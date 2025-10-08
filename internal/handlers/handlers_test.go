@@ -201,7 +201,7 @@ func TestEntityHandlerEntityMethodNotAllowed(t *testing.T) {
 
 func TestMetadataHandler(t *testing.T) {
 	entities := make(map[string]*metadata.EntityMetadata)
-	
+
 	entityMeta, _ := metadata.AnalyzeEntity(TestEntity{})
 	entities["TestEntities"] = entityMeta
 
@@ -254,7 +254,7 @@ func TestMetadataHandlerMethodNotAllowed(t *testing.T) {
 
 func TestServiceDocumentHandler(t *testing.T) {
 	entities := make(map[string]*metadata.EntityMetadata)
-	
+
 	entityMeta, _ := metadata.AnalyzeEntity(TestEntity{})
 	entities["TestEntities"] = entityMeta
 
@@ -333,11 +333,11 @@ func TestServiceDocumentHandlerMethodNotAllowed(t *testing.T) {
 }
 
 func contains(s, substr string) bool {
-	return len(s) > 0 && len(substr) > 0 && s != substr && 
-		(s[0:1] == substr || s[len(s)-1:] == substr || 
-		 len(s) > len(substr) && (s[0:len(substr)] == substr || 
-		 s[len(s)-len(substr):] == substr || 
-		 findInString(s, substr)))
+	return len(s) > 0 && len(substr) > 0 && s != substr &&
+		(s[0:1] == substr || s[len(s)-1:] == substr ||
+			len(s) > len(substr) && (s[0:len(substr)] == substr ||
+				s[len(s)-len(substr):] == substr ||
+				findInString(s, substr)))
 }
 
 func findInString(s, substr string) bool {
