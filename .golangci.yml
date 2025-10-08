@@ -1,0 +1,38 @@
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  enable:
+    - gofmt
+    - govet
+    - errcheck
+    - staticcheck
+    - unused
+    - gosimple
+    - ineffassign
+    - typecheck
+    - exportloopref
+    - gocyclo
+    - misspell
+    - unconvert
+    - unparam
+    - prealloc
+
+linters-settings:
+  gocyclo:
+    min-complexity: 15
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+
+issues:
+  exclude-rules:
+    # Exclude some linters from running on tests files.
+    - path: _test\.go
+      linters:
+        - gocyclo
+        - errcheck
+        - dupl
+        - gosec
+        - unparam
