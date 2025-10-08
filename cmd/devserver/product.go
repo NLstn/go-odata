@@ -99,7 +99,7 @@ func GetSampleProductDescriptions() []ProductDescription {
 			ProductID:   5,
 			LanguageKey: "ES",
 			Description: "Smartphone de última generación con cámara avanzada",
-			LongText:    "Captura los momentos de la vida con un detalle asombroso con nuestro smartphone insignia. Cuenta con un sistema de cámara de nivel profesional, procesador ultrarrápido y batería para todo el día.",
+			LongText:    "Captura los momentos de la vida con un detalle asombroso con nuestro smartphone insignia. Cuenta con un sistema de cámara de nivel profesional, procesador ultrarrápido y batería para todo el día.", //nolint:misspell // Spanish text
 		},
 	}
 }

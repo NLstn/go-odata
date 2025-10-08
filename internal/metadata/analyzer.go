@@ -42,15 +42,7 @@ func AnalyzeEntity(entity interface{}) (*EntityMetadata, error) {
 		return nil, fmt.Errorf("entity must be a struct, got %s", entityType.Kind())
 	}
 
-	entityName := entityType.Name()
-	entitySetName := pluralize(entityName)
-
-	metadata := &EntityMetadata{
-		EntityType:    entityType,
-		EntityName:    entityName,
-		EntitySetName: entitySetName,
-		Properties:    make([]PropertyMetadata, 0),
-	}
+	metadata := initializeMetadata(entityType)
 
 	// Analyze struct fields
 	for i := 0; i < entityType.NumField(); i++ {
@@ -61,62 +53,91 @@ func AnalyzeEntity(entity interface{}) (*EntityMetadata, error) {
 			continue
 		}
 
-		property := PropertyMetadata{
-			Name:      field.Name,
-			Type:      field.Type,
-			FieldName: field.Name,
-			JsonName:  getJsonName(field),
-			GormTag:   field.Tag.Get("gorm"),
-		}
-
-		// Check if this is a navigation property (struct or slice of structs)
-		fieldType := field.Type
-		isSlice := fieldType.Kind() == reflect.Slice
-		if isSlice {
-			fieldType = fieldType.Elem()
-		}
-
-		// Check if it's a pointer type
-		if fieldType.Kind() == reflect.Ptr {
-			fieldType = fieldType.Elem()
-		}
-
-		// If it's a struct type and has gorm foreign key tag, it's a navigation property
-		if fieldType.Kind() == reflect.Struct {
-			gormTag := field.Tag.Get("gorm")
-			if strings.Contains(gormTag, "foreignKey") || strings.Contains(gormTag, "references") {
-				property.IsNavigationProp = true
-				property.NavigationTarget = fieldType.Name()
-				property.NavigationIsArray = isSlice
-			}
-		}
-
-		// Check for OData key tag
-		if odataTag := field.Tag.Get("odata"); odataTag != "" {
-			if strings.Contains(odataTag, "key") {
-				property.IsKey = true
-				metadata.KeyProperty = &property
-			}
-			if strings.Contains(odataTag, "required") {
-				property.IsRequired = true
-			}
-		}
-
-		// Auto-detect key if no explicit key is set and field name is "ID"
-		if metadata.KeyProperty == nil && field.Name == "ID" {
-			property.IsKey = true
-			metadata.KeyProperty = &property
-		}
-
+		property := analyzeField(field, metadata)
 		metadata.Properties = append(metadata.Properties, property)
 	}
 
 	// Validate that we have a key property
 	if metadata.KeyProperty == nil {
-		return nil, fmt.Errorf("entity %s must have a key property (use `odata:\"key\"` tag or name field 'ID')", entityName)
+		return nil, fmt.Errorf("entity %s must have a key property (use `odata:\"key\"` tag or name field 'ID')", metadata.EntityName)
 	}
 
 	return metadata, nil
+}
+
+// initializeMetadata creates a new EntityMetadata struct with basic information
+func initializeMetadata(entityType reflect.Type) *EntityMetadata {
+	entityName := entityType.Name()
+	entitySetName := pluralize(entityName)
+
+	return &EntityMetadata{
+		EntityType:    entityType,
+		EntityName:    entityName,
+		EntitySetName: entitySetName,
+		Properties:    make([]PropertyMetadata, 0),
+	}
+}
+
+// analyzeField analyzes a single struct field and creates a PropertyMetadata
+func analyzeField(field reflect.StructField, metadata *EntityMetadata) PropertyMetadata {
+	property := PropertyMetadata{
+		Name:      field.Name,
+		Type:      field.Type,
+		FieldName: field.Name,
+		JsonName:  getJsonName(field),
+		GormTag:   field.Tag.Get("gorm"),
+	}
+
+	// Check if this is a navigation property
+	analyzeNavigationProperty(&property, field)
+
+	// Check for OData tags
+	analyzeODataTags(&property, field, metadata)
+
+	return property
+}
+
+// analyzeNavigationProperty determines if a field is a navigation property
+func analyzeNavigationProperty(property *PropertyMetadata, field reflect.StructField) {
+	fieldType := field.Type
+	isSlice := fieldType.Kind() == reflect.Slice
+	if isSlice {
+		fieldType = fieldType.Elem()
+	}
+
+	// Check if it's a pointer type
+	if fieldType.Kind() == reflect.Ptr {
+		fieldType = fieldType.Elem()
+	}
+
+	// If it's a struct type and has gorm foreign key tag, it's a navigation property
+	if fieldType.Kind() == reflect.Struct {
+		gormTag := field.Tag.Get("gorm")
+		if strings.Contains(gormTag, "foreignKey") || strings.Contains(gormTag, "references") {
+			property.IsNavigationProp = true
+			property.NavigationTarget = fieldType.Name()
+			property.NavigationIsArray = isSlice
+		}
+	}
+}
+
+// analyzeODataTags processes OData-specific tags on a field
+func analyzeODataTags(property *PropertyMetadata, field reflect.StructField, metadata *EntityMetadata) {
+	if odataTag := field.Tag.Get("odata"); odataTag != "" {
+		if strings.Contains(odataTag, "key") {
+			property.IsKey = true
+			metadata.KeyProperty = property
+		}
+		if strings.Contains(odataTag, "required") {
+			property.IsRequired = true
+		}
+	}
+
+	// Auto-detect key if no explicit key is set and field name is "ID"
+	if metadata.KeyProperty == nil && field.Name == "ID" {
+		property.IsKey = true
+		metadata.KeyProperty = property
+	}
 }
 
 // getJsonName extracts the JSON field name from struct tags
