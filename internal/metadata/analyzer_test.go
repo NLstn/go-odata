@@ -13,13 +13,13 @@ type TestProduct struct {
 }
 
 type TestProductNoKey struct {
-	Name  string `json:"name"`
+	Name  string  `json:"name"`
 	Price float64 `json:"price"`
 }
 
 type TestProductWithAutoKey struct {
-	ID    int    `json:"id"`
-	Name  string `json:"name"`
+	ID    int     `json:"id"`
+	Name  string  `json:"name"`
 	Price float64 `json:"price"`
 }
 
@@ -135,7 +135,7 @@ func TestGetJsonName(t *testing.T) {
 	}
 
 	entityType := reflect.TypeOf(TestStruct{})
-	
+
 	tests := []struct {
 		fieldName string
 		want      string

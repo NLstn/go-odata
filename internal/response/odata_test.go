@@ -141,14 +141,14 @@ func TestWriteServiceDocument(t *testing.T) {
 
 func TestBuildBaseURL(t *testing.T) {
 	tests := []struct {
-		name   string
-		req    *http.Request
-		want   string
+		name string
+		req  *http.Request
+		want string
 	}{
 		{
 			name: "http request",
 			req: &http.Request{
-				Host: "localhost:8080",
+				Host:   "localhost:8080",
 				Header: http.Header{},
 			},
 			want: "http://localhost:8080",
@@ -156,8 +156,8 @@ func TestBuildBaseURL(t *testing.T) {
 		{
 			name: "https request",
 			req: &http.Request{
-				Host: "example.com",
-				TLS:  &tls.ConnectionState{},
+				Host:   "example.com",
+				TLS:    &tls.ConnectionState{},
 				Header: http.Header{},
 			},
 			want: "https://example.com",
