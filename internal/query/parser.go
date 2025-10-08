@@ -220,7 +220,7 @@ func parseSingleExpand(expandStr string, entityMetadata *metadata.EntityMetadata
 		nestedOptions := expandStr[idx+1 : len(expandStr)-1]
 
 		// Parse nested options (simplified - doesn't handle complex nested cases)
-		if err := parseNestedExpandOptions(&expand, nestedOptions); err != nil {
+		if err := parseNestedExpandOptions(&expand, nestedOptions, entityMetadata); err != nil {
 			return expand, err
 		}
 	} else {
@@ -236,7 +236,7 @@ func parseSingleExpand(expandStr string, entityMetadata *metadata.EntityMetadata
 }
 
 // parseNestedExpandOptions parses nested query options within an expand
-func parseNestedExpandOptions(expand *ExpandOption, optionsStr string) error {
+func parseNestedExpandOptions(expand *ExpandOption, optionsStr string, entityMetadata *metadata.EntityMetadata) error {
 	// Split by semicolon for different query options
 	parts := strings.Split(optionsStr, ";")
 
@@ -258,6 +258,28 @@ func parseNestedExpandOptions(expand *ExpandOption, optionsStr string) error {
 		switch strings.ToLower(key) {
 		case "$select":
 			expand.Select = parseSelect(value)
+		case "$filter":
+			// Get the navigation property metadata to find the target entity type
+			navProp := findNavigationProperty(expand.NavigationProperty, entityMetadata)
+			if navProp == nil {
+				return fmt.Errorf("navigation property '%s' not found", expand.NavigationProperty)
+			}
+
+			// Create a temporary entity metadata for the target type
+			// We need to find the target entity type in the metadata
+			// For now, we'll parse without metadata validation
+			filter, err := parseFilterWithoutMetadata(value)
+			if err != nil {
+				return fmt.Errorf("invalid nested $filter: %w", err)
+			}
+			expand.Filter = filter
+		case "$orderby":
+			// Parse orderby without strict metadata validation
+			orderBy, err := parseOrderByWithoutMetadata(value)
+			if err != nil {
+				return fmt.Errorf("invalid nested $orderby: %w", err)
+			}
+			expand.OrderBy = orderBy
 		case "$top":
 			var top int
 			if _, err := fmt.Sscanf(value, "%d", &top); err != nil {
@@ -270,11 +292,162 @@ func parseNestedExpandOptions(expand *ExpandOption, optionsStr string) error {
 				return fmt.Errorf("invalid nested $skip: %w", err)
 			}
 			expand.Skip = &skip
-			// Add more nested options as needed (filter, orderby)
 		}
 	}
 
 	return nil
+}
+
+// parseFilterWithoutMetadata parses a filter expression without validating property names
+func parseFilterWithoutMetadata(filterStr string) (*FilterExpression, error) {
+	filterStr = strings.TrimSpace(filterStr)
+
+	// Check for logical operators (and, or)
+	if idx := findLogicalOperator(filterStr); idx != -1 {
+		operator := getLogicalOperatorAt(filterStr, idx)
+		left := strings.TrimSpace(filterStr[:idx])
+		right := strings.TrimSpace(filterStr[idx+len(operator):])
+
+		leftExpr, err := parseFilterWithoutMetadata(left)
+		if err != nil {
+			return nil, err
+		}
+
+		rightExpr, err := parseFilterWithoutMetadata(right)
+		if err != nil {
+			return nil, err
+		}
+
+		return &FilterExpression{
+			Left:    leftExpr,
+			Right:   rightExpr,
+			Logical: LogicalOperator(operator),
+		}, nil
+	}
+
+	// Check for function calls (contains, startswith, endswith)
+	if strings.Contains(filterStr, "(") && strings.Contains(filterStr, ")") {
+		return parseFunctionFilterWithoutMetadata(filterStr)
+	}
+
+	// Parse comparison expression (property operator value)
+	return parseComparisonFilterWithoutMetadata(filterStr)
+}
+
+// parseFunctionFilterWithoutMetadata parses function-based filters without metadata
+func parseFunctionFilterWithoutMetadata(filterStr string) (*FilterExpression, error) {
+	openParen := strings.Index(filterStr, "(")
+	if openParen == -1 {
+		return nil, fmt.Errorf("invalid function filter: %s", filterStr)
+	}
+
+	functionName := strings.ToLower(strings.TrimSpace(filterStr[:openParen]))
+	closeParen := strings.LastIndex(filterStr, ")")
+	if closeParen == -1 {
+		return nil, fmt.Errorf("invalid function filter: missing closing parenthesis")
+	}
+
+	args := filterStr[openParen+1 : closeParen]
+	parts := splitFunctionArgs(args)
+
+	if len(parts) != 2 {
+		return nil, fmt.Errorf("function %s requires 2 arguments", functionName)
+	}
+
+	property := strings.TrimSpace(parts[0])
+	value := strings.Trim(strings.TrimSpace(parts[1]), "'\"")
+
+	var operator FilterOperator
+	switch functionName {
+	case "contains":
+		operator = OpContains
+	case "startswith":
+		operator = OpStartsWith
+	case "endswith":
+		operator = OpEndsWith
+	default:
+		return nil, fmt.Errorf("unsupported function: %s", functionName)
+	}
+
+	return &FilterExpression{
+		Property: property,
+		Operator: operator,
+		Value:    value,
+	}, nil
+}
+
+// parseComparisonFilterWithoutMetadata parses comparison filters without metadata
+func parseComparisonFilterWithoutMetadata(filterStr string) (*FilterExpression, error) {
+	// Split by spaces to find operator
+	tokens := strings.Fields(filterStr)
+	if len(tokens) < 3 {
+		return nil, fmt.Errorf("invalid filter expression: %s", filterStr)
+	}
+
+	property := tokens[0]
+	operator := strings.ToLower(tokens[1])
+	value := strings.Join(tokens[2:], " ")
+
+	// Remove quotes from string values
+	value = strings.Trim(value, "'\"")
+
+	// Validate operator
+	var op FilterOperator
+	switch operator {
+	case "eq":
+		op = OpEqual
+	case "ne":
+		op = OpNotEqual
+	case "gt":
+		op = OpGreaterThan
+	case "ge":
+		op = OpGreaterThanOrEqual
+	case "lt":
+		op = OpLessThan
+	case "le":
+		op = OpLessThanOrEqual
+	default:
+		return nil, fmt.Errorf("unsupported operator: %s", operator)
+	}
+
+	return &FilterExpression{
+		Property: property,
+		Operator: op,
+		Value:    value,
+	}, nil
+}
+
+// parseOrderByWithoutMetadata parses orderby without metadata validation
+func parseOrderByWithoutMetadata(orderByStr string) ([]OrderByItem, error) {
+	parts := strings.Split(orderByStr, ",")
+	result := make([]OrderByItem, 0, len(parts))
+
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed == "" {
+			continue
+		}
+
+		// Check for "desc" or "asc" suffix
+		tokens := strings.Fields(trimmed)
+		item := OrderByItem{
+			Property:   tokens[0],
+			Descending: false,
+		}
+
+		if len(tokens) > 1 {
+			direction := strings.ToLower(tokens[1])
+			if direction == "desc" {
+				item.Descending = true
+			} else if direction != "asc" {
+				return nil, fmt.Errorf("invalid direction '%s', expected 'asc' or 'desc'", tokens[1])
+			}
+		}
+
+		result = append(result, item)
+	}
+
+	return result, nil
 }
 
 // isNavigationProperty checks if a property is a navigation property

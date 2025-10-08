@@ -170,7 +170,9 @@ func applyExpand(db *gorm.DB, expand []ExpandOption, entityMetadata *metadata.En
 						if item.Descending {
 							direction = "DESC"
 						}
-						db = db.Order(fmt.Sprintf("%s %s", item.Property, direction))
+						// Convert property name to snake_case for database column name
+						columnName := toSnakeCase(item.Property)
+						db = db.Order(fmt.Sprintf("%s %s", columnName, direction))
 					}
 				}
 
@@ -221,6 +223,18 @@ func applyFilterForExpand(db *gorm.DB, filter *FilterExpression) *gorm.DB {
 	return db.Where(query, args...)
 }
 
+// toSnakeCase converts a camelCase or PascalCase string to snake_case
+func toSnakeCase(s string) string {
+	var result []rune
+	for i, r := range s {
+		if i > 0 && r >= 'A' && r <= 'Z' {
+			result = append(result, '_')
+		}
+		result = append(result, r)
+	}
+	return strings.ToLower(string(result))
+}
+
 // buildSimpleFilterCondition builds a filter condition without metadata
 func buildSimpleFilterCondition(filter *FilterExpression) (string, []interface{}) {
 	if filter == nil {
@@ -243,7 +257,8 @@ func buildSimpleFilterCondition(filter *FilterExpression) (string, []interface{}
 		}
 	}
 
-	fieldName := filter.Property
+	// Convert property name to snake_case for database column name
+	fieldName := toSnakeCase(filter.Property)
 
 	switch filter.Operator {
 	case OpEqual:
