@@ -23,8 +23,10 @@ func NewServiceDocumentHandler(entities map[string]*metadata.EntityMetadata) *Se
 // HandleServiceDocument handles the service document endpoint
 func (h *ServiceDocumentHandler) HandleServiceDocument(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		response.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
-			fmt.Sprintf("Method %s is not supported for service document", r.Method))
+		if err := response.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
+			fmt.Sprintf("Method %s is not supported for service document", r.Method)); err != nil {
+			fmt.Printf("Error writing error response: %v\n", err)
+		}
 		return
 	}
 

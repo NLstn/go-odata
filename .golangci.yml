@@ -12,7 +12,7 @@ linters:
     - gosimple
     - ineffassign
     - typecheck
-    - exportloopref
+    - copyloopvar
     - gocyclo
     - misspell
     - unconvert
