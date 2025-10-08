@@ -111,15 +111,6 @@ func buildBaseURL(r *http.Request) string {
 	return scheme + "://" + host
 }
 
-// buildURL builds a full URL from the request and path
-func buildURL(r *http.Request, path string) string {
-	baseURL := buildBaseURL(r)
-	if path != "" && path[0] != '/' {
-		path = "/" + path
-	}
-	return baseURL + path
-}
-
 // ParseODataURL parses an OData URL and extracts components (exported for use in main package)
 func ParseODataURL(path string) (entitySet string, entityKey string, err error) {
 	return parseODataURL(path)

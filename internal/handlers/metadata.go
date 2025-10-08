@@ -23,8 +23,10 @@ func NewMetadataHandler(entities map[string]*metadata.EntityMetadata) *MetadataH
 // HandleMetadata handles the metadata document endpoint
 func (h *MetadataHandler) HandleMetadata(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		response.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
-			fmt.Sprintf("Method %s is not supported for metadata document", r.Method))
+		if err := response.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
+			fmt.Sprintf("Method %s is not supported for metadata document", r.Method)); err != nil {
+			fmt.Printf("Error writing error response: %v\n", err)
+		}
 		return
 	}
 
@@ -50,5 +52,7 @@ func (h *MetadataHandler) HandleMetadata(w http.ResponseWriter, r *http.Request)
   </edmx:DataServices>
 </edmx:Edmx>`
 
-	w.Write([]byte(metadata))
+	if _, err := w.Write([]byte(metadata)); err != nil {
+		fmt.Printf("Error writing metadata response: %v\n", err)
+	}
 }

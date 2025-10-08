@@ -29,8 +29,10 @@ func NewEntityHandler(db *gorm.DB, entityMetadata *metadata.EntityMetadata) *Ent
 // HandleCollection handles GET requests for entity collections
 func (h *EntityHandler) HandleCollection(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		response.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
-			fmt.Sprintf("Method %s is not supported for entity collections", r.Method))
+		if err := response.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
+			fmt.Sprintf("Method %s is not supported for entity collections", r.Method)); err != nil {
+			fmt.Printf("Error writing error response: %v\n", err)
+		}
 		return
 	}
 
@@ -40,7 +42,9 @@ func (h *EntityHandler) HandleCollection(w http.ResponseWriter, r *http.Request)
 
 	// Execute the database query
 	if err := h.db.Find(results).Error; err != nil {
-		response.WriteError(w, http.StatusInternalServerError, "Database error", err.Error())
+		if writeErr := response.WriteError(w, http.StatusInternalServerError, "Database error", err.Error()); writeErr != nil {
+			fmt.Printf("Error writing error response: %v\n", writeErr)
+		}
 		return
 	}
 
@@ -57,8 +61,10 @@ func (h *EntityHandler) HandleCollection(w http.ResponseWriter, r *http.Request)
 // HandleEntity handles GET requests for individual entities
 func (h *EntityHandler) HandleEntity(w http.ResponseWriter, r *http.Request, entityKey string) {
 	if r.Method != http.MethodGet {
-		response.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
-			fmt.Sprintf("Method %s is not supported for individual entities", r.Method))
+		if err := response.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
+			fmt.Sprintf("Method %s is not supported for individual entities", r.Method)); err != nil {
+			fmt.Printf("Error writing error response: %v\n", err)
+		}
 		return
 	}
 
@@ -69,10 +75,14 @@ func (h *EntityHandler) HandleEntity(w http.ResponseWriter, r *http.Request, ent
 	keyField := h.metadata.KeyProperty.JsonName
 	if err := h.db.Where(fmt.Sprintf("%s = ?", keyField), entityKey).First(result).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			response.WriteError(w, http.StatusNotFound, "Entity not found",
-				fmt.Sprintf("Entity with key '%s' not found", entityKey))
+			if writeErr := response.WriteError(w, http.StatusNotFound, "Entity not found",
+				fmt.Sprintf("Entity with key '%s' not found", entityKey)); writeErr != nil {
+				fmt.Printf("Error writing error response: %v\n", writeErr)
+			}
 		} else {
-			response.WriteError(w, http.StatusInternalServerError, "Database error", err.Error())
+			if writeErr := response.WriteError(w, http.StatusInternalServerError, "Database error", err.Error()); writeErr != nil {
+				fmt.Printf("Error writing error response: %v\n", writeErr)
+			}
 		}
 		return
 	}
