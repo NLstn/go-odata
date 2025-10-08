@@ -164,11 +164,24 @@ func (h *EntityHandler) hasMoreRecords(queryOptions *query.QueryOptions, nextSki
 	// Apply the same order by
 	if len(queryOptions.OrderBy) > 0 {
 		for _, item := range queryOptions.OrderBy {
+			// Sanitize: Only allow real property names from metadata
+			valid := false
+			for _, prop := range h.metadata.Properties {
+				if prop.JsonName == item.Property || prop.Name == item.Property {
+					valid = true
+					break
+				}
+			}
+			if !valid {
+				// Skip invalid property
+				continue
+			}
 			fieldName := query.GetPropertyFieldName(item.Property, h.metadata)
 			direction := "ASC"
 			if item.Descending {
 				direction = "DESC"
 			}
+			// No user input concatenated directly to SQL, fieldName is safe
 			checkDB = checkDB.Order(fmt.Sprintf("%s %s", fieldName, direction))
 		}
 	}
