@@ -48,10 +48,11 @@ func applyFilter(db *gorm.DB, filter *FilterExpression, entityMetadata *metadata
 		leftDB := applyFilter(db, filter.Left, entityMetadata)
 		rightDB := applyFilter(db, filter.Right, entityMetadata)
 
-		if filter.Logical == LogicalAnd {
+		switch filter.Logical {
+		case LogicalAnd:
 			// For AND, we can chain the conditions
 			return leftDB.Where(rightDB)
-		} else if filter.Logical == LogicalOr {
+		case LogicalOr:
 			// For OR, we need to build a more complex query
 			// This is simplified and may need enhancement for complex cases
 			leftQuery, leftArgs := buildFilterCondition(filter.Left, entityMetadata)
@@ -80,11 +81,12 @@ func buildFilterCondition(filter *FilterExpression, entityMetadata *metadata.Ent
 		leftQuery, leftArgs := buildFilterCondition(filter.Left, entityMetadata)
 		rightQuery, rightArgs := buildFilterCondition(filter.Right, entityMetadata)
 
-		if filter.Logical == LogicalAnd {
+		switch filter.Logical {
+		case LogicalAnd:
 			query := fmt.Sprintf("(%s) AND (%s)", leftQuery, rightQuery)
 			args := append(leftArgs, rightArgs...)
 			return query, args
-		} else if filter.Logical == LogicalOr {
+		case LogicalOr:
 			query := fmt.Sprintf("(%s) OR (%s)", leftQuery, rightQuery)
 			args := append(leftArgs, rightArgs...)
 			return query, args
