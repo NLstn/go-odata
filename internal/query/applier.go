@@ -37,6 +37,15 @@ func ApplyQueryOptions(db *gorm.DB, options *QueryOptions, entityMetadata *metad
 	return db
 }
 
+// ApplyFilterOnly applies only the filter expression to a GORM database query
+// This is useful for getting counts without applying pagination
+func ApplyFilterOnly(db *gorm.DB, filter *FilterExpression, entityMetadata *metadata.EntityMetadata) *gorm.DB {
+	if filter == nil {
+		return db
+	}
+	return applyFilter(db, filter, entityMetadata)
+}
+
 // applyFilter applies filter expressions to the GORM query
 func applyFilter(db *gorm.DB, filter *FilterExpression, entityMetadata *metadata.EntityMetadata) *gorm.DB {
 	if filter == nil {

@@ -46,6 +46,56 @@ func (h *EntityHandler) HandleCollection(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Get the total count if $count=true is specified
+	totalCount := h.getTotalCount(queryOptions, w)
+	if totalCount == nil && queryOptions.Count {
+		return // Error already written
+	}
+
+	// Fetch the results
+	sliceValue, err := h.fetchResults(queryOptions)
+	if err != nil {
+		if writeErr := response.WriteError(w, http.StatusInternalServerError, "Database error", err.Error()); writeErr != nil {
+			fmt.Printf("Error writing error response: %v\n", writeErr)
+		}
+		return
+	}
+
+	// Calculate next link if pagination is active
+	nextLink := h.calculateNextLink(queryOptions, sliceValue, r)
+
+	// Write the OData response
+	if err := response.WriteODataCollection(w, r, h.metadata.EntitySetName, sliceValue, totalCount, nextLink); err != nil {
+		// If we can't write the response, log the error but don't try to write another response
+		fmt.Printf("Error writing OData response: %v\n", err)
+	}
+}
+
+// getTotalCount retrieves the total count if requested
+func (h *EntityHandler) getTotalCount(queryOptions *query.QueryOptions, w http.ResponseWriter) *int64 {
+	if !queryOptions.Count {
+		return nil
+	}
+
+	var count int64
+	countDB := h.db.Model(reflect.New(h.metadata.EntityType).Interface())
+
+	// Apply filter to count query if present
+	if queryOptions.Filter != nil {
+		countDB = query.ApplyFilterOnly(countDB, queryOptions.Filter, h.metadata)
+	}
+
+	if err := countDB.Count(&count).Error; err != nil {
+		if writeErr := response.WriteError(w, http.StatusInternalServerError, "Database error", err.Error()); writeErr != nil {
+			fmt.Printf("Error writing error response: %v\n", writeErr)
+		}
+		return nil
+	}
+	return &count
+}
+
+// fetchResults fetches the results from the database
+func (h *EntityHandler) fetchResults(queryOptions *query.QueryOptions) (interface{}, error) {
 	// Create a slice to hold the results
 	sliceType := reflect.SliceOf(h.metadata.EntityType)
 	results := reflect.New(sliceType).Interface()
@@ -55,10 +105,7 @@ func (h *EntityHandler) HandleCollection(w http.ResponseWriter, r *http.Request)
 
 	// Execute the database query
 	if err := db.Find(results).Error; err != nil {
-		if writeErr := response.WriteError(w, http.StatusInternalServerError, "Database error", err.Error()); writeErr != nil {
-			fmt.Printf("Error writing error response: %v\n", writeErr)
-		}
-		return
+		return nil, err
 	}
 
 	// Get the actual slice value (results is a pointer to slice)
@@ -69,11 +116,71 @@ func (h *EntityHandler) HandleCollection(w http.ResponseWriter, r *http.Request)
 		sliceValue = query.ApplySelect(sliceValue, queryOptions.Select, h.metadata)
 	}
 
-	// Write the OData response
-	if err := response.WriteODataCollection(w, r, h.metadata.EntitySetName, sliceValue); err != nil {
-		// If we can't write the response, log the error but don't try to write another response
-		fmt.Printf("Error writing OData response: %v\n", err)
+	return sliceValue, nil
+}
+
+// calculateNextLink calculates the next link URL for pagination
+func (h *EntityHandler) calculateNextLink(queryOptions *query.QueryOptions, sliceValue interface{}, r *http.Request) *string {
+	if queryOptions.Top == nil {
+		return nil
 	}
+
+	// Get the actual result count
+	resultCount := reflect.ValueOf(sliceValue).Len()
+
+	// If we got exactly $top results, check if there are more records
+	if resultCount != *queryOptions.Top {
+		return nil
+	}
+
+	// Calculate the new skip value for the next page
+	currentSkip := 0
+	if queryOptions.Skip != nil {
+		currentSkip = *queryOptions.Skip
+	}
+	nextSkip := currentSkip + *queryOptions.Top
+
+	// Check if there are more records
+	if h.hasMoreRecords(queryOptions, nextSkip) {
+		nextURL := response.BuildNextLink(r, nextSkip)
+		return &nextURL
+	}
+
+	return nil
+}
+
+// hasMoreRecords checks if there are more records available
+func (h *EntityHandler) hasMoreRecords(queryOptions *query.QueryOptions, nextSkip int) bool {
+	checkSliceType := reflect.SliceOf(h.metadata.EntityType)
+	checkResults := reflect.New(checkSliceType).Interface()
+
+	checkDB := h.db
+
+	// Apply the same filters
+	if queryOptions.Filter != nil {
+		checkDB = query.ApplyFilterOnly(checkDB, queryOptions.Filter, h.metadata)
+	}
+
+	// Apply the same order by
+	if len(queryOptions.OrderBy) > 0 {
+		for _, item := range queryOptions.OrderBy {
+			fieldName := query.GetPropertyFieldName(item.Property, h.metadata)
+			direction := "ASC"
+			if item.Descending {
+				direction = "DESC"
+			}
+			checkDB = checkDB.Order(fmt.Sprintf("%s %s", fieldName, direction))
+		}
+	}
+
+	// Check if there's at least one more record at the next position
+	checkDB = checkDB.Offset(nextSkip).Limit(1)
+	if err := checkDB.Find(checkResults).Error; err != nil {
+		return false
+	}
+
+	checkSliceValue := reflect.ValueOf(checkResults).Elem()
+	return checkSliceValue.Len() > 0
 }
 
 // HandleEntity handles GET requests for individual entities

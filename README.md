@@ -19,10 +19,10 @@ A Go library for building services that expose OData APIs with automatic handlin
 - ✅ Service document generation
 - ✅ Basic metadata document
 - ✅ Proper HTTP headers and error handling
-- 🔄 OData query operations ($filter, $select, $orderby, etc.) - Coming soon
+- ✅ OData query operations ($filter, $select, $orderby)
+- ✅ **Pagination support ($top, $skip, $count, @odata.nextLink)**
 - 🔄 Complete metadata document generation - Coming soon
 - 🔄 Entity relationship handling - Coming soon
-- 🔄 Pagination support - Coming soon
 
 ## Installation
 
@@ -83,6 +83,71 @@ Once your service is running, the following endpoints will be available:
 - **Metadata**: `GET /$metadata` - OData metadata document
 - **Entity Collection**: `GET /Products` - All products
 - **Individual Entity**: `GET /Products(1)` - Product with ID 1
+
+## OData Query Options
+
+The library supports the following OData v4 query options:
+
+### Filtering (`$filter`)
+Filter entities based on property values:
+```
+GET /Products?$filter=Price gt 100
+GET /Products?$filter=Category eq 'Electronics'
+GET /Products?$filter=contains(Name,'Laptop')
+```
+
+Supported operators: `eq`, `ne`, `gt`, `ge`, `lt`, `le`, `contains`, `startswith`, `endswith`
+
+### Selection (`$select`)
+Select specific properties to return:
+```
+GET /Products?$select=Name,Price
+```
+
+### Ordering (`$orderby`)
+Sort results by one or more properties:
+```
+GET /Products?$orderby=Price desc
+GET /Products?$orderby=Category asc,Price desc
+```
+
+### Pagination (`$top`, `$skip`)
+Control the number of results returned:
+```
+GET /Products?$top=10              # Get first 10 products
+GET /Products?$skip=10&$top=10     # Get products 11-20
+```
+
+When using `$top`, if more results are available, the response will include an `@odata.nextLink` with the URL for the next page:
+```json
+{
+  "@odata.context": "http://localhost:8080/$metadata#Products",
+  "@odata.nextLink": "http://localhost:8080/Products?$skip=10&$top=10",
+  "value": [ /* ... */ ]
+}
+```
+
+### Count (`$count`)
+Get the total count of items matching the query:
+```
+GET /Products?$count=true          # Returns count with results
+GET /Products?$filter=Price gt 100&$count=true
+```
+
+Response includes the total count:
+```json
+{
+  "@odata.context": "http://localhost:8080/$metadata#Products",
+  "@odata.count": 42,
+  "value": [ /* ... */ ]
+}
+```
+
+### Combining Query Options
+You can combine multiple query options:
+```
+GET /Products?$filter=Category eq 'Electronics'&$orderby=Price desc&$top=5&$count=true
+```
 
 ## Entity Definition
 
