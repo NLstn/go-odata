@@ -1,0 +1,15 @@
+{
+    "go.toolsManagement.checkForUpdates": "local",
+    "go.useLanguageServer": true,
+    "go.formatTool": "goimports",
+    "go.lintTool": "golangci-lint",
+    "go.vetOnSave": "package",
+    "go.testFlags": ["-v"],
+    "go.testTimeout": "30s",
+    "files.exclude": {
+        "**/tmp": true
+    },
+    "files.watcherExclude": {
+        "**/tmp/**": true
+    }
+}
