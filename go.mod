@@ -1,6 +1,6 @@
 module github.com/nlstn/go-odata
 
-go 1.25
+go 1.24
 
 require (
 	gorm.io/driver/sqlite v1.6.0
