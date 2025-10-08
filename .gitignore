@@ -15,12 +15,7 @@ tmp/
 go.work
 go.work.sum
 
-# IDE specific files
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
+coverage.out
 
 # OS specific files
 .DS_Store
