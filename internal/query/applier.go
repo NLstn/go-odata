@@ -175,13 +175,3 @@ func ApplySelect(results interface{}, selectedProperties []string, entityMetadat
 
 	return filteredResults
 }
-
-// propertyExists checks if a property exists in the entity metadata
-func propertyExists(propertyName string, entityMetadata *metadata.EntityMetadata) bool {
-	for _, prop := range entityMetadata.Properties {
-		if prop.JsonName == propertyName || prop.Name == propertyName {
-			return true
-		}
-	}
-	return false
-}
