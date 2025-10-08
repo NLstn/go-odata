@@ -120,6 +120,9 @@ func buildFilterCondition(filter *FilterExpression, entityMetadata *metadata.Ent
 // applyOrderBy applies order by clauses to the GORM query
 func applyOrderBy(db *gorm.DB, orderBy []OrderByItem, entityMetadata *metadata.EntityMetadata) *gorm.DB {
 	for _, item := range orderBy {
+		if !propertyExists(item.Property, entityMetadata) {
+			continue // Skip unrecognized properties in $orderby
+		}
 		fieldName := GetPropertyFieldName(item.Property, entityMetadata)
 		direction := "ASC"
 		if item.Descending {
@@ -171,4 +174,14 @@ func ApplySelect(results interface{}, selectedProperties []string, entityMetadat
 	}
 
 	return filteredResults
+}
+
+// propertyExists checks if a property exists in the entity metadata
+func propertyExists(propertyName string, entityMetadata *metadata.EntityMetadata) bool {
+	for _, prop := range entityMetadata.Properties {
+		if prop.JsonName == propertyName || prop.Name == propertyName {
+			return true
+		}
+	}
+	return false
 }
