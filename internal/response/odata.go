@@ -9,6 +9,59 @@ import (
 	"strings"
 )
 
+// OrderedMap maintains insertion order of keys
+type OrderedMap struct {
+	keys   []string
+	values map[string]interface{}
+}
+
+// NewOrderedMap creates a new OrderedMap
+func NewOrderedMap() *OrderedMap {
+	return &OrderedMap{
+		keys:   make([]string, 0),
+		values: make(map[string]interface{}),
+	}
+}
+
+// Set adds or updates a key-value pair in the ordered map
+func (om *OrderedMap) Set(key string, value interface{}) {
+	if _, exists := om.values[key]; !exists {
+		om.keys = append(om.keys, key)
+	}
+	om.values[key] = value
+}
+
+// ToMap returns the underlying map (loses ordering)
+func (om *OrderedMap) ToMap() map[string]interface{} {
+	return om.values
+}
+
+// MarshalJSON implements json.Marshaler to maintain field order
+func (om *OrderedMap) MarshalJSON() ([]byte, error) {
+	buf := []byte("{")
+	for i, key := range om.keys {
+		if i > 0 {
+			buf = append(buf, ',')
+		}
+		// Marshal the key
+		keyBytes, err := json.Marshal(key)
+		if err != nil {
+			return nil, err
+		}
+		buf = append(buf, keyBytes...)
+		buf = append(buf, ':')
+
+		// Marshal the value
+		valueBytes, err := json.Marshal(om.values[key])
+		if err != nil {
+			return nil, err
+		}
+		buf = append(buf, valueBytes...)
+	}
+	buf = append(buf, '}')
+	return buf, nil
+}
+
 // ODataResponse represents the structure of an OData JSON response
 type ODataResponse struct {
 	Context  string      `json:"@odata.context"`
@@ -83,24 +136,24 @@ func WriteODataCollectionWithNavigation(w http.ResponseWriter, r *http.Request, 
 }
 
 // addNavigationLinks adds @odata.navigationLink annotations for navigation properties
-func addNavigationLinks(data interface{}, metadata EntityMetadataProvider, expandedProps []string, r *http.Request, entitySetName string) []map[string]interface{} {
+func addNavigationLinks(data interface{}, metadata EntityMetadataProvider, expandedProps []string, r *http.Request, entitySetName string) []interface{} {
 	dataValue := reflect.ValueOf(data)
 	if dataValue.Kind() != reflect.Slice {
 		return nil
 	}
 
-	result := make([]map[string]interface{}, dataValue.Len())
+	result := make([]interface{}, dataValue.Len())
 	baseURL := buildBaseURL(r)
 	keyProp := metadata.GetKeyProperty()
 
 	for i := 0; i < dataValue.Len(); i++ {
 		entity := dataValue.Index(i)
-		var entityMap map[string]interface{}
+		var entityMap interface{}
 
 		if entity.Kind() == reflect.Map {
 			entityMap = processMapEntity(entity, metadata, expandedProps, baseURL, entitySetName, keyProp)
 		} else {
-			entityMap = processStructEntity(entity, metadata, expandedProps, baseURL, entitySetName, keyProp)
+			entityMap = processStructEntityOrdered(entity, metadata, expandedProps, baseURL, entitySetName, keyProp)
 		}
 
 		if entityMap != nil {
@@ -140,9 +193,9 @@ func processMapEntity(entity reflect.Value, metadata EntityMetadataProvider, exp
 	return entityMap
 }
 
-// processStructEntity processes an entity that is a struct and converts it to a map with navigation links
-func processStructEntity(entity reflect.Value, metadata EntityMetadataProvider, expandedProps []string, baseURL, entitySetName string, keyProp *PropertyMetadata) map[string]interface{} {
-	entityMap := make(map[string]interface{})
+// processStructEntityOrdered processes an entity that is a struct and returns an OrderedMap
+func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataProvider, expandedProps []string, baseURL, entitySetName string, keyProp *PropertyMetadata) *OrderedMap {
+	entityMap := NewOrderedMap()
 	entityType := entity.Type()
 
 	for j := 0; j < entity.NumField(); j++ {
@@ -156,10 +209,10 @@ func processStructEntity(entity reflect.Value, metadata EntityMetadataProvider, 
 		propMeta := findPropertyMetadata(field.Name, metadata)
 
 		if propMeta != nil && propMeta.IsNavigationProp {
-			processNavigationProperty(entityMap, entity, propMeta, fieldValue, jsonName, expandedProps, baseURL, entitySetName, keyProp)
+			processNavigationPropertyOrdered(entityMap, entity, propMeta, fieldValue, jsonName, expandedProps, baseURL, entitySetName, keyProp)
 		} else {
 			// Regular property - include its value
-			entityMap[jsonName] = fieldValue.Interface()
+			entityMap.Set(jsonName, fieldValue.Interface())
 		}
 	}
 
@@ -186,18 +239,18 @@ func findPropertyMetadata(fieldName string, metadata EntityMetadataProvider) *Pr
 	return nil
 }
 
-// processNavigationProperty handles navigation properties by either including expanded data or adding a navigation link
-func processNavigationProperty(entityMap map[string]interface{}, entity reflect.Value, propMeta *PropertyMetadata, fieldValue reflect.Value, jsonName string, expandedProps []string, baseURL, entitySetName string, keyProp *PropertyMetadata) {
+// processNavigationPropertyOrdered handles navigation properties for ordered maps
+func processNavigationPropertyOrdered(entityMap *OrderedMap, entity reflect.Value, propMeta *PropertyMetadata, fieldValue reflect.Value, jsonName string, expandedProps []string, baseURL, entitySetName string, keyProp *PropertyMetadata) {
 	if isPropertyExpanded(*propMeta, expandedProps) {
 		// Include the expanded data
-		entityMap[jsonName] = fieldValue.Interface()
+		entityMap.Set(jsonName, fieldValue.Interface())
 	} else {
 		// Add navigation link instead of null value
 		keyFieldValue := entity.FieldByName(keyProp.Name)
 		if keyFieldValue.IsValid() {
 			keyValue := fmt.Sprintf("%v", keyFieldValue.Interface())
 			navLink := fmt.Sprintf("%s/%s(%s)/%s", baseURL, entitySetName, keyValue, propMeta.JsonName)
-			entityMap[jsonName+"@odata.navigationLink"] = navLink
+			entityMap.Set(jsonName+"@odata.navigationLink", navLink)
 		}
 	}
 }
