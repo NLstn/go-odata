@@ -97,96 +97,109 @@ func addNavigationLinks(data interface{}, metadata EntityMetadataProvider, expan
 		entity := dataValue.Index(i)
 		var entityMap map[string]interface{}
 
-		// Check if the entity is already a map (from $select processing)
 		if entity.Kind() == reflect.Map {
-			// Entity is already a map, convert it
-			entityMap = entity.Interface().(map[string]interface{})
-
-			// Add navigation links for properties that are not in the map
-			// and are not expanded
-			for _, prop := range metadata.GetProperties() {
-				if prop.IsNavigationProp {
-					// Check if this property was expanded
-					isExpanded := false
-					for _, expanded := range expandedProps {
-						if expanded == prop.Name || expanded == prop.JsonName {
-							isExpanded = true
-							break
-						}
-					}
-
-					// If not expanded and not in the map, add navigation link
-					if !isExpanded {
-						// Check if the property is already in the map
-						if _, exists := entityMap[prop.JsonName]; !exists {
-							// Get the entity key value from the map
-							keyValue := entityMap[keyProp.JsonName]
-							if keyValue != nil {
-								navLink := fmt.Sprintf("%s/%s(%v)/%s", baseURL, entitySetName, keyValue, prop.JsonName)
-								entityMap[prop.JsonName+"@odata.navigationLink"] = navLink
-							}
-						}
-					}
-				}
-			}
+			entityMap = processMapEntity(entity, metadata, expandedProps, baseURL, entitySetName, keyProp)
 		} else {
-			// Entity is a struct, process fields
-			entityMap = make(map[string]interface{})
-			entityType := entity.Type()
-
-			for j := 0; j < entity.NumField(); j++ {
-				field := entityType.Field(j)
-				if !field.IsExported() {
-					continue
-				}
-
-				fieldValue := entity.Field(j)
-				jsonName := getJsonFieldName(field)
-
-				// Find metadata for this property
-				var propMeta *PropertyMetadata
-				for _, prop := range metadata.GetProperties() {
-					if prop.Name == field.Name {
-						propMeta = &prop
-						break
-					}
-				}
-
-				// Check if this is a navigation property
-				if propMeta != nil && propMeta.IsNavigationProp {
-					// Check if this property was expanded
-					isExpanded := false
-					for _, expanded := range expandedProps {
-						if expanded == propMeta.Name || expanded == propMeta.JsonName {
-							isExpanded = true
-							break
-						}
-					}
-
-					if isExpanded {
-						// Include the expanded data
-						entityMap[jsonName] = fieldValue.Interface()
-					} else {
-						// Add navigation link instead of null value
-						// Get the entity key value
-						keyFieldValue := entity.FieldByName(keyProp.Name)
-						if keyFieldValue.IsValid() {
-							keyValue := fmt.Sprintf("%v", keyFieldValue.Interface())
-							navLink := fmt.Sprintf("%s/%s(%s)/%s", baseURL, entitySetName, keyValue, propMeta.JsonName)
-							entityMap[jsonName+"@odata.navigationLink"] = navLink
-						}
-					}
-				} else {
-					// Regular property - include its value
-					entityMap[jsonName] = fieldValue.Interface()
-				}
-			}
+			entityMap = processStructEntity(entity, metadata, expandedProps, baseURL, entitySetName, keyProp)
 		}
 
-		result[i] = entityMap
+		if entityMap != nil {
+			result[i] = entityMap
+		}
 	}
 
 	return result
+}
+
+// processMapEntity processes an entity that is already a map and adds navigation links
+func processMapEntity(entity reflect.Value, metadata EntityMetadataProvider, expandedProps []string, baseURL, entitySetName string, keyProp *PropertyMetadata) map[string]interface{} {
+	entityMap, ok := entity.Interface().(map[string]interface{})
+	if !ok {
+		return nil
+	}
+
+	// Add navigation links for properties that are not in the map and not expanded
+	for _, prop := range metadata.GetProperties() {
+		if !prop.IsNavigationProp {
+			continue
+		}
+
+		if isPropertyExpanded(prop, expandedProps) {
+			continue
+		}
+
+		// If property doesn't exist in map, add navigation link
+		if _, exists := entityMap[prop.JsonName]; !exists {
+			if keyValue := entityMap[keyProp.JsonName]; keyValue != nil {
+				navLink := fmt.Sprintf("%s/%s(%v)/%s", baseURL, entitySetName, keyValue, prop.JsonName)
+				entityMap[prop.JsonName+"@odata.navigationLink"] = navLink
+			}
+		}
+	}
+
+	return entityMap
+}
+
+// processStructEntity processes an entity that is a struct and converts it to a map with navigation links
+func processStructEntity(entity reflect.Value, metadata EntityMetadataProvider, expandedProps []string, baseURL, entitySetName string, keyProp *PropertyMetadata) map[string]interface{} {
+	entityMap := make(map[string]interface{})
+	entityType := entity.Type()
+
+	for j := 0; j < entity.NumField(); j++ {
+		field := entityType.Field(j)
+		if !field.IsExported() {
+			continue
+		}
+
+		fieldValue := entity.Field(j)
+		jsonName := getJsonFieldName(field)
+		propMeta := findPropertyMetadata(field.Name, metadata)
+
+		if propMeta != nil && propMeta.IsNavigationProp {
+			processNavigationProperty(entityMap, entity, propMeta, fieldValue, jsonName, expandedProps, baseURL, entitySetName, keyProp)
+		} else {
+			// Regular property - include its value
+			entityMap[jsonName] = fieldValue.Interface()
+		}
+	}
+
+	return entityMap
+}
+
+// isPropertyExpanded checks if a property is in the expanded properties list
+func isPropertyExpanded(prop PropertyMetadata, expandedProps []string) bool {
+	for _, expanded := range expandedProps {
+		if expanded == prop.Name || expanded == prop.JsonName {
+			return true
+		}
+	}
+	return false
+}
+
+// findPropertyMetadata finds the metadata for a property by its field name
+func findPropertyMetadata(fieldName string, metadata EntityMetadataProvider) *PropertyMetadata {
+	for _, prop := range metadata.GetProperties() {
+		if prop.Name == fieldName {
+			return &prop
+		}
+	}
+	return nil
+}
+
+// processNavigationProperty handles navigation properties by either including expanded data or adding a navigation link
+func processNavigationProperty(entityMap map[string]interface{}, entity reflect.Value, propMeta *PropertyMetadata, fieldValue reflect.Value, jsonName string, expandedProps []string, baseURL, entitySetName string, keyProp *PropertyMetadata) {
+	if isPropertyExpanded(*propMeta, expandedProps) {
+		// Include the expanded data
+		entityMap[jsonName] = fieldValue.Interface()
+	} else {
+		// Add navigation link instead of null value
+		keyFieldValue := entity.FieldByName(keyProp.Name)
+		if keyFieldValue.IsValid() {
+			keyValue := fmt.Sprintf("%v", keyFieldValue.Interface())
+			navLink := fmt.Sprintf("%s/%s(%s)/%s", baseURL, entitySetName, keyValue, propMeta.JsonName)
+			entityMap[jsonName+"@odata.navigationLink"] = navLink
+		}
+	}
 }
 
 // getJsonFieldName extracts the JSON field name from struct tags

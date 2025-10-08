@@ -72,73 +72,126 @@ const (
 func ParseQueryOptions(queryParams url.Values, entityMetadata *metadata.EntityMetadata) (*QueryOptions, error) {
 	options := &QueryOptions{}
 
-	// Parse $filter
+	// Parse each query option
+	if err := parseFilterOption(queryParams, entityMetadata, options); err != nil {
+		return nil, err
+	}
+
+	parseSelectOption(queryParams, options)
+
+	if err := parseExpandOption(queryParams, entityMetadata, options); err != nil {
+		return nil, err
+	}
+
+	if err := parseOrderByOption(queryParams, entityMetadata, options); err != nil {
+		return nil, err
+	}
+
+	if err := parseTopOption(queryParams, options); err != nil {
+		return nil, err
+	}
+
+	if err := parseSkipOption(queryParams, options); err != nil {
+		return nil, err
+	}
+
+	if err := parseCountOption(queryParams, options); err != nil {
+		return nil, err
+	}
+
+	return options, nil
+}
+
+// parseFilterOption parses the $filter query parameter
+func parseFilterOption(queryParams url.Values, entityMetadata *metadata.EntityMetadata, options *QueryOptions) error {
 	if filterStr := queryParams.Get("$filter"); filterStr != "" {
 		filter, err := parseFilter(filterStr, entityMetadata)
 		if err != nil {
-			return nil, fmt.Errorf("invalid $filter: %w", err)
+			return fmt.Errorf("invalid $filter: %w", err)
 		}
 		options.Filter = filter
 	}
+	return nil
+}
 
-	// Parse $select
+// parseSelectOption parses the $select query parameter
+func parseSelectOption(queryParams url.Values, options *QueryOptions) {
 	if selectStr := queryParams.Get("$select"); selectStr != "" {
 		options.Select = parseSelect(selectStr)
 	}
+}
 
-	// Parse $expand
+// parseExpandOption parses the $expand query parameter
+func parseExpandOption(queryParams url.Values, entityMetadata *metadata.EntityMetadata, options *QueryOptions) error {
 	if expandStr := queryParams.Get("$expand"); expandStr != "" {
 		expand, err := parseExpand(expandStr, entityMetadata)
 		if err != nil {
-			return nil, fmt.Errorf("invalid $expand: %w", err)
+			return fmt.Errorf("invalid $expand: %w", err)
 		}
 		options.Expand = expand
 	}
+	return nil
+}
 
-	// Parse $orderby
+// parseOrderByOption parses the $orderby query parameter
+func parseOrderByOption(queryParams url.Values, entityMetadata *metadata.EntityMetadata, options *QueryOptions) error {
 	if orderByStr := queryParams.Get("$orderby"); orderByStr != "" {
 		orderBy, err := parseOrderBy(orderByStr, entityMetadata)
 		if err != nil {
-			return nil, fmt.Errorf("invalid $orderby: %w", err)
+			return fmt.Errorf("invalid $orderby: %w", err)
 		}
 		options.OrderBy = orderBy
 	}
+	return nil
+}
 
-	// Parse $top
+// parseTopOption parses the $top query parameter
+func parseTopOption(queryParams url.Values, options *QueryOptions) error {
 	if topStr := queryParams.Get("$top"); topStr != "" {
-		var top int
-		if _, err := fmt.Sscanf(topStr, "%d", &top); err != nil {
-			return nil, fmt.Errorf("invalid $top: must be a non-negative integer")
-		}
-		if top < 0 {
-			return nil, fmt.Errorf("invalid $top: must be a non-negative integer")
+		top, err := parseNonNegativeInt(topStr, "$top")
+		if err != nil {
+			return err
 		}
 		options.Top = &top
 	}
+	return nil
+}
 
-	// Parse $skip
+// parseSkipOption parses the $skip query parameter
+func parseSkipOption(queryParams url.Values, options *QueryOptions) error {
 	if skipStr := queryParams.Get("$skip"); skipStr != "" {
-		var skip int
-		if _, err := fmt.Sscanf(skipStr, "%d", &skip); err != nil {
-			return nil, fmt.Errorf("invalid $skip: must be a non-negative integer")
-		}
-		if skip < 0 {
-			return nil, fmt.Errorf("invalid $skip: must be a non-negative integer")
+		skip, err := parseNonNegativeInt(skipStr, "$skip")
+		if err != nil {
+			return err
 		}
 		options.Skip = &skip
 	}
+	return nil
+}
 
-	// Parse $count
+// parseCountOption parses the $count query parameter
+func parseCountOption(queryParams url.Values, options *QueryOptions) error {
 	if countStr := queryParams.Get("$count"); countStr != "" {
 		countLower := strings.ToLower(countStr)
 		if countLower == "true" {
 			options.Count = true
 		} else if countLower != "false" {
-			return nil, fmt.Errorf("invalid $count: must be 'true' or 'false'")
+			return fmt.Errorf("invalid $count: must be 'true' or 'false'")
 		}
 	}
+	return nil
+}
 
-	return options, nil
+// parseNonNegativeInt parses a string as a non-negative integer
+func parseNonNegativeInt(str, paramName string) (int, error) {
+	var value int
+	if _, err := fmt.Sscanf(str, "%d", &value); err != nil {
+		return 0, fmt.Errorf("invalid %s: must be a non-negative integer", paramName)
+	}
+	if value < 0 {
+		return 0, fmt.Errorf("invalid %s: must be a non-negative integer", paramName)
+	}
+	return value, nil
 }
 
 // parseSelect parses the $select query option

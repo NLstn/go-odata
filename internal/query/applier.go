@@ -225,7 +225,7 @@ func applyFilterForExpand(db *gorm.DB, filter *FilterExpression) *gorm.DB {
 
 // toSnakeCase converts a camelCase or PascalCase string to snake_case
 func toSnakeCase(s string) string {
-	var result []rune
+	result := make([]rune, 0, len(s)+5)
 	for i, r := range s {
 		if i > 0 && r >= 'A' && r <= 'Z' {
 			result = append(result, '_')
