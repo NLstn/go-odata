@@ -250,6 +250,154 @@ func TestParseExpandWithTopAndSkip(t *testing.T) {
 	}
 }
 
+// TestParseExpandWithNestedFilter tests parsing $expand with nested $filter
+func TestParseExpandWithNestedFilter(t *testing.T) {
+	authorMeta, _ := metadata.AnalyzeEntity(&TestAuthor{})
+
+	params := url.Values{}
+	params.Set("$expand", "Books($filter=Title eq 'Test Book')")
+
+	options, err := ParseQueryOptions(params, authorMeta)
+	if err != nil {
+		t.Fatalf("Failed to parse query options: %v", err)
+	}
+
+	if len(options.Expand) != 1 {
+		t.Fatalf("Expected 1 expand option, got %d", len(options.Expand))
+	}
+
+	expand := options.Expand[0]
+	if expand.Filter == nil {
+		t.Fatal("Expected $filter to be set")
+	}
+
+	if expand.Filter.Property != "Title" {
+		t.Errorf("Expected property 'Title', got '%s'", expand.Filter.Property)
+	}
+
+	if expand.Filter.Operator != OpEqual {
+		t.Errorf("Expected operator 'eq', got '%s'", expand.Filter.Operator)
+	}
+
+	if expand.Filter.Value != "Test Book" {
+		t.Errorf("Expected value 'Test Book', got '%v'", expand.Filter.Value)
+	}
+}
+
+// TestParseExpandWithNestedOrderBy tests parsing $expand with nested $orderby
+func TestParseExpandWithNestedOrderBy(t *testing.T) {
+	authorMeta, _ := metadata.AnalyzeEntity(&TestAuthor{})
+
+	params := url.Values{}
+	params.Set("$expand", "Books($orderby=Title desc)")
+
+	options, err := ParseQueryOptions(params, authorMeta)
+	if err != nil {
+		t.Fatalf("Failed to parse query options: %v", err)
+	}
+
+	if len(options.Expand) != 1 {
+		t.Fatalf("Expected 1 expand option, got %d", len(options.Expand))
+	}
+
+	expand := options.Expand[0]
+	if len(expand.OrderBy) != 1 {
+		t.Fatalf("Expected 1 orderby item, got %d", len(expand.OrderBy))
+	}
+
+	orderBy := expand.OrderBy[0]
+	if orderBy.Property != "Title" {
+		t.Errorf("Expected property 'Title', got '%s'", orderBy.Property)
+	}
+
+	if !orderBy.Descending {
+		t.Error("Expected descending order")
+	}
+}
+
+// TestParseExpandWithMultipleNestedFilters tests parsing $expand with complex nested $filter
+func TestParseExpandWithMultipleNestedFilters(t *testing.T) {
+	authorMeta, _ := metadata.AnalyzeEntity(&TestAuthor{})
+
+	params := url.Values{}
+	params.Set("$expand", "Books($filter=Title eq 'Book A' or Title eq 'Book B')")
+
+	options, err := ParseQueryOptions(params, authorMeta)
+	if err != nil {
+		t.Fatalf("Failed to parse query options: %v", err)
+	}
+
+	if len(options.Expand) != 1 {
+		t.Fatalf("Expected 1 expand option, got %d", len(options.Expand))
+	}
+
+	expand := options.Expand[0]
+	if expand.Filter == nil {
+		t.Fatal("Expected $filter to be set")
+	}
+
+	if expand.Filter.Logical != " or " {
+		t.Errorf("Expected logical operator ' or ', got '%s'", expand.Filter.Logical)
+	}
+
+	if expand.Filter.Left == nil || expand.Filter.Right == nil {
+		t.Fatal("Expected left and right filter expressions")
+	}
+}
+
+// TestParseExpandWithAllNestedOptions tests parsing $expand with all nested options
+func TestParseExpandWithAllNestedOptions(t *testing.T) {
+	authorMeta, _ := metadata.AnalyzeEntity(&TestAuthor{})
+
+	params := url.Values{}
+	params.Set("$expand", "Books($filter=Title ne 'Archived';$select=Title;$orderby=Title;$top=5;$skip=2)")
+
+	options, err := ParseQueryOptions(params, authorMeta)
+	if err != nil {
+		t.Fatalf("Failed to parse query options: %v", err)
+	}
+
+	if len(options.Expand) != 1 {
+		t.Fatalf("Expected 1 expand option, got %d", len(options.Expand))
+	}
+
+	expand := options.Expand[0]
+
+	// Check filter
+	if expand.Filter == nil {
+		t.Error("Expected $filter to be set")
+	} else {
+		if expand.Filter.Property != "Title" {
+			t.Errorf("Expected filter property 'Title', got '%s'", expand.Filter.Property)
+		}
+		if expand.Filter.Operator != OpNotEqual {
+			t.Errorf("Expected filter operator 'ne', got '%s'", expand.Filter.Operator)
+		}
+	}
+
+	// Check select
+	if len(expand.Select) != 1 || expand.Select[0] != "Title" {
+		t.Error("Expected $select=Title")
+	}
+
+	// Check orderby
+	if len(expand.OrderBy) != 1 {
+		t.Error("Expected 1 orderby item")
+	} else if expand.OrderBy[0].Property != "Title" {
+		t.Errorf("Expected orderby property 'Title', got '%s'", expand.OrderBy[0].Property)
+	}
+
+	// Check top
+	if expand.Top == nil || *expand.Top != 5 {
+		t.Error("Expected $top=5")
+	}
+
+	// Check skip
+	if expand.Skip == nil || *expand.Skip != 2 {
+		t.Error("Expected $skip=2")
+	}
+}
+
 // TestSplitExpandParts tests the expand parts splitting logic
 func TestSplitExpandParts(t *testing.T) {
 	tests := []struct {
