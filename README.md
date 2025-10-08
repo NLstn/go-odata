@@ -1,6 +1,9 @@
 ````markdown
 # go-odata
 
+[![CI](https://github.com/NLstn/go-odata/actions/workflows/ci.yml/badge.svg)](https://github.com/NLstn/go-odata/actions/workflows/ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/nlstn/go-odata)](https://goreportcard.com/report/github.com/nlstn/go-odata)
+
 A Go library for building services that expose OData APIs with automatic handling of OData logic.
 
 ## Overview
@@ -163,9 +166,33 @@ This starts a server on `http://localhost:8080` with sample Product data.
 - Go 1.21 or later
 - GORM-compatible database driver
 
+## Testing
+
+Run the test suite:
+
+```bash
+# Run all tests
+go test ./...
+
+# Run tests with verbose output
+go test -v ./...
+
+# Run tests with race detection
+go test -race ./...
+```
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
+
+### Running Tests Locally
+
+Before submitting a PR, make sure to:
+
+1. Run all tests: `go test ./...`
+2. Run tests with race detection: `go test -race ./...`
+3. Format your code: `go fmt ./...`
+4. Run go vet: `go vet ./...`
 
 ## License
 
