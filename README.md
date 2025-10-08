@@ -1,4 +1,3 @@
-````markdown
 # go-odata
 
 [![CI](https://github.com/NLstn/go-odata/actions/workflows/ci.yml/badge.svg)](https://github.com/NLstn/go-odata/actions/workflows/ci.yml)
@@ -197,4 +196,3 @@ Before submitting a PR, make sure to:
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-````
