@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/nlstn/go-odata/internal/metadata"
@@ -347,4 +348,383 @@ func findInString(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+// Additional entity type for testing query options
+type Product struct {
+	ID          int     `json:"ID" gorm:"primarykey" odata:"key"`
+	Name        string  `json:"Name"`
+	Description string  `json:"Description"`
+	Price       float64 `json:"Price"`
+	Category    string  `json:"Category"`
+}
+
+func setupProductHandler(t *testing.T) (*EntityHandler, *gorm.DB) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("Failed to connect to database: %v", err)
+	}
+
+	if err := db.AutoMigrate(&Product{}); err != nil {
+		t.Fatalf("Failed to migrate database: %v", err)
+	}
+
+	entityMeta, err := metadata.AnalyzeEntity(Product{})
+	if err != nil {
+		t.Fatalf("Failed to analyze entity: %v", err)
+	}
+
+	handler := NewEntityHandler(db, entityMeta)
+	return handler, db
+}
+
+func TestEntityHandlerCollectionWithFilter(t *testing.T) {
+	handler, db := setupProductHandler(t)
+
+	// Insert test data
+	products := []Product{
+		{ID: 1, Name: "Laptop", Description: "High-performance laptop", Price: 999.99, Category: "Electronics"},
+		{ID: 2, Name: "Mouse", Description: "Wireless mouse", Price: 29.99, Category: "Electronics"},
+		{ID: 3, Name: "Coffee Mug", Description: "Ceramic mug", Price: 15.50, Category: "Kitchen"},
+		{ID: 4, Name: "Office Chair", Description: "Ergonomic chair", Price: 249.99, Category: "Furniture"},
+	}
+	for _, product := range products {
+		db.Create(&product)
+	}
+
+	tests := []struct {
+		name          string
+		query         string
+		expectedCount int
+	}{
+		{
+			name:          "Filter by category",
+			query:         "$filter=Category eq 'Electronics'",
+			expectedCount: 2,
+		},
+		{
+			name:          "Filter by price greater than",
+			query:         "$filter=Price gt 100",
+			expectedCount: 2,
+		},
+		{
+			name:          "Filter by price less than or equal",
+			query:         "$filter=Price le 30",
+			expectedCount: 2,
+		},
+		{
+			name:          "Filter with contains",
+			query:         "$filter=contains(Name,'Laptop')",
+			expectedCount: 1,
+		},
+		{
+			name:          "Filter with startswith",
+			query:         "$filter=startswith(Category,'Elec')",
+			expectedCount: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/Products", nil)
+			q := req.URL.Query()
+			// Parse and add query parameters manually to handle spaces properly
+			if tt.query != "" {
+				parts := strings.SplitN(tt.query, "=", 2)
+				if len(parts) == 2 {
+					q.Add(parts[0], parts[1])
+				}
+			}
+			req.URL.RawQuery = q.Encode()
+			w := httptest.NewRecorder()
+
+			handler.HandleCollection(w, req)
+
+			if w.Code != http.StatusOK {
+				t.Errorf("Status = %v, want %v", w.Code, http.StatusOK)
+				t.Logf("Response body: %s", w.Body.String())
+			}
+
+			var response map[string]interface{}
+			if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+				t.Fatalf("Failed to decode response: %v", err)
+			}
+
+			value, ok := response["value"].([]interface{})
+			if !ok {
+				t.Fatal("value field is not an array")
+			}
+
+			if len(value) != tt.expectedCount {
+				t.Errorf("Expected %d results, got %d", tt.expectedCount, len(value))
+			}
+		})
+	}
+}
+
+func TestEntityHandlerCollectionWithSelect(t *testing.T) {
+	handler, db := setupProductHandler(t)
+
+	// Insert test data
+	products := []Product{
+		{ID: 1, Name: "Laptop", Description: "High-performance laptop", Price: 999.99, Category: "Electronics"},
+		{ID: 2, Name: "Mouse", Description: "Wireless mouse", Price: 29.99, Category: "Electronics"},
+	}
+	for _, product := range products {
+		db.Create(&product)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/Products", nil)
+	q := req.URL.Query()
+	q.Add("$select", "Name,Price")
+	req.URL.RawQuery = q.Encode()
+	w := httptest.NewRecorder()
+
+	handler.HandleCollection(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Status = %v, want %v", w.Code, http.StatusOK)
+	}
+
+	var response map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	value, ok := response["value"].([]interface{})
+	if !ok {
+		t.Fatal("value field is not an array")
+	}
+
+	if len(value) != 2 {
+		t.Errorf("Expected 2 results, got %d", len(value))
+	}
+
+	// Check that only selected properties are present
+	if len(value) > 0 {
+		item, ok := value[0].(map[string]interface{})
+		if !ok {
+			t.Fatal("Item is not a map")
+		}
+
+		if _, hasName := item["Name"]; !hasName {
+			t.Error("Expected Name property to be present")
+		}
+
+		if _, hasPrice := item["Price"]; !hasPrice {
+			t.Error("Expected Price property to be present")
+		}
+
+		if _, hasDescription := item["Description"]; hasDescription {
+			t.Error("Did not expect Description property to be present")
+		}
+
+		if _, hasCategory := item["Category"]; hasCategory {
+			t.Error("Did not expect Category property to be present")
+		}
+	}
+}
+
+func TestEntityHandlerCollectionWithOrderBy(t *testing.T) {
+	handler, db := setupProductHandler(t)
+
+	// Insert test data
+	products := []Product{
+		{ID: 1, Name: "Laptop", Description: "High-performance laptop", Price: 999.99, Category: "Electronics"},
+		{ID: 2, Name: "Mouse", Description: "Wireless mouse", Price: 29.99, Category: "Electronics"},
+		{ID: 3, Name: "Coffee Mug", Description: "Ceramic mug", Price: 15.50, Category: "Kitchen"},
+		{ID: 4, Name: "Office Chair", Description: "Ergonomic chair", Price: 249.99, Category: "Furniture"},
+	}
+	for _, product := range products {
+		db.Create(&product)
+	}
+
+	tests := []struct {
+		name          string
+		query         string
+		expectedFirst string
+		expectedLast  string
+	}{
+		{
+			name:          "Order by name ascending",
+			query:         "$orderby=Name asc",
+			expectedFirst: "Coffee Mug",
+			expectedLast:  "Office Chair",
+		},
+		{
+			name:          "Order by name descending",
+			query:         "$orderby=Name desc",
+			expectedFirst: "Office Chair",
+			expectedLast:  "Coffee Mug",
+		},
+		{
+			name:          "Order by price ascending",
+			query:         "$orderby=Price asc",
+			expectedFirst: "Coffee Mug",
+			expectedLast:  "Laptop",
+		},
+		{
+			name:          "Order by price descending",
+			query:         "$orderby=Price desc",
+			expectedFirst: "Laptop",
+			expectedLast:  "Coffee Mug",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/Products", nil)
+			q := req.URL.Query()
+			if tt.query != "" {
+				parts := strings.SplitN(tt.query, "=", 2)
+				if len(parts) == 2 {
+					q.Add(parts[0], parts[1])
+				}
+			}
+			req.URL.RawQuery = q.Encode()
+			w := httptest.NewRecorder()
+
+			handler.HandleCollection(w, req)
+
+			if w.Code != http.StatusOK {
+				t.Errorf("Status = %v, want %v", w.Code, http.StatusOK)
+			}
+
+			var response map[string]interface{}
+			if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+				t.Fatalf("Failed to decode response: %v", err)
+			}
+
+			value, ok := response["value"].([]interface{})
+			if !ok {
+				t.Fatal("value field is not an array")
+			}
+
+			if len(value) != 4 {
+				t.Errorf("Expected 4 results, got %d", len(value))
+			}
+
+			// Check first item
+			if len(value) > 0 {
+				firstItem, ok := value[0].(map[string]interface{})
+				if !ok {
+					t.Fatal("First item is not a map")
+				}
+
+				firstName, ok := firstItem["Name"].(string)
+				if !ok {
+					t.Fatal("Name is not a string")
+				}
+
+				if firstName != tt.expectedFirst {
+					t.Errorf("Expected first item to be %s, got %s", tt.expectedFirst, firstName)
+				}
+			}
+
+			// Check last item
+			if len(value) > 0 {
+				lastItem, ok := value[len(value)-1].(map[string]interface{})
+				if !ok {
+					t.Fatal("Last item is not a map")
+				}
+
+				lastName, ok := lastItem["Name"].(string)
+				if !ok {
+					t.Fatal("Name is not a string")
+				}
+
+				if lastName != tt.expectedLast {
+					t.Errorf("Expected last item to be %s, got %s", tt.expectedLast, lastName)
+				}
+			}
+		})
+	}
+}
+
+func TestEntityHandlerCollectionWithCombinedOptions(t *testing.T) {
+	handler, db := setupProductHandler(t)
+
+	// Insert test data
+	products := []Product{
+		{ID: 1, Name: "Laptop", Description: "High-performance laptop", Price: 999.99, Category: "Electronics"},
+		{ID: 2, Name: "Mouse", Description: "Wireless mouse", Price: 29.99, Category: "Electronics"},
+		{ID: 3, Name: "Keyboard", Description: "Mechanical keyboard", Price: 149.99, Category: "Electronics"},
+		{ID: 4, Name: "Coffee Mug", Description: "Ceramic mug", Price: 15.50, Category: "Kitchen"},
+	}
+	for _, product := range products {
+		db.Create(&product)
+	}
+
+	// Test filter + orderby + select
+	req := httptest.NewRequest(http.MethodGet, "/Products", nil)
+	q := req.URL.Query()
+	q.Add("$filter", "Category eq 'Electronics'")
+	q.Add("$orderby", "Price desc")
+	q.Add("$select", "Name,Price")
+	req.URL.RawQuery = q.Encode()
+	w := httptest.NewRecorder()
+
+	handler.HandleCollection(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Status = %v, want %v", w.Code, http.StatusOK)
+	}
+
+	var response map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	value, ok := response["value"].([]interface{})
+	if !ok {
+		t.Fatal("value field is not an array")
+	}
+
+	// Should have 3 Electronics items
+	if len(value) != 3 {
+		t.Errorf("Expected 3 results, got %d", len(value))
+	}
+
+	// First item should be Laptop (highest price)
+	if len(value) > 0 {
+		firstItem, ok := value[0].(map[string]interface{})
+		if !ok {
+			t.Fatal("First item is not a map")
+		}
+
+		firstName, _ := firstItem["Name"].(string)
+		if firstName != "Laptop" {
+			t.Errorf("Expected first item to be Laptop, got %s", firstName)
+		}
+
+		// Should only have Name and Price
+		if len(firstItem) > 2 {
+			t.Errorf("Expected only 2 properties, got %d", len(firstItem))
+		}
+	}
+}
+
+func TestEntityHandlerCollectionWithInvalidFilter(t *testing.T) {
+	handler, _ := setupProductHandler(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/Products", nil)
+	q := req.URL.Query()
+	q.Add("$filter", "InvalidProperty eq 'value'")
+	req.URL.RawQuery = q.Encode()
+	w := httptest.NewRecorder()
+
+	handler.HandleCollection(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Status = %v, want %v", w.Code, http.StatusBadRequest)
+	}
+
+	var response map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	if _, ok := response["error"]; !ok {
+		t.Error("Response missing error field")
+	}
 }
