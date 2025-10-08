@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/nlstn/go-odata/internal/metadata"
+	"github.com/nlstn/go-odata/internal/query"
 	"github.com/nlstn/go-odata/internal/response"
 	"gorm.io/gorm"
 )
@@ -36,12 +37,24 @@ func (h *EntityHandler) HandleCollection(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Parse query options
+	queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata)
+	if err != nil {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid query options", err.Error()); writeErr != nil {
+			fmt.Printf("Error writing error response: %v\n", writeErr)
+		}
+		return
+	}
+
 	// Create a slice to hold the results
 	sliceType := reflect.SliceOf(h.metadata.EntityType)
 	results := reflect.New(sliceType).Interface()
 
+	// Apply query options to the database query
+	db := query.ApplyQueryOptions(h.db, queryOptions, h.metadata)
+
 	// Execute the database query
-	if err := h.db.Find(results).Error; err != nil {
+	if err := db.Find(results).Error; err != nil {
 		if writeErr := response.WriteError(w, http.StatusInternalServerError, "Database error", err.Error()); writeErr != nil {
 			fmt.Printf("Error writing error response: %v\n", writeErr)
 		}
@@ -50,6 +63,11 @@ func (h *EntityHandler) HandleCollection(w http.ResponseWriter, r *http.Request)
 
 	// Get the actual slice value (results is a pointer to slice)
 	sliceValue := reflect.ValueOf(results).Elem().Interface()
+
+	// Apply $select if specified
+	if len(queryOptions.Select) > 0 {
+		sliceValue = query.ApplySelect(sliceValue, queryOptions.Select, h.metadata)
+	}
 
 	// Write the OData response
 	if err := response.WriteODataCollection(w, r, h.metadata.EntitySetName, sliceValue); err != nil {
