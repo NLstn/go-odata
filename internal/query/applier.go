@@ -20,6 +20,11 @@ func ApplyQueryOptions(db *gorm.DB, options *QueryOptions, entityMetadata *metad
 		db = applyFilter(db, options.Filter, entityMetadata)
 	}
 
+	// Apply expand (preload navigation properties)
+	if len(options.Expand) > 0 {
+		db = applyExpand(db, options.Expand, entityMetadata)
+	}
+
 	// Apply orderby
 	if len(options.OrderBy) > 0 {
 		db = applyOrderBy(db, options.OrderBy, entityMetadata)
@@ -44,6 +49,15 @@ func ApplyFilterOnly(db *gorm.DB, filter *FilterExpression, entityMetadata *meta
 		return db
 	}
 	return applyFilter(db, filter, entityMetadata)
+}
+
+// ApplyExpandOnly applies only the expand (preload) options to a GORM database query
+// This is useful for loading related entities without applying other query options
+func ApplyExpandOnly(db *gorm.DB, expand []ExpandOption, entityMetadata *metadata.EntityMetadata) *gorm.DB {
+	if len(expand) == 0 {
+		return db
+	}
+	return applyExpand(db, expand, entityMetadata)
 }
 
 // applyFilter applies filter expressions to the GORM query
@@ -126,6 +140,143 @@ func buildFilterCondition(filter *FilterExpression, entityMetadata *metadata.Ent
 	default:
 		return "", nil
 	}
+}
+
+// applyExpand applies expand (preload) options to the GORM query
+func applyExpand(db *gorm.DB, expand []ExpandOption, entityMetadata *metadata.EntityMetadata) *gorm.DB {
+	for _, expandOpt := range expand {
+		// Find the navigation property
+		navProp := findNavigationProperty(expandOpt.NavigationProperty, entityMetadata)
+		if navProp == nil {
+			continue // Skip invalid navigation property
+		}
+
+		// Build preload with conditions if nested options exist
+		if expandOpt.Select != nil || expandOpt.Filter != nil || expandOpt.OrderBy != nil ||
+			expandOpt.Top != nil || expandOpt.Skip != nil {
+			// Preload with conditions
+			db = db.Preload(navProp.Name, func(db *gorm.DB) *gorm.DB {
+				// Apply nested filter
+				if expandOpt.Filter != nil {
+					// Note: This would require navigation target metadata
+					// For now, just add basic support
+					db = applyFilterForExpand(db, expandOpt.Filter)
+				}
+
+				// Apply nested orderby
+				if len(expandOpt.OrderBy) > 0 {
+					for _, item := range expandOpt.OrderBy {
+						direction := "ASC"
+						if item.Descending {
+							direction = "DESC"
+						}
+						db = db.Order(fmt.Sprintf("%s %s", item.Property, direction))
+					}
+				}
+
+				// Apply nested pagination
+				if expandOpt.Skip != nil {
+					db = db.Offset(*expandOpt.Skip)
+				}
+				if expandOpt.Top != nil {
+					db = db.Limit(*expandOpt.Top)
+				}
+
+				return db
+			})
+		} else {
+			// Simple preload without conditions
+			db = db.Preload(navProp.Name)
+		}
+	}
+	return db
+}
+
+// applyFilterForExpand applies filter to expanded navigation property
+// This is a simplified version that doesn't have full metadata context
+func applyFilterForExpand(db *gorm.DB, filter *FilterExpression) *gorm.DB {
+	if filter == nil {
+		return db
+	}
+
+	// Handle logical operators
+	if filter.Logical != "" {
+		leftDB := applyFilterForExpand(db, filter.Left)
+		rightDB := applyFilterForExpand(db, filter.Right)
+
+		switch filter.Logical {
+		case LogicalAnd:
+			return leftDB.Where(rightDB)
+		case LogicalOr:
+			leftQuery, leftArgs := buildSimpleFilterCondition(filter.Left)
+			rightQuery, rightArgs := buildSimpleFilterCondition(filter.Right)
+			combinedQuery := fmt.Sprintf("(%s) OR (%s)", leftQuery, rightQuery)
+			combinedArgs := append(leftArgs, rightArgs...)
+			return db.Where(combinedQuery, combinedArgs...)
+		}
+	}
+
+	// Handle simple comparison
+	query, args := buildSimpleFilterCondition(filter)
+	return db.Where(query, args...)
+}
+
+// buildSimpleFilterCondition builds a filter condition without metadata
+func buildSimpleFilterCondition(filter *FilterExpression) (string, []interface{}) {
+	if filter == nil {
+		return "", nil
+	}
+
+	if filter.Logical != "" {
+		leftQuery, leftArgs := buildSimpleFilterCondition(filter.Left)
+		rightQuery, rightArgs := buildSimpleFilterCondition(filter.Right)
+
+		switch filter.Logical {
+		case LogicalAnd:
+			query := fmt.Sprintf("(%s) AND (%s)", leftQuery, rightQuery)
+			args := append(leftArgs, rightArgs...)
+			return query, args
+		case LogicalOr:
+			query := fmt.Sprintf("(%s) OR (%s)", leftQuery, rightQuery)
+			args := append(leftArgs, rightArgs...)
+			return query, args
+		}
+	}
+
+	fieldName := filter.Property
+
+	switch filter.Operator {
+	case OpEqual:
+		return fmt.Sprintf("%s = ?", fieldName), []interface{}{filter.Value}
+	case OpNotEqual:
+		return fmt.Sprintf("%s != ?", fieldName), []interface{}{filter.Value}
+	case OpGreaterThan:
+		return fmt.Sprintf("%s > ?", fieldName), []interface{}{filter.Value}
+	case OpGreaterThanOrEqual:
+		return fmt.Sprintf("%s >= ?", fieldName), []interface{}{filter.Value}
+	case OpLessThan:
+		return fmt.Sprintf("%s < ?", fieldName), []interface{}{filter.Value}
+	case OpLessThanOrEqual:
+		return fmt.Sprintf("%s <= ?", fieldName), []interface{}{filter.Value}
+	case OpContains:
+		return fmt.Sprintf("%s LIKE ?", fieldName), []interface{}{"%" + fmt.Sprint(filter.Value) + "%"}
+	case OpStartsWith:
+		return fmt.Sprintf("%s LIKE ?", fieldName), []interface{}{fmt.Sprint(filter.Value) + "%"}
+	case OpEndsWith:
+		return fmt.Sprintf("%s LIKE ?", fieldName), []interface{}{"%" + fmt.Sprint(filter.Value)}
+	default:
+		return "", nil
+	}
+}
+
+// findNavigationProperty finds a navigation property by name
+func findNavigationProperty(propName string, entityMetadata *metadata.EntityMetadata) *metadata.PropertyMetadata {
+	for _, prop := range entityMetadata.Properties {
+		if (prop.JsonName == propName || prop.Name == propName) && prop.IsNavigationProp {
+			return &prop
+		}
+	}
+	return nil
 }
 
 // applyOrderBy applies order by clauses to the GORM query

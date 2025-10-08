@@ -24,8 +24,8 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse the OData URL to extract entity set and key
-	entitySet, entityKey, err := response.ParseODataURL(path)
+	// Parse the OData URL to extract entity set, key, and navigation property
+	components, err := response.ParseODataURLComponents(path)
 	if err != nil {
 		if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid URL", err.Error()); writeErr != nil {
 			fmt.Printf("Error writing error response: %v\n", writeErr)
@@ -34,22 +34,25 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Find the handler for the entity set
-	handler, exists := s.handlers[entitySet]
+	handler, exists := s.handlers[components.EntitySet]
 	if !exists {
 		if writeErr := response.WriteError(w, http.StatusNotFound, "Entity set not found",
-			fmt.Sprintf("Entity set '%s' is not registered", entitySet)); writeErr != nil {
+			fmt.Sprintf("Entity set '%s' is not registered", components.EntitySet)); writeErr != nil {
 			fmt.Printf("Error writing error response: %v\n", writeErr)
 		}
 		return
 	}
 
 	// Route to appropriate handler method
-	if entityKey == "" {
+	if components.EntityKey == "" {
 		// Collection request
 		handler.HandleCollection(w, r)
+	} else if components.NavigationProperty != "" {
+		// Navigation property request: Products(1)/Descriptions
+		handler.HandleNavigationProperty(w, r, components.EntityKey, components.NavigationProperty)
 	} else {
 		// Individual entity request
-		handler.HandleEntity(w, r, entityKey)
+		handler.HandleEntity(w, r, components.EntityKey)
 	}
 }
 

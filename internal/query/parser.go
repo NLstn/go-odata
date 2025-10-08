@@ -12,10 +12,21 @@ import (
 type QueryOptions struct {
 	Filter  *FilterExpression
 	Select  []string
+	Expand  []ExpandOption
 	OrderBy []OrderByItem
 	Top     *int
 	Skip    *int
 	Count   bool
+}
+
+// ExpandOption represents a single $expand clause
+type ExpandOption struct {
+	NavigationProperty string
+	Select             []string          // Nested $select
+	Filter             *FilterExpression // Nested $filter
+	OrderBy            []OrderByItem     // Nested $orderby
+	Top                *int              // Nested $top
+	Skip               *int              // Nested $skip
 }
 
 // OrderByItem represents a single orderby clause
@@ -75,6 +86,15 @@ func ParseQueryOptions(queryParams url.Values, entityMetadata *metadata.EntityMe
 		options.Select = parseSelect(selectStr)
 	}
 
+	// Parse $expand
+	if expandStr := queryParams.Get("$expand"); expandStr != "" {
+		expand, err := parseExpand(expandStr, entityMetadata)
+		if err != nil {
+			return nil, fmt.Errorf("invalid $expand: %w", err)
+		}
+		options.Expand = expand
+	}
+
 	// Parse $orderby
 	if orderByStr := queryParams.Get("$orderby"); orderByStr != "" {
 		orderBy, err := parseOrderBy(orderByStr, entityMetadata)
@@ -132,6 +152,139 @@ func parseSelect(selectStr string) []string {
 		}
 	}
 	return result
+}
+
+// parseExpand parses the $expand query option
+func parseExpand(expandStr string, entityMetadata *metadata.EntityMetadata) ([]ExpandOption, error) {
+	// Split by comma for multiple expands (basic implementation, doesn't handle nested parens)
+	parts := splitExpandParts(expandStr)
+	result := make([]ExpandOption, 0, len(parts))
+
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed == "" {
+			continue
+		}
+
+		expand, err := parseSingleExpand(trimmed, entityMetadata)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, expand)
+	}
+
+	return result, nil
+}
+
+// splitExpandParts splits expand string by comma, handling nested parentheses
+func splitExpandParts(expandStr string) []string {
+	result := make([]string, 0)
+	current := ""
+	depth := 0
+
+	for _, ch := range expandStr {
+		if ch == '(' {
+			depth++
+			current += string(ch)
+		} else if ch == ')' {
+			depth--
+			current += string(ch)
+		} else if ch == ',' && depth == 0 {
+			if current != "" {
+				result = append(result, current)
+			}
+			current = ""
+		} else {
+			current += string(ch)
+		}
+	}
+
+	if current != "" {
+		result = append(result, current)
+	}
+
+	return result
+}
+
+// parseSingleExpand parses a single expand option with potential nested query options
+func parseSingleExpand(expandStr string, entityMetadata *metadata.EntityMetadata) (ExpandOption, error) {
+	expand := ExpandOption{}
+
+	// Check for nested query options: NavigationProp($select=...,...)
+	if idx := strings.Index(expandStr, "("); idx != -1 {
+		if !strings.HasSuffix(expandStr, ")") {
+			return expand, fmt.Errorf("invalid expand syntax: %s", expandStr)
+		}
+
+		expand.NavigationProperty = strings.TrimSpace(expandStr[:idx])
+		nestedOptions := expandStr[idx+1 : len(expandStr)-1]
+
+		// Parse nested options (simplified - doesn't handle complex nested cases)
+		if err := parseNestedExpandOptions(&expand, nestedOptions); err != nil {
+			return expand, err
+		}
+	} else {
+		expand.NavigationProperty = strings.TrimSpace(expandStr)
+	}
+
+	// Validate navigation property exists
+	if !isNavigationProperty(expand.NavigationProperty, entityMetadata) {
+		return expand, fmt.Errorf("'%s' is not a valid navigation property", expand.NavigationProperty)
+	}
+
+	return expand, nil
+}
+
+// parseNestedExpandOptions parses nested query options within an expand
+func parseNestedExpandOptions(expand *ExpandOption, optionsStr string) error {
+	// Split by semicolon for different query options
+	parts := strings.Split(optionsStr, ";")
+
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+
+		// Find the equals sign
+		eqIdx := strings.Index(part, "=")
+		if eqIdx == -1 {
+			continue
+		}
+
+		key := strings.TrimSpace(part[:eqIdx])
+		value := strings.TrimSpace(part[eqIdx+1:])
+
+		switch strings.ToLower(key) {
+		case "$select":
+			expand.Select = parseSelect(value)
+		case "$top":
+			var top int
+			if _, err := fmt.Sscanf(value, "%d", &top); err != nil {
+				return fmt.Errorf("invalid nested $top: %w", err)
+			}
+			expand.Top = &top
+		case "$skip":
+			var skip int
+			if _, err := fmt.Sscanf(value, "%d", &skip); err != nil {
+				return fmt.Errorf("invalid nested $skip: %w", err)
+			}
+			expand.Skip = &skip
+			// Add more nested options as needed (filter, orderby)
+		}
+	}
+
+	return nil
+}
+
+// isNavigationProperty checks if a property is a navigation property
+func isNavigationProperty(propName string, entityMetadata *metadata.EntityMetadata) bool {
+	for _, prop := range entityMetadata.Properties {
+		if (prop.JsonName == propName || prop.Name == propName) && prop.IsNavigationProp {
+			return true
+		}
+	}
+	return false
 }
 
 // parseOrderBy parses the $orderby query option

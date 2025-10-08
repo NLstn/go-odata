@@ -64,8 +64,15 @@ func (h *EntityHandler) HandleCollection(w http.ResponseWriter, r *http.Request)
 	// Calculate next link if pagination is active
 	nextLink := h.calculateNextLink(queryOptions, sliceValue, r)
 
-	// Write the OData response
-	if err := response.WriteODataCollection(w, r, h.metadata.EntitySetName, sliceValue, totalCount, nextLink); err != nil {
+	// Get list of expanded properties
+	expandedProps := make([]string, len(queryOptions.Expand))
+	for i, exp := range queryOptions.Expand {
+		expandedProps[i] = exp.NavigationProperty
+	}
+
+	// Write the OData response with navigation links
+	metadataProvider := &metadataAdapter{metadata: h.metadata}
+	if err := response.WriteODataCollectionWithNavigation(w, r, h.metadata.EntitySetName, sliceValue, totalCount, nextLink, metadataProvider, expandedProps); err != nil {
 		// If we can't write the response, log the error but don't try to write another response
 		fmt.Printf("Error writing OData response: %v\n", err)
 	}
@@ -206,12 +213,28 @@ func (h *EntityHandler) HandleEntity(w http.ResponseWriter, r *http.Request, ent
 		return
 	}
 
+	// Parse query options for $expand
+	queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata)
+	if err != nil {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid query options", err.Error()); writeErr != nil {
+			fmt.Printf("Error writing error response: %v\n", writeErr)
+		}
+		return
+	}
+
 	// Create an instance to hold the result
 	result := reflect.New(h.metadata.EntityType).Interface()
 
 	// Build the query condition using the key property
 	keyField := h.metadata.KeyProperty.JsonName
-	if err := h.db.Where(fmt.Sprintf("%s = ?", keyField), entityKey).First(result).Error; err != nil {
+	db := h.db.Where(fmt.Sprintf("%s = ?", keyField), entityKey)
+
+	// Apply expand (preload navigation properties) if specified
+	if len(queryOptions.Expand) > 0 {
+		db = query.ApplyExpandOnly(db, queryOptions.Expand, h.metadata)
+	}
+
+	if err := db.First(result).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			if writeErr := response.WriteError(w, http.StatusNotFound, "Entity not found",
 				fmt.Sprintf("Entity with key '%s' not found", entityKey)); writeErr != nil {
@@ -255,6 +278,121 @@ func (h *EntityHandler) HandleEntity(w http.ResponseWriter, r *http.Request, ent
 	}
 }
 
+// HandleNavigationProperty handles GET requests for navigation properties (e.g., Products(1)/Descriptions)
+func (h *EntityHandler) HandleNavigationProperty(w http.ResponseWriter, r *http.Request, entityKey string, navigationProperty string) {
+	if r.Method != http.MethodGet {
+		if err := response.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
+			fmt.Sprintf("Method %s is not supported for navigation properties", r.Method)); err != nil {
+			fmt.Printf("Error writing error response: %v\n", err)
+		}
+		return
+	}
+
+	// Find the navigation property in metadata
+	var navProp *metadata.PropertyMetadata
+	for _, prop := range h.metadata.Properties {
+		if (prop.JsonName == navigationProperty || prop.Name == navigationProperty) && prop.IsNavigationProp {
+			navProp = &prop
+			break
+		}
+	}
+
+	if navProp == nil {
+		if err := response.WriteError(w, http.StatusNotFound, "Navigation property not found",
+			fmt.Sprintf("'%s' is not a valid navigation property for %s", navigationProperty, h.metadata.EntitySetName)); err != nil {
+			fmt.Printf("Error writing error response: %v\n", err)
+		}
+		return
+	}
+
+	// First, fetch the parent entity
+	parent := reflect.New(h.metadata.EntityType).Interface()
+	keyField := h.metadata.KeyProperty.JsonName
+
+	db := h.db.Where(fmt.Sprintf("%s = ?", keyField), entityKey)
+
+	// Preload the navigation property
+	db = db.Preload(navProp.Name)
+
+	if err := db.First(parent).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			if writeErr := response.WriteError(w, http.StatusNotFound, "Entity not found",
+				fmt.Sprintf("Entity with key '%s' not found", entityKey)); writeErr != nil {
+				fmt.Printf("Error writing error response: %v\n", writeErr)
+			}
+		} else {
+			if writeErr := response.WriteError(w, http.StatusInternalServerError, "Database error", err.Error()); writeErr != nil {
+				fmt.Printf("Error writing error response: %v\n", writeErr)
+			}
+		}
+		return
+	}
+
+	// Extract the navigation property value
+	parentValue := reflect.ValueOf(parent).Elem()
+	navFieldValue := parentValue.FieldByName(navProp.Name)
+
+	if !navFieldValue.IsValid() {
+		if err := response.WriteError(w, http.StatusInternalServerError, "Internal error",
+			"Could not access navigation property"); err != nil {
+			fmt.Printf("Error writing error response: %v\n", err)
+		}
+		return
+	}
+
+	// Check if it's a collection or single entity
+	if navProp.NavigationIsArray {
+		// Collection navigation property
+		navData := navFieldValue.Interface()
+
+		// Write as collection
+		if err := response.WriteODataCollection(w, r, navProp.NavigationTarget+"s", navData, nil, nil); err != nil {
+			fmt.Printf("Error writing navigation property collection: %v\n", err)
+		}
+	} else {
+		// Single navigation property
+		navData := navFieldValue.Interface()
+
+		// Build context URL for navigation property entity
+		contextURL := fmt.Sprintf("%s/$metadata#%s/$entity", response.BuildBaseURL(r), navProp.NavigationTarget+"s")
+
+		odataResponse := map[string]interface{}{
+			"@odata.context": contextURL,
+		}
+
+		// Merge the entity fields into the response
+		navValue := reflect.ValueOf(navData)
+		if navValue.Kind() == reflect.Ptr {
+			if navValue.IsNil() {
+				// Navigation property is null
+				w.Header().Set("Content-Type", "application/json;odata.metadata=minimal")
+				w.Header().Set("OData-Version", "4.0")
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			navValue = navValue.Elem()
+		}
+
+		navType := navValue.Type()
+		for i := 0; i < navValue.NumField(); i++ {
+			field := navType.Field(i)
+			if field.IsExported() {
+				fieldValue := navValue.Field(i)
+				jsonName := getJsonName(field)
+				odataResponse[jsonName] = fieldValue.Interface()
+			}
+		}
+
+		w.Header().Set("Content-Type", "application/json;odata.metadata=minimal")
+		w.Header().Set("OData-Version", "4.0")
+		w.WriteHeader(http.StatusOK)
+
+		if err := json.NewEncoder(w).Encode(odataResponse); err != nil {
+			fmt.Printf("Error writing navigation property response: %v\n", err)
+		}
+	}
+}
+
 // getJsonName extracts the JSON field name from struct tags
 func getJsonName(field reflect.StructField) string {
 	jsonTag := field.Tag.Get("json")
@@ -269,4 +407,40 @@ func getJsonName(field reflect.StructField) string {
 	}
 
 	return field.Name
+}
+
+// metadataAdapter adapts metadata.EntityMetadata to response.EntityMetadataProvider
+type metadataAdapter struct {
+	metadata *metadata.EntityMetadata
+}
+
+func (a *metadataAdapter) GetProperties() []response.PropertyMetadata {
+	props := make([]response.PropertyMetadata, len(a.metadata.Properties))
+	for i, p := range a.metadata.Properties {
+		props[i] = response.PropertyMetadata{
+			Name:              p.Name,
+			JsonName:          p.JsonName,
+			IsNavigationProp:  p.IsNavigationProp,
+			NavigationTarget:  p.NavigationTarget,
+			NavigationIsArray: p.NavigationIsArray,
+		}
+	}
+	return props
+}
+
+func (a *metadataAdapter) GetKeyProperty() *response.PropertyMetadata {
+	if a.metadata.KeyProperty == nil {
+		return nil
+	}
+	return &response.PropertyMetadata{
+		Name:              a.metadata.KeyProperty.Name,
+		JsonName:          a.metadata.KeyProperty.JsonName,
+		IsNavigationProp:  a.metadata.KeyProperty.IsNavigationProp,
+		NavigationTarget:  a.metadata.KeyProperty.NavigationTarget,
+		NavigationIsArray: a.metadata.KeyProperty.NavigationIsArray,
+	}
+}
+
+func (a *metadataAdapter) GetEntitySetName() string {
+	return a.metadata.EntitySetName
 }
