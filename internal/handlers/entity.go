@@ -251,22 +251,8 @@ func (h *EntityHandler) HandleEntity(w http.ResponseWriter, r *http.Request, ent
 	// For individual entities, we return the entity directly (not wrapped in a collection)
 	contextURL := fmt.Sprintf("%s/$metadata#%s/$entity", response.BuildBaseURL(r), h.metadata.EntitySetName)
 
-	odataResponse := map[string]interface{}{
-		"@odata.context": contextURL,
-	}
-
-	// Merge the entity fields into the response
-	entityValue := reflect.ValueOf(result).Elem()
-	entityType := entityValue.Type()
-
-	for i := 0; i < entityValue.NumField(); i++ {
-		field := entityType.Field(i)
-		if field.IsExported() {
-			fieldValue := entityValue.Field(i)
-			jsonName := getJsonName(field)
-			odataResponse[jsonName] = fieldValue.Interface()
-		}
-	}
+	// Build ordered response
+	odataResponse := h.buildOrderedEntityResponse(result, contextURL)
 
 	w.Header().Set("Content-Type", "application/json;odata.metadata=minimal")
 	w.Header().Set("OData-Version", "4.0")
@@ -405,9 +391,8 @@ func (h *EntityHandler) writeSingleNavigationEntity(w http.ResponseWriter, r *ht
 
 // buildEntityResponse builds an OData entity response from a reflect.Value
 func (h *EntityHandler) buildEntityResponse(navValue reflect.Value, contextURL string) map[string]interface{} {
-	odataResponse := map[string]interface{}{
-		"@odata.context": contextURL,
-	}
+	odataResponse := response.NewOrderedMap()
+	odataResponse.Set("@odata.context", contextURL)
 
 	navType := navValue.Type()
 	for i := 0; i < navValue.NumField(); i++ {
@@ -415,7 +400,28 @@ func (h *EntityHandler) buildEntityResponse(navValue reflect.Value, contextURL s
 		if field.IsExported() {
 			fieldValue := navValue.Field(i)
 			jsonName := getJsonName(field)
-			odataResponse[jsonName] = fieldValue.Interface()
+			odataResponse.Set(jsonName, fieldValue.Interface())
+		}
+	}
+
+	return odataResponse.ToMap()
+}
+
+// buildOrderedEntityResponse builds an ordered OData entity response
+func (h *EntityHandler) buildOrderedEntityResponse(result interface{}, contextURL string) *response.OrderedMap {
+	odataResponse := response.NewOrderedMap()
+	odataResponse.Set("@odata.context", contextURL)
+
+	// Merge the entity fields into the response
+	entityValue := reflect.ValueOf(result).Elem()
+	entityType := entityValue.Type()
+
+	for i := 0; i < entityValue.NumField(); i++ {
+		field := entityType.Field(i)
+		if field.IsExported() {
+			fieldValue := entityValue.Field(i)
+			jsonName := getJsonName(field)
+			odataResponse.Set(jsonName, fieldValue.Interface())
 		}
 	}
 
