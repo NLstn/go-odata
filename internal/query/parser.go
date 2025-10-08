@@ -15,6 +15,7 @@ type QueryOptions struct {
 	OrderBy []OrderByItem
 	Top     *int
 	Skip    *int
+	Count   bool
 }
 
 // OrderByItem represents a single orderby clause
@@ -81,6 +82,40 @@ func ParseQueryOptions(queryParams url.Values, entityMetadata *metadata.EntityMe
 			return nil, fmt.Errorf("invalid $orderby: %w", err)
 		}
 		options.OrderBy = orderBy
+	}
+
+	// Parse $top
+	if topStr := queryParams.Get("$top"); topStr != "" {
+		var top int
+		if _, err := fmt.Sscanf(topStr, "%d", &top); err != nil {
+			return nil, fmt.Errorf("invalid $top: must be a non-negative integer")
+		}
+		if top < 0 {
+			return nil, fmt.Errorf("invalid $top: must be a non-negative integer")
+		}
+		options.Top = &top
+	}
+
+	// Parse $skip
+	if skipStr := queryParams.Get("$skip"); skipStr != "" {
+		var skip int
+		if _, err := fmt.Sscanf(skipStr, "%d", &skip); err != nil {
+			return nil, fmt.Errorf("invalid $skip: must be a non-negative integer")
+		}
+		if skip < 0 {
+			return nil, fmt.Errorf("invalid $skip: must be a non-negative integer")
+		}
+		options.Skip = &skip
+	}
+
+	// Parse $count
+	if countStr := queryParams.Get("$count"); countStr != "" {
+		countLower := strings.ToLower(countStr)
+		if countLower == "true" {
+			options.Count = true
+		} else if countLower != "false" {
+			return nil, fmt.Errorf("invalid $count: must be 'true' or 'false'")
+		}
 	}
 
 	return options, nil

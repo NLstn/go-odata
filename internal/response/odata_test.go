@@ -22,7 +22,7 @@ func TestWriteODataCollection(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "http://localhost:8080/Products", nil)
 	w := httptest.NewRecorder()
 
-	err := WriteODataCollection(w, req, "Products", data)
+	err := WriteODataCollection(w, req, "Products", data, nil, nil)
 	if err != nil {
 		t.Fatalf("WriteODataCollection() error = %v", err)
 	}

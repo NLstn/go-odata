@@ -2,6 +2,7 @@ package response
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -9,18 +10,22 @@ import (
 
 // ODataResponse represents the structure of an OData JSON response
 type ODataResponse struct {
-	Context string      `json:"@odata.context"`
-	Value   interface{} `json:"value"`
+	Context  string      `json:"@odata.context"`
+	Count    *int64      `json:"@odata.count,omitempty"`
+	NextLink *string     `json:"@odata.nextLink,omitempty"`
+	Value    interface{} `json:"value"`
 }
 
 // WriteODataCollection writes an OData collection response
-func WriteODataCollection(w http.ResponseWriter, r *http.Request, entitySetName string, data interface{}) error {
+func WriteODataCollection(w http.ResponseWriter, r *http.Request, entitySetName string, data interface{}, count *int64, nextLink *string) error {
 	// Build the context URL
 	contextURL := buildContextURL(r, entitySetName)
 
 	response := ODataResponse{
-		Context: contextURL,
-		Value:   data,
+		Context:  contextURL,
+		Count:    count,
+		NextLink: nextLink,
+		Value:    data,
 	}
 
 	// Set OData-compliant headers
@@ -109,6 +114,25 @@ func buildBaseURL(r *http.Request) string {
 	}
 
 	return scheme + "://" + host
+}
+
+// BuildNextLink builds the next link URL for pagination
+func BuildNextLink(r *http.Request, skipValue int) string {
+	baseURL := buildBaseURL(r)
+
+	// Clone the URL to avoid modifying the original
+	nextURL := *r.URL
+
+	// Get existing query parameters
+	query := nextURL.Query()
+
+	// Update the $skip parameter
+	query.Set("$skip", fmt.Sprintf("%d", skipValue))
+
+	// Rebuild the URL with updated query
+	nextURL.RawQuery = query.Encode()
+
+	return baseURL + nextURL.Path + "?" + nextURL.RawQuery
 }
 
 // ParseODataURL parses an OData URL and extracts components (exported for use in main package)
