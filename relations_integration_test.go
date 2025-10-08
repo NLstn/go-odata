@@ -1,0 +1,430 @@
+package odata
+
+import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+)
+
+// Integration test entities
+type Department struct {
+	ID        uint       `json:"ID" gorm:"primaryKey" odata:"key"`
+	Name      string     `json:"Name"`
+	Employees []Employee `json:"Employees" gorm:"foreignKey:DepartmentID"`
+}
+
+type Employee struct {
+	ID           uint        `json:"ID" gorm:"primaryKey" odata:"key"`
+	Name         string      `json:"Name"`
+	DepartmentID uint        `json:"DepartmentID"`
+	Department   *Department `json:"Department,omitempty" gorm:"foreignKey:DepartmentID"`
+}
+
+func setupIntegrationTest(t *testing.T) *Service {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("Failed to connect to database: %v", err)
+	}
+
+	if err := db.AutoMigrate(&Department{}, &Employee{}); err != nil {
+		t.Fatalf("Failed to migrate database: %v", err)
+	}
+
+	// Seed test data
+	departments := []Department{
+		{ID: 1, Name: "Engineering"},
+		{ID: 2, Name: "Sales"},
+		{ID: 3, Name: "Marketing"},
+	}
+	db.Create(&departments)
+
+	employees := []Employee{
+		{ID: 1, Name: "Alice", DepartmentID: 1},
+		{ID: 2, Name: "Bob", DepartmentID: 1},
+		{ID: 3, Name: "Charlie", DepartmentID: 1},
+		{ID: 4, Name: "Diana", DepartmentID: 2},
+		{ID: 5, Name: "Eve", DepartmentID: 2},
+		{ID: 6, Name: "Frank", DepartmentID: 3},
+	}
+	db.Create(&employees)
+
+	service := NewService(db)
+	service.RegisterEntity(&Department{})
+	service.RegisterEntity(&Employee{})
+
+	return service
+}
+
+// TestIntegrationExpandCollection tests $expand on entity collection
+func TestIntegrationExpandCollection(t *testing.T) {
+	service := setupIntegrationTest(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/Departments?$expand=Employees", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+
+	values, ok := response["value"].([]interface{})
+	if !ok {
+		t.Fatal("Expected value array in response")
+	}
+
+	if len(values) != 3 {
+		t.Errorf("Expected 3 departments, got %d", len(values))
+	}
+
+	// Check that Engineering department has 3 employees
+	firstDept := values[0].(map[string]interface{})
+	employees, ok := firstDept["Employees"].([]interface{})
+	if !ok {
+		t.Fatal("Expected Employees to be expanded")
+	}
+
+	if len(employees) != 3 {
+		t.Errorf("Expected 3 employees in Engineering, got %d", len(employees))
+	}
+}
+
+// TestIntegrationExpandEntity tests $expand on single entity
+func TestIntegrationExpandEntity(t *testing.T) {
+	service := setupIntegrationTest(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/Departments(1)?$expand=Employees", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+
+	employees, ok := response["Employees"].([]interface{})
+	if !ok {
+		t.Fatal("Expected Employees to be expanded")
+	}
+
+	if len(employees) != 3 {
+		t.Errorf("Expected 3 employees, got %d", len(employees))
+	}
+}
+
+// TestIntegrationNavigationPath tests accessing navigation property via path
+func TestIntegrationNavigationPath(t *testing.T) {
+	service := setupIntegrationTest(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/Departments(1)/Employees", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+
+	values, ok := response["value"].([]interface{})
+	if !ok {
+		t.Fatal("Expected value array in response")
+	}
+
+	if len(values) != 3 {
+		t.Errorf("Expected 3 employees, got %d", len(values))
+	}
+}
+
+// TestIntegrationExpandWithNestedTop tests $expand with nested $top
+func TestIntegrationExpandWithNestedTop(t *testing.T) {
+	service := setupIntegrationTest(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/Departments(1)?$expand=Employees($top=2)", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+
+	employees, ok := response["Employees"].([]interface{})
+	if !ok {
+		t.Fatal("Expected Employees to be expanded")
+	}
+
+	if len(employees) != 2 {
+		t.Errorf("Expected 2 employees due to $top=2, got %d", len(employees))
+	}
+}
+
+// TestIntegrationExpandReverseNavigation tests expanding from child to parent
+func TestIntegrationExpandReverseNavigation(t *testing.T) {
+	service := setupIntegrationTest(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/Employees(1)?$expand=Department", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+
+	department, ok := response["Department"].(map[string]interface{})
+	if !ok {
+		t.Fatal("Expected Department to be expanded")
+	}
+
+	deptName, ok := department["Name"].(string)
+	if !ok || deptName != "Engineering" {
+		t.Errorf("Expected department name 'Engineering', got %v", deptName)
+	}
+}
+
+// TestIntegrationExpandWithFilter tests combining $expand with $filter
+func TestIntegrationExpandWithFilter(t *testing.T) {
+	service := setupIntegrationTest(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/Departments?$filter=Name%20eq%20Engineering&$expand=Employees", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+
+	values, ok := response["value"].([]interface{})
+	if !ok {
+		t.Fatal("Expected value array in response")
+	}
+
+	if len(values) != 1 {
+		t.Errorf("Expected 1 department after filter, got %d", len(values))
+	}
+
+	dept := values[0].(map[string]interface{})
+	employees, ok := dept["Employees"].([]interface{})
+	if !ok {
+		t.Fatal("Expected Employees to be expanded")
+	}
+
+	if len(employees) != 3 {
+		t.Errorf("Expected 3 employees, got %d", len(employees))
+	}
+}
+
+// TestIntegrationExpandWithCount tests combining $expand with $count
+func TestIntegrationExpandWithCount(t *testing.T) {
+	service := setupIntegrationTest(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/Departments?$count=true&$expand=Employees", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+
+	count, ok := response["@odata.count"].(float64)
+	if !ok {
+		t.Fatal("Expected @odata.count in response")
+	}
+
+	if int(count) != 3 {
+		t.Errorf("Expected count of 3, got %d", int(count))
+	}
+}
+
+// TestIntegrationExpandWithOrderBy tests combining $expand with $orderby
+func TestIntegrationExpandWithOrderBy(t *testing.T) {
+	service := setupIntegrationTest(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/Departments?$orderby=Name%20desc&$expand=Employees&$top=2", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+
+	values, ok := response["value"].([]interface{})
+	if !ok {
+		t.Fatal("Expected value array in response")
+	}
+
+	if len(values) != 2 {
+		t.Errorf("Expected 2 departments due to $top=2, got %d", len(values))
+	}
+
+	// First should be "Sales" (descending order)
+	firstDept := values[0].(map[string]interface{})
+	firstName, _ := firstDept["Name"].(string)
+	if firstName != "Sales" {
+		t.Errorf("Expected first department to be 'Sales', got %s", firstName)
+	}
+}
+
+// TestIntegrationMetadata tests that metadata includes navigation properties
+func TestIntegrationMetadata(t *testing.T) {
+	service := setupIntegrationTest(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/$metadata", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", w.Code)
+	}
+
+	body := w.Body.String()
+
+	// Check for navigation property definitions
+	if !contains(body, "NavigationProperty") {
+		t.Error("Expected metadata to contain NavigationProperty elements")
+	}
+
+	if !contains(body, "Employees") {
+		t.Error("Expected metadata to contain Employees navigation property")
+	}
+
+	if !contains(body, "Department") {
+		t.Error("Expected metadata to contain Department navigation property")
+	}
+
+	if !contains(body, "NavigationPropertyBinding") {
+		t.Error("Expected metadata to contain NavigationPropertyBinding elements")
+	}
+}
+
+// TestIntegrationServiceDocument tests that service document lists entity sets
+func TestIntegrationServiceDocument(t *testing.T) {
+	service := setupIntegrationTest(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", w.Code)
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+
+	values, ok := response["value"].([]interface{})
+	if !ok {
+		t.Fatal("Expected value array in response")
+	}
+
+	if len(values) != 2 {
+		t.Errorf("Expected 2 entity sets, got %d", len(values))
+	}
+}
+
+// TestIntegrationInvalidNavigationProperty tests error handling for invalid navigation properties
+func TestIntegrationInvalidNavigationProperty(t *testing.T) {
+	service := setupIntegrationTest(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/Departments?$expand=InvalidProperty", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status 400, got %d", w.Code)
+	}
+}
+
+// TestIntegrationNavigationPropertyNotFound tests 404 for invalid navigation paths
+func TestIntegrationNavigationPropertyNotFound(t *testing.T) {
+	service := setupIntegrationTest(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/Departments(1)/InvalidProperty", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("Expected status 404, got %d", w.Code)
+	}
+}
+
+// TestIntegrationEntityNotFound tests 404 for non-existent entity in navigation
+func TestIntegrationEntityNotFound(t *testing.T) {
+	service := setupIntegrationTest(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/Departments(999)/Employees", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("Expected status 404, got %d", w.Code)
+	}
+}
+
+// Helper function
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && findSubstring(s, substr))
+}
+
+func findSubstring(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}

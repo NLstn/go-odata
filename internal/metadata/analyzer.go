@@ -17,13 +17,16 @@ type EntityMetadata struct {
 
 // PropertyMetadata holds metadata information about an entity property
 type PropertyMetadata struct {
-	Name       string
-	Type       reflect.Type
-	FieldName  string
-	IsKey      bool
-	IsRequired bool
-	JsonName   string
-	GormTag    string
+	Name              string
+	Type              reflect.Type
+	FieldName         string
+	IsKey             bool
+	IsRequired        bool
+	JsonName          string
+	GormTag           string
+	IsNavigationProp  bool
+	NavigationTarget  string // Entity type name for navigation properties
+	NavigationIsArray bool   // True for collection navigation properties
 }
 
 // AnalyzeEntity extracts metadata from a Go struct for OData usage
@@ -64,6 +67,28 @@ func AnalyzeEntity(entity interface{}) (*EntityMetadata, error) {
 			FieldName: field.Name,
 			JsonName:  getJsonName(field),
 			GormTag:   field.Tag.Get("gorm"),
+		}
+
+		// Check if this is a navigation property (struct or slice of structs)
+		fieldType := field.Type
+		isSlice := fieldType.Kind() == reflect.Slice
+		if isSlice {
+			fieldType = fieldType.Elem()
+		}
+
+		// Check if it's a pointer type
+		if fieldType.Kind() == reflect.Ptr {
+			fieldType = fieldType.Elem()
+		}
+
+		// If it's a struct type and has gorm foreign key tag, it's a navigation property
+		if fieldType.Kind() == reflect.Struct {
+			gormTag := field.Tag.Get("gorm")
+			if strings.Contains(gormTag, "foreignKey") || strings.Contains(gormTag, "references") {
+				property.IsNavigationProp = true
+				property.NavigationTarget = fieldType.Name()
+				property.NavigationIsArray = isSlice
+			}
 		}
 
 		// Check for OData key tag
