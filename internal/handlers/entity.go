@@ -420,8 +420,9 @@ func (h *EntityHandler) handleGetEntity(w http.ResponseWriter, r *http.Request, 
 
 	if err := db.First(result).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			if writeErr := response.WriteError(w, http.StatusNotFound, "Entity not found",
-				fmt.Sprintf("Entity with key '%s' not found", entityKey)); writeErr != nil {
+			target := fmt.Sprintf("%s(%s)", h.metadata.EntitySetName, entityKey)
+			if writeErr := response.WriteErrorWithTarget(w, http.StatusNotFound, "Entity not found",
+				target, fmt.Sprintf("The entity with key '%s' does not exist", entityKey)); writeErr != nil {
 				fmt.Printf("Error writing error response: %v\n", writeErr)
 			}
 		} else {
@@ -466,8 +467,9 @@ func (h *EntityHandler) handleDeleteEntity(w http.ResponseWriter, r *http.Reques
 	// First, check if the entity exists
 	if err := db.First(entity).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			if writeErr := response.WriteError(w, http.StatusNotFound, "Entity not found",
-				fmt.Sprintf("Entity with key '%s' not found", entityKey)); writeErr != nil {
+			target := fmt.Sprintf("%s(%s)", h.metadata.EntitySetName, entityKey)
+			if writeErr := response.WriteErrorWithTarget(w, http.StatusNotFound, "Entity not found",
+				target, fmt.Sprintf("The entity with key '%s' does not exist", entityKey)); writeErr != nil {
 				fmt.Printf("Error writing error response: %v\n", writeErr)
 			}
 		} else {
@@ -1022,8 +1024,9 @@ func parseCompositeKey(keyPart string, components *response.ODataURLComponents) 
 // handleFetchError writes appropriate error responses based on the fetch error type
 func (h *EntityHandler) handleFetchError(w http.ResponseWriter, err error, entityKey string) {
 	if err == gorm.ErrRecordNotFound {
-		if writeErr := response.WriteError(w, http.StatusNotFound, "Entity not found",
-			fmt.Sprintf("Entity with key '%s' not found", entityKey)); writeErr != nil {
+		target := fmt.Sprintf("%s(%s)", h.metadata.EntitySetName, entityKey)
+		if writeErr := response.WriteErrorWithTarget(w, http.StatusNotFound, "Entity not found",
+			target, fmt.Sprintf("The entity with key '%s' does not exist", entityKey)); writeErr != nil {
 			fmt.Printf("Error writing error response: %v\n", writeErr)
 		}
 	} else {

@@ -399,6 +399,26 @@ func WriteODataError(w http.ResponseWriter, httpStatusCode int, odataError *ODat
 	return encoder.Encode(errorResponse)
 }
 
+// WriteErrorWithTarget writes an OData error with target information
+func WriteErrorWithTarget(w http.ResponseWriter, code int, message string, target string, details string) error {
+	odataErr := &ODataError{
+		Code:    fmt.Sprintf("%d", code),
+		Message: message,
+		Target:  target,
+	}
+
+	if details != "" {
+		odataErr.Details = []ODataErrorDetail{
+			{
+				Message: details,
+				Target:  target,
+			},
+		}
+	}
+
+	return WriteODataError(w, code, odataErr)
+}
+
 // WriteServiceDocument writes the OData service document
 func WriteServiceDocument(w http.ResponseWriter, r *http.Request, entitySets []string) error {
 	baseURL := buildBaseURL(r)
