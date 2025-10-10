@@ -8,6 +8,9 @@ tmp/
 *.so
 *.dylib
 
+# Binary executables
+cmd/devserver/devserver
+
 # Test binaries
 *.test
 
