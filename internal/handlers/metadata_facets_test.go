@@ -24,16 +24,16 @@ type ProductWithFacets struct {
 
 // Test entity with navigation properties and referential constraints
 type Order struct {
-	ID         int    `json:"id" odata:"key"`
-	CustomerID int    `json:"customerId" odata:"required"`
-	Customer   *User  `json:"customer" gorm:"foreignKey:CustomerID;references:ID"`
+	ID         int     `json:"id" odata:"key"`
+	CustomerID int     `json:"customerId" odata:"required"`
+	Customer   *User   `json:"customer" gorm:"foreignKey:CustomerID;references:ID"`
 	TotalPrice float64 `json:"totalPrice" odata:"precision=10,scale=2"`
 }
 
 type User struct {
-	ID    int     `json:"id" odata:"key"`
-	Name  string  `json:"name" odata:"required,maxlength=100"`
-	Email string  `json:"email" odata:"maxlength=255"`
+	ID     int     `json:"id" odata:"key"`
+	Name   string  `json:"name" odata:"required,maxlength=100"`
+	Email  string  `json:"email" odata:"maxlength=255"`
 	Orders []Order `json:"orders" gorm:"foreignKey:CustomerID;references:ID"`
 }
 
@@ -287,9 +287,9 @@ func TestMetadataWithReferentialConstraintsJSON(t *testing.T) {
 
 func TestEdmTypeMapping(t *testing.T) {
 	tests := []struct {
-		name     string
-		goType   string
-		edmType  string
+		name    string
+		goType  string
+		edmType string
 	}{
 		{"time.Time", "time.Time", "Edm.DateTimeOffset"},
 		{"int", "int", "Edm.Int32"},
@@ -311,10 +311,10 @@ func TestEdmTypeMapping(t *testing.T) {
 
 func TestNullableOverride(t *testing.T) {
 	type EntityWithNullable struct {
-		ID              int    `json:"id" odata:"key"`
-		RequiredField   string `json:"requiredField" odata:"required"`
-		NullableField   string `json:"nullableField" odata:"nullable"`
-		NonNullableOpt  string `json:"nonNullableOpt" odata:"nullable=false"`
+		ID             int    `json:"id" odata:"key"`
+		RequiredField  string `json:"requiredField" odata:"required"`
+		NullableField  string `json:"nullableField" odata:"nullable"`
+		NonNullableOpt string `json:"nonNullableOpt" odata:"nullable=false"`
 	}
 
 	entities := make(map[string]*metadata.EntityMetadata)

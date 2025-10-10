@@ -131,7 +131,7 @@ func analyzeNavigationProperty(property *PropertyMetadata, field reflect.StructF
 			property.IsNavigationProp = true
 			property.NavigationTarget = fieldType.Name()
 			property.NavigationIsArray = isSlice
-			
+
 			// Extract referential constraints from GORM tags
 			property.ReferentialConstraints = extractReferentialConstraints(gormTag)
 		}
@@ -141,11 +141,11 @@ func analyzeNavigationProperty(property *PropertyMetadata, field reflect.StructF
 // extractReferentialConstraints extracts referential constraints from GORM tags
 func extractReferentialConstraints(gormTag string) map[string]string {
 	constraints := make(map[string]string)
-	
+
 	// Parse foreignKey and references from gorm tag
 	// Format: "foreignKey:UserID;references:ID"
 	var foreignKey, references string
-	
+
 	parts := strings.Split(gormTag, ";")
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
@@ -155,11 +155,11 @@ func extractReferentialConstraints(gormTag string) map[string]string {
 			references = strings.TrimPrefix(part, "references:")
 		}
 	}
-	
+
 	if foreignKey != "" && references != "" {
 		constraints[foreignKey] = references
 	}
-	
+
 	return constraints
 }
 
@@ -170,7 +170,7 @@ func analyzeODataTags(property *PropertyMetadata, field reflect.StructField, met
 		parts := strings.Split(odataTag, ",")
 		for _, part := range parts {
 			part = strings.TrimSpace(part)
-			
+
 			if part == "key" {
 				property.IsKey = true
 				metadata.KeyProperties = append(metadata.KeyProperties, *property)
