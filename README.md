@@ -2,7 +2,6 @@
 
 [![CI](https://github.com/NLstn/go-odata/actions/workflows/ci.yml/badge.svg)](https://github.com/NLstn/go-odata/actions/workflows/ci.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/nlstn/go-odata)](https://goreportcard.com/report/github.com/nlstn/go-odata)
-[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/NLstn/go-odata)
 
 A Go library for building services that expose OData APIs with automatic handling of OData logic.
 
@@ -12,21 +11,35 @@ A Go library for building services that expose OData APIs with automatic handlin
 
 ## Features
 
+### Core OData Protocol Support
 - ✅ Automatic OData endpoint generation from Go structs
 - ✅ GORM database integration
+- ✅ OData-compliant JSON responses with @odata.context
+- ✅ Service document generation (GET /)
+- ✅ Metadata document generation in both XML and JSON (CSDL) formats (GET /$metadata)
+- ✅ Proper HTTP headers and error handling
+
+### CRUD Operations
 - ✅ Entity collection retrieval (GET /EntitySet)
 - ✅ Individual entity retrieval (GET /EntitySet(key))
 - ✅ Entity creation (POST /EntitySet)
 - ✅ Entity update (PUT and PATCH /EntitySet(key))
 - ✅ Entity deletion (DELETE /EntitySet(key))
-- ✅ OData-compliant JSON responses with @odata.context
-- ✅ Service document generation
-- ✅ Basic metadata document
-- ✅ Proper HTTP headers and error handling
-- ✅ OData query operations ($filter, $select, $orderby)
-- ✅ **Pagination support ($top, $skip, $count, @odata.nextLink)**
-- 🔄 Complete metadata document generation - Coming soon
-- 🔄 Entity relationship handling - Coming soon
+
+### OData Query Options
+- ✅ Filtering ($filter) with operators: eq, ne, gt, ge, lt, le, contains, startswith, endswith
+- ✅ Selection ($select) - choose specific properties to return
+- ✅ Ordering ($orderby) - sort by one or more properties
+- ✅ Pagination ($top, $skip) with automatic @odata.nextLink generation
+- ✅ Count ($count) - inline count with results or standalone count endpoint
+- ✅ Expand ($expand) - retrieve related entities in a single request
+
+### Advanced Features
+- ✅ Composite keys support (e.g., /EntitySet(key1=value1,key2=value2))
+- ✅ Navigation properties - access related entities (e.g., /Products(1)/Category)
+- ✅ Structural properties with $value endpoint (e.g., /Products(1)/Name/$value)
+- ✅ Prefer header support (return=representation, return=minimal)
+- ✅ Filter operations on expanded navigation properties
 
 ## Installation
 
@@ -38,7 +51,7 @@ go get github.com/nlstn/go-odata
 
 ### GitHub Codespaces
 
-The easiest way to start developing is with GitHub Codespaces. Click the badge above or:
+The easiest way to start developing is with GitHub Codespaces:
 
 1. Click the "Code" button on the repository
 2. Select the "Codespaces" tab
@@ -115,7 +128,7 @@ func main() {
 Once your service is running, the following endpoints will be available:
 
 - **Service Document**: `GET /` - Lists all available entity sets
-- **Metadata**: `GET /$metadata` - OData metadata document
+- **Metadata**: `GET /$metadata` - OData metadata document (supports both XML and JSON/CSDL formats)
 - **Entity Collection**: 
   - `GET /Products` - All products
   - `POST /Products` - Create a new product
@@ -124,6 +137,11 @@ Once your service is running, the following endpoints will be available:
   - `PUT /Products(1)` - Replace product with ID 1 (complete replacement)
   - `PATCH /Products(1)` - Update product with ID 1 (partial update)
   - `DELETE /Products(1)` - Delete product with ID 1
+- **Count Endpoint**: `GET /Products/$count` - Get total count of products (supports filtering)
+- **Navigation Properties**: `GET /Products(1)/Category` - Access related entities
+- **Structural Properties**: `GET /Products(1)/Name` - Access individual property values
+- **Raw Property Value**: `GET /Products(1)/Name/$value` - Get raw property value without JSON wrapping
+- **Composite Keys**: `GET /EntitySet(key1=value1,key2=value2)` - Access entities with composite keys
 
 ## OData Query Options
 
