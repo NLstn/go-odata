@@ -73,7 +73,8 @@ type ODataResponse struct {
 // EntityMetadataProvider is an interface for getting entity metadata
 type EntityMetadataProvider interface {
 	GetProperties() []PropertyMetadata
-	GetKeyProperty() *PropertyMetadata
+	GetKeyProperty() *PropertyMetadata    // Deprecated: Use GetKeyProperties for composite key support
+	GetKeyProperties() []PropertyMetadata // Returns all key properties (single or composite)
 	GetEntitySetName() string
 }
 
@@ -183,8 +184,9 @@ func processMapEntity(entity reflect.Value, metadata EntityMetadataProvider, exp
 
 		// If property doesn't exist in map, add navigation link
 		if _, exists := entityMap[prop.JsonName]; !exists {
-			if keyValue := entityMap[keyProp.JsonName]; keyValue != nil {
-				navLink := fmt.Sprintf("%s/%s(%v)/%s", baseURL, entitySetName, keyValue, prop.JsonName)
+			keySegment := buildKeySegmentFromMap(entityMap, metadata)
+			if keySegment != "" {
+				navLink := fmt.Sprintf("%s/%s(%s)/%s", baseURL, entitySetName, keySegment, prop.JsonName)
 				entityMap[prop.JsonName+"@odata.navigationLink"] = navLink
 			}
 		}
@@ -209,7 +211,7 @@ func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataPro
 		propMeta := findPropertyMetadata(field.Name, metadata)
 
 		if propMeta != nil && propMeta.IsNavigationProp {
-			processNavigationPropertyOrdered(entityMap, entity, propMeta, fieldValue, jsonName, expandedProps, baseURL, entitySetName, keyProp)
+			processNavigationPropertyOrderedWithMetadata(entityMap, entity, propMeta, fieldValue, jsonName, expandedProps, baseURL, entitySetName, metadata)
 		} else {
 			// Regular property - include its value
 			entityMap.Set(jsonName, fieldValue.Interface())
@@ -246,13 +248,114 @@ func processNavigationPropertyOrdered(entityMap *OrderedMap, entity reflect.Valu
 		entityMap.Set(jsonName, fieldValue.Interface())
 	} else {
 		// Add navigation link instead of null value
-		keyFieldValue := entity.FieldByName(keyProp.Name)
-		if keyFieldValue.IsValid() {
-			keyValue := fmt.Sprintf("%v", keyFieldValue.Interface())
-			navLink := fmt.Sprintf("%s/%s(%s)/%s", baseURL, entitySetName, keyValue, propMeta.JsonName)
+		keySegment := buildKeySegmentFromEntity(entity, keyProp)
+		if keySegment != "" {
+			navLink := fmt.Sprintf("%s/%s(%s)/%s", baseURL, entitySetName, keySegment, propMeta.JsonName)
 			entityMap.Set(jsonName+"@odata.navigationLink", navLink)
 		}
 	}
+}
+
+// processNavigationPropertyOrderedWithMetadata handles navigation properties with full metadata support
+func processNavigationPropertyOrderedWithMetadata(entityMap *OrderedMap, entity reflect.Value, propMeta *PropertyMetadata, fieldValue reflect.Value, jsonName string, expandedProps []string, baseURL, entitySetName string, metadata EntityMetadataProvider) {
+	if isPropertyExpanded(*propMeta, expandedProps) {
+		// Include the expanded data
+		entityMap.Set(jsonName, fieldValue.Interface())
+	} else {
+		// Add navigation link instead of null value
+		keySegment := BuildKeySegmentFromEntity(entity, metadata)
+		if keySegment != "" {
+			navLink := fmt.Sprintf("%s/%s(%s)/%s", baseURL, entitySetName, keySegment, propMeta.JsonName)
+			entityMap.Set(jsonName+"@odata.navigationLink", navLink)
+		}
+	}
+}
+
+// buildKeySegmentFromEntity builds the key segment for URLs from an entity reflection value
+// For single keys: returns "1" or "ID=1"
+// For composite keys: returns "ProductID=1,LanguageKey='EN'"
+func buildKeySegmentFromEntity(entity reflect.Value, keyProp *PropertyMetadata) string {
+	// This function is kept for backwards compatibility but won't work properly for composite keys
+	// since it only receives a single keyProp
+	if keyProp == nil {
+		return ""
+	}
+
+	keyFieldValue := entity.FieldByName(keyProp.Name)
+	if keyFieldValue.IsValid() {
+		return fmt.Sprintf("%v", keyFieldValue.Interface())
+	}
+
+	return ""
+}
+
+// BuildKeySegmentFromEntity builds the key segment for URLs from an entity and metadata
+// For single keys: returns "1"
+// For composite keys: returns "ProductID=1,LanguageKey='EN'"
+func BuildKeySegmentFromEntity(entity reflect.Value, metadata EntityMetadataProvider) string {
+	keyProps := metadata.GetKeyProperties()
+	if len(keyProps) == 0 {
+		return ""
+	}
+
+	// Single key - return just the value
+	if len(keyProps) == 1 {
+		keyFieldValue := entity.FieldByName(keyProps[0].Name)
+		if keyFieldValue.IsValid() {
+			return fmt.Sprintf("%v", keyFieldValue.Interface())
+		}
+		return ""
+	}
+
+	// Composite keys - return key1=value1,key2=value2
+	var parts []string
+	for _, keyProp := range keyProps {
+		keyFieldValue := entity.FieldByName(keyProp.Name)
+		if keyFieldValue.IsValid() {
+			keyValue := keyFieldValue.Interface()
+			// Quote string values
+			if keyFieldValue.Kind() == reflect.String {
+				parts = append(parts, fmt.Sprintf("%s='%v'", keyProp.JsonName, keyValue))
+			} else {
+				parts = append(parts, fmt.Sprintf("%s=%v", keyProp.JsonName, keyValue))
+			}
+		}
+	}
+
+	return strings.Join(parts, ",")
+}
+
+// buildKeySegmentFromMap builds the key segment for URLs from a map
+// For single keys: returns "1"
+// For composite keys: returns "ProductID=1,LanguageKey='EN'"
+func buildKeySegmentFromMap(entityMap map[string]interface{}, metadata EntityMetadataProvider) string {
+	keyProps := metadata.GetKeyProperties()
+	if len(keyProps) == 0 {
+		return ""
+	}
+
+	// Single key - return just the value
+	if len(keyProps) == 1 {
+		if keyValue := entityMap[keyProps[0].JsonName]; keyValue != nil {
+			return fmt.Sprintf("%v", keyValue)
+		}
+		return ""
+	}
+
+	// Composite keys - return key1=value1,key2=value2
+	var parts []string
+	for _, keyProp := range keyProps {
+		if keyValue := entityMap[keyProp.JsonName]; keyValue != nil {
+			// Quote string values
+			if strVal, ok := keyValue.(string); ok {
+				parts = append(parts, fmt.Sprintf("%s='%s'", keyProp.JsonName, strVal))
+			} else {
+				parts = append(parts, fmt.Sprintf("%s=%v", keyProp.JsonName, keyValue))
+			}
+		}
+	}
+
+	return strings.Join(parts, ",")
 }
 
 // getJsonFieldName extracts the JSON field name from struct tags
@@ -370,8 +473,9 @@ func BuildNextLink(r *http.Request, skipValue int) string {
 // ODataURLComponents represents the parsed components of an OData URL
 type ODataURLComponents struct {
 	EntitySet          string
-	EntityKey          string
-	NavigationProperty string // For paths like Products(1)/Descriptions
+	EntityKey          string            // For single keys: the value, for composite keys: empty (use EntityKeyMap)
+	EntityKeyMap       map[string]string // For composite keys: map of key names to values
+	NavigationProperty string            // For paths like Products(1)/Descriptions
 }
 
 // ParseODataURL parses an OData URL and extracts components (exported for use in main package)
@@ -396,18 +500,25 @@ func ParseODataURLComponents(path string) (*ODataURLComponents, error) {
 		return nil, err
 	}
 
-	components := &ODataURLComponents{}
+	components := &ODataURLComponents{
+		EntityKeyMap: make(map[string]string),
+	}
 
 	// Extract entity set and key
 	pathParts := strings.Split(u.Path, "/")
 	if len(pathParts) > 0 {
 		entitySet := pathParts[0]
 
-		// Check for key in parentheses: Products(1)
+		// Check for key in parentheses: Products(1) or ProductDescriptions(ProductID=1,LanguageKey='EN')
 		if idx := strings.Index(entitySet, "("); idx != -1 {
 			if strings.HasSuffix(entitySet, ")") {
-				components.EntityKey = entitySet[idx+1 : len(entitySet)-1]
+				keyPart := entitySet[idx+1 : len(entitySet)-1]
 				components.EntitySet = entitySet[:idx]
+
+				// Parse the key part - could be single key or composite
+				if err := parseKeyPart(keyPart, components); err != nil {
+					return nil, fmt.Errorf("invalid key format: %w", err)
+				}
 			}
 		} else {
 			components.EntitySet = entitySet
@@ -420,4 +531,88 @@ func ParseODataURLComponents(path string) (*ODataURLComponents, error) {
 	}
 
 	return components, nil
+}
+
+// parseKeyPart parses the key portion of an OData URL
+// Supports both single keys: (1) or (ID=1)
+// and composite keys: (ProductID=1,LanguageKey='EN')
+func parseKeyPart(keyPart string, components *ODataURLComponents) error {
+	// Check if it contains '=' - if not, it's a simple single key value
+	if !strings.Contains(keyPart, "=") {
+		components.EntityKey = keyPart
+		return nil
+	}
+
+	// Parse composite key format: key1=value1,key2=value2
+	// Split by comma, but be careful of quoted values
+	pairs, err := splitKeyPairs(keyPart)
+	if err != nil {
+		return err
+	}
+
+	for _, pair := range pairs {
+		// Split by '='
+		parts := strings.SplitN(pair, "=", 2)
+		if len(parts) != 2 {
+			return fmt.Errorf("invalid key-value pair: %s", pair)
+		}
+
+		keyName := strings.TrimSpace(parts[0])
+		keyValue := strings.TrimSpace(parts[1])
+
+		// Remove quotes from value if present (OData allows 'value' or just value)
+		if len(keyValue) > 0 && (keyValue[0] == '\'' || keyValue[0] == '"') {
+			keyValue = strings.Trim(keyValue, "'\"")
+		}
+
+		components.EntityKeyMap[keyName] = keyValue
+	}
+
+	// If only one key-value pair, also set EntityKey for backwards compatibility
+	if len(components.EntityKeyMap) == 1 {
+		for _, v := range components.EntityKeyMap {
+			components.EntityKey = v
+			break
+		}
+	}
+
+	return nil
+}
+
+// splitKeyPairs splits key pairs by comma, respecting quoted values
+func splitKeyPairs(input string) ([]string, error) {
+	var pairs []string
+	var current strings.Builder
+	inQuote := false
+	quoteChar := rune(0)
+
+	for i, ch := range input {
+		switch {
+		case (ch == '\'' || ch == '"') && !inQuote:
+			inQuote = true
+			quoteChar = ch
+			current.WriteRune(ch)
+		case ch == quoteChar && inQuote:
+			inQuote = false
+			quoteChar = 0
+			current.WriteRune(ch)
+		case ch == ',' && !inQuote:
+			pairs = append(pairs, current.String())
+			current.Reset()
+		default:
+			current.WriteRune(ch)
+		}
+
+		// Check for unclosed quote at end
+		if i == len(input)-1 && inQuote {
+			return nil, fmt.Errorf("unclosed quote in key part")
+		}
+	}
+
+	// Add the last pair
+	if current.Len() > 0 {
+		pairs = append(pairs, current.String())
+	}
+
+	return pairs, nil
 }

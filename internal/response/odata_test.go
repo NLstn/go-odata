@@ -509,6 +509,7 @@ func TestWriteODataCollectionWithNavigation_FieldOrder(t *testing.T) {
 type mockMetadata struct {
 	props         []PropertyMetadata
 	keyProp       *PropertyMetadata
+	keyProps      []PropertyMetadata
 	entitySetName string
 }
 
@@ -518,6 +519,17 @@ func (m *mockMetadata) GetProperties() []PropertyMetadata {
 
 func (m *mockMetadata) GetKeyProperty() *PropertyMetadata {
 	return m.keyProp
+}
+
+func (m *mockMetadata) GetKeyProperties() []PropertyMetadata {
+	if m.keyProps != nil {
+		return m.keyProps
+	}
+	// For backwards compatibility, if keyProps is not set but keyProp is, return it as a slice
+	if m.keyProp != nil {
+		return []PropertyMetadata{*m.keyProp}
+	}
+	return nil
 }
 
 func (m *mockMetadata) GetEntitySetName() string {

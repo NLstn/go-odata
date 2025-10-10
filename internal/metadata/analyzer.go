@@ -12,7 +12,8 @@ type EntityMetadata struct {
 	EntityName    string
 	EntitySetName string
 	Properties    []PropertyMetadata
-	KeyProperty   *PropertyMetadata
+	KeyProperties []PropertyMetadata // Support for composite keys
+	KeyProperty   *PropertyMetadata  // Deprecated: Use KeyProperties for single or composite keys, kept for backwards compatibility
 }
 
 // PropertyMetadata holds metadata information about an entity property
@@ -57,9 +58,14 @@ func AnalyzeEntity(entity interface{}) (*EntityMetadata, error) {
 		metadata.Properties = append(metadata.Properties, property)
 	}
 
-	// Validate that we have a key property
-	if metadata.KeyProperty == nil {
-		return nil, fmt.Errorf("entity %s must have a key property (use `odata:\"key\"` tag or name field 'ID')", metadata.EntityName)
+	// Validate that we have at least one key property
+	if len(metadata.KeyProperties) == 0 {
+		return nil, fmt.Errorf("entity %s must have at least one key property (use `odata:\"key\"` tag or name field 'ID')", metadata.EntityName)
+	}
+
+	// For backwards compatibility, set KeyProperty to first key if only one key exists
+	if len(metadata.KeyProperties) == 1 {
+		metadata.KeyProperty = &metadata.KeyProperties[0]
 	}
 
 	return metadata, nil
@@ -126,7 +132,7 @@ func analyzeODataTags(property *PropertyMetadata, field reflect.StructField, met
 	if odataTag := field.Tag.Get("odata"); odataTag != "" {
 		if strings.Contains(odataTag, "key") {
 			property.IsKey = true
-			metadata.KeyProperty = property
+			metadata.KeyProperties = append(metadata.KeyProperties, *property)
 		}
 		if strings.Contains(odataTag, "required") {
 			property.IsRequired = true
@@ -134,9 +140,9 @@ func analyzeODataTags(property *PropertyMetadata, field reflect.StructField, met
 	}
 
 	// Auto-detect key if no explicit key is set and field name is "ID"
-	if metadata.KeyProperty == nil && field.Name == "ID" {
+	if len(metadata.KeyProperties) == 0 && field.Name == "ID" {
 		property.IsKey = true
-		metadata.KeyProperty = property
+		metadata.KeyProperties = append(metadata.KeyProperties, *property)
 	}
 }
 
@@ -165,12 +171,24 @@ func pluralize(word string) string {
 
 	// Simple pluralization rules
 	switch {
-	case strings.HasSuffix(word, "y"):
+	case strings.HasSuffix(word, "y") && len(word) > 1 && !isVowel(rune(word[len(word)-2])):
+		// Only change y to ies if preceded by a consonant (e.g., "Category" -> "Categories")
+		// If preceded by a vowel, just add s (e.g., "Key" -> "Keys")
 		return word[:len(word)-1] + "ies"
 	case strings.HasSuffix(word, "s") || strings.HasSuffix(word, "x") || strings.HasSuffix(word, "z") ||
 		strings.HasSuffix(word, "ch") || strings.HasSuffix(word, "sh"):
 		return word + "es"
 	default:
 		return word + "s"
+	}
+}
+
+// isVowel checks if a rune is a vowel
+func isVowel(r rune) bool {
+	switch r {
+	case 'a', 'e', 'i', 'o', 'u', 'A', 'E', 'I', 'O', 'U':
+		return true
+	default:
+		return false
 	}
 }
