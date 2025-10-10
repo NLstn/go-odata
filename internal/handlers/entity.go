@@ -225,9 +225,14 @@ func (h *EntityHandler) HandleEntity(w http.ResponseWriter, r *http.Request, ent
 	// Create an instance to hold the result
 	result := reflect.New(h.metadata.EntityType).Interface()
 
-	// Build the query condition using the key property
-	keyField := h.metadata.KeyProperty.JsonName
-	db := h.db.Where(fmt.Sprintf("%s = ?", keyField), entityKey)
+	// Build the query condition using the key properties
+	db, err := h.buildKeyQuery(entityKey)
+	if err != nil {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid key", err.Error()); writeErr != nil {
+			fmt.Printf("Error writing error response: %v\n", writeErr)
+		}
+		return
+	}
 
 	// Apply expand (preload navigation properties) if specified
 	if len(queryOptions.Expand) > 0 {
@@ -317,10 +322,113 @@ func (h *EntityHandler) findNavigationProperty(navigationProperty string) *metad
 // fetchParentEntityWithNav fetches the parent entity and preloads the specified navigation property
 func (h *EntityHandler) fetchParentEntityWithNav(entityKey, navPropertyName string) (interface{}, error) {
 	parent := reflect.New(h.metadata.EntityType).Interface()
-	keyField := h.metadata.KeyProperty.JsonName
 
-	db := h.db.Where(fmt.Sprintf("%s = ?", keyField), entityKey).Preload(navPropertyName)
+	db, err := h.buildKeyQuery(entityKey)
+	if err != nil {
+		return nil, err
+	}
+
+	db = db.Preload(navPropertyName)
 	return parent, db.First(parent).Error
+}
+
+// buildKeyQuery builds a GORM query with WHERE conditions for the entity key(s)
+// Supports both single keys and composite keys
+func (h *EntityHandler) buildKeyQuery(entityKey string) (*gorm.DB, error) {
+	db := h.db
+
+	// Parse the key - could be single value or composite key format
+	components := &response.ODataURLComponents{
+		EntityKeyMap: make(map[string]string),
+	}
+
+	// Try to parse as composite key format first
+	keyPart := entityKey
+	if err := parseCompositeKey(keyPart, components); err != nil {
+		// If parsing fails, treat as simple single key
+		components.EntityKey = entityKey
+		components.EntityKeyMap = nil
+	}
+
+	// If we have a composite key map, use it
+	if len(components.EntityKeyMap) > 0 {
+		// Build WHERE clause for each key property
+		for _, keyProp := range h.metadata.KeyProperties {
+			keyValue, found := components.EntityKeyMap[keyProp.JsonName]
+			if !found {
+				// Also try the field name
+				keyValue, found = components.EntityKeyMap[keyProp.Name]
+			}
+			if !found {
+				return nil, fmt.Errorf("missing key property: %s", keyProp.JsonName)
+			}
+			// Use snake_case for database column name (GORM convention)
+			columnName := toSnakeCase(keyProp.JsonName)
+			db = db.Where(fmt.Sprintf("%s = ?", columnName), keyValue)
+		}
+	} else {
+		// Single key - use backwards compatible logic
+		if len(h.metadata.KeyProperties) != 1 {
+			return nil, fmt.Errorf("entity has composite keys, please use composite key format: key1=value1,key2=value2")
+		}
+		// Use snake_case for database column name (GORM convention)
+		columnName := toSnakeCase(h.metadata.KeyProperties[0].JsonName)
+		db = db.Where(fmt.Sprintf("%s = ?", columnName), entityKey)
+	}
+
+	return db, nil
+}
+
+// toSnakeCase converts a camelCase or PascalCase string to snake_case
+func toSnakeCase(s string) string {
+	var result strings.Builder
+	for i, r := range s {
+		if i > 0 && r >= 'A' && r <= 'Z' {
+			// Check if the previous character was lowercase or if this is the start of a new word
+			// For "ProductID", we want "product_id" not "product_i_d"
+			prevRune := rune(s[i-1])
+			if prevRune >= 'a' && prevRune <= 'z' {
+				result.WriteRune('_')
+			} else if i < len(s)-1 {
+				// Check if next character is lowercase (e.g., "XMLParser" -> "xml_parser")
+				nextRune := rune(s[i+1])
+				if nextRune >= 'a' && nextRune <= 'z' {
+					result.WriteRune('_')
+				}
+			}
+		}
+		result.WriteRune(r)
+	}
+	return strings.ToLower(result.String())
+}
+
+// parseCompositeKey attempts to parse a composite key string
+func parseCompositeKey(keyPart string, components *response.ODataURLComponents) error {
+	// Check if it contains '=' - if not, it's a simple single key value
+	if !strings.Contains(keyPart, "=") {
+		return fmt.Errorf("not a composite key")
+	}
+
+	// Parse composite key format: key1=value1,key2=value2
+	pairs := strings.Split(keyPart, ",")
+	for _, pair := range pairs {
+		parts := strings.SplitN(pair, "=", 2)
+		if len(parts) != 2 {
+			return fmt.Errorf("invalid key-value pair: %s", pair)
+		}
+
+		keyName := strings.TrimSpace(parts[0])
+		keyValue := strings.TrimSpace(parts[1])
+
+		// Remove quotes from value if present
+		if len(keyValue) > 0 && (keyValue[0] == '\'' || keyValue[0] == '"') {
+			keyValue = strings.Trim(keyValue, "'\"")
+		}
+
+		components.EntityKeyMap[keyName] = keyValue
+	}
+
+	return nil
 }
 
 // handleFetchError writes appropriate error responses based on the fetch error type
@@ -474,6 +582,20 @@ func (a *metadataAdapter) GetKeyProperty() *response.PropertyMetadata {
 		NavigationTarget:  a.metadata.KeyProperty.NavigationTarget,
 		NavigationIsArray: a.metadata.KeyProperty.NavigationIsArray,
 	}
+}
+
+func (a *metadataAdapter) GetKeyProperties() []response.PropertyMetadata {
+	props := make([]response.PropertyMetadata, len(a.metadata.KeyProperties))
+	for i, p := range a.metadata.KeyProperties {
+		props[i] = response.PropertyMetadata{
+			Name:              p.Name,
+			JsonName:          p.JsonName,
+			IsNavigationProp:  p.IsNavigationProp,
+			NavigationTarget:  p.NavigationTarget,
+			NavigationIsArray: p.NavigationIsArray,
+		}
+	}
+	return props
 }
 
 func (a *metadataAdapter) GetEntitySetName() string {

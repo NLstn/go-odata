@@ -45,9 +45,16 @@ func (h *MetadataHandler) HandleMetadata(w http.ResponseWriter, r *http.Request)
 	for _, entityMeta := range h.entities {
 		metadata += fmt.Sprintf(`      <EntityType Name="%s">
         <Key>
-          <PropertyRef Name="%s" />
-        </Key>
-`, entityMeta.EntityName, entityMeta.KeyProperty.JsonName)
+`, entityMeta.EntityName)
+
+		// Add all key properties (supports composite keys)
+		for _, keyProp := range entityMeta.KeyProperties {
+			metadata += fmt.Sprintf(`          <PropertyRef Name="%s" />
+`, keyProp.JsonName)
+		}
+
+		metadata += `        </Key>
+`
 
 		// Add regular properties
 		for _, prop := range entityMeta.Properties {

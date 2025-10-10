@@ -44,16 +44,58 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Route to appropriate handler method
-	if components.EntityKey == "" {
+	hasKey := components.EntityKey != "" || len(components.EntityKeyMap) > 0
+
+	if !hasKey {
 		// Collection request
 		handler.HandleCollection(w, r)
 	} else if components.NavigationProperty != "" {
 		// Navigation property request: Products(1)/Descriptions
-		handler.HandleNavigationProperty(w, r, components.EntityKey, components.NavigationProperty)
+		// For composite keys, serialize the key map back to a string
+		keyString := components.EntityKey
+		if keyString == "" {
+			keyString = serializeKeyMap(components.EntityKeyMap)
+		}
+		handler.HandleNavigationProperty(w, r, keyString, components.NavigationProperty)
 	} else {
 		// Individual entity request
-		handler.HandleEntity(w, r, components.EntityKey)
+		// For composite keys, serialize the key map back to a string
+		keyString := components.EntityKey
+		if keyString == "" {
+			keyString = serializeKeyMap(components.EntityKeyMap)
+		}
+		handler.HandleEntity(w, r, keyString)
 	}
+}
+
+// serializeKeyMap converts a key map to a string format for handlers
+// For composite keys: returns "ProductID=1,LanguageKey='EN'"
+func serializeKeyMap(keyMap map[string]string) string {
+	if len(keyMap) == 0 {
+		return ""
+	}
+
+	var parts []string
+	for key, value := range keyMap {
+		// Check if value looks like a string (simple heuristic)
+		// If it contains only digits, treat as number, otherwise quote it
+		isNumeric := true
+		for _, ch := range value {
+			if ch < '0' || ch > '9' {
+				isNumeric = false
+				break
+			}
+		}
+
+		if isNumeric {
+			parts = append(parts, fmt.Sprintf("%s=%s", key, value))
+		} else {
+			parts = append(parts, fmt.Sprintf("%s='%s'", key, value))
+		}
+	}
+
+	// Sort for consistency (optional, but helps with testing)
+	return strings.Join(parts, ",")
 }
 
 // ListenAndServe starts the OData service on the specified address.
