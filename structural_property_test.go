@@ -264,10 +264,10 @@ func TestStructuralPropertyRead_UsingFieldName(t *testing.T) {
 
 // Additional test types with navigation properties
 type TestProductWithNav struct {
-	ID         int               `json:"id" gorm:"primarykey" odata:"key"`
-	Name       string            `json:"name"`
-	CategoryID int               `json:"categoryId"`
-	Category   *TestCategoryNav  `json:"category" gorm:"foreignKey:CategoryID"`
+	ID         int              `json:"id" gorm:"primarykey" odata:"key"`
+	Name       string           `json:"name"`
+	CategoryID int              `json:"categoryId"`
+	Category   *TestCategoryNav `json:"category" gorm:"foreignKey:CategoryID"`
 }
 
 type TestCategoryNav struct {

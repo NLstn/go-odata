@@ -59,7 +59,7 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if keyString == "" {
 			keyString = serializeKeyMap(components.EntityKeyMap)
 		}
-		
+
 		// We need to determine if this is a navigation property or structural property
 		// Try navigation property first, then structural property
 		if handler.IsNavigationProperty(components.NavigationProperty) {
