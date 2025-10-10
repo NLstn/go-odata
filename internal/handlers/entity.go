@@ -362,6 +362,97 @@ func (h *EntityHandler) findNavigationProperty(navigationProperty string) *metad
 	return nil
 }
 
+// findStructuralProperty finds a structural (non-navigation) property by name in the entity metadata
+func (h *EntityHandler) findStructuralProperty(propertyName string) *metadata.PropertyMetadata {
+	for _, prop := range h.metadata.Properties {
+		if (prop.JsonName == propertyName || prop.Name == propertyName) && !prop.IsNavigationProp {
+			return &prop
+		}
+	}
+	return nil
+}
+
+// IsNavigationProperty checks if a property name is a navigation property
+func (h *EntityHandler) IsNavigationProperty(propertyName string) bool {
+	return h.findNavigationProperty(propertyName) != nil
+}
+
+// IsStructuralProperty checks if a property name is a structural property
+func (h *EntityHandler) IsStructuralProperty(propertyName string) bool {
+	return h.findStructuralProperty(propertyName) != nil
+}
+
+// HandleStructuralProperty handles GET requests for structural properties (e.g., Products(1)/Name)
+func (h *EntityHandler) HandleStructuralProperty(w http.ResponseWriter, r *http.Request, entityKey string, propertyName string) {
+	if r.Method != http.MethodGet {
+		if err := response.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
+			fmt.Sprintf("Method %s is not supported for property access", r.Method)); err != nil {
+			fmt.Printf("Error writing error response: %v\n", err)
+		}
+		return
+	}
+
+	// Find and validate the structural property
+	prop := h.findStructuralProperty(propertyName)
+	if prop == nil {
+		if err := response.WriteError(w, http.StatusNotFound, "Property not found",
+			fmt.Sprintf("'%s' is not a valid property for %s", propertyName, h.metadata.EntitySetName)); err != nil {
+			fmt.Printf("Error writing error response: %v\n", err)
+		}
+		return
+	}
+
+	// Fetch the entity
+	entity := reflect.New(h.metadata.EntityType).Interface()
+	db, err := h.buildKeyQuery(entityKey)
+	if err != nil {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid key", err.Error()); writeErr != nil {
+			fmt.Printf("Error writing error response: %v\n", writeErr)
+		}
+		return
+	}
+
+	if err := db.First(entity).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			if writeErr := response.WriteError(w, http.StatusNotFound, "Entity not found",
+				fmt.Sprintf("Entity with key '%s' not found", entityKey)); writeErr != nil {
+				fmt.Printf("Error writing error response: %v\n", writeErr)
+			}
+		} else {
+			if writeErr := response.WriteError(w, http.StatusInternalServerError, "Database error", err.Error()); writeErr != nil {
+				fmt.Printf("Error writing error response: %v\n", writeErr)
+			}
+		}
+		return
+	}
+
+	// Extract the property value
+	entityValue := reflect.ValueOf(entity).Elem()
+	fieldValue := entityValue.FieldByName(prop.Name)
+	if !fieldValue.IsValid() {
+		if err := response.WriteError(w, http.StatusInternalServerError, "Internal error",
+			"Could not access property"); err != nil {
+			fmt.Printf("Error writing error response: %v\n", err)
+		}
+		return
+	}
+
+	// Build the OData response according to OData v4 spec
+	contextURL := fmt.Sprintf("%s/$metadata#%s(%s)/%s", response.BuildBaseURL(r), h.metadata.EntitySetName, entityKey, prop.JsonName)
+	odataResponse := map[string]interface{}{
+		"@odata.context": contextURL,
+		"value":          fieldValue.Interface(),
+	}
+
+	w.Header().Set("Content-Type", "application/json;odata.metadata=minimal")
+	w.Header().Set("OData-Version", "4.0")
+	w.WriteHeader(http.StatusOK)
+
+	if err := json.NewEncoder(w).Encode(odataResponse); err != nil {
+		fmt.Printf("Error writing property response: %v\n", err)
+	}
+}
+
 // fetchParentEntityWithNav fetches the parent entity and preloads the specified navigation property
 func (h *EntityHandler) fetchParentEntityWithNav(entityKey, navPropertyName string) (interface{}, error) {
 	parent := reflect.New(h.metadata.EntityType).Interface()
