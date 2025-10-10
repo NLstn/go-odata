@@ -349,7 +349,7 @@ func (h *EntityHandler) HandleNavigationProperty(w http.ResponseWriter, r *http.
 		return
 	}
 
-	h.writeNavigationResponse(w, r, navProp, navFieldValue)
+	h.writeNavigationResponse(w, r, entityKey, navProp, navFieldValue)
 }
 
 // findNavigationProperty finds a navigation property by name in the entity metadata
@@ -495,24 +495,26 @@ func (h *EntityHandler) extractNavigationField(parent interface{}, navPropertyNa
 }
 
 // writeNavigationResponse writes the navigation property response (collection or single entity)
-func (h *EntityHandler) writeNavigationResponse(w http.ResponseWriter, r *http.Request, navProp *metadata.PropertyMetadata, navFieldValue reflect.Value) {
+func (h *EntityHandler) writeNavigationResponse(w http.ResponseWriter, r *http.Request, entityKey string, navProp *metadata.PropertyMetadata, navFieldValue reflect.Value) {
 	if navProp.NavigationIsArray {
-		h.writeNavigationCollection(w, r, navProp, navFieldValue)
+		h.writeNavigationCollection(w, r, entityKey, navProp, navFieldValue)
 	} else {
-		h.writeSingleNavigationEntity(w, r, navProp, navFieldValue)
+		h.writeSingleNavigationEntity(w, r, entityKey, navProp, navFieldValue)
 	}
 }
 
 // writeNavigationCollection writes a collection navigation property response
-func (h *EntityHandler) writeNavigationCollection(w http.ResponseWriter, r *http.Request, navProp *metadata.PropertyMetadata, navFieldValue reflect.Value) {
+func (h *EntityHandler) writeNavigationCollection(w http.ResponseWriter, r *http.Request, entityKey string, navProp *metadata.PropertyMetadata, navFieldValue reflect.Value) {
 	navData := navFieldValue.Interface()
-	if err := response.WriteODataCollection(w, r, navProp.NavigationTarget+"s", navData, nil, nil); err != nil {
+	// Build the navigation path according to OData V4 spec: EntitySet(key)/NavigationProperty
+	navigationPath := fmt.Sprintf("%s(%s)/%s", h.metadata.EntitySetName, entityKey, navProp.JsonName)
+	if err := response.WriteODataCollection(w, r, navigationPath, navData, nil, nil); err != nil {
 		fmt.Printf("Error writing navigation property collection: %v\n", err)
 	}
 }
 
 // writeSingleNavigationEntity writes a single navigation property entity response
-func (h *EntityHandler) writeSingleNavigationEntity(w http.ResponseWriter, r *http.Request, navProp *metadata.PropertyMetadata, navFieldValue reflect.Value) {
+func (h *EntityHandler) writeSingleNavigationEntity(w http.ResponseWriter, r *http.Request, entityKey string, navProp *metadata.PropertyMetadata, navFieldValue reflect.Value) {
 	navData := navFieldValue.Interface()
 	navValue := reflect.ValueOf(navData)
 
@@ -527,8 +529,9 @@ func (h *EntityHandler) writeSingleNavigationEntity(w http.ResponseWriter, r *ht
 		navValue = navValue.Elem()
 	}
 
-	// Build the OData response
-	contextURL := fmt.Sprintf("%s/$metadata#%s/$entity", response.BuildBaseURL(r), navProp.NavigationTarget+"s")
+	// Build the OData response with navigation path according to OData V4 spec: EntitySet(key)/NavigationProperty/$entity
+	navigationPath := fmt.Sprintf("%s(%s)/%s", h.metadata.EntitySetName, entityKey, navProp.JsonName)
+	contextURL := fmt.Sprintf("%s/$metadata#%s/$entity", response.BuildBaseURL(r), navigationPath)
 	odataResponse := h.buildEntityResponse(navValue, contextURL)
 
 	w.Header().Set("Content-Type", "application/json;odata.metadata=minimal")
