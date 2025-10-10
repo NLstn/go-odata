@@ -412,16 +412,8 @@ func (h *EntityHandler) HandleStructuralProperty(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// Build select columns list: property + all key properties
-	// Use struct field names - GORM will handle column name conversion
-	selectColumns := []string{prop.Name}
-	for _, keyProp := range h.metadata.KeyProperties {
-		// Avoid duplicates if the property itself is a key
-		if keyProp.Name != prop.Name {
-			selectColumns = append(selectColumns, keyProp.Name)
-		}
-	}
-	db = db.Select(selectColumns)
+	// Apply select to fetch only the needed property and key columns
+	db = h.applyStructuralPropertySelect(db, prop)
 
 	if err := db.First(entity).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -462,6 +454,20 @@ func (h *EntityHandler) HandleStructuralProperty(w http.ResponseWriter, r *http.
 	if err := json.NewEncoder(w).Encode(odataResponse); err != nil {
 		fmt.Printf("Error writing property response: %v\n", err)
 	}
+}
+
+// applyStructuralPropertySelect applies SELECT clause to fetch only the structural property and key columns
+func (h *EntityHandler) applyStructuralPropertySelect(db *gorm.DB, prop *metadata.PropertyMetadata) *gorm.DB {
+	// Build select columns list: property + all key properties
+	// Use struct field names - GORM will handle column name conversion
+	selectColumns := []string{prop.Name}
+	for _, keyProp := range h.metadata.KeyProperties {
+		// Avoid duplicates if the property itself is a key
+		if keyProp.Name != prop.Name {
+			selectColumns = append(selectColumns, keyProp.Name)
+		}
+	}
+	return db.Select(selectColumns)
 }
 
 // fetchParentEntityWithNav fetches the parent entity and preloads the specified navigation property
