@@ -164,70 +164,102 @@ func (t *Tokenizer) NextToken() (*Token, error) {
 
 	pos := t.pos
 
-	// String literals
-	if t.ch == '\'' || t.ch == '"' {
-		value := t.readString()
-		return &Token{Type: TokenString, Value: value, Pos: pos}, nil
+	// Try to tokenize based on character type
+	if token := t.tokenizeString(pos); token != nil {
+		return token, nil
 	}
 
-	// Numbers
-	if unicode.IsDigit(t.ch) || (t.ch == '-' && unicode.IsDigit(t.peek())) {
-		value := t.readNumber()
-		return &Token{Type: TokenNumber, Value: value, Pos: pos}, nil
+	if token := t.tokenizeNumber(pos); token != nil {
+		return token, nil
 	}
 
-	// Parentheses
-	if t.ch == '(' {
-		t.advance()
-		return &Token{Type: TokenLParen, Value: "(", Pos: pos}, nil
-	}
-	if t.ch == ')' {
-		t.advance()
-		return &Token{Type: TokenRParen, Value: ")", Pos: pos}, nil
+	if token := t.tokenizeSpecialChar(pos); token != nil {
+		return token, nil
 	}
 
-	// Comma
-	if t.ch == ',' {
-		t.advance()
-		return &Token{Type: TokenComma, Value: ",", Pos: pos}, nil
-	}
-
-	// Arithmetic operators
-	if t.ch == '+' || t.ch == '-' || t.ch == '*' || t.ch == '/' {
-		op := string(t.ch)
-		t.advance()
-		return &Token{Type: TokenArithmetic, Value: op, Pos: pos}, nil
-	}
-
-	// Identifiers and keywords
-	if unicode.IsLetter(t.ch) || t.ch == '_' {
-		value := t.readIdentifier()
-		lower := strings.ToLower(value)
-
-		// Check for keywords
-		switch lower {
-		case "and":
-			return &Token{Type: TokenLogical, Value: "and", Pos: pos}, nil
-		case "or":
-			return &Token{Type: TokenLogical, Value: "or", Pos: pos}, nil
-		case "not":
-			return &Token{Type: TokenNot, Value: "not", Pos: pos}, nil
-		case "true", "false":
-			return &Token{Type: TokenBoolean, Value: lower, Pos: pos}, nil
-		case "null":
-			return &Token{Type: TokenNull, Value: "null", Pos: pos}, nil
-		case "eq", "ne", "gt", "ge", "lt", "le":
-			return &Token{Type: TokenOperator, Value: lower, Pos: pos}, nil
-		case "mod":
-			return &Token{Type: TokenArithmetic, Value: "mod", Pos: pos}, nil
-		default:
-			// Functions like contains, startswith, endswith are identifiers
-			// that will be recognized as function calls when followed by '('
-			return &Token{Type: TokenIdentifier, Value: value, Pos: pos}, nil
-		}
+	if token := t.tokenizeIdentifierOrKeyword(pos); token != nil {
+		return token, nil
 	}
 
 	return nil, fmt.Errorf("unexpected character '%c' at position %d", t.ch, t.pos)
+}
+
+// tokenizeString tokenizes string literals
+func (t *Tokenizer) tokenizeString(pos int) *Token {
+	if t.ch == '\'' || t.ch == '"' {
+		value := t.readString()
+		return &Token{Type: TokenString, Value: value, Pos: pos}
+	}
+	return nil
+}
+
+// tokenizeNumber tokenizes numeric literals
+func (t *Tokenizer) tokenizeNumber(pos int) *Token {
+	if unicode.IsDigit(t.ch) || (t.ch == '-' && unicode.IsDigit(t.peek())) {
+		value := t.readNumber()
+		return &Token{Type: TokenNumber, Value: value, Pos: pos}
+	}
+	return nil
+}
+
+// tokenizeSpecialChar tokenizes special characters (parentheses, comma, operators)
+func (t *Tokenizer) tokenizeSpecialChar(pos int) *Token {
+	switch t.ch {
+	case '(':
+		t.advance()
+		return &Token{Type: TokenLParen, Value: "(", Pos: pos}
+	case ')':
+		t.advance()
+		return &Token{Type: TokenRParen, Value: ")", Pos: pos}
+	case ',':
+		t.advance()
+		return &Token{Type: TokenComma, Value: ",", Pos: pos}
+	case '+', '-', '*', '/':
+		op := string(t.ch)
+		t.advance()
+		return &Token{Type: TokenArithmetic, Value: op, Pos: pos}
+	}
+	return nil
+}
+
+// tokenizeIdentifierOrKeyword tokenizes identifiers and keywords
+func (t *Tokenizer) tokenizeIdentifierOrKeyword(pos int) *Token {
+	if !unicode.IsLetter(t.ch) && t.ch != '_' {
+		return nil
+	}
+
+	value := t.readIdentifier()
+	lower := strings.ToLower(value)
+
+	// Check for keywords
+	if token := t.classifyKeyword(lower, pos); token != nil {
+		return token
+	}
+
+	// Functions like contains, startswith, endswith are identifiers
+	// that will be recognized as function calls when followed by '('
+	return &Token{Type: TokenIdentifier, Value: value, Pos: pos}
+}
+
+// classifyKeyword classifies a keyword and returns the appropriate token
+func (t *Tokenizer) classifyKeyword(lower string, pos int) *Token {
+	switch lower {
+	case "and":
+		return &Token{Type: TokenLogical, Value: "and", Pos: pos}
+	case "or":
+		return &Token{Type: TokenLogical, Value: "or", Pos: pos}
+	case "not":
+		return &Token{Type: TokenNot, Value: "not", Pos: pos}
+	case "true", "false":
+		return &Token{Type: TokenBoolean, Value: lower, Pos: pos}
+	case "null":
+		return &Token{Type: TokenNull, Value: "null", Pos: pos}
+	case "eq", "ne", "gt", "ge", "lt", "le":
+		return &Token{Type: TokenOperator, Value: lower, Pos: pos}
+	case "mod":
+		return &Token{Type: TokenArithmetic, Value: "mod", Pos: pos}
+	}
+	return nil
 }
 
 // TokenizeAll returns all tokens from the input
