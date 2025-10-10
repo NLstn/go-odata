@@ -37,9 +37,9 @@ func (h *MetadataHandler) HandleMetadata(w http.ResponseWriter, r *http.Request)
 	useJSON := shouldReturnJSON(r)
 
 	if useJSON {
-		h.handleMetadataJSON(w, r)
+		h.handleMetadataJSON(w)
 	} else {
-		h.handleMetadataXML(w, r)
+		h.handleMetadataXML(w)
 	}
 }
 
@@ -53,15 +53,11 @@ func shouldReturnJSON(r *http.Request) bool {
 
 	// Check Accept header
 	accept := r.Header.Get("Accept")
-	if strings.Contains(accept, "application/json") {
-		return true
-	}
-
-	return false
+	return strings.Contains(accept, "application/json")
 }
 
 // handleMetadataXML handles XML metadata format (existing implementation)
-func (h *MetadataHandler) handleMetadataXML(w http.ResponseWriter, r *http.Request) {
+func (h *MetadataHandler) handleMetadataXML(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/xml")
 	w.WriteHeader(http.StatusOK)
 
@@ -144,18 +140,17 @@ func (h *MetadataHandler) handleMetadataXML(w http.ResponseWriter, r *http.Reque
 }
 
 // handleMetadataJSON handles JSON metadata format (CSDL JSON)
-func (h *MetadataHandler) handleMetadataJSON(w http.ResponseWriter, r *http.Request) {
+func (h *MetadataHandler) handleMetadataJSON(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("OData-Version", "4.0")
 	w.WriteHeader(http.StatusOK)
 
 	// Build CSDL JSON structure
+	odataService := make(map[string]interface{})
 	csdl := map[string]interface{}{
 		"$Version":     "4.0",
-		"ODataService": map[string]interface{}{},
+		"ODataService": odataService,
 	}
-
-	odataService := csdl["ODataService"].(map[string]interface{})
 
 	// Add entity types
 	for _, entityMeta := range h.entities {
