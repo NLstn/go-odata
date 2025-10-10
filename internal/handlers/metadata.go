@@ -206,8 +206,12 @@ func (h *MetadataHandler) handleMetadataJSON(w http.ResponseWriter) {
 		entityType := make(map[string]interface{})
 		entityType["$Kind"] = "EntityType"
 
-		// Add key
-		entityType["$Key"] = []string{entityMeta.KeyProperty.JsonName}
+		// Add key(s) - supports both single and composite keys
+		keyNames := make([]string, 0, len(entityMeta.KeyProperties))
+		for _, keyProp := range entityMeta.KeyProperties {
+			keyNames = append(keyNames, keyProp.JsonName)
+		}
+		entityType["$Key"] = keyNames
 
 		// Add regular properties
 		for _, prop := range entityMeta.Properties {
