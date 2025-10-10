@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"reflect"
@@ -32,6 +33,35 @@ func (h *MetadataHandler) HandleMetadata(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Check if JSON format is requested via $format query parameter or Accept header
+	useJSON := shouldReturnJSON(r)
+
+	if useJSON {
+		h.handleMetadataJSON(w, r)
+	} else {
+		h.handleMetadataXML(w, r)
+	}
+}
+
+// shouldReturnJSON determines if JSON format should be returned based on request
+func shouldReturnJSON(r *http.Request) bool {
+	// Check $format query parameter first
+	format := r.URL.Query().Get("$format")
+	if format == "json" || format == "application/json" {
+		return true
+	}
+
+	// Check Accept header
+	accept := r.Header.Get("Accept")
+	if strings.Contains(accept, "application/json") {
+		return true
+	}
+
+	return false
+}
+
+// handleMetadataXML handles XML metadata format (existing implementation)
+func (h *MetadataHandler) handleMetadataXML(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/xml")
 	w.WriteHeader(http.StatusOK)
 
@@ -110,6 +140,104 @@ func (h *MetadataHandler) HandleMetadata(w http.ResponseWriter, r *http.Request)
 
 	if _, err := w.Write([]byte(metadata)); err != nil {
 		fmt.Printf("Error writing metadata response: %v\n", err)
+	}
+}
+
+// handleMetadataJSON handles JSON metadata format (CSDL JSON)
+func (h *MetadataHandler) handleMetadataJSON(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("OData-Version", "4.0")
+	w.WriteHeader(http.StatusOK)
+
+	// Build CSDL JSON structure
+	csdl := map[string]interface{}{
+		"$Version":     "4.0",
+		"ODataService": map[string]interface{}{},
+	}
+
+	odataService := csdl["ODataService"].(map[string]interface{})
+
+	// Add entity types
+	for _, entityMeta := range h.entities {
+		entityType := make(map[string]interface{})
+		entityType["$Kind"] = "EntityType"
+
+		// Add key
+		entityType["$Key"] = []string{entityMeta.KeyProperty.JsonName}
+
+		// Add regular properties
+		for _, prop := range entityMeta.Properties {
+			if prop.IsNavigationProp {
+				continue // Handle navigation properties separately
+			}
+
+			propDef := make(map[string]interface{})
+			propDef["$Type"] = getEdmType(prop.Type)
+
+			// Set nullable
+			if !prop.IsRequired && !prop.IsKey {
+				propDef["$Nullable"] = true
+			}
+
+			entityType[prop.JsonName] = propDef
+		}
+
+		// Add navigation properties
+		for _, prop := range entityMeta.Properties {
+			if !prop.IsNavigationProp {
+				continue
+			}
+
+			navProp := make(map[string]interface{})
+			navProp["$Kind"] = "NavigationProperty"
+
+			if prop.NavigationIsArray {
+				navProp["$Collection"] = true
+				navProp["$Type"] = fmt.Sprintf("ODataService.%s", prop.NavigationTarget)
+			} else {
+				navProp["$Type"] = fmt.Sprintf("ODataService.%s", prop.NavigationTarget)
+			}
+
+			entityType[prop.JsonName] = navProp
+		}
+
+		odataService[entityMeta.EntityName] = entityType
+	}
+
+	// Add entity container
+	container := map[string]interface{}{
+		"$Kind": "EntityContainer",
+	}
+
+	for entitySetName, entityMeta := range h.entities {
+		entitySet := map[string]interface{}{
+			"$Collection": true,
+			"$Type":       fmt.Sprintf("ODataService.%s", entityMeta.EntityName),
+		}
+
+		// Add navigation property bindings
+		navigationBindings := make(map[string]string)
+		for _, prop := range entityMeta.Properties {
+			if prop.IsNavigationProp {
+				targetEntitySet := pluralize(prop.NavigationTarget)
+				navigationBindings[prop.JsonName] = targetEntitySet
+			}
+		}
+
+		if len(navigationBindings) > 0 {
+			entitySet["$NavigationPropertyBinding"] = navigationBindings
+		}
+
+		container[entitySetName] = entitySet
+	}
+
+	odataService["Container"] = container
+
+	// Encode and write JSON
+	encoder := json.NewEncoder(w)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(csdl); err != nil {
+		fmt.Printf("Error writing JSON metadata response: %v\n", err)
 	}
 }
 
