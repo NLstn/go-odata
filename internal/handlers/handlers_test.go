@@ -184,8 +184,8 @@ func TestEntityHandlerEntityNotFound(t *testing.T) {
 func TestEntityHandlerEntityMethodNotAllowed(t *testing.T) {
 	handler, _ := setupTestHandler(t)
 
-	// DELETE is now supported, so only test POST, PUT, and PATCH
-	methods := []string{http.MethodPost, http.MethodPut, http.MethodPatch}
+	// DELETE and PATCH are now supported, so only test POST and PUT
+	methods := []string{http.MethodPost, http.MethodPut}
 
 	for _, method := range methods {
 		t.Run(method, func(t *testing.T) {
