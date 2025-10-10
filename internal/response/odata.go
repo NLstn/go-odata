@@ -444,6 +444,7 @@ type ODataURLComponents struct {
 	NavigationProperty string            // For paths like Products(1)/Descriptions
 	PropertyPath       string            // For structural property paths like Products(1)/Name
 	IsCount            bool              // For paths like Products/$count
+	IsValue            bool              // For paths like Products(1)/Name/$value
 }
 
 // ParseODataURL parses an OData URL and extracts components (exported for use in main package)
@@ -498,6 +499,11 @@ func ParseODataURLComponents(path string) (*ODataURLComponents, error) {
 				components.IsCount = true
 			} else {
 				components.NavigationProperty = pathParts[1]
+
+				// Check for $value suffix: Products(1)/Name/$value
+				if len(pathParts) > 2 && pathParts[2] == "$value" {
+					components.IsValue = true
+				}
 			}
 		}
 	}

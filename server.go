@@ -73,9 +73,17 @@ func (s *Service) handlePropertyRequest(w http.ResponseWriter, r *http.Request, 
 
 	// Try navigation property first, then structural property
 	if handler.IsNavigationProperty(components.NavigationProperty) {
+		if components.IsValue {
+			// /$value is not supported on navigation properties
+			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid request",
+				"$value is not supported on navigation properties"); writeErr != nil {
+				fmt.Printf("Error writing error response: %v\n", writeErr)
+			}
+			return
+		}
 		handler.HandleNavigationProperty(w, r, keyString, components.NavigationProperty)
 	} else if handler.IsStructuralProperty(components.NavigationProperty) {
-		handler.HandleStructuralProperty(w, r, keyString, components.NavigationProperty)
+		handler.HandleStructuralProperty(w, r, keyString, components.NavigationProperty, components.IsValue)
 	} else {
 		// Property not found
 		if writeErr := response.WriteError(w, http.StatusNotFound, "Property not found",
