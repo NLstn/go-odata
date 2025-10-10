@@ -170,39 +170,7 @@ func analyzeODataTags(property *PropertyMetadata, field reflect.StructField, met
 		parts := strings.Split(odataTag, ",")
 		for _, part := range parts {
 			part = strings.TrimSpace(part)
-
-			if part == "key" {
-				property.IsKey = true
-				metadata.KeyProperties = append(metadata.KeyProperties, *property)
-			} else if part == "required" {
-				property.IsRequired = true
-			} else if strings.HasPrefix(part, "maxlength=") {
-				if val := strings.TrimPrefix(part, "maxlength="); val != "" {
-					if parsed, err := parseInt(val); err == nil {
-						property.MaxLength = parsed
-					}
-				}
-			} else if strings.HasPrefix(part, "precision=") {
-				if val := strings.TrimPrefix(part, "precision="); val != "" {
-					if parsed, err := parseInt(val); err == nil {
-						property.Precision = parsed
-					}
-				}
-			} else if strings.HasPrefix(part, "scale=") {
-				if val := strings.TrimPrefix(part, "scale="); val != "" {
-					if parsed, err := parseInt(val); err == nil {
-						property.Scale = parsed
-					}
-				}
-			} else if strings.HasPrefix(part, "default=") {
-				property.DefaultValue = strings.TrimPrefix(part, "default=")
-			} else if part == "nullable" {
-				nullable := true
-				property.Nullable = &nullable
-			} else if part == "nullable=false" {
-				nullable := false
-				property.Nullable = &nullable
-			}
+			processODataTagPart(property, part, metadata)
 		}
 	}
 
@@ -210,6 +178,40 @@ func analyzeODataTags(property *PropertyMetadata, field reflect.StructField, met
 	if len(metadata.KeyProperties) == 0 && field.Name == "ID" {
 		property.IsKey = true
 		metadata.KeyProperties = append(metadata.KeyProperties, *property)
+	}
+}
+
+// processODataTagPart processes a single OData tag part
+func processODataTagPart(property *PropertyMetadata, part string, metadata *EntityMetadata) {
+	switch {
+	case part == "key":
+		property.IsKey = true
+		metadata.KeyProperties = append(metadata.KeyProperties, *property)
+	case part == "required":
+		property.IsRequired = true
+	case strings.HasPrefix(part, "maxlength="):
+		processIntFacet(part, "maxlength=", &property.MaxLength)
+	case strings.HasPrefix(part, "precision="):
+		processIntFacet(part, "precision=", &property.Precision)
+	case strings.HasPrefix(part, "scale="):
+		processIntFacet(part, "scale=", &property.Scale)
+	case strings.HasPrefix(part, "default="):
+		property.DefaultValue = strings.TrimPrefix(part, "default=")
+	case part == "nullable":
+		nullable := true
+		property.Nullable = &nullable
+	case part == "nullable=false":
+		nullable := false
+		property.Nullable = &nullable
+	}
+}
+
+// processIntFacet processes an integer facet from an OData tag
+func processIntFacet(part, prefix string, target *int) {
+	if val := strings.TrimPrefix(part, prefix); val != "" {
+		if parsed, err := parseInt(val); err == nil {
+			*target = parsed
+		}
 	}
 }
 
