@@ -133,12 +133,38 @@ func (h *MetadataHandler) buildRegularProperties(entityMeta *metadata.EntityMeta
 		}
 
 		edmType := getEdmType(prop.Type)
+		
+		// Determine nullable
 		nullable := "false"
-		if !prop.IsRequired && !prop.IsKey {
+		if prop.Nullable != nil {
+			if *prop.Nullable {
+				nullable = "true"
+			} else {
+				nullable = "false"
+			}
+		} else if !prop.IsRequired && !prop.IsKey {
 			nullable = "true"
 		}
-		result += fmt.Sprintf(`        <Property Name="%s" Type="%s" Nullable="%s" />
-`, prop.JsonName, edmType, nullable)
+		
+		// Build property attributes
+		attrs := fmt.Sprintf(`Name="%s" Type="%s" Nullable="%s"`, prop.JsonName, edmType, nullable)
+		
+		// Add facets
+		if prop.MaxLength > 0 {
+			attrs += fmt.Sprintf(` MaxLength="%d"`, prop.MaxLength)
+		}
+		if prop.Precision > 0 {
+			attrs += fmt.Sprintf(` Precision="%d"`, prop.Precision)
+		}
+		if prop.Scale > 0 {
+			attrs += fmt.Sprintf(` Scale="%d"`, prop.Scale)
+		}
+		if prop.DefaultValue != "" {
+			attrs += fmt.Sprintf(` DefaultValue="%s"`, prop.DefaultValue)
+		}
+		
+		result += fmt.Sprintf(`        <Property %s />
+`, attrs)
 	}
 	return result
 }
@@ -151,12 +177,27 @@ func (h *MetadataHandler) buildNavigationProperties(entityMeta *metadata.EntityM
 			continue
 		}
 
+		typeName := fmt.Sprintf("ODataService.%s", prop.NavigationTarget)
 		if prop.NavigationIsArray {
-			result += fmt.Sprintf(`        <NavigationProperty Name="%s" Type="Collection(ODataService.%s)" />
-`, prop.JsonName, prop.NavigationTarget)
+			typeName = fmt.Sprintf("Collection(%s)", typeName)
+		}
+		
+		// Check if we have referential constraints
+		if len(prop.ReferentialConstraints) > 0 {
+			result += fmt.Sprintf(`        <NavigationProperty Name="%s" Type="%s">
+`, prop.JsonName, typeName)
+			result += `          <ReferentialConstraint>
+`
+			for dependent, principal := range prop.ReferentialConstraints {
+				result += fmt.Sprintf(`            <Property Name="%s" ReferencedProperty="%s" />
+`, dependent, principal)
+			}
+			result += `          </ReferentialConstraint>
+        </NavigationProperty>
+`
 		} else {
-			result += fmt.Sprintf(`        <NavigationProperty Name="%s" Type="ODataService.%s" />
-`, prop.JsonName, prop.NavigationTarget)
+			result += fmt.Sprintf(`        <NavigationProperty Name="%s" Type="%s" />
+`, prop.JsonName, typeName)
 		}
 	}
 	return result
@@ -223,8 +264,24 @@ func (h *MetadataHandler) handleMetadataJSON(w http.ResponseWriter) {
 			propDef["$Type"] = getEdmType(prop.Type)
 
 			// Set nullable
-			if !prop.IsRequired && !prop.IsKey {
+			if prop.Nullable != nil {
+				propDef["$Nullable"] = *prop.Nullable
+			} else if !prop.IsRequired && !prop.IsKey {
 				propDef["$Nullable"] = true
+			}
+			
+			// Add facets
+			if prop.MaxLength > 0 {
+				propDef["$MaxLength"] = prop.MaxLength
+			}
+			if prop.Precision > 0 {
+				propDef["$Precision"] = prop.Precision
+			}
+			if prop.Scale > 0 {
+				propDef["$Scale"] = prop.Scale
+			}
+			if prop.DefaultValue != "" {
+				propDef["$DefaultValue"] = prop.DefaultValue
 			}
 
 			entityType[prop.JsonName] = propDef
@@ -244,6 +301,18 @@ func (h *MetadataHandler) handleMetadataJSON(w http.ResponseWriter) {
 				navProp["$Type"] = fmt.Sprintf("ODataService.%s", prop.NavigationTarget)
 			} else {
 				navProp["$Type"] = fmt.Sprintf("ODataService.%s", prop.NavigationTarget)
+			}
+			
+			// Add referential constraints if present
+			if len(prop.ReferentialConstraints) > 0 {
+				constraints := make([]map[string]string, 0, len(prop.ReferentialConstraints))
+				for dependent, principal := range prop.ReferentialConstraints {
+					constraints = append(constraints, map[string]string{
+						"Property":           dependent,
+						"ReferencedProperty": principal,
+					})
+				}
+				navProp["$ReferentialConstraint"] = constraints
 			}
 
 			entityType[prop.JsonName] = navProp
@@ -296,6 +365,15 @@ func getEdmType(goType reflect.Type) string {
 		goType = goType.Elem()
 	}
 
+	// Check for specific types by name
+	typeName := goType.String()
+	switch typeName {
+	case "time.Time":
+		return "Edm.DateTimeOffset"
+	case "uuid.UUID", "github.com/google/uuid.UUID":
+		return "Edm.Guid"
+	}
+
 	switch goType.Kind() {
 	case reflect.String:
 		return "Edm.String"
@@ -314,6 +392,10 @@ func getEdmType(goType reflect.Type) string {
 	case reflect.Bool:
 		return "Edm.Boolean"
 	default:
+		// Check for arrays of bytes (often used for binary data)
+		if goType.Kind() == reflect.Slice && goType.Elem().Kind() == reflect.Uint8 {
+			return "Edm.Binary"
+		}
 		// For complex types, return as string
 		return "Edm.String"
 	}

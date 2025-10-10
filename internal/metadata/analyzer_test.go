@@ -185,3 +185,147 @@ func TestPropertyMetadata(t *testing.T) {
 		t.Errorf("Name property JsonName = %v, want name", nameProperty.JsonName)
 	}
 }
+
+func TestPropertyFacets(t *testing.T) {
+	type EntityWithFacets struct {
+		ID          int     `json:"id" odata:"key"`
+		Name        string  `json:"name" odata:"maxlength=100"`
+		Description string  `json:"description" odata:"maxlength=500,nullable"`
+		Price       float64 `json:"price" odata:"precision=10,scale=2"`
+		SKU         string  `json:"sku" odata:"default=AUTO"`
+		Active      bool    `json:"active" odata:"nullable=false"`
+	}
+
+	meta, err := AnalyzeEntity(EntityWithFacets{})
+	if err != nil {
+		t.Fatalf("AnalyzeEntity() error = %v", err)
+	}
+
+	// Check name with maxlength
+	var nameProp *PropertyMetadata
+	for i, prop := range meta.Properties {
+		if prop.Name == "Name" {
+			nameProp = &meta.Properties[i]
+			break
+		}
+	}
+	if nameProp == nil {
+		t.Fatal("Name property not found")
+	}
+	if nameProp.MaxLength != 100 {
+		t.Errorf("Name MaxLength = %v, want 100", nameProp.MaxLength)
+	}
+
+	// Check description with maxlength and nullable
+	var descProp *PropertyMetadata
+	for i, prop := range meta.Properties {
+		if prop.Name == "Description" {
+			descProp = &meta.Properties[i]
+			break
+		}
+	}
+	if descProp == nil {
+		t.Fatal("Description property not found")
+	}
+	if descProp.MaxLength != 500 {
+		t.Errorf("Description MaxLength = %v, want 500", descProp.MaxLength)
+	}
+	if descProp.Nullable == nil || !*descProp.Nullable {
+		t.Error("Description should be nullable")
+	}
+
+	// Check price with precision and scale
+	var priceProp *PropertyMetadata
+	for i, prop := range meta.Properties {
+		if prop.Name == "Price" {
+			priceProp = &meta.Properties[i]
+			break
+		}
+	}
+	if priceProp == nil {
+		t.Fatal("Price property not found")
+	}
+	if priceProp.Precision != 10 {
+		t.Errorf("Price Precision = %v, want 10", priceProp.Precision)
+	}
+	if priceProp.Scale != 2 {
+		t.Errorf("Price Scale = %v, want 2", priceProp.Scale)
+	}
+
+	// Check SKU with default value
+	var skuProp *PropertyMetadata
+	for i, prop := range meta.Properties {
+		if prop.Name == "SKU" {
+			skuProp = &meta.Properties[i]
+			break
+		}
+	}
+	if skuProp == nil {
+		t.Fatal("SKU property not found")
+	}
+	if skuProp.DefaultValue != "AUTO" {
+		t.Errorf("SKU DefaultValue = %v, want AUTO", skuProp.DefaultValue)
+	}
+
+	// Check Active with nullable=false
+	var activeProp *PropertyMetadata
+	for i, prop := range meta.Properties {
+		if prop.Name == "Active" {
+			activeProp = &meta.Properties[i]
+			break
+		}
+	}
+	if activeProp == nil {
+		t.Fatal("Active property not found")
+	}
+	if activeProp.Nullable == nil || *activeProp.Nullable {
+		t.Error("Active should not be nullable")
+	}
+}
+
+func TestNavigationPropertyWithReferentialConstraints(t *testing.T) {
+	type User struct {
+		ID   int    `json:"id" odata:"key"`
+		Name string `json:"name"`
+	}
+
+	type Order struct {
+		ID         int   `json:"id" odata:"key"`
+		CustomerID int   `json:"customerId"`
+		Customer   *User `json:"customer" gorm:"foreignKey:CustomerID;references:ID"`
+	}
+
+	meta, err := AnalyzeEntity(Order{})
+	if err != nil {
+		t.Fatalf("AnalyzeEntity() error = %v", err)
+	}
+
+	// Find customer navigation property
+	var customerProp *PropertyMetadata
+	for i, prop := range meta.Properties {
+		if prop.Name == "Customer" {
+			customerProp = &meta.Properties[i]
+			break
+		}
+	}
+
+	if customerProp == nil {
+		t.Fatal("Customer navigation property not found")
+	}
+
+	if !customerProp.IsNavigationProp {
+		t.Error("Customer should be a navigation property")
+	}
+
+	if customerProp.NavigationTarget != "User" {
+		t.Errorf("NavigationTarget = %v, want User", customerProp.NavigationTarget)
+	}
+
+	if len(customerProp.ReferentialConstraints) == 0 {
+		t.Fatal("ReferentialConstraints should not be empty")
+	}
+
+	if referencedProp, ok := customerProp.ReferentialConstraints["CustomerID"]; !ok || referencedProp != "ID" {
+		t.Errorf("Expected CustomerID -> ID constraint, got %v", customerProp.ReferentialConstraints)
+	}
+}

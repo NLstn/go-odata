@@ -40,6 +40,10 @@ A Go library for building services that expose OData APIs with automatic handlin
 - ✅ Structural properties with $value endpoint (e.g., /Products(1)/Name/$value)
 - ✅ Prefer header support (return=representation, return=minimal)
 - ✅ Filter operations on expanded navigation properties
+- ✅ **Rich metadata document generation (XML and JSON)**
+  - Property facets (MaxLength, Precision, Scale, DefaultValue, Nullable)
+  - Extended type support (DateTimeOffset, Guid, Binary)
+  - Navigation properties with referential constraints
 
 ## Installation
 
@@ -129,6 +133,7 @@ Once your service is running, the following endpoints will be available:
 
 - **Service Document**: `GET /` - Lists all available entity sets
 - **Metadata**: `GET /$metadata` - OData metadata document (supports both XML and JSON/CSDL formats)
+- **Metadata (JSON)**: `GET /$metadata?$format=json` - OData metadata document in JSON format (CSDL JSON)
 - **Entity Collection**: 
   - `GET /Products` - All products
   - `POST /Products` - Create a new product
@@ -142,6 +147,86 @@ Once your service is running, the following endpoints will be available:
 - **Structural Properties**: `GET /Products(1)/Name` - Access individual property values
 - **Raw Property Value**: `GET /Products(1)/Name/$value` - Get raw property value without JSON wrapping
 - **Composite Keys**: `GET /EntitySet(key1=value1,key2=value2)` - Access entities with composite keys
+
+## Metadata Document
+
+The library generates rich OData v4 metadata documents that describe your data model. Metadata is available in both XML and JSON formats.
+
+### Accessing Metadata
+
+```bash
+# XML format (default)
+GET http://localhost:8080/$metadata
+
+# JSON format (CSDL JSON)
+GET http://localhost:8080/$metadata?$format=json
+```
+
+### Metadata Features
+
+The metadata document includes:
+
+- **Entity Types**: Complete type definitions for all registered entities
+- **Property Facets**: 
+  - `MaxLength` - Maximum string length
+  - `Precision` and `Scale` - Numeric precision for decimals
+  - `DefaultValue` - Default values for properties
+  - `Nullable` - Nullability constraints
+- **Type Mappings**:
+  - `time.Time` → `Edm.DateTimeOffset`
+  - `int`, `int32` → `Edm.Int32`
+  - `int64` → `Edm.Int64`
+  - `float64` → `Edm.Double`
+  - `bool` → `Edm.Boolean`
+  - `[]byte` → `Edm.Binary`
+- **Navigation Properties**: Relationship definitions with referential constraints
+- **Entity Container**: Entity sets and navigation property bindings
+
+### Example Metadata (JSON)
+
+```json
+{
+  "$Version": "4.0",
+  "ODataService": {
+    "Product": {
+      "$Kind": "EntityType",
+      "$Key": ["id"],
+      "id": { "$Type": "Edm.Int32" },
+      "name": { 
+        "$Type": "Edm.String", 
+        "$MaxLength": 100 
+      },
+      "price": { 
+        "$Type": "Edm.Double",
+        "$Precision": 10,
+        "$Scale": 2
+      },
+      "createdAt": { 
+        "$Type": "Edm.DateTimeOffset" 
+      }
+    },
+    "Order": {
+      "$Kind": "EntityType",
+      "$Key": ["id"],
+      "customer": {
+        "$Kind": "NavigationProperty",
+        "$Type": "ODataService.Customer",
+        "$ReferentialConstraint": [{
+          "Property": "CustomerID",
+          "ReferencedProperty": "ID"
+        }]
+      }
+    },
+    "Container": {
+      "$Kind": "EntityContainer",
+      "Products": {
+        "$Collection": true,
+        "$Type": "ODataService.Product"
+      }
+    }
+  }
+}
+```
 
 ## OData Query Options
 
@@ -212,6 +297,8 @@ GET /Products?$filter=Category eq 'Electronics'&$orderby=Price desc&$top=5&$coun
 
 Define your entities using Go structs with appropriate tags:
 
+### Basic Entity
+
 ```go
 type Product struct {
     ID          uint    `json:"ID" gorm:"primaryKey" odata:"key"`
@@ -222,12 +309,54 @@ type Product struct {
 }
 ```
 
+### Entity with Rich Metadata
+
+```go
+type Product struct {
+    ID          int       `json:"id" gorm:"primaryKey" odata:"key"`
+    Name        string    `json:"name" odata:"required,maxlength=100"`
+    Description string    `json:"description" odata:"maxlength=1000,nullable"`
+    SKU         string    `json:"sku" odata:"maxlength=50,default=AUTO"`
+    Price       float64   `json:"price" odata:"precision=10,scale=2"`
+    Stock       int       `json:"stock" odata:"default=0"`
+    Active      bool      `json:"active" odata:"default=true"`
+    CreatedAt   time.Time `json:"createdAt"`
+}
+```
+
+### Entity with Relationships
+
+```go
+type Order struct {
+    ID          int       `json:"id" gorm:"primaryKey" odata:"key"`
+    OrderNumber string    `json:"orderNumber" odata:"required,maxlength=50"`
+    CustomerID  int       `json:"customerId" odata:"required"`
+    Customer    *Customer `json:"customer" gorm:"foreignKey:CustomerID;references:ID"`
+    TotalAmount float64   `json:"totalAmount" odata:"precision=10,scale=2"`
+    OrderDate   time.Time `json:"orderDate"`
+    Items       []OrderItem `json:"items" gorm:"foreignKey:OrderID;references:ID"`
+}
+
+type Customer struct {
+    ID     int     `json:"id" gorm:"primaryKey" odata:"key"`
+    Name   string  `json:"name" odata:"required,maxlength=100"`
+    Email  string  `json:"email" odata:"maxlength=255"`
+    Orders []Order `json:"orders" gorm:"foreignKey:CustomerID;references:ID"`
+}
+```
+
 ### Supported Tags
 
 - `odata:"key"` - Marks the field as the entity key (required)
 - `odata:"required"` - Marks the field as required
+- `odata:"maxlength=N"` - Sets the maximum length for string properties
+- `odata:"precision=N"` - Sets the precision for numeric properties
+- `odata:"scale=N"` - Sets the scale for decimal properties
+- `odata:"default=VALUE"` - Sets the default value for the property
+- `odata:"nullable"` - Explicitly marks the field as nullable
+- `odata:"nullable=false"` - Explicitly marks the field as non-nullable
 - `json:"fieldname"` - Specifies the JSON field name
-- `gorm:"..."` - GORM database tags
+- `gorm:"..."` - GORM database tags (including foreign key relationships)
 
 ## Development Server
 
