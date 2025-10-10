@@ -355,6 +355,26 @@ func parseNestedExpandOptions(expand *ExpandOption, optionsStr string, entityMet
 // parseFilterWithoutMetadata parses a filter expression without validating property names
 func parseFilterWithoutMetadata(filterStr string) (*FilterExpression, error) {
 	filterStr = strings.TrimSpace(filterStr)
+	
+	// Try using the new AST parser first
+	tokenizer := NewTokenizer(filterStr)
+	tokens, err := tokenizer.TokenizeAll()
+	if err == nil {
+		parser := NewASTParser(tokens)
+		ast, err := parser.Parse()
+		if err == nil {
+			// Convert AST to FilterExpression without metadata validation
+			return ASTToFilterExpression(ast, nil)
+		}
+	}
+	
+	// Fall back to legacy parser
+	return parseFilterWithoutMetadataLegacy(filterStr)
+}
+
+// parseFilterWithoutMetadataLegacy is the old parser without metadata validation
+func parseFilterWithoutMetadataLegacy(filterStr string) (*FilterExpression, error) {
+	filterStr = strings.TrimSpace(filterStr)
 
 	// Check for logical operators (and, or)
 	if idx := findLogicalOperator(filterStr); idx != -1 {
@@ -362,12 +382,12 @@ func parseFilterWithoutMetadata(filterStr string) (*FilterExpression, error) {
 		left := strings.TrimSpace(filterStr[:idx])
 		right := strings.TrimSpace(filterStr[idx+len(operator):])
 
-		leftExpr, err := parseFilterWithoutMetadata(left)
+		leftExpr, err := parseFilterWithoutMetadataLegacy(left)
 		if err != nil {
 			return nil, err
 		}
 
-		rightExpr, err := parseFilterWithoutMetadata(right)
+		rightExpr, err := parseFilterWithoutMetadataLegacy(right)
 		if err != nil {
 			return nil, err
 		}
