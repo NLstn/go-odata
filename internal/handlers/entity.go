@@ -232,13 +232,15 @@ func (h *EntityHandler) trimResults(sliceValue interface{}, maxLen int) interfac
 	return v.Slice(0, maxLen).Interface()
 }
 
-// HandleEntity handles GET and DELETE requests for individual entities
+// HandleEntity handles GET, DELETE, and PATCH requests for individual entities
 func (h *EntityHandler) HandleEntity(w http.ResponseWriter, r *http.Request, entityKey string) {
 	switch r.Method {
 	case http.MethodGet:
 		h.handleGetEntity(w, r, entityKey)
 	case http.MethodDelete:
 		h.handleDeleteEntity(w, r, entityKey)
+	case http.MethodPatch:
+		h.handlePatchEntity(w, r, entityKey)
 	default:
 		if err := response.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
 			fmt.Sprintf("Method %s is not supported for individual entities", r.Method)); err != nil {
@@ -338,6 +340,77 @@ func (h *EntityHandler) handleDeleteEntity(w http.ResponseWriter, r *http.Reques
 
 	// Delete the entity
 	if err := h.db.Delete(entity).Error; err != nil {
+		if writeErr := response.WriteError(w, http.StatusInternalServerError, "Database error", err.Error()); writeErr != nil {
+			fmt.Printf("Error writing error response: %v\n", writeErr)
+		}
+		return
+	}
+
+	// Return 204 No Content according to OData v4 spec
+	w.Header().Set("OData-Version", "4.0")
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handlePatchEntity handles PATCH requests for individual entities
+func (h *EntityHandler) handlePatchEntity(w http.ResponseWriter, r *http.Request, entityKey string) {
+	// Create an instance to hold the entity to be updated
+	entity := reflect.New(h.metadata.EntityType).Interface()
+
+	// Build the query condition using the key properties
+	db, err := h.buildKeyQuery(entityKey)
+	if err != nil {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid key", err.Error()); writeErr != nil {
+			fmt.Printf("Error writing error response: %v\n", writeErr)
+		}
+		return
+	}
+
+	// First, check if the entity exists
+	if err := db.First(entity).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			if writeErr := response.WriteError(w, http.StatusNotFound, "Entity not found",
+				fmt.Sprintf("Entity with key '%s' not found", entityKey)); writeErr != nil {
+				fmt.Printf("Error writing error response: %v\n", writeErr)
+			}
+		} else {
+			if writeErr := response.WriteError(w, http.StatusInternalServerError, "Database error", err.Error()); writeErr != nil {
+				fmt.Printf("Error writing error response: %v\n", writeErr)
+			}
+		}
+		return
+	}
+
+	// Parse the request body to get the update data
+	var updateData map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&updateData); err != nil {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid request body",
+			fmt.Sprintf("Failed to parse JSON: %v", err.Error())); writeErr != nil {
+			fmt.Printf("Error writing error response: %v\n", writeErr)
+		}
+		return
+	}
+
+	// Validate that we're not trying to update key properties
+	for _, keyProp := range h.metadata.KeyProperties {
+		if _, exists := updateData[keyProp.JsonName]; exists {
+			if writeErr := response.WriteError(w, http.StatusBadRequest, "Cannot update key property",
+				fmt.Sprintf("Key property '%s' cannot be modified", keyProp.JsonName)); writeErr != nil {
+				fmt.Printf("Error writing error response: %v\n", writeErr)
+			}
+			return
+		}
+		// Also check using the struct field name
+		if _, exists := updateData[keyProp.Name]; exists {
+			if writeErr := response.WriteError(w, http.StatusBadRequest, "Cannot update key property",
+				fmt.Sprintf("Key property '%s' cannot be modified", keyProp.Name)); writeErr != nil {
+				fmt.Printf("Error writing error response: %v\n", writeErr)
+			}
+			return
+		}
+	}
+
+	// Apply updates using GORM's Updates method which only updates provided fields
+	if err := h.db.Model(entity).Updates(updateData).Error; err != nil {
 		if writeErr := response.WriteError(w, http.StatusInternalServerError, "Database error", err.Error()); writeErr != nil {
 			fmt.Printf("Error writing error response: %v\n", writeErr)
 		}
