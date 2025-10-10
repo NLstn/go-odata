@@ -349,19 +349,19 @@ type ODataErrorDetail struct {
 
 // ODataInnerError represents nested error information in an OData error response
 type ODataInnerError struct {
-	Message      string           `json:"message,omitempty"`
-	TypeName     string           `json:"type,omitempty"`
-	StackTrace   string           `json:"stacktrace,omitempty"`
-	InnerError   *ODataInnerError `json:"innererror,omitempty"`
+	Message    string           `json:"message,omitempty"`
+	TypeName   string           `json:"type,omitempty"`
+	StackTrace string           `json:"stacktrace,omitempty"`
+	InnerError *ODataInnerError `json:"innererror,omitempty"`
 }
 
 // ODataError represents the OData v4 compliant error structure
 type ODataError struct {
-	Code       string              `json:"code"`
-	Message    string              `json:"message"`
-	Target     string              `json:"target,omitempty"`
-	Details    []ODataErrorDetail  `json:"details,omitempty"`
-	InnerError *ODataInnerError    `json:"innererror,omitempty"`
+	Code       string             `json:"code"`
+	Message    string             `json:"message"`
+	Target     string             `json:"target,omitempty"`
+	Details    []ODataErrorDetail `json:"details,omitempty"`
+	InnerError *ODataInnerError   `json:"innererror,omitempty"`
 }
 
 // WriteError writes an OData v4 compliant error response
