@@ -133,7 +133,7 @@ func (h *MetadataHandler) buildRegularProperties(entityMeta *metadata.EntityMeta
 		}
 
 		edmType := getEdmType(prop.Type)
-		
+
 		// Determine nullable
 		nullable := "false"
 		if prop.Nullable != nil {
@@ -145,10 +145,10 @@ func (h *MetadataHandler) buildRegularProperties(entityMeta *metadata.EntityMeta
 		} else if !prop.IsRequired && !prop.IsKey {
 			nullable = "true"
 		}
-		
+
 		// Build property attributes
 		attrs := fmt.Sprintf(`Name="%s" Type="%s" Nullable="%s"`, prop.JsonName, edmType, nullable)
-		
+
 		// Add facets
 		if prop.MaxLength > 0 {
 			attrs += fmt.Sprintf(` MaxLength="%d"`, prop.MaxLength)
@@ -162,7 +162,7 @@ func (h *MetadataHandler) buildRegularProperties(entityMeta *metadata.EntityMeta
 		if prop.DefaultValue != "" {
 			attrs += fmt.Sprintf(` DefaultValue="%s"`, prop.DefaultValue)
 		}
-		
+
 		result += fmt.Sprintf(`        <Property %s />
 `, attrs)
 	}
@@ -181,7 +181,7 @@ func (h *MetadataHandler) buildNavigationProperties(entityMeta *metadata.EntityM
 		if prop.NavigationIsArray {
 			typeName = fmt.Sprintf("Collection(%s)", typeName)
 		}
-		
+
 		// Check if we have referential constraints
 		if len(prop.ReferentialConstraints) > 0 {
 			result += fmt.Sprintf(`        <NavigationProperty Name="%s" Type="%s">
@@ -269,7 +269,7 @@ func (h *MetadataHandler) handleMetadataJSON(w http.ResponseWriter) {
 			} else if !prop.IsRequired && !prop.IsKey {
 				propDef["$Nullable"] = true
 			}
-			
+
 			// Add facets
 			if prop.MaxLength > 0 {
 				propDef["$MaxLength"] = prop.MaxLength
@@ -302,7 +302,7 @@ func (h *MetadataHandler) handleMetadataJSON(w http.ResponseWriter) {
 			} else {
 				navProp["$Type"] = fmt.Sprintf("ODataService.%s", prop.NavigationTarget)
 			}
-			
+
 			// Add referential constraints if present
 			if len(prop.ReferentialConstraints) > 0 {
 				constraints := make([]map[string]string, 0, len(prop.ReferentialConstraints))

@@ -25,24 +25,24 @@ type Customer struct {
 }
 
 type Order struct {
-	ID          int       `json:"id" gorm:"primarykey" odata:"key"`
-	OrderNumber string    `json:"orderNumber" odata:"required,maxlength=50"`
-	CustomerID  int       `json:"customerId" odata:"required"`
-	Customer    *Customer `json:"customer" gorm:"foreignKey:CustomerID;references:ID"`
-	TotalAmount float64   `json:"totalAmount" odata:"precision=10,scale=2"`
-	Status      string    `json:"status" odata:"default=pending,maxlength=20"`
-	OrderDate   time.Time `json:"orderDate"`
+	ID          int         `json:"id" gorm:"primarykey" odata:"key"`
+	OrderNumber string      `json:"orderNumber" odata:"required,maxlength=50"`
+	CustomerID  int         `json:"customerId" odata:"required"`
+	Customer    *Customer   `json:"customer" gorm:"foreignKey:CustomerID;references:ID"`
+	TotalAmount float64     `json:"totalAmount" odata:"precision=10,scale=2"`
+	Status      string      `json:"status" odata:"default=pending,maxlength=20"`
+	OrderDate   time.Time   `json:"orderDate"`
 	Items       []OrderItem `json:"items" gorm:"foreignKey:OrderID;references:ID"`
 }
 
 type OrderItem struct {
-	ID        int     `json:"id" gorm:"primarykey" odata:"key"`
-	OrderID   int     `json:"orderId" odata:"required"`
-	Order     *Order  `json:"order" gorm:"foreignKey:OrderID;references:ID"`
-	ProductID int     `json:"productId" odata:"required"`
+	ID        int      `json:"id" gorm:"primarykey" odata:"key"`
+	OrderID   int      `json:"orderId" odata:"required"`
+	Order     *Order   `json:"order" gorm:"foreignKey:OrderID;references:ID"`
+	ProductID int      `json:"productId" odata:"required"`
 	Product   *Product `json:"product" gorm:"foreignKey:ProductID;references:ID"`
-	Quantity  int     `json:"quantity" odata:"required"`
-	UnitPrice float64 `json:"unitPrice" odata:"precision=10,scale=2"`
+	Quantity  int      `json:"quantity" odata:"required"`
+	UnitPrice float64  `json:"unitPrice" odata:"precision=10,scale=2"`
 }
 
 type Product struct {
