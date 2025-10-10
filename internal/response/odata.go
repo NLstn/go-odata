@@ -442,6 +442,7 @@ type ODataURLComponents struct {
 	EntityKey          string            // For single keys: the value, for composite keys: empty (use EntityKeyMap)
 	EntityKeyMap       map[string]string // For composite keys: map of key names to values
 	NavigationProperty string            // For paths like Products(1)/Descriptions
+	IsCount            bool              // For paths like Products/$count
 }
 
 // ParseODataURL parses an OData URL and extracts components (exported for use in main package)
@@ -490,9 +491,13 @@ func ParseODataURLComponents(path string) (*ODataURLComponents, error) {
 			components.EntitySet = entitySet
 		}
 
-		// Check for navigation property: Products(1)/Descriptions
+		// Check for $count or navigation property: Products/$count or Products(1)/Descriptions
 		if len(pathParts) > 1 {
-			components.NavigationProperty = pathParts[1]
+			if pathParts[1] == "$count" {
+				components.IsCount = true
+			} else {
+				components.NavigationProperty = pathParts[1]
+			}
 		}
 	}
 

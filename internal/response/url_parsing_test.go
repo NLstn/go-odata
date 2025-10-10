@@ -81,3 +81,64 @@ func TestParseODataURLComponentsCompositeKey(t *testing.T) {
 		})
 	}
 }
+
+func TestParseODataURLComponentsCount(t *testing.T) {
+	tests := []struct {
+		name            string
+		path            string
+		expectEntitySet string
+		expectIsCount   bool
+		expectHasKey    bool
+	}{
+		{
+			name:            "Collection count",
+			path:            "Products/$count",
+			expectEntitySet: "Products",
+			expectIsCount:   true,
+			expectHasKey:    false,
+		},
+		{
+			name:            "Collection without count",
+			path:            "Products",
+			expectEntitySet: "Products",
+			expectIsCount:   false,
+			expectHasKey:    false,
+		},
+		{
+			name:            "Navigation property (not count)",
+			path:            "Products(1)/Descriptions",
+			expectEntitySet: "Products",
+			expectIsCount:   false,
+			expectHasKey:    true,
+		},
+		{
+			name:            "Leading slash",
+			path:            "/Products/$count",
+			expectEntitySet: "Products",
+			expectIsCount:   true,
+			expectHasKey:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			components, err := ParseODataURLComponents(tt.path)
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+
+			if components.EntitySet != tt.expectEntitySet {
+				t.Errorf("Expected entity set %s, got %s", tt.expectEntitySet, components.EntitySet)
+			}
+
+			if components.IsCount != tt.expectIsCount {
+				t.Errorf("Expected IsCount %v, got %v", tt.expectIsCount, components.IsCount)
+			}
+
+			hasKey := components.EntityKey != "" || len(components.EntityKeyMap) > 0
+			if hasKey != tt.expectHasKey {
+				t.Errorf("Expected HasKey %v, got %v", tt.expectHasKey, hasKey)
+			}
+		})
+	}
+}
