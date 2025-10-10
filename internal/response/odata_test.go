@@ -113,6 +113,11 @@ func TestWriteError(t *testing.T) {
 		t.Errorf("Content-Type = %v, want application/json;odata.metadata=minimal", contentType)
 	}
 
+	odataVersion := w.Header().Get("OData-Version")
+	if odataVersion != "4.0" {
+		t.Errorf("OData-Version = %v, want 4.0", odataVersion)
+	}
+
 	// Check response body
 	var response map[string]interface{}
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
@@ -124,12 +129,32 @@ func TestWriteError(t *testing.T) {
 		t.Fatal("error field is not an object")
 	}
 
+	// Check OData v4 compliant structure
+	if errorData["code"] != "404" {
+		t.Errorf("error.code = %v, want 404", errorData["code"])
+	}
+
 	if errorData["message"] != "Not found" {
 		t.Errorf("error.message = %v, want Not found", errorData["message"])
 	}
 
-	if errorData["details"] != "Entity not found" {
-		t.Errorf("error.details = %v, want Entity not found", errorData["details"])
+	// Check that details are in the details array
+	details, ok := errorData["details"].([]interface{})
+	if !ok {
+		t.Fatal("error.details is not an array")
+	}
+
+	if len(details) != 1 {
+		t.Fatalf("len(error.details) = %v, want 1", len(details))
+	}
+
+	firstDetail, ok := details[0].(map[string]interface{})
+	if !ok {
+		t.Fatal("error.details[0] is not an object")
+	}
+
+	if firstDetail["message"] != "Entity not found" {
+		t.Errorf("error.details[0].message = %v, want Entity not found", firstDetail["message"])
 	}
 }
 
@@ -166,6 +191,233 @@ func TestWriteServiceDocument(t *testing.T) {
 
 	if len(value) != 2 {
 		t.Errorf("len(value) = %v, want 2", len(value))
+	}
+}
+
+func TestWriteODataError_WithTarget(t *testing.T) {
+	w := httptest.NewRecorder()
+
+	odataErr := &ODataError{
+		Code:    "ValidationError",
+		Message: "Validation failed",
+		Target:  "Products(1)/Price",
+		Details: []ODataErrorDetail{
+			{
+				Code:    "FieldTooLarge",
+				Target:  "Price",
+				Message: "Price cannot exceed 10000",
+			},
+		},
+	}
+
+	err := WriteODataError(w, http.StatusBadRequest, odataErr)
+	if err != nil {
+		t.Fatalf("WriteODataError() error = %v", err)
+	}
+
+	// Check status code
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Status = %v, want %v", w.Code, http.StatusBadRequest)
+	}
+
+	// Check response body
+	var response map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	errorData, ok := response["error"].(map[string]interface{})
+	if !ok {
+		t.Fatal("error field is not an object")
+	}
+
+	if errorData["code"] != "ValidationError" {
+		t.Errorf("error.code = %v, want ValidationError", errorData["code"])
+	}
+
+	if errorData["message"] != "Validation failed" {
+		t.Errorf("error.message = %v, want Validation failed", errorData["message"])
+	}
+
+	if errorData["target"] != "Products(1)/Price" {
+		t.Errorf("error.target = %v, want Products(1)/Price", errorData["target"])
+	}
+
+	details, ok := errorData["details"].([]interface{})
+	if !ok {
+		t.Fatal("error.details is not an array")
+	}
+
+	if len(details) != 1 {
+		t.Fatalf("len(error.details) = %v, want 1", len(details))
+	}
+
+	detail := details[0].(map[string]interface{})
+	if detail["code"] != "FieldTooLarge" {
+		t.Errorf("error.details[0].code = %v, want FieldTooLarge", detail["code"])
+	}
+
+	if detail["target"] != "Price" {
+		t.Errorf("error.details[0].target = %v, want Price", detail["target"])
+	}
+}
+
+func TestWriteODataError_MultipleDetails(t *testing.T) {
+	w := httptest.NewRecorder()
+
+	odataErr := &ODataError{
+		Code:    "MultipleErrors",
+		Message: "Multiple validation errors occurred",
+		Details: []ODataErrorDetail{
+			{
+				Code:    "RequiredField",
+				Target:  "Name",
+				Message: "Name is required",
+			},
+			{
+				Code:    "InvalidFormat",
+				Target:  "Email",
+				Message: "Email format is invalid",
+			},
+			{
+				Code:    "OutOfRange",
+				Target:  "Age",
+				Message: "Age must be between 0 and 150",
+			},
+		},
+	}
+
+	err := WriteODataError(w, http.StatusBadRequest, odataErr)
+	if err != nil {
+		t.Fatalf("WriteODataError() error = %v", err)
+	}
+
+	var response map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	errorData := response["error"].(map[string]interface{})
+	details := errorData["details"].([]interface{})
+
+	if len(details) != 3 {
+		t.Fatalf("len(error.details) = %v, want 3", len(details))
+	}
+
+	// Verify first detail
+	detail0 := details[0].(map[string]interface{})
+	if detail0["code"] != "RequiredField" {
+		t.Errorf("details[0].code = %v, want RequiredField", detail0["code"])
+	}
+
+	// Verify second detail
+	detail1 := details[1].(map[string]interface{})
+	if detail1["target"] != "Email" {
+		t.Errorf("details[1].target = %v, want Email", detail1["target"])
+	}
+
+	// Verify third detail
+	detail2 := details[2].(map[string]interface{})
+	if detail2["message"] != "Age must be between 0 and 150" {
+		t.Errorf("details[2].message = %v, want 'Age must be between 0 and 150'", detail2["message"])
+	}
+}
+
+func TestWriteODataError_WithInnerError(t *testing.T) {
+	w := httptest.NewRecorder()
+
+	odataErr := &ODataError{
+		Code:    "InternalError",
+		Message: "An internal error occurred",
+		InnerError: &ODataInnerError{
+			Message:  "Database connection failed",
+			TypeName: "System.Data.SqlClient.SqlException",
+			InnerError: &ODataInnerError{
+				Message:    "Network timeout",
+				StackTrace: "at System.Net.Sockets.TcpClient.Connect()\n   at Database.Connect()",
+			},
+		},
+	}
+
+	err := WriteODataError(w, http.StatusInternalServerError, odataErr)
+	if err != nil {
+		t.Fatalf("WriteODataError() error = %v", err)
+	}
+
+	var response map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	errorData := response["error"].(map[string]interface{})
+	innerError, ok := errorData["innererror"].(map[string]interface{})
+	if !ok {
+		t.Fatal("error.innererror is not an object")
+	}
+
+	if innerError["message"] != "Database connection failed" {
+		t.Errorf("innererror.message = %v, want 'Database connection failed'", innerError["message"])
+	}
+
+	if innerError["type"] != "System.Data.SqlClient.SqlException" {
+		t.Errorf("innererror.type = %v, want System.Data.SqlClient.SqlException", innerError["type"])
+	}
+
+	// Check nested inner error
+	nestedInner, ok := innerError["innererror"].(map[string]interface{})
+	if !ok {
+		t.Fatal("innererror.innererror is not an object")
+	}
+
+	if nestedInner["message"] != "Network timeout" {
+		t.Errorf("nested innererror.message = %v, want 'Network timeout'", nestedInner["message"])
+	}
+
+	if !strings.Contains(nestedInner["stacktrace"].(string), "TcpClient.Connect") {
+		t.Errorf("nested innererror.stacktrace doesn't contain expected stack trace")
+	}
+}
+
+func TestWriteODataError_MinimalError(t *testing.T) {
+	w := httptest.NewRecorder()
+
+	odataErr := &ODataError{
+		Code:    "NotFound",
+		Message: "Resource not found",
+	}
+
+	err := WriteODataError(w, http.StatusNotFound, odataErr)
+	if err != nil {
+		t.Fatalf("WriteODataError() error = %v", err)
+	}
+
+	var response map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	errorData := response["error"].(map[string]interface{})
+
+	// Verify minimal structure
+	if errorData["code"] != "NotFound" {
+		t.Errorf("error.code = %v, want NotFound", errorData["code"])
+	}
+
+	if errorData["message"] != "Resource not found" {
+		t.Errorf("error.message = %v, want 'Resource not found'", errorData["message"])
+	}
+
+	// Ensure optional fields are omitted
+	if _, exists := errorData["target"]; exists {
+		t.Error("error.target should be omitted when empty")
+	}
+
+	if _, exists := errorData["details"]; exists {
+		t.Error("error.details should be omitted when empty")
+	}
+
+	if _, exists := errorData["innererror"]; exists {
+		t.Error("error.innererror should be omitted when nil")
 	}
 }
 
