@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/nlstn/go-odata/internal/handlers"
 	"github.com/nlstn/go-odata/internal/response"
 )
 
@@ -44,6 +45,11 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Route to appropriate handler method
+	s.routeRequest(w, r, handler, components)
+}
+
+// routeRequest routes the request to the appropriate handler method based on URL components
+func (s *Service) routeRequest(w http.ResponseWriter, r *http.Request, handler *handlers.EntityHandler, components *response.ODataURLComponents) {
 	hasKey := components.EntityKey != "" || len(components.EntityKeyMap) > 0
 
 	if components.IsCount {
@@ -53,35 +59,38 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// Collection request
 		handler.HandleCollection(w, r)
 	} else if components.NavigationProperty != "" {
-		// Property access request: Products(1)/Descriptions (navigation) or Products(1)/Name (structural)
-		// For composite keys, serialize the key map back to a string
-		keyString := components.EntityKey
-		if keyString == "" {
-			keyString = serializeKeyMap(components.EntityKeyMap)
-		}
-
-		// We need to determine if this is a navigation property or structural property
-		// Try navigation property first, then structural property
-		if handler.IsNavigationProperty(components.NavigationProperty) {
-			handler.HandleNavigationProperty(w, r, keyString, components.NavigationProperty)
-		} else if handler.IsStructuralProperty(components.NavigationProperty) {
-			handler.HandleStructuralProperty(w, r, keyString, components.NavigationProperty)
-		} else {
-			// Property not found
-			if writeErr := response.WriteError(w, http.StatusNotFound, "Property not found",
-				fmt.Sprintf("'%s' is not a valid property for %s", components.NavigationProperty, components.EntitySet)); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
-			}
-		}
+		s.handlePropertyRequest(w, r, handler, components)
 	} else {
 		// Individual entity request
-		// For composite keys, serialize the key map back to a string
-		keyString := components.EntityKey
-		if keyString == "" {
-			keyString = serializeKeyMap(components.EntityKeyMap)
-		}
+		keyString := s.getKeyString(components)
 		handler.HandleEntity(w, r, keyString)
 	}
+}
+
+// handlePropertyRequest handles navigation and structural property requests
+func (s *Service) handlePropertyRequest(w http.ResponseWriter, r *http.Request, handler *handlers.EntityHandler, components *response.ODataURLComponents) {
+	keyString := s.getKeyString(components)
+
+	// Try navigation property first, then structural property
+	if handler.IsNavigationProperty(components.NavigationProperty) {
+		handler.HandleNavigationProperty(w, r, keyString, components.NavigationProperty)
+	} else if handler.IsStructuralProperty(components.NavigationProperty) {
+		handler.HandleStructuralProperty(w, r, keyString, components.NavigationProperty)
+	} else {
+		// Property not found
+		if writeErr := response.WriteError(w, http.StatusNotFound, "Property not found",
+			fmt.Sprintf("'%s' is not a valid property for %s", components.NavigationProperty, components.EntitySet)); writeErr != nil {
+			fmt.Printf("Error writing error response: %v\n", writeErr)
+		}
+	}
+}
+
+// getKeyString returns the key string from components, serializing the key map if needed
+func (s *Service) getKeyString(components *response.ODataURLComponents) string {
+	if components.EntityKey != "" {
+		return components.EntityKey
+	}
+	return serializeKeyMap(components.EntityKeyMap)
 }
 
 // serializeKeyMap converts a key map to a string format for handlers
