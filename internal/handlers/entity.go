@@ -705,7 +705,8 @@ func (h *EntityHandler) IsStructuralProperty(propertyName string) bool {
 }
 
 // HandleStructuralProperty handles GET requests for structural properties (e.g., Products(1)/Name)
-func (h *EntityHandler) HandleStructuralProperty(w http.ResponseWriter, r *http.Request, entityKey string, propertyName string) {
+// When isValue is true, returns the raw property value without JSON wrapper (e.g., Products(1)/Name/$value)
+func (h *EntityHandler) HandleStructuralProperty(w http.ResponseWriter, r *http.Request, entityKey string, propertyName string, isValue bool) {
 	if r.Method != http.MethodGet {
 		if err := response.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
 			fmt.Sprintf("Method %s is not supported for property access", r.Method)); err != nil {
@@ -762,6 +763,12 @@ func (h *EntityHandler) HandleStructuralProperty(w http.ResponseWriter, r *http.
 		return
 	}
 
+	// If $value is requested, return the raw value without JSON wrapper
+	if isValue {
+		h.writeRawPropertyValue(w, fieldValue)
+		return
+	}
+
 	// Build the OData response according to OData v4 spec
 	contextURL := fmt.Sprintf("%s/$metadata#%s(%s)/%s", response.BuildBaseURL(r), h.metadata.EntitySetName, entityKey, prop.JsonName)
 	odataResponse := map[string]interface{}{
@@ -775,6 +782,35 @@ func (h *EntityHandler) HandleStructuralProperty(w http.ResponseWriter, r *http.
 
 	if err := json.NewEncoder(w).Encode(odataResponse); err != nil {
 		fmt.Printf("Error writing property response: %v\n", err)
+	}
+}
+
+// writeRawPropertyValue writes a property value in raw format for /$value requests
+func (h *EntityHandler) writeRawPropertyValue(w http.ResponseWriter, fieldValue reflect.Value) {
+	// Set appropriate content type based on the value type
+	valueInterface := fieldValue.Interface()
+
+	// Determine content type based on the property type
+	switch fieldValue.Kind() {
+	case reflect.String:
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+		reflect.Float32, reflect.Float64:
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	case reflect.Bool:
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	default:
+		// For other types, use application/octet-stream
+		w.Header().Set("Content-Type", "application/octet-stream")
+	}
+
+	w.Header().Set("OData-Version", "4.0")
+	w.WriteHeader(http.StatusOK)
+
+	// Write the raw value
+	if _, err := fmt.Fprintf(w, "%v", valueInterface); err != nil {
+		fmt.Printf("Error writing raw value: %v\n", err)
 	}
 }
 

@@ -351,3 +351,190 @@ func TestStructuralPropertyRead_WithNavigationProperty(t *testing.T) {
 		t.Errorf("Navigation property name = %v, want 'Electronics'", response2["name"])
 	}
 }
+
+func TestStructuralPropertyValue_String(t *testing.T) {
+	service, db := setupStructuralPropTestService(t)
+
+	// Insert test data
+	product := TestProductForStructuralProp{
+		ID:          1,
+		Name:        "Laptop",
+		Price:       999.99,
+		Description: "A high-performance laptop",
+		InStock:     true,
+	}
+	db.Create(&product)
+
+	req := httptest.NewRequest(http.MethodGet, "/TestProductForStructuralProps(1)/name/$value", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	// Check content type
+	contentType := w.Header().Get("Content-Type")
+	if contentType != "text/plain; charset=utf-8" {
+		t.Errorf("Content-Type = %v, want 'text/plain; charset=utf-8'", contentType)
+	}
+
+	// Check the raw value (should not be JSON)
+	body := w.Body.String()
+	if body != "Laptop" {
+		t.Errorf("Body = %v, want 'Laptop'", body)
+	}
+}
+
+func TestStructuralPropertyValue_Number(t *testing.T) {
+	service, db := setupStructuralPropTestService(t)
+
+	// Insert test data
+	product := TestProductForStructuralProp{
+		ID:          1,
+		Name:        "Laptop",
+		Price:       999.99,
+		Description: "A high-performance laptop",
+		InStock:     true,
+	}
+	db.Create(&product)
+
+	req := httptest.NewRequest(http.MethodGet, "/TestProductForStructuralProps(1)/price/$value", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	// Check content type
+	contentType := w.Header().Get("Content-Type")
+	if contentType != "text/plain; charset=utf-8" {
+		t.Errorf("Content-Type = %v, want 'text/plain; charset=utf-8'", contentType)
+	}
+
+	// Check the raw value (should not be JSON)
+	body := w.Body.String()
+	if body != "999.99" {
+		t.Errorf("Body = %v, want '999.99'", body)
+	}
+}
+
+func TestStructuralPropertyValue_Boolean(t *testing.T) {
+	service, db := setupStructuralPropTestService(t)
+
+	// Insert test data
+	product := TestProductForStructuralProp{
+		ID:          1,
+		Name:        "Laptop",
+		Price:       999.99,
+		Description: "A high-performance laptop",
+		InStock:     true,
+	}
+	db.Create(&product)
+
+	req := httptest.NewRequest(http.MethodGet, "/TestProductForStructuralProps(1)/inStock/$value", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	// Check content type
+	contentType := w.Header().Get("Content-Type")
+	if contentType != "text/plain; charset=utf-8" {
+		t.Errorf("Content-Type = %v, want 'text/plain; charset=utf-8'", contentType)
+	}
+
+	// Check the raw value (should not be JSON)
+	body := w.Body.String()
+	if body != "true" {
+		t.Errorf("Body = %v, want 'true'", body)
+	}
+}
+
+func TestStructuralPropertyValue_EntityNotFound(t *testing.T) {
+	service, _ := setupStructuralPropTestService(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/TestProductForStructuralProps(999)/name/$value", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusNotFound, w.Body.String())
+	}
+
+	var response map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	if _, ok := response["error"]; !ok {
+		t.Error("Response missing error field")
+	}
+}
+
+func TestStructuralPropertyValue_PropertyNotFound(t *testing.T) {
+	service, db := setupStructuralPropTestService(t)
+
+	// Insert test data
+	product := TestProductForStructuralProp{
+		ID:          1,
+		Name:        "Laptop",
+		Price:       999.99,
+		Description: "A high-performance laptop",
+		InStock:     true,
+	}
+	db.Create(&product)
+
+	req := httptest.NewRequest(http.MethodGet, "/TestProductForStructuralProps(1)/nonexistent/$value", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusNotFound, w.Body.String())
+	}
+
+	var response map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	if _, ok := response["error"]; !ok {
+		t.Error("Response missing error field")
+	}
+}
+
+func TestStructuralPropertyValue_OnNavigationProperty(t *testing.T) {
+	service, db := setupStructuralPropWithNavTestService(t)
+
+	// Insert test data
+	category := TestCategoryNav{ID: 1, Name: "Electronics"}
+	db.Create(&category)
+	product := TestProductWithNav{ID: 1, Name: "Laptop", CategoryID: 1}
+	db.Create(&product)
+
+	// Try to use $value on a navigation property (should fail)
+	req := httptest.NewRequest(http.MethodGet, "/TestProductWithNavs(1)/Category/$value", nil)
+	w := httptest.NewRecorder()
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Status = %v, want %v for $value on navigation property. Body: %s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+
+	var response map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	if _, ok := response["error"]; !ok {
+		t.Error("Response missing error field")
+	}
+}
