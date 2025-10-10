@@ -78,6 +78,47 @@ func (h *EntityHandler) HandleCollection(w http.ResponseWriter, r *http.Request)
 	}
 }
 
+// HandleCount handles GET requests for entity collection count (e.g., /Products/$count)
+func (h *EntityHandler) HandleCount(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		if err := response.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
+			fmt.Sprintf("Method %s is not supported for $count", r.Method)); err != nil {
+			fmt.Printf("Error writing error response: %v\n", err)
+		}
+		return
+	}
+
+	// Parse query options (primarily for $filter support)
+	queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata)
+	if err != nil {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid query options", err.Error()); writeErr != nil {
+			fmt.Printf("Error writing error response: %v\n", writeErr)
+		}
+		return
+	}
+
+	var count int64
+	countDB := h.db.Model(reflect.New(h.metadata.EntityType).Interface())
+
+	// Apply filter to count query if present
+	if queryOptions.Filter != nil {
+		countDB = query.ApplyFilterOnly(countDB, queryOptions.Filter, h.metadata)
+	}
+
+	if err := countDB.Count(&count).Error; err != nil {
+		if writeErr := response.WriteError(w, http.StatusInternalServerError, "Database error", err.Error()); writeErr != nil {
+			fmt.Printf("Error writing error response: %v\n", writeErr)
+		}
+		return
+	}
+
+	// Write the count as plain text according to OData v4 spec
+	w.Header().Set("Content-Type", "text/plain")
+	w.Header().Set("OData-Version", "4.0")
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprintf(w, "%d", count)
+}
+
 // getTotalCount retrieves the total count if requested
 func (h *EntityHandler) getTotalCount(queryOptions *query.QueryOptions, w http.ResponseWriter) *int64 {
 	if !queryOptions.Count {

@@ -46,7 +46,10 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Route to appropriate handler method
 	hasKey := components.EntityKey != "" || len(components.EntityKeyMap) > 0
 
-	if !hasKey {
+	if components.IsCount {
+		// $count request: Products/$count
+		handler.HandleCount(w, r)
+	} else if !hasKey {
 		// Collection request
 		handler.HandleCollection(w, r)
 	} else if components.NavigationProperty != "" {
