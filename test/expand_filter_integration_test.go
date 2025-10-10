@@ -1,7 +1,8 @@
-package odata
+package odata_test
 
 import (
 	"encoding/json"
+	odata "github.com/nlstn/go-odata"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -67,7 +68,7 @@ func TestExpandWithFilterIntegration(t *testing.T) {
 	db := setupExpandFilterTestDB(t)
 
 	// Create OData service
-	service := NewService(db)
+	service := odata.NewService(db)
 	if err := service.RegisterEntity(&ExpandTestProduct{}); err != nil {
 		t.Fatalf("Failed to register ExpandTestProduct entity: %v", err)
 	}

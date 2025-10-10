@@ -1,8 +1,9 @@
-package odata
+package odata_test
 
 import (
 	"encoding/json"
 	"fmt"
+	odata "github.com/nlstn/go-odata"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -21,7 +22,7 @@ type TestProductSelect struct {
 	InStock     bool    `json:"inStock"`
 }
 
-func setupSelectTestService(t *testing.T) (*Service, *gorm.DB) {
+func setupSelectTestService(t *testing.T) (*odata.Service, *gorm.DB) {
 	// Create a custom logger to capture SQL queries
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
@@ -32,7 +33,7 @@ func setupSelectTestService(t *testing.T) (*Service, *gorm.DB) {
 		t.Fatalf("Failed to migrate database: %v", err)
 	}
 
-	service := NewService(db)
+	service := odata.NewService(db)
 	if err := service.RegisterEntity(TestProductSelect{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
 	}
@@ -325,7 +326,7 @@ func TestSelectWithUppercaseJsonNames(t *testing.T) {
 		t.Fatalf("Failed to migrate database: %v", err)
 	}
 
-	service := NewService(db)
+	service := odata.NewService(db)
 	if err := service.RegisterEntity(TestProductUppercase{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
 	}

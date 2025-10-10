@@ -1,7 +1,8 @@
-package odata
+package odata_test
 
 import (
 	"encoding/json"
+	odata "github.com/nlstn/go-odata"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -132,7 +133,7 @@ func TestCompositeKeyURLParsing(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			service := NewService(nil)
+			service := odata.NewService(nil)
 			components, err := parseURLForTest(tt.url)
 
 			if tt.expectError && err == nil {
@@ -167,7 +168,7 @@ func TestCompositeKeyURLParsing(t *testing.T) {
 
 func TestCompositeKeyEntityRetrieval(t *testing.T) {
 	db := setupCompositeKeyTestDB(t)
-	service := NewService(db)
+	service := odata.NewService(db)
 
 	if err := service.RegisterEntity(TestEntityCompositeKey{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
@@ -242,7 +243,7 @@ func TestCompositeKeyEntityRetrieval(t *testing.T) {
 
 func TestCompositeKeyMetadataGeneration(t *testing.T) {
 	db := setupCompositeKeyTestDB(t)
-	service := NewService(db)
+	service := odata.NewService(db)
 
 	if err := service.RegisterEntity(TestEntityCompositeKey{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
@@ -281,7 +282,7 @@ func TestCompositeKeyMetadataGeneration(t *testing.T) {
 
 func TestCompositeKeyCollection(t *testing.T) {
 	db := setupCompositeKeyTestDB(t)
-	service := NewService(db)
+	service := odata.NewService(db)
 
 	if err := service.RegisterEntity(TestEntityCompositeKey{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)

@@ -1,8 +1,9 @@
-package odata
+package odata_test
 
 import (
 	"bytes"
 	"encoding/json"
+	odata "github.com/nlstn/go-odata"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -28,7 +29,7 @@ type PatchTestProductCompositeKey struct {
 	Description string `json:"description"`
 }
 
-func setupPatchTestService(t *testing.T) (*Service, *gorm.DB) {
+func setupPatchTestService(t *testing.T) (*odata.Service, *gorm.DB) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("Failed to connect to database: %v", err)
@@ -38,7 +39,7 @@ func setupPatchTestService(t *testing.T) (*Service, *gorm.DB) {
 		t.Fatalf("Failed to migrate database: %v", err)
 	}
 
-	service := NewService(db)
+	service := odata.NewService(db)
 	if err := service.RegisterEntity(PatchTestProduct{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
 	}
@@ -46,7 +47,7 @@ func setupPatchTestService(t *testing.T) (*Service, *gorm.DB) {
 	return service, db
 }
 
-func setupPatchCompositeKeyTestService(t *testing.T) (*Service, *gorm.DB) {
+func setupPatchCompositeKeyTestService(t *testing.T) (*odata.Service, *gorm.DB) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("Failed to connect to database: %v", err)
@@ -56,7 +57,7 @@ func setupPatchCompositeKeyTestService(t *testing.T) (*Service, *gorm.DB) {
 		t.Fatalf("Failed to migrate database: %v", err)
 	}
 
-	service := NewService(db)
+	service := odata.NewService(db)
 	if err := service.RegisterEntity(PatchTestProductCompositeKey{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
 	}

@@ -32,9 +32,23 @@ The library is structured with:
 ### Testing
 
 The project includes comprehensive tests:
-- Unit tests for handlers, metadata, query processing, and responses
-- Integration tests for relations and expand/filter combinations
+- Unit tests for handlers, metadata, query processing, and responses (located in `internal/*/`)
+- Integration tests for the main OData service (located in `test/`)
 - All tests use GORM with SQLite in-memory database
+
+#### Test Organization
+
+- **Integration tests**: All integration tests for the main OData service are located in the `test/` directory
+  - These tests use the `odata_test` package and import the `odata` package
+  - They test the public API of the service from an external perspective
+- **Unit tests**: Internal package tests remain in their respective `internal/` subdirectories
+  - These tests are in the same package as the code they test
+- **White-box tests**: The root-level `odata_test.go` contains white-box tests that need access to unexported fields
+
+When adding new tests:
+- Place integration tests in the `test/` directory
+- Use package `odata_test` and import `odata "github.com/nlstn/go-odata"`
+- Place unit tests for internal packages in the same directory as the code
 
 ### Requirements
 
@@ -73,12 +87,15 @@ When reviewing or making code changes, ensure the following quality checks are p
 ### Workflow
 
 1. Make code changes
-2. Format code: `gofmt -w .`
-3. Run linter: `golangci-lint run ./...`
-4. Fix all linting errors
-5. Run tests: `go test ./...`
-6. Build: `go build ./...`
-7. Commit only after all checks pass
+2. Add tests in appropriate location:
+   - Integration tests → `test/` directory
+   - Unit tests → same directory as source code
+3. Format code: `gofmt -w .`
+4. Run linter: `golangci-lint run ./...`
+5. Fix all linting errors
+6. Run tests: `go test ./...`
+7. Build: `go build ./...`
+8. Commit only after all checks pass
 
 ### Configuration
 
