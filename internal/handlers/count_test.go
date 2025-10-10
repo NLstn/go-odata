@@ -210,5 +210,3 @@ func TestEntityHandlerCountComplexFilter(t *testing.T) {
 		})
 	}
 }
-
-
