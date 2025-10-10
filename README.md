@@ -27,12 +27,20 @@ A Go library for building services that expose OData APIs with automatic handlin
 - ✅ Entity deletion (DELETE /EntitySet(key))
 
 ### OData Query Options
-- ✅ Filtering ($filter) with operators: eq, ne, gt, ge, lt, le, contains, startswith, endswith
+- ✅ **Advanced Filtering ($filter)** - AST-based parser with full OData v4 support
+  - Comparison operators: `eq`, `ne`, `gt`, `ge`, `lt`, `le`
+  - String functions: `contains`, `startswith`, `endswith`
+  - Boolean operators: `and`, `or`, `not`
+  - Parentheses for complex expressions
+  - Literal types: strings, numbers, booleans, null
+  - Basic arithmetic operators: `+`, `-`, `*`, `/`, `mod`
 - ✅ Selection ($select) - choose specific properties to return
 - ✅ Ordering ($orderby) - sort by one or more properties
 - ✅ Pagination ($top, $skip) with automatic @odata.nextLink generation
 - ✅ Count ($count) - inline count with results or standalone count endpoint
-- ✅ Expand ($expand) - retrieve related entities in a single request
+- ✅ **Expand ($expand)** - retrieve related entities with nested query options
+  - Nested $filter, $select, $orderby, $top, $skip on expanded properties
+  - Complex filters on expanded navigation properties
 
 ### Advanced Features
 - ✅ Composite keys support (e.g., /EntitySet(key1=value1,key2=value2))
@@ -44,6 +52,7 @@ A Go library for building services that expose OData APIs with automatic handlin
   - Property facets (MaxLength, Precision, Scale, DefaultValue, Nullable)
   - Extended type support (DateTimeOffset, Guid, Binary)
   - Navigation properties with referential constraints
+- ✅ Proper snake_case database column mapping for all operations
 
 ## Installation
 
@@ -233,14 +242,77 @@ The metadata document includes:
 The library supports the following OData v4 query options:
 
 ### Filtering (`$filter`)
-Filter entities based on property values:
+
+The library supports comprehensive OData v4 filter expressions with an AST-based parser:
+
+#### Basic Comparison Operators
 ```
 GET /Products?$filter=Price gt 100
 GET /Products?$filter=Category eq 'Electronics'
-GET /Products?$filter=contains(Name,'Laptop')
+GET /Products?$filter=Price ne 0
+GET /Products?$filter=Price ge 100
+GET /Products?$filter=Price le 1000
+GET /Products?$filter=Price lt 50
 ```
 
-Supported operators: `eq`, `ne`, `gt`, `ge`, `lt`, `le`, `contains`, `startswith`, `endswith`
+Supported operators: `eq`, `ne`, `gt`, `ge`, `lt`, `le`
+
+#### String Functions
+```
+GET /Products?$filter=contains(Name,'Laptop')
+GET /Products?$filter=startswith(Category,'Elec')
+GET /Products?$filter=endswith(Name,'Pro')
+```
+
+Supported functions: `contains`, `startswith`, `endswith`
+
+#### Boolean Logic with Parentheses
+```
+GET /Products?$filter=(Price gt 100 and Category eq 'Electronics') or (Price lt 50 and Category eq 'Books')
+GET /Products?$filter=((Price gt 1000 or Price lt 50) and IsAvailable eq true)
+```
+
+Parentheses can be nested to create complex boolean expressions with proper operator precedence.
+
+#### NOT Operator
+```
+GET /Products?$filter=not (Category eq 'Books')
+GET /Products?$filter=not (Price gt 1000) and IsAvailable eq true
+GET /Products?$filter=contains(Name,'Laptop') and not (Category eq 'Used')
+```
+
+The `not` operator negates the expression that follows it.
+
+#### Literal Types
+```
+GET /Products?$filter=IsAvailable eq true          # Boolean
+GET /Products?$filter=IsAvailable eq false         # Boolean
+GET /Products?$filter=Price eq 99.99               # Numeric (decimal)
+GET /Products?$filter=Quantity eq 42               # Numeric (integer)
+GET /Products?$filter=Category eq 'Electronics'    # String
+GET /Products?$filter=Description eq null          # Null
+```
+
+The parser properly handles different literal types including booleans, numbers (integers and decimals), strings, and null.
+
+#### Arithmetic Operators (Basic Support)
+```
+GET /Products?$filter=Quantity mod 2 eq 0          # Modulo
+```
+
+Basic arithmetic operators (`+`, `-`, `*`, `/`, `mod`) are supported in simple expressions.
+
+#### Complex Filter Examples
+```
+# Multiple conditions with functions and NOT
+GET /Products?$filter=(contains(Name,'Laptop') or contains(Name,'Computer')) and Price gt 500 and not (Category eq 'Used')
+
+# Deep nesting with boolean logic
+GET /Products?$filter=((Price gt 100 and not (Category eq 'Books')) or contains(Name,'Special')) and IsAvailable eq true
+
+# Combining multiple operators and literals
+GET /Products?$filter=Price gt 100.0 and Price lt 1000.0 and IsAvailable eq true and Category ne 'Luxury'
+```
 
 ### Selection (`$select`)
 Select specific properties to return:
@@ -285,6 +357,52 @@ Response includes the total count:
   "@odata.count": 42,
   "value": [ /* ... */ ]
 }
+```
+
+### Expand (`$expand`)
+Retrieve related entities in a single request:
+```
+GET /Products?$expand=Category
+GET /Authors?$expand=Books
+```
+
+#### Nested Query Options on Expand
+You can apply query options to expanded navigation properties:
+```
+# Select specific properties from expanded entity
+GET /Authors?$expand=Books($select=Title,Price)
+
+# Filter expanded entities
+GET /Authors?$expand=Books($filter=Price gt 50)
+
+# Order expanded entities
+GET /Authors?$expand=Books($orderby=Title asc)
+
+# Paginate expanded entities
+GET /Authors?$expand=Books($top=5;$skip=2)
+
+# Combine multiple nested options
+GET /Authors?$expand=Books($filter=Price gt 50;$orderby=Price desc;$top=10)
+```
+
+#### Advanced Filters on Expanded Properties
+All filter features work in nested expand filters:
+```
+# Parentheses in nested filters
+GET /Authors?$expand=Books($filter=(Price gt 50 and Category eq 'Fiction') or (Price lt 20 and Category eq 'NonFiction'))
+
+# NOT operator in nested filters
+GET /Authors?$expand=Books($filter=not (Category eq 'OutOfPrint'))
+
+# Functions with complex logic in nested filters
+GET /Authors?$expand=Books($filter=contains(Title,'Guide') and not (Price gt 100))
+```
+
+#### Multiple Expand
+Expand multiple navigation properties:
+```
+GET /Products?$expand=Category,Reviews
+GET /Authors?$expand=Books,Publisher
 ```
 
 ### Combining Query Options
