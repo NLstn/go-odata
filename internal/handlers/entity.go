@@ -116,7 +116,9 @@ func (h *EntityHandler) HandleCount(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain")
 	w.Header().Set("OData-Version", "4.0")
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprintf(w, "%d", count)
+	if _, err := fmt.Fprintf(w, "%d", count); err != nil {
+		fmt.Printf("Error writing count response: %v\n", err)
+	}
 }
 
 // getTotalCount retrieves the total count if requested
