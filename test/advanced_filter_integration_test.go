@@ -325,7 +325,7 @@ func TestCombinedAdvancedFeatures(t *testing.T) {
 
 	// Test combining multiple features in one query
 	filter := "((Price gt 100 and not (Category eq 'Books')) or contains(Name,'Mouse')) and IsAvailable eq true"
-	
+
 	req := httptest.NewRequest("GET", "/AdvancedProducts?$filter="+url.QueryEscape(filter), nil)
 	w := httptest.NewRecorder()
 
