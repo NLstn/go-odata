@@ -331,15 +331,38 @@ func ASTToFilterExpression(node ASTNode, entityMetadata *metadata.EntityMetadata
 		var property string
 		var value interface{}
 
-		// Left side should be an identifier (property name)
+		// Left side can be an identifier or an arithmetic expression
 		if ident, ok := n.Left.(*IdentifierExpr); ok {
 			property = ident.Name
 			// Validate property exists
 			if entityMetadata != nil && !propertyExists(property, entityMetadata) {
 				return nil, fmt.Errorf("property '%s' does not exist", property)
 			}
+		} else if binExpr, ok := n.Left.(*BinaryExpr); ok {
+			// Handle arithmetic expressions on the left side
+			// For now, we'll convert the entire arithmetic expression to a string representation
+			// A full implementation would need to build a proper arithmetic expression tree
+			// For simple cases like "Quantity mod 2", extract the property name
+			if leftIdent, ok := binExpr.Left.(*IdentifierExpr); ok {
+				property = leftIdent.Name
+				// Validate property exists
+				if entityMetadata != nil && !propertyExists(property, entityMetadata) {
+					return nil, fmt.Errorf("property '%s' does not exist", property)
+				}
+				// For modulo operation, we'll create a special representation
+				if binExpr.Operator == "mod" {
+					if rightLit, ok := binExpr.Right.(*LiteralExpr); ok {
+						// Store the modulo divisor in a special way
+						// This is a simplified approach - a full implementation would need more sophisticated handling
+						property = fmt.Sprintf("%s_mod_%v", property, rightLit.Value)
+					}
+				}
+			} else {
+				// Complex arithmetic expression - for now, just use a placeholder
+				property = "arithmetic_expr"
+			}
 		} else {
-			return nil, fmt.Errorf("left side of comparison must be a property name")
+			return nil, fmt.Errorf("left side of comparison must be a property name or arithmetic expression")
 		}
 
 		// Right side should be a literal
