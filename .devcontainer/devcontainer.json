@@ -1,0 +1,47 @@
+{
+	"name": "Go OData Development",
+	"image": "mcr.microsoft.com/devcontainers/go:1-1.24-bookworm",
+	
+	"features": {
+		"ghcr.io/devcontainers/features/git:1": {}
+	},
+
+	"customizations": {
+		"vscode": {
+			"settings": {
+				"go.toolsManagement.checkForUpdates": "local",
+				"go.useLanguageServer": true,
+				"go.gopath": "/go",
+				"go.goroot": "/usr/local/go",
+				"go.lintTool": "golangci-lint",
+				"go.lintOnSave": "package",
+				"go.formatTool": "gofmt",
+				"go.vetOnSave": "package",
+				"editor.formatOnSave": true,
+				"[go]": {
+					"editor.defaultFormatter": "golang.go",
+					"editor.codeActionsOnSave": {
+						"source.organizeImports": "explicit"
+					}
+				}
+			},
+			"extensions": [
+				"golang.go",
+				"github.copilot",
+				"eamodio.gitlens"
+			]
+		}
+	},
+
+	"postCreateCommand": "go mod download && go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest",
+
+	"remoteUser": "vscode",
+	
+	"forwardPorts": [8080],
+	"portsAttributes": {
+		"8080": {
+			"label": "OData Dev Server",
+			"onAutoForward": "notify"
+		}
+	}
+}
