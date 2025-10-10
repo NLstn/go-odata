@@ -1,23 +1,23 @@
 package main
 
-// Product represents a product entity for the development server
+// Product represents a product entity for the development server with rich metadata
 type Product struct {
 	ID       uint    `json:"ID" gorm:"primaryKey" odata:"key"`
-	Name     string  `json:"Name" gorm:"not null"`
-	Price    float64 `json:"Price" gorm:"not null"`
-	Category string  `json:"Category" gorm:"not null"`
+	Name     string  `json:"Name" gorm:"not null" odata:"required,maxlength=100"`
+	Price    float64 `json:"Price" gorm:"not null" odata:"required,precision=10,scale=2"`
+	Category string  `json:"Category" gorm:"not null" odata:"required,maxlength=50"`
 	// Navigation property for ProductDescriptions
-	Descriptions []ProductDescription `json:"Descriptions" gorm:"foreignKey:ProductID"`
+	Descriptions []ProductDescription `json:"Descriptions" gorm:"foreignKey:ProductID;references:ID"`
 }
 
-// ProductDescription represents a multilingual product description entity
+// ProductDescription represents a multilingual product description entity with rich metadata
 type ProductDescription struct {
 	ProductID   uint   `json:"ProductID" gorm:"primaryKey" odata:"key"`
-	LanguageKey string `json:"LanguageKey" gorm:"primaryKey;size:2" odata:"key"`
-	Description string `json:"Description" gorm:"not null"`
-	LongText    string `json:"LongText" gorm:"type:text"`
+	LanguageKey string `json:"LanguageKey" gorm:"primaryKey;size:2" odata:"key,maxlength=2"`
+	Description string `json:"Description" gorm:"not null" odata:"required,maxlength=500"`
+	LongText    string `json:"LongText" gorm:"type:text" odata:"maxlength=2000,nullable"`
 	// Navigation property back to Product
-	Product *Product `json:"Product,omitempty" gorm:"foreignKey:ProductID"`
+	Product *Product `json:"Product,omitempty" gorm:"foreignKey:ProductID;references:ID"`
 }
 
 // GetSampleProducts returns sample product data for seeding the database
