@@ -209,7 +209,7 @@ func buildFilterCondition(filter *FilterExpression, entityMetadata *metadata.Ent
 	if filter.IsNot {
 		return fmt.Sprintf("NOT (%s)", query), args
 	}
-	
+
 	return query, args
 }
 

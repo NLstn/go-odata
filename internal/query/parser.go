@@ -355,7 +355,7 @@ func parseNestedExpandOptions(expand *ExpandOption, optionsStr string, entityMet
 // parseFilterWithoutMetadata parses a filter expression without validating property names
 func parseFilterWithoutMetadata(filterStr string) (*FilterExpression, error) {
 	filterStr = strings.TrimSpace(filterStr)
-	
+
 	// Try using the new AST parser first
 	tokenizer := NewTokenizer(filterStr)
 	tokens, err := tokenizer.TokenizeAll()
@@ -367,7 +367,7 @@ func parseFilterWithoutMetadata(filterStr string) (*FilterExpression, error) {
 			return ASTToFilterExpression(ast, nil)
 		}
 	}
-	
+
 	// Fall back to legacy parser
 	return parseFilterWithoutMetadataLegacy(filterStr)
 }
@@ -575,7 +575,7 @@ func parseOrderBy(orderByStr string, entityMetadata *metadata.EntityMetadata) ([
 // parseFilter parses a filter expression using the new AST-based parser
 func parseFilter(filterStr string, entityMetadata *metadata.EntityMetadata) (*FilterExpression, error) {
 	filterStr = strings.TrimSpace(filterStr)
-	
+
 	// Use the new tokenizer and AST parser
 	tokenizer := NewTokenizer(filterStr)
 	tokens, err := tokenizer.TokenizeAll()
@@ -583,14 +583,14 @@ func parseFilter(filterStr string, entityMetadata *metadata.EntityMetadata) (*Fi
 		// Fall back to old parser if tokenization fails
 		return parseFilterLegacy(filterStr, entityMetadata)
 	}
-	
+
 	parser := NewASTParser(tokens)
 	ast, err := parser.Parse()
 	if err != nil {
 		// Fall back to old parser if AST parsing fails
 		return parseFilterLegacy(filterStr, entityMetadata)
 	}
-	
+
 	return ASTToFilterExpression(ast, entityMetadata)
 }
 

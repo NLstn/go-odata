@@ -440,267 +440,267 @@ func TestSplitExpandParts(t *testing.T) {
 
 // TestParseExpandWithComplexFilter tests parsing $expand with complex nested filters
 func TestParseExpandWithComplexFilter(t *testing.T) {
-authorMeta, _ := metadata.AnalyzeEntity(&TestAuthor{})
+	authorMeta, _ := metadata.AnalyzeEntity(&TestAuthor{})
 
-tests := []struct {
-name        string
-expandQuery string
-expectErr   bool
-description string
-}{
-{
-name:        "Filter with parentheses",
-expandQuery: "Books($filter=(Title eq 'Book1' or Title eq 'Book2'))",
-expectErr:   false,
-description: "Should support parentheses in nested filters",
-},
-{
-name:        "Filter with NOT operator",
-expandQuery: "Books($filter=not (Title eq 'Excluded'))",
-expectErr:   false,
-description: "Should support NOT operator in nested filters",
-},
-{
-name:        "Complex nested filter",
-expandQuery: "Books($filter=(Title eq 'Book1' and ID gt 10) or (Title eq 'Book2' and ID lt 5))",
-expectErr:   false,
-description: "Should support complex boolean combinations",
-},
-{
-name:        "Filter with function and boolean logic",
-expandQuery: "Books($filter=contains(Title,'Test') and not (ID eq 999))",
-expectErr:   false,
-description: "Should support functions with NOT and boolean logic",
-},
-}
+	tests := []struct {
+		name        string
+		expandQuery string
+		expectErr   bool
+		description string
+	}{
+		{
+			name:        "Filter with parentheses",
+			expandQuery: "Books($filter=(Title eq 'Book1' or Title eq 'Book2'))",
+			expectErr:   false,
+			description: "Should support parentheses in nested filters",
+		},
+		{
+			name:        "Filter with NOT operator",
+			expandQuery: "Books($filter=not (Title eq 'Excluded'))",
+			expectErr:   false,
+			description: "Should support NOT operator in nested filters",
+		},
+		{
+			name:        "Complex nested filter",
+			expandQuery: "Books($filter=(Title eq 'Book1' and ID gt 10) or (Title eq 'Book2' and ID lt 5))",
+			expectErr:   false,
+			description: "Should support complex boolean combinations",
+		},
+		{
+			name:        "Filter with function and boolean logic",
+			expandQuery: "Books($filter=contains(Title,'Test') and not (ID eq 999))",
+			expectErr:   false,
+			description: "Should support functions with NOT and boolean logic",
+		},
+	}
 
-for _, tt := range tests {
-t.Run(tt.name, func(t *testing.T) {
-params := url.Values{}
-params.Set("$expand", tt.expandQuery)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			params := url.Values{}
+			params.Set("$expand", tt.expandQuery)
 
-options, err := ParseQueryOptions(params, authorMeta)
-if (err != nil) != tt.expectErr {
-t.Errorf("Expected error: %v, got: %v", tt.expectErr, err)
-return
-}
+			options, err := ParseQueryOptions(params, authorMeta)
+			if (err != nil) != tt.expectErr {
+				t.Errorf("Expected error: %v, got: %v", tt.expectErr, err)
+				return
+			}
 
-if !tt.expectErr {
-if len(options.Expand) != 1 {
-t.Errorf("Expected 1 expand option, got %d", len(options.Expand))
-return
-}
+			if !tt.expectErr {
+				if len(options.Expand) != 1 {
+					t.Errorf("Expected 1 expand option, got %d", len(options.Expand))
+					return
+				}
 
-if options.Expand[0].Filter == nil {
-t.Error("Expected filter to be set in expand option")
-}
-}
-})
-}
+				if options.Expand[0].Filter == nil {
+					t.Error("Expected filter to be set in expand option")
+				}
+			}
+		})
+	}
 }
 
 // TestParseExpandWithMultipleLevels tests multi-level expand (future support)
 func TestParseExpandWithMultipleLevels(t *testing.T) {
-// Define entities with multi-level relationships
-type Publisher struct {
-ID      uint         `json:"ID" gorm:"primaryKey" odata:"key"`
-Name    string       `json:"Name"`
-Authors []TestAuthor `json:"Authors" gorm:"foreignKey:PublisherID"`
-}
+	// Define entities with multi-level relationships
+	type Publisher struct {
+		ID      uint         `json:"ID" gorm:"primaryKey" odata:"key"`
+		Name    string       `json:"Name"`
+		Authors []TestAuthor `json:"Authors" gorm:"foreignKey:PublisherID"`
+	}
 
-type TestAuthorWithPublisher struct {
-ID          uint        `json:"ID" gorm:"primaryKey" odata:"key"`
-Name        string      `json:"Name"`
-PublisherID uint        `json:"PublisherID"`
-Publisher   *Publisher  `json:"Publisher,omitempty" gorm:"foreignKey:PublisherID"`
-Books       []TestBook  `json:"Books" gorm:"foreignKey:AuthorID"`
-}
+	type TestAuthorWithPublisher struct {
+		ID          uint       `json:"ID" gorm:"primaryKey" odata:"key"`
+		Name        string     `json:"Name"`
+		PublisherID uint       `json:"PublisherID"`
+		Publisher   *Publisher `json:"Publisher,omitempty" gorm:"foreignKey:PublisherID"`
+		Books       []TestBook `json:"Books" gorm:"foreignKey:AuthorID"`
+	}
 
-authorMeta, err := metadata.AnalyzeEntity(&TestAuthorWithPublisher{})
-if err != nil {
-t.Fatalf("Failed to analyze entity: %v", err)
-}
+	authorMeta, err := metadata.AnalyzeEntity(&TestAuthorWithPublisher{})
+	if err != nil {
+		t.Fatalf("Failed to analyze entity: %v", err)
+	}
 
-tests := []struct {
-name        string
-expandQuery string
-expectErr   bool
-description string
-}{
-{
-name:        "Simple two-level expand",
-expandQuery: "Books,Publisher",
-expectErr:   false,
-description: "Should support expanding multiple navigation properties",
-},
-{
-name:        "Expand with nested options on multiple properties",
-expandQuery: "Books($top=5),Publisher($select=Name)",
-expectErr:   false,
-description: "Should support different nested options on different properties",
-},
-{
-name:        "Complex expand with filters on multiple levels",
-expandQuery: "Books($filter=Title eq 'Test';$top=10),Publisher($filter=Name ne 'Excluded')",
-expectErr:   false,
-description: "Should support filters on multiple expanded properties",
-},
-}
+	tests := []struct {
+		name        string
+		expandQuery string
+		expectErr   bool
+		description string
+	}{
+		{
+			name:        "Simple two-level expand",
+			expandQuery: "Books,Publisher",
+			expectErr:   false,
+			description: "Should support expanding multiple navigation properties",
+		},
+		{
+			name:        "Expand with nested options on multiple properties",
+			expandQuery: "Books($top=5),Publisher($select=Name)",
+			expectErr:   false,
+			description: "Should support different nested options on different properties",
+		},
+		{
+			name:        "Complex expand with filters on multiple levels",
+			expandQuery: "Books($filter=Title eq 'Test';$top=10),Publisher($filter=Name ne 'Excluded')",
+			expectErr:   false,
+			description: "Should support filters on multiple expanded properties",
+		},
+	}
 
-for _, tt := range tests {
-t.Run(tt.name, func(t *testing.T) {
-params := url.Values{}
-params.Set("$expand", tt.expandQuery)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			params := url.Values{}
+			params.Set("$expand", tt.expandQuery)
 
-options, err := ParseQueryOptions(params, authorMeta)
-if (err != nil) != tt.expectErr {
-t.Errorf("Expected error: %v, got: %v", tt.expectErr, err)
-return
-}
+			options, err := ParseQueryOptions(params, authorMeta)
+			if (err != nil) != tt.expectErr {
+				t.Errorf("Expected error: %v, got: %v", tt.expectErr, err)
+				return
+			}
 
-if !tt.expectErr && len(options.Expand) == 0 {
-t.Error("Expected at least one expand option")
-}
-})
-}
+			if !tt.expectErr && len(options.Expand) == 0 {
+				t.Error("Expected at least one expand option")
+			}
+		})
+	}
 }
 
 // TestComplexFilterCombinations tests complex filter expressions at the top level
 func TestComplexFilterCombinations(t *testing.T) {
-type TestProduct struct {
-ID          int     `json:"ID" odata:"key"`
-Name        string  `json:"Name"`
-Price       float64 `json:"Price"`
-Category    string  `json:"Category"`
-IsAvailable bool    `json:"IsAvailable"`
-Quantity    int     `json:"Quantity"`
-}
+	type TestProduct struct {
+		ID          int     `json:"ID" odata:"key"`
+		Name        string  `json:"Name"`
+		Price       float64 `json:"Price"`
+		Category    string  `json:"Category"`
+		IsAvailable bool    `json:"IsAvailable"`
+		Quantity    int     `json:"Quantity"`
+	}
 
-productMeta, err := metadata.AnalyzeEntity(&TestProduct{})
-if err != nil {
-t.Fatalf("Failed to analyze entity: %v", err)
-}
+	productMeta, err := metadata.AnalyzeEntity(&TestProduct{})
+	if err != nil {
+		t.Fatalf("Failed to analyze entity: %v", err)
+	}
 
-tests := []struct {
-name      string
-filter    string
-expectErr bool
-}{
-{
-name:      "Nested boolean groups with parentheses",
-filter:    "(Price gt 100 and Category eq 'Electronics') or (Price lt 50 and Category eq 'Books')",
-expectErr: false,
-},
-{
-name:      "Multiple levels of grouping",
-filter:    "((Price gt 100 or Price lt 10) and (Category eq 'A' or Category eq 'B')) or Name eq 'Test'",
-expectErr: false,
-},
-{
-name:      "NOT with complex expressions",
-filter:    "not ((Price gt 1000 or Category eq 'Luxury') and IsAvailable eq true)",
-expectErr: false,
-},
-{
-name:      "Multiple NOT operators",
-filter:    "not (Price gt 100) and not (Category eq 'Books') and IsAvailable eq true",
-expectErr: false,
-},
-{
-name:      "Mixed functions and boolean logic",
-filter:    "(contains(Name,'Laptop') or contains(Name,'Computer')) and Price gt 500 and Category eq 'Electronics'",
-expectErr: false,
-},
-{
-name:      "Deep nesting with NOT",
-filter:    "not (not (Price gt 100 and Category eq 'Electronics'))",
-expectErr: false,
-},
-{
-name:      "Boolean literal",
-filter:    "IsAvailable eq true",
-expectErr: false,
-},
-{
-name:      "Arithmetic modulo (limited support)",
-filter:    "Quantity mod 2 eq 0",
-expectErr: false, // Basic arithmetic supported
-},
-{
-name:      "Complex multi-condition filter",
-filter:    "((Price gt 100 and not (Category eq 'Books')) or contains(Name,'Special')) and IsAvailable eq true",
-expectErr: false,
-},
-}
+	tests := []struct {
+		name      string
+		filter    string
+		expectErr bool
+	}{
+		{
+			name:      "Nested boolean groups with parentheses",
+			filter:    "(Price gt 100 and Category eq 'Electronics') or (Price lt 50 and Category eq 'Books')",
+			expectErr: false,
+		},
+		{
+			name:      "Multiple levels of grouping",
+			filter:    "((Price gt 100 or Price lt 10) and (Category eq 'A' or Category eq 'B')) or Name eq 'Test'",
+			expectErr: false,
+		},
+		{
+			name:      "NOT with complex expressions",
+			filter:    "not ((Price gt 1000 or Category eq 'Luxury') and IsAvailable eq true)",
+			expectErr: false,
+		},
+		{
+			name:      "Multiple NOT operators",
+			filter:    "not (Price gt 100) and not (Category eq 'Books') and IsAvailable eq true",
+			expectErr: false,
+		},
+		{
+			name:      "Mixed functions and boolean logic",
+			filter:    "(contains(Name,'Laptop') or contains(Name,'Computer')) and Price gt 500 and Category eq 'Electronics'",
+			expectErr: false,
+		},
+		{
+			name:      "Deep nesting with NOT",
+			filter:    "not (not (Price gt 100 and Category eq 'Electronics'))",
+			expectErr: false,
+		},
+		{
+			name:      "Boolean literal",
+			filter:    "IsAvailable eq true",
+			expectErr: false,
+		},
+		{
+			name:      "Arithmetic modulo (limited support)",
+			filter:    "Quantity mod 2 eq 0",
+			expectErr: false, // Basic arithmetic supported
+		},
+		{
+			name:      "Complex multi-condition filter",
+			filter:    "((Price gt 100 and not (Category eq 'Books')) or contains(Name,'Special')) and IsAvailable eq true",
+			expectErr: false,
+		},
+	}
 
-for _, tt := range tests {
-t.Run(tt.name, func(t *testing.T) {
-params := url.Values{}
-params.Set("$filter", tt.filter)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			params := url.Values{}
+			params.Set("$filter", tt.filter)
 
-options, err := ParseQueryOptions(params, productMeta)
-if (err != nil) != tt.expectErr {
-t.Errorf("Expected error: %v, got: %v (filter: %s)", tt.expectErr, err, tt.filter)
-return
-}
+			options, err := ParseQueryOptions(params, productMeta)
+			if (err != nil) != tt.expectErr {
+				t.Errorf("Expected error: %v, got: %v (filter: %s)", tt.expectErr, err, tt.filter)
+				return
+			}
 
-if !tt.expectErr && options.Filter == nil {
-t.Error("Expected filter to be set")
-}
-})
-}
+			if !tt.expectErr && options.Filter == nil {
+				t.Error("Expected filter to be set")
+			}
+		})
+	}
 }
 
 // TestParseOrderByWithMultipleProperties tests ordering by multiple properties
 func TestParseOrderByWithMultipleProperties(t *testing.T) {
-type TestProduct struct {
-ID       int     `json:"ID" odata:"key"`
-Name     string  `json:"Name"`
-Price    float64 `json:"Price"`
-Category string  `json:"Category"`
-}
+	type TestProduct struct {
+		ID       int     `json:"ID" odata:"key"`
+		Name     string  `json:"Name"`
+		Price    float64 `json:"Price"`
+		Category string  `json:"Category"`
+	}
 
-productMeta, err := metadata.AnalyzeEntity(&TestProduct{})
-if err != nil {
-t.Fatalf("Failed to analyze entity: %v", err)
-}
+	productMeta, err := metadata.AnalyzeEntity(&TestProduct{})
+	if err != nil {
+		t.Fatalf("Failed to analyze entity: %v", err)
+	}
 
-tests := []struct {
-name           string
-orderBy        string
-expectedCount  int
-expectErr      bool
-}{
-{
-name:          "Multiple properties with mixed directions",
-orderBy:       "Category asc,Price desc,Name asc",
-expectedCount: 3,
-expectErr:     false,
-},
-{
-name:          "Multiple properties without explicit direction",
-orderBy:       "Category,Price,Name",
-expectedCount: 3,
-expectErr:     false,
-},
-}
+	tests := []struct {
+		name          string
+		orderBy       string
+		expectedCount int
+		expectErr     bool
+	}{
+		{
+			name:          "Multiple properties with mixed directions",
+			orderBy:       "Category asc,Price desc,Name asc",
+			expectedCount: 3,
+			expectErr:     false,
+		},
+		{
+			name:          "Multiple properties without explicit direction",
+			orderBy:       "Category,Price,Name",
+			expectedCount: 3,
+			expectErr:     false,
+		},
+	}
 
-for _, tt := range tests {
-t.Run(tt.name, func(t *testing.T) {
-params := url.Values{}
-params.Set("$orderby", tt.orderBy)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			params := url.Values{}
+			params.Set("$orderby", tt.orderBy)
 
-options, err := ParseQueryOptions(params, productMeta)
-if (err != nil) != tt.expectErr {
-t.Errorf("Expected error: %v, got: %v", tt.expectErr, err)
-return
-}
+			options, err := ParseQueryOptions(params, productMeta)
+			if (err != nil) != tt.expectErr {
+				t.Errorf("Expected error: %v, got: %v", tt.expectErr, err)
+				return
+			}
 
-if !tt.expectErr {
-if len(options.OrderBy) != tt.expectedCount {
-t.Errorf("Expected %d orderby items, got %d", tt.expectedCount, len(options.OrderBy))
-}
-}
-})
-}
+			if !tt.expectErr {
+				if len(options.OrderBy) != tt.expectedCount {
+					t.Errorf("Expected %d orderby items, got %d", tt.expectedCount, len(options.OrderBy))
+				}
+			}
+		})
+	}
 }

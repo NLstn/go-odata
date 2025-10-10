@@ -245,13 +245,13 @@ func (p *ASTParser) parsePrimary() (ASTNode, error) {
 	// Identifier or function call
 	if token.Type == TokenIdentifier {
 		p.advance()
-		
+
 		// Check if this is a function call
 		if p.currentToken().Type == TokenLParen {
 			p.advance() // consume '('
-			
+
 			var args []ASTNode
-			
+
 			// Parse function arguments
 			if p.currentToken().Type != TokenRParen {
 				for {
@@ -260,7 +260,7 @@ func (p *ASTParser) parsePrimary() (ASTNode, error) {
 						return nil, err
 					}
 					args = append(args, arg)
-					
+
 					if p.currentToken().Type == TokenComma {
 						p.advance()
 					} else {
@@ -268,17 +268,17 @@ func (p *ASTParser) parsePrimary() (ASTNode, error) {
 					}
 				}
 			}
-			
+
 			if _, err := p.expect(TokenRParen); err != nil {
 				return nil, err
 			}
-			
+
 			return &FunctionCallExpr{
 				Function: token.Value,
 				Args:     args,
 			}, nil
 		}
-		
+
 		return &IdentifierExpr{Name: token.Value}, nil
 	}
 
