@@ -367,46 +367,19 @@ func (h *EntityHandler) handlePatchEntity(w http.ResponseWriter, r *http.Request
 
 	// First, check if the entity exists
 	if err := db.First(entity).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			if writeErr := response.WriteError(w, http.StatusNotFound, "Entity not found",
-				fmt.Sprintf("Entity with key '%s' not found", entityKey)); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
-			}
-		} else {
-			if writeErr := response.WriteError(w, http.StatusInternalServerError, "Database error", err.Error()); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
-			}
-		}
+		h.handleFetchError(w, err, entityKey)
 		return
 	}
 
 	// Parse the request body to get the update data
-	var updateData map[string]interface{}
-	if err := json.NewDecoder(r.Body).Decode(&updateData); err != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid request body",
-			fmt.Sprintf("Failed to parse JSON: %v", err.Error())); writeErr != nil {
-			fmt.Printf("Error writing error response: %v\n", writeErr)
-		}
-		return
+	updateData, err := h.parsePatchRequestBody(r, w)
+	if err != nil {
+		return // Error already written by parsePatchRequestBody
 	}
 
 	// Validate that we're not trying to update key properties
-	for _, keyProp := range h.metadata.KeyProperties {
-		if _, exists := updateData[keyProp.JsonName]; exists {
-			if writeErr := response.WriteError(w, http.StatusBadRequest, "Cannot update key property",
-				fmt.Sprintf("Key property '%s' cannot be modified", keyProp.JsonName)); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
-			}
-			return
-		}
-		// Also check using the struct field name
-		if _, exists := updateData[keyProp.Name]; exists {
-			if writeErr := response.WriteError(w, http.StatusBadRequest, "Cannot update key property",
-				fmt.Sprintf("Key property '%s' cannot be modified", keyProp.Name)); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
-			}
-			return
-		}
+	if err := h.validateKeyPropertiesNotUpdated(updateData, w); err != nil {
+		return // Error already written by validateKeyPropertiesNotUpdated
 	}
 
 	// Apply updates using GORM's Updates method which only updates provided fields
@@ -420,6 +393,41 @@ func (h *EntityHandler) handlePatchEntity(w http.ResponseWriter, r *http.Request
 	// Return 204 No Content according to OData v4 spec
 	w.Header().Set("OData-Version", "4.0")
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// parsePatchRequestBody parses the JSON request body for PATCH operations
+func (h *EntityHandler) parsePatchRequestBody(r *http.Request, w http.ResponseWriter) (map[string]interface{}, error) {
+	var updateData map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&updateData); err != nil {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid request body",
+			fmt.Sprintf("Failed to parse JSON: %v", err.Error())); writeErr != nil {
+			fmt.Printf("Error writing error response: %v\n", writeErr)
+		}
+		return nil, err
+	}
+	return updateData, nil
+}
+
+// validateKeyPropertiesNotUpdated validates that key properties are not being updated
+func (h *EntityHandler) validateKeyPropertiesNotUpdated(updateData map[string]interface{}, w http.ResponseWriter) error {
+	for _, keyProp := range h.metadata.KeyProperties {
+		if _, exists := updateData[keyProp.JsonName]; exists {
+			err := fmt.Errorf("key property '%s' cannot be modified", keyProp.JsonName)
+			if writeErr := response.WriteError(w, http.StatusBadRequest, "Cannot update key property", err.Error()); writeErr != nil {
+				fmt.Printf("Error writing error response: %v\n", writeErr)
+			}
+			return err
+		}
+		// Also check using the struct field name
+		if _, exists := updateData[keyProp.Name]; exists {
+			err := fmt.Errorf("key property '%s' cannot be modified", keyProp.Name)
+			if writeErr := response.WriteError(w, http.StatusBadRequest, "Cannot update key property", err.Error()); writeErr != nil {
+				fmt.Printf("Error writing error response: %v\n", writeErr)
+			}
+			return err
+		}
+	}
+	return nil
 }
 
 // HandleNavigationProperty handles GET requests for navigation properties (e.g., Products(1)/Descriptions)
