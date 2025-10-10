@@ -53,13 +53,26 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// Collection request
 		handler.HandleCollection(w, r)
 	} else if components.NavigationProperty != "" {
-		// Navigation property request: Products(1)/Descriptions
+		// Property access request: Products(1)/Descriptions (navigation) or Products(1)/Name (structural)
 		// For composite keys, serialize the key map back to a string
 		keyString := components.EntityKey
 		if keyString == "" {
 			keyString = serializeKeyMap(components.EntityKeyMap)
 		}
-		handler.HandleNavigationProperty(w, r, keyString, components.NavigationProperty)
+		
+		// We need to determine if this is a navigation property or structural property
+		// Try navigation property first, then structural property
+		if handler.IsNavigationProperty(components.NavigationProperty) {
+			handler.HandleNavigationProperty(w, r, keyString, components.NavigationProperty)
+		} else if handler.IsStructuralProperty(components.NavigationProperty) {
+			handler.HandleStructuralProperty(w, r, keyString, components.NavigationProperty)
+		} else {
+			// Property not found
+			if writeErr := response.WriteError(w, http.StatusNotFound, "Property not found",
+				fmt.Sprintf("'%s' is not a valid property for %s", components.NavigationProperty, components.EntitySet)); writeErr != nil {
+				fmt.Printf("Error writing error response: %v\n", writeErr)
+			}
+		}
 	} else {
 		// Individual entity request
 		// For composite keys, serialize the key map back to a string

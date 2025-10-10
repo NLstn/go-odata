@@ -442,6 +442,7 @@ type ODataURLComponents struct {
 	EntityKey          string            // For single keys: the value, for composite keys: empty (use EntityKeyMap)
 	EntityKeyMap       map[string]string // For composite keys: map of key names to values
 	NavigationProperty string            // For paths like Products(1)/Descriptions
+	PropertyPath       string            // For structural property paths like Products(1)/Name
 	IsCount            bool              // For paths like Products/$count
 }
 
