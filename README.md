@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/NLstn/go-odata/actions/workflows/ci.yml/badge.svg)](https://github.com/NLstn/go-odata/actions/workflows/ci.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/nlstn/go-odata)](https://goreportcard.com/report/github.com/nlstn/go-odata)
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://github.com/codespaces/new?hide_repo_select=true&ref=main&repo=NLstn/go-odata)
 
 A Go library for building services that expose OData APIs with automatic handling of OData logic.
 
@@ -29,6 +30,37 @@ A Go library for building services that expose OData APIs with automatic handlin
 ```bash
 go get github.com/nlstn/go-odata
 ```
+
+## Development Environment
+
+### GitHub Codespaces
+
+The easiest way to start developing is with GitHub Codespaces. Click the badge above or:
+
+1. Click the "Code" button on the repository
+2. Select the "Codespaces" tab
+3. Click "Create codespace on main"
+
+The development environment includes:
+- Go 1.24 with all tools pre-installed
+- VS Code with Go extension and language server
+- golangci-lint for code quality
+- Automatic dependency installation
+- Pre-configured formatting and linting on save
+
+### VS Code Dev Containers
+
+Alternatively, you can use VS Code Dev Containers:
+
+1. Install the [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
+2. Open the repository in VS Code
+3. Press `F1` and select "Dev Containers: Reopen in Container"
+
+### Local Development
+
+If you prefer to develop locally, ensure you have:
+- Go 1.21 or later installed
+- A GORM-compatible database driver (SQLite is used in examples)
 
 ## Quick Start
 
