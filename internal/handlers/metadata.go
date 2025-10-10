@@ -35,89 +35,131 @@ func (h *MetadataHandler) HandleMetadata(w http.ResponseWriter, r *http.Request)
 	w.Header().Set("Content-Type", "application/xml")
 	w.WriteHeader(http.StatusOK)
 
+	metadataDoc := h.buildMetadataDocument()
+
+	if _, err := w.Write([]byte(metadataDoc)); err != nil {
+		fmt.Printf("Error writing metadata response: %v\n", err)
+	}
+}
+
+// buildMetadataDocument builds the complete metadata XML document
+func (h *MetadataHandler) buildMetadataDocument() string {
 	metadata := `<?xml version="1.0" encoding="UTF-8"?>
 <edmx:Edmx xmlns:edmx="http://docs.oasis-open.org/odata/ns/edmx" Version="4.0">
   <edmx:DataServices>
     <Schema xmlns="http://docs.oasis-open.org/odata/ns/edm" Namespace="ODataService">
 `
 
-	// Add entity types with properties and navigation properties
+	// Add entity types
+	metadata += h.buildEntityTypes()
+
+	// Add entity container with entity sets
+	metadata += h.buildEntityContainer()
+
+	metadata += `    </Schema>
+  </edmx:DataServices>
+</edmx:Edmx>`
+
+	return metadata
+}
+
+// buildEntityTypes builds the entity type definitions
+func (h *MetadataHandler) buildEntityTypes() string {
+	result := ""
 	for _, entityMeta := range h.entities {
-		metadata += fmt.Sprintf(`      <EntityType Name="%s">
+		result += h.buildEntityType(entityMeta)
+	}
+	return result
+}
+
+// buildEntityType builds a single entity type definition
+func (h *MetadataHandler) buildEntityType(entityMeta *metadata.EntityMetadata) string {
+	result := fmt.Sprintf(`      <EntityType Name="%s">
         <Key>
 `, entityMeta.EntityName)
 
-		// Add all key properties (supports composite keys)
-		for _, keyProp := range entityMeta.KeyProperties {
-			metadata += fmt.Sprintf(`          <PropertyRef Name="%s" />
+	// Add all key properties (supports composite keys)
+	for _, keyProp := range entityMeta.KeyProperties {
+		result += fmt.Sprintf(`          <PropertyRef Name="%s" />
 `, keyProp.JsonName)
-		}
-
-		metadata += `        </Key>
-`
-
-		// Add regular properties
-		for _, prop := range entityMeta.Properties {
-			if prop.IsNavigationProp {
-				continue // Handle navigation properties separately
-			}
-
-			edmType := getEdmType(prop.Type)
-			nullable := "false"
-			if !prop.IsRequired && !prop.IsKey {
-				nullable = "true"
-			}
-			metadata += fmt.Sprintf(`        <Property Name="%s" Type="%s" Nullable="%s" />
-`, prop.JsonName, edmType, nullable)
-		}
-
-		// Add navigation properties
-		for _, prop := range entityMeta.Properties {
-			if !prop.IsNavigationProp {
-				continue
-			}
-
-			if prop.NavigationIsArray {
-				metadata += fmt.Sprintf(`        <NavigationProperty Name="%s" Type="Collection(ODataService.%s)" />
-`, prop.JsonName, prop.NavigationTarget)
-			} else {
-				metadata += fmt.Sprintf(`        <NavigationProperty Name="%s" Type="ODataService.%s" />
-`, prop.JsonName, prop.NavigationTarget)
-			}
-		}
-
-		metadata += `      </EntityType>
-`
 	}
 
-	// Add entity container with entity sets
-	metadata += `      <EntityContainer Name="Container">
+	result += `        </Key>
+`
+
+	// Add regular properties
+	result += h.buildRegularProperties(entityMeta)
+
+	// Add navigation properties
+	result += h.buildNavigationProperties(entityMeta)
+
+	result += `      </EntityType>
+`
+	return result
+}
+
+// buildRegularProperties builds the regular (non-navigation) properties
+func (h *MetadataHandler) buildRegularProperties(entityMeta *metadata.EntityMetadata) string {
+	result := ""
+	for _, prop := range entityMeta.Properties {
+		if prop.IsNavigationProp {
+			continue // Handle navigation properties separately
+		}
+
+		edmType := getEdmType(prop.Type)
+		nullable := "false"
+		if !prop.IsRequired && !prop.IsKey {
+			nullable = "true"
+		}
+		result += fmt.Sprintf(`        <Property Name="%s" Type="%s" Nullable="%s" />
+`, prop.JsonName, edmType, nullable)
+	}
+	return result
+}
+
+// buildNavigationProperties builds the navigation properties
+func (h *MetadataHandler) buildNavigationProperties(entityMeta *metadata.EntityMetadata) string {
+	result := ""
+	for _, prop := range entityMeta.Properties {
+		if !prop.IsNavigationProp {
+			continue
+		}
+
+		if prop.NavigationIsArray {
+			result += fmt.Sprintf(`        <NavigationProperty Name="%s" Type="Collection(ODataService.%s)" />
+`, prop.JsonName, prop.NavigationTarget)
+		} else {
+			result += fmt.Sprintf(`        <NavigationProperty Name="%s" Type="ODataService.%s" />
+`, prop.JsonName, prop.NavigationTarget)
+		}
+	}
+	return result
+}
+
+// buildEntityContainer builds the entity container with entity sets
+func (h *MetadataHandler) buildEntityContainer() string {
+	result := `      <EntityContainer Name="Container">
 `
 	for entitySetName, entityMeta := range h.entities {
-		metadata += fmt.Sprintf(`        <EntitySet Name="%s" EntityType="ODataService.%s">
+		result += fmt.Sprintf(`        <EntitySet Name="%s" EntityType="ODataService.%s">
 `, entitySetName, entityMeta.EntityName)
 
 		// Add navigation property bindings
 		for _, prop := range entityMeta.Properties {
 			if prop.IsNavigationProp {
 				targetEntitySet := pluralize(prop.NavigationTarget)
-				metadata += fmt.Sprintf(`          <NavigationPropertyBinding Path="%s" Target="%s" />
+				result += fmt.Sprintf(`          <NavigationPropertyBinding Path="%s" Target="%s" />
 `, prop.JsonName, targetEntitySet)
 			}
 		}
 
-		metadata += `        </EntitySet>
+		result += `        </EntitySet>
 `
 	}
 
-	metadata += `      </EntityContainer>
-    </Schema>
-  </edmx:DataServices>
-</edmx:Edmx>`
-
-	if _, err := w.Write([]byte(metadata)); err != nil {
-		fmt.Printf("Error writing metadata response: %v\n", err)
-	}
+	result += `      </EntityContainer>
+`
+	return result
 }
 
 // getEdmType converts a Go type to an EDM (Entity Data Model) type

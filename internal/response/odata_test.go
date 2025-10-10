@@ -413,7 +413,7 @@ func TestProcessStructEntityOrdered_FieldOrder(t *testing.T) {
 	}
 
 	entityValue := reflect.ValueOf(entity)
-	result := processStructEntityOrdered(entityValue, metadata, []string{}, "http://localhost:8080", "Products", metadata.GetKeyProperty())
+	result := processStructEntityOrdered(entityValue, metadata, []string{}, "http://localhost:8080", "Products")
 
 	// Marshal to JSON to check order
 	data, err := json.Marshal(result)

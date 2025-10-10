@@ -145,16 +145,15 @@ func addNavigationLinks(data interface{}, metadata EntityMetadataProvider, expan
 
 	result := make([]interface{}, dataValue.Len())
 	baseURL := buildBaseURL(r)
-	keyProp := metadata.GetKeyProperty()
 
 	for i := 0; i < dataValue.Len(); i++ {
 		entity := dataValue.Index(i)
 		var entityMap interface{}
 
 		if entity.Kind() == reflect.Map {
-			entityMap = processMapEntity(entity, metadata, expandedProps, baseURL, entitySetName, keyProp)
+			entityMap = processMapEntity(entity, metadata, expandedProps, baseURL, entitySetName)
 		} else {
-			entityMap = processStructEntityOrdered(entity, metadata, expandedProps, baseURL, entitySetName, keyProp)
+			entityMap = processStructEntityOrdered(entity, metadata, expandedProps, baseURL, entitySetName)
 		}
 
 		if entityMap != nil {
@@ -166,7 +165,7 @@ func addNavigationLinks(data interface{}, metadata EntityMetadataProvider, expan
 }
 
 // processMapEntity processes an entity that is already a map and adds navigation links
-func processMapEntity(entity reflect.Value, metadata EntityMetadataProvider, expandedProps []string, baseURL, entitySetName string, keyProp *PropertyMetadata) map[string]interface{} {
+func processMapEntity(entity reflect.Value, metadata EntityMetadataProvider, expandedProps []string, baseURL, entitySetName string) map[string]interface{} {
 	entityMap, ok := entity.Interface().(map[string]interface{})
 	if !ok {
 		return nil
@@ -196,7 +195,7 @@ func processMapEntity(entity reflect.Value, metadata EntityMetadataProvider, exp
 }
 
 // processStructEntityOrdered processes an entity that is a struct and returns an OrderedMap
-func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataProvider, expandedProps []string, baseURL, entitySetName string, keyProp *PropertyMetadata) *OrderedMap {
+func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataProvider, expandedProps []string, baseURL, entitySetName string) *OrderedMap {
 	entityMap := NewOrderedMap()
 	entityType := entity.Type()
 
@@ -241,21 +240,6 @@ func findPropertyMetadata(fieldName string, metadata EntityMetadataProvider) *Pr
 	return nil
 }
 
-// processNavigationPropertyOrdered handles navigation properties for ordered maps
-func processNavigationPropertyOrdered(entityMap *OrderedMap, entity reflect.Value, propMeta *PropertyMetadata, fieldValue reflect.Value, jsonName string, expandedProps []string, baseURL, entitySetName string, keyProp *PropertyMetadata) {
-	if isPropertyExpanded(*propMeta, expandedProps) {
-		// Include the expanded data
-		entityMap.Set(jsonName, fieldValue.Interface())
-	} else {
-		// Add navigation link instead of null value
-		keySegment := buildKeySegmentFromEntity(entity, keyProp)
-		if keySegment != "" {
-			navLink := fmt.Sprintf("%s/%s(%s)/%s", baseURL, entitySetName, keySegment, propMeta.JsonName)
-			entityMap.Set(jsonName+"@odata.navigationLink", navLink)
-		}
-	}
-}
-
 // processNavigationPropertyOrderedWithMetadata handles navigation properties with full metadata support
 func processNavigationPropertyOrderedWithMetadata(entityMap *OrderedMap, entity reflect.Value, propMeta *PropertyMetadata, fieldValue reflect.Value, jsonName string, expandedProps []string, baseURL, entitySetName string, metadata EntityMetadataProvider) {
 	if isPropertyExpanded(*propMeta, expandedProps) {
@@ -269,24 +253,6 @@ func processNavigationPropertyOrderedWithMetadata(entityMap *OrderedMap, entity 
 			entityMap.Set(jsonName+"@odata.navigationLink", navLink)
 		}
 	}
-}
-
-// buildKeySegmentFromEntity builds the key segment for URLs from an entity reflection value
-// For single keys: returns "1" or "ID=1"
-// For composite keys: returns "ProductID=1,LanguageKey='EN'"
-func buildKeySegmentFromEntity(entity reflect.Value, keyProp *PropertyMetadata) string {
-	// This function is kept for backwards compatibility but won't work properly for composite keys
-	// since it only receives a single keyProp
-	if keyProp == nil {
-		return ""
-	}
-
-	keyFieldValue := entity.FieldByName(keyProp.Name)
-	if keyFieldValue.IsValid() {
-		return fmt.Sprintf("%v", keyFieldValue.Interface())
-	}
-
-	return ""
 }
 
 // BuildKeySegmentFromEntity builds the key segment for URLs from an entity and metadata
