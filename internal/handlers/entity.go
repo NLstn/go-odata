@@ -27,15 +27,23 @@ func NewEntityHandler(db *gorm.DB, entityMetadata *metadata.EntityMetadata) *Ent
 	}
 }
 
-// HandleCollection handles GET requests for entity collections
+// HandleCollection handles GET and POST requests for entity collections
 func (h *EntityHandler) HandleCollection(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
+	switch r.Method {
+	case http.MethodGet:
+		h.handleGetCollection(w, r)
+	case http.MethodPost:
+		h.handlePostEntity(w, r)
+	default:
 		if err := response.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
 			fmt.Sprintf("Method %s is not supported for entity collections", r.Method)); err != nil {
 			fmt.Printf("Error writing error response: %v\n", err)
 		}
-		return
 	}
+}
+
+// handleGetCollection handles GET requests for entity collections
+func (h *EntityHandler) handleGetCollection(w http.ResponseWriter, r *http.Request) {
 
 	// Parse query options
 	queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata)
@@ -80,6 +88,123 @@ func (h *EntityHandler) HandleCollection(w http.ResponseWriter, r *http.Request)
 		// If we can't write the response, log the error but don't try to write another response
 		fmt.Printf("Error writing OData response: %v\n", err)
 	}
+}
+
+// handlePostEntity handles POST requests to create new entities in a collection
+func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request) {
+	// Create a new instance of the entity
+	entity := reflect.New(h.metadata.EntityType).Interface()
+
+	// Parse the request body
+	if err := json.NewDecoder(r.Body).Decode(entity); err != nil {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid request body",
+			fmt.Sprintf("Failed to parse JSON: %v", err.Error())); writeErr != nil {
+			fmt.Printf("Error writing error response: %v\n", writeErr)
+		}
+		return
+	}
+
+	// Validate required properties
+	if err := h.validateRequiredProperties(entity); err != nil {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, "Missing required properties", err.Error()); writeErr != nil {
+			fmt.Printf("Error writing error response: %v\n", writeErr)
+		}
+		return
+	}
+
+	// Create the entity in the database
+	if err := h.db.Create(entity).Error; err != nil {
+		if writeErr := response.WriteError(w, http.StatusInternalServerError, "Database error", err.Error()); writeErr != nil {
+			fmt.Printf("Error writing error response: %v\n", writeErr)
+		}
+		return
+	}
+
+	// Build the Location header with the key(s) of the created entity
+	location := h.buildEntityLocation(r, entity)
+
+	// Build the context URL
+	contextURL := fmt.Sprintf("%s/$metadata#%s/$entity", response.BuildBaseURL(r), h.metadata.EntitySetName)
+
+	// Build ordered response
+	odataResponse := h.buildOrderedEntityResponse(entity, contextURL)
+
+	// Set headers
+	w.Header().Set("Content-Type", "application/json;odata.metadata=minimal")
+	w.Header().Set("OData-Version", "4.0")
+	w.Header().Set("Location", location)
+	w.WriteHeader(http.StatusCreated)
+
+	// Write the response
+	if err := json.NewEncoder(w).Encode(odataResponse); err != nil {
+		fmt.Printf("Error writing entity response: %v\n", err)
+	}
+}
+
+// validateRequiredProperties validates that all required properties are provided
+func (h *EntityHandler) validateRequiredProperties(entity interface{}) error {
+	entityValue := reflect.ValueOf(entity)
+	if entityValue.Kind() == reflect.Ptr {
+		entityValue = entityValue.Elem()
+	}
+
+	var missingFields []string
+	for _, prop := range h.metadata.Properties {
+		if !prop.IsRequired || prop.IsKey {
+			continue // Skip non-required and key fields (keys can be auto-generated)
+		}
+
+		fieldValue := entityValue.FieldByName(prop.Name)
+		if !fieldValue.IsValid() {
+			continue
+		}
+
+		// Check if the field is zero value
+		if fieldValue.IsZero() {
+			missingFields = append(missingFields, prop.JsonName)
+		}
+	}
+
+	if len(missingFields) > 0 {
+		return fmt.Errorf("missing required properties: %s", strings.Join(missingFields, ", "))
+	}
+
+	return nil
+}
+
+// buildEntityLocation builds the Location header URL for a created entity
+func (h *EntityHandler) buildEntityLocation(r *http.Request, entity interface{}) string {
+	baseURL := response.BuildBaseURL(r)
+	entitySetName := h.metadata.EntitySetName
+
+	// Extract key values from the entity
+	entityValue := reflect.ValueOf(entity)
+	if entityValue.Kind() == reflect.Ptr {
+		entityValue = entityValue.Elem()
+	}
+
+	// Handle single key vs composite key
+	if len(h.metadata.KeyProperties) == 1 {
+		// Single key
+		keyProp := h.metadata.KeyProperties[0]
+		keyValue := entityValue.FieldByName(keyProp.Name)
+		return fmt.Sprintf("%s/%s(%v)", baseURL, entitySetName, keyValue.Interface())
+	}
+
+	// Composite key
+	var keyParts []string
+	for _, keyProp := range h.metadata.KeyProperties {
+		keyValue := entityValue.FieldByName(keyProp.Name)
+		// Format based on type
+		switch keyValue.Kind() {
+		case reflect.String:
+			keyParts = append(keyParts, fmt.Sprintf("%s='%v'", keyProp.JsonName, keyValue.Interface()))
+		default:
+			keyParts = append(keyParts, fmt.Sprintf("%s=%v", keyProp.JsonName, keyValue.Interface()))
+		}
+	}
+
+	return fmt.Sprintf("%s/%s(%s)", baseURL, entitySetName, strings.Join(keyParts, ","))
 }
 
 // HandleCount handles GET requests for entity collection count (e.g., /Products/$count)
