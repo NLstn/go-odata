@@ -15,6 +15,11 @@ func ApplyQueryOptions(db *gorm.DB, options *QueryOptions, entityMetadata *metad
 		return db
 	}
 
+	// Apply select at database level to fetch only needed columns
+	if len(options.Select) > 0 {
+		db = applySelect(db, options.Select, entityMetadata)
+	}
+
 	// Apply filter
 	if options.Filter != nil {
 		db = applyFilter(db, options.Filter, entityMetadata)
@@ -58,6 +63,46 @@ func ApplyExpandOnly(db *gorm.DB, expand []ExpandOption, entityMetadata *metadat
 		return db
 	}
 	return applyExpand(db, expand, entityMetadata)
+}
+
+// applySelect applies select clause to fetch only specified columns at database level
+func applySelect(db *gorm.DB, selectedProperties []string, entityMetadata *metadata.EntityMetadata) *gorm.DB {
+	if len(selectedProperties) == 0 {
+		return db
+	}
+
+	// Build list of columns to select using struct field names
+	// GORM will convert them to the correct column names
+	columns := make([]string, 0, len(selectedProperties))
+	selectedPropMap := make(map[string]bool)
+
+	// Add requested properties
+	for _, propName := range selectedProperties {
+		propName = strings.TrimSpace(propName)
+		// Find the property in metadata
+		for _, prop := range entityMetadata.Properties {
+			if (prop.JsonName == propName || prop.Name == propName) && !prop.IsNavigationProp {
+				// Use struct field name - GORM will handle column name conversion
+				columns = append(columns, prop.Name)
+				selectedPropMap[prop.Name] = true
+				break
+			}
+		}
+	}
+
+	// Always include key properties for OData responses (if not already selected)
+	for _, keyProp := range entityMetadata.KeyProperties {
+		if !selectedPropMap[keyProp.Name] {
+			columns = append(columns, keyProp.Name)
+		}
+	}
+
+	// Apply select to GORM query
+	if len(columns) > 0 {
+		db = db.Select(columns)
+	}
+
+	return db
 }
 
 // applyFilter applies filter expressions to the GORM query
@@ -310,8 +355,9 @@ func applyOrderBy(db *gorm.DB, orderBy []OrderByItem, entityMetadata *metadata.E
 	return db
 }
 
-// ApplySelect filters the result to only include selected properties
-// This is done after the query by modifying the result slice
+// ApplySelect converts struct results to map format with only selected properties
+// This is called after the query to convert the result to the correct format for OData responses
+// The database query already fetched only the needed columns via applySelect
 func ApplySelect(results interface{}, selectedProperties []string, entityMetadata *metadata.EntityMetadata) interface{} {
 	if len(selectedProperties) == 0 {
 		return results
@@ -323,26 +369,27 @@ func ApplySelect(results interface{}, selectedProperties []string, entityMetadat
 		return results
 	}
 
-	// Create a new slice of maps to hold the filtered results
+	// Create a new slice of maps to hold the results
 	filteredResults := make([]map[string]interface{}, sliceValue.Len())
+
+	// Build a map of selected properties for quick lookup
+	selectedPropMap := make(map[string]bool)
+	for _, propName := range selectedProperties {
+		selectedPropMap[strings.TrimSpace(propName)] = true
+	}
 
 	for i := 0; i < sliceValue.Len(); i++ {
 		item := sliceValue.Index(i)
 		filteredItem := make(map[string]interface{})
 
-		// Extract only the selected properties
-		for _, propName := range selectedProperties {
-			propName = strings.TrimSpace(propName)
-
-			// Find the property in metadata
-			for _, prop := range entityMetadata.Properties {
-				if prop.JsonName == propName || prop.Name == propName {
-					// Get the field value
-					fieldValue := item.FieldByName(prop.Name)
-					if fieldValue.IsValid() && fieldValue.CanInterface() {
-						filteredItem[prop.JsonName] = fieldValue.Interface()
-					}
-					break
+		// Extract only the selected properties (database already filtered columns)
+		for _, prop := range entityMetadata.Properties {
+			// Check if this property was selected
+			if selectedPropMap[prop.JsonName] || selectedPropMap[prop.Name] {
+				// Get the field value
+				fieldValue := item.FieldByName(prop.Name)
+				if fieldValue.IsValid() && fieldValue.CanInterface() {
+					filteredItem[prop.JsonName] = fieldValue.Interface()
 				}
 			}
 		}

@@ -439,7 +439,7 @@ func (h *EntityHandler) HandleStructuralProperty(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// Fetch the entity
+	// Fetch the entity with only the needed property and key columns
 	entity := reflect.New(h.metadata.EntityType).Interface()
 	db, err := h.buildKeyQuery(entityKey)
 	if err != nil {
@@ -448,6 +448,17 @@ func (h *EntityHandler) HandleStructuralProperty(w http.ResponseWriter, r *http.
 		}
 		return
 	}
+
+	// Build select columns list: property + all key properties
+	// Use struct field names - GORM will handle column name conversion
+	selectColumns := []string{prop.Name}
+	for _, keyProp := range h.metadata.KeyProperties {
+		// Avoid duplicates if the property itself is a key
+		if keyProp.Name != prop.Name {
+			selectColumns = append(selectColumns, keyProp.Name)
+		}
+	}
+	db = db.Select(selectColumns)
 
 	if err := db.First(entity).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
