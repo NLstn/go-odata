@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/nlstn/go-odata/internal/metadata"
+	"github.com/nlstn/go-odata/internal/preference"
 	"github.com/nlstn/go-odata/internal/query"
 	"github.com/nlstn/go-odata/internal/response"
 	"gorm.io/gorm"
@@ -92,6 +93,9 @@ func (h *EntityHandler) handleGetCollection(w http.ResponseWriter, r *http.Reque
 
 // handlePostEntity handles POST requests to create new entities in a collection
 func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request) {
+	// Parse Prefer header
+	pref := preference.ParsePrefer(r)
+
 	// Create a new instance of the entity
 	entity := reflect.New(h.metadata.EntityType).Interface()
 
@@ -123,21 +127,30 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 	// Build the Location header with the key(s) of the created entity
 	location := h.buildEntityLocation(r, entity)
 
-	// Build the context URL
-	contextURL := fmt.Sprintf("%s/$metadata#%s/$entity", response.BuildBaseURL(r), h.metadata.EntitySetName)
-
-	// Build ordered response
-	odataResponse := h.buildOrderedEntityResponse(entity, contextURL)
-
-	// Set headers
-	w.Header().Set("Content-Type", "application/json;odata.metadata=minimal")
+	// Set common headers
 	w.Header().Set("OData-Version", "4.0")
 	w.Header().Set("Location", location)
-	w.WriteHeader(http.StatusCreated)
 
-	// Write the response
-	if err := json.NewEncoder(w).Encode(odataResponse); err != nil {
-		fmt.Printf("Error writing entity response: %v\n", err)
+	// Add Preference-Applied header if a preference was specified
+	if applied := pref.GetPreferenceApplied(); applied != "" {
+		w.Header().Set("Preference-Applied", applied)
+	}
+
+	// Determine whether to return content based on preferences
+	if pref.ShouldReturnContent(true) {
+		// Return representation (default for POST)
+		contextURL := fmt.Sprintf("%s/$metadata#%s/$entity", response.BuildBaseURL(r), h.metadata.EntitySetName)
+		odataResponse := h.buildOrderedEntityResponse(entity, contextURL)
+
+		w.Header().Set("Content-Type", "application/json;odata.metadata=minimal")
+		w.WriteHeader(http.StatusCreated)
+
+		if err := json.NewEncoder(w).Encode(odataResponse); err != nil {
+			fmt.Printf("Error writing entity response: %v\n", err)
+		}
+	} else {
+		// Return minimal (204 No Content)
+		w.WriteHeader(http.StatusNoContent)
 	}
 }
 
@@ -480,6 +493,9 @@ func (h *EntityHandler) handleDeleteEntity(w http.ResponseWriter, r *http.Reques
 
 // handlePatchEntity handles PATCH requests for individual entities
 func (h *EntityHandler) handlePatchEntity(w http.ResponseWriter, r *http.Request, entityKey string) {
+	// Parse Prefer header
+	pref := preference.ParsePrefer(r)
+
 	// Create an instance to hold the entity to be updated
 	entity := reflect.New(h.metadata.EntityType).Interface()
 
@@ -517,14 +533,47 @@ func (h *EntityHandler) handlePatchEntity(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Return 204 No Content according to OData v4 spec
+	// Set common headers
 	w.Header().Set("OData-Version", "4.0")
-	w.WriteHeader(http.StatusNoContent)
+
+	// Add Preference-Applied header if a preference was specified
+	if applied := pref.GetPreferenceApplied(); applied != "" {
+		w.Header().Set("Preference-Applied", applied)
+	}
+
+	// Determine whether to return content based on preferences
+	if pref.ShouldReturnContent(false) {
+		// Return representation
+		// Fetch the updated entity
+		updatedEntity := reflect.New(h.metadata.EntityType).Interface()
+		if err := db.First(updatedEntity).Error; err != nil {
+			if writeErr := response.WriteError(w, http.StatusInternalServerError, "Database error", err.Error()); writeErr != nil {
+				fmt.Printf("Error writing error response: %v\n", writeErr)
+			}
+			return
+		}
+
+		contextURL := fmt.Sprintf("%s/$metadata#%s/$entity", response.BuildBaseURL(r), h.metadata.EntitySetName)
+		odataResponse := h.buildOrderedEntityResponse(updatedEntity, contextURL)
+
+		w.Header().Set("Content-Type", "application/json;odata.metadata=minimal")
+		w.WriteHeader(http.StatusOK)
+
+		if err := json.NewEncoder(w).Encode(odataResponse); err != nil {
+			fmt.Printf("Error writing entity response: %v\n", err)
+		}
+	} else {
+		// Return minimal (204 No Content) - default for PATCH
+		w.WriteHeader(http.StatusNoContent)
+	}
 }
 
 // handlePutEntity handles PUT requests for individual entities
 // PUT performs a complete replacement according to OData v4 spec
 func (h *EntityHandler) handlePutEntity(w http.ResponseWriter, r *http.Request, entityKey string) {
+	// Parse Prefer header
+	pref := preference.ParsePrefer(r)
+
 	// Create an instance to hold the entity to be replaced
 	entity := reflect.New(h.metadata.EntityType).Interface()
 
@@ -571,9 +620,39 @@ func (h *EntityHandler) handlePutEntity(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	// Return 204 No Content according to OData v4 spec
+	// Set common headers
 	w.Header().Set("OData-Version", "4.0")
-	w.WriteHeader(http.StatusNoContent)
+
+	// Add Preference-Applied header if a preference was specified
+	if applied := pref.GetPreferenceApplied(); applied != "" {
+		w.Header().Set("Preference-Applied", applied)
+	}
+
+	// Determine whether to return content based on preferences
+	if pref.ShouldReturnContent(false) {
+		// Return representation
+		// Fetch the updated entity
+		updatedEntity := reflect.New(h.metadata.EntityType).Interface()
+		if err := db.First(updatedEntity).Error; err != nil {
+			if writeErr := response.WriteError(w, http.StatusInternalServerError, "Database error", err.Error()); writeErr != nil {
+				fmt.Printf("Error writing error response: %v\n", writeErr)
+			}
+			return
+		}
+
+		contextURL := fmt.Sprintf("%s/$metadata#%s/$entity", response.BuildBaseURL(r), h.metadata.EntitySetName)
+		odataResponse := h.buildOrderedEntityResponse(updatedEntity, contextURL)
+
+		w.Header().Set("Content-Type", "application/json;odata.metadata=minimal")
+		w.WriteHeader(http.StatusOK)
+
+		if err := json.NewEncoder(w).Encode(odataResponse); err != nil {
+			fmt.Printf("Error writing entity response: %v\n", err)
+		}
+	} else {
+		// Return minimal (204 No Content) - default for PUT
+		w.WriteHeader(http.StatusNoContent)
+	}
 }
 
 // preserveKeyProperties copies key property values from source to destination
