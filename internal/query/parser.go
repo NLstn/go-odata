@@ -43,6 +43,7 @@ type FilterExpression struct {
 	Left     *FilterExpression
 	Right    *FilterExpression
 	Logical  LogicalOperator
+	IsNot    bool // Indicates if this is a NOT expression
 }
 
 // FilterOperator represents filter comparison operators
@@ -551,9 +552,30 @@ func parseOrderBy(orderByStr string, entityMetadata *metadata.EntityMetadata) ([
 	return result, nil
 }
 
-// parseFilter parses a filter expression
-// This is a simplified parser that handles basic filter expressions
+// parseFilter parses a filter expression using the new AST-based parser
 func parseFilter(filterStr string, entityMetadata *metadata.EntityMetadata) (*FilterExpression, error) {
+	filterStr = strings.TrimSpace(filterStr)
+	
+	// Use the new tokenizer and AST parser
+	tokenizer := NewTokenizer(filterStr)
+	tokens, err := tokenizer.TokenizeAll()
+	if err != nil {
+		// Fall back to old parser if tokenization fails
+		return parseFilterLegacy(filterStr, entityMetadata)
+	}
+	
+	parser := NewASTParser(tokens)
+	ast, err := parser.Parse()
+	if err != nil {
+		// Fall back to old parser if AST parsing fails
+		return parseFilterLegacy(filterStr, entityMetadata)
+	}
+	
+	return ASTToFilterExpression(ast, entityMetadata)
+}
+
+// parseFilterLegacy is the old recursive-descent parser (kept for backward compatibility)
+func parseFilterLegacy(filterStr string, entityMetadata *metadata.EntityMetadata) (*FilterExpression, error) {
 	filterStr = strings.TrimSpace(filterStr)
 
 	// Check for logical operators (and, or)
@@ -562,12 +584,12 @@ func parseFilter(filterStr string, entityMetadata *metadata.EntityMetadata) (*Fi
 		left := strings.TrimSpace(filterStr[:idx])
 		right := strings.TrimSpace(filterStr[idx+len(operator):])
 
-		leftExpr, err := parseFilter(left, entityMetadata)
+		leftExpr, err := parseFilterLegacy(left, entityMetadata)
 		if err != nil {
 			return nil, err
 		}
 
-		rightExpr, err := parseFilter(right, entityMetadata)
+		rightExpr, err := parseFilterLegacy(right, entityMetadata)
 		if err != nil {
 			return nil, err
 		}
@@ -758,11 +780,47 @@ func propertyExists(propertyName string, entityMetadata *metadata.EntityMetadata
 }
 
 // GetPropertyFieldName returns the struct field name for a given JSON property name
+// This returns the actual Go struct field name, not the JSON name
 func GetPropertyFieldName(propertyName string, entityMetadata *metadata.EntityMetadata) string {
 	for _, prop := range entityMetadata.Properties {
 		if prop.JsonName == propertyName || prop.Name == propertyName {
-			return prop.JsonName
+			return prop.Name // Return the struct field name
 		}
 	}
 	return propertyName
+}
+
+// GetColumnName returns the database column name (snake_case) for a property
+func GetColumnName(propertyName string, entityMetadata *metadata.EntityMetadata) string {
+	for _, prop := range entityMetadata.Properties {
+		if prop.JsonName == propertyName || prop.Name == propertyName {
+			// Check if there's a GORM tag specifying the column name
+			if prop.GormTag != "" {
+				// Parse GORM tag for column name
+				parts := strings.Split(prop.GormTag, ";")
+				for _, part := range parts {
+					part = strings.TrimSpace(part)
+					if strings.HasPrefix(part, "column:") {
+						return strings.TrimPrefix(part, "column:")
+					}
+				}
+			}
+			// Use the struct field name and convert to snake_case
+			return toSnakeCase(prop.Name)
+		}
+	}
+	// Fallback: convert property name to snake_case
+	return toSnakeCase(propertyName)
+}
+
+// toSnakeCase converts a camelCase or PascalCase string to snake_case
+func toSnakeCase(s string) string {
+	result := make([]rune, 0, len(s)+5)
+	for i, r := range s {
+		if i > 0 && r >= 'A' && r <= 'Z' {
+			result = append(result, '_')
+		}
+		result = append(result, r)
+	}
+	return strings.ToLower(string(result))
 }

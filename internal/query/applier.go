@@ -153,38 +153,64 @@ func buildFilterCondition(filter *FilterExpression, entityMetadata *metadata.Ent
 		case LogicalAnd:
 			query := fmt.Sprintf("(%s) AND (%s)", leftQuery, rightQuery)
 			args := append(leftArgs, rightArgs...)
+			if filter.IsNot {
+				return fmt.Sprintf("NOT (%s)", query), args
+			}
 			return query, args
 		case LogicalOr:
 			query := fmt.Sprintf("(%s) OR (%s)", leftQuery, rightQuery)
 			args := append(leftArgs, rightArgs...)
+			if filter.IsNot {
+				return fmt.Sprintf("NOT (%s)", query), args
+			}
 			return query, args
 		}
 	}
 
-	fieldName := GetPropertyFieldName(filter.Property, entityMetadata)
+	// Get the database column name (snake_case)
+	columnName := GetColumnName(filter.Property, entityMetadata)
+
+	var query string
+	var args []interface{}
 
 	switch filter.Operator {
 	case OpEqual:
-		return fmt.Sprintf("%s = ?", fieldName), []interface{}{filter.Value}
+		query = fmt.Sprintf("%s = ?", columnName)
+		args = []interface{}{filter.Value}
 	case OpNotEqual:
-		return fmt.Sprintf("%s != ?", fieldName), []interface{}{filter.Value}
+		query = fmt.Sprintf("%s != ?", columnName)
+		args = []interface{}{filter.Value}
 	case OpGreaterThan:
-		return fmt.Sprintf("%s > ?", fieldName), []interface{}{filter.Value}
+		query = fmt.Sprintf("%s > ?", columnName)
+		args = []interface{}{filter.Value}
 	case OpGreaterThanOrEqual:
-		return fmt.Sprintf("%s >= ?", fieldName), []interface{}{filter.Value}
+		query = fmt.Sprintf("%s >= ?", columnName)
+		args = []interface{}{filter.Value}
 	case OpLessThan:
-		return fmt.Sprintf("%s < ?", fieldName), []interface{}{filter.Value}
+		query = fmt.Sprintf("%s < ?", columnName)
+		args = []interface{}{filter.Value}
 	case OpLessThanOrEqual:
-		return fmt.Sprintf("%s <= ?", fieldName), []interface{}{filter.Value}
+		query = fmt.Sprintf("%s <= ?", columnName)
+		args = []interface{}{filter.Value}
 	case OpContains:
-		return fmt.Sprintf("%s LIKE ?", fieldName), []interface{}{"%" + fmt.Sprint(filter.Value) + "%"}
+		query = fmt.Sprintf("%s LIKE ?", columnName)
+		args = []interface{}{"%" + fmt.Sprint(filter.Value) + "%"}
 	case OpStartsWith:
-		return fmt.Sprintf("%s LIKE ?", fieldName), []interface{}{fmt.Sprint(filter.Value) + "%"}
+		query = fmt.Sprintf("%s LIKE ?", columnName)
+		args = []interface{}{fmt.Sprint(filter.Value) + "%"}
 	case OpEndsWith:
-		return fmt.Sprintf("%s LIKE ?", fieldName), []interface{}{"%" + fmt.Sprint(filter.Value)}
+		query = fmt.Sprintf("%s LIKE ?", columnName)
+		args = []interface{}{"%" + fmt.Sprint(filter.Value)}
 	default:
 		return "", nil
 	}
+
+	// Apply NOT if needed
+	if filter.IsNot {
+		return fmt.Sprintf("NOT (%s)", query), args
+	}
+	
+	return query, args
 }
 
 // applyExpand applies expand (preload) options to the GORM query
@@ -266,18 +292,6 @@ func applyFilterForExpand(db *gorm.DB, filter *FilterExpression) *gorm.DB {
 	// Handle simple comparison
 	query, args := buildSimpleFilterCondition(filter)
 	return db.Where(query, args...)
-}
-
-// toSnakeCase converts a camelCase or PascalCase string to snake_case
-func toSnakeCase(s string) string {
-	result := make([]rune, 0, len(s)+5)
-	for i, r := range s {
-		if i > 0 && r >= 'A' && r <= 'Z' {
-			result = append(result, '_')
-		}
-		result = append(result, r)
-	}
-	return strings.ToLower(string(result))
 }
 
 // buildSimpleFilterCondition builds a filter condition without metadata
