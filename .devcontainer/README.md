@@ -12,6 +12,7 @@ This directory contains the development container configuration for GitHub Codes
 - **Tools**:
   - golangci-lint for code linting
   - Go language server for enhanced IDE features
+  - air for hot-reload development server
 - **Port Forwarding**: Port 8080 is automatically forwarded for the development server
 
 ## Getting Started
@@ -33,7 +34,14 @@ This directory contains the development container configuration for GitHub Codes
 
 ## Running the Development Server
 
-Once the container is running:
+Once the container is running, you can run the development server with hot reload:
+
+```bash
+cd cmd/devserver
+air
+```
+
+Or without hot reload:
 
 ```bash
 cd cmd/devserver
