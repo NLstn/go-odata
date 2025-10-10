@@ -316,33 +316,85 @@ func TestIntegrationExpandWithOrderBy(t *testing.T) {
 func TestIntegrationMetadata(t *testing.T) {
 	service := setupIntegrationTest(t)
 
-	req := httptest.NewRequest(http.MethodGet, "/$metadata", nil)
-	w := httptest.NewRecorder()
+	t.Run("XML format", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/$metadata", nil)
+		w := httptest.NewRecorder()
 
-	service.ServeHTTP(w, req)
+		service.ServeHTTP(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Errorf("Expected status 200, got %d", w.Code)
-	}
+		if w.Code != http.StatusOK {
+			t.Errorf("Expected status 200, got %d", w.Code)
+		}
 
-	body := w.Body.String()
+		body := w.Body.String()
 
-	// Check for navigation property definitions
-	if !contains(body, "NavigationProperty") {
-		t.Error("Expected metadata to contain NavigationProperty elements")
-	}
+		// Check for navigation property definitions
+		if !contains(body, "NavigationProperty") {
+			t.Error("Expected metadata to contain NavigationProperty elements")
+		}
 
-	if !contains(body, "Employees") {
-		t.Error("Expected metadata to contain Employees navigation property")
-	}
+		if !contains(body, "Employees") {
+			t.Error("Expected metadata to contain Employees navigation property")
+		}
 
-	if !contains(body, "Department") {
-		t.Error("Expected metadata to contain Department navigation property")
-	}
+		if !contains(body, "Department") {
+			t.Error("Expected metadata to contain Department navigation property")
+		}
 
-	if !contains(body, "NavigationPropertyBinding") {
-		t.Error("Expected metadata to contain NavigationPropertyBinding elements")
-	}
+		if !contains(body, "NavigationPropertyBinding") {
+			t.Error("Expected metadata to contain NavigationPropertyBinding elements")
+		}
+	})
+
+	t.Run("JSON format", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/$metadata?$format=json", nil)
+		w := httptest.NewRecorder()
+
+		service.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Errorf("Expected status 200, got %d", w.Code)
+		}
+
+		var response map[string]interface{}
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+			t.Fatalf("Failed to parse JSON response: %v", err)
+		}
+
+		// Check for basic structure
+		if _, ok := response["$Version"]; !ok {
+			t.Error("Expected $Version in JSON metadata")
+		}
+
+		odataService, ok := response["ODataService"].(map[string]interface{})
+		if !ok {
+			t.Fatal("Expected ODataService in JSON metadata")
+		}
+
+		// Check for entity types
+		if _, ok := odataService["Department"]; !ok {
+			t.Error("Expected Department entity type in JSON metadata")
+		}
+
+		if _, ok := odataService["Employee"]; !ok {
+			t.Error("Expected Employee entity type in JSON metadata")
+		}
+
+		// Check for container
+		container, ok := odataService["Container"].(map[string]interface{})
+		if !ok {
+			t.Fatal("Expected Container in JSON metadata")
+		}
+
+		// Check for entity sets
+		if _, ok := container["Departments"]; !ok {
+			t.Error("Expected Departments entity set in JSON metadata")
+		}
+
+		if _, ok := container["Employees"]; !ok {
+			t.Error("Expected Employees entity set in JSON metadata")
+		}
+	})
 }
 
 // TestIntegrationServiceDocument tests that service document lists entity sets

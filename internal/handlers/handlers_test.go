@@ -253,6 +253,141 @@ func TestMetadataHandlerMethodNotAllowed(t *testing.T) {
 	}
 }
 
+func TestMetadataHandlerJSON(t *testing.T) {
+	entities := make(map[string]*metadata.EntityMetadata)
+
+	entityMeta, _ := metadata.AnalyzeEntity(TestEntity{})
+	entities["TestEntities"] = entityMeta
+
+	handler := NewMetadataHandler(entities)
+
+	t.Run("JSON format via query parameter", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/$metadata?$format=json", nil)
+		w := httptest.NewRecorder()
+
+		handler.HandleMetadata(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Errorf("Status = %v, want %v", w.Code, http.StatusOK)
+		}
+
+		contentType := w.Header().Get("Content-Type")
+		if contentType != "application/json" {
+			t.Errorf("Content-Type = %v, want application/json", contentType)
+		}
+
+		odataVersion := w.Header().Get("OData-Version")
+		if odataVersion != "4.0" {
+			t.Errorf("OData-Version = %v, want 4.0", odataVersion)
+		}
+
+		// Parse JSON response
+		var response map[string]interface{}
+		if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+			t.Fatalf("Failed to decode JSON response: %v", err)
+		}
+
+		// Validate JSON structure
+		if version, ok := response["$Version"].(string); !ok || version != "4.0" {
+			t.Errorf("Expected $Version to be 4.0, got %v", response["$Version"])
+		}
+
+		odataService, ok := response["ODataService"].(map[string]interface{})
+		if !ok {
+			t.Fatal("ODataService not found in response")
+		}
+
+		// Check for entity type
+		entityType, ok := odataService["TestEntity"].(map[string]interface{})
+		if !ok {
+			t.Fatal("TestEntity not found in metadata")
+		}
+
+		// Validate entity type structure
+		if kind, ok := entityType["$Kind"].(string); !ok || kind != "EntityType" {
+			t.Errorf("Expected $Kind to be EntityType, got %v", entityType["$Kind"])
+		}
+
+		// Check for key property
+		key, ok := entityType["$Key"].([]interface{})
+		if !ok || len(key) == 0 {
+			t.Error("$Key not found or empty")
+		}
+
+		// Check for properties
+		if _, ok := entityType["id"]; !ok {
+			t.Error("id property not found in entity type")
+		}
+		if _, ok := entityType["name"]; !ok {
+			t.Error("name property not found in entity type")
+		}
+
+		// Check for container
+		container, ok := odataService["Container"].(map[string]interface{})
+		if !ok {
+			t.Fatal("Container not found in metadata")
+		}
+
+		// Validate container structure
+		if kind, ok := container["$Kind"].(string); !ok || kind != "EntityContainer" {
+			t.Errorf("Expected $Kind to be EntityContainer, got %v", container["$Kind"])
+		}
+
+		// Check for entity set
+		if _, ok := container["TestEntities"]; !ok {
+			t.Error("TestEntities entity set not found in container")
+		}
+	})
+
+	t.Run("JSON format via Accept header", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/$metadata", nil)
+		req.Header.Set("Accept", "application/json")
+		w := httptest.NewRecorder()
+
+		handler.HandleMetadata(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Errorf("Status = %v, want %v", w.Code, http.StatusOK)
+		}
+
+		contentType := w.Header().Get("Content-Type")
+		if contentType != "application/json" {
+			t.Errorf("Content-Type = %v, want application/json", contentType)
+		}
+
+		// Parse JSON response
+		var response map[string]interface{}
+		if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+			t.Fatalf("Failed to decode JSON response: %v", err)
+		}
+
+		if _, ok := response["$Version"]; !ok {
+			t.Error("$Version not found in JSON response")
+		}
+	})
+
+	t.Run("XML format by default", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/$metadata", nil)
+		w := httptest.NewRecorder()
+
+		handler.HandleMetadata(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Errorf("Status = %v, want %v", w.Code, http.StatusOK)
+		}
+
+		contentType := w.Header().Get("Content-Type")
+		if contentType != "application/xml" {
+			t.Errorf("Content-Type = %v, want application/xml", contentType)
+		}
+
+		body := w.Body.String()
+		if !contains(body, "<?xml") {
+			t.Error("Response should contain XML declaration")
+		}
+	})
+}
+
 func TestServiceDocumentHandler(t *testing.T) {
 	entities := make(map[string]*metadata.EntityMetadata)
 
