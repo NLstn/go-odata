@@ -103,7 +103,8 @@ func TestEntityHandlerCollectionEmpty(t *testing.T) {
 func TestEntityHandlerCollectionMethodNotAllowed(t *testing.T) {
 	handler, _ := setupTestHandler(t)
 
-	methods := []string{http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodPatch}
+	// POST is now supported for collections, so only test PUT, DELETE, and PATCH
+	methods := []string{http.MethodPut, http.MethodDelete, http.MethodPatch}
 
 	for _, method := range methods {
 		t.Run(method, func(t *testing.T) {

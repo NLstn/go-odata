@@ -113,8 +113,13 @@ Once your service is running, the following endpoints will be available:
 
 - **Service Document**: `GET /` - Lists all available entity sets
 - **Metadata**: `GET /$metadata` - OData metadata document
-- **Entity Collection**: `GET /Products` - All products
-- **Individual Entity**: `GET /Products(1)` - Product with ID 1
+- **Entity Collection**: 
+  - `GET /Products` - All products
+  - `POST /Products` - Create a new product
+- **Individual Entity**: 
+  - `GET /Products(1)` - Product with ID 1
+  - `PATCH /Products(1)` - Update product with ID 1
+  - `DELETE /Products(1)` - Delete product with ID 1
 
 ## OData Query Options
 
@@ -256,6 +261,36 @@ This starts a server on `http://localhost:8080` with sample Product data.
   "Category": "Electronics"
 }
 ```
+
+### Create Entity (`POST /Products`)
+
+Request body:
+```json
+{
+  "Name": "Mouse",
+  "Description": "Wireless mouse",
+  "Price": 29.99,
+  "Category": "Accessories"
+}
+```
+
+Response (201 Created):
+```json
+{
+  "@odata.context": "http://localhost:8080/$metadata#Products/$entity",
+  "ID": 2,
+  "Name": "Mouse",
+  "Description": "Wireless mouse",
+  "Price": 29.99,
+  "Category": "Accessories"
+}
+```
+
+The response includes:
+- Status: `201 Created`
+- Header `Location`: URL of the created entity (e.g., `http://localhost:8080/Products(2)`)
+- Header `OData-Version`: `4.0`
+- Body: The created entity with all properties
 
 ## Requirements
 
