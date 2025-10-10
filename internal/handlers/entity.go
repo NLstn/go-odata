@@ -61,8 +61,12 @@ func (h *EntityHandler) HandleCollection(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Calculate next link if pagination is active
-	nextLink := h.calculateNextLink(queryOptions, sliceValue, r)
+	// Calculate next link if pagination is active and trim results if needed
+	nextLink, needsTrimming := h.calculateNextLink(queryOptions, sliceValue, r)
+	if needsTrimming && queryOptions.Top != nil {
+		// Trim the results to $top (we fetched $top + 1 to check for more pages)
+		sliceValue = h.trimResults(sliceValue, *queryOptions.Top)
+	}
 
 	// Get list of expanded properties
 	expandedProps := make([]string, len(queryOptions.Expand))
@@ -150,8 +154,16 @@ func (h *EntityHandler) fetchResults(queryOptions *query.QueryOptions) (interfac
 	sliceType := reflect.SliceOf(h.metadata.EntityType)
 	results := reflect.New(sliceType).Interface()
 
+	// If $top is specified, fetch $top + 1 records to check if there are more results
+	// This avoids an extra database query for pagination
+	modifiedOptions := *queryOptions
+	if queryOptions.Top != nil {
+		topPlusOne := *queryOptions.Top + 1
+		modifiedOptions.Top = &topPlusOne
+	}
+
 	// Apply query options to the database query
-	db := query.ApplyQueryOptions(h.db, queryOptions, h.metadata)
+	db := query.ApplyQueryOptions(h.db, &modifiedOptions, h.metadata)
 
 	// Execute the database query
 	if err := db.Find(results).Error; err != nil {
@@ -170,80 +182,54 @@ func (h *EntityHandler) fetchResults(queryOptions *query.QueryOptions) (interfac
 }
 
 // calculateNextLink calculates the next link URL for pagination
-func (h *EntityHandler) calculateNextLink(queryOptions *query.QueryOptions, sliceValue interface{}, r *http.Request) *string {
+// Returns the nextLink and a boolean indicating if results need trimming
+func (h *EntityHandler) calculateNextLink(queryOptions *query.QueryOptions, sliceValue interface{}, r *http.Request) (*string, bool) {
 	if queryOptions.Top == nil {
-		return nil
+		return nil, false
 	}
 
 	// Get the actual result count
 	resultCount := reflect.ValueOf(sliceValue).Len()
 
-	// If we got exactly $top results, check if there are more records
-	if resultCount != *queryOptions.Top {
-		return nil
-	}
+	// If we got more than $top results, it means there are more pages
+	// We fetched $top + 1 to determine this without an extra query
+	if resultCount > *queryOptions.Top {
+		// Calculate the new skip value for the next page
+		currentSkip := 0
+		if queryOptions.Skip != nil {
+			currentSkip = *queryOptions.Skip
+		}
+		nextSkip := currentSkip + *queryOptions.Top
 
-	// Calculate the new skip value for the next page
-	currentSkip := 0
-	if queryOptions.Skip != nil {
-		currentSkip = *queryOptions.Skip
-	}
-	nextSkip := currentSkip + *queryOptions.Top
-
-	// Check if there are more records
-	if h.hasMoreRecords(queryOptions, nextSkip) {
 		nextURL := response.BuildNextLink(r, nextSkip)
-		return &nextURL
+		return &nextURL, true // true indicates we need to trim the results
 	}
 
-	return nil
+	return nil, false
 }
 
-// hasMoreRecords checks if there are more records available
-func (h *EntityHandler) hasMoreRecords(queryOptions *query.QueryOptions, nextSkip int) bool {
-	checkSliceType := reflect.SliceOf(h.metadata.EntityType)
-	checkResults := reflect.New(checkSliceType).Interface()
-
-	checkDB := h.db
-
-	// Apply the same filters
-	if queryOptions.Filter != nil {
-		checkDB = query.ApplyFilterOnly(checkDB, queryOptions.Filter, h.metadata)
+// trimResults trims a slice to the specified length
+func (h *EntityHandler) trimResults(sliceValue interface{}, maxLen int) interface{} {
+	v := reflect.ValueOf(sliceValue)
+	if v.Kind() != reflect.Slice {
+		return sliceValue
 	}
 
-	// Apply the same order by
-	if len(queryOptions.OrderBy) > 0 {
-		for _, item := range queryOptions.OrderBy {
-			// Sanitize: Only allow real property names from metadata
-			valid := false
-			for _, prop := range h.metadata.Properties {
-				if prop.JsonName == item.Property || prop.Name == item.Property {
-					valid = true
-					break
-				}
-			}
-			if !valid {
-				// Skip invalid property
-				continue
-			}
-			fieldName := query.GetPropertyFieldName(item.Property, h.metadata)
-			direction := "ASC"
-			if item.Descending {
-				direction = "DESC"
-			}
-			// No user input concatenated directly to SQL, fieldName is safe
-			checkDB = checkDB.Order(fmt.Sprintf("%s %s", fieldName, direction))
+	if v.Len() <= maxLen {
+		return sliceValue
+	}
+
+	// Check if sliceValue is a slice of maps (from $select)
+	if v.Len() > 0 && v.Index(0).Kind() == reflect.Map {
+		// Handle slice of maps
+		mapSlice, ok := sliceValue.([]map[string]interface{})
+		if ok {
+			return mapSlice[:maxLen]
 		}
 	}
 
-	// Check if there's at least one more record at the next position
-	checkDB = checkDB.Offset(nextSkip).Limit(1)
-	if err := checkDB.Find(checkResults).Error; err != nil {
-		return false
-	}
-
-	checkSliceValue := reflect.ValueOf(checkResults).Elem()
-	return checkSliceValue.Len() > 0
+	// Handle regular slice
+	return v.Slice(0, maxLen).Interface()
 }
 
 // HandleEntity handles GET requests for individual entities
