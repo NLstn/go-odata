@@ -261,3 +261,93 @@ func TestStructuralPropertyRead_UsingFieldName(t *testing.T) {
 		t.Errorf("value = %v, want 'Laptop'", response["value"])
 	}
 }
+
+// Additional test types with navigation properties
+type TestProductWithNav struct {
+	ID         int               `json:"id" gorm:"primarykey" odata:"key"`
+	Name       string            `json:"name"`
+	CategoryID int               `json:"categoryId"`
+	Category   *TestCategoryNav  `json:"category" gorm:"foreignKey:CategoryID"`
+}
+
+type TestCategoryNav struct {
+	ID   int    `json:"id" gorm:"primarykey" odata:"key"`
+	Name string `json:"name"`
+}
+
+func setupStructuralPropWithNavTestService(t *testing.T) (*Service, *gorm.DB) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("Failed to connect to database: %v", err)
+	}
+
+	if err := db.AutoMigrate(&TestProductWithNav{}, &TestCategoryNav{}); err != nil {
+		t.Fatalf("Failed to migrate database: %v", err)
+	}
+
+	service := NewService(db)
+	if err := service.RegisterEntity(TestProductWithNav{}); err != nil {
+		t.Fatalf("Failed to register entity: %v", err)
+	}
+	if err := service.RegisterEntity(TestCategoryNav{}); err != nil {
+		t.Fatalf("Failed to register entity: %v", err)
+	}
+
+	return service, db
+}
+
+func TestStructuralPropertyRead_WithNavigationProperty(t *testing.T) {
+	service, db := setupStructuralPropWithNavTestService(t)
+
+	// Insert test data
+	category := TestCategoryNav{ID: 1, Name: "Electronics"}
+	db.Create(&category)
+	product := TestProductWithNav{ID: 1, Name: "Laptop", CategoryID: 1}
+	db.Create(&product)
+
+	// Test structural property (should return value wrapper)
+	req1 := httptest.NewRequest(http.MethodGet, "/TestProductWithNavs(1)/name", nil)
+	w1 := httptest.NewRecorder()
+	service.ServeHTTP(w1, req1)
+
+	if w1.Code != http.StatusOK {
+		t.Errorf("Status = %v, want %v for structural property. Body: %s", w1.Code, http.StatusOK, w1.Body.String())
+	}
+
+	var response1 map[string]interface{}
+	if err := json.NewDecoder(w1.Body).Decode(&response1); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	// Check structural property returns value wrapper
+	if response1["value"] != "Laptop" {
+		t.Errorf("value = %v, want 'Laptop'", response1["value"])
+	}
+
+	// Test navigation property (should return full entity, not value wrapper)
+	req2 := httptest.NewRequest(http.MethodGet, "/TestProductWithNavs(1)/Category", nil)
+	w2 := httptest.NewRecorder()
+	service.ServeHTTP(w2, req2)
+
+	if w2.Code != http.StatusOK {
+		t.Errorf("Status = %v, want %v for navigation property. Body: %s", w2.Code, http.StatusOK, w2.Body.String())
+	}
+
+	var response2 map[string]interface{}
+	if err := json.NewDecoder(w2.Body).Decode(&response2); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	// Check navigation property returns full entity (not value wrapper)
+	if _, hasValue := response2["value"]; hasValue {
+		// Navigation properties should not have a "value" wrapper, just the entity properties
+		if _, hasId := response2["id"]; !hasId {
+			t.Error("Navigation property response has 'value' wrapper but should return full entity")
+		}
+	}
+
+	// Navigation property should have the entity's properties
+	if response2["name"] != "Electronics" {
+		t.Errorf("Navigation property name = %v, want 'Electronics'", response2["name"])
+	}
+}
