@@ -1,8 +1,9 @@
-package odata
+package odata_test
 
 import (
 	"bytes"
 	"encoding/json"
+	odata "github.com/nlstn/go-odata"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -19,7 +20,7 @@ type PreferTestProduct struct {
 	Description string  `json:"description"`
 }
 
-func setupPreferTestService(t *testing.T) (*Service, *gorm.DB) {
+func setupPreferTestService(t *testing.T) (*odata.Service, *gorm.DB) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("Failed to connect to database: %v", err)
@@ -29,7 +30,7 @@ func setupPreferTestService(t *testing.T) (*Service, *gorm.DB) {
 		t.Fatalf("Failed to migrate database: %v", err)
 	}
 
-	service := NewService(db)
+	service := odata.NewService(db)
 	if err := service.RegisterEntity(PreferTestProduct{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
 	}

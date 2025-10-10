@@ -1,7 +1,8 @@
-package odata
+package odata_test
 
 import (
 	"encoding/json"
+	odata "github.com/nlstn/go-odata"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -24,7 +25,7 @@ type Employee struct {
 	Department   *Department `json:"Department,omitempty" gorm:"foreignKey:DepartmentID"`
 }
 
-func setupIntegrationTest(t *testing.T) *Service {
+func setupIntegrationTest(t *testing.T) *odata.Service {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("Failed to connect to database: %v", err)
@@ -52,7 +53,7 @@ func setupIntegrationTest(t *testing.T) *Service {
 	}
 	db.Create(&employees)
 
-	service := NewService(db)
+	service := odata.NewService(db)
 	service.RegisterEntity(&Department{})
 	service.RegisterEntity(&Employee{})
 

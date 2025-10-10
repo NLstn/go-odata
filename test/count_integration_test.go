@@ -1,6 +1,7 @@
-package odata
+package odata_test
 
 import (
+	odata "github.com/nlstn/go-odata"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -45,7 +46,7 @@ func TestIntegrationCountEndpoint(t *testing.T) {
 	}
 
 	// Initialize OData service
-	service := NewService(db)
+	service := odata.NewService(db)
 	service.RegisterEntity(&CountTestProduct{})
 
 	tests := []struct {
@@ -154,7 +155,7 @@ func TestIntegrationCountEndpointVerifyCollectionStillWorks(t *testing.T) {
 	}
 
 	// Initialize OData service
-	service := NewService(db)
+	service := odata.NewService(db)
 	service.RegisterEntity(&CountTestProduct{})
 
 	// Test that regular collection endpoint still works

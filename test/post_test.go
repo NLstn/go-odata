@@ -1,8 +1,9 @@
-package odata
+package odata_test
 
 import (
 	"bytes"
 	"encoding/json"
+	odata "github.com/nlstn/go-odata"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -35,7 +36,7 @@ type PostTestProductNoAutoIncrement struct {
 	Price float64 `json:"price"`
 }
 
-func setupPostTestService(t *testing.T) (*Service, *gorm.DB) {
+func setupPostTestService(t *testing.T) (*odata.Service, *gorm.DB) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("Failed to connect to database: %v", err)
@@ -45,7 +46,7 @@ func setupPostTestService(t *testing.T) (*Service, *gorm.DB) {
 		t.Fatalf("Failed to migrate database: %v", err)
 	}
 
-	service := NewService(db)
+	service := odata.NewService(db)
 	if err := service.RegisterEntity(PostTestProduct{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
 	}
@@ -53,7 +54,7 @@ func setupPostTestService(t *testing.T) (*Service, *gorm.DB) {
 	return service, db
 }
 
-func setupPostCompositeKeyTestService(t *testing.T) (*Service, *gorm.DB) {
+func setupPostCompositeKeyTestService(t *testing.T) (*odata.Service, *gorm.DB) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("Failed to connect to database: %v", err)
@@ -63,7 +64,7 @@ func setupPostCompositeKeyTestService(t *testing.T) (*Service, *gorm.DB) {
 		t.Fatalf("Failed to migrate database: %v", err)
 	}
 
-	service := NewService(db)
+	service := odata.NewService(db)
 	if err := service.RegisterEntity(PostTestProductCompositeKey{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
 	}
@@ -71,7 +72,7 @@ func setupPostCompositeKeyTestService(t *testing.T) (*Service, *gorm.DB) {
 	return service, db
 }
 
-func setupPostNoAutoIncrementTestService(t *testing.T) (*Service, *gorm.DB) {
+func setupPostNoAutoIncrementTestService(t *testing.T) (*odata.Service, *gorm.DB) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("Failed to connect to database: %v", err)
@@ -81,7 +82,7 @@ func setupPostNoAutoIncrementTestService(t *testing.T) (*Service, *gorm.DB) {
 		t.Fatalf("Failed to migrate database: %v", err)
 	}
 
-	service := NewService(db)
+	service := odata.NewService(db)
 	if err := service.RegisterEntity(PostTestProductNoAutoIncrement{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
 	}
