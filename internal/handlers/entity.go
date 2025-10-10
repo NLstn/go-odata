@@ -357,7 +357,7 @@ func (h *EntityHandler) trimResults(sliceValue interface{}, maxLen int) interfac
 	return v.Slice(0, maxLen).Interface()
 }
 
-// HandleEntity handles GET, DELETE, and PATCH requests for individual entities
+// HandleEntity handles GET, DELETE, PATCH, and PUT requests for individual entities
 func (h *EntityHandler) HandleEntity(w http.ResponseWriter, r *http.Request, entityKey string) {
 	switch r.Method {
 	case http.MethodGet:
@@ -366,6 +366,8 @@ func (h *EntityHandler) HandleEntity(w http.ResponseWriter, r *http.Request, ent
 		h.handleDeleteEntity(w, r, entityKey)
 	case http.MethodPatch:
 		h.handlePatchEntity(w, r, entityKey)
+	case http.MethodPut:
+		h.handlePutEntity(w, r, entityKey)
 	default:
 		if err := response.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
 			fmt.Sprintf("Method %s is not supported for individual entities", r.Method)); err != nil {
@@ -518,6 +520,83 @@ func (h *EntityHandler) handlePatchEntity(w http.ResponseWriter, r *http.Request
 	// Return 204 No Content according to OData v4 spec
 	w.Header().Set("OData-Version", "4.0")
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// handlePutEntity handles PUT requests for individual entities
+// PUT performs a complete replacement according to OData v4 spec
+func (h *EntityHandler) handlePutEntity(w http.ResponseWriter, r *http.Request, entityKey string) {
+	// Create an instance to hold the entity to be replaced
+	entity := reflect.New(h.metadata.EntityType).Interface()
+
+	// Build the query condition using the key properties
+	db, err := h.buildKeyQuery(entityKey)
+	if err != nil {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid key", err.Error()); writeErr != nil {
+			fmt.Printf("Error writing error response: %v\n", writeErr)
+		}
+		return
+	}
+
+	// First, check if the entity exists
+	if err := db.First(entity).Error; err != nil {
+		h.handleFetchError(w, err, entityKey)
+		return
+	}
+
+	// Create a new instance for the replacement data
+	replacementEntity := reflect.New(h.metadata.EntityType).Interface()
+
+	// Parse the request body into the replacement entity
+	if err := json.NewDecoder(r.Body).Decode(replacementEntity); err != nil {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid request body",
+			fmt.Sprintf("Failed to parse JSON: %v", err.Error())); writeErr != nil {
+			fmt.Printf("Error writing error response: %v\n", writeErr)
+		}
+		return
+	}
+
+	// Preserve the key properties from the original entity
+	if err := h.preserveKeyProperties(entity, replacementEntity); err != nil {
+		if writeErr := response.WriteError(w, http.StatusInternalServerError, "Internal error", err.Error()); writeErr != nil {
+			fmt.Printf("Error writing error response: %v\n", writeErr)
+		}
+		return
+	}
+
+	// Perform complete replacement using Save (updates all fields)
+	if err := h.db.Model(entity).Select("*").Updates(replacementEntity).Error; err != nil {
+		if writeErr := response.WriteError(w, http.StatusInternalServerError, "Database error", err.Error()); writeErr != nil {
+			fmt.Printf("Error writing error response: %v\n", writeErr)
+		}
+		return
+	}
+
+	// Return 204 No Content according to OData v4 spec
+	w.Header().Set("OData-Version", "4.0")
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// preserveKeyProperties copies key property values from source to destination
+func (h *EntityHandler) preserveKeyProperties(source, destination interface{}) error {
+	sourceVal := reflect.ValueOf(source).Elem()
+	destVal := reflect.ValueOf(destination).Elem()
+
+	for _, keyProp := range h.metadata.KeyProperties {
+		sourceField := sourceVal.FieldByName(keyProp.Name)
+		destField := destVal.FieldByName(keyProp.Name)
+
+		if !sourceField.IsValid() || !destField.IsValid() {
+			return fmt.Errorf("key property '%s' not found", keyProp.Name)
+		}
+
+		if !destField.CanSet() {
+			return fmt.Errorf("cannot set key property '%s'", keyProp.Name)
+		}
+
+		destField.Set(sourceField)
+	}
+
+	return nil
 }
 
 // parsePatchRequestBody parses the JSON request body for PATCH operations

@@ -215,7 +215,7 @@ func TestServeHTTPMethodNotAllowed(t *testing.T) {
 		{"POST to service document", http.MethodPost, "/"},
 		{"POST to metadata", http.MethodPost, "/$metadata"},
 		{"DELETE to collection", http.MethodDelete, "/TestProducts"},
-		{"PUT to entity", http.MethodPut, "/TestProducts(1)"},
+		// PUT to entity is now supported, so removed from this test
 	}
 
 	for _, tt := range tests {
