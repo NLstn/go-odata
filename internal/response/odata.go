@@ -340,19 +340,59 @@ func getJsonFieldName(field reflect.StructField) string {
 	return field.Name
 }
 
-// WriteError writes an OData error response
+// ODataErrorDetail represents an additional error detail in an OData error response
+type ODataErrorDetail struct {
+	Code    string `json:"code,omitempty"`
+	Target  string `json:"target,omitempty"`
+	Message string `json:"message"`
+}
+
+// ODataInnerError represents nested error information in an OData error response
+type ODataInnerError struct {
+	Message      string           `json:"message,omitempty"`
+	TypeName     string           `json:"type,omitempty"`
+	StackTrace   string           `json:"stacktrace,omitempty"`
+	InnerError   *ODataInnerError `json:"innererror,omitempty"`
+}
+
+// ODataError represents the OData v4 compliant error structure
+type ODataError struct {
+	Code       string              `json:"code"`
+	Message    string              `json:"message"`
+	Target     string              `json:"target,omitempty"`
+	Details    []ODataErrorDetail  `json:"details,omitempty"`
+	InnerError *ODataInnerError    `json:"innererror,omitempty"`
+}
+
+// WriteError writes an OData v4 compliant error response
+// For backwards compatibility, message and details params are used to create a basic error
 func WriteError(w http.ResponseWriter, code int, message string, details string) error {
+	odataErr := &ODataError{
+		Code:    fmt.Sprintf("%d", code),
+		Message: message,
+	}
+
+	// If details are provided, add them as a detail entry
+	if details != "" {
+		odataErr.Details = []ODataErrorDetail{
+			{
+				Message: details,
+			},
+		}
+	}
+
+	return WriteODataError(w, code, odataErr)
+}
+
+// WriteODataError writes an OData v4 compliant error response with full error structure
+func WriteODataError(w http.ResponseWriter, httpStatusCode int, odataError *ODataError) error {
 	errorResponse := map[string]interface{}{
-		"error": map[string]interface{}{
-			"code":    code,
-			"message": message,
-			"details": details,
-		},
+		"error": odataError,
 	}
 
 	w.Header().Set("Content-Type", "application/json;odata.metadata=minimal")
 	w.Header().Set("OData-Version", "4.0")
-	w.WriteHeader(code)
+	w.WriteHeader(httpStatusCode)
 
 	encoder := json.NewEncoder(w)
 	encoder.SetIndent("", "  ")
