@@ -28,6 +28,14 @@ type PropertyMetadata struct {
 	IsNavigationProp  bool
 	NavigationTarget  string // Entity type name for navigation properties
 	NavigationIsArray bool   // True for collection navigation properties
+	// Facets
+	MaxLength    int    // Maximum length for string properties
+	Precision    int    // Precision for decimal/numeric properties
+	Scale        int    // Scale for decimal properties
+	DefaultValue string // Default value for the property
+	Nullable     *bool  // Explicit nullable override (nil means use default behavior)
+	// Referential constraints for navigation properties
+	ReferentialConstraints map[string]string // Maps dependent property to principal property
 }
 
 // AnalyzeEntity extracts metadata from a Go struct for OData usage
@@ -123,19 +131,78 @@ func analyzeNavigationProperty(property *PropertyMetadata, field reflect.StructF
 			property.IsNavigationProp = true
 			property.NavigationTarget = fieldType.Name()
 			property.NavigationIsArray = isSlice
+			
+			// Extract referential constraints from GORM tags
+			property.ReferentialConstraints = extractReferentialConstraints(gormTag)
 		}
 	}
+}
+
+// extractReferentialConstraints extracts referential constraints from GORM tags
+func extractReferentialConstraints(gormTag string) map[string]string {
+	constraints := make(map[string]string)
+	
+	// Parse foreignKey and references from gorm tag
+	// Format: "foreignKey:UserID;references:ID"
+	var foreignKey, references string
+	
+	parts := strings.Split(gormTag, ";")
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if strings.HasPrefix(part, "foreignKey:") {
+			foreignKey = strings.TrimPrefix(part, "foreignKey:")
+		} else if strings.HasPrefix(part, "references:") {
+			references = strings.TrimPrefix(part, "references:")
+		}
+	}
+	
+	if foreignKey != "" && references != "" {
+		constraints[foreignKey] = references
+	}
+	
+	return constraints
 }
 
 // analyzeODataTags processes OData-specific tags on a field
 func analyzeODataTags(property *PropertyMetadata, field reflect.StructField, metadata *EntityMetadata) {
 	if odataTag := field.Tag.Get("odata"); odataTag != "" {
-		if strings.Contains(odataTag, "key") {
-			property.IsKey = true
-			metadata.KeyProperties = append(metadata.KeyProperties, *property)
-		}
-		if strings.Contains(odataTag, "required") {
-			property.IsRequired = true
+		// Parse tag as comma-separated key-value pairs
+		parts := strings.Split(odataTag, ",")
+		for _, part := range parts {
+			part = strings.TrimSpace(part)
+			
+			if part == "key" {
+				property.IsKey = true
+				metadata.KeyProperties = append(metadata.KeyProperties, *property)
+			} else if part == "required" {
+				property.IsRequired = true
+			} else if strings.HasPrefix(part, "maxlength=") {
+				if val := strings.TrimPrefix(part, "maxlength="); val != "" {
+					if parsed, err := parseInt(val); err == nil {
+						property.MaxLength = parsed
+					}
+				}
+			} else if strings.HasPrefix(part, "precision=") {
+				if val := strings.TrimPrefix(part, "precision="); val != "" {
+					if parsed, err := parseInt(val); err == nil {
+						property.Precision = parsed
+					}
+				}
+			} else if strings.HasPrefix(part, "scale=") {
+				if val := strings.TrimPrefix(part, "scale="); val != "" {
+					if parsed, err := parseInt(val); err == nil {
+						property.Scale = parsed
+					}
+				}
+			} else if strings.HasPrefix(part, "default=") {
+				property.DefaultValue = strings.TrimPrefix(part, "default=")
+			} else if part == "nullable" {
+				nullable := true
+				property.Nullable = &nullable
+			} else if part == "nullable=false" {
+				nullable := false
+				property.Nullable = &nullable
+			}
 		}
 	}
 
@@ -191,4 +258,11 @@ func isVowel(r rune) bool {
 	default:
 		return false
 	}
+}
+
+// parseInt parses a string to an integer
+func parseInt(s string) (int, error) {
+	var result int
+	_, err := fmt.Sscanf(s, "%d", &result)
+	return result, err
 }
