@@ -16,6 +16,9 @@ A Go library for building services that expose OData APIs with automatic handlin
 - ✅ GORM database integration
 - ✅ Entity collection retrieval (GET /EntitySet)
 - ✅ Individual entity retrieval (GET /EntitySet(key))
+- ✅ Entity creation (POST /EntitySet)
+- ✅ Entity update (PUT and PATCH /EntitySet(key))
+- ✅ Entity deletion (DELETE /EntitySet(key))
 - ✅ OData-compliant JSON responses with @odata.context
 - ✅ Service document generation
 - ✅ Basic metadata document
@@ -118,7 +121,8 @@ Once your service is running, the following endpoints will be available:
   - `POST /Products` - Create a new product
 - **Individual Entity**: 
   - `GET /Products(1)` - Product with ID 1
-  - `PATCH /Products(1)` - Update product with ID 1
+  - `PUT /Products(1)` - Replace product with ID 1 (complete replacement)
+  - `PATCH /Products(1)` - Update product with ID 1 (partial update)
   - `DELETE /Products(1)` - Delete product with ID 1
 
 ## OData Query Options
@@ -291,6 +295,42 @@ The response includes:
 - Header `Location`: URL of the created entity (e.g., `http://localhost:8080/Products(2)`)
 - Header `OData-Version`: `4.0`
 - Body: The created entity with all properties
+
+### Update Entity (`PUT /Products(1)` vs `PATCH /Products(1)`)
+
+The library supports both PUT and PATCH for updating entities, following OData v4 specifications:
+
+**PUT - Complete Replacement:**
+- Replaces the entire entity
+- All properties not included in the request are set to their default values
+- Returns `204 No Content` on success
+
+Request body (PUT):
+```json
+{
+  "Name": "Gaming Laptop",
+  "Price": 1499.99
+}
+```
+Result: Name and Price are updated, but Description and Category are set to empty strings (defaults).
+
+**PATCH - Partial Update:**
+- Updates only the properties included in the request
+- Other properties remain unchanged
+- Returns `204 No Content` on success
+
+Request body (PATCH):
+```json
+{
+  "Price": 1499.99
+}
+```
+Result: Only Price is updated, all other properties remain unchanged.
+
+Both methods:
+- Require the entity to exist (404 if not found)
+- Cannot modify key properties
+- Return proper OData v4 headers
 
 ## Requirements
 
