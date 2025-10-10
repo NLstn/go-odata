@@ -144,6 +144,16 @@ func TestIntegrationNavigationPath(t *testing.T) {
 		t.Fatalf("Failed to parse response: %v", err)
 	}
 
+	// Verify the @odata.context follows OData V4 spec for navigation paths
+	context, ok := response["@odata.context"].(string)
+	if !ok {
+		t.Fatal("Expected @odata.context in response")
+	}
+	expectedContext := "http://example.com/$metadata#Departments(1)/Employees"
+	if context != expectedContext {
+		t.Errorf("Expected @odata.context to be '%s', got '%s'", expectedContext, context)
+	}
+
 	values, ok := response["value"].([]interface{})
 	if !ok {
 		t.Fatal("Expected value array in response")
@@ -179,6 +189,43 @@ func TestIntegrationExpandWithNestedTop(t *testing.T) {
 
 	if len(employees) != 2 {
 		t.Errorf("Expected 2 employees due to $top=2, got %d", len(employees))
+	}
+}
+
+// TestIntegrationNavigationSingleEntity tests accessing single entity via navigation property
+func TestIntegrationNavigationSingleEntity(t *testing.T) {
+	service := setupIntegrationTest(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/Employees(1)/Department", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+
+	// Verify the @odata.context follows OData V4 spec for single entity navigation
+	context, ok := response["@odata.context"].(string)
+	if !ok {
+		t.Fatal("Expected @odata.context in response")
+	}
+	expectedContext := "http://example.com/$metadata#Employees(1)/Department/$entity"
+	if context != expectedContext {
+		t.Errorf("Expected @odata.context to be '%s', got '%s'", expectedContext, context)
+	}
+
+	// Verify the department data
+	if response["ID"].(float64) != 1 {
+		t.Errorf("Expected Department ID to be 1, got %v", response["ID"])
+	}
+	if response["Name"].(string) != "Engineering" {
+		t.Errorf("Expected Department Name to be 'Engineering', got %s", response["Name"])
 	}
 }
 
