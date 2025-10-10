@@ -33,7 +33,7 @@
 		}
 	},
 
-	"postCreateCommand": "go mod download && go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest",
+	"postCreateCommand": "go mod download && go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest && go install github.com/air-verse/air@latest",
 
 	"remoteUser": "vscode",
 	
