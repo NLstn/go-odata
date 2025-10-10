@@ -50,7 +50,18 @@ func (p *ASTParser) expect(tokenType TokenType) error {
 
 // Parse parses the tokens into an AST
 func (p *ASTParser) Parse() (ASTNode, error) {
-	return p.parseOr()
+	node, err := p.parseOr()
+	if err != nil {
+		return nil, err
+	}
+
+	// Verify all tokens were consumed (except EOF)
+	if p.currentToken().Type != TokenEOF {
+		return nil, fmt.Errorf("unexpected token after expression: %v at position %d",
+			p.currentToken().Type, p.currentToken().Pos)
+	}
+
+	return node, nil
 }
 
 // parseOr handles OR expressions (lowest precedence)
