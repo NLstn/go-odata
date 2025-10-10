@@ -350,6 +350,173 @@ Both methods:
 - Cannot modify key properties
 - Return proper OData v4 headers
 
+## Error Handling
+
+The library implements OData v4 compliant error responses, providing structured error information that helps clients understand and handle errors effectively.
+
+### Error Response Structure
+
+All errors follow the OData v4 specification with the following structure:
+
+```json
+{
+  "error": {
+    "code": "404",
+    "message": "Entity not found",
+    "target": "Products(999)",
+    "details": [
+      {
+        "code": "EntityNotFound",
+        "target": "Products(999)",
+        "message": "The entity with key '999' does not exist"
+      }
+    ]
+  }
+}
+```
+
+### Error Fields
+
+- **code**: A string error code that can be used programmatically (typically the HTTP status code)
+- **message**: A human-readable error message describing the error
+- **target** (optional): The target of the error (e.g., the entity set and key, or property name)
+- **details** (optional): An array of detailed error information
+- **innererror** (optional): Nested error information for debugging (typically used in development)
+
+### Single Error Example
+
+Simple validation error:
+
+```json
+{
+  "error": {
+    "code": "400",
+    "message": "Invalid query options",
+    "details": [
+      {
+        "message": "Unknown query option: $invalidOption"
+      }
+    ]
+  }
+}
+```
+
+### Multiple Validation Errors
+
+When multiple validation errors occur:
+
+```json
+{
+  "error": {
+    "code": "ValidationError",
+    "message": "Multiple validation errors occurred",
+    "details": [
+      {
+        "code": "RequiredField",
+        "target": "Name",
+        "message": "Name is required"
+      },
+      {
+        "code": "InvalidFormat",
+        "target": "Email",
+        "message": "Email format is invalid"
+      },
+      {
+        "code": "OutOfRange",
+        "target": "Price",
+        "message": "Price must be greater than 0"
+      }
+    ]
+  }
+}
+```
+
+### Nested Error with Debug Information
+
+For internal errors with additional context (typically in development environments):
+
+```json
+{
+  "error": {
+    "code": "500",
+    "message": "An internal error occurred",
+    "innererror": {
+      "message": "Database connection failed",
+      "type": "System.Data.SqlClient.SqlException",
+      "innererror": {
+        "message": "Network timeout",
+        "stacktrace": "at Database.Connect()\n   at QueryExecutor.Execute()"
+      }
+    }
+  }
+}
+```
+
+### Common Error Scenarios
+
+#### Entity Not Found (404)
+```bash
+GET /Products(999)
+```
+Response:
+```json
+{
+  "error": {
+    "code": "404",
+    "message": "Entity not found",
+    "target": "Products(999)",
+    "details": [
+      {
+        "target": "Products(999)",
+        "message": "The entity with key '999' does not exist"
+      }
+    ]
+  }
+}
+```
+
+#### Invalid Request (400)
+```bash
+GET /Products?$filter=invalid syntax
+```
+Response:
+```json
+{
+  "error": {
+    "code": "400",
+    "message": "Invalid query options",
+    "details": [
+      {
+        "message": "Failed to parse filter expression"
+      }
+    ]
+  }
+}
+```
+
+#### Method Not Allowed (405)
+```bash
+DELETE /
+```
+Response:
+```json
+{
+  "error": {
+    "code": "405",
+    "message": "Method not allowed",
+    "details": [
+      {
+        "message": "Method DELETE is not supported for entity collections"
+      }
+    ]
+  }
+}
+```
+
+All error responses include the appropriate HTTP status code and OData v4 headers:
+- `Content-Type: application/json;odata.metadata=minimal`
+- `OData-Version: 4.0`
+
 ## Requirements
 
 - Go 1.21 or later
