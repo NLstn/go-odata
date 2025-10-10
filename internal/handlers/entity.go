@@ -246,15 +246,23 @@ func (h *EntityHandler) hasMoreRecords(queryOptions *query.QueryOptions, nextSki
 	return checkSliceValue.Len() > 0
 }
 
-// HandleEntity handles GET requests for individual entities
+// HandleEntity handles GET and DELETE requests for individual entities
 func (h *EntityHandler) HandleEntity(w http.ResponseWriter, r *http.Request, entityKey string) {
-	if r.Method != http.MethodGet {
+	switch r.Method {
+	case http.MethodGet:
+		h.handleGetEntity(w, r, entityKey)
+	case http.MethodDelete:
+		h.handleDeleteEntity(w, r, entityKey)
+	default:
 		if err := response.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
 			fmt.Sprintf("Method %s is not supported for individual entities", r.Method)); err != nil {
 			fmt.Printf("Error writing error response: %v\n", err)
 		}
-		return
 	}
+}
+
+// handleGetEntity handles GET requests for individual entities
+func (h *EntityHandler) handleGetEntity(w http.ResponseWriter, r *http.Request, entityKey string) {
 
 	// Parse query options for $expand
 	queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata)
@@ -310,6 +318,49 @@ func (h *EntityHandler) HandleEntity(w http.ResponseWriter, r *http.Request, ent
 	if err := json.NewEncoder(w).Encode(odataResponse); err != nil {
 		fmt.Printf("Error writing entity response: %v\n", err)
 	}
+}
+
+// handleDeleteEntity handles DELETE requests for individual entities
+func (h *EntityHandler) handleDeleteEntity(w http.ResponseWriter, r *http.Request, entityKey string) {
+	_ = r // Reserved for future use (e.g., conditional deletes with If-Match header)
+	// Create an instance to hold the entity to be deleted
+	entity := reflect.New(h.metadata.EntityType).Interface()
+
+	// Build the query condition using the key properties
+	db, err := h.buildKeyQuery(entityKey)
+	if err != nil {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid key", err.Error()); writeErr != nil {
+			fmt.Printf("Error writing error response: %v\n", writeErr)
+		}
+		return
+	}
+
+	// First, check if the entity exists
+	if err := db.First(entity).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			if writeErr := response.WriteError(w, http.StatusNotFound, "Entity not found",
+				fmt.Sprintf("Entity with key '%s' not found", entityKey)); writeErr != nil {
+				fmt.Printf("Error writing error response: %v\n", writeErr)
+			}
+		} else {
+			if writeErr := response.WriteError(w, http.StatusInternalServerError, "Database error", err.Error()); writeErr != nil {
+				fmt.Printf("Error writing error response: %v\n", writeErr)
+			}
+		}
+		return
+	}
+
+	// Delete the entity
+	if err := h.db.Delete(entity).Error; err != nil {
+		if writeErr := response.WriteError(w, http.StatusInternalServerError, "Database error", err.Error()); writeErr != nil {
+			fmt.Printf("Error writing error response: %v\n", writeErr)
+		}
+		return
+	}
+
+	// Return 204 No Content according to OData v4 spec
+	w.Header().Set("OData-Version", "4.0")
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // HandleNavigationProperty handles GET requests for navigation properties (e.g., Products(1)/Descriptions)
