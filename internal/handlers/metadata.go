@@ -244,84 +244,130 @@ func (h *MetadataHandler) handleMetadataJSON(w http.ResponseWriter) {
 
 	// Add entity types
 	for _, entityMeta := range h.entities {
-		entityType := make(map[string]interface{})
-		entityType["$Kind"] = "EntityType"
-
-		// Add key(s) - supports both single and composite keys
-		keyNames := make([]string, 0, len(entityMeta.KeyProperties))
-		for _, keyProp := range entityMeta.KeyProperties {
-			keyNames = append(keyNames, keyProp.JsonName)
-		}
-		entityType["$Key"] = keyNames
-
-		// Add regular properties
-		for _, prop := range entityMeta.Properties {
-			if prop.IsNavigationProp {
-				continue // Handle navigation properties separately
-			}
-
-			propDef := make(map[string]interface{})
-			propDef["$Type"] = getEdmType(prop.Type)
-
-			// Set nullable
-			if prop.Nullable != nil {
-				propDef["$Nullable"] = *prop.Nullable
-			} else if !prop.IsRequired && !prop.IsKey {
-				propDef["$Nullable"] = true
-			}
-
-			// Add facets
-			if prop.MaxLength > 0 {
-				propDef["$MaxLength"] = prop.MaxLength
-			}
-			if prop.Precision > 0 {
-				propDef["$Precision"] = prop.Precision
-			}
-			if prop.Scale > 0 {
-				propDef["$Scale"] = prop.Scale
-			}
-			if prop.DefaultValue != "" {
-				propDef["$DefaultValue"] = prop.DefaultValue
-			}
-
-			entityType[prop.JsonName] = propDef
-		}
-
-		// Add navigation properties
-		for _, prop := range entityMeta.Properties {
-			if !prop.IsNavigationProp {
-				continue
-			}
-
-			navProp := make(map[string]interface{})
-			navProp["$Kind"] = "NavigationProperty"
-
-			if prop.NavigationIsArray {
-				navProp["$Collection"] = true
-				navProp["$Type"] = fmt.Sprintf("ODataService.%s", prop.NavigationTarget)
-			} else {
-				navProp["$Type"] = fmt.Sprintf("ODataService.%s", prop.NavigationTarget)
-			}
-
-			// Add referential constraints if present
-			if len(prop.ReferentialConstraints) > 0 {
-				constraints := make([]map[string]string, 0, len(prop.ReferentialConstraints))
-				for dependent, principal := range prop.ReferentialConstraints {
-					constraints = append(constraints, map[string]string{
-						"Property":           dependent,
-						"ReferencedProperty": principal,
-					})
-				}
-				navProp["$ReferentialConstraint"] = constraints
-			}
-
-			entityType[prop.JsonName] = navProp
-		}
-
+		entityType := h.buildJSONEntityType(entityMeta)
 		odataService[entityMeta.EntityName] = entityType
 	}
 
 	// Add entity container
+	container := h.buildJSONEntityContainer()
+	odataService["Container"] = container
+
+	// Encode and write JSON
+	encoder := json.NewEncoder(w)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(csdl); err != nil {
+		fmt.Printf("Error writing JSON metadata response: %v\n", err)
+	}
+}
+
+// buildJSONEntityType builds a JSON entity type definition
+func (h *MetadataHandler) buildJSONEntityType(entityMeta *metadata.EntityMetadata) map[string]interface{} {
+	entityType := make(map[string]interface{})
+	entityType["$Kind"] = "EntityType"
+
+	// Add key(s) - supports both single and composite keys
+	keyNames := make([]string, 0, len(entityMeta.KeyProperties))
+	for _, keyProp := range entityMeta.KeyProperties {
+		keyNames = append(keyNames, keyProp.JsonName)
+	}
+	entityType["$Key"] = keyNames
+
+	// Add regular properties
+	h.addJSONRegularProperties(entityType, entityMeta)
+
+	// Add navigation properties
+	h.addJSONNavigationProperties(entityType, entityMeta)
+
+	return entityType
+}
+
+// addJSONRegularProperties adds regular properties to a JSON entity type
+func (h *MetadataHandler) addJSONRegularProperties(entityType map[string]interface{}, entityMeta *metadata.EntityMetadata) {
+	for _, prop := range entityMeta.Properties {
+		if prop.IsNavigationProp {
+			continue // Handle navigation properties separately
+		}
+
+		propDef := h.buildJSONPropertyDefinition(&prop)
+		entityType[prop.JsonName] = propDef
+	}
+}
+
+// buildJSONPropertyDefinition builds a JSON property definition
+func (h *MetadataHandler) buildJSONPropertyDefinition(prop *metadata.PropertyMetadata) map[string]interface{} {
+	propDef := make(map[string]interface{})
+	propDef["$Type"] = getEdmType(prop.Type)
+
+	// Set nullable
+	if prop.Nullable != nil {
+		propDef["$Nullable"] = *prop.Nullable
+	} else if !prop.IsRequired && !prop.IsKey {
+		propDef["$Nullable"] = true
+	}
+
+	// Add facets
+	h.addJSONPropertyFacets(propDef, prop)
+
+	return propDef
+}
+
+// addJSONPropertyFacets adds facets to a JSON property definition
+func (h *MetadataHandler) addJSONPropertyFacets(propDef map[string]interface{}, prop *metadata.PropertyMetadata) {
+	if prop.MaxLength > 0 {
+		propDef["$MaxLength"] = prop.MaxLength
+	}
+	if prop.Precision > 0 {
+		propDef["$Precision"] = prop.Precision
+	}
+	if prop.Scale > 0 {
+		propDef["$Scale"] = prop.Scale
+	}
+	if prop.DefaultValue != "" {
+		propDef["$DefaultValue"] = prop.DefaultValue
+	}
+}
+
+// addJSONNavigationProperties adds navigation properties to a JSON entity type
+func (h *MetadataHandler) addJSONNavigationProperties(entityType map[string]interface{}, entityMeta *metadata.EntityMetadata) {
+	for _, prop := range entityMeta.Properties {
+		if !prop.IsNavigationProp {
+			continue
+		}
+
+		navProp := h.buildJSONNavigationProperty(&prop)
+		entityType[prop.JsonName] = navProp
+	}
+}
+
+// buildJSONNavigationProperty builds a JSON navigation property definition
+func (h *MetadataHandler) buildJSONNavigationProperty(prop *metadata.PropertyMetadata) map[string]interface{} {
+	navProp := make(map[string]interface{})
+	navProp["$Kind"] = "NavigationProperty"
+
+	if prop.NavigationIsArray {
+		navProp["$Collection"] = true
+		navProp["$Type"] = fmt.Sprintf("ODataService.%s", prop.NavigationTarget)
+	} else {
+		navProp["$Type"] = fmt.Sprintf("ODataService.%s", prop.NavigationTarget)
+	}
+
+	// Add referential constraints if present
+	if len(prop.ReferentialConstraints) > 0 {
+		constraints := make([]map[string]string, 0, len(prop.ReferentialConstraints))
+		for dependent, principal := range prop.ReferentialConstraints {
+			constraints = append(constraints, map[string]string{
+				"Property":           dependent,
+				"ReferencedProperty": principal,
+			})
+		}
+		navProp["$ReferentialConstraint"] = constraints
+	}
+
+	return navProp
+}
+
+// buildJSONEntityContainer builds the JSON entity container
+func (h *MetadataHandler) buildJSONEntityContainer() map[string]interface{} {
 	container := map[string]interface{}{
 		"$Kind": "EntityContainer",
 	}
@@ -333,14 +379,7 @@ func (h *MetadataHandler) handleMetadataJSON(w http.ResponseWriter) {
 		}
 
 		// Add navigation property bindings
-		navigationBindings := make(map[string]string)
-		for _, prop := range entityMeta.Properties {
-			if prop.IsNavigationProp {
-				targetEntitySet := pluralize(prop.NavigationTarget)
-				navigationBindings[prop.JsonName] = targetEntitySet
-			}
-		}
-
+		navigationBindings := h.buildNavigationBindings(entityMeta)
 		if len(navigationBindings) > 0 {
 			entitySet["$NavigationPropertyBinding"] = navigationBindings
 		}
@@ -348,14 +387,19 @@ func (h *MetadataHandler) handleMetadataJSON(w http.ResponseWriter) {
 		container[entitySetName] = entitySet
 	}
 
-	odataService["Container"] = container
+	return container
+}
 
-	// Encode and write JSON
-	encoder := json.NewEncoder(w)
-	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(csdl); err != nil {
-		fmt.Printf("Error writing JSON metadata response: %v\n", err)
+// buildNavigationBindings builds navigation property bindings for an entity
+func (h *MetadataHandler) buildNavigationBindings(entityMeta *metadata.EntityMetadata) map[string]string {
+	navigationBindings := make(map[string]string)
+	for _, prop := range entityMeta.Properties {
+		if prop.IsNavigationProp {
+			targetEntitySet := pluralize(prop.NavigationTarget)
+			navigationBindings[prop.JsonName] = targetEntitySet
+		}
 	}
+	return navigationBindings
 }
 
 // getEdmType converts a Go type to an EDM (Entity Data Model) type
