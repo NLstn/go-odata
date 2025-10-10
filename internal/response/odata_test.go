@@ -421,6 +421,53 @@ func TestWriteODataError_MinimalError(t *testing.T) {
 	}
 }
 
+func TestWriteErrorWithTarget(t *testing.T) {
+	w := httptest.NewRecorder()
+
+	err := WriteErrorWithTarget(w, http.StatusNotFound, "Entity not found", "Products(999)", "The specified entity does not exist")
+	if err != nil {
+		t.Fatalf("WriteErrorWithTarget() error = %v", err)
+	}
+
+	// Check status code
+	if w.Code != http.StatusNotFound {
+		t.Errorf("Status = %v, want %v", w.Code, http.StatusNotFound)
+	}
+
+	var response map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	errorData := response["error"].(map[string]interface{})
+
+	if errorData["code"] != "404" {
+		t.Errorf("error.code = %v, want 404", errorData["code"])
+	}
+
+	if errorData["message"] != "Entity not found" {
+		t.Errorf("error.message = %v, want 'Entity not found'", errorData["message"])
+	}
+
+	if errorData["target"] != "Products(999)" {
+		t.Errorf("error.target = %v, want Products(999)", errorData["target"])
+	}
+
+	details := errorData["details"].([]interface{})
+	if len(details) != 1 {
+		t.Fatalf("len(error.details) = %v, want 1", len(details))
+	}
+
+	detail := details[0].(map[string]interface{})
+	if detail["message"] != "The specified entity does not exist" {
+		t.Errorf("error.details[0].message = %v, want 'The specified entity does not exist'", detail["message"])
+	}
+
+	if detail["target"] != "Products(999)" {
+		t.Errorf("error.details[0].target = %v, want Products(999)", detail["target"])
+	}
+}
+
 func TestBuildBaseURL(t *testing.T) {
 	tests := []struct {
 		name string
