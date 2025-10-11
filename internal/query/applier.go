@@ -236,6 +236,14 @@ func buildFunctionSQL(op FilterOperator, columnName string, value interface{}) (
 		return fmt.Sprintf("CONCAT(%s, ?)", columnName), []interface{}{value}
 	case OpSubstring:
 		return buildSubstringSQL(columnName, value)
+	case OpAdd:
+		return fmt.Sprintf("(%s + ?)", columnName), []interface{}{value}
+	case OpSub:
+		return fmt.Sprintf("(%s - ?)", columnName), []interface{}{value}
+	case OpMul:
+		return fmt.Sprintf("(%s * ?)", columnName), []interface{}{value}
+	case OpDiv:
+		return fmt.Sprintf("(%s / ?)", columnName), []interface{}{value}
 	default:
 		return "", nil
 	}
