@@ -36,9 +36,9 @@ func (h *EntityHandler) HandleCollection(w http.ResponseWriter, r *http.Request)
 	case http.MethodPost:
 		h.handlePostEntity(w, r)
 	default:
-		if err := response.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
+		if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
 			fmt.Sprintf("Method %s is not supported for entity collections", r.Method)); err != nil {
-			fmt.Printf("Error writing error response: %v\n", err)
+			fmt.Printf(LogMsgErrorWritingErrorResponse, err)
 		}
 	}
 }
@@ -49,8 +49,8 @@ func (h *EntityHandler) handleGetCollection(w http.ResponseWriter, r *http.Reque
 	// Parse query options
 	queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata)
 	if err != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid query options", err.Error()); writeErr != nil {
-			fmt.Printf("Error writing error response: %v\n", writeErr)
+		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions, err.Error()); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
 		}
 		return
 	}
@@ -64,8 +64,8 @@ func (h *EntityHandler) handleGetCollection(w http.ResponseWriter, r *http.Reque
 	// Fetch the results
 	sliceValue, err := h.fetchResults(queryOptions)
 	if err != nil {
-		if writeErr := response.WriteError(w, http.StatusInternalServerError, "Database error", err.Error()); writeErr != nil {
-			fmt.Printf("Error writing error response: %v\n", writeErr)
+		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error()); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
 		}
 		return
 	}
@@ -101,9 +101,9 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 
 	// Parse the request body
 	if err := json.NewDecoder(r.Body).Decode(entity); err != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid request body",
-			fmt.Sprintf("Failed to parse JSON: %v", err.Error())); writeErr != nil {
-			fmt.Printf("Error writing error response: %v\n", writeErr)
+		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidRequestBody,
+			fmt.Sprintf(ErrDetailFailedToParseJSON, err.Error())); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
 		}
 		return
 	}
@@ -111,15 +111,15 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 	// Validate required properties
 	if err := h.validateRequiredProperties(entity); err != nil {
 		if writeErr := response.WriteError(w, http.StatusBadRequest, "Missing required properties", err.Error()); writeErr != nil {
-			fmt.Printf("Error writing error response: %v\n", writeErr)
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
 		}
 		return
 	}
 
 	// Create the entity in the database
 	if err := h.db.Create(entity).Error; err != nil {
-		if writeErr := response.WriteError(w, http.StatusInternalServerError, "Database error", err.Error()); writeErr != nil {
-			fmt.Printf("Error writing error response: %v\n", writeErr)
+		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error()); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
 		}
 		return
 	}
@@ -128,25 +128,25 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 	location := h.buildEntityLocation(r, entity)
 
 	// Set common headers
-	w.Header().Set("OData-Version", "4.0")
+	w.Header().Set(HeaderODataVersion, "4.0")
 	w.Header().Set("Location", location)
 
 	// Add Preference-Applied header if a preference was specified
 	if applied := pref.GetPreferenceApplied(); applied != "" {
-		w.Header().Set("Preference-Applied", applied)
+		w.Header().Set(HeaderPreferenceApplied, applied)
 	}
 
 	// Determine whether to return content based on preferences
 	if pref.ShouldReturnContent(true) {
 		// Return representation (default for POST)
-		contextURL := fmt.Sprintf("%s/$metadata#%s/$entity", response.BuildBaseURL(r), h.metadata.EntitySetName)
+		contextURL := fmt.Sprintf(ODataContextFormat, response.BuildBaseURL(r), h.metadata.EntitySetName)
 		odataResponse := h.buildOrderedEntityResponse(entity, contextURL)
 
-		w.Header().Set("Content-Type", "application/json;odata.metadata=minimal")
+		w.Header().Set(HeaderContentType, ContentTypeJSON)
 		w.WriteHeader(http.StatusCreated)
 
 		if err := json.NewEncoder(w).Encode(odataResponse); err != nil {
-			fmt.Printf("Error writing entity response: %v\n", err)
+			fmt.Printf(LogMsgErrorWritingEntityResponse, err)
 		}
 	} else {
 		// Return minimal (204 No Content)
@@ -223,9 +223,9 @@ func (h *EntityHandler) buildEntityLocation(r *http.Request, entity interface{})
 // HandleCount handles GET requests for entity collection count (e.g., /Products/$count)
 func (h *EntityHandler) HandleCount(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		if err := response.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
+		if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
 			fmt.Sprintf("Method %s is not supported for $count", r.Method)); err != nil {
-			fmt.Printf("Error writing error response: %v\n", err)
+			fmt.Printf(LogMsgErrorWritingErrorResponse, err)
 		}
 		return
 	}
@@ -233,8 +233,8 @@ func (h *EntityHandler) HandleCount(w http.ResponseWriter, r *http.Request) {
 	// Parse query options (primarily for $filter support)
 	queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata)
 	if err != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid query options", err.Error()); writeErr != nil {
-			fmt.Printf("Error writing error response: %v\n", writeErr)
+		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions, err.Error()); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
 		}
 		return
 	}
@@ -248,15 +248,15 @@ func (h *EntityHandler) HandleCount(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := countDB.Count(&count).Error; err != nil {
-		if writeErr := response.WriteError(w, http.StatusInternalServerError, "Database error", err.Error()); writeErr != nil {
-			fmt.Printf("Error writing error response: %v\n", writeErr)
+		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error()); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
 		}
 		return
 	}
 
 	// Write the count as plain text according to OData v4 spec
-	w.Header().Set("Content-Type", "text/plain")
-	w.Header().Set("OData-Version", "4.0")
+	w.Header().Set(HeaderContentType, "text/plain")
+	w.Header().Set(HeaderODataVersion, "4.0")
 	w.WriteHeader(http.StatusOK)
 	if _, err := fmt.Fprintf(w, "%d", count); err != nil {
 		fmt.Printf("Error writing count response: %v\n", err)
@@ -278,8 +278,8 @@ func (h *EntityHandler) getTotalCount(queryOptions *query.QueryOptions, w http.R
 	}
 
 	if err := countDB.Count(&count).Error; err != nil {
-		if writeErr := response.WriteError(w, http.StatusInternalServerError, "Database error", err.Error()); writeErr != nil {
-			fmt.Printf("Error writing error response: %v\n", writeErr)
+		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error()); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
 		}
 		return nil
 	}
@@ -382,35 +382,40 @@ func (h *EntityHandler) HandleEntity(w http.ResponseWriter, r *http.Request, ent
 	case http.MethodPut:
 		h.handlePutEntity(w, r, entityKey)
 	default:
-		if err := response.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
+		if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
 			fmt.Sprintf("Method %s is not supported for individual entities", r.Method)); err != nil {
-			fmt.Printf("Error writing error response: %v\n", err)
+			fmt.Printf(LogMsgErrorWritingErrorResponse, err)
 		}
 	}
 }
 
 // handleGetEntity handles GET requests for individual entities
 func (h *EntityHandler) handleGetEntity(w http.ResponseWriter, r *http.Request, entityKey string) {
-
 	// Parse query options for $expand
 	queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata)
 	if err != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid query options", err.Error()); writeErr != nil {
-			fmt.Printf("Error writing error response: %v\n", writeErr)
-		}
+		h.writeInvalidQueryError(w, err)
 		return
 	}
 
-	// Create an instance to hold the result
+	// Fetch the entity
+	result, err := h.fetchEntityByKey(entityKey, queryOptions)
+	if err != nil {
+		h.handleFetchError(w, err, entityKey)
+		return
+	}
+
+	// Build and write response
+	h.writeEntityResponse(w, r, result)
+}
+
+// fetchEntityByKey fetches an entity by its key with optional expand
+func (h *EntityHandler) fetchEntityByKey(entityKey string, queryOptions *query.QueryOptions) (interface{}, error) {
 	result := reflect.New(h.metadata.EntityType).Interface()
 
-	// Build the query condition using the key properties
 	db, err := h.buildKeyQuery(entityKey)
 	if err != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid key", err.Error()); writeErr != nil {
-			fmt.Printf("Error writing error response: %v\n", writeErr)
-		}
-		return
+		return nil, err
 	}
 
 	// Apply expand (preload navigation properties) if specified
@@ -419,242 +424,217 @@ func (h *EntityHandler) handleGetEntity(w http.ResponseWriter, r *http.Request, 
 	}
 
 	if err := db.First(result).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			target := fmt.Sprintf("%s(%s)", h.metadata.EntitySetName, entityKey)
-			if writeErr := response.WriteErrorWithTarget(w, http.StatusNotFound, "Entity not found",
-				target, fmt.Sprintf("The entity with key '%s' does not exist", entityKey)); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
-			}
-		} else {
-			if writeErr := response.WriteError(w, http.StatusInternalServerError, "Database error", err.Error()); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
-			}
-		}
-		return
+		return nil, err
 	}
 
-	// For individual entities, we return the entity directly (not wrapped in a collection)
-	contextURL := fmt.Sprintf("%s/$metadata#%s/$entity", response.BuildBaseURL(r), h.metadata.EntitySetName)
+	return result, nil
+}
 
-	// Build ordered response
+// writeEntityResponse writes an entity response
+func (h *EntityHandler) writeEntityResponse(w http.ResponseWriter, r *http.Request, result interface{}) {
+	contextURL := fmt.Sprintf(ODataContextFormat, response.BuildBaseURL(r), h.metadata.EntitySetName)
 	odataResponse := h.buildOrderedEntityResponse(result, contextURL)
 
-	w.Header().Set("Content-Type", "application/json;odata.metadata=minimal")
-	w.Header().Set("OData-Version", "4.0")
+	w.Header().Set(HeaderContentType, ContentTypeJSON)
+	w.Header().Set(HeaderODataVersion, "4.0")
 	w.WriteHeader(http.StatusOK)
 
-	// Write the response
 	if err := json.NewEncoder(w).Encode(odataResponse); err != nil {
-		fmt.Printf("Error writing entity response: %v\n", err)
+		fmt.Printf(LogMsgErrorWritingEntityResponse, err)
+	}
+}
+
+// writeInvalidQueryError writes an invalid query error response
+func (h *EntityHandler) writeInvalidQueryError(w http.ResponseWriter, err error) {
+	if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions, err.Error()); writeErr != nil {
+		fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
 	}
 }
 
 // handleDeleteEntity handles DELETE requests for individual entities
 func (h *EntityHandler) handleDeleteEntity(w http.ResponseWriter, r *http.Request, entityKey string) {
 	_ = r // Reserved for future use (e.g., conditional deletes with If-Match header)
-	// Create an instance to hold the entity to be deleted
-	entity := reflect.New(h.metadata.EntityType).Interface()
 
-	// Build the query condition using the key properties
-	db, err := h.buildKeyQuery(entityKey)
+	// Fetch and delete the entity
+	entity, err := h.fetchAndVerifyEntity(entityKey, w)
 	if err != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid key", err.Error()); writeErr != nil {
-			fmt.Printf("Error writing error response: %v\n", writeErr)
-		}
-		return
-	}
-
-	// First, check if the entity exists
-	if err := db.First(entity).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			target := fmt.Sprintf("%s(%s)", h.metadata.EntitySetName, entityKey)
-			if writeErr := response.WriteErrorWithTarget(w, http.StatusNotFound, "Entity not found",
-				target, fmt.Sprintf("The entity with key '%s' does not exist", entityKey)); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
-			}
-		} else {
-			if writeErr := response.WriteError(w, http.StatusInternalServerError, "Database error", err.Error()); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
-			}
-		}
-		return
+		return // Error already written
 	}
 
 	// Delete the entity
 	if err := h.db.Delete(entity).Error; err != nil {
-		if writeErr := response.WriteError(w, http.StatusInternalServerError, "Database error", err.Error()); writeErr != nil {
-			fmt.Printf("Error writing error response: %v\n", writeErr)
-		}
+		h.writeDatabaseError(w, err)
 		return
 	}
 
 	// Return 204 No Content according to OData v4 spec
-	w.Header().Set("OData-Version", "4.0")
+	w.Header().Set(HeaderODataVersion, "4.0")
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// fetchAndVerifyEntity fetches an entity by key and handles errors
+func (h *EntityHandler) fetchAndVerifyEntity(entityKey string, w http.ResponseWriter) (interface{}, error) {
+	entity := reflect.New(h.metadata.EntityType).Interface()
+
+	db, err := h.buildKeyQuery(entityKey)
+	if err != nil {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidKey, err.Error()); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return nil, err
+	}
+
+	if err := db.First(entity).Error; err != nil {
+		h.handleFetchError(w, err, entityKey)
+		return nil, err
+	}
+
+	return entity, nil
+}
+
+// writeDatabaseError writes a database error response
+func (h *EntityHandler) writeDatabaseError(w http.ResponseWriter, err error) {
+	if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error()); writeErr != nil {
+		fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+	}
 }
 
 // handlePatchEntity handles PATCH requests for individual entities
 func (h *EntityHandler) handlePatchEntity(w http.ResponseWriter, r *http.Request, entityKey string) {
-	// Parse Prefer header
 	pref := preference.ParsePrefer(r)
 
-	// Create an instance to hold the entity to be updated
+	// Fetch and update the entity
+	db, _, err := h.fetchAndUpdateEntity(w, r, entityKey)
+	if err != nil {
+		return // Error already written
+	}
+
+	// Write response based on preference
+	h.writeUpdateResponse(w, r, pref, db, false)
+}
+
+// fetchAndUpdateEntity fetches an entity and applies PATCH updates
+func (h *EntityHandler) fetchAndUpdateEntity(w http.ResponseWriter, r *http.Request, entityKey string) (*gorm.DB, interface{}, error) {
 	entity := reflect.New(h.metadata.EntityType).Interface()
 
-	// Build the query condition using the key properties
 	db, err := h.buildKeyQuery(entityKey)
 	if err != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid key", err.Error()); writeErr != nil {
-			fmt.Printf("Error writing error response: %v\n", writeErr)
+		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidKey, err.Error()); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
 		}
-		return
+		return nil, nil, err
 	}
 
-	// First, check if the entity exists
 	if err := db.First(entity).Error; err != nil {
 		h.handleFetchError(w, err, entityKey)
-		return
+		return nil, nil, err
 	}
 
-	// Parse the request body to get the update data
 	updateData, err := h.parsePatchRequestBody(r, w)
 	if err != nil {
-		return // Error already written by parsePatchRequestBody
+		return nil, nil, err
 	}
 
-	// Validate that we're not trying to update key properties
 	if err := h.validateKeyPropertiesNotUpdated(updateData, w); err != nil {
-		return // Error already written by validateKeyPropertiesNotUpdated
+		return nil, nil, err
 	}
 
-	// Apply updates using GORM's Updates method which only updates provided fields
 	if err := h.db.Model(entity).Updates(updateData).Error; err != nil {
-		if writeErr := response.WriteError(w, http.StatusInternalServerError, "Database error", err.Error()); writeErr != nil {
-			fmt.Printf("Error writing error response: %v\n", writeErr)
-		}
+		h.writeDatabaseError(w, err)
+		return nil, nil, err
+	}
+
+	return db, entity, nil
+}
+
+// writeUpdateResponse writes the response for PATCH/PUT operations based on preferences
+func (h *EntityHandler) writeUpdateResponse(w http.ResponseWriter, r *http.Request, pref *preference.Preference, db *gorm.DB, isDefaultReturnContent bool) {
+	w.Header().Set(HeaderODataVersion, "4.0")
+
+	if applied := pref.GetPreferenceApplied(); applied != "" {
+		w.Header().Set(HeaderPreferenceApplied, applied)
+	}
+
+	if pref.ShouldReturnContent(isDefaultReturnContent) {
+		h.returnUpdatedEntity(w, r, db)
+	} else {
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// returnUpdatedEntity fetches and returns the updated entity
+func (h *EntityHandler) returnUpdatedEntity(w http.ResponseWriter, r *http.Request, db *gorm.DB) {
+	updatedEntity := reflect.New(h.metadata.EntityType).Interface()
+	if err := db.First(updatedEntity).Error; err != nil {
+		h.writeDatabaseError(w, err)
 		return
 	}
 
-	// Set common headers
-	w.Header().Set("OData-Version", "4.0")
+	contextURL := fmt.Sprintf(ODataContextFormat, response.BuildBaseURL(r), h.metadata.EntitySetName)
+	odataResponse := h.buildOrderedEntityResponse(updatedEntity, contextURL)
 
-	// Add Preference-Applied header if a preference was specified
-	if applied := pref.GetPreferenceApplied(); applied != "" {
-		w.Header().Set("Preference-Applied", applied)
-	}
+	w.Header().Set(HeaderContentType, ContentTypeJSON)
+	w.WriteHeader(http.StatusOK)
 
-	// Determine whether to return content based on preferences
-	if pref.ShouldReturnContent(false) {
-		// Return representation
-		// Fetch the updated entity
-		updatedEntity := reflect.New(h.metadata.EntityType).Interface()
-		if err := db.First(updatedEntity).Error; err != nil {
-			if writeErr := response.WriteError(w, http.StatusInternalServerError, "Database error", err.Error()); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
-			}
-			return
-		}
-
-		contextURL := fmt.Sprintf("%s/$metadata#%s/$entity", response.BuildBaseURL(r), h.metadata.EntitySetName)
-		odataResponse := h.buildOrderedEntityResponse(updatedEntity, contextURL)
-
-		w.Header().Set("Content-Type", "application/json;odata.metadata=minimal")
-		w.WriteHeader(http.StatusOK)
-
-		if err := json.NewEncoder(w).Encode(odataResponse); err != nil {
-			fmt.Printf("Error writing entity response: %v\n", err)
-		}
-	} else {
-		// Return minimal (204 No Content) - default for PATCH
-		w.WriteHeader(http.StatusNoContent)
+	if err := json.NewEncoder(w).Encode(odataResponse); err != nil {
+		fmt.Printf(LogMsgErrorWritingEntityResponse, err)
 	}
 }
 
 // handlePutEntity handles PUT requests for individual entities
 // PUT performs a complete replacement according to OData v4 spec
 func (h *EntityHandler) handlePutEntity(w http.ResponseWriter, r *http.Request, entityKey string) {
-	// Parse Prefer header
 	pref := preference.ParsePrefer(r)
 
-	// Create an instance to hold the entity to be replaced
+	// Fetch and replace the entity
+	db, err := h.fetchAndReplaceEntity(w, r, entityKey)
+	if err != nil {
+		return // Error already written
+	}
+
+	// Write response based on preference
+	h.writeUpdateResponse(w, r, pref, db, false)
+}
+
+// fetchAndReplaceEntity fetches an entity and performs PUT replacement
+func (h *EntityHandler) fetchAndReplaceEntity(w http.ResponseWriter, r *http.Request, entityKey string) (*gorm.DB, error) {
 	entity := reflect.New(h.metadata.EntityType).Interface()
 
-	// Build the query condition using the key properties
 	db, err := h.buildKeyQuery(entityKey)
 	if err != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid key", err.Error()); writeErr != nil {
-			fmt.Printf("Error writing error response: %v\n", writeErr)
+		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidKey, err.Error()); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
 		}
-		return
+		return nil, err
 	}
 
-	// First, check if the entity exists
 	if err := db.First(entity).Error; err != nil {
 		h.handleFetchError(w, err, entityKey)
-		return
+		return nil, err
 	}
 
-	// Create a new instance for the replacement data
 	replacementEntity := reflect.New(h.metadata.EntityType).Interface()
-
-	// Parse the request body into the replacement entity
 	if err := json.NewDecoder(r.Body).Decode(replacementEntity); err != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid request body",
-			fmt.Sprintf("Failed to parse JSON: %v", err.Error())); writeErr != nil {
-			fmt.Printf("Error writing error response: %v\n", writeErr)
+		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidRequestBody,
+			fmt.Sprintf(ErrDetailFailedToParseJSON, err.Error())); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
 		}
-		return
+		return nil, err
 	}
 
-	// Preserve the key properties from the original entity
 	if err := h.preserveKeyProperties(entity, replacementEntity); err != nil {
-		if writeErr := response.WriteError(w, http.StatusInternalServerError, "Internal error", err.Error()); writeErr != nil {
-			fmt.Printf("Error writing error response: %v\n", writeErr)
+		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgInternalError, err.Error()); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
 		}
-		return
+		return nil, err
 	}
 
-	// Perform complete replacement using Save (updates all fields)
 	if err := h.db.Model(entity).Select("*").Updates(replacementEntity).Error; err != nil {
-		if writeErr := response.WriteError(w, http.StatusInternalServerError, "Database error", err.Error()); writeErr != nil {
-			fmt.Printf("Error writing error response: %v\n", writeErr)
-		}
-		return
+		h.writeDatabaseError(w, err)
+		return nil, err
 	}
 
-	// Set common headers
-	w.Header().Set("OData-Version", "4.0")
-
-	// Add Preference-Applied header if a preference was specified
-	if applied := pref.GetPreferenceApplied(); applied != "" {
-		w.Header().Set("Preference-Applied", applied)
-	}
-
-	// Determine whether to return content based on preferences
-	if pref.ShouldReturnContent(false) {
-		// Return representation
-		// Fetch the updated entity
-		updatedEntity := reflect.New(h.metadata.EntityType).Interface()
-		if err := db.First(updatedEntity).Error; err != nil {
-			if writeErr := response.WriteError(w, http.StatusInternalServerError, "Database error", err.Error()); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
-			}
-			return
-		}
-
-		contextURL := fmt.Sprintf("%s/$metadata#%s/$entity", response.BuildBaseURL(r), h.metadata.EntitySetName)
-		odataResponse := h.buildOrderedEntityResponse(updatedEntity, contextURL)
-
-		w.Header().Set("Content-Type", "application/json;odata.metadata=minimal")
-		w.WriteHeader(http.StatusOK)
-
-		if err := json.NewEncoder(w).Encode(odataResponse); err != nil {
-			fmt.Printf("Error writing entity response: %v\n", err)
-		}
-	} else {
-		// Return minimal (204 No Content) - default for PUT
-		w.WriteHeader(http.StatusNoContent)
-	}
+	return db, nil
 }
 
 // preserveKeyProperties copies key property values from source to destination
@@ -684,9 +664,9 @@ func (h *EntityHandler) preserveKeyProperties(source, destination interface{}) e
 func (h *EntityHandler) parsePatchRequestBody(r *http.Request, w http.ResponseWriter) (map[string]interface{}, error) {
 	var updateData map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&updateData); err != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid request body",
-			fmt.Sprintf("Failed to parse JSON: %v", err.Error())); writeErr != nil {
-			fmt.Printf("Error writing error response: %v\n", writeErr)
+		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidRequestBody,
+			fmt.Sprintf(ErrDetailFailedToParseJSON, err.Error())); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
 		}
 		return nil, err
 	}
@@ -699,7 +679,7 @@ func (h *EntityHandler) validateKeyPropertiesNotUpdated(updateData map[string]in
 		if _, exists := updateData[keyProp.JsonName]; exists {
 			err := fmt.Errorf("key property '%s' cannot be modified", keyProp.JsonName)
 			if writeErr := response.WriteError(w, http.StatusBadRequest, "Cannot update key property", err.Error()); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
+				fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
 			}
 			return err
 		}
@@ -707,7 +687,7 @@ func (h *EntityHandler) validateKeyPropertiesNotUpdated(updateData map[string]in
 		if _, exists := updateData[keyProp.Name]; exists {
 			err := fmt.Errorf("key property '%s' cannot be modified", keyProp.Name)
 			if writeErr := response.WriteError(w, http.StatusBadRequest, "Cannot update key property", err.Error()); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
+				fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
 			}
 			return err
 		}
@@ -718,9 +698,9 @@ func (h *EntityHandler) validateKeyPropertiesNotUpdated(updateData map[string]in
 // HandleNavigationProperty handles GET requests for navigation properties (e.g., Products(1)/Descriptions)
 func (h *EntityHandler) HandleNavigationProperty(w http.ResponseWriter, r *http.Request, entityKey string, navigationProperty string) {
 	if r.Method != http.MethodGet {
-		if err := response.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
+		if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
 			fmt.Sprintf("Method %s is not supported for navigation properties", r.Method)); err != nil {
-			fmt.Printf("Error writing error response: %v\n", err)
+			fmt.Printf(LogMsgErrorWritingErrorResponse, err)
 		}
 		return
 	}
@@ -730,7 +710,7 @@ func (h *EntityHandler) HandleNavigationProperty(w http.ResponseWriter, r *http.
 	if navProp == nil {
 		if err := response.WriteError(w, http.StatusNotFound, "Navigation property not found",
 			fmt.Sprintf("'%s' is not a valid navigation property for %s", navigationProperty, h.metadata.EntitySetName)); err != nil {
-			fmt.Printf("Error writing error response: %v\n", err)
+			fmt.Printf(LogMsgErrorWritingErrorResponse, err)
 		}
 		return
 	}
@@ -745,9 +725,9 @@ func (h *EntityHandler) HandleNavigationProperty(w http.ResponseWriter, r *http.
 	// Extract and write the navigation property value
 	navFieldValue := h.extractNavigationField(parent, navProp.Name)
 	if !navFieldValue.IsValid() {
-		if err := response.WriteError(w, http.StatusInternalServerError, "Internal error",
+		if err := response.WriteError(w, http.StatusInternalServerError, ErrMsgInternalError,
 			"Could not access navigation property"); err != nil {
-			fmt.Printf("Error writing error response: %v\n", err)
+			fmt.Printf(LogMsgErrorWritingErrorResponse, err)
 		}
 		return
 	}
@@ -789,76 +769,100 @@ func (h *EntityHandler) IsStructuralProperty(propertyName string) bool {
 // When isValue is true, returns the raw property value without JSON wrapper (e.g., Products(1)/Name/$value)
 func (h *EntityHandler) HandleStructuralProperty(w http.ResponseWriter, r *http.Request, entityKey string, propertyName string, isValue bool) {
 	if r.Method != http.MethodGet {
-		if err := response.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
-			fmt.Sprintf("Method %s is not supported for property access", r.Method)); err != nil {
-			fmt.Printf("Error writing error response: %v\n", err)
-		}
+		h.writeMethodNotAllowedError(w, r.Method, "property access")
 		return
 	}
 
 	// Find and validate the structural property
 	prop := h.findStructuralProperty(propertyName)
 	if prop == nil {
-		if err := response.WriteError(w, http.StatusNotFound, "Property not found",
-			fmt.Sprintf("'%s' is not a valid property for %s", propertyName, h.metadata.EntitySetName)); err != nil {
-			fmt.Printf("Error writing error response: %v\n", err)
-		}
+		h.writePropertyNotFoundError(w, propertyName)
 		return
 	}
 
-	// Fetch the entity with only the needed property and key columns
+	// Fetch property value
+	fieldValue, err := h.fetchPropertyValue(w, entityKey, prop)
+	if err != nil {
+		return // Error already written
+	}
+
+	// Write response
+	if isValue {
+		h.writeRawPropertyValue(w, fieldValue)
+	} else {
+		h.writePropertyResponse(w, r, entityKey, prop, fieldValue)
+	}
+}
+
+// writeMethodNotAllowedError writes a method not allowed error for a specific context
+func (h *EntityHandler) writeMethodNotAllowedError(w http.ResponseWriter, method, context string) {
+	if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+		fmt.Sprintf("Method %s is not supported for %s", method, context)); err != nil {
+		fmt.Printf(LogMsgErrorWritingErrorResponse, err)
+	}
+}
+
+// writePropertyNotFoundError writes a property not found error
+func (h *EntityHandler) writePropertyNotFoundError(w http.ResponseWriter, propertyName string) {
+	if err := response.WriteError(w, http.StatusNotFound, "Property not found",
+		fmt.Sprintf("'%s' is not a valid property for %s", propertyName, h.metadata.EntitySetName)); err != nil {
+		fmt.Printf(LogMsgErrorWritingErrorResponse, err)
+	}
+}
+
+// fetchPropertyValue fetches a property value from an entity
+func (h *EntityHandler) fetchPropertyValue(w http.ResponseWriter, entityKey string, prop *metadata.PropertyMetadata) (reflect.Value, error) {
 	entity := reflect.New(h.metadata.EntityType).Interface()
 	db, err := h.buildKeyQuery(entityKey)
 	if err != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid key", err.Error()); writeErr != nil {
-			fmt.Printf("Error writing error response: %v\n", writeErr)
+		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidKey, err.Error()); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
 		}
-		return
+		return reflect.Value{}, err
 	}
 
-	// Apply select to fetch only the needed property and key columns
 	db = h.applyStructuralPropertySelect(db, prop)
 
 	if err := db.First(entity).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			if writeErr := response.WriteError(w, http.StatusNotFound, "Entity not found",
-				fmt.Sprintf("Entity with key '%s' not found", entityKey)); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
-			}
-		} else {
-			if writeErr := response.WriteError(w, http.StatusInternalServerError, "Database error", err.Error()); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
-			}
-		}
-		return
+		h.handlePropertyFetchError(w, err, entityKey)
+		return reflect.Value{}, err
 	}
 
-	// Extract the property value
 	entityValue := reflect.ValueOf(entity).Elem()
 	fieldValue := entityValue.FieldByName(prop.Name)
 	if !fieldValue.IsValid() {
-		if err := response.WriteError(w, http.StatusInternalServerError, "Internal error",
+		if err := response.WriteError(w, http.StatusInternalServerError, ErrMsgInternalError,
 			"Could not access property"); err != nil {
-			fmt.Printf("Error writing error response: %v\n", err)
+			fmt.Printf(LogMsgErrorWritingErrorResponse, err)
 		}
-		return
+		return reflect.Value{}, fmt.Errorf("invalid field")
 	}
 
-	// If $value is requested, return the raw value without JSON wrapper
-	if isValue {
-		h.writeRawPropertyValue(w, fieldValue)
-		return
-	}
+	return fieldValue, nil
+}
 
-	// Build the OData response according to OData v4 spec
+// handlePropertyFetchError handles errors when fetching a property
+func (h *EntityHandler) handlePropertyFetchError(w http.ResponseWriter, err error, entityKey string) {
+	if err == gorm.ErrRecordNotFound {
+		if writeErr := response.WriteError(w, http.StatusNotFound, ErrMsgEntityNotFound,
+			fmt.Sprintf("Entity with key '%s' not found", entityKey)); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+	} else {
+		h.writeDatabaseError(w, err)
+	}
+}
+
+// writePropertyResponse writes a property response with OData context
+func (h *EntityHandler) writePropertyResponse(w http.ResponseWriter, r *http.Request, entityKey string, prop *metadata.PropertyMetadata, fieldValue reflect.Value) {
 	contextURL := fmt.Sprintf("%s/$metadata#%s(%s)/%s", response.BuildBaseURL(r), h.metadata.EntitySetName, entityKey, prop.JsonName)
 	odataResponse := map[string]interface{}{
-		"@odata.context": contextURL,
-		"value":          fieldValue.Interface(),
+		ODataContextProperty: contextURL,
+		"value":              fieldValue.Interface(),
 	}
 
-	w.Header().Set("Content-Type", "application/json;odata.metadata=minimal")
-	w.Header().Set("OData-Version", "4.0")
+	w.Header().Set(HeaderContentType, ContentTypeJSON)
+	w.Header().Set(HeaderODataVersion, "4.0")
 	w.WriteHeader(http.StatusOK)
 
 	if err := json.NewEncoder(w).Encode(odataResponse); err != nil {
@@ -874,19 +878,19 @@ func (h *EntityHandler) writeRawPropertyValue(w http.ResponseWriter, fieldValue 
 	// Determine content type based on the property type
 	switch fieldValue.Kind() {
 	case reflect.String:
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Header().Set(HeaderContentType, ContentTypePlainText)
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
 		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
 		reflect.Float32, reflect.Float64:
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Header().Set(HeaderContentType, ContentTypePlainText)
 	case reflect.Bool:
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Header().Set(HeaderContentType, ContentTypePlainText)
 	default:
 		// For other types, use application/octet-stream
-		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set(HeaderContentType, "application/octet-stream")
 	}
 
-	w.Header().Set("OData-Version", "4.0")
+	w.Header().Set(HeaderODataVersion, "4.0")
 	w.WriteHeader(http.StatusOK)
 
 	// Write the raw value
@@ -1024,14 +1028,14 @@ func parseCompositeKey(keyPart string, components *response.ODataURLComponents) 
 // handleFetchError writes appropriate error responses based on the fetch error type
 func (h *EntityHandler) handleFetchError(w http.ResponseWriter, err error, entityKey string) {
 	if err == gorm.ErrRecordNotFound {
-		target := fmt.Sprintf("%s(%s)", h.metadata.EntitySetName, entityKey)
-		if writeErr := response.WriteErrorWithTarget(w, http.StatusNotFound, "Entity not found",
-			target, fmt.Sprintf("The entity with key '%s' does not exist", entityKey)); writeErr != nil {
-			fmt.Printf("Error writing error response: %v\n", writeErr)
+		target := fmt.Sprintf(ODataEntityKeyFormat, h.metadata.EntitySetName, entityKey)
+		if writeErr := response.WriteErrorWithTarget(w, http.StatusNotFound, ErrMsgEntityNotFound,
+			target, fmt.Sprintf(EntityKeyNotExistFmt, entityKey)); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
 		}
 	} else {
-		if writeErr := response.WriteError(w, http.StatusInternalServerError, "Database error", err.Error()); writeErr != nil {
-			fmt.Printf("Error writing error response: %v\n", writeErr)
+		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error()); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
 		}
 	}
 }
@@ -1055,7 +1059,8 @@ func (h *EntityHandler) writeNavigationResponse(w http.ResponseWriter, r *http.R
 func (h *EntityHandler) writeNavigationCollection(w http.ResponseWriter, r *http.Request, entityKey string, navProp *metadata.PropertyMetadata, navFieldValue reflect.Value) {
 	navData := navFieldValue.Interface()
 	// Build the navigation path according to OData V4 spec: EntitySet(key)/NavigationProperty
-	navigationPath := fmt.Sprintf("%s(%s)/%s", h.metadata.EntitySetName, entityKey, navProp.JsonName)
+	navigationPath := fmt.Sprintf(ODataEntityKeyFormat, h.metadata.EntitySetName, entityKey)
+	navigationPath = fmt.Sprintf("%s/%s", navigationPath, navProp.JsonName)
 	if err := response.WriteODataCollection(w, r, navigationPath, navData, nil, nil); err != nil {
 		fmt.Printf("Error writing navigation property collection: %v\n", err)
 	}
@@ -1069,8 +1074,8 @@ func (h *EntityHandler) writeSingleNavigationEntity(w http.ResponseWriter, r *ht
 	// Handle pointer and check for nil
 	if navValue.Kind() == reflect.Ptr {
 		if navValue.IsNil() {
-			w.Header().Set("Content-Type", "application/json;odata.metadata=minimal")
-			w.Header().Set("OData-Version", "4.0")
+			w.Header().Set(HeaderContentType, ContentTypeJSON)
+			w.Header().Set(HeaderODataVersion, "4.0")
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
@@ -1078,12 +1083,13 @@ func (h *EntityHandler) writeSingleNavigationEntity(w http.ResponseWriter, r *ht
 	}
 
 	// Build the OData response with navigation path according to OData V4 spec: EntitySet(key)/NavigationProperty/$entity
-	navigationPath := fmt.Sprintf("%s(%s)/%s", h.metadata.EntitySetName, entityKey, navProp.JsonName)
+	navigationPath := fmt.Sprintf(ODataEntityKeyFormat, h.metadata.EntitySetName, entityKey)
+	navigationPath = fmt.Sprintf("%s/%s", navigationPath, navProp.JsonName)
 	contextURL := fmt.Sprintf("%s/$metadata#%s/$entity", response.BuildBaseURL(r), navigationPath)
 	odataResponse := h.buildEntityResponse(navValue, contextURL)
 
-	w.Header().Set("Content-Type", "application/json;odata.metadata=minimal")
-	w.Header().Set("OData-Version", "4.0")
+	w.Header().Set(HeaderContentType, ContentTypeJSON)
+	w.Header().Set(HeaderODataVersion, "4.0")
 	w.WriteHeader(http.StatusOK)
 
 	if err := json.NewEncoder(w).Encode(odataResponse); err != nil {
@@ -1094,7 +1100,7 @@ func (h *EntityHandler) writeSingleNavigationEntity(w http.ResponseWriter, r *ht
 // buildEntityResponse builds an OData entity response from a reflect.Value
 func (h *EntityHandler) buildEntityResponse(navValue reflect.Value, contextURL string) map[string]interface{} {
 	odataResponse := response.NewOrderedMap()
-	odataResponse.Set("@odata.context", contextURL)
+	odataResponse.Set(ODataContextProperty, contextURL)
 
 	navType := navValue.Type()
 	for i := 0; i < navValue.NumField(); i++ {
@@ -1112,7 +1118,7 @@ func (h *EntityHandler) buildEntityResponse(navValue reflect.Value, contextURL s
 // buildOrderedEntityResponse builds an ordered OData entity response
 func (h *EntityHandler) buildOrderedEntityResponse(result interface{}, contextURL string) *response.OrderedMap {
 	odataResponse := response.NewOrderedMap()
-	odataResponse.Set("@odata.context", contextURL)
+	odataResponse.Set(ODataContextProperty, contextURL)
 
 	// Merge the entity fields into the response
 	entityValue := reflect.ValueOf(result).Elem()
