@@ -626,7 +626,10 @@ func convertFunctionCallExpr(n *FunctionCallExpr, entityMetadata *metadata.Entit
 
 // isSingleArgFunction checks if a function takes a single argument
 func isSingleArgFunction(name string) bool {
-	return name == "tolower" || name == "toupper" || name == "trim" || name == "length"
+	return name == "tolower" || name == "toupper" || name == "trim" || name == "length" ||
+		name == "year" || name == "month" || name == "day" ||
+		name == "hour" || name == "minute" || name == "second" ||
+		name == "date" || name == "time"
 }
 
 // isTwoArgFunction checks if a function takes two arguments

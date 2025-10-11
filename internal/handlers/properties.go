@@ -246,7 +246,7 @@ func (h *EntityHandler) writeRawPropertyValue(w http.ResponseWriter, r *http.Req
 	if r.Method == http.MethodHead {
 		return
 	}
-	
+
 	// Write the raw value
 	if _, err := fmt.Fprintf(w, "%v", valueInterface); err != nil {
 		fmt.Printf("Error writing raw value: %v\n", err)

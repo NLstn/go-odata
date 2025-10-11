@@ -246,6 +246,23 @@ func buildFunctionSQL(op FilterOperator, columnName string, value interface{}) (
 		return fmt.Sprintf("(%s / ?)", columnName), []interface{}{value}
 	case OpMod:
 		return fmt.Sprintf("(%s %% ?)", columnName), []interface{}{value}
+	// Date functions
+	case OpYear:
+		return fmt.Sprintf("CAST(strftime('%%Y', %s) AS INTEGER)", columnName), nil
+	case OpMonth:
+		return fmt.Sprintf("CAST(strftime('%%m', %s) AS INTEGER)", columnName), nil
+	case OpDay:
+		return fmt.Sprintf("CAST(strftime('%%d', %s) AS INTEGER)", columnName), nil
+	case OpHour:
+		return fmt.Sprintf("CAST(strftime('%%H', %s) AS INTEGER)", columnName), nil
+	case OpMinute:
+		return fmt.Sprintf("CAST(strftime('%%M', %s) AS INTEGER)", columnName), nil
+	case OpSecond:
+		return fmt.Sprintf("CAST(strftime('%%S', %s) AS INTEGER)", columnName), nil
+	case OpDate:
+		return fmt.Sprintf("DATE(%s)", columnName), nil
+	case OpTime:
+		return fmt.Sprintf("TIME(%s)", columnName), nil
 	default:
 		return "", nil
 	}
