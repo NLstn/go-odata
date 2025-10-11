@@ -1,10 +1,5 @@
-version: "2"
-
 run:
   timeout: 5m
-  skip-files:
-    - "test/expand_filter_integration_test.go"
-    - "test/metadata_integration_test.go"
 
 linters:
   enable:
@@ -26,6 +21,9 @@ linters-settings:
     check-blank: true
 
 issues:
+  exclude-files:
+    - "test/expand_filter_integration_test.go"
+    - "test/metadata_integration_test.go"
   exclude-rules:
     # Exclude some linters from running on test files.
     - linters:
