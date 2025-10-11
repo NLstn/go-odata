@@ -6,6 +6,7 @@ type Product struct {
 	Name     string  `json:"Name" gorm:"not null" odata:"required,maxlength=100"`
 	Price    float64 `json:"Price" gorm:"not null" odata:"required,precision=10,scale=2"`
 	Category string  `json:"Category" gorm:"not null" odata:"required,maxlength=50"`
+	Version  int     `json:"Version" gorm:"default:1" odata:"etag"` // Version field used for optimistic concurrency control via ETag
 	// Navigation property for ProductDescriptions
 	Descriptions []ProductDescription `json:"Descriptions" gorm:"foreignKey:ProductID;references:ID"`
 }
@@ -28,30 +29,35 @@ func GetSampleProducts() []Product {
 			Name:     "Laptop",
 			Price:    999.99,
 			Category: "Electronics",
+			Version:  1,
 		},
 		{
 			ID:       2,
 			Name:     "Wireless Mouse",
 			Price:    29.99,
 			Category: "Electronics",
+			Version:  1,
 		},
 		{
 			ID:       3,
 			Name:     "Coffee Mug",
 			Price:    15.50,
 			Category: "Kitchen",
+			Version:  1,
 		},
 		{
 			ID:       4,
 			Name:     "Office Chair",
 			Price:    249.99,
 			Category: "Furniture",
+			Version:  1,
 		},
 		{
 			ID:       5,
 			Name:     "Smartphone",
 			Price:    799.99,
 			Category: "Electronics",
+			Version:  1,
 		},
 	}
 }

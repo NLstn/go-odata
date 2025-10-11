@@ -47,6 +47,7 @@ A Go library for building services that expose OData APIs with automatic handlin
 - ✅ Navigation properties - access related entities (e.g., /Products(1)/Category)
 - ✅ Structural properties with $value endpoint (e.g., /Products(1)/Name/$value)
 - ✅ Prefer header support (return=representation, return=minimal)
+- ✅ **ETag support with If-Match headers** - optimistic concurrency control
 - ✅ Filter operations on expanded navigation properties
 - ✅ **Rich metadata document generation (XML and JSON)**
   - Property facets (MaxLength, Precision, Scale, DefaultValue, Nullable)
@@ -466,6 +467,7 @@ type Customer struct {
 ### Supported Tags
 
 - `odata:"key"` - Marks the field as the entity key (required)
+- `odata:"etag"` - Marks the field to be used for ETag generation (optimistic concurrency control)
 - `odata:"required"` - Marks the field as required
 - `odata:"maxlength=N"` - Sets the maximum length for string properties
 - `odata:"precision=N"` - Sets the precision for numeric properties
@@ -596,6 +598,117 @@ Both methods:
 - Require the entity to exist (404 if not found)
 - Cannot modify key properties
 - Return proper OData v4 headers
+
+## ETag Support (Optimistic Concurrency Control)
+
+The library supports ETags for optimistic concurrency control, allowing you to prevent concurrent updates from overwriting each other's changes.
+
+### Defining an ETag Property
+
+Mark a field in your entity with the `odata:"etag"` tag. This field will be used to generate ETags:
+
+```go
+type Product struct {
+    ID       uint    `json:"ID" gorm:"primaryKey" odata:"key"`
+    Name     string  `json:"Name" odata:"required"`
+    Price    float64 `json:"Price"`
+    Version  int     `json:"Version" odata:"etag"` // Used for ETag generation
+}
+```
+
+You can use any field type for ETags:
+- **Integer fields** (e.g., `Version int`) - Common pattern for version numbers
+- **Timestamp fields** (e.g., `LastModified time.Time`) - Tracks last modification time
+- **String fields** - Custom version identifiers
+
+### How ETags Work
+
+1. **GET requests** return an `ETag` header with a hash of the ETag field value
+2. **Clients** store the ETag value and send it back in an `If-Match` header when updating
+3. **UPDATE/DELETE operations** validate that the `If-Match` header matches the current ETag
+4. If ETags don't match, a `412 Precondition Failed` response is returned
+
+### Example: Using ETags
+
+**Step 1: Retrieve an entity (GET)**
+```bash
+GET /Products(1)
+```
+
+Response headers:
+```
+HTTP/1.1 200 OK
+ETag: W/"abc123def456..."
+OData-Version: 4.0
+Content-Type: application/json
+```
+
+Response body:
+```json
+{
+  "@odata.context": "http://localhost:8080/$metadata#Products/$entity",
+  "ID": 1,
+  "Name": "Laptop",
+  "Price": 999.99,
+  "Version": 1
+}
+```
+
+**Step 2: Update the entity with If-Match header (PATCH)**
+```bash
+PATCH /Products(1)
+If-Match: W/"abc123def456..."
+Content-Type: application/json
+
+{
+  "Price": 899.99
+}
+```
+
+If the ETag matches:
+```
+HTTP/1.1 204 No Content
+OData-Version: 4.0
+```
+
+If the ETag doesn't match (entity was modified by another client):
+```
+HTTP/1.1 412 Precondition Failed
+Content-Type: application/json
+
+{
+  "error": {
+    "code": "412",
+    "message": "Precondition failed",
+    "details": [{
+      "message": "The entity has been modified. Please refresh and try again."
+    }]
+  }
+}
+```
+
+### If-Match Header Options
+
+- **Specific ETag**: `If-Match: W/"abc123..."` - Match only if the ETag is exactly this value
+- **Wildcard**: `If-Match: *` - Match if the entity exists (any ETag value)
+- **No header**: Update proceeds without validation
+
+### ETag Generation
+
+ETags are automatically generated as weak ETags (format: `W/"hash"`) using SHA-256 hash of the ETag field value. The same field value always produces the same ETag, ensuring consistency.
+
+### Best Practices
+
+1. **Use version numbers** for simple counter-based concurrency control
+2. **Use timestamps** when you need to track when entities were last modified
+3. **Always check for 412 responses** in your client code and handle them appropriately
+4. **Refresh data** when receiving a 412 response before retrying the update
+
+### Operations Supporting If-Match
+
+- `PATCH /EntitySet(key)` - Partial update with ETag validation
+- `PUT /EntitySet(key)` - Full replacement with ETag validation
+- `DELETE /EntitySet(key)` - Delete with ETag validation
 
 ## Error Handling
 

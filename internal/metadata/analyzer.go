@@ -14,6 +14,7 @@ type EntityMetadata struct {
 	Properties    []PropertyMetadata
 	KeyProperties []PropertyMetadata // Support for composite keys
 	KeyProperty   *PropertyMetadata  // Deprecated: Use KeyProperties for single or composite keys, kept for backwards compatibility
+	ETagProperty  *PropertyMetadata  // Property used for ETag generation (optional)
 }
 
 // PropertyMetadata holds metadata information about an entity property
@@ -28,6 +29,7 @@ type PropertyMetadata struct {
 	IsNavigationProp  bool
 	NavigationTarget  string // Entity type name for navigation properties
 	NavigationIsArray bool   // True for collection navigation properties
+	IsETag            bool   // True if this property should be used for ETag generation
 	// Facets
 	MaxLength    int    // Maximum length for string properties
 	Precision    int    // Precision for decimal/numeric properties
@@ -187,6 +189,9 @@ func processODataTagPart(property *PropertyMetadata, part string, metadata *Enti
 	case part == "key":
 		property.IsKey = true
 		metadata.KeyProperties = append(metadata.KeyProperties, *property)
+	case part == "etag":
+		property.IsETag = true
+		metadata.ETagProperty = property
 	case part == "required":
 		property.IsRequired = true
 	case strings.HasPrefix(part, "maxlength="):

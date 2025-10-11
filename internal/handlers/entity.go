@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/nlstn/go-odata/internal/etag"
 	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/preference"
 	"github.com/nlstn/go-odata/internal/query"
@@ -141,6 +142,11 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 		// Return representation (default for POST)
 		contextURL := fmt.Sprintf(ODataContextFormat, response.BuildBaseURL(r), h.metadata.EntitySetName)
 		odataResponse := h.buildOrderedEntityResponse(entity, contextURL)
+
+		// Generate and set ETag header if entity has an ETag property
+		if etagValue := etag.Generate(entity, h.metadata); etagValue != "" {
+			w.Header().Set(HeaderETag, etagValue)
+		}
 
 		w.Header().Set(HeaderContentType, ContentTypeJSON)
 		w.WriteHeader(http.StatusCreated)
@@ -435,6 +441,11 @@ func (h *EntityHandler) writeEntityResponse(w http.ResponseWriter, r *http.Reque
 	contextURL := fmt.Sprintf(ODataContextFormat, response.BuildBaseURL(r), h.metadata.EntitySetName)
 	odataResponse := h.buildOrderedEntityResponse(result, contextURL)
 
+	// Generate and set ETag header if entity has an ETag property
+	if etagValue := etag.Generate(result, h.metadata); etagValue != "" {
+		w.Header().Set(HeaderETag, etagValue)
+	}
+
 	w.Header().Set(HeaderContentType, ContentTypeJSON)
 	w.Header().Set(HeaderODataVersion, "4.0")
 	w.WriteHeader(http.StatusOK)
@@ -453,12 +464,24 @@ func (h *EntityHandler) writeInvalidQueryError(w http.ResponseWriter, err error)
 
 // handleDeleteEntity handles DELETE requests for individual entities
 func (h *EntityHandler) handleDeleteEntity(w http.ResponseWriter, r *http.Request, entityKey string) {
-	_ = r // Reserved for future use (e.g., conditional deletes with If-Match header)
-
 	// Fetch and delete the entity
 	entity, err := h.fetchAndVerifyEntity(entityKey, w)
 	if err != nil {
 		return // Error already written
+	}
+
+	// Check If-Match header if ETag is configured
+	if h.metadata.ETagProperty != nil {
+		ifMatch := r.Header.Get(HeaderIfMatch)
+		currentETag := etag.Generate(entity, h.metadata)
+
+		if !etag.Match(ifMatch, currentETag) {
+			if writeErr := response.WriteError(w, http.StatusPreconditionFailed, ErrMsgPreconditionFailed,
+				ErrDetailPreconditionFailed); writeErr != nil {
+				fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			}
+			return
+		}
 	}
 
 	// Delete the entity
@@ -530,6 +553,21 @@ func (h *EntityHandler) fetchAndUpdateEntity(w http.ResponseWriter, r *http.Requ
 		return nil, nil, err
 	}
 
+	// Check If-Match header if ETag is configured
+	if h.metadata.ETagProperty != nil {
+		ifMatch := r.Header.Get(HeaderIfMatch)
+		currentETag := etag.Generate(entity, h.metadata)
+
+		if !etag.Match(ifMatch, currentETag) {
+			if writeErr := response.WriteError(w, http.StatusPreconditionFailed, ErrMsgPreconditionFailed,
+				ErrDetailPreconditionFailed); writeErr != nil {
+				fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			}
+			return nil, nil, err
+		}
+	}
+
+	// Parse the request body to get the update data
 	updateData, err := h.parsePatchRequestBody(r, w)
 	if err != nil {
 		return nil, nil, err
@@ -573,6 +611,11 @@ func (h *EntityHandler) returnUpdatedEntity(w http.ResponseWriter, r *http.Reque
 	contextURL := fmt.Sprintf(ODataContextFormat, response.BuildBaseURL(r), h.metadata.EntitySetName)
 	odataResponse := h.buildOrderedEntityResponse(updatedEntity, contextURL)
 
+	// Generate and set ETag header if entity has an ETag property
+	if etagValue := etag.Generate(updatedEntity, h.metadata); etagValue != "" {
+		w.Header().Set(HeaderETag, etagValue)
+	}
+
 	w.Header().Set(HeaderContentType, ContentTypeJSON)
 	w.WriteHeader(http.StatusOK)
 
@@ -613,6 +656,21 @@ func (h *EntityHandler) fetchAndReplaceEntity(w http.ResponseWriter, r *http.Req
 		return nil, err
 	}
 
+	// Check If-Match header if ETag is configured
+	if h.metadata.ETagProperty != nil {
+		ifMatch := r.Header.Get(HeaderIfMatch)
+		currentETag := etag.Generate(entity, h.metadata)
+
+		if !etag.Match(ifMatch, currentETag) {
+			if writeErr := response.WriteError(w, http.StatusPreconditionFailed, ErrMsgPreconditionFailed,
+				ErrDetailPreconditionFailed); writeErr != nil {
+				fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			}
+			return nil, err
+		}
+	}
+
+	// Create a new instance for the replacement data
 	replacementEntity := reflect.New(h.metadata.EntityType).Interface()
 	if err := json.NewDecoder(r.Body).Decode(replacementEntity); err != nil {
 		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidRequestBody,

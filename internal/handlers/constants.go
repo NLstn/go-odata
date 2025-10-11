@@ -5,6 +5,8 @@ const (
 	HeaderContentType       = "Content-Type"
 	HeaderODataVersion      = "OData-Version"
 	HeaderPreferenceApplied = "Preference-Applied"
+	HeaderIfMatch           = "If-Match"
+	HeaderETag              = "ETag"
 )
 
 // Content type constants
@@ -15,13 +17,15 @@ const (
 
 // Error message constants
 const (
-	ErrMsgMethodNotAllowed    = "Method not allowed"
-	ErrMsgInvalidQueryOptions = "Invalid query options"
-	ErrMsgDatabaseError       = "Database error"
-	ErrMsgInvalidRequestBody  = "Invalid request body"
-	ErrMsgInvalidKey          = "Invalid key"
-	ErrMsgEntityNotFound      = "Entity not found"
-	ErrMsgInternalError       = "Internal error"
+	ErrMsgMethodNotAllowed     = "Method not allowed"
+	ErrMsgInvalidQueryOptions  = "Invalid query options"
+	ErrMsgDatabaseError        = "Database error"
+	ErrMsgInvalidRequestBody   = "Invalid request body"
+	ErrMsgInvalidKey           = "Invalid key"
+	ErrMsgEntityNotFound       = "Entity not found"
+	ErrMsgInternalError        = "Internal error"
+	ErrMsgPreconditionFailed   = "Precondition failed"
+	ErrDetailPreconditionFailed = "The entity has been modified. Please refresh and try again."
 )
 
 // Error detail format constants
