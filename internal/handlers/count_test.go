@@ -153,6 +153,51 @@ func TestEntityHandlerCountEmptyCollection(t *testing.T) {
 	}
 }
 
+// Test that $count endpoint returns plain text, not JSON
+func TestEntityHandlerCountReturnsPlainText(t *testing.T) {
+	handler, db := setupProductHandler(t)
+
+	// Insert test products
+	products := []Product{
+		{ID: 1, Name: "Laptop", Price: 999.99, Category: "Electronics"},
+		{ID: 2, Name: "Mouse", Price: 29.99, Category: "Electronics"},
+		{ID: 3, Name: "Chair", Price: 249.99, Category: "Furniture"},
+	}
+	for _, product := range products {
+		db.Create(&product)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/Products/$count", nil)
+	w := httptest.NewRecorder()
+
+	handler.HandleCount(w, req)
+
+	// Verify status is OK
+	if w.Code != http.StatusOK {
+		t.Errorf("Status = %v, want %v", w.Code, http.StatusOK)
+	}
+
+	// Verify Content-Type is text/plain, not JSON
+	contentType := w.Header().Get("Content-Type")
+	if contentType != "text/plain" {
+		t.Errorf("Content-Type = %v, want text/plain", contentType)
+	}
+	if contentType == "application/json" || contentType == "application/json;odata.metadata=minimal" {
+		t.Error("Count endpoint should not return JSON")
+	}
+
+	// Verify body is just a number, not a JSON object
+	body := w.Body.String()
+	if body != "3" {
+		t.Errorf("Body = %v, want 3", body)
+	}
+
+	// Verify it's not a JSON response with a "value" property
+	if len(body) > 10 || body[0] == '{' || body[0] == '[' {
+		t.Errorf("Response appears to be JSON, should be plain text: %s", body)
+	}
+}
+
 // Test that $count endpoint works with complex filters
 func TestEntityHandlerCountComplexFilter(t *testing.T) {
 	handler, db := setupProductHandler(t)
@@ -206,6 +251,81 @@ func TestEntityHandlerCountComplexFilter(t *testing.T) {
 			body := w.Body.String()
 			if body != tt.expectedCount {
 				t.Errorf("Body = %v, want %v", body, tt.expectedCount)
+			}
+		})
+	}
+}
+
+// Test that $count endpoint ignores query options other than $filter
+// According to OData v4 spec, only $filter and $search should apply to $count
+func TestEntityHandlerCountIgnoresOtherQueryOptions(t *testing.T) {
+	handler, db := setupProductHandler(t)
+
+	// Insert test products
+	products := []Product{
+		{ID: 1, Name: "Laptop", Price: 999.99, Category: "Electronics"},
+		{ID: 2, Name: "Mouse", Price: 29.99, Category: "Electronics"},
+		{ID: 3, Name: "Keyboard", Price: 149.99, Category: "Electronics"},
+		{ID: 4, Name: "Chair", Price: 249.99, Category: "Furniture"},
+		{ID: 5, Name: "Desk", Price: 399.99, Category: "Furniture"},
+	}
+	for _, product := range products {
+		db.Create(&product)
+	}
+
+	tests := []struct {
+		name          string
+		url           string
+		expectedCount string
+		description   string
+	}{
+		{
+			name:          "With $top - should be ignored",
+			url:           "/Products/$count?$top=2",
+			expectedCount: "5",
+			description:   "$top should not affect count",
+		},
+		{
+			name:          "With $skip - should be ignored",
+			url:           "/Products/$count?$skip=2",
+			expectedCount: "5",
+			description:   "$skip should not affect count",
+		},
+		{
+			name:          "With $orderby - should be ignored",
+			url:           "/Products/$count?$orderby=Name",
+			expectedCount: "5",
+			description:   "$orderby should not affect count",
+		},
+		{
+			name:          "With $select - should be ignored",
+			url:           "/Products/$count?$select=Name",
+			expectedCount: "5",
+			description:   "$select should not affect count",
+		},
+		{
+			name:          "With $filter and $top - only filter should apply",
+			url:           "/Products/$count?$filter=Category%20eq%20%27Electronics%27&$top=2",
+			expectedCount: "3",
+			description:   "Only $filter should apply, $top should be ignored",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tt.url, nil)
+			w := httptest.NewRecorder()
+
+			handler.HandleCount(w, req)
+
+			if w.Code != http.StatusOK {
+				t.Errorf("Status = %v, want %v", w.Code, http.StatusOK)
+				t.Logf("Response body: %s", w.Body.String())
+			}
+
+			body := w.Body.String()
+			if body != tt.expectedCount {
+				t.Errorf("Body = %v, want %v (%s)", body, tt.expectedCount, tt.description)
 			}
 		})
 	}
