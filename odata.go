@@ -24,18 +24,24 @@ type Service struct {
 	metadataHandler *handlers.MetadataHandler
 	// serviceDocumentHandler handles service document requests
 	serviceDocumentHandler *handlers.ServiceDocumentHandler
+	// batchHandler handles batch requests
+	batchHandler *handlers.BatchHandler
 }
 
 // NewService creates a new OData service instance with database connection.
 func NewService(db *gorm.DB) *Service {
 	entities := make(map[string]*metadata.EntityMetadata)
-	return &Service{
+	handlersMap := make(map[string]*handlers.EntityHandler)
+	s := &Service{
 		db:                     db,
 		entities:               entities,
-		handlers:               make(map[string]*handlers.EntityHandler),
+		handlers:               handlersMap,
 		metadataHandler:        handlers.NewMetadataHandler(entities),
 		serviceDocumentHandler: handlers.NewServiceDocumentHandler(entities),
 	}
+	// Initialize batch handler with reference to service
+	s.batchHandler = handlers.NewBatchHandler(db, handlersMap, s)
+	return s
 }
 
 // RegisterEntity registers an entity type with the OData service.

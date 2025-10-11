@@ -25,6 +25,12 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Handle batch requests
+	if path == "$batch" {
+		s.batchHandler.HandleBatch(w, r)
+		return
+	}
+
 	// Parse the OData URL to extract entity set, key, and navigation property
 	components, err := response.ParseODataURLComponents(path)
 	if err != nil {
