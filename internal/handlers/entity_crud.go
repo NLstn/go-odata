@@ -13,10 +13,10 @@ import (
 	"gorm.io/gorm"
 )
 
-// HandleEntity handles GET, DELETE, PATCH, PUT, and OPTIONS requests for individual entities
+// HandleEntity handles GET, HEAD, DELETE, PATCH, PUT, and OPTIONS requests for individual entities
 func (h *EntityHandler) HandleEntity(w http.ResponseWriter, r *http.Request, entityKey string) {
 	switch r.Method {
-	case http.MethodGet:
+	case http.MethodGet, http.MethodHead:
 		h.handleGetEntity(w, r, entityKey)
 	case http.MethodDelete:
 		h.handleDeleteEntity(w, r, entityKey)
@@ -36,7 +36,7 @@ func (h *EntityHandler) HandleEntity(w http.ResponseWriter, r *http.Request, ent
 
 // handleOptionsEntity handles OPTIONS requests for individual entities
 func (h *EntityHandler) handleOptionsEntity(w http.ResponseWriter) {
-	w.Header().Set("Allow", "GET, DELETE, PATCH, PUT, OPTIONS")
+	w.Header().Set("Allow", "GET, HEAD, DELETE, PATCH, PUT, OPTIONS")
 	w.Header().Set(HeaderODataVersion, "4.0")
 	w.WriteHeader(http.StatusOK)
 }
@@ -95,6 +95,11 @@ func (h *EntityHandler) writeEntityResponse(w http.ResponseWriter, r *http.Reque
 	w.Header().Set(HeaderContentType, ContentTypeJSON)
 	w.Header().Set(HeaderODataVersion, "4.0")
 	w.WriteHeader(http.StatusOK)
+
+	// For HEAD requests, don't write the body
+	if r.Method == http.MethodHead {
+		return
+	}
 
 	if err := json.NewEncoder(w).Encode(odataResponse); err != nil {
 		fmt.Printf(LogMsgErrorWritingEntityResponse, err)

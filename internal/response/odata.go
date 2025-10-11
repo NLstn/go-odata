@@ -104,6 +104,11 @@ func WriteODataCollection(w http.ResponseWriter, r *http.Request, entitySetName 
 	w.Header().Set("OData-Version", "4.0")
 	w.WriteHeader(http.StatusOK)
 
+	// For HEAD requests, don't write the body
+	if r.Method == http.MethodHead {
+		return nil
+	}
+
 	// Encode and write the response
 	encoder := json.NewEncoder(w)
 	encoder.SetIndent("", "  ")
@@ -129,6 +134,11 @@ func WriteODataCollectionWithNavigation(w http.ResponseWriter, r *http.Request, 
 	w.Header().Set("Content-Type", "application/json;odata.metadata=minimal")
 	w.Header().Set("OData-Version", "4.0")
 	w.WriteHeader(http.StatusOK)
+
+	// For HEAD requests, don't write the body
+	if r.Method == http.MethodHead {
+		return nil
+	}
 
 	// Encode and write the response
 	encoder := json.NewEncoder(w)
@@ -440,6 +450,11 @@ func WriteServiceDocument(w http.ResponseWriter, r *http.Request, entitySets []s
 	w.Header().Set("Content-Type", "application/json;odata.metadata=minimal")
 	w.Header().Set("OData-Version", "4.0")
 	w.WriteHeader(http.StatusOK)
+
+	// For HEAD requests, don't write the body
+	if r.Method == http.MethodHead {
+		return nil
+	}
 
 	encoder := json.NewEncoder(w)
 	encoder.SetIndent("", "  ")

@@ -13,10 +13,10 @@ import (
 	"github.com/nlstn/go-odata/internal/response"
 )
 
-// HandleCollection handles GET, POST, and OPTIONS requests for entity collections
+// HandleCollection handles GET, HEAD, POST, and OPTIONS requests for entity collections
 func (h *EntityHandler) HandleCollection(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
-	case http.MethodGet:
+	case http.MethodGet, http.MethodHead:
 		h.handleGetCollection(w, r)
 	case http.MethodPost:
 		h.handlePostEntity(w, r)
@@ -32,7 +32,7 @@ func (h *EntityHandler) HandleCollection(w http.ResponseWriter, r *http.Request)
 
 // handleOptionsCollection handles OPTIONS requests for entity collections
 func (h *EntityHandler) handleOptionsCollection(w http.ResponseWriter) {
-	w.Header().Set("Allow", "GET, POST, OPTIONS")
+	w.Header().Set("Allow", "GET, HEAD, POST, OPTIONS")
 	w.Header().Set(HeaderODataVersion, "4.0")
 	w.WriteHeader(http.StatusOK)
 }
@@ -219,10 +219,10 @@ func (h *EntityHandler) buildEntityLocation(r *http.Request, entity interface{})
 	return fmt.Sprintf("%s/%s(%s)", baseURL, entitySetName, strings.Join(keyParts, ","))
 }
 
-// HandleCount handles GET and OPTIONS requests for entity collection count (e.g., /Products/$count)
+// HandleCount handles GET, HEAD, and OPTIONS requests for entity collection count (e.g., /Products/$count)
 func (h *EntityHandler) HandleCount(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
-	case http.MethodGet:
+	case http.MethodGet, http.MethodHead:
 		h.handleGetCount(w, r)
 	case http.MethodOptions:
 		h.handleOptionsCount(w)
@@ -264,6 +264,12 @@ func (h *EntityHandler) handleGetCount(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set(HeaderContentType, "text/plain")
 	w.Header().Set(HeaderODataVersion, "4.0")
 	w.WriteHeader(http.StatusOK)
+
+	// For HEAD requests, don't write the body
+	if r.Method == http.MethodHead {
+		return
+	}
+
 	if _, err := fmt.Fprintf(w, "%d", count); err != nil {
 		fmt.Printf("Error writing count response: %v\n", err)
 	}
@@ -271,7 +277,7 @@ func (h *EntityHandler) handleGetCount(w http.ResponseWriter, r *http.Request) {
 
 // handleOptionsCount handles OPTIONS requests for $count endpoint
 func (h *EntityHandler) handleOptionsCount(w http.ResponseWriter) {
-	w.Header().Set("Allow", "GET, OPTIONS")
+	w.Header().Set("Allow", "GET, HEAD, OPTIONS")
 	w.Header().Set(HeaderODataVersion, "4.0")
 	w.WriteHeader(http.StatusOK)
 }

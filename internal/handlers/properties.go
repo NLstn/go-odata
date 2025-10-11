@@ -11,10 +11,10 @@ import (
 	"gorm.io/gorm"
 )
 
-// HandleNavigationProperty handles GET and OPTIONS requests for navigation properties (e.g., Products(1)/Descriptions)
+// HandleNavigationProperty handles GET, HEAD, and OPTIONS requests for navigation properties (e.g., Products(1)/Descriptions)
 func (h *EntityHandler) HandleNavigationProperty(w http.ResponseWriter, r *http.Request, entityKey string, navigationProperty string) {
 	switch r.Method {
-	case http.MethodGet:
+	case http.MethodGet, http.MethodHead:
 		h.handleGetNavigationProperty(w, r, entityKey, navigationProperty)
 	case http.MethodOptions:
 		h.handleOptionsNavigationProperty(w)
@@ -60,7 +60,7 @@ func (h *EntityHandler) handleGetNavigationProperty(w http.ResponseWriter, r *ht
 
 // handleOptionsNavigationProperty handles OPTIONS requests for navigation properties
 func (h *EntityHandler) handleOptionsNavigationProperty(w http.ResponseWriter) {
-	w.Header().Set("Allow", "GET, OPTIONS")
+	w.Header().Set("Allow", "GET, HEAD, OPTIONS")
 	w.Header().Set(HeaderODataVersion, "4.0")
 	w.WriteHeader(http.StatusOK)
 }
@@ -99,7 +99,7 @@ func (h *EntityHandler) IsStructuralProperty(propertyName string) bool {
 // When isValue is true, returns the raw property value without JSON wrapper (e.g., Products(1)/Name/$value)
 func (h *EntityHandler) HandleStructuralProperty(w http.ResponseWriter, r *http.Request, entityKey string, propertyName string, isValue bool) {
 	switch r.Method {
-	case http.MethodGet:
+	case http.MethodGet, http.MethodHead:
 		h.handleGetStructuralProperty(w, r, entityKey, propertyName, isValue)
 	case http.MethodOptions:
 		h.handleOptionsStructuralProperty(w)
@@ -125,7 +125,7 @@ func (h *EntityHandler) handleGetStructuralProperty(w http.ResponseWriter, r *ht
 
 	// Write response
 	if isValue {
-		h.writeRawPropertyValue(w, fieldValue)
+		h.writeRawPropertyValue(w, r, fieldValue)
 	} else {
 		h.writePropertyResponse(w, r, entityKey, prop, fieldValue)
 	}
@@ -133,7 +133,7 @@ func (h *EntityHandler) handleGetStructuralProperty(w http.ResponseWriter, r *ht
 
 // handleOptionsStructuralProperty handles OPTIONS requests for structural properties
 func (h *EntityHandler) handleOptionsStructuralProperty(w http.ResponseWriter) {
-	w.Header().Set("Allow", "GET, OPTIONS")
+	w.Header().Set("Allow", "GET, HEAD, OPTIONS")
 	w.Header().Set(HeaderODataVersion, "4.0")
 	w.WriteHeader(http.StatusOK)
 }
@@ -209,13 +209,18 @@ func (h *EntityHandler) writePropertyResponse(w http.ResponseWriter, r *http.Req
 	w.Header().Set(HeaderODataVersion, "4.0")
 	w.WriteHeader(http.StatusOK)
 
+	// For HEAD requests, don't write the body
+	if r.Method == http.MethodHead {
+		return
+	}
+
 	if err := json.NewEncoder(w).Encode(odataResponse); err != nil {
 		fmt.Printf("Error writing property response: %v\n", err)
 	}
 }
 
 // writeRawPropertyValue writes a property value in raw format for /$value requests
-func (h *EntityHandler) writeRawPropertyValue(w http.ResponseWriter, fieldValue reflect.Value) {
+func (h *EntityHandler) writeRawPropertyValue(w http.ResponseWriter, r *http.Request, fieldValue reflect.Value) {
 	// Set appropriate content type based on the value type
 	valueInterface := fieldValue.Interface()
 
@@ -237,6 +242,11 @@ func (h *EntityHandler) writeRawPropertyValue(w http.ResponseWriter, fieldValue 
 	w.Header().Set(HeaderODataVersion, "4.0")
 	w.WriteHeader(http.StatusOK)
 
+	// For HEAD requests, don't write the body
+	if r.Method == http.MethodHead {
+		return
+	}
+	
 	// Write the raw value
 	if _, err := fmt.Fprintf(w, "%v", valueInterface); err != nil {
 		fmt.Printf("Error writing raw value: %v\n", err)
@@ -321,6 +331,11 @@ func (h *EntityHandler) writeSingleNavigationEntity(w http.ResponseWriter, r *ht
 	w.Header().Set(HeaderContentType, ContentTypeJSON)
 	w.Header().Set(HeaderODataVersion, "4.0")
 	w.WriteHeader(http.StatusOK)
+
+	// For HEAD requests, don't write the body
+	if r.Method == http.MethodHead {
+		return
+	}
 
 	if err := json.NewEncoder(w).Encode(odataResponse); err != nil {
 		fmt.Printf("Error writing navigation property response: %v\n", err)

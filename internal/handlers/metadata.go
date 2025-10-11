@@ -26,7 +26,7 @@ func NewMetadataHandler(entities map[string]*metadata.EntityMetadata) *MetadataH
 // HandleMetadata handles the metadata document endpoint
 func (h *MetadataHandler) HandleMetadata(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
-	case http.MethodGet:
+	case http.MethodGet, http.MethodHead:
 		h.handleGetMetadata(w, r)
 	case http.MethodOptions:
 		h.handleOptionsMetadata(w)
@@ -44,15 +44,15 @@ func (h *MetadataHandler) handleGetMetadata(w http.ResponseWriter, r *http.Reque
 	useJSON := shouldReturnJSON(r)
 
 	if useJSON {
-		h.handleMetadataJSON(w)
+		h.handleMetadataJSON(w, r)
 	} else {
-		h.handleMetadataXML(w)
+		h.handleMetadataXML(w, r)
 	}
 }
 
 // handleOptionsMetadata handles OPTIONS requests for metadata document
 func (h *MetadataHandler) handleOptionsMetadata(w http.ResponseWriter) {
-	w.Header().Set("Allow", "GET, OPTIONS")
+	w.Header().Set("Allow", "GET, HEAD, OPTIONS")
 	w.Header().Set("OData-Version", "4.0")
 	w.WriteHeader(http.StatusOK)
 }
@@ -71,9 +71,14 @@ func shouldReturnJSON(r *http.Request) bool {
 }
 
 // handleMetadataXML handles XML metadata format (existing implementation)
-func (h *MetadataHandler) handleMetadataXML(w http.ResponseWriter) {
+func (h *MetadataHandler) handleMetadataXML(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/xml")
 	w.WriteHeader(http.StatusOK)
+
+	// For HEAD requests, don't write the body
+	if r.Method == http.MethodHead {
+		return
+	}
 
 	metadataDoc := h.buildMetadataDocument()
 
@@ -244,10 +249,15 @@ func (h *MetadataHandler) buildEntityContainer() string {
 }
 
 // handleMetadataJSON handles JSON metadata format (CSDL JSON)
-func (h *MetadataHandler) handleMetadataJSON(w http.ResponseWriter) {
+func (h *MetadataHandler) handleMetadataJSON(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("OData-Version", "4.0")
 	w.WriteHeader(http.StatusOK)
+
+	// For HEAD requests, don't write the body
+	if r.Method == http.MethodHead {
+		return
+	}
 
 	// Build CSDL JSON structure
 	odataService := make(map[string]interface{})
