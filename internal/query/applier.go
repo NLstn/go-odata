@@ -169,6 +169,11 @@ func buildLogicalCondition(filter *FilterExpression, entityMetadata *metadata.En
 
 // buildComparisonCondition builds a comparison condition
 func buildComparisonCondition(filter *FilterExpression, entityMetadata *metadata.EntityMetadata) (string, []interface{}) {
+	// Check if this is a function comparison (function on left side of comparison)
+	if filter.Left != nil && filter.Left.Operator != "" {
+		return buildFunctionComparison(filter, entityMetadata)
+	}
+
 	columnName := GetColumnName(filter.Property, entityMetadata)
 
 	switch filter.Operator {
@@ -192,6 +197,82 @@ func buildComparisonCondition(filter *FilterExpression, entityMetadata *metadata
 		return fmt.Sprintf("%s LIKE ?", columnName), []interface{}{"%" + fmt.Sprint(filter.Value)}
 	default:
 		return "", nil
+	}
+}
+
+// buildFunctionComparison builds a comparison with a function on the left side
+func buildFunctionComparison(filter *FilterExpression, entityMetadata *metadata.EntityMetadata) (string, []interface{}) {
+	funcExpr := filter.Left
+	columnName := GetColumnName(funcExpr.Property, entityMetadata)
+
+	funcSQL, funcArgs := buildFunctionSQL(funcExpr.Operator, columnName, funcExpr.Value)
+	if funcSQL == "" {
+		return "", nil
+	}
+
+	compSQL := buildComparisonSQL(filter.Operator, funcSQL)
+	if compSQL == "" {
+		return "", nil
+	}
+
+	allArgs := append(funcArgs, filter.Value)
+	return compSQL, allArgs
+}
+
+// buildFunctionSQL generates SQL for a string function
+func buildFunctionSQL(op FilterOperator, columnName string, value interface{}) (string, []interface{}) {
+	switch op {
+	case OpToLower:
+		return fmt.Sprintf("LOWER(%s)", columnName), nil
+	case OpToUpper:
+		return fmt.Sprintf("UPPER(%s)", columnName), nil
+	case OpTrim:
+		return fmt.Sprintf("TRIM(%s)", columnName), nil
+	case OpLength:
+		return fmt.Sprintf("LENGTH(%s)", columnName), nil
+	case OpIndexOf:
+		return fmt.Sprintf("INSTR(%s, ?)", columnName), []interface{}{value}
+	case OpConcat:
+		return fmt.Sprintf("CONCAT(%s, ?)", columnName), []interface{}{value}
+	case OpSubstring:
+		return buildSubstringSQL(columnName, value)
+	default:
+		return "", nil
+	}
+}
+
+// buildSubstringSQL builds SQL for substring function
+func buildSubstringSQL(columnName string, value interface{}) (string, []interface{}) {
+	args, ok := value.([]interface{})
+	if !ok {
+		return "", nil
+	}
+	if len(args) == 1 {
+		return fmt.Sprintf("SUBSTR(%s, ?, LENGTH(%s))", columnName, columnName), []interface{}{args[0]}
+	}
+	if len(args) == 2 {
+		return fmt.Sprintf("SUBSTR(%s, ?, ?)", columnName), args
+	}
+	return "", nil
+}
+
+// buildComparisonSQL builds SQL for comparison operator
+func buildComparisonSQL(op FilterOperator, leftSQL string) string {
+	switch op {
+	case OpEqual:
+		return fmt.Sprintf("%s = ?", leftSQL)
+	case OpNotEqual:
+		return fmt.Sprintf("%s != ?", leftSQL)
+	case OpGreaterThan:
+		return fmt.Sprintf("%s > ?", leftSQL)
+	case OpGreaterThanOrEqual:
+		return fmt.Sprintf("%s >= ?", leftSQL)
+	case OpLessThan:
+		return fmt.Sprintf("%s < ?", leftSQL)
+	case OpLessThanOrEqual:
+		return fmt.Sprintf("%s <= ?", leftSQL)
+	default:
+		return ""
 	}
 }
 
@@ -298,31 +379,59 @@ func buildSimpleFilterCondition(filter *FilterExpression) (string, []interface{}
 		}
 	}
 
+	// Check if this is a function comparison (function on left side of comparison)
+	if filter.Left != nil && filter.Left.Operator != "" {
+		return buildSimpleFunctionComparison(filter)
+	}
+
 	// Convert property name to snake_case for database column name
 	fieldName := toSnakeCase(filter.Property)
+	return buildSimpleOperatorCondition(filter.Operator, fieldName, filter.Value)
+}
 
-	switch filter.Operator {
+// buildSimpleOperatorCondition builds SQL for a simple operator condition
+func buildSimpleOperatorCondition(op FilterOperator, fieldName string, value interface{}) (string, []interface{}) {
+	switch op {
 	case OpEqual:
-		return fmt.Sprintf("%s = ?", fieldName), []interface{}{filter.Value}
+		return fmt.Sprintf("%s = ?", fieldName), []interface{}{value}
 	case OpNotEqual:
-		return fmt.Sprintf("%s != ?", fieldName), []interface{}{filter.Value}
+		return fmt.Sprintf("%s != ?", fieldName), []interface{}{value}
 	case OpGreaterThan:
-		return fmt.Sprintf("%s > ?", fieldName), []interface{}{filter.Value}
+		return fmt.Sprintf("%s > ?", fieldName), []interface{}{value}
 	case OpGreaterThanOrEqual:
-		return fmt.Sprintf("%s >= ?", fieldName), []interface{}{filter.Value}
+		return fmt.Sprintf("%s >= ?", fieldName), []interface{}{value}
 	case OpLessThan:
-		return fmt.Sprintf("%s < ?", fieldName), []interface{}{filter.Value}
+		return fmt.Sprintf("%s < ?", fieldName), []interface{}{value}
 	case OpLessThanOrEqual:
-		return fmt.Sprintf("%s <= ?", fieldName), []interface{}{filter.Value}
+		return fmt.Sprintf("%s <= ?", fieldName), []interface{}{value}
 	case OpContains:
-		return fmt.Sprintf("%s LIKE ?", fieldName), []interface{}{"%" + fmt.Sprint(filter.Value) + "%"}
+		return fmt.Sprintf("%s LIKE ?", fieldName), []interface{}{"%" + fmt.Sprint(value) + "%"}
 	case OpStartsWith:
-		return fmt.Sprintf("%s LIKE ?", fieldName), []interface{}{fmt.Sprint(filter.Value) + "%"}
+		return fmt.Sprintf("%s LIKE ?", fieldName), []interface{}{fmt.Sprint(value) + "%"}
 	case OpEndsWith:
-		return fmt.Sprintf("%s LIKE ?", fieldName), []interface{}{"%" + fmt.Sprint(filter.Value)}
+		return fmt.Sprintf("%s LIKE ?", fieldName), []interface{}{"%" + fmt.Sprint(value)}
 	default:
 		return "", nil
 	}
+}
+
+// buildSimpleFunctionComparison builds a comparison with a function on the left side (without metadata)
+func buildSimpleFunctionComparison(filter *FilterExpression) (string, []interface{}) {
+	funcExpr := filter.Left
+	fieldName := toSnakeCase(funcExpr.Property)
+
+	funcSQL, funcArgs := buildFunctionSQL(funcExpr.Operator, fieldName, funcExpr.Value)
+	if funcSQL == "" {
+		return "", nil
+	}
+
+	compSQL := buildComparisonSQL(filter.Operator, funcSQL)
+	if compSQL == "" {
+		return "", nil
+	}
+
+	allArgs := append(funcArgs, filter.Value)
+	return compSQL, allArgs
 }
 
 // applyOrderBy applies order by clauses to the GORM query
