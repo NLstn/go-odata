@@ -440,10 +440,7 @@ func TestMetadataNavigationProperties(t *testing.T) {
 func TestQueryParserExpandSingle(t *testing.T) {
 
 	queryString := "Books"
-	expandOpts, err := parseExpandForTest(queryString)
-	if err != nil {
-		t.Fatalf("Failed to parse expand: %v", err)
-	}
+	expandOpts := parseExpandForTest(queryString)
 
 	if len(expandOpts) != 1 {
 		t.Fatalf("Expected 1 expand option, got %d", len(expandOpts))
@@ -455,7 +452,7 @@ func TestQueryParserExpandSingle(t *testing.T) {
 }
 
 // Helper function for testing expand parsing
-func parseExpandForTest(expandStr string) ([]query.ExpandOption, error) {
+func parseExpandForTest(expandStr string) []query.ExpandOption {
 	// This is a simplified version for testing - in real code, use the parser
 	parts := []string{expandStr}
 	result := make([]query.ExpandOption, 0, len(parts))
@@ -467,7 +464,7 @@ func parseExpandForTest(expandStr string) ([]query.ExpandOption, error) {
 		result = append(result, expand)
 	}
 
-	return result, nil
+	return result
 }
 
 // TestNavigationLinksWithoutExpand tests that navigation links are included when properties are not expanded
