@@ -231,9 +231,9 @@ func (t *Tokenizer) tokenizeIdentifierOrKeyword(pos int) *Token {
 	value := t.readIdentifier()
 	lower := strings.ToLower(value)
 
-	// Check for arithmetic functions: add, sub, mul, div can be either
+	// Check for arithmetic functions: add, sub, mul, div, mod can be either
 	// functions (when followed by '(') or infix operators
-	if (lower == "add" || lower == "sub" || lower == "mul" || lower == "div") && t.ch == '(' {
+	if (lower == "add" || lower == "sub" || lower == "mul" || lower == "div" || lower == "mod") && t.ch == '(' {
 		// Treat as identifier (function name) when followed by '('
 		return &Token{Type: TokenIdentifier, Value: value, Pos: pos}
 	}

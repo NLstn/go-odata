@@ -313,6 +313,20 @@ func TestArithmeticFunctions_SQLGeneration(t *testing.T) {
 			expectedSQL:    "(price / ?) >= ?",
 			expectedArgsNo: 2,
 		},
+		{
+			name:           "mod SQL with function syntax",
+			filter:         "mod(Price, 2) eq 1",
+			expectErr:      false,
+			expectedSQL:    "(price % ?) = ?",
+			expectedArgsNo: 2,
+		},
+		{
+			name:           "mod SQL with infix syntax",
+			filter:         "Price mod 2 eq 1",
+			expectErr:      false,
+			expectedSQL:    "(price % ?) = ?",
+			expectedArgsNo: 2,
+		},
 	}
 
 	for _, tt := range tests {

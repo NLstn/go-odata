@@ -425,6 +425,44 @@ func convertComparisonExpr(n *ComparisonExpr, entityMetadata *metadata.EntityMet
 		return filterExpr, nil
 	}
 
+	// Check if left side is a binary expression (arithmetic operation)
+	if binExpr, ok := n.Left.(*BinaryExpr); ok {
+		// Handle arithmetic operations like Price mod 2 eq 1
+		arithExpr, err := convertBinaryArithmeticExpr(binExpr, entityMetadata)
+		if err != nil {
+			return nil, err
+		}
+
+		// Get value from right side
+		value, err := extractValueFromComparison(n.Right)
+		if err != nil {
+			return nil, err
+		}
+
+		// Store comparison info for SQL generation
+		filterExpr := &FilterExpression{
+			Property: fmt.Sprintf("_func_%s_%s_%s", arithExpr.Operator, arithExpr.Property, n.Operator),
+			Operator: FilterOperator(n.Operator),
+			Value:    value,
+		}
+
+		// Store the original arithmetic info in Left for SQL generation
+		filterExpr.Left = arithExpr
+
+		return filterExpr, nil
+	}
+
+	// Check if left side is a grouped expression
+	if groupExpr, ok := n.Left.(*GroupExpr); ok {
+		// Unwrap and re-process
+		unwrappedComparison := &ComparisonExpr{
+			Left:     groupExpr.Expr,
+			Operator: n.Operator,
+			Right:    n.Right,
+		}
+		return convertComparisonExpr(unwrappedComparison, entityMetadata)
+	}
+
 	property, err := extractPropertyFromComparison(n.Left, entityMetadata)
 	if err != nil {
 		return nil, err
@@ -465,6 +503,74 @@ func extractPropertyFromComparison(node ASTNode, entityMetadata *metadata.Entity
 	return "", fmt.Errorf("left side of comparison must be a property name or arithmetic expression")
 }
 
+// convertBinaryArithmeticExpr converts a binary arithmetic expression to a filter expression
+func convertBinaryArithmeticExpr(binExpr *BinaryExpr, entityMetadata *metadata.EntityMetadata) (*FilterExpression, error) {
+	// Map operator to FilterOperator
+	var op FilterOperator
+	switch binExpr.Operator {
+	case "add", "+":
+		op = OpAdd
+	case "sub", "-":
+		op = OpSub
+	case "mul", "*":
+		op = OpMul
+	case "div", "/":
+		op = OpDiv
+	case "mod":
+		op = OpMod
+	default:
+		return nil, fmt.Errorf("unsupported arithmetic operator: %s", binExpr.Operator)
+	}
+
+	// Extract property from left side
+	var property string
+	if leftIdent, ok := binExpr.Left.(*IdentifierExpr); ok {
+		property = leftIdent.Name
+		// Validate property exists
+		if entityMetadata != nil && !propertyExists(property, entityMetadata) {
+			return nil, fmt.Errorf("property '%s' does not exist", property)
+		}
+	} else if leftBinExpr, ok := binExpr.Left.(*BinaryExpr); ok {
+		// Nested arithmetic expression - recursively convert it
+		leftFilterExpr, err := convertBinaryArithmeticExpr(leftBinExpr, entityMetadata)
+		if err != nil {
+			return nil, err
+		}
+		// For nested expressions, we'll use a placeholder property
+		// The actual SQL generation will need to handle this recursively
+		property = leftFilterExpr.Property
+	} else {
+		// For other complex cases, use a placeholder
+		property = "_arithmetic_"
+	}
+
+	// Extract value from right side
+	var value interface{}
+	if rightLit, ok := binExpr.Right.(*LiteralExpr); ok {
+		value = rightLit.Value
+	} else if rightIdent, ok := binExpr.Right.(*IdentifierExpr); ok {
+		value = rightIdent.Name
+	} else if rightBinExpr, ok := binExpr.Right.(*BinaryExpr); ok {
+		// Nested arithmetic expression on right side - recursively convert it
+		// This handles cases like "Price add (10 mul 2)"
+		rightFilterExpr, err := convertBinaryArithmeticExpr(rightBinExpr, entityMetadata)
+		if err != nil {
+			return nil, err
+		}
+		// For nested expressions, store the converted expression
+		// The actual SQL generation will need to handle this
+		value = rightFilterExpr
+	} else {
+		return nil, fmt.Errorf("right side of arithmetic expression must be a literal, property, or arithmetic expression")
+	}
+
+	return &FilterExpression{
+		Property: property,
+		Operator: op,
+		Value:    value,
+	}, nil
+}
+
 // extractPropertyFromArithmeticExpr extracts property from arithmetic expression
 func extractPropertyFromArithmeticExpr(binExpr *BinaryExpr, entityMetadata *metadata.EntityMetadata) (string, error) {
 	if leftIdent, ok := binExpr.Left.(*IdentifierExpr); ok {
@@ -472,12 +578,6 @@ func extractPropertyFromArithmeticExpr(binExpr *BinaryExpr, entityMetadata *meta
 		// Validate property exists
 		if entityMetadata != nil && !propertyExists(property, entityMetadata) {
 			return "", fmt.Errorf("property '%s' does not exist", property)
-		}
-		// For modulo operation, we'll create a special representation
-		if binExpr.Operator == "mod" {
-			if rightLit, ok := binExpr.Right.(*LiteralExpr); ok {
-				return fmt.Sprintf("%s_mod_%v", property, rightLit.Value), nil
-			}
 		}
 		return property, nil
 	}
@@ -537,7 +637,7 @@ func isTwoArgFunction(name string) bool {
 
 // isArithmeticFunction checks if a function is an arithmetic function
 func isArithmeticFunction(name string) bool {
-	return name == "add" || name == "sub" || name == "mul" || name == "div"
+	return name == "add" || name == "sub" || name == "mul" || name == "div" || name == "mod"
 }
 
 // extractPropertyFromFunctionArg extracts property from function argument
