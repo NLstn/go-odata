@@ -59,6 +59,13 @@ const (
 	OpContains           FilterOperator = "contains"
 	OpStartsWith         FilterOperator = "startswith"
 	OpEndsWith           FilterOperator = "endswith"
+	OpToLower            FilterOperator = "tolower"
+	OpToUpper            FilterOperator = "toupper"
+	OpTrim               FilterOperator = "trim"
+	OpLength             FilterOperator = "length"
+	OpIndexOf            FilterOperator = "indexof"
+	OpSubstring          FilterOperator = "substring"
+	OpConcat             FilterOperator = "concat"
 )
 
 // LogicalOperator represents logical operators for combining filters

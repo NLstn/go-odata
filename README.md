@@ -29,7 +29,7 @@ A Go library for building services that expose OData APIs with automatic handlin
 ### OData Query Options
 - ✅ **Advanced Filtering ($filter)** - AST-based parser with full OData v4 support
   - Comparison operators: `eq`, `ne`, `gt`, `ge`, `lt`, `le`
-  - String functions: `contains`, `startswith`, `endswith`
+  - String functions: `contains`, `startswith`, `endswith`, `tolower`, `toupper`, `trim`, `length`, `indexof`, `substring`, `concat`
   - Boolean operators: `and`, `or`, `not`
   - Parentheses for complex expressions
   - Literal types: strings, numbers, booleans, null
@@ -260,12 +260,28 @@ Supported operators: `eq`, `ne`, `gt`, `ge`, `lt`, `le`
 
 #### String Functions
 ```
+# Search functions
 GET /Products?$filter=contains(Name,'Laptop')
 GET /Products?$filter=startswith(Category,'Elec')
 GET /Products?$filter=endswith(Name,'Pro')
+
+# Case transformation
+GET /Products?$filter=tolower(Name) eq 'laptop pro'
+GET /Products?$filter=toupper(Category) eq 'ELECTRONICS'
+
+# String manipulation
+GET /Products?$filter=trim(Description) ne ''
+GET /Products?$filter=length(Name) gt 10
+GET /Products?$filter=indexof(Name,'Pro') gt 0
+GET /Products?$filter=substring(Name,0,3) eq 'Lap'
+GET /Products?$filter=substring(Name,1,5) eq 'aptop'
+GET /Products?$filter=concat(Name,' Edition') eq 'Laptop Pro Edition'
 ```
 
-Supported functions: `contains`, `startswith`, `endswith`
+Supported functions:
+- **Search**: `contains`, `startswith`, `endswith`
+- **Case**: `tolower`, `toupper`
+- **Manipulation**: `trim`, `length`, `indexof`, `substring`, `concat`
 
 #### Boolean Logic with Parentheses
 ```

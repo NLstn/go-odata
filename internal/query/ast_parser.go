@@ -388,6 +388,40 @@ func convertUnaryExpr(n *UnaryExpr, entityMetadata *metadata.EntityMetadata) (*F
 
 // convertComparisonExpr converts a comparison expression to a filter expression
 func convertComparisonExpr(n *ComparisonExpr, entityMetadata *metadata.EntityMetadata) (*FilterExpression, error) {
+	// Check if left side is a function call
+	if funcCall, ok := n.Left.(*FunctionCallExpr); ok {
+		// Handle function calls like tolower(Name) eq 'value'
+		funcExpr, err := convertFunctionCallExpr(funcCall, entityMetadata)
+		if err != nil {
+			return nil, err
+		}
+
+		// Get value from right side
+		value, err := extractValueFromComparison(n.Right)
+		if err != nil {
+			return nil, err
+		}
+
+		// Store the function operator and the comparison operator together
+		// The property holds the column, the operator holds the function,
+		// and we store the comparison operator and value separately
+		filterExpr := &FilterExpression{
+			Property: funcExpr.Property,
+			Operator: funcExpr.Operator, // The function (tolower, length, etc.)
+			Value:    value,
+		}
+
+		// Store comparison info for SQL generation
+		// We'll use a special marker in the property name to indicate this is a function comparison
+		filterExpr.Property = fmt.Sprintf("_func_%s_%s_%s", funcExpr.Operator, funcExpr.Property, n.Operator)
+		filterExpr.Operator = FilterOperator(n.Operator)
+
+		// Store the original function info in Left for SQL generation
+		filterExpr.Left = funcExpr
+
+		return filterExpr, nil
+	}
+
 	property, err := extractPropertyFromComparison(n.Left, entityMetadata)
 	if err != nil {
 		return nil, err
@@ -457,34 +491,124 @@ func extractValueFromComparison(node ASTNode) (interface{}, error) {
 
 // convertFunctionCallExpr converts a function call expression to a filter expression
 func convertFunctionCallExpr(n *FunctionCallExpr, entityMetadata *metadata.EntityMetadata) (*FilterExpression, error) {
-	// Handle function calls like contains(Name, 'text')
-	if len(n.Args) != 2 {
-		return nil, fmt.Errorf("function %s requires 2 arguments", n.Function)
+	functionName := n.Function
+
+	// Handle single-argument functions (tolower, toupper, trim, length)
+	if isSingleArgFunction(functionName) {
+		return convertSingleArgFunction(n, functionName, entityMetadata)
 	}
 
-	var property string
-	var value interface{}
+	// Handle two-argument functions (contains, startswith, endswith, indexof, concat)
+	if isTwoArgFunction(functionName) {
+		return convertTwoArgFunction(n, functionName, entityMetadata)
+	}
 
-	// First argument should be a property name
-	if ident, ok := n.Args[0].(*IdentifierExpr); ok {
-		property = ident.Name
+	// Handle substring function (2 or 3 arguments)
+	if functionName == "substring" {
+		return convertSubstringFunction(n, entityMetadata)
+	}
+
+	return nil, fmt.Errorf("unsupported function: %s", functionName)
+}
+
+// isSingleArgFunction checks if a function takes a single argument
+func isSingleArgFunction(name string) bool {
+	return name == "tolower" || name == "toupper" || name == "trim" || name == "length"
+}
+
+// isTwoArgFunction checks if a function takes two arguments
+func isTwoArgFunction(name string) bool {
+	return name == "contains" || name == "startswith" || name == "endswith" ||
+		name == "indexof" || name == "concat"
+}
+
+// extractPropertyFromFunctionArg extracts property from function argument
+func extractPropertyFromFunctionArg(arg ASTNode, functionName string, entityMetadata *metadata.EntityMetadata) (string, error) {
+	if ident, ok := arg.(*IdentifierExpr); ok {
+		property := ident.Name
 		if entityMetadata != nil && !propertyExists(property, entityMetadata) {
-			return nil, fmt.Errorf("property '%s' does not exist", property)
+			return "", fmt.Errorf("property '%s' does not exist", property)
 		}
-	} else {
-		return nil, fmt.Errorf("first argument of %s must be a property name", n.Function)
+		return property, nil
 	}
 
-	// Second argument should be a literal
-	if lit, ok := n.Args[1].(*LiteralExpr); ok {
-		value = lit.Value
-	} else {
-		return nil, fmt.Errorf("second argument of %s must be a literal", n.Function)
+	if funcCall, ok := arg.(*FunctionCallExpr); ok {
+		innerExpr, err := convertFunctionCallExpr(funcCall, entityMetadata)
+		if err != nil {
+			return "", err
+		}
+		return innerExpr.Property, nil
+	}
+
+	return "", fmt.Errorf("first argument of %s must be a property name or function call", functionName)
+}
+
+// convertSingleArgFunction converts single-argument functions
+func convertSingleArgFunction(n *FunctionCallExpr, functionName string, entityMetadata *metadata.EntityMetadata) (*FilterExpression, error) {
+	if len(n.Args) != 1 {
+		return nil, fmt.Errorf("function %s requires 1 argument", functionName)
+	}
+
+	property, err := extractPropertyFromFunctionArg(n.Args[0], functionName, entityMetadata)
+	if err != nil {
+		return nil, err
 	}
 
 	return &FilterExpression{
 		Property: property,
-		Operator: FilterOperator(n.Function),
-		Value:    value,
+		Operator: FilterOperator(functionName),
+		Value:    nil,
+	}, nil
+}
+
+// convertTwoArgFunction converts two-argument functions
+func convertTwoArgFunction(n *FunctionCallExpr, functionName string, entityMetadata *metadata.EntityMetadata) (*FilterExpression, error) {
+	if len(n.Args) != 2 {
+		return nil, fmt.Errorf("function %s requires 2 arguments", functionName)
+	}
+
+	property, err := extractPropertyFromFunctionArg(n.Args[0], functionName, entityMetadata)
+	if err != nil {
+		return nil, err
+	}
+
+	// Second argument should be a literal
+	lit, ok := n.Args[1].(*LiteralExpr)
+	if !ok {
+		return nil, fmt.Errorf("second argument of %s must be a literal", functionName)
+	}
+
+	return &FilterExpression{
+		Property: property,
+		Operator: FilterOperator(functionName),
+		Value:    lit.Value,
+	}, nil
+}
+
+// convertSubstringFunction converts substring function
+func convertSubstringFunction(n *FunctionCallExpr, entityMetadata *metadata.EntityMetadata) (*FilterExpression, error) {
+	if len(n.Args) < 2 || len(n.Args) > 3 {
+		return nil, fmt.Errorf("function substring requires 2 or 3 arguments")
+	}
+
+	property, err := extractPropertyFromFunctionArg(n.Args[0], "substring", entityMetadata)
+	if err != nil {
+		return nil, err
+	}
+
+	// Collect numeric arguments
+	args := []interface{}{}
+	for i := 1; i < len(n.Args); i++ {
+		lit, ok := n.Args[i].(*LiteralExpr)
+		if !ok {
+			return nil, fmt.Errorf("argument %d of substring must be a number", i+1)
+		}
+		args = append(args, lit.Value)
+	}
+
+	return &FilterExpression{
+		Property: property,
+		Operator: OpSubstring,
+		Value:    args,
 	}, nil
 }
