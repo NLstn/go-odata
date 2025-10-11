@@ -6,6 +6,7 @@ const (
 	HeaderODataVersion      = "OData-Version"
 	HeaderPreferenceApplied = "Preference-Applied"
 	HeaderIfMatch           = "If-Match"
+	HeaderIfNoneMatch       = "If-None-Match"
 	HeaderETag              = "ETag"
 )
 

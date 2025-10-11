@@ -96,3 +96,26 @@ func Match(ifMatch string, currentETag string) bool {
 
 	return parsedIfMatch == parsedCurrent
 }
+
+// NoneMatch checks if the provided If-None-Match header value does NOT match the current ETag
+// Returns true if they don't match or if ifNoneMatch is empty (no condition)
+// Returns false if they match (meaning resource hasn't changed - should return 304)
+// The "*" wildcard means "match if entity exists" for If-None-Match
+func NoneMatch(ifNoneMatch string, currentETag string) bool {
+	if ifNoneMatch == "" {
+		return true // No If-None-Match header means no condition, proceed normally
+	}
+
+	// "*" matches any existing entity, so none-match is false if entity exists
+	if ifNoneMatch == "*" {
+		return currentETag == ""
+	}
+
+	// Parse both ETags and compare
+	parsedIfNoneMatch := Parse(ifNoneMatch)
+	parsedCurrent := Parse(currentETag)
+
+	// Return true if they DON'T match (proceed with normal response)
+	// Return false if they DO match (should return 304)
+	return parsedIfNoneMatch != parsedCurrent
+}

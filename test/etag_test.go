@@ -586,3 +586,247 @@ func TestPutEntity_WithPreferReturnRepresentation_IncludesETag(t *testing.T) {
 		t.Error("ETag header is missing in response")
 	}
 }
+
+// Test GET with If-None-Match header when ETag matches (304)
+func TestGetEntity_WithIfNoneMatch_Matching(t *testing.T) {
+	service, db := setupETagTestService(t)
+
+	// Create a test product
+	product := ETagProduct{
+		ID:          1,
+		Name:        "Laptop",
+		Price:       999.99,
+		Version:     1,
+		LastUpdated: time.Now(),
+	}
+	db.Create(&product)
+
+	// First, get the ETag
+	req := httptest.NewRequest(http.MethodGet, "/ETagProducts(1)", nil)
+	w := httptest.NewRecorder()
+	service.ServeHTTP(w, req)
+	etag := w.Header().Get("ETag")
+
+	// Now try to GET with If-None-Match using the same ETag
+	req = httptest.NewRequest(http.MethodGet, "/ETagProducts(1)", nil)
+	req.Header.Set("If-None-Match", etag)
+	w = httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	// Should return 304 Not Modified
+	if w.Code != http.StatusNotModified {
+		t.Errorf("Status = %v, want %v", w.Code, http.StatusNotModified)
+	}
+
+	// Should still have ETag header
+	if w.Header().Get("ETag") == "" {
+		t.Error("ETag header should be present in 304 response")
+	}
+
+	// Body should be empty for 304
+	if w.Body.Len() > 0 {
+		t.Errorf("Body should be empty for 304 response, got %d bytes", w.Body.Len())
+	}
+}
+
+// Test GET with If-None-Match header when ETag doesn't match (200)
+func TestGetEntity_WithIfNoneMatch_NotMatching(t *testing.T) {
+	service, db := setupETagTestService(t)
+
+	// Create a test product
+	product := ETagProduct{
+		ID:          1,
+		Name:        "Laptop",
+		Price:       999.99,
+		Version:     1,
+		LastUpdated: time.Now(),
+	}
+	db.Create(&product)
+
+	// Try to GET with If-None-Match using a different ETag
+	req := httptest.NewRequest(http.MethodGet, "/ETagProducts(1)", nil)
+	req.Header.Set("If-None-Match", "W/\"differentetag\"")
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	// Should return 200 OK with full entity
+	if w.Code != http.StatusOK {
+		t.Errorf("Status = %v, want %v", w.Code, http.StatusOK)
+	}
+
+	// Should have ETag header
+	etag := w.Header().Get("ETag")
+	if etag == "" {
+		t.Error("ETag header is missing")
+	}
+
+	// Body should contain the entity
+	var response map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	if response["name"] != "Laptop" {
+		t.Errorf("Expected name=Laptop, got %v", response["name"])
+	}
+}
+
+// Test GET without If-None-Match header (normal behavior)
+func TestGetEntity_WithoutIfNoneMatch(t *testing.T) {
+	service, db := setupETagTestService(t)
+
+	// Create a test product
+	product := ETagProduct{
+		ID:          1,
+		Name:        "Laptop",
+		Price:       999.99,
+		Version:     1,
+		LastUpdated: time.Now(),
+	}
+	db.Create(&product)
+
+	req := httptest.NewRequest(http.MethodGet, "/ETagProducts(1)", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	// Should return 200 OK
+	if w.Code != http.StatusOK {
+		t.Errorf("Status = %v, want %v", w.Code, http.StatusOK)
+	}
+
+	// Should have ETag header
+	if w.Header().Get("ETag") == "" {
+		t.Error("ETag header is missing")
+	}
+
+	// Body should contain the entity
+	if w.Body.Len() == 0 {
+		t.Error("Body should not be empty")
+	}
+}
+
+// Test GET with If-None-Match wildcard (*)
+func TestGetEntity_WithIfNoneMatch_Wildcard(t *testing.T) {
+	service, db := setupETagTestService(t)
+
+	// Create a test product
+	product := ETagProduct{
+		ID:          1,
+		Name:        "Laptop",
+		Price:       999.99,
+		Version:     1,
+		LastUpdated: time.Now(),
+	}
+	db.Create(&product)
+
+	// Try to GET with If-None-Match using wildcard
+	req := httptest.NewRequest(http.MethodGet, "/ETagProducts(1)", nil)
+	req.Header.Set("If-None-Match", "*")
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	// Should return 304 Not Modified (entity exists)
+	if w.Code != http.StatusNotModified {
+		t.Errorf("Status = %v, want %v", w.Code, http.StatusNotModified)
+	}
+}
+
+// Test GET with If-None-Match after entity modification
+func TestGetEntity_WithIfNoneMatch_AfterModification(t *testing.T) {
+	service, db := setupETagTestService(t)
+
+	// Create a test product
+	product := ETagProduct{
+		ID:          1,
+		Name:        "Laptop",
+		Price:       999.99,
+		Version:     1,
+		LastUpdated: time.Now(),
+	}
+	db.Create(&product)
+
+	// First, get the ETag
+	req := httptest.NewRequest(http.MethodGet, "/ETagProducts(1)", nil)
+	w := httptest.NewRecorder()
+	service.ServeHTTP(w, req)
+	originalETag := w.Header().Get("ETag")
+
+	// Modify the product (change version which is the ETag field)
+	db.Model(&ETagProduct{}).Where("id = ?", 1).Update("version", 2)
+
+	// Now try to GET with If-None-Match using the old ETag
+	req = httptest.NewRequest(http.MethodGet, "/ETagProducts(1)", nil)
+	req.Header.Set("If-None-Match", originalETag)
+	w = httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	// Should return 200 OK since ETag changed
+	if w.Code != http.StatusOK {
+		t.Errorf("Status = %v, want %v", w.Code, http.StatusOK)
+	}
+
+	// New ETag should be different
+	newETag := w.Header().Get("ETag")
+	if newETag == originalETag {
+		t.Error("ETag should have changed after modification")
+	}
+
+	// Body should contain the modified entity
+	var response map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	// Verify the version was updated
+	if response["version"] != float64(2) {
+		t.Errorf("Expected version=2, got %v", response["version"])
+	}
+}
+
+// Test HEAD with If-None-Match (should also return 304)
+func TestHeadEntity_WithIfNoneMatch_Matching(t *testing.T) {
+	service, db := setupETagTestService(t)
+
+	// Create a test product
+	product := ETagProduct{
+		ID:          1,
+		Name:        "Laptop",
+		Price:       999.99,
+		Version:     1,
+		LastUpdated: time.Now(),
+	}
+	db.Create(&product)
+
+	// First, get the ETag using GET
+	req := httptest.NewRequest(http.MethodGet, "/ETagProducts(1)", nil)
+	w := httptest.NewRecorder()
+	service.ServeHTTP(w, req)
+	etag := w.Header().Get("ETag")
+
+	// Now try HEAD with If-None-Match using the same ETag
+	req = httptest.NewRequest(http.MethodHead, "/ETagProducts(1)", nil)
+	req.Header.Set("If-None-Match", etag)
+	w = httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	// Should return 304 Not Modified
+	if w.Code != http.StatusNotModified {
+		t.Errorf("Status = %v, want %v", w.Code, http.StatusNotModified)
+	}
+
+	// Should still have ETag header
+	if w.Header().Get("ETag") == "" {
+		t.Error("ETag header should be present in 304 response")
+	}
+
+	// Body should be empty for HEAD request
+	if w.Body.Len() > 0 {
+		t.Errorf("Body should be empty for HEAD request, got %d bytes", w.Body.Len())
+	}
+}
