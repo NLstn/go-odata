@@ -11,16 +11,23 @@ import (
 	"gorm.io/gorm"
 )
 
-// HandleNavigationProperty handles GET requests for navigation properties (e.g., Products(1)/Descriptions)
+// HandleNavigationProperty handles GET and OPTIONS requests for navigation properties (e.g., Products(1)/Descriptions)
 func (h *EntityHandler) HandleNavigationProperty(w http.ResponseWriter, r *http.Request, entityKey string, navigationProperty string) {
-	if r.Method != http.MethodGet {
+	switch r.Method {
+	case http.MethodGet:
+		h.handleGetNavigationProperty(w, r, entityKey, navigationProperty)
+	case http.MethodOptions:
+		h.handleOptionsNavigationProperty(w)
+	default:
 		if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
 			fmt.Sprintf("Method %s is not supported for navigation properties", r.Method)); err != nil {
 			fmt.Printf(LogMsgErrorWritingErrorResponse, err)
 		}
-		return
 	}
+}
 
+// handleGetNavigationProperty handles GET requests for navigation properties
+func (h *EntityHandler) handleGetNavigationProperty(w http.ResponseWriter, r *http.Request, entityKey string, navigationProperty string) {
 	// Find and validate the navigation property
 	navProp := h.findNavigationProperty(navigationProperty)
 	if navProp == nil {
@@ -49,6 +56,13 @@ func (h *EntityHandler) HandleNavigationProperty(w http.ResponseWriter, r *http.
 	}
 
 	h.writeNavigationResponse(w, r, entityKey, navProp, navFieldValue)
+}
+
+// handleOptionsNavigationProperty handles OPTIONS requests for navigation properties
+func (h *EntityHandler) handleOptionsNavigationProperty(w http.ResponseWriter) {
+	w.Header().Set("Allow", "GET, OPTIONS")
+	w.Header().Set(HeaderODataVersion, "4.0")
+	w.WriteHeader(http.StatusOK)
 }
 
 // findNavigationProperty finds a navigation property by name in the entity metadata
@@ -81,14 +95,21 @@ func (h *EntityHandler) IsStructuralProperty(propertyName string) bool {
 	return h.findStructuralProperty(propertyName) != nil
 }
 
-// HandleStructuralProperty handles GET requests for structural properties (e.g., Products(1)/Name)
+// HandleStructuralProperty handles GET and OPTIONS requests for structural properties (e.g., Products(1)/Name)
 // When isValue is true, returns the raw property value without JSON wrapper (e.g., Products(1)/Name/$value)
 func (h *EntityHandler) HandleStructuralProperty(w http.ResponseWriter, r *http.Request, entityKey string, propertyName string, isValue bool) {
-	if r.Method != http.MethodGet {
+	switch r.Method {
+	case http.MethodGet:
+		h.handleGetStructuralProperty(w, r, entityKey, propertyName, isValue)
+	case http.MethodOptions:
+		h.handleOptionsStructuralProperty(w)
+	default:
 		h.writeMethodNotAllowedError(w, r.Method, "property access")
-		return
 	}
+}
 
+// handleGetStructuralProperty handles GET requests for structural properties
+func (h *EntityHandler) handleGetStructuralProperty(w http.ResponseWriter, r *http.Request, entityKey string, propertyName string, isValue bool) {
 	// Find and validate the structural property
 	prop := h.findStructuralProperty(propertyName)
 	if prop == nil {
@@ -108,6 +129,13 @@ func (h *EntityHandler) HandleStructuralProperty(w http.ResponseWriter, r *http.
 	} else {
 		h.writePropertyResponse(w, r, entityKey, prop, fieldValue)
 	}
+}
+
+// handleOptionsStructuralProperty handles OPTIONS requests for structural properties
+func (h *EntityHandler) handleOptionsStructuralProperty(w http.ResponseWriter) {
+	w.Header().Set("Allow", "GET, OPTIONS")
+	w.Header().Set(HeaderODataVersion, "4.0")
+	w.WriteHeader(http.StatusOK)
 }
 
 // writeMethodNotAllowedError writes a method not allowed error for a specific context

@@ -13,7 +13,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// HandleEntity handles GET, DELETE, PATCH, and PUT requests for individual entities
+// HandleEntity handles GET, DELETE, PATCH, PUT, and OPTIONS requests for individual entities
 func (h *EntityHandler) HandleEntity(w http.ResponseWriter, r *http.Request, entityKey string) {
 	switch r.Method {
 	case http.MethodGet:
@@ -24,12 +24,21 @@ func (h *EntityHandler) HandleEntity(w http.ResponseWriter, r *http.Request, ent
 		h.handlePatchEntity(w, r, entityKey)
 	case http.MethodPut:
 		h.handlePutEntity(w, r, entityKey)
+	case http.MethodOptions:
+		h.handleOptionsEntity(w)
 	default:
 		if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
 			fmt.Sprintf("Method %s is not supported for individual entities", r.Method)); err != nil {
 			fmt.Printf(LogMsgErrorWritingErrorResponse, err)
 		}
 	}
+}
+
+// handleOptionsEntity handles OPTIONS requests for individual entities
+func (h *EntityHandler) handleOptionsEntity(w http.ResponseWriter) {
+	w.Header().Set("Allow", "GET, DELETE, PATCH, PUT, OPTIONS")
+	w.Header().Set(HeaderODataVersion, "4.0")
+	w.WriteHeader(http.StatusOK)
 }
 
 // handleGetEntity handles GET requests for individual entities

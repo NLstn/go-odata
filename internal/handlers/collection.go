@@ -13,19 +13,28 @@ import (
 	"github.com/nlstn/go-odata/internal/response"
 )
 
-// HandleCollection handles GET and POST requests for entity collections
+// HandleCollection handles GET, POST, and OPTIONS requests for entity collections
 func (h *EntityHandler) HandleCollection(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		h.handleGetCollection(w, r)
 	case http.MethodPost:
 		h.handlePostEntity(w, r)
+	case http.MethodOptions:
+		h.handleOptionsCollection(w)
 	default:
 		if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
 			fmt.Sprintf("Method %s is not supported for entity collections", r.Method)); err != nil {
 			fmt.Printf(LogMsgErrorWritingErrorResponse, err)
 		}
 	}
+}
+
+// handleOptionsCollection handles OPTIONS requests for entity collections
+func (h *EntityHandler) handleOptionsCollection(w http.ResponseWriter) {
+	w.Header().Set("Allow", "GET, POST, OPTIONS")
+	w.Header().Set(HeaderODataVersion, "4.0")
+	w.WriteHeader(http.StatusOK)
 }
 
 // handleGetCollection handles GET requests for entity collections
@@ -210,16 +219,23 @@ func (h *EntityHandler) buildEntityLocation(r *http.Request, entity interface{})
 	return fmt.Sprintf("%s/%s(%s)", baseURL, entitySetName, strings.Join(keyParts, ","))
 }
 
-// HandleCount handles GET requests for entity collection count (e.g., /Products/$count)
+// HandleCount handles GET and OPTIONS requests for entity collection count (e.g., /Products/$count)
 func (h *EntityHandler) HandleCount(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
+	switch r.Method {
+	case http.MethodGet:
+		h.handleGetCount(w, r)
+	case http.MethodOptions:
+		h.handleOptionsCount(w)
+	default:
 		if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
 			fmt.Sprintf("Method %s is not supported for $count", r.Method)); err != nil {
 			fmt.Printf(LogMsgErrorWritingErrorResponse, err)
 		}
-		return
 	}
+}
 
+// handleGetCount handles GET requests for entity collection count
+func (h *EntityHandler) handleGetCount(w http.ResponseWriter, r *http.Request) {
 	// Parse query options (primarily for $filter support)
 	queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata)
 	if err != nil {
@@ -251,6 +267,13 @@ func (h *EntityHandler) HandleCount(w http.ResponseWriter, r *http.Request) {
 	if _, err := fmt.Fprintf(w, "%d", count); err != nil {
 		fmt.Printf("Error writing count response: %v\n", err)
 	}
+}
+
+// handleOptionsCount handles OPTIONS requests for $count endpoint
+func (h *EntityHandler) handleOptionsCount(w http.ResponseWriter) {
+	w.Header().Set("Allow", "GET, OPTIONS")
+	w.Header().Set(HeaderODataVersion, "4.0")
+	w.WriteHeader(http.StatusOK)
 }
 
 // getTotalCount retrieves the total count if requested
