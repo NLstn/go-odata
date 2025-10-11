@@ -75,8 +75,8 @@ func TestOptionsStructuralProperty(t *testing.T) {
 	}
 
 	allowHeader := w.Header().Get("Allow")
-	if allowHeader != "GET, OPTIONS" {
-		t.Errorf("Allow header = %v, want 'GET, OPTIONS'", allowHeader)
+	if allowHeader != "GET, HEAD, OPTIONS" {
+		t.Errorf("Allow header = %v, want 'GET, HEAD, OPTIONS'", allowHeader)
 	}
 
 	odataVersion := w.Header().Get("OData-Version")
@@ -111,8 +111,8 @@ func TestOptionsStructuralPropertyValue(t *testing.T) {
 	}
 
 	allowHeader := w.Header().Get("Allow")
-	if allowHeader != "GET, OPTIONS" {
-		t.Errorf("Allow header = %v, want 'GET, OPTIONS'", allowHeader)
+	if allowHeader != "GET, HEAD, OPTIONS" {
+		t.Errorf("Allow header = %v, want 'GET, HEAD, OPTIONS'", allowHeader)
 	}
 
 	odataVersion := w.Header().Get("OData-Version")
@@ -151,8 +151,8 @@ func TestOptionsNavigationPropertySingle(t *testing.T) {
 	}
 
 	allowHeader := w.Header().Get("Allow")
-	if allowHeader != "GET, OPTIONS" {
-		t.Errorf("Allow header = %v, want 'GET, OPTIONS'", allowHeader)
+	if allowHeader != "GET, HEAD, OPTIONS" {
+		t.Errorf("Allow header = %v, want 'GET, HEAD, OPTIONS'", allowHeader)
 	}
 
 	odataVersion := w.Header().Get("OData-Version")
@@ -194,8 +194,8 @@ func TestOptionsNavigationPropertyCollection(t *testing.T) {
 	}
 
 	allowHeader := w.Header().Get("Allow")
-	if allowHeader != "GET, OPTIONS" {
-		t.Errorf("Allow header = %v, want 'GET, OPTIONS'", allowHeader)
+	if allowHeader != "GET, HEAD, OPTIONS" {
+		t.Errorf("Allow header = %v, want 'GET, HEAD, OPTIONS'", allowHeader)
 	}
 
 	odataVersion := w.Header().Get("OData-Version")

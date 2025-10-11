@@ -23,7 +23,7 @@ func NewServiceDocumentHandler(entities map[string]*metadata.EntityMetadata) *Se
 // HandleServiceDocument handles the service document endpoint
 func (h *ServiceDocumentHandler) HandleServiceDocument(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
-	case http.MethodGet:
+	case http.MethodGet, http.MethodHead:
 		h.handleGetServiceDocument(w, r)
 	case http.MethodOptions:
 		h.handleOptionsServiceDocument(w)
@@ -50,7 +50,7 @@ func (h *ServiceDocumentHandler) handleGetServiceDocument(w http.ResponseWriter,
 
 // handleOptionsServiceDocument handles OPTIONS requests for service document
 func (h *ServiceDocumentHandler) handleOptionsServiceDocument(w http.ResponseWriter) {
-	w.Header().Set("Allow", "GET, OPTIONS")
+	w.Header().Set("Allow", "GET, HEAD, OPTIONS")
 	w.Header().Set("OData-Version", "4.0")
 	w.WriteHeader(http.StatusOK)
 }

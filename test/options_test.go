@@ -49,8 +49,8 @@ func TestOptionsServiceDocument(t *testing.T) {
 	}
 
 	allowHeader := w.Header().Get("Allow")
-	if allowHeader != "GET, OPTIONS" {
-		t.Errorf("Allow header = %v, want 'GET, OPTIONS'", allowHeader)
+	if allowHeader != "GET, HEAD, OPTIONS" {
+		t.Errorf("Allow header = %v, want 'GET, HEAD, OPTIONS'", allowHeader)
 	}
 
 	odataVersion := w.Header().Get("OData-Version")
@@ -78,8 +78,8 @@ func TestOptionsMetadata(t *testing.T) {
 	}
 
 	allowHeader := w.Header().Get("Allow")
-	if allowHeader != "GET, OPTIONS" {
-		t.Errorf("Allow header = %v, want 'GET, OPTIONS'", allowHeader)
+	if allowHeader != "GET, HEAD, OPTIONS" {
+		t.Errorf("Allow header = %v, want 'GET, HEAD, OPTIONS'", allowHeader)
 	}
 
 	odataVersion := w.Header().Get("OData-Version")
@@ -107,8 +107,8 @@ func TestOptionsEntityCollection(t *testing.T) {
 	}
 
 	allowHeader := w.Header().Get("Allow")
-	if allowHeader != "GET, POST, OPTIONS" {
-		t.Errorf("Allow header = %v, want 'GET, POST, OPTIONS'", allowHeader)
+	if allowHeader != "GET, HEAD, POST, OPTIONS" {
+		t.Errorf("Allow header = %v, want 'GET, HEAD, POST, OPTIONS'", allowHeader)
 	}
 
 	odataVersion := w.Header().Get("OData-Version")
@@ -140,8 +140,8 @@ func TestOptionsEntity(t *testing.T) {
 	}
 
 	allowHeader := w.Header().Get("Allow")
-	if allowHeader != "GET, DELETE, PATCH, PUT, OPTIONS" {
-		t.Errorf("Allow header = %v, want 'GET, DELETE, PATCH, PUT, OPTIONS'", allowHeader)
+	if allowHeader != "GET, HEAD, DELETE, PATCH, PUT, OPTIONS" {
+		t.Errorf("Allow header = %v, want 'GET, HEAD, DELETE, PATCH, PUT, OPTIONS'", allowHeader)
 	}
 
 	odataVersion := w.Header().Get("OData-Version")
@@ -169,8 +169,8 @@ func TestOptionsCount(t *testing.T) {
 	}
 
 	allowHeader := w.Header().Get("Allow")
-	if allowHeader != "GET, OPTIONS" {
-		t.Errorf("Allow header = %v, want 'GET, OPTIONS'", allowHeader)
+	if allowHeader != "GET, HEAD, OPTIONS" {
+		t.Errorf("Allow header = %v, want 'GET, HEAD, OPTIONS'", allowHeader)
 	}
 
 	odataVersion := w.Header().Get("OData-Version")

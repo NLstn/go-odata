@@ -1009,8 +1009,8 @@ func TestEntityHandlerCollectionOptions(t *testing.T) {
 	}
 
 	allowHeader := w.Header().Get("Allow")
-	if allowHeader != "GET, POST, OPTIONS" {
-		t.Errorf("Allow header = %v, want 'GET, POST, OPTIONS'", allowHeader)
+	if allowHeader != "GET, HEAD, POST, OPTIONS" {
+		t.Errorf("Allow header = %v, want 'GET, HEAD, POST, OPTIONS'", allowHeader)
 	}
 
 	odataVersion := w.Header().Get("OData-Version")
@@ -1037,8 +1037,8 @@ func TestEntityHandlerEntityOptions(t *testing.T) {
 	}
 
 	allowHeader := w.Header().Get("Allow")
-	if allowHeader != "GET, DELETE, PATCH, PUT, OPTIONS" {
-		t.Errorf("Allow header = %v, want 'GET, DELETE, PATCH, PUT, OPTIONS'", allowHeader)
+	if allowHeader != "GET, HEAD, DELETE, PATCH, PUT, OPTIONS" {
+		t.Errorf("Allow header = %v, want 'GET, HEAD, DELETE, PATCH, PUT, OPTIONS'", allowHeader)
 	}
 
 	odataVersion := w.Header().Get("OData-Version")
@@ -1061,8 +1061,8 @@ func TestEntityHandlerCountOptions(t *testing.T) {
 	}
 
 	allowHeader := w.Header().Get("Allow")
-	if allowHeader != "GET, OPTIONS" {
-		t.Errorf("Allow header = %v, want 'GET, OPTIONS'", allowHeader)
+	if allowHeader != "GET, HEAD, OPTIONS" {
+		t.Errorf("Allow header = %v, want 'GET, HEAD, OPTIONS'", allowHeader)
 	}
 
 	odataVersion := w.Header().Get("OData-Version")
@@ -1086,8 +1086,8 @@ func TestServiceDocumentHandlerOptions(t *testing.T) {
 	}
 
 	allowHeader := w.Header().Get("Allow")
-	if allowHeader != "GET, OPTIONS" {
-		t.Errorf("Allow header = %v, want 'GET, OPTIONS'", allowHeader)
+	if allowHeader != "GET, HEAD, OPTIONS" {
+		t.Errorf("Allow header = %v, want 'GET, HEAD, OPTIONS'", allowHeader)
 	}
 
 	odataVersion := w.Header().Get("OData-Version")
@@ -1111,8 +1111,8 @@ func TestMetadataHandlerOptions(t *testing.T) {
 	}
 
 	allowHeader := w.Header().Get("Allow")
-	if allowHeader != "GET, OPTIONS" {
-		t.Errorf("Allow header = %v, want 'GET, OPTIONS'", allowHeader)
+	if allowHeader != "GET, HEAD, OPTIONS" {
+		t.Errorf("Allow header = %v, want 'GET, HEAD, OPTIONS'", allowHeader)
 	}
 
 	odataVersion := w.Header().Get("OData-Version")
