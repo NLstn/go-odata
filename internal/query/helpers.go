@@ -85,12 +85,23 @@ func findNavigationProperty(propName string, entityMetadata *metadata.EntityMeta
 
 // toSnakeCase converts a camelCase or PascalCase string to snake_case
 func toSnakeCase(s string) string {
-	result := make([]rune, 0, len(s)+5)
+	var result strings.Builder
 	for i, r := range s {
 		if i > 0 && r >= 'A' && r <= 'Z' {
-			result = append(result, '_')
+			// Check if the previous character was lowercase or if this is the start of a new word
+			// For "ProductID", we want "product_id" not "product_i_d"
+			prevRune := rune(s[i-1])
+			if prevRune >= 'a' && prevRune <= 'z' {
+				result.WriteRune('_')
+			} else if i < len(s)-1 {
+				// Check if next character is lowercase (e.g., "XMLParser" -> "xml_parser")
+				nextRune := rune(s[i+1])
+				if nextRune >= 'a' && nextRune <= 'z' {
+					result.WriteRune('_')
+				}
+			}
 		}
-		result = append(result, r)
+		result.WriteRune(r)
 	}
-	return strings.ToLower(string(result))
+	return strings.ToLower(result.String())
 }
