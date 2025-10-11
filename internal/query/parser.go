@@ -66,6 +66,10 @@ const (
 	OpIndexOf            FilterOperator = "indexof"
 	OpSubstring          FilterOperator = "substring"
 	OpConcat             FilterOperator = "concat"
+	OpAdd                FilterOperator = "add"
+	OpSub                FilterOperator = "sub"
+	OpMul                FilterOperator = "mul"
+	OpDiv                FilterOperator = "div"
 )
 
 // LogicalOperator represents logical operators for combining filters

@@ -503,6 +503,11 @@ func convertFunctionCallExpr(n *FunctionCallExpr, entityMetadata *metadata.Entit
 		return convertTwoArgFunction(n, functionName, entityMetadata)
 	}
 
+	// Handle arithmetic functions (add, sub, mul, div, mod)
+	if isArithmeticFunction(functionName) {
+		return convertArithmeticFunction(n, functionName, entityMetadata)
+	}
+
 	// Handle substring function (2 or 3 arguments)
 	if functionName == "substring" {
 		return convertSubstringFunction(n, entityMetadata)
@@ -520,6 +525,11 @@ func isSingleArgFunction(name string) bool {
 func isTwoArgFunction(name string) bool {
 	return name == "contains" || name == "startswith" || name == "endswith" ||
 		name == "indexof" || name == "concat"
+}
+
+// isArithmeticFunction checks if a function is an arithmetic function
+func isArithmeticFunction(name string) bool {
+	return name == "add" || name == "sub" || name == "mul" || name == "div"
 }
 
 // extractPropertyFromFunctionArg extracts property from function argument
@@ -610,5 +620,43 @@ func convertSubstringFunction(n *FunctionCallExpr, entityMetadata *metadata.Enti
 		Property: property,
 		Operator: OpSubstring,
 		Value:    args,
+	}, nil
+}
+
+// convertArithmeticFunction converts arithmetic functions (add, sub, mul, div, mod)
+func convertArithmeticFunction(n *FunctionCallExpr, functionName string, entityMetadata *metadata.EntityMetadata) (*FilterExpression, error) {
+	if len(n.Args) != 2 {
+		return nil, fmt.Errorf("function %s requires 2 arguments", functionName)
+	}
+
+	// First argument can be a property or another arithmetic expression
+	var property string
+
+	// Check if first argument is a property
+	if ident, ok := n.Args[0].(*IdentifierExpr); ok {
+		property = ident.Name
+		if entityMetadata != nil && !propertyExists(property, entityMetadata) {
+			return nil, fmt.Errorf("property '%s' does not exist", property)
+		}
+	} else {
+		// For complex expressions, use a placeholder
+		property = "_arithmetic_"
+	}
+
+	// Second argument should be a literal or identifier
+	var value interface{}
+	if lit, ok := n.Args[1].(*LiteralExpr); ok {
+		value = lit.Value
+	} else if ident, ok := n.Args[1].(*IdentifierExpr); ok {
+		// Allow property references as second argument
+		value = ident.Name
+	} else {
+		return nil, fmt.Errorf("second argument of %s must be a literal or property", functionName)
+	}
+
+	return &FilterExpression{
+		Property: property,
+		Operator: FilterOperator(functionName),
+		Value:    value,
 	}, nil
 }
