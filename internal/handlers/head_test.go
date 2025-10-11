@@ -226,9 +226,9 @@ func TestOptionsHandlersIncludeHead(t *testing.T) {
 	handler, _ := setupTestHandler(t)
 
 	tests := []struct {
-		name        string
-		path        string
-		handlerFunc func(http.ResponseWriter, *http.Request)
+		name          string
+		path          string
+		handlerFunc   func(http.ResponseWriter, *http.Request)
 		expectedAllow string
 	}{
 		{

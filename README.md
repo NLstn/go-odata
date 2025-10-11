@@ -30,6 +30,7 @@ A Go library for building services that expose OData APIs with automatic handlin
 - ✅ **Advanced Filtering ($filter)** - AST-based parser with full OData v4 support
   - Comparison operators: `eq`, `ne`, `gt`, `ge`, `lt`, `le`
   - String functions: `contains`, `startswith`, `endswith`, `tolower`, `toupper`, `trim`, `length`, `indexof`, `substring`, `concat`
+  - Date functions: `year`, `month`, `day`, `hour`, `minute`, `second`, `date`, `time`
   - Boolean operators: `and`, `or`, `not`
   - Parentheses for complex expressions
   - Literal types: strings, numbers, booleans, null
@@ -282,6 +283,31 @@ Supported functions:
 - **Search**: `contains`, `startswith`, `endswith`
 - **Case**: `tolower`, `toupper`
 - **Manipulation**: `trim`, `length`, `indexof`, `substring`, `concat`
+
+#### Date Functions
+```
+# Date component extraction
+GET /Orders?$filter=year(OrderDate) eq 2024
+GET /Orders?$filter=month(OrderDate) eq 12
+GET /Orders?$filter=day(OrderDate) eq 25
+
+# Time component extraction
+GET /Orders?$filter=hour(OrderDate) eq 14
+GET /Orders?$filter=minute(OrderDate) eq 30
+GET /Orders?$filter=second(OrderDate) eq 0
+
+# Date and time parts
+GET /Orders?$filter=date(OrderDate) eq '2024-12-25'
+GET /Orders?$filter=time(OrderDate) eq '14:30:00'
+
+# Complex date queries
+GET /Orders?$filter=year(OrderDate) eq 2024 and month(OrderDate) ge 6
+GET /Orders?$filter=date(OrderDate) ge '2024-01-01' and date(OrderDate) le '2024-12-31'
+```
+
+Supported date functions:
+- **Component extraction**: `year`, `month`, `day`, `hour`, `minute`, `second`
+- **Date/time parts**: `date`, `time`
 
 #### Boolean Logic with Parentheses
 ```

@@ -71,6 +71,15 @@ const (
 	OpMul                FilterOperator = "mul"
 	OpDiv                FilterOperator = "div"
 	OpMod                FilterOperator = "mod"
+	// Date functions
+	OpYear   FilterOperator = "year"
+	OpMonth  FilterOperator = "month"
+	OpDay    FilterOperator = "day"
+	OpHour   FilterOperator = "hour"
+	OpMinute FilterOperator = "minute"
+	OpSecond FilterOperator = "second"
+	OpDate   FilterOperator = "date"
+	OpTime   FilterOperator = "time"
 )
 
 // LogicalOperator represents logical operators for combining filters
