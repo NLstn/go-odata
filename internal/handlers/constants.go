@@ -17,14 +17,14 @@ const (
 
 // Error message constants
 const (
-	ErrMsgMethodNotAllowed     = "Method not allowed"
-	ErrMsgInvalidQueryOptions  = "Invalid query options"
-	ErrMsgDatabaseError        = "Database error"
-	ErrMsgInvalidRequestBody   = "Invalid request body"
-	ErrMsgInvalidKey           = "Invalid key"
-	ErrMsgEntityNotFound       = "Entity not found"
-	ErrMsgInternalError        = "Internal error"
-	ErrMsgPreconditionFailed   = "Precondition failed"
+	ErrMsgMethodNotAllowed      = "Method not allowed"
+	ErrMsgInvalidQueryOptions   = "Invalid query options"
+	ErrMsgDatabaseError         = "Database error"
+	ErrMsgInvalidRequestBody    = "Invalid request body"
+	ErrMsgInvalidKey            = "Invalid key"
+	ErrMsgEntityNotFound        = "Entity not found"
+	ErrMsgInternalError         = "Internal error"
+	ErrMsgPreconditionFailed    = "Precondition failed"
 	ErrDetailPreconditionFailed = "The entity has been modified. Please refresh and try again."
 )
 
