@@ -1,12 +1,15 @@
 package main
 
+import "time"
+
 // Product represents a product entity for the development server with rich metadata
 type Product struct {
-	ID       uint    `json:"ID" gorm:"primaryKey" odata:"key"`
-	Name     string  `json:"Name" gorm:"not null" odata:"required,maxlength=100"`
-	Price    float64 `json:"Price" gorm:"not null" odata:"required,precision=10,scale=2"`
-	Category string  `json:"Category" gorm:"not null" odata:"required,maxlength=50"`
-	Version  int     `json:"Version" gorm:"default:1" odata:"etag"` // Version field used for optimistic concurrency control via ETag
+	ID        uint      `json:"ID" gorm:"primaryKey" odata:"key"`
+	Name      string    `json:"Name" gorm:"not null" odata:"required,maxlength=100"`
+	Price     float64   `json:"Price" gorm:"not null" odata:"required,precision=10,scale=2"`
+	Category  string    `json:"Category" gorm:"not null" odata:"required,maxlength=50"`
+	Version   int       `json:"Version" gorm:"default:1" odata:"etag"` // Version field used for optimistic concurrency control via ETag
+	CreatedAt time.Time `json:"CreatedAt" gorm:"not null"`
 	// Navigation property for ProductDescriptions
 	Descriptions []ProductDescription `json:"Descriptions" gorm:"foreignKey:ProductID;references:ID"`
 }
@@ -25,39 +28,44 @@ type ProductDescription struct {
 func GetSampleProducts() []Product {
 	return []Product{
 		{
-			ID:       1,
-			Name:     "Laptop",
-			Price:    999.99,
-			Category: "Electronics",
-			Version:  1,
+			ID:        1,
+			Name:      "Laptop",
+			Price:     999.99,
+			Category:  "Electronics",
+			Version:   1,
+			CreatedAt: time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC),
 		},
 		{
-			ID:       2,
-			Name:     "Wireless Mouse",
-			Price:    29.99,
-			Category: "Electronics",
-			Version:  1,
+			ID:        2,
+			Name:      "Wireless Mouse",
+			Price:     29.99,
+			Category:  "Electronics",
+			Version:   1,
+			CreatedAt: time.Date(2024, 3, 20, 14, 45, 0, 0, time.UTC),
 		},
 		{
-			ID:       3,
-			Name:     "Coffee Mug",
-			Price:    15.50,
-			Category: "Kitchen",
-			Version:  1,
+			ID:        3,
+			Name:      "Coffee Mug",
+			Price:     15.50,
+			Category:  "Kitchen",
+			Version:   1,
+			CreatedAt: time.Date(2023, 11, 5, 9, 15, 0, 0, time.UTC),
 		},
 		{
-			ID:       4,
-			Name:     "Office Chair",
-			Price:    249.99,
-			Category: "Furniture",
-			Version:  1,
+			ID:        4,
+			Name:      "Office Chair",
+			Price:     249.99,
+			Category:  "Furniture",
+			Version:   1,
+			CreatedAt: time.Date(2023, 8, 12, 16, 20, 0, 0, time.UTC),
 		},
 		{
-			ID:       5,
-			Name:     "Smartphone",
-			Price:    799.99,
-			Category: "Electronics",
-			Version:  1,
+			ID:        5,
+			Name:      "Smartphone",
+			Price:     799.99,
+			Category:  "Electronics",
+			Version:   1,
+			CreatedAt: time.Date(2024, 6, 28, 11, 0, 0, 0, time.UTC),
 		},
 	}
 }
