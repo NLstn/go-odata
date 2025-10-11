@@ -244,6 +244,8 @@ func buildFunctionSQL(op FilterOperator, columnName string, value interface{}) (
 		return fmt.Sprintf("(%s * ?)", columnName), []interface{}{value}
 	case OpDiv:
 		return fmt.Sprintf("(%s / ?)", columnName), []interface{}{value}
+	case OpMod:
+		return fmt.Sprintf("(%s %% ?)", columnName), []interface{}{value}
 	default:
 		return "", nil
 	}

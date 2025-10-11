@@ -70,6 +70,7 @@ const (
 	OpSub                FilterOperator = "sub"
 	OpMul                FilterOperator = "mul"
 	OpDiv                FilterOperator = "div"
+	OpMod                FilterOperator = "mod"
 )
 
 // LogicalOperator represents logical operators for combining filters
