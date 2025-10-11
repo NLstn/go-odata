@@ -78,7 +78,9 @@ func ParseQueryOptions(queryParams url.Values, entityMetadata *metadata.EntityMe
 		return nil, err
 	}
 
-	parseSelectOption(queryParams, options)
+	if err := parseSelectOption(queryParams, entityMetadata, options); err != nil {
+		return nil, err
+	}
 
 	if err := parseExpandOption(queryParams, entityMetadata, options); err != nil {
 		return nil, err
@@ -116,10 +118,18 @@ func parseFilterOption(queryParams url.Values, entityMetadata *metadata.EntityMe
 }
 
 // parseSelectOption parses the $select query parameter
-func parseSelectOption(queryParams url.Values, options *QueryOptions) {
+func parseSelectOption(queryParams url.Values, entityMetadata *metadata.EntityMetadata, options *QueryOptions) error {
 	if selectStr := queryParams.Get("$select"); selectStr != "" {
-		options.Select = parseSelect(selectStr)
+		selectedProps := parseSelect(selectStr)
+		// Validate that all selected properties exist
+		for _, propName := range selectedProps {
+			if !propertyExists(propName, entityMetadata) {
+				return fmt.Errorf("property '%s' does not exist in entity type", propName)
+			}
+		}
+		options.Select = selectedProps
 	}
+	return nil
 }
 
 // parseExpandOption parses the $expand query parameter
