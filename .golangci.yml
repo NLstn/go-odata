@@ -1,3 +1,5 @@
+version: "2"
+
 run:
   timeout: 5m
 
@@ -12,28 +14,28 @@ linters:
     - unconvert
     - unparam
     - prealloc
-
-linters-settings:
-  gocyclo:
-    min-complexity: 45
-  errcheck:
-    check-type-assertions: true
-    check-blank: true
-
-issues:
-  exclude-files:
-    - "test/expand_filter_integration_test.go"
-    - "test/metadata_integration_test.go"
-  exclude-rules:
-    # Exclude some linters from running on test files.
-    - linters:
-        - gocyclo
-        - errcheck
-        - dupl
-        - gosec
-        - unparam
-      path: "_test\\.go"
-    # Exclude gocyclo from complex test functions
-    - linters:
-        - gocyclo
-      text: "TestExpandWithFilterIntegration|TestMetadataIntegrationJSON"
+  
+  settings:
+    gocyclo:
+      min-complexity: 45
+    errcheck:
+      check-type-assertions: true
+      check-blank: true
+  
+  exclusions:
+    paths:
+      - "test/expand_filter_integration_test.go"
+      - "test/metadata_integration_test.go"
+    rules:
+      # Exclude some linters from running on test files.
+      - linters:
+          - gocyclo
+          - errcheck
+          - dupl
+          - gosec
+          - unparam
+        path: "_test\\.go"
+      # Exclude gocyclo from complex test functions
+      - linters:
+          - gocyclo
+        text: "TestExpandWithFilterIntegration|TestMetadataIntegrationJSON"
