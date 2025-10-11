@@ -428,7 +428,7 @@ func TestPostEntity_VerifyLocationHeader(t *testing.T) {
 	// For example: http://localhost:8080/PostTestProducts(1)
 	// We verify it has the expected pattern
 	var response map[string]interface{}
-	json.NewDecoder(w.Body).Decode(&response)
+	_ = json.NewDecoder(w.Body).Decode(&response)
 	id := int(response["id"].(float64))
 
 	// The location should end with the key in parentheses
@@ -463,7 +463,7 @@ func TestPostEntity_GetAfterPost(t *testing.T) {
 
 	// Extract the ID from the response
 	var postResponse map[string]interface{}
-	json.NewDecoder(w.Body).Decode(&postResponse)
+	_ = json.NewDecoder(w.Body).Decode(&postResponse)
 	id := int(postResponse["id"].(float64))
 
 	// Try to GET the created entity
@@ -478,7 +478,7 @@ func TestPostEntity_GetAfterPost(t *testing.T) {
 
 	// Verify the entity properties
 	var getResponse map[string]interface{}
-	json.NewDecoder(w.Body).Decode(&getResponse)
+	_ = json.NewDecoder(w.Body).Decode(&getResponse)
 
 	if getResponse["name"] != "Laptop" {
 		t.Errorf("name = %v, want Laptop", getResponse["name"])

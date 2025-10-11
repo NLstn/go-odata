@@ -22,7 +22,7 @@ type TestProductSelect struct {
 	InStock     bool    `json:"inStock"`
 }
 
-func setupSelectTestService(t *testing.T) (*odata.Service, *gorm.DB) {
+func setupSelectTestService(t *testing.T) *odata.Service {
 	// Create a custom logger to capture SQL queries
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
@@ -43,12 +43,12 @@ func setupSelectTestService(t *testing.T) (*odata.Service, *gorm.DB) {
 	db.Create(&TestProductSelect{ID: 2, Name: "Mouse", Price: 29.99, Description: "Wireless mouse", Category: "Electronics", InStock: true})
 	db.Create(&TestProductSelect{ID: 3, Name: "Keyboard", Price: 79.99, Description: "Mechanical keyboard", Category: "Electronics", InStock: false})
 
-	return service, db
+	return service
 }
 
 // TestSelectFetchesOnlyNeededColumns verifies that $select only fetches requested columns from database
 func TestSelectFetchesOnlyNeededColumns(t *testing.T) {
-	service, _ := setupSelectTestService(t)
+	service := setupSelectTestService(t)
 
 	tests := []struct {
 		name           string
@@ -143,7 +143,7 @@ func TestSelectFetchesOnlyNeededColumns(t *testing.T) {
 
 // TestStructuralPropertyFetchesOnlyNeededColumn verifies structural property access fetches only that column
 func TestStructuralPropertyFetchesOnlyNeededColumn(t *testing.T) {
-	service, _ := setupSelectTestService(t)
+	service := setupSelectTestService(t)
 
 	tests := []struct {
 		name         string
@@ -204,7 +204,7 @@ func TestStructuralPropertyFetchesOnlyNeededColumn(t *testing.T) {
 
 // TestSelectWithFilterAndOrderBy verifies $select works with other query options
 func TestSelectWithFilterAndOrderBy(t *testing.T) {
-	service, _ := setupSelectTestService(t)
+	service := setupSelectTestService(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/TestProductSelects?$select=name,price&$filter=price%20gt%2050&$orderby=price%20desc", nil)
 	w := httptest.NewRecorder()
@@ -260,7 +260,7 @@ func TestSelectWithFilterAndOrderBy(t *testing.T) {
 
 // TestSelectAllFields verifies that without $select, all fields are returned
 func TestSelectAllFields(t *testing.T) {
-	service, _ := setupSelectTestService(t)
+	service := setupSelectTestService(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/TestProductSelects", nil)
 	w := httptest.NewRecorder()
@@ -374,7 +374,7 @@ func TestSelectWithUppercaseJsonNames(t *testing.T) {
 
 // TestSelectKeyAlwaysIncluded verifies that key properties are always included even if not in $select
 func TestSelectKeyAlwaysIncluded(t *testing.T) {
-	service, _ := setupSelectTestService(t)
+	service := setupSelectTestService(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/TestProductSelects?$select=name", nil)
 	w := httptest.NewRecorder()

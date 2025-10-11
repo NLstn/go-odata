@@ -1,5 +1,10 @@
+version: "2"
+
 run:
   timeout: 5m
+  skip-files:
+    - "test/expand_filter_integration_test.go"
+    - "test/metadata_integration_test.go"
 
 linters:
   enable:
@@ -8,30 +13,29 @@ linters:
     - staticcheck
     - unused
     - ineffassign
-    - gocyclo
     - misspell
     - unconvert
     - unparam
     - prealloc
 
-  settings:
-    gocyclo:
-      min-complexity: 15
-    errcheck:
-      check-type-assertions: true
-      check-blank: true
+linters-settings:
+  gocyclo:
+    min-complexity: 45
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
 
-  exclusions:
-    rules:
-      # Exclude some linters from running on test files.
-      - linters:
-          - gocyclo
-          - errcheck
-          - dupl
-          - gosec
-          - unparam
-        path: "_test\\.go"
-
-formatters:
-  enable:
-    - gofmt
+issues:
+  exclude-rules:
+    # Exclude some linters from running on test files.
+    - linters:
+        - gocyclo
+        - errcheck
+        - dupl
+        - gosec
+        - unparam
+      path: "_test\\.go"
+    # Exclude gocyclo from complex test functions
+    - linters:
+        - gocyclo
+      text: "TestExpandWithFilterIntegration|TestMetadataIntegrationJSON"

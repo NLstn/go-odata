@@ -54,8 +54,8 @@ func setupIntegrationTest(t *testing.T) *odata.Service {
 	db.Create(&employees)
 
 	service := odata.NewService(db)
-	service.RegisterEntity(&Department{})
-	service.RegisterEntity(&Employee{})
+	_ = service.RegisterEntity(&Department{})
+	_ = service.RegisterEntity(&Employee{})
 
 	return service
 }

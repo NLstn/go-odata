@@ -55,7 +55,7 @@ type Product struct {
 	Active      bool    `json:"active" odata:"default=true"`
 }
 
-func setupTestServer(t *testing.T) (*odata.Service, *httptest.Server) {
+func setupTestServer(t *testing.T) *httptest.Server {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("Failed to connect to database: %v", err)
@@ -68,26 +68,26 @@ func setupTestServer(t *testing.T) (*odata.Service, *httptest.Server) {
 
 	// Create OData service
 	service := odata.NewService(db)
-	service.RegisterEntity(&Customer{})
-	service.RegisterEntity(&Order{})
-	service.RegisterEntity(&OrderItem{})
-	service.RegisterEntity(&Product{})
+	_ = service.RegisterEntity(&Customer{})
+	_ = service.RegisterEntity(&Order{})
+	_ = service.RegisterEntity(&OrderItem{})
+	_ = service.RegisterEntity(&Product{})
 
 	// Create test server
 	server := httptest.NewServer(service)
 
-	return service, server
+	return server
 }
 
 func TestMetadataIntegrationXML(t *testing.T) {
-	_, server := setupTestServer(t)
+	server := setupTestServer(t)
 	defer server.Close()
 
 	resp, err := http.Get(server.URL + "/$metadata")
 	if err != nil {
 		t.Fatalf("Failed to get metadata: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("Status = %v, want %v", resp.StatusCode, http.StatusOK)
@@ -150,14 +150,14 @@ func TestMetadataIntegrationXML(t *testing.T) {
 }
 
 func TestMetadataIntegrationJSON(t *testing.T) {
-	_, server := setupTestServer(t)
+	server := setupTestServer(t)
 	defer server.Close()
 
 	resp, err := http.Get(server.URL + "/$metadata?$format=json")
 	if err != nil {
 		t.Fatalf("Failed to get metadata: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("Status = %v, want %v", resp.StatusCode, http.StatusOK)
@@ -287,14 +287,14 @@ func TestMetadataIntegrationJSON(t *testing.T) {
 }
 
 func TestMetadataWithComplexRelationships(t *testing.T) {
-	_, server := setupTestServer(t)
+	server := setupTestServer(t)
 	defer server.Close()
 
 	resp, err := http.Get(server.URL + "/$metadata?$format=json")
 	if err != nil {
 		t.Fatalf("Failed to get metadata: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var response map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {

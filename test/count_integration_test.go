@@ -47,7 +47,7 @@ func TestIntegrationCountEndpoint(t *testing.T) {
 
 	// Initialize OData service
 	service := odata.NewService(db)
-	service.RegisterEntity(&CountTestProduct{})
+	_ = service.RegisterEntity(&CountTestProduct{})
 
 	tests := []struct {
 		name           string
@@ -156,7 +156,7 @@ func TestIntegrationCountEndpointVerifyCollectionStillWorks(t *testing.T) {
 
 	// Initialize OData service
 	service := odata.NewService(db)
-	service.RegisterEntity(&CountTestProduct{})
+	_ = service.RegisterEntity(&CountTestProduct{})
 
 	// Test that regular collection endpoint still works
 	req := httptest.NewRequest(http.MethodGet, "/CountTestProducts", nil)
@@ -209,7 +209,7 @@ func TestIntegrationCountEndpointODataV4Compliance(t *testing.T) {
 
 	// Initialize OData service
 	service := odata.NewService(db)
-	service.RegisterEntity(&CountTestProduct{})
+	_ = service.RegisterEntity(&CountTestProduct{})
 
 	tests := []struct {
 		name         string
