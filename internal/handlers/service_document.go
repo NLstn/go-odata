@@ -22,14 +22,21 @@ func NewServiceDocumentHandler(entities map[string]*metadata.EntityMetadata) *Se
 
 // HandleServiceDocument handles the service document endpoint
 func (h *ServiceDocumentHandler) HandleServiceDocument(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
+	switch r.Method {
+	case http.MethodGet:
+		h.handleGetServiceDocument(w, r)
+	case http.MethodOptions:
+		h.handleOptionsServiceDocument(w)
+	default:
 		if err := response.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
 			fmt.Sprintf("Method %s is not supported for service document", r.Method)); err != nil {
 			fmt.Printf("Error writing error response: %v\n", err)
 		}
-		return
 	}
+}
 
+// handleGetServiceDocument handles GET requests for service document
+func (h *ServiceDocumentHandler) handleGetServiceDocument(w http.ResponseWriter, r *http.Request) {
 	// Build list of entity sets
 	entitySets := make([]string, 0, len(h.entities))
 	for entitySetName := range h.entities {
@@ -39,4 +46,11 @@ func (h *ServiceDocumentHandler) HandleServiceDocument(w http.ResponseWriter, r 
 	if err := response.WriteServiceDocument(w, r, entitySets); err != nil {
 		fmt.Printf("Error writing service document: %v\n", err)
 	}
+}
+
+// handleOptionsServiceDocument handles OPTIONS requests for service document
+func (h *ServiceDocumentHandler) handleOptionsServiceDocument(w http.ResponseWriter) {
+	w.Header().Set("Allow", "GET, OPTIONS")
+	w.Header().Set("OData-Version", "4.0")
+	w.WriteHeader(http.StatusOK)
 }

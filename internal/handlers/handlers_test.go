@@ -994,3 +994,129 @@ func TestEntityHandlerCollectionWithInvalidFilter(t *testing.T) {
 		t.Error("Response missing error field")
 	}
 }
+
+// TestEntityHandlerCollectionOptions tests OPTIONS request on entity collection
+func TestEntityHandlerCollectionOptions(t *testing.T) {
+	handler, _ := setupTestHandler(t)
+
+	req := httptest.NewRequest(http.MethodOptions, "/TestEntities", nil)
+	w := httptest.NewRecorder()
+
+	handler.HandleCollection(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Status = %v, want %v", w.Code, http.StatusOK)
+	}
+
+	allowHeader := w.Header().Get("Allow")
+	if allowHeader != "GET, POST, OPTIONS" {
+		t.Errorf("Allow header = %v, want 'GET, POST, OPTIONS'", allowHeader)
+	}
+
+	odataVersion := w.Header().Get("OData-Version")
+	if odataVersion != "4.0" {
+		t.Errorf("OData-Version header = %v, want '4.0'", odataVersion)
+	}
+}
+
+// TestEntityHandlerEntityOptions tests OPTIONS request on individual entity
+func TestEntityHandlerEntityOptions(t *testing.T) {
+	handler, db := setupTestHandler(t)
+
+	// Insert test data
+	entity := TestEntity{ID: 1, Name: "Test Entity"}
+	db.Create(&entity)
+
+	req := httptest.NewRequest(http.MethodOptions, "/TestEntities(1)", nil)
+	w := httptest.NewRecorder()
+
+	handler.HandleEntity(w, req, "1")
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Status = %v, want %v", w.Code, http.StatusOK)
+	}
+
+	allowHeader := w.Header().Get("Allow")
+	if allowHeader != "GET, DELETE, PATCH, PUT, OPTIONS" {
+		t.Errorf("Allow header = %v, want 'GET, DELETE, PATCH, PUT, OPTIONS'", allowHeader)
+	}
+
+	odataVersion := w.Header().Get("OData-Version")
+	if odataVersion != "4.0" {
+		t.Errorf("OData-Version header = %v, want '4.0'", odataVersion)
+	}
+}
+
+// TestEntityHandlerCountOptions tests OPTIONS request on $count endpoint
+func TestEntityHandlerCountOptions(t *testing.T) {
+	handler, _ := setupTestHandler(t)
+
+	req := httptest.NewRequest(http.MethodOptions, "/TestEntities/$count", nil)
+	w := httptest.NewRecorder()
+
+	handler.HandleCount(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Status = %v, want %v", w.Code, http.StatusOK)
+	}
+
+	allowHeader := w.Header().Get("Allow")
+	if allowHeader != "GET, OPTIONS" {
+		t.Errorf("Allow header = %v, want 'GET, OPTIONS'", allowHeader)
+	}
+
+	odataVersion := w.Header().Get("OData-Version")
+	if odataVersion != "4.0" {
+		t.Errorf("OData-Version header = %v, want '4.0'", odataVersion)
+	}
+}
+
+// TestServiceDocumentHandlerOptions tests OPTIONS request on service document
+func TestServiceDocumentHandlerOptions(t *testing.T) {
+	entities := make(map[string]*metadata.EntityMetadata)
+	handler := NewServiceDocumentHandler(entities)
+
+	req := httptest.NewRequest(http.MethodOptions, "/", nil)
+	w := httptest.NewRecorder()
+
+	handler.HandleServiceDocument(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Status = %v, want %v", w.Code, http.StatusOK)
+	}
+
+	allowHeader := w.Header().Get("Allow")
+	if allowHeader != "GET, OPTIONS" {
+		t.Errorf("Allow header = %v, want 'GET, OPTIONS'", allowHeader)
+	}
+
+	odataVersion := w.Header().Get("OData-Version")
+	if odataVersion != "4.0" {
+		t.Errorf("OData-Version header = %v, want '4.0'", odataVersion)
+	}
+}
+
+// TestMetadataHandlerOptions tests OPTIONS request on metadata document
+func TestMetadataHandlerOptions(t *testing.T) {
+	entities := make(map[string]*metadata.EntityMetadata)
+	handler := NewMetadataHandler(entities)
+
+	req := httptest.NewRequest(http.MethodOptions, "/$metadata", nil)
+	w := httptest.NewRecorder()
+
+	handler.HandleMetadata(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Status = %v, want %v", w.Code, http.StatusOK)
+	}
+
+	allowHeader := w.Header().Get("Allow")
+	if allowHeader != "GET, OPTIONS" {
+		t.Errorf("Allow header = %v, want 'GET, OPTIONS'", allowHeader)
+	}
+
+	odataVersion := w.Header().Get("OData-Version")
+	if odataVersion != "4.0" {
+		t.Errorf("OData-Version header = %v, want '4.0'", odataVersion)
+	}
+}

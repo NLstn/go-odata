@@ -25,14 +25,21 @@ func NewMetadataHandler(entities map[string]*metadata.EntityMetadata) *MetadataH
 
 // HandleMetadata handles the metadata document endpoint
 func (h *MetadataHandler) HandleMetadata(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
+	switch r.Method {
+	case http.MethodGet:
+		h.handleGetMetadata(w, r)
+	case http.MethodOptions:
+		h.handleOptionsMetadata(w)
+	default:
 		if err := response.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
 			fmt.Sprintf("Method %s is not supported for metadata document", r.Method)); err != nil {
 			fmt.Printf("Error writing error response: %v\n", err)
 		}
-		return
 	}
+}
 
+// handleGetMetadata handles GET requests for metadata document
+func (h *MetadataHandler) handleGetMetadata(w http.ResponseWriter, r *http.Request) {
 	// Check if JSON format is requested via $format query parameter or Accept header
 	useJSON := shouldReturnJSON(r)
 
@@ -41,6 +48,13 @@ func (h *MetadataHandler) HandleMetadata(w http.ResponseWriter, r *http.Request)
 	} else {
 		h.handleMetadataXML(w)
 	}
+}
+
+// handleOptionsMetadata handles OPTIONS requests for metadata document
+func (h *MetadataHandler) handleOptionsMetadata(w http.ResponseWriter) {
+	w.Header().Set("Allow", "GET, OPTIONS")
+	w.Header().Set("OData-Version", "4.0")
+	w.WriteHeader(http.StatusOK)
 }
 
 // shouldReturnJSON determines if JSON format should be returned based on request
