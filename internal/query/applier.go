@@ -340,16 +340,6 @@ func buildSimpleFilterCondition(filter *FilterExpression) (string, []interface{}
 	}
 }
 
-// findNavigationProperty finds a navigation property by name
-func findNavigationProperty(propName string, entityMetadata *metadata.EntityMetadata) *metadata.PropertyMetadata {
-	for _, prop := range entityMetadata.Properties {
-		if (prop.JsonName == propName || prop.Name == propName) && prop.IsNavigationProp {
-			return &prop
-		}
-	}
-	return nil
-}
-
 // applyOrderBy applies order by clauses to the GORM query
 func applyOrderBy(db *gorm.DB, orderBy []OrderByItem, entityMetadata *metadata.EntityMetadata) *gorm.DB {
 	for _, item := range orderBy {
