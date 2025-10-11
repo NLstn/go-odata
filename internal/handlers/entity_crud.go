@@ -57,6 +57,20 @@ func (h *EntityHandler) handleGetEntity(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
+	// Check If-None-Match header if ETag is configured
+	if h.metadata.ETagProperty != nil {
+		ifNoneMatch := r.Header.Get(HeaderIfNoneMatch)
+		currentETag := etag.Generate(result, h.metadata)
+
+		// If ETags match, return 304 Not Modified
+		if !etag.NoneMatch(ifNoneMatch, currentETag) {
+			w.Header().Set(HeaderETag, currentETag)
+			w.Header().Set(HeaderODataVersion, "4.0")
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+	}
+
 	// Build and write response
 	h.writeEntityResponse(w, r, result)
 }
