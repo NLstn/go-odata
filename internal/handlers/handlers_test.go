@@ -599,6 +599,135 @@ func TestEntityHandlerCollectionWithFilter(t *testing.T) {
 	}
 }
 
+func TestEntityHandlerCollectionWithCombinedFilters(t *testing.T) {
+	handler, db := setupProductHandler(t)
+
+	// Insert test data
+	products := []Product{
+		{ID: 1, Name: "Laptop", Description: "High-performance laptop", Price: 999.99, Category: "Electronics"},
+		{ID: 2, Name: "Mouse", Description: "Wireless mouse", Price: 29.99, Category: "Electronics"},
+		{ID: 3, Name: "Coffee Mug", Description: "Ceramic mug", Price: 15.50, Category: "Kitchen"},
+		{ID: 4, Name: "Office Chair", Description: "Ergonomic chair", Price: 249.99, Category: "Furniture"},
+		{ID: 5, Name: "Smartphone", Description: "Latest smartphone", Price: 799.99, Category: "Electronics"},
+		{ID: 6, Name: "Desk Lamp", Description: "LED desk lamp", Price: 45.00, Category: "Furniture"},
+	}
+	for _, product := range products {
+		db.Create(&product)
+	}
+
+	tests := []struct {
+		name          string
+		query         string
+		expectedCount int
+		description   string
+	}{
+		{
+			name:          "AND filter - Category and Price",
+			query:         "$filter=Category eq 'Electronics' and Price lt 100",
+			expectedCount: 1, // Only Mouse (29.99)
+			description:   "Should return only Mouse (Electronics and Price < 100)",
+		},
+		{
+			name:          "AND filter - Category and Price range",
+			query:         "$filter=Category eq 'Electronics' and Price gt 100",
+			expectedCount: 2, // Laptop (999.99) and Smartphone (799.99)
+			description:   "Should return Laptop and Smartphone",
+		},
+		{
+			name:          "OR filter - Multiple categories",
+			query:         "$filter=Category eq 'Kitchen' or Category eq 'Furniture'",
+			expectedCount: 3, // Coffee Mug, Office Chair, Desk Lamp
+			description:   "Should return items from Kitchen or Furniture",
+		},
+		{
+			name:          "OR filter - Price conditions",
+			query:         "$filter=Price lt 20 or Price gt 800",
+			expectedCount: 2, // Coffee Mug (15.50) and Laptop (999.99)
+			description:   "Should return items with Price < 20 or Price > 800",
+		},
+		{
+			name:          "Complex AND-OR - Electronics with price range",
+			query:         "$filter=(Category eq 'Electronics' and Price lt 100) or Category eq 'Kitchen'",
+			expectedCount: 2, // Mouse (Electronics < 100) and Coffee Mug (Kitchen)
+			description:   "Should return Mouse and Coffee Mug",
+		},
+		{
+			name:          "Complex OR-AND - Multiple conditions",
+			query:         "$filter=Category eq 'Furniture' or (Category eq 'Electronics' and Price gt 500)",
+			expectedCount: 4, // Office Chair, Desk Lamp, Laptop, Smartphone
+			description:   "Should return all Furniture items and expensive Electronics",
+		},
+		{
+			name:          "Triple AND - Multiple conditions",
+			query:         "$filter=Category eq 'Electronics' and Price gt 100 and Price lt 900",
+			expectedCount: 1, // Only Smartphone (799.99)
+			description:   "Should return only Smartphone (Electronics, 100 < Price < 900)",
+		},
+		{
+			name:          "Complex nested - Parentheses",
+			query:         "$filter=(Category eq 'Electronics' or Category eq 'Furniture') and Price lt 100",
+			expectedCount: 2, // Mouse (29.99) and Desk Lamp (45.00)
+			description:   "Should return Mouse and Desk Lamp",
+		},
+		{
+			name:          "NOT operator with AND",
+			query:         "$filter=not (Category eq 'Electronics') and Price lt 100",
+			expectedCount: 2, // Coffee Mug (15.50) and Desk Lamp (45.00)
+			description:   "Should return non-Electronics items under 100",
+		},
+		{
+			name:          "Function with AND",
+			query:         "$filter=contains(Name,'Lamp') and Price lt 50",
+			expectedCount: 1, // Desk Lamp (45.00)
+			description:   "Should return Desk Lamp",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/Products", nil)
+			q := req.URL.Query()
+			// Parse and add query parameters manually to handle spaces properly
+			if tt.query != "" {
+				parts := strings.SplitN(tt.query, "=", 2)
+				if len(parts) == 2 {
+					q.Add(parts[0], parts[1])
+				}
+			}
+			req.URL.RawQuery = q.Encode()
+			w := httptest.NewRecorder()
+
+			handler.HandleCollection(w, req)
+
+			if w.Code != http.StatusOK {
+				t.Errorf("Status = %v, want %v", w.Code, http.StatusOK)
+				t.Logf("Response body: %s", w.Body.String())
+			}
+
+			var response map[string]interface{}
+			if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+				t.Fatalf("Failed to decode response: %v", err)
+			}
+
+			value, ok := response["value"].([]interface{})
+			if !ok {
+				t.Fatal("value field is not an array")
+			}
+
+			if len(value) != tt.expectedCount {
+				t.Errorf("Expected %d results, got %d - %s", tt.expectedCount, len(value), tt.description)
+				// Log the actual results for debugging
+				for i, item := range value {
+					if itemMap, ok := item.(map[string]interface{}); ok {
+						t.Logf("  Result %d: Name=%v, Category=%v, Price=%v",
+							i+1, itemMap["Name"], itemMap["Category"], itemMap["Price"])
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestEntityHandlerCollectionWithSelect(t *testing.T) {
 	handler, db := setupProductHandler(t)
 
