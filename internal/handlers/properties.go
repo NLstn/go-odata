@@ -52,6 +52,9 @@ func (h *EntityHandler) HandleNavigationProperty(w http.ResponseWriter, r *http.
 }
 
 // findNavigationProperty finds a navigation property by name in the entity metadata
+// Navigation properties are identified by IsNavigationProp flag, which is set when:
+// - The field type is a struct (or pointer/slice of struct)
+// - The field has GORM tags with "foreignKey" or "references"
 func (h *EntityHandler) findNavigationProperty(navigationProperty string) *metadata.PropertyMetadata {
 	for _, prop := range h.metadata.Properties {
 		if (prop.JsonName == navigationProperty || prop.Name == navigationProperty) && prop.IsNavigationProp {
@@ -62,6 +65,8 @@ func (h *EntityHandler) findNavigationProperty(navigationProperty string) *metad
 }
 
 // findStructuralProperty finds a structural (non-navigation) property by name in the entity metadata
+// Structural properties are simple data properties like strings, numbers, booleans
+// They are distinguished from navigation properties by the absence of IsNavigationProp flag
 func (h *EntityHandler) findStructuralProperty(propertyName string) *metadata.PropertyMetadata {
 	for _, prop := range h.metadata.Properties {
 		if (prop.JsonName == propertyName || prop.Name == propertyName) && !prop.IsNavigationProp {
@@ -72,11 +77,13 @@ func (h *EntityHandler) findStructuralProperty(propertyName string) *metadata.Pr
 }
 
 // IsNavigationProperty checks if a property name is a navigation property
+// Returns true if the property represents a relationship to another entity
 func (h *EntityHandler) IsNavigationProperty(propertyName string) bool {
 	return h.findNavigationProperty(propertyName) != nil
 }
 
 // IsStructuralProperty checks if a property name is a structural property
+// Returns true if the property is a simple data value (not a relationship)
 func (h *EntityHandler) IsStructuralProperty(propertyName string) bool {
 	return h.findStructuralProperty(propertyName) != nil
 }

@@ -68,10 +68,13 @@ func (s *Service) routeRequest(w http.ResponseWriter, r *http.Request, handler *
 }
 
 // handlePropertyRequest handles navigation and structural property requests
+// Navigation properties: relationships to other entities (e.g., Products(1)/Category)
+// Structural properties: simple data properties (e.g., Products(1)/Name)
+// OData v4 spec requires different handling for each type
 func (s *Service) handlePropertyRequest(w http.ResponseWriter, r *http.Request, handler *handlers.EntityHandler, components *response.ODataURLComponents) {
 	keyString := s.getKeyString(components)
 
-	// Try navigation property first, then structural property
+	// Check navigation property first (relationship to another entity)
 	if handler.IsNavigationProperty(components.NavigationProperty) {
 		if components.IsValue {
 			// /$value is not supported on navigation properties
@@ -83,6 +86,7 @@ func (s *Service) handlePropertyRequest(w http.ResponseWriter, r *http.Request, 
 		}
 		handler.HandleNavigationProperty(w, r, keyString, components.NavigationProperty)
 	} else if handler.IsStructuralProperty(components.NavigationProperty) {
+		// Handle structural property (simple data value)
 		handler.HandleStructuralProperty(w, r, keyString, components.NavigationProperty, components.IsValue)
 	} else {
 		// Property not found
