@@ -55,6 +55,10 @@ A Go library for building services that expose OData APIs with automatic handlin
   - Extended type support (DateTimeOffset, Guid, Binary)
   - Navigation properties with referential constraints
 - ✅ Proper snake_case database column mapping for all operations
+- ✅ **Batch requests ($batch)** - group multiple operations in a single HTTP request
+  - Support for multipart/mixed format (OData v4 standard)
+  - Changesets for atomic operations (transaction support)
+  - Mix read and write operations in a single batch
 
 ## Installation
 
@@ -158,6 +162,7 @@ Once your service is running, the following endpoints will be available:
 - **Structural Properties**: `GET /Products(1)/Name` - Access individual property values
 - **Raw Property Value**: `GET /Products(1)/Name/$value` - Get raw property value without JSON wrapping
 - **Composite Keys**: `GET /EntitySet(key1=value1,key2=value2)` - Access entities with composite keys
+- **Batch Requests**: `POST /$batch` - Execute multiple operations in a single HTTP request
 
 ## Metadata Document
 
@@ -401,6 +406,152 @@ Response includes the total count:
   "value": [ /* ... */ ]
 }
 ```
+
+### Batch Requests (`$batch`)
+
+Batch requests allow you to group multiple operations into a single HTTP request, reducing network overhead and improving performance. The library supports OData v4 batch processing using the `multipart/mixed` format.
+
+#### Basic Batch Request
+
+```bash
+POST /$batch HTTP/1.1
+Content-Type: multipart/mixed; boundary=batch_36d5c8c6
+```
+
+```
+--batch_36d5c8c6
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+GET /Products(1) HTTP/1.1
+Host: localhost
+Accept: application/json
+
+
+--batch_36d5c8c6
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+GET /Products(2) HTTP/1.1
+Host: localhost
+Accept: application/json
+
+
+--batch_36d5c8c6--
+```
+
+#### Changesets for Atomic Operations
+
+Group write operations (POST, PUT, PATCH, DELETE) into changesets for atomic transaction support. If any operation in a changeset fails, all operations in that changeset are rolled back.
+
+```
+--batch_36d5c8c6
+Content-Type: multipart/mixed; boundary=changeset_77162fcd
+
+--changeset_77162fcd
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+POST /Products HTTP/1.1
+Host: localhost
+Content-Type: application/json
+
+{"Name":"Product 1","Price":10.00,"Category":"Electronics"}
+
+--changeset_77162fcd
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+POST /Products HTTP/1.1
+Host: localhost
+Content-Type: application/json
+
+{"Name":"Product 2","Price":20.00,"Category":"Books"}
+
+--changeset_77162fcd--
+
+--batch_36d5c8c6--
+```
+
+#### Mixed Read and Write Operations
+
+You can mix read operations (GET) outside changesets with write operations inside changesets in a single batch:
+
+```
+--batch_36d5c8c6
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+GET /Products(1) HTTP/1.1
+Host: localhost
+Accept: application/json
+
+
+--batch_36d5c8c6
+Content-Type: multipart/mixed; boundary=changeset_77162fcd
+
+--changeset_77162fcd
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+POST /Products HTTP/1.1
+Host: localhost
+Content-Type: application/json
+
+{"Name":"New Product","Price":100.00,"Category":"Books"}
+
+--changeset_77162fcd--
+
+--batch_36d5c8c6
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+GET /Products HTTP/1.1
+Host: localhost
+Accept: application/json
+
+
+--batch_36d5c8c6--
+```
+
+#### Batch Response Format
+
+The server responds with a `multipart/mixed` response containing the results of each operation:
+
+```
+HTTP/1.1 200 OK
+Content-Type: multipart/mixed; boundary=batchresponse_36d5c8c6
+OData-Version: 4.0
+
+--batchresponse_36d5c8c6
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{"ID":1,"Name":"Product 1","Price":99.99}
+
+--batchresponse_36d5c8c6
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+HTTP/1.1 201 Created
+Content-Type: application/json
+
+{"ID":2,"Name":"New Product","Price":100.00}
+
+--batchresponse_36d5c8c6--
+```
+
+#### Batch Features
+
+- ✅ Multiple GET requests in a single batch
+- ✅ Changesets for atomic write operations (POST, PUT, PATCH, DELETE)
+- ✅ Mix read and write operations
+- ✅ Transaction support for changesets
+- ✅ Individual error handling per request
+- ✅ OData v4 compliant multipart/mixed format
 
 ### Expand (`$expand`)
 Retrieve related entities in a single request:
