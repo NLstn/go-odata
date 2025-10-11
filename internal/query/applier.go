@@ -189,6 +189,21 @@ func buildComparisonCondition(filter *FilterExpression, entityMetadata *metadata
 		return fmt.Sprintf("%s < ?", columnName), []interface{}{filter.Value}
 	case OpLessThanOrEqual:
 		return fmt.Sprintf("%s <= ?", columnName), []interface{}{filter.Value}
+	case OpIn:
+		// Handle IN operator with a collection of values
+		values, ok := filter.Value.([]interface{})
+		if !ok {
+			return "", nil
+		}
+		if len(values) == 0 {
+			// Empty IN clause - return false condition
+			return "1 = 0", []interface{}{}
+		}
+		placeholders := make([]string, len(values))
+		for i := range values {
+			placeholders[i] = "?"
+		}
+		return fmt.Sprintf("%s IN (%s)", columnName, strings.Join(placeholders, ", ")), values
 	case OpContains:
 		return fmt.Sprintf("%s LIKE ?", columnName), []interface{}{"%" + fmt.Sprint(filter.Value) + "%"}
 	case OpStartsWith:

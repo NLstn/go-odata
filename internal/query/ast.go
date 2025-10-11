@@ -60,3 +60,10 @@ type GroupExpr struct {
 }
 
 func (e *GroupExpr) astNode() {}
+
+// CollectionExpr represents a collection of values (for 'in' operator)
+type CollectionExpr struct {
+	Values []ASTNode
+}
+
+func (e *CollectionExpr) astNode() {}

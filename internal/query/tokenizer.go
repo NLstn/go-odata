@@ -261,7 +261,7 @@ func (t *Tokenizer) classifyKeyword(lower string, pos int) *Token {
 		return &Token{Type: TokenBoolean, Value: lower, Pos: pos}
 	case "null":
 		return &Token{Type: TokenNull, Value: "null", Pos: pos}
-	case "eq", "ne", "gt", "ge", "lt", "le":
+	case "eq", "ne", "gt", "ge", "lt", "le", "in":
 		return &Token{Type: TokenOperator, Value: lower, Pos: pos}
 	case "add", "sub", "mul", "div", "mod":
 		return &Token{Type: TokenArithmetic, Value: lower, Pos: pos}

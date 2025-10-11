@@ -137,6 +137,20 @@ func (p *ASTParser) parseComparison() (ASTNode, error) {
 	// Check for comparison operators
 	if p.currentToken().Type == TokenOperator {
 		op := p.advance()
+		
+		// Special handling for 'in' operator - expect a collection
+		if op.Value == "in" {
+			right, err := p.parseCollection()
+			if err != nil {
+				return nil, err
+			}
+			return &ComparisonExpr{
+				Left:     left,
+				Operator: op.Value,
+				Right:    right,
+			}, nil
+		}
+		
 		right, err := p.parseArithmetic()
 		if err != nil {
 			return nil, err
@@ -315,6 +329,39 @@ func (p *ASTParser) parseFunctionCall(functionName string) (ASTNode, error) {
 	}, nil
 }
 
+// parseCollection parses a collection expression like (value1, value2, value3)
+func (p *ASTParser) parseCollection() (ASTNode, error) {
+	if err := p.expect(TokenLParen); err != nil {
+		return nil, fmt.Errorf("expected '(' after 'in' operator: %w", err)
+	}
+
+	var values []ASTNode
+
+	// Parse collection values
+	if p.currentToken().Type != TokenRParen {
+		for {
+			// Parse a primary value (literal or identifier)
+			value, err := p.parsePrimary()
+			if err != nil {
+				return nil, err
+			}
+			values = append(values, value)
+
+			if p.currentToken().Type == TokenComma {
+				p.advance()
+			} else {
+				break
+			}
+		}
+	}
+
+	if err := p.expect(TokenRParen); err != nil {
+		return nil, err
+	}
+
+	return &CollectionExpr{Values: values}, nil
+}
+
 // ASTToFilterExpression converts an AST to a FilterExpression
 func ASTToFilterExpression(node ASTNode, entityMetadata *metadata.EntityMetadata) (*FilterExpression, error) {
 	switch n := node.(type) {
@@ -461,6 +508,36 @@ func convertComparisonExpr(n *ComparisonExpr, entityMetadata *metadata.EntityMet
 			Right:    n.Right,
 		}
 		return convertComparisonExpr(unwrappedComparison, entityMetadata)
+	}
+
+	// Handle 'in' operator with collection
+	if n.Operator == "in" {
+		property, err := extractPropertyFromComparison(n.Left, entityMetadata)
+		if err != nil {
+			return nil, err
+		}
+
+		// Right side must be a collection
+		collExpr, ok := n.Right.(*CollectionExpr)
+		if !ok {
+			return nil, fmt.Errorf("'in' operator requires a collection on the right side")
+		}
+
+		// Extract values from collection
+		values := make([]interface{}, len(collExpr.Values))
+		for i, valueNode := range collExpr.Values {
+			if lit, ok := valueNode.(*LiteralExpr); ok {
+				values[i] = lit.Value
+			} else {
+				return nil, fmt.Errorf("collection values must be literals")
+			}
+		}
+
+		return &FilterExpression{
+			Property: property,
+			Operator: OpIn,
+			Value:    values,
+		}, nil
 	}
 
 	property, err := extractPropertyFromComparison(n.Left, entityMetadata)

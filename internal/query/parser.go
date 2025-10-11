@@ -56,6 +56,7 @@ const (
 	OpGreaterThanOrEqual FilterOperator = "ge"
 	OpLessThan           FilterOperator = "lt"
 	OpLessThanOrEqual    FilterOperator = "le"
+	OpIn                 FilterOperator = "in"
 	OpContains           FilterOperator = "contains"
 	OpStartsWith         FilterOperator = "startswith"
 	OpEndsWith           FilterOperator = "endswith"
