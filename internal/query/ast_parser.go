@@ -159,7 +159,8 @@ func (p *ASTParser) parseArithmetic() (ASTNode, error) {
 	}
 
 	for p.currentToken().Type == TokenArithmetic &&
-		(p.currentToken().Value == "+" || p.currentToken().Value == "-") {
+		(p.currentToken().Value == "+" || p.currentToken().Value == "-" ||
+			p.currentToken().Value == "add" || p.currentToken().Value == "sub") {
 		op := p.advance()
 		right, err := p.parseTerm()
 		if err != nil {
@@ -183,7 +184,9 @@ func (p *ASTParser) parseTerm() (ASTNode, error) {
 	}
 
 	for p.currentToken().Type == TokenArithmetic &&
-		(p.currentToken().Value == "*" || p.currentToken().Value == "/" || p.currentToken().Value == "mod") {
+		(p.currentToken().Value == "*" || p.currentToken().Value == "/" ||
+			p.currentToken().Value == "mul" || p.currentToken().Value == "div" ||
+			p.currentToken().Value == "mod") {
 		op := p.advance()
 		right, err := p.parsePrimary()
 		if err != nil {
@@ -452,6 +455,11 @@ func extractPropertyFromComparison(node ASTNode, entityMetadata *metadata.Entity
 
 	if binExpr, ok := node.(*BinaryExpr); ok {
 		return extractPropertyFromArithmeticExpr(binExpr, entityMetadata)
+	}
+
+	if groupExpr, ok := node.(*GroupExpr); ok {
+		// Unwrap grouped expression and try again
+		return extractPropertyFromComparison(groupExpr.Expr, entityMetadata)
 	}
 
 	return "", fmt.Errorf("left side of comparison must be a property name or arithmetic expression")
