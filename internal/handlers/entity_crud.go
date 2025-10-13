@@ -43,7 +43,7 @@ func (h *EntityHandler) handleOptionsEntity(w http.ResponseWriter) {
 
 // handleGetEntity handles GET requests for individual entities
 func (h *EntityHandler) handleGetEntity(w http.ResponseWriter, r *http.Request, entityKey string) {
-	// Parse query options for $expand
+	// Parse query options for $expand and $select
 	queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata)
 	if err != nil {
 		h.writeInvalidQueryError(w, err)
@@ -57,10 +57,11 @@ func (h *EntityHandler) handleGetEntity(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	// Check If-None-Match header if ETag is configured
+	// Check If-None-Match header if ETag is configured (before applying select)
+	var currentETag string
 	if h.metadata.ETagProperty != nil {
 		ifNoneMatch := r.Header.Get(HeaderIfNoneMatch)
-		currentETag := etag.Generate(result, h.metadata)
+		currentETag = etag.Generate(result, h.metadata)
 
 		// If ETags match, return 304 Not Modified
 		if !etag.NoneMatch(ifNoneMatch, currentETag) {
@@ -71,8 +72,13 @@ func (h *EntityHandler) handleGetEntity(w http.ResponseWriter, r *http.Request, 
 		}
 	}
 
+	// Apply $select if specified (after ETag generation)
+	if len(queryOptions.Select) > 0 {
+		result = query.ApplySelectToEntity(result, queryOptions.Select, h.metadata)
+	}
+
 	// Build and write response
-	h.writeEntityResponse(w, r, result)
+	h.writeEntityResponseWithETag(w, r, result, currentETag)
 }
 
 // fetchEntityByKey fetches an entity by its key with optional expand
@@ -96,13 +102,18 @@ func (h *EntityHandler) fetchEntityByKey(entityKey string, queryOptions *query.Q
 	return result, nil
 }
 
-// writeEntityResponse writes an entity response
-func (h *EntityHandler) writeEntityResponse(w http.ResponseWriter, r *http.Request, result interface{}) {
+// writeEntityResponseWithETag writes an entity response with an optional pre-computed ETag
+func (h *EntityHandler) writeEntityResponseWithETag(w http.ResponseWriter, r *http.Request, result interface{}, precomputedETag string) {
 	contextURL := fmt.Sprintf(ODataContextFormat, response.BuildBaseURL(r), h.metadata.EntitySetName)
 	odataResponse := h.buildOrderedEntityResponse(result, contextURL)
 
-	// Generate and set ETag header if entity has an ETag property
-	if etagValue := etag.Generate(result, h.metadata); etagValue != "" {
+	// Use pre-computed ETag if provided, otherwise generate it
+	etagValue := precomputedETag
+	if etagValue == "" && h.metadata.ETagProperty != nil {
+		etagValue = etag.Generate(result, h.metadata)
+	}
+
+	if etagValue != "" {
 		w.Header().Set(HeaderETag, etagValue)
 	}
 

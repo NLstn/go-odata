@@ -515,14 +515,23 @@ func ApplySelect(results interface{}, selectedProperties []string, entityMetadat
 		selectedPropMap[strings.TrimSpace(propName)] = true
 	}
 
+	// Always include key properties (OData requirement)
+	keyPropMap := make(map[string]bool)
+	for _, keyProp := range entityMetadata.KeyProperties {
+		keyPropMap[keyProp.Name] = true
+	}
+
 	for i := 0; i < sliceValue.Len(); i++ {
 		item := sliceValue.Index(i)
 		filteredItem := make(map[string]interface{})
 
-		// Extract only the selected properties (database already filtered columns)
+		// Extract selected properties and key properties
 		for _, prop := range entityMetadata.Properties {
-			// Check if this property was selected
-			if selectedPropMap[prop.JsonName] || selectedPropMap[prop.Name] {
+			// Include if selected OR if it's a key property
+			isSelected := selectedPropMap[prop.JsonName] || selectedPropMap[prop.Name]
+			isKey := keyPropMap[prop.Name]
+
+			if isSelected || isKey {
 				// Get the field value
 				fieldValue := item.FieldByName(prop.Name)
 				if fieldValue.IsValid() && fieldValue.CanInterface() {
@@ -535,4 +544,49 @@ func ApplySelect(results interface{}, selectedProperties []string, entityMetadat
 	}
 
 	return filteredResults
+}
+
+// ApplySelectToEntity applies the $select filter to a single entity
+func ApplySelectToEntity(entity interface{}, selectedProperties []string, entityMetadata *metadata.EntityMetadata) interface{} {
+	if len(selectedProperties) == 0 {
+		return entity
+	}
+
+	// Build a map of selected properties for quick lookup
+	selectedPropMap := make(map[string]bool)
+	for _, propName := range selectedProperties {
+		selectedPropMap[strings.TrimSpace(propName)] = true
+	}
+
+	// Get the entity value
+	entityValue := reflect.ValueOf(entity)
+	if entityValue.Kind() == reflect.Ptr {
+		entityValue = entityValue.Elem()
+	}
+
+	// Create a map to hold the filtered result
+	filteredEntity := make(map[string]interface{})
+
+	// Always include key properties (OData requirement)
+	keyPropMap := make(map[string]bool)
+	for _, keyProp := range entityMetadata.KeyProperties {
+		keyPropMap[keyProp.Name] = true
+	}
+
+	// Extract selected properties and key properties
+	for _, prop := range entityMetadata.Properties {
+		// Include if selected OR if it's a key property
+		isSelected := selectedPropMap[prop.JsonName] || selectedPropMap[prop.Name]
+		isKey := keyPropMap[prop.Name]
+
+		if isSelected || isKey {
+			// Get the field value
+			fieldValue := entityValue.FieldByName(prop.Name)
+			if fieldValue.IsValid() && fieldValue.CanInterface() {
+				filteredEntity[prop.JsonName] = fieldValue.Interface()
+			}
+		}
+	}
+
+	return filteredEntity
 }

@@ -766,16 +766,16 @@ func TestEntityHandlerCollectionWithSelect(t *testing.T) {
 		t.Errorf("Expected 2 results, got %d", len(value))
 	}
 
-	// Check that only selected properties are present
+	// Check that only selected properties are present (plus ID which is always included as key)
 	if len(value) > 0 {
 		item, ok := value[0].(map[string]interface{})
 		if !ok {
 			t.Fatal("Item is not a map")
 		}
 
-		// Explicitly check that we have exactly 2 properties (Name and Price)
-		if len(item) != 2 {
-			t.Errorf("Expected exactly 2 properties (Name, Price), got %d properties: %v", len(item), item)
+		// Explicitly check that we have exactly 3 properties (Name, Price, and ID which is always included as key)
+		if len(item) != 3 {
+			t.Errorf("Expected exactly 3 properties (Name, Price, ID), got %d properties: %v", len(item), item)
 		}
 
 		if _, hasName := item["Name"]; !hasName {
@@ -786,16 +786,16 @@ func TestEntityHandlerCollectionWithSelect(t *testing.T) {
 			t.Error("Expected Price property to be present")
 		}
 
+		if _, hasID := item["ID"]; !hasID {
+			t.Error("Expected ID property to be present (key properties are always included per OData spec)")
+		}
+
 		if _, hasDescription := item["Description"]; hasDescription {
 			t.Error("Did not expect Description property to be present")
 		}
 
 		if _, hasCategory := item["Category"]; hasCategory {
 			t.Error("Did not expect Category property to be present")
-		}
-
-		if _, hasID := item["ID"]; hasID {
-			t.Error("Did not expect ID property to be present (not in $select)")
 		}
 	}
 }
@@ -835,20 +835,24 @@ func TestEntityHandlerCollectionWithSelectSingleProperty(t *testing.T) {
 		t.Errorf("Expected 2 results, got %d", len(value))
 	}
 
-	// Check that only Name property is present
+	// Check that only Name property is present (plus ID which is always included as key)
 	if len(value) > 0 {
 		item, ok := value[0].(map[string]interface{})
 		if !ok {
 			t.Fatal("Item is not a map")
 		}
 
-		// Should have exactly 1 property (Name only)
-		if len(item) != 1 {
-			t.Errorf("Expected exactly 1 property (Name), got %d properties: %v", len(item), item)
+		// Should have exactly 2 properties (Name and ID which is always included as key)
+		if len(item) != 2 {
+			t.Errorf("Expected exactly 2 properties (Name, ID), got %d properties: %v", len(item), item)
 		}
 
 		if _, hasName := item["Name"]; !hasName {
 			t.Error("Expected Name property to be present")
+		}
+
+		if _, hasID := item["ID"]; !hasID {
+			t.Error("Expected ID property to be present (key properties are always included per OData spec)")
 		}
 
 		// Verify other properties are not present
@@ -862,10 +866,6 @@ func TestEntityHandlerCollectionWithSelectSingleProperty(t *testing.T) {
 
 		if _, hasCategory := item["Category"]; hasCategory {
 			t.Error("Did not expect Category property to be present")
-		}
-
-		if _, hasID := item["ID"]; hasID {
-			t.Error("Did not expect ID property to be present")
 		}
 	}
 }
@@ -1094,9 +1094,9 @@ func TestEntityHandlerCollectionWithCombinedOptions(t *testing.T) {
 			t.Errorf("Expected first item to be Laptop, got %s", firstName)
 		}
 
-		// Should only have Name and Price
-		if len(firstItem) > 2 {
-			t.Errorf("Expected only 2 properties, got %d", len(firstItem))
+		// Should have Name, Price, and ID (key properties are always included per OData spec)
+		if len(firstItem) != 3 {
+			t.Errorf("Expected 3 properties (Name, Price, ID), got %d", len(firstItem))
 		}
 	}
 }
