@@ -677,4 +677,53 @@ Accept: application/json
 	if w.Code != http.StatusOK {
 		t.Logf("Response code: %d, Body: %s", w.Code, w.Body.String())
 	}
+
+	// Check response contains product data
+	responseBody := w.Body.String()
+	if !strings.Contains(responseBody, "Test Product") {
+		t.Errorf("Response does not contain product name. Body: %s", responseBody)
+	}
+}
+
+func TestBatchHandler_ChangesetWithoutLeadingSlash(t *testing.T) {
+	handler, db, _ := setupBatchTestHandler(t)
+
+	// Create batch request with changeset WITHOUT leading slash
+	batchBoundary := "batch_boundary"
+	changesetBoundary := "changeset_boundary"
+	body := fmt.Sprintf(`--%s
+Content-Type: multipart/mixed; boundary=%s
+
+--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+POST BatchTestProducts HTTP/1.1
+Host: localhost
+Content-Type: application/json
+
+{"Name":"Product 1","Price":10.00,"Category":"Electronics"}
+
+--%s--
+
+--%s--
+`, batchBoundary, changesetBoundary, changesetBoundary, changesetBoundary, batchBoundary)
+
+	req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+	req.Header.Set("Content-Type", fmt.Sprintf("multipart/mixed; boundary=%s", batchBoundary))
+	w := httptest.NewRecorder()
+
+	// This should not panic
+	handler.HandleBatch(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	// Verify product was created
+	var count int64
+	db.Model(&BatchTestProduct{}).Count(&count)
+	if count != 1 {
+		t.Errorf("Expected 1 product in database, got %d", count)
+	}
 }
