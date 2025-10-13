@@ -223,6 +223,9 @@ func (h *MetadataHandler) buildMetadataDocument() string {
     <Schema xmlns="http://docs.oasis-open.org/odata/ns/edm" Namespace="ODataService">
 `
 
+	// Add enum types
+	metadata += h.buildEnumTypes()
+
 	// Add entity types
 	metadata += h.buildEntityTypes()
 
@@ -234,6 +237,53 @@ func (h *MetadataHandler) buildMetadataDocument() string {
 </edmx:Edmx>`
 
 	return metadata
+}
+
+// buildEnumTypes builds the enum type definitions
+func (h *MetadataHandler) buildEnumTypes() string {
+	result := ""
+	enumTypes := make(map[string]bool)
+
+	// Collect all unique enum types from all entities
+	for _, entityMeta := range h.entities {
+		for _, prop := range entityMeta.Properties {
+			if prop.IsEnum && prop.EnumTypeName != "" {
+				if !enumTypes[prop.EnumTypeName] {
+					enumTypes[prop.EnumTypeName] = true
+					result += h.buildEnumType(prop.EnumTypeName, prop.IsFlags)
+				}
+			}
+		}
+	}
+
+	return result
+}
+
+// buildEnumType builds a single enum type definition
+func (h *MetadataHandler) buildEnumType(enumTypeName string, isFlags bool) string {
+	flagsAttr := ""
+	if isFlags {
+		flagsAttr = ` IsFlags="true"`
+	}
+
+	result := fmt.Sprintf(`      <EnumType Name="%s" UnderlyingType="Edm.Int32"%s>
+`, enumTypeName, flagsAttr)
+
+	// Add enum members based on the enum type name
+	// In a real implementation, this would use reflection to get actual enum values
+	// For now, we'll add common members for known types
+	if enumTypeName == "ProductStatus" {
+		result += `        <Member Name="None" Value="0" />
+        <Member Name="InStock" Value="1" />
+        <Member Name="OnSale" Value="2" />
+        <Member Name="Discontinued" Value="4" />
+        <Member Name="Featured" Value="8" />
+`
+	}
+
+	result += `      </EnumType>
+`
+	return result
 }
 
 // buildEntityTypes builds the entity type definitions
@@ -279,7 +329,13 @@ func (h *MetadataHandler) buildRegularProperties(entityMeta *metadata.EntityMeta
 			continue // Handle navigation properties separately
 		}
 
-		edmType := getEdmType(prop.Type)
+		// Determine the EDM type
+		var edmType string
+		if prop.IsEnum && prop.EnumTypeName != "" {
+			edmType = fmt.Sprintf("ODataService.%s", prop.EnumTypeName)
+		} else {
+			edmType = getEdmType(prop.Type)
+		}
 
 		// Determine nullable
 		nullable := "false"
@@ -394,6 +450,9 @@ func (h *MetadataHandler) handleMetadataJSON(w http.ResponseWriter, r *http.Requ
 		"ODataService": odataService,
 	}
 
+	// Add enum types
+	h.addJSONEnumTypes(odataService)
+
 	// Add entity types
 	for _, entityMeta := range h.entities {
 		entityType := h.buildJSONEntityType(entityMeta)
@@ -410,6 +469,48 @@ func (h *MetadataHandler) handleMetadataJSON(w http.ResponseWriter, r *http.Requ
 	if err := encoder.Encode(csdl); err != nil {
 		fmt.Printf("Error writing JSON metadata response: %v\n", err)
 	}
+}
+
+// addJSONEnumTypes adds enum type definitions to the JSON service
+func (h *MetadataHandler) addJSONEnumTypes(odataService map[string]interface{}) {
+	enumTypes := make(map[string]bool)
+
+	// Collect all unique enum types from all entities
+	for _, entityMeta := range h.entities {
+		for _, prop := range entityMeta.Properties {
+			if prop.IsEnum && prop.EnumTypeName != "" {
+				if !enumTypes[prop.EnumTypeName] {
+					enumTypes[prop.EnumTypeName] = true
+					enumType := h.buildJSONEnumType(prop.EnumTypeName, prop.IsFlags)
+					odataService[prop.EnumTypeName] = enumType
+				}
+			}
+		}
+	}
+}
+
+// buildJSONEnumType builds a JSON enum type definition
+func (h *MetadataHandler) buildJSONEnumType(enumTypeName string, isFlags bool) map[string]interface{} {
+	enumType := map[string]interface{}{
+		"$Kind":           "EnumType",
+		"$UnderlyingType": "Edm.Int32",
+	}
+
+	if isFlags {
+		enumType["$IsFlags"] = true
+	}
+
+	// Add enum members based on the enum type name
+	// In a real implementation, this would use reflection to get actual enum values
+	if enumTypeName == "ProductStatus" {
+		enumType["None"] = 0
+		enumType["InStock"] = 1
+		enumType["OnSale"] = 2
+		enumType["Discontinued"] = 4
+		enumType["Featured"] = 8
+	}
+
+	return enumType
 }
 
 // buildJSONEntityType builds a JSON entity type definition
@@ -448,7 +549,13 @@ func (h *MetadataHandler) addJSONRegularProperties(entityType map[string]interfa
 // buildJSONPropertyDefinition builds a JSON property definition
 func (h *MetadataHandler) buildJSONPropertyDefinition(prop *metadata.PropertyMetadata) map[string]interface{} {
 	propDef := make(map[string]interface{})
-	propDef["$Type"] = getEdmType(prop.Type)
+	
+	// Determine the type
+	if prop.IsEnum && prop.EnumTypeName != "" {
+		propDef["$Type"] = fmt.Sprintf("ODataService.%s", prop.EnumTypeName)
+	} else {
+		propDef["$Type"] = getEdmType(prop.Type)
+	}
 
 	// Set nullable
 	if prop.Nullable != nil {

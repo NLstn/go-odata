@@ -41,6 +41,10 @@ type PropertyMetadata struct {
 	// Search properties
 	IsSearchable     bool // True if this property should be considered in $search
 	SearchFuzziness  int  // Fuzziness level for search (default 1, meaning exact match)
+	// Enum properties
+	IsEnum           bool   // True if this property is an enum type
+	EnumTypeName     string // Name of the enum type (for metadata generation)
+	IsFlags          bool   // True if this enum supports flag combinations (bitwise operations)
 }
 
 // AnalyzeEntity extracts metadata from a Go struct for OData usage
@@ -222,6 +226,15 @@ func processODataTagPart(property *PropertyMetadata, part string, metadata *Enti
 		// If fuzziness is set, also mark as searchable
 		if property.SearchFuzziness > 0 {
 			property.IsSearchable = true
+		}
+	case strings.HasPrefix(part, "enum="):
+		property.IsEnum = true
+		property.EnumTypeName = strings.TrimPrefix(part, "enum=")
+	case part == "flags":
+		property.IsFlags = true
+		// If flags is set without enum, we still mark it as enum
+		if !property.IsEnum {
+			property.IsEnum = true
 		}
 	}
 }

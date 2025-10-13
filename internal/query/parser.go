@@ -130,6 +130,7 @@ const (
 	OpIndexOf            FilterOperator = "indexof"
 	OpSubstring          FilterOperator = "substring"
 	OpConcat             FilterOperator = "concat"
+	OpHas                FilterOperator = "has"
 	OpAdd                FilterOperator = "add"
 	OpSub                FilterOperator = "sub"
 	OpMul                FilterOperator = "mul"
