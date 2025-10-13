@@ -37,7 +37,6 @@ This directory contains the development container configuration for GitHub Codes
 Once the container is running, you can run the development server with hot reload:
 
 ```bash
-cd cmd/devserver
 air
 ```
 
@@ -47,6 +46,8 @@ Or without hot reload:
 cd cmd/devserver
 go run .
 ```
+
+The `air` command should be run from the repository root. It will automatically watch for changes in the library files and rebuild the development server.
 
 The server will be available at `http://localhost:8080`.
 

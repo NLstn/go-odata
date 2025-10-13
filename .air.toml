@@ -1,23 +1,23 @@
 root = "."
 testdata_dir = "testdata"
-tmp_dir = "tmp"
+tmp_dir = "cmd/devserver/tmp"
 
 [build]
   args_bin = []
-  bin = "./tmp/main"
-  cmd = "go build -o ./tmp/main ."
+  bin = "./cmd/devserver/tmp/main"
+  cmd = "cd cmd/devserver && go build -o ./tmp/main ."
   delay = 1000
-  exclude_dir = ["assets", "tmp", "vendor", "testdata", ".git", "node_modules"]
+  exclude_dir = ["assets", "tmp", "vendor", "testdata", ".git", "node_modules", "test"]
   exclude_file = []
   exclude_regex = ["_test.go"]
   exclude_unchanged = false
   follow_symlink = false
   full_bin = ""
-  include_dir = [".", "../../internal"]
+  include_dir = []
   include_ext = ["go", "tpl", "tmpl", "html"]
   include_file = []
   kill_delay = "0s"
-  log = "tmp/build-errors.log"
+  log = "cmd/devserver/tmp/build-errors.log"
   poll = false
   poll_interval = 0
   post_cmd = []
