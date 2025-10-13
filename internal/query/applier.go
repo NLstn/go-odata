@@ -15,6 +15,11 @@ func ApplyQueryOptions(db *gorm.DB, options *QueryOptions, entityMetadata *metad
 		return db
 	}
 
+	// Apply transformations (if present, they take precedence over other query options)
+	if len(options.Apply) > 0 {
+		return applyTransformations(db, options.Apply, entityMetadata)
+	}
+
 	// Apply select at database level to fetch only needed columns
 	if len(options.Select) > 0 {
 		db = applySelect(db, options.Select, entityMetadata)
@@ -589,4 +594,139 @@ func ApplySelectToEntity(entity interface{}, selectedProperties []string, entity
 	}
 
 	return filteredEntity
+}
+
+// applyTransformations applies apply transformations to the GORM query
+func applyTransformations(db *gorm.DB, transformations []ApplyTransformation, entityMetadata *metadata.EntityMetadata) *gorm.DB {
+	for _, transformation := range transformations {
+		switch transformation.Type {
+		case ApplyTypeGroupBy:
+			db = applyGroupBy(db, transformation.GroupBy, entityMetadata)
+		case ApplyTypeAggregate:
+			db = applyAggregate(db, transformation.Aggregate, entityMetadata)
+		case ApplyTypeFilter:
+			db = applyFilter(db, transformation.Filter, entityMetadata)
+		case ApplyTypeCompute:
+			// Compute transformations would require more complex handling
+			// For now, we'll skip them
+			continue
+		}
+	}
+	return db
+}
+
+// applyGroupBy applies a groupby transformation to the GORM query
+func applyGroupBy(db *gorm.DB, groupBy *GroupByTransformation, entityMetadata *metadata.EntityMetadata) *gorm.DB {
+	if groupBy == nil || len(groupBy.Properties) == 0 {
+		return db
+	}
+
+	// Build the GROUP BY clause
+	groupByColumns := make([]string, 0, len(groupBy.Properties))
+	selectColumns := make([]string, 0, len(groupBy.Properties))
+
+	for _, propName := range groupBy.Properties {
+		// Find the property metadata
+		prop := findProperty(propName, entityMetadata)
+		if prop == nil {
+			continue
+		}
+
+		// Use the struct field name for GROUP BY (GORM will convert to column name)
+		groupByColumns = append(groupByColumns, prop.Name)
+		selectColumns = append(selectColumns, prop.Name)
+	}
+
+	// Apply nested transformations (typically aggregate)
+	if len(groupBy.Transform) > 0 {
+		for _, trans := range groupBy.Transform {
+			if trans.Type == ApplyTypeAggregate && trans.Aggregate != nil {
+				// Build aggregate expressions for SELECT
+				for _, aggExpr := range trans.Aggregate.Expressions {
+					aggSQL := buildAggregateSQL(aggExpr, entityMetadata)
+					if aggSQL != "" {
+						selectColumns = append(selectColumns, aggSQL)
+					}
+				}
+			}
+		}
+	}
+
+	// Apply GROUP BY and SELECT
+	if len(groupByColumns) > 0 {
+		db = db.Group(strings.Join(groupByColumns, ", "))
+	}
+
+	if len(selectColumns) > 0 {
+		db = db.Select(strings.Join(selectColumns, ", "))
+	}
+
+	return db
+}
+
+// applyAggregate applies an aggregate transformation to the GORM query
+func applyAggregate(db *gorm.DB, aggregate *AggregateTransformation, entityMetadata *metadata.EntityMetadata) *gorm.DB {
+	if aggregate == nil || len(aggregate.Expressions) == 0 {
+		return db
+	}
+
+	// Build aggregate expressions for SELECT
+	selectColumns := make([]string, 0, len(aggregate.Expressions))
+	for _, aggExpr := range aggregate.Expressions {
+		aggSQL := buildAggregateSQL(aggExpr, entityMetadata)
+		if aggSQL != "" {
+			selectColumns = append(selectColumns, aggSQL)
+		}
+	}
+
+	if len(selectColumns) > 0 {
+		db = db.Select(strings.Join(selectColumns, ", "))
+	}
+
+	return db
+}
+
+// buildAggregateSQL builds the SQL for an aggregate expression
+func buildAggregateSQL(aggExpr AggregateExpression, entityMetadata *metadata.EntityMetadata) string {
+	// Handle $count special case
+	if aggExpr.Property == "$count" {
+		return fmt.Sprintf("COUNT(*) as %s", aggExpr.Alias)
+	}
+
+	// Find the property metadata
+	prop := findProperty(aggExpr.Property, entityMetadata)
+	if prop == nil {
+		return ""
+	}
+
+	// Build the aggregate SQL based on method
+	var sqlFunc string
+	switch aggExpr.Method {
+	case AggregationSum:
+		sqlFunc = "SUM"
+	case AggregationAvg:
+		sqlFunc = "AVG"
+	case AggregationMin:
+		sqlFunc = "MIN"
+	case AggregationMax:
+		sqlFunc = "MAX"
+	case AggregationCount:
+		sqlFunc = "COUNT"
+	case AggregationCountDistinct:
+		return fmt.Sprintf("COUNT(DISTINCT %s) as %s", prop.Name, aggExpr.Alias)
+	default:
+		return ""
+	}
+
+	return fmt.Sprintf("%s(%s) as %s", sqlFunc, prop.Name, aggExpr.Alias)
+}
+
+// findProperty finds a property by name or JSON name in the entity metadata
+func findProperty(propName string, entityMetadata *metadata.EntityMetadata) *metadata.PropertyMetadata {
+	for _, prop := range entityMetadata.Properties {
+		if prop.Name == propName || prop.JsonName == propName {
+			return &prop
+		}
+	}
+	return nil
 }
