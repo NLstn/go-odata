@@ -811,6 +811,11 @@ func convertFunctionCallExpr(n *FunctionCallExpr, entityMetadata *metadata.Entit
 		return convertCastFunction(n, entityMetadata)
 	}
 
+	// Handle isof function (1 or 2 arguments)
+	if functionName == "isof" {
+		return convertIsOfFunction(n, entityMetadata)
+	}
+
 	return nil, fmt.Errorf("unsupported function: %s", functionName)
 }
 
@@ -1013,6 +1018,82 @@ func convertCastFunction(n *FunctionCallExpr, entityMetadata *metadata.EntityMet
 	return &FilterExpression{
 		Property: property,
 		Operator: OpCast,
+		Value:    typeName,
+	}, nil
+}
+
+// convertIsOfFunction converts isof function
+// Format: isof(property, 'TypeName') or isof('TypeName')
+func convertIsOfFunction(n *FunctionCallExpr, entityMetadata *metadata.EntityMetadata) (*FilterExpression, error) {
+	// isof can have 1 or 2 arguments
+	if len(n.Args) < 1 || len(n.Args) > 2 {
+		return nil, fmt.Errorf("function isof requires 1 or 2 arguments")
+	}
+
+	var property string
+	var typeName string
+
+	if len(n.Args) == 1 {
+		// Single argument form: isof('TypeName')
+		// This checks the type of the current instance (implicit property)
+		lit, ok := n.Args[0].(*LiteralExpr)
+		if !ok {
+			return nil, fmt.Errorf("argument of isof must be a type name string")
+		}
+
+		typeNameVal, ok := lit.Value.(string)
+		if !ok {
+			return nil, fmt.Errorf("argument of isof must be a string")
+		}
+		typeName = typeNameVal
+		property = "$it" // Special marker for current instance
+	} else {
+		// Two argument form: isof(property, 'TypeName')
+		var err error
+		property, err = extractPropertyFromFunctionArg(n.Args[0], "isof", entityMetadata)
+		if err != nil {
+			return nil, err
+		}
+
+		// Second argument should be a string literal representing the target type
+		lit, ok := n.Args[1].(*LiteralExpr)
+		if !ok {
+			return nil, fmt.Errorf("second argument of isof must be a type name string")
+		}
+
+		typeNameVal, ok := lit.Value.(string)
+		if !ok {
+			return nil, fmt.Errorf("second argument of isof must be a string")
+		}
+		typeName = typeNameVal
+	}
+
+	// Validate the type name (basic validation)
+	validTypes := map[string]bool{
+		"Edm.String":         true,
+		"Edm.Int32":          true,
+		"Edm.Int64":          true,
+		"Edm.Decimal":        true,
+		"Edm.Double":         true,
+		"Edm.Single":         true,
+		"Edm.Boolean":        true,
+		"Edm.DateTimeOffset": true,
+		"Edm.Date":           true,
+		"Edm.TimeOfDay":      true,
+		"Edm.Guid":           true,
+		"Edm.Binary":         true,
+		"Edm.Byte":           true,
+		"Edm.SByte":          true,
+		"Edm.Int16":          true,
+	}
+
+	if !validTypes[typeName] {
+		return nil, fmt.Errorf("unsupported isof type: %s", typeName)
+	}
+
+	return &FilterExpression{
+		Property: property,
+		Operator: OpIsOf,
 		Value:    typeName,
 	}, nil
 }

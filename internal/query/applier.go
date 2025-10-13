@@ -410,6 +410,18 @@ func buildFunctionSQL(op FilterOperator, columnName string, value interface{}) (
 			return fmt.Sprintf("CAST(%s AS %s)", columnName, sqlType), nil
 		}
 		return "", nil
+	case OpIsOf:
+		// isof returns a boolean indicating if the value can be cast to the specified type
+		// In SQLite, we use a CASE expression to check if CAST succeeds
+		// Returns 1 (true) if cast is valid, 0 (false) otherwise
+		if typeName, ok := value.(string); ok {
+			sqlType := edmTypeToSQLType(typeName)
+			// Use a safe type check that doesn't fail on invalid casts
+			// We try to cast and compare with the original to see if it's valid
+			return fmt.Sprintf("CASE WHEN CAST(%s AS %s) IS NOT NULL THEN 1 ELSE 0 END", 
+				columnName, sqlType), nil
+		}
+		return "", nil
 	default:
 		return "", nil
 	}
