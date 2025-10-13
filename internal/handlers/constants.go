@@ -4,6 +4,7 @@ package handlers
 const (
 	HeaderContentType       = "Content-Type"
 	HeaderODataVersion      = "OData-Version"
+	HeaderODataMaxVersion   = "OData-MaxVersion"
 	HeaderPreferenceApplied = "Preference-Applied"
 	HeaderIfMatch           = "If-Match"
 	HeaderIfNoneMatch       = "If-None-Match"
@@ -27,6 +28,8 @@ const (
 	ErrMsgInternalError         = "Internal error"
 	ErrMsgPreconditionFailed    = "Precondition failed"
 	ErrDetailPreconditionFailed = "The entity has been modified. Please refresh and try again."
+	ErrMsgVersionNotSupported   = "OData version not supported"
+	ErrDetailVersionNotSupported = "This service only supports OData version 4.0 and above. The maximum version specified in the OData-MaxVersion header is below 4.0."
 )
 
 // Error detail format constants

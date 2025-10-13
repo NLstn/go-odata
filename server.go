@@ -12,6 +12,16 @@ import (
 
 // ServeHTTP implements http.Handler interface
 func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Validate OData version before processing any request
+	if !handlers.ValidateODataVersion(r) {
+		if err := response.WriteError(w, http.StatusNotAcceptable, 
+			handlers.ErrMsgVersionNotSupported,
+			handlers.ErrDetailVersionNotSupported); err != nil {
+			fmt.Printf("Error writing error response: %v\n", err)
+		}
+		return
+	}
+
 	path := strings.TrimPrefix(r.URL.Path, "/")
 
 	// Handle root path - service document
