@@ -135,6 +135,10 @@ const (
 	OpMul                FilterOperator = "mul"
 	OpDiv                FilterOperator = "div"
 	OpMod                FilterOperator = "mod"
+	// Math functions
+	OpCeiling FilterOperator = "ceiling"
+	OpFloor   FilterOperator = "floor"
+	OpRound   FilterOperator = "round"
 	// Date functions
 	OpYear   FilterOperator = "year"
 	OpMonth  FilterOperator = "month"

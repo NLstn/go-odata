@@ -288,6 +288,17 @@ func buildFunctionSQL(op FilterOperator, columnName string, value interface{}) (
 		return fmt.Sprintf("DATE(%s)", columnName), nil
 	case OpTime:
 		return fmt.Sprintf("TIME(%s)", columnName), nil
+	// Math functions
+	case OpCeiling:
+		// SQLite doesn't have native CEIL, so we implement it
+		return fmt.Sprintf("CASE WHEN %s = CAST(%s AS INTEGER) THEN %s ELSE CAST(%s AS INTEGER) + (CASE WHEN %s > 0 THEN 1 ELSE 0 END) END",
+			columnName, columnName, columnName, columnName, columnName), nil
+	case OpFloor:
+		// SQLite doesn't have native FLOOR, so we implement it
+		return fmt.Sprintf("CASE WHEN %s = CAST(%s AS INTEGER) THEN %s ELSE CAST(%s AS INTEGER) - (CASE WHEN %s < 0 THEN 1 ELSE 0 END) END",
+			columnName, columnName, columnName, columnName, columnName), nil
+	case OpRound:
+		return fmt.Sprintf("ROUND(%s)", columnName), nil
 	default:
 		return "", nil
 	}
