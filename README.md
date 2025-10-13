@@ -35,6 +35,11 @@ A Go library for building services that expose OData APIs with automatic handlin
   - Parentheses for complex expressions
   - Literal types: strings, numbers, booleans, null
   - Basic arithmetic operators: `+`, `-`, `*`, `/`, `mod`
+- ✅ **Search ($search)** - database-agnostic full-text search with fuzzy matching
+  - Case-insensitive substring search across entity properties
+  - Configurable searchable fields using `odata:"searchable"` tag
+  - Fuzzy matching support with customizable fuzziness level
+  - Defaults to searching all string fields if no searchable fields defined
 - ✅ Selection ($select) - choose specific properties to return
 - ✅ Ordering ($orderby) - sort by one or more properties
 - ✅ Pagination ($top, $skip) with automatic @odata.nextLink generation
@@ -424,6 +429,65 @@ Response includes the total count:
   "value": [ /* ... */ ]
 }
 ```
+
+### Search (`$search`)
+
+The `$search` query option provides database-agnostic full-text search capabilities with fuzzy matching support. Search is performed in-memory after fetching results, making it independent of the underlying database.
+
+#### Basic Search
+
+```
+GET /Products?$search=laptop        # Case-insensitive search
+GET /Products?$search=gaming        # Search across searchable fields
+```
+
+#### Configuring Searchable Fields
+
+By default, all string properties are searchable. You can control which fields are searchable using the `odata:"searchable"` tag:
+
+```go
+type Product struct {
+    ID          int     `json:"ID" odata:"key"`
+    Name        string  `json:"Name" odata:"searchable"`           // Searchable
+    Description string  `json:"Description" odata:"searchable"`    // Searchable
+    Category    string  `json:"Category"`                          // Not searchable
+    Price       float64 `json:"Price"`                             // Not searchable
+}
+```
+
+#### Fuzzy Matching
+
+You can configure the fuzziness level for each searchable field. Fuzziness determines how tolerant the search is to character differences:
+
+- **fuzziness=1** (default): Exact substring match (case-insensitive)
+- **fuzziness=2+**: Allows character differences based on Levenshtein distance
+
+```go
+type Product struct {
+    ID    int    `json:"ID" odata:"key"`
+    Name  string `json:"Name" odata:"searchable,fuzziness=1"`   // Exact match
+    Email string `json:"Email" odata:"searchable,fuzziness=2"`  // 1 char difference allowed
+    Tags  string `json:"Tags" odata:"searchable,fuzziness=3"`   // 2 char differences allowed
+}
+```
+
+#### Combining with Other Query Options
+
+Search can be combined with other query options:
+
+```
+GET /Products?$search=laptop&$filter=Price gt 500&$top=10
+GET /Products?$search=gaming&$orderby=Price desc
+GET /Products?$search=wireless&$select=Name,Price
+```
+
+#### How It Works
+
+1. The search query is applied after fetching results from the database
+2. Search is case-insensitive by default
+3. If no fields are marked as `searchable`, all string properties are searched
+4. Each entity is checked against the search query across all searchable fields
+5. Fuzzy matching is applied based on the configured fuzziness level
 
 ### Batch Requests (`$batch`)
 
