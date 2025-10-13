@@ -340,6 +340,11 @@ func (h *EntityHandler) fetchResults(queryOptions *query.QueryOptions) (interfac
 	// Get the actual slice value (results is a pointer to slice)
 	sliceValue := reflect.ValueOf(results).Elem().Interface()
 
+	// Apply $search if specified (database-agnostic in-memory filtering)
+	if queryOptions.Search != "" {
+		sliceValue = query.ApplySearch(sliceValue, queryOptions.Search, h.metadata)
+	}
+
 	// Apply $select if specified
 	if len(queryOptions.Select) > 0 {
 		sliceValue = query.ApplySelect(sliceValue, queryOptions.Select, h.metadata)
