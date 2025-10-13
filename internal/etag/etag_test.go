@@ -218,53 +218,53 @@ func TestMatch(t *testing.T) {
 
 func TestNoneMatch(t *testing.T) {
 	tests := []struct {
-		name          string
-		ifNoneMatch   string
-		currentETag   string
-		want          bool
-		description   string
+		name        string
+		ifNoneMatch string
+		currentETag string
+		want        bool
+		description string
 	}{
 		{
-			name:          "ETags match - should return false (304)",
-			ifNoneMatch:   "W/\"abc123\"",
-			currentETag:   "W/\"abc123\"",
-			want:          false,
-			description:   "When ETags match, NoneMatch returns false indicating 304 should be returned",
+			name:        "ETags match - should return false (304)",
+			ifNoneMatch: "W/\"abc123\"",
+			currentETag: "W/\"abc123\"",
+			want:        false,
+			description: "When ETags match, NoneMatch returns false indicating 304 should be returned",
 		},
 		{
-			name:          "ETags don't match - should return true (200)",
-			ifNoneMatch:   "W/\"abc123\"",
-			currentETag:   "W/\"def456\"",
-			want:          true,
-			description:   "When ETags don't match, NoneMatch returns true indicating normal response",
+			name:        "ETags don't match - should return true (200)",
+			ifNoneMatch: "W/\"abc123\"",
+			currentETag: "W/\"def456\"",
+			want:        true,
+			description: "When ETags don't match, NoneMatch returns true indicating normal response",
 		},
 		{
-			name:          "Strong and weak ETags match",
-			ifNoneMatch:   "\"abc123\"",
-			currentETag:   "W/\"abc123\"",
-			want:          false,
-			description:   "Strong and weak ETags with same value match",
+			name:        "Strong and weak ETags match",
+			ifNoneMatch: "\"abc123\"",
+			currentETag: "W/\"abc123\"",
+			want:        false,
+			description: "Strong and weak ETags with same value match",
 		},
 		{
-			name:          "Empty If-None-Match always returns true",
-			ifNoneMatch:   "",
-			currentETag:   "W/\"abc123\"",
-			want:          true,
-			description:   "No If-None-Match header means no condition",
+			name:        "Empty If-None-Match always returns true",
+			ifNoneMatch: "",
+			currentETag: "W/\"abc123\"",
+			want:        true,
+			description: "No If-None-Match header means no condition",
 		},
 		{
-			name:          "Wildcard with existing entity",
-			ifNoneMatch:   "*",
-			currentETag:   "W/\"abc123\"",
-			want:          false,
-			description:   "Wildcard matches any existing entity",
+			name:        "Wildcard with existing entity",
+			ifNoneMatch: "*",
+			currentETag: "W/\"abc123\"",
+			want:        false,
+			description: "Wildcard matches any existing entity",
 		},
 		{
-			name:          "Wildcard with empty current ETag",
-			ifNoneMatch:   "*",
-			currentETag:   "",
-			want:          true,
-			description:   "Wildcard with no entity means none-match is true",
+			name:        "Wildcard with empty current ETag",
+			ifNoneMatch: "*",
+			currentETag: "",
+			want:        true,
+			description: "Wildcard with no entity means none-match is true",
 		},
 	}
 
@@ -272,7 +272,7 @@ func TestNoneMatch(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := NoneMatch(tt.ifNoneMatch, tt.currentETag)
 			if got != tt.want {
-				t.Errorf("NoneMatch(%q, %q) = %v, want %v\nDescription: %s", 
+				t.Errorf("NoneMatch(%q, %q) = %v, want %v\nDescription: %s",
 					tt.ifNoneMatch, tt.currentETag, got, tt.want, tt.description)
 			}
 		})

@@ -359,7 +359,7 @@ Accept: application/json
 // This test is skipped for now and represents a future enhancement
 func TestBatchIntegration_ChangesetRollback(t *testing.T) {
 	t.Skip("Changeset rollback on validation errors requires deeper transaction integration - future enhancement")
-	
+
 	service, db := setupBatchIntegrationTest(t)
 
 	// Insert a product that will be referenced

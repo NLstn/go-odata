@@ -1,6 +1,7 @@
 package odata
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -28,6 +29,12 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Handle batch requests
 	if path == "$batch" {
 		s.batchHandler.HandleBatch(w, r)
+		return
+	}
+
+	// Check if this is an unbound action or function (no entity set in path)
+	if s.isActionOrFunction(path) {
+		s.handleActionOrFunction(w, r, path, "", false, "")
 		return
 	}
 
@@ -62,8 +69,13 @@ func (s *Service) routeRequest(w http.ResponseWriter, r *http.Request, handler *
 		// $count request: Products/$count
 		handler.HandleCount(w, r)
 	} else if !hasKey {
-		// Collection request
-		handler.HandleCollection(w, r)
+		// Check if this is an unbound action/function on the collection
+		if components.NavigationProperty != "" && s.isActionOrFunction(components.NavigationProperty) {
+			s.handleActionOrFunction(w, r, components.NavigationProperty, "", false, components.EntitySet)
+		} else {
+			// Collection request
+			handler.HandleCollection(w, r)
+		}
 	} else if components.NavigationProperty != "" {
 		s.handlePropertyRequest(w, r, handler, components)
 	} else {
@@ -73,9 +85,18 @@ func (s *Service) routeRequest(w http.ResponseWriter, r *http.Request, handler *
 	}
 }
 
-// handlePropertyRequest handles navigation and structural property requests
+// handlePropertyRequest handles navigation and structural property requests, as well as actions/functions
 func (s *Service) handlePropertyRequest(w http.ResponseWriter, r *http.Request, handler *handlers.EntityHandler, components *response.ODataURLComponents) {
 	keyString := s.getKeyString(components)
+
+	// Check if this is an action or function invocation (bound to entity)
+	propertyOrAction := components.NavigationProperty
+
+	// Try action/function first (bound operations)
+	if s.isActionOrFunction(propertyOrAction) {
+		s.handleActionOrFunction(w, r, propertyOrAction, keyString, true, components.EntitySet)
+		return
+	}
 
 	// Try navigation property first, then structural property
 	if handler.IsNavigationProperty(components.NavigationProperty) {
@@ -135,6 +156,150 @@ func serializeKeyMap(keyMap map[string]string) string {
 
 	// Sort for consistency (optional, but helps with testing)
 	return strings.Join(parts, ",")
+}
+
+// isActionOrFunction checks if a name corresponds to a registered action or function
+func (s *Service) isActionOrFunction(name string) bool {
+	_, isAction := s.actions[name]
+	_, isFunction := s.functions[name]
+	return isAction || isFunction
+}
+
+// handleActionOrFunction handles action or function invocation
+func (s *Service) handleActionOrFunction(w http.ResponseWriter, r *http.Request, name string, key string, isBound bool, entitySet string) {
+	// Check if it's an action (POST) or function (GET)
+	switch r.Method {
+	case http.MethodPost:
+		// Handle action
+		actionDef, exists := s.actions[name]
+		if !exists {
+			if writeErr := response.WriteError(w, http.StatusNotFound, "Action not found",
+				fmt.Sprintf("Action '%s' is not registered", name)); writeErr != nil {
+				fmt.Printf("Error writing error response: %v\n", writeErr)
+			}
+			return
+		}
+
+		// Verify binding matches
+		if isBound != actionDef.IsBound {
+			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid action binding",
+				fmt.Sprintf("Action '%s' binding mismatch", name)); writeErr != nil {
+				fmt.Printf("Error writing error response: %v\n", writeErr)
+			}
+			return
+		}
+
+		if isBound && actionDef.EntitySet != entitySet {
+			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid entity set",
+				fmt.Sprintf("Action '%s' is not bound to entity set '%s'", name, entitySet)); writeErr != nil {
+				fmt.Printf("Error writing error response: %v\n", writeErr)
+			}
+			return
+		}
+
+		// Parse parameters from request body
+		params, err := parseActionParameters(r, actionDef.Parameters)
+		if err != nil {
+			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid parameters", err.Error()); writeErr != nil {
+				fmt.Printf("Error writing error response: %v\n", writeErr)
+			}
+			return
+		}
+
+		// Get entity context for bound actions
+		var ctx interface{}
+		if isBound && key != "" {
+			// Fetch the entity from database
+			handler := s.handlers[entitySet]
+			if handler != nil {
+				// For now, we'll pass nil as context
+				// In a full implementation, we'd fetch the entity here
+				ctx = nil
+			}
+		}
+
+		// Invoke the action handler
+		if err := actionDef.Handler(w, r, ctx, params); err != nil {
+			if writeErr := response.WriteError(w, http.StatusInternalServerError, "Action failed", err.Error()); writeErr != nil {
+				fmt.Printf("Error writing error response: %v\n", writeErr)
+			}
+			return
+		}
+
+	case http.MethodGet:
+		// Handle function
+		functionDef, exists := s.functions[name]
+		if !exists {
+			if writeErr := response.WriteError(w, http.StatusNotFound, "Function not found",
+				fmt.Sprintf("Function '%s' is not registered", name)); writeErr != nil {
+				fmt.Printf("Error writing error response: %v\n", writeErr)
+			}
+			return
+		}
+
+		// Verify binding matches
+		if isBound != functionDef.IsBound {
+			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid function binding",
+				fmt.Sprintf("Function '%s' binding mismatch", name)); writeErr != nil {
+				fmt.Printf("Error writing error response: %v\n", writeErr)
+			}
+			return
+		}
+
+		if isBound && functionDef.EntitySet != entitySet {
+			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid entity set",
+				fmt.Sprintf("Function '%s' is not bound to entity set '%s'", name, entitySet)); writeErr != nil {
+				fmt.Printf("Error writing error response: %v\n", writeErr)
+			}
+			return
+		}
+
+		// Parse parameters from query string
+		params, err := parseFunctionParameters(r, functionDef.Parameters)
+		if err != nil {
+			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid parameters", err.Error()); writeErr != nil {
+				fmt.Printf("Error writing error response: %v\n", writeErr)
+			}
+			return
+		}
+
+		// Get entity context for bound functions
+		var ctx interface{}
+		if isBound && key != "" {
+			// For now, we'll pass nil as context
+			// In a full implementation, we'd fetch the entity here
+			ctx = nil
+		}
+
+		// Invoke the function handler
+		result, err := functionDef.Handler(w, r, ctx, params)
+		if err != nil {
+			if writeErr := response.WriteError(w, http.StatusInternalServerError, "Function failed", err.Error()); writeErr != nil {
+				fmt.Printf("Error writing error response: %v\n", writeErr)
+			}
+			return
+		}
+
+		// Write the result
+		w.Header().Set("Content-Type", "application/json;odata.metadata=minimal")
+		w.Header().Set("OData-Version", "4.0")
+		w.WriteHeader(http.StatusOK)
+
+		responseMap := map[string]interface{}{
+			"@odata.context": "$metadata#Edm.String",
+			"value":          result,
+		}
+
+		if err := json.NewEncoder(w).Encode(responseMap); err != nil {
+			fmt.Printf("Error encoding response: %v\n", err)
+		}
+
+	default:
+		if writeErr := response.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
+			fmt.Sprintf("Method %s is not allowed for actions or functions", r.Method)); writeErr != nil {
+			fmt.Printf("Error writing error response: %v\n", writeErr)
+		}
+	}
 }
 
 // ListenAndServe starts the OData service on the specified address.

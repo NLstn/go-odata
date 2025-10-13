@@ -195,7 +195,7 @@ func (h *BatchHandler) processChangeset(r io.Reader, boundary string) []batchRes
 // parseHTTPRequest parses an HTTP request from a multipart part
 func (h *BatchHandler) parseHTTPRequest(r io.Reader) (*batchRequest, error) {
 	scanner := bufio.NewScanner(r)
-	
+
 	// Read request line
 	if !scanner.Scan() {
 		return nil, fmt.Errorf("empty request")
@@ -216,7 +216,7 @@ func (h *BatchHandler) parseHTTPRequest(r io.Reader) (*batchRequest, error) {
 		if line == "" || line == "\r" {
 			break
 		}
-		
+
 		// Parse header
 		idx := strings.Index(line, ":")
 		if idx > 0 {
@@ -273,7 +273,7 @@ func (h *BatchHandler) executeRequestInTransaction(req *batchRequest, tx *gorm.D
 	// Create a service handler for the transaction
 	serviceHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := strings.TrimPrefix(r.URL.Path, "/")
-		
+
 		// Find the entity set
 		for entitySet, handler := range txHandlers {
 			if strings.HasPrefix(path, entitySet) {
@@ -355,13 +355,13 @@ func (h *BatchHandler) writeBatchResponse(w http.ResponseWriter, responses []bat
 			fmt.Printf("Error writing newline: %v\n", err)
 			return
 		}
-		
+
 		// Write status line
 		if _, err := fmt.Fprintf(w, "HTTP/1.1 %d %s\r\n", resp.StatusCode, http.StatusText(resp.StatusCode)); err != nil {
 			fmt.Printf("Error writing status line: %v\n", err)
 			return
 		}
-		
+
 		// Write headers
 		for key, values := range resp.Headers {
 			for _, value := range values {
@@ -371,12 +371,12 @@ func (h *BatchHandler) writeBatchResponse(w http.ResponseWriter, responses []bat
 				}
 			}
 		}
-		
+
 		if _, err := fmt.Fprintf(w, "\r\n"); err != nil {
 			fmt.Printf("Error writing newline: %v\n", err)
 			return
 		}
-		
+
 		// Write body
 		if _, err := w.Write(resp.Body); err != nil {
 			fmt.Printf("Error writing body: %v\n", err)
