@@ -305,8 +305,40 @@ func buildFunctionSQL(op FilterOperator, columnName string, value interface{}) (
 			columnName, columnName, columnName, columnName, columnName), nil
 	case OpRound:
 		return fmt.Sprintf("ROUND(%s)", columnName), nil
+	// Type conversion functions
+	case OpCast:
+		// value should be the type name (e.g., "Edm.String", "Edm.Int32")
+		if typeName, ok := value.(string); ok {
+			sqlType := edmTypeToSQLType(typeName)
+			return fmt.Sprintf("CAST(%s AS %s)", columnName, sqlType), nil
+		}
+		return "", nil
 	default:
 		return "", nil
+	}
+}
+
+// edmTypeToSQLType converts OData EDM types to SQLite types
+func edmTypeToSQLType(edmType string) string {
+	switch edmType {
+	case "Edm.String":
+		return "TEXT"
+	case "Edm.Int32", "Edm.Int16", "Edm.Byte", "Edm.SByte":
+		return "INTEGER"
+	case "Edm.Int64":
+		return "INTEGER"
+	case "Edm.Decimal", "Edm.Double", "Edm.Single":
+		return "REAL"
+	case "Edm.Boolean":
+		return "INTEGER" // SQLite uses 0/1 for boolean
+	case "Edm.DateTimeOffset", "Edm.Date", "Edm.TimeOfDay":
+		return "TEXT" // SQLite stores dates as text
+	case "Edm.Guid":
+		return "TEXT"
+	case "Edm.Binary":
+		return "BLOB"
+	default:
+		return "TEXT" // Default to TEXT for unknown types
 	}
 }
 

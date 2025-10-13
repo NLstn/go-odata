@@ -152,6 +152,8 @@ const (
 	// Lambda operators
 	OpAny FilterOperator = "any"
 	OpAll FilterOperator = "all"
+	// Type conversion functions
+	OpCast FilterOperator = "cast"
 )
 
 // LogicalOperator represents logical operators for combining filters
