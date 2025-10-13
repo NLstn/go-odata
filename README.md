@@ -35,6 +35,7 @@ A Go library for building services that expose OData APIs with automatic handlin
   - Parentheses for complex expressions
   - Literal types: strings, numbers, booleans, null
   - Basic arithmetic operators: `+`, `-`, `*`, `/`, `mod`
+  - **Lambda operators**: `any`, `all` - collection filtering with range variables
 - ✅ **Search ($search)** - database-agnostic full-text search with fuzzy matching
   - Case-insensitive substring search across entity properties
   - Configurable searchable fields using `odata:"searchable"` tag
@@ -372,6 +373,75 @@ GET /Products?$filter=Quantity mod 2 eq 0          # Modulo
 ```
 
 Basic arithmetic operators (`+`, `-`, `*`, `/`, `mod`) are supported in simple expressions.
+
+#### Lambda Operators (`any`, `all`)
+
+Lambda operators allow filtering based on collection properties. They support range variables to refer to individual elements in the collection.
+
+**any() operator** - Returns true if any element in a collection satisfies the condition:
+```
+# Check if any tag equals 'Electronics'
+GET /Products?$filter=Tags/any(t: t eq 'Electronics')
+
+# Check if any order has total greater than 100
+GET /Products?$filter=Orders/any(o: o/Total gt 100)
+
+# Parameterless any - checks if collection is non-empty
+GET /Products?$filter=Tags/any()
+
+# Any with complex conditions
+GET /Products?$filter=Orders/any(o: o/Total gt 100 and o/Status eq 'Completed')
+
+# Any with string functions
+GET /Products?$filter=Tags/any(t: contains(t, 'tech'))
+```
+
+**all() operator** - Returns true if all elements in a collection satisfy the condition:
+```
+# Check if all tags contain 'Certified'
+GET /Products?$filter=Tags/all(t: contains(t, 'Certified'))
+
+# Check if all orders are completed
+GET /Products?$filter=Orders/all(o: o/Status eq 'Completed')
+
+# Parameterless all - checks if collection is empty (vacuous truth)
+GET /Products?$filter=Tags/all()
+```
+
+**Nested lambda expressions**:
+```
+# Check if any order has any item with price greater than 50
+GET /Products?$filter=Orders/any(o: o/Items/any(i: i/Price gt 50))
+
+# Check if all orders have all items in stock
+GET /Products?$filter=Orders/all(o: o/Items/all(i: i/InStock eq true))
+
+# Mixed any and all
+GET /Products?$filter=Orders/any(o: o/Items/all(i: i/Status eq 'Valid'))
+```
+
+**Combining lambda with other operators**:
+```
+# Lambda with AND
+GET /Products?$filter=Tags/any(t: t eq 'Electronics') and Price gt 100
+
+# Lambda with OR
+GET /Products?$filter=Tags/any(t: t eq 'Sale') or Price lt 50
+
+# NOT with lambda
+GET /Products?$filter=not (Tags/any(t: t eq 'Discontinued'))
+
+# Multiple lambda expressions
+GET /Products?$filter=Tags/any(t: t eq 'Electronics') and Categories/any(c: c/Name eq 'Computers')
+```
+
+**Lambda features**:
+- **Range variables**: Use short variable names (e.g., `t:`, `o:`, `i:`) to refer to collection elements
+- **Property access**: Access properties of collection elements using `/` (e.g., `o/Total`, `i/Price`)
+- **Complex conditions**: Use `and`, `or`, `not`, and parentheses within lambda predicates
+- **Functions**: Use any filter function within lambda predicates (e.g., `contains`, `startswith`)
+- **Nesting**: Lambda expressions can be nested for multi-level collection filtering
+- **Parameterless**: Use `any()` without predicate to check if collection is non-empty
 
 #### Complex Filter Examples
 ```
