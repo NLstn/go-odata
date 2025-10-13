@@ -232,3 +232,101 @@ func TestErrorResponse_MethodNotAllowed(t *testing.T) {
 		t.Errorf("error.message = %v, want 'Method not allowed'", errorData["message"])
 	}
 }
+
+func TestErrorResponse_InvalidQueryOption(t *testing.T) {
+	service := setupErrorTestService(t)
+
+	tests := []struct {
+		name        string
+		url         string
+		expectCode  int
+		expectMsg   string
+		expectError string
+	}{
+		{
+			name:        "Single invalid query option",
+			url:         "/ErrorTestProducts?$invalidQuery=1234",
+			expectCode:  http.StatusBadRequest,
+			expectMsg:   "Invalid query options",
+			expectError: "unknown query option: '$invalidQuery'",
+		},
+		{
+			name:        "Multiple invalid query options",
+			url:         "/ErrorTestProducts?$invalidOption=value&$anotherInvalid=test",
+			expectCode:  http.StatusBadRequest,
+			expectMsg:   "Invalid query options",
+			expectError: "", // Either error could come first
+		},
+		{
+			name:        "Valid and invalid mixed",
+			url:         "/ErrorTestProducts?$filter=price%20gt%2050&$invalidQuery=1234",
+			expectCode:  http.StatusBadRequest,
+			expectMsg:   "Invalid query options",
+			expectError: "unknown query option: '$invalidQuery'",
+		},
+		{
+			name:       "Non-$ prefixed parameter should work",
+			url:        "/ErrorTestProducts?customParam=value",
+			expectCode: http.StatusOK,
+		},
+		{
+			name:       "All valid query options",
+			url:        "/ErrorTestProducts?$filter=price%20gt%2050&$select=name&$top=10",
+			expectCode: http.StatusOK,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tt.url, nil)
+			w := httptest.NewRecorder()
+
+			service.ServeHTTP(w, req)
+
+			// Verify status code
+			if w.Code != tt.expectCode {
+				t.Errorf("Status = %v, want %v", w.Code, tt.expectCode)
+			}
+
+			// For error responses, validate structure
+			if tt.expectCode != http.StatusOK {
+				var response map[string]interface{}
+				if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+					t.Fatalf("Failed to decode response: %v", err)
+				}
+
+				errorData, ok := response["error"].(map[string]interface{})
+				if !ok {
+					t.Fatal("error field is missing or not an object")
+				}
+
+				// Verify error message
+				if errorData["message"] != tt.expectMsg {
+					t.Errorf("error.message = %v, want '%s'", errorData["message"], tt.expectMsg)
+				}
+
+				// Verify details contain the expected error
+				if tt.expectError != "" {
+					details, ok := errorData["details"].([]interface{})
+					if !ok || len(details) == 0 {
+						t.Fatal("error.details is missing or empty")
+					}
+
+					firstDetail, ok := details[0].(map[string]interface{})
+					if !ok {
+						t.Fatal("error.details[0] is not an object")
+					}
+
+					detailMsg, ok := firstDetail["message"].(string)
+					if !ok {
+						t.Fatal("error.details[0].message is not a string")
+					}
+
+					if detailMsg != tt.expectError {
+						t.Errorf("error.details[0].message = %v, want '%s'", detailMsg, tt.expectError)
+					}
+				}
+			}
+		})
+	}
+}
