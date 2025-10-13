@@ -9,6 +9,11 @@ import (
 	"gorm.io/gorm"
 )
 
+// ShouldUseMapResults returns true if the query options require map results instead of entity results
+func ShouldUseMapResults(options *QueryOptions) bool {
+	return options != nil && len(options.Apply) > 0
+}
+
 // ApplyQueryOptions applies parsed query options to a GORM database query
 func ApplyQueryOptions(db *gorm.DB, options *QueryOptions, entityMetadata *metadata.EntityMetadata) *gorm.DB {
 	if options == nil {
@@ -598,6 +603,14 @@ func ApplySelectToEntity(entity interface{}, selectedProperties []string, entity
 
 // applyTransformations applies apply transformations to the GORM query
 func applyTransformations(db *gorm.DB, transformations []ApplyTransformation, entityMetadata *metadata.EntityMetadata) *gorm.DB {
+	// Set the table/model for the query - use the statement destination if available
+	// Otherwise, we'll need the caller to set this
+	if db.Statement != nil && db.Statement.Dest == nil {
+		// Create an instance of the entity type to set the model
+		modelInstance := reflect.New(entityMetadata.EntityType).Interface()
+		db = db.Model(modelInstance)
+	}
+
 	for _, transformation := range transformations {
 		switch transformation.Type {
 		case ApplyTypeGroupBy:
@@ -634,7 +647,8 @@ func applyGroupBy(db *gorm.DB, groupBy *GroupByTransformation, entityMetadata *m
 
 		// Use the struct field name for GROUP BY (GORM will convert to column name)
 		groupByColumns = append(groupByColumns, prop.Name)
-		selectColumns = append(selectColumns, prop.Name)
+		// Use "column as fieldname" to ensure the result has the correct key
+		selectColumns = append(selectColumns, fmt.Sprintf("%s as %s", prop.Name, prop.JsonName))
 	}
 
 	// Apply nested transformations (typically aggregate)
