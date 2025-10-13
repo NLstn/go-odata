@@ -17,6 +17,7 @@ type QueryOptions struct {
 	Top     *int
 	Skip    *int
 	Count   bool
+	Apply   []ApplyTransformation
 }
 
 // ExpandOption represents a single $expand clause
@@ -33,6 +34,67 @@ type ExpandOption struct {
 type OrderByItem struct {
 	Property   string
 	Descending bool
+}
+
+// ApplyTransformation represents a single apply transformation
+type ApplyTransformation struct {
+	Type      ApplyTransformationType
+	GroupBy   *GroupByTransformation
+	Aggregate *AggregateTransformation
+	Filter    *FilterExpression
+	Compute   *ComputeTransformation
+}
+
+// ApplyTransformationType represents the type of apply transformation
+type ApplyTransformationType string
+
+const (
+	ApplyTypeGroupBy   ApplyTransformationType = "groupby"
+	ApplyTypeAggregate ApplyTransformationType = "aggregate"
+	ApplyTypeFilter    ApplyTransformationType = "filter"
+	ApplyTypeCompute   ApplyTransformationType = "compute"
+)
+
+// GroupByTransformation represents a groupby transformation
+type GroupByTransformation struct {
+	Properties []string
+	Transform  []ApplyTransformation // Nested transformations (typically aggregate)
+}
+
+// AggregateTransformation represents an aggregate transformation
+type AggregateTransformation struct {
+	Expressions []AggregateExpression
+}
+
+// AggregateExpression represents a single aggregation expression
+type AggregateExpression struct {
+	Property   string              // Property to aggregate
+	Method     AggregationMethod   // Aggregation method (sum, avg, min, max, count, etc.)
+	Alias      string              // Alias for the result
+	Expression *FilterExpression   // Optional expression for countdistinct, etc.
+}
+
+// AggregationMethod represents aggregation methods
+type AggregationMethod string
+
+const (
+	AggregationSum          AggregationMethod = "sum"
+	AggregationAvg          AggregationMethod = "average"
+	AggregationMin          AggregationMethod = "min"
+	AggregationMax          AggregationMethod = "max"
+	AggregationCount        AggregationMethod = "count"
+	AggregationCountDistinct AggregationMethod = "countdistinct"
+)
+
+// ComputeTransformation represents a compute transformation
+type ComputeTransformation struct {
+	Expressions []ComputeExpression
+}
+
+// ComputeExpression represents a single compute expression
+type ComputeExpression struct {
+	Expression *FilterExpression
+	Alias      string
 }
 
 // FilterExpression represents a parsed filter expression
@@ -158,6 +220,10 @@ func ParseQueryOptions(queryParams url.Values, entityMetadata *metadata.EntityMe
 	}
 
 	if err := parseCountOption(queryParams, options); err != nil {
+		return nil, err
+	}
+
+	if err := parseApplyOption(queryParams, entityMetadata, options); err != nil {
 		return nil, err
 	}
 
