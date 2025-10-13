@@ -226,14 +226,14 @@ func TestODataMaxVersion_InvalidFormat(t *testing.T) {
 	service := setupVersionTestService(t)
 
 	testCases := []struct {
-		name        string
-		maxVersion  string
+		name         string
+		maxVersion   string
 		shouldReject bool
 	}{
-		{"Empty string", "", false}, // Empty should be treated as no header
-		{"Invalid number", "abc", true}, // Invalid format should be rejected (treated as 0.0)
+		{"Empty string", "", false},        // Empty should be treated as no header
+		{"Invalid number", "abc", true},    // Invalid format should be rejected (treated as 0.0)
 		{"Just major version", "4", false}, // "4" should be accepted as 4.0
-		{"Major only below 4", "3", true}, // "3" should be rejected
+		{"Major only below 4", "3", true},  // "3" should be rejected
 	}
 
 	for _, tc := range testCases {

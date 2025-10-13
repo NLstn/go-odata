@@ -70,10 +70,10 @@ func (e *CollectionExpr) astNode() {}
 
 // LambdaExpr represents a lambda expression (any/all)
 type LambdaExpr struct {
-	Collection     ASTNode // The collection (could be a property path like "Tags" or "Orders/Items")
-	Operator       string  // "any" or "all"
-	RangeVariable  string  // The lambda variable name (e.g., "t" in "Tags/any(t: ...)")
-	Predicate      ASTNode // The condition to evaluate (nil for parameterless any/all)
+	Collection    ASTNode // The collection (could be a property path like "Tags" or "Orders/Items")
+	Operator      string  // "any" or "all"
+	RangeVariable string  // The lambda variable name (e.g., "t" in "Tags/any(t: ...)")
+	Predicate     ASTNode // The condition to evaluate (nil for parameterless any/all)
 }
 
 func (e *LambdaExpr) astNode() {}

@@ -9,7 +9,7 @@ import (
 func TestHasFunctionParsing(t *testing.T) {
 	// Test basic has function parsing
 	filterStr := "has(Status, 1)"
-	
+
 	filter, err := parseFilterWithoutMetadata(filterStr)
 	if err != nil {
 		t.Fatalf("Failed to parse filter: %v", err)
@@ -51,7 +51,7 @@ func TestHasFunctionWithMetadata(t *testing.T) {
 	}
 
 	filterStr := "has(Status, 1)"
-	
+
 	filter, err := parseFilter(filterStr, entityType)
 	if err != nil {
 		t.Fatalf("Failed to parse filter: %v", err)
@@ -80,7 +80,7 @@ func TestHasFunctionSQLGeneration(t *testing.T) {
 	}
 
 	sql, args := buildSimpleOperatorCondition(filter.Operator, "status", filter.Value)
-	
+
 	t.Logf("Generated SQL: %s", sql)
 	t.Logf("Args: %v", args)
 
@@ -101,7 +101,7 @@ func TestHasFunctionSQLGeneration(t *testing.T) {
 func TestHasInfixParsing(t *testing.T) {
 	// Test basic has infix parsing
 	filterStr := "Status has 1"
-	
+
 	filter, err := parseFilterWithoutMetadata(filterStr)
 	if err != nil {
 		t.Fatalf("Failed to parse filter: %v", err)
@@ -143,7 +143,7 @@ func TestHasInfixWithMetadata(t *testing.T) {
 	}
 
 	filterStr := "Status has 1"
-	
+
 	filter, err := parseFilter(filterStr, entityType)
 	if err != nil {
 		t.Fatalf("Failed to parse filter: %v", err)

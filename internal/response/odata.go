@@ -464,7 +464,7 @@ func WriteServiceDocument(w http.ResponseWriter, r *http.Request, entitySets []s
 	baseURL := buildBaseURL(r)
 
 	entities := make([]map[string]interface{}, 0, len(entitySets)+len(singletons))
-	
+
 	// Add entity sets
 	for _, entitySet := range entitySets {
 		entities = append(entities, map[string]interface{}{
@@ -473,7 +473,7 @@ func WriteServiceDocument(w http.ResponseWriter, r *http.Request, entitySets []s
 			"url":  entitySet,
 		})
 	}
-	
+
 	// Add singletons
 	for _, singleton := range singletons {
 		entities = append(entities, map[string]interface{}{

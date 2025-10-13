@@ -16,7 +16,7 @@ func ApplySearch(results interface{}, searchQuery string, entityMetadata *metada
 
 	// Get searchable properties
 	searchableProps := getSearchableProperties(entityMetadata)
-	
+
 	// If no properties are marked as searchable, consider all string properties
 	if len(searchableProps) == 0 {
 		searchableProps = getAllStringProperties(entityMetadata)

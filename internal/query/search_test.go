@@ -9,10 +9,10 @@ import (
 
 // TestEntity represents a test entity with searchable properties
 type SearchTestEntity struct {
-	ID          int    `json:"ID" odata:"key"`
-	Name        string `json:"Name" odata:"searchable"`
-	Description string `json:"Description" odata:"searchable"`
-	Category    string `json:"Category"`
+	ID          int     `json:"ID" odata:"key"`
+	Name        string  `json:"Name" odata:"searchable"`
+	Description string  `json:"Description" odata:"searchable"`
+	Category    string  `json:"Category"`
 	Price       float64 `json:"Price"`
 }
 
@@ -47,10 +47,10 @@ func TestApplySearch_BasicSearch(t *testing.T) {
 	}
 
 	tests := []struct {
-		name           string
-		searchQuery    string
-		expectedCount  int
-		expectedIDs    []int
+		name          string
+		searchQuery   string
+		expectedCount int
+		expectedIDs   []int
 	}{
 		{
 			name:          "Search for 'laptop'",
@@ -105,7 +105,7 @@ func TestApplySearch_BasicSearch(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := ApplySearch(entities, tt.searchQuery, meta)
-			
+
 			resultSlice, ok := result.([]SearchTestEntity)
 			if !ok {
 				t.Fatalf("Expected []SearchTestEntity, got %T", result)
@@ -170,7 +170,7 @@ func TestApplySearch_NoSearchableFields(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := ApplySearch(entities, tt.searchQuery, meta)
-			
+
 			resultSlice, ok := result.([]SearchTestEntityNoSearchable)
 			if !ok {
 				t.Fatalf("Expected []SearchTestEntityNoSearchable, got %T", result)
@@ -220,7 +220,7 @@ func TestApplySearch_WithFuzziness(t *testing.T) {
 		{
 			name:          "With one character difference (fuzziness=2)",
 			searchQuery:   "Jahn", // One char different from "John"
-			expectedCount: 3, // Should match all with fuzziness (Jane has similar pattern)
+			expectedCount: 3,      // Should match all with fuzziness (Jane has similar pattern)
 			description:   "Should match with one character difference",
 		},
 		{
@@ -234,7 +234,7 @@ func TestApplySearch_WithFuzziness(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := ApplySearch(entities, tt.searchQuery, meta)
-			
+
 			resultSlice, ok := result.([]SearchTestEntityWithFuzziness)
 			if !ok {
 				t.Fatalf("Expected []SearchTestEntityWithFuzziness, got %T", result)
@@ -385,7 +385,7 @@ func TestGetSearchableProperties(t *testing.T) {
 	}
 
 	searchable := getSearchableProperties(meta)
-	
+
 	// Should have 2 searchable properties: Name and Description
 	if len(searchable) != 2 {
 		t.Errorf("Expected 2 searchable properties, got %d", len(searchable))
@@ -415,7 +415,7 @@ func TestGetAllStringProperties(t *testing.T) {
 	}
 
 	stringProps := getAllStringProperties(meta)
-	
+
 	// Should have 3 string properties: Name, Description, Category
 	if len(stringProps) != 3 {
 		t.Errorf("Expected 3 string properties, got %d", len(stringProps))
@@ -471,7 +471,7 @@ func TestApplySearch_NonSliceInput(t *testing.T) {
 	entity := SearchTestEntity{ID: 1, Name: "Laptop", Description: "Test", Category: "Electronics", Price: 1000}
 
 	result := ApplySearch(entity, "laptop", meta)
-	
+
 	// Should return the input unchanged if it's not a slice
 	if !reflect.DeepEqual(result, entity) {
 		t.Error("Expected non-slice input to be returned unchanged")

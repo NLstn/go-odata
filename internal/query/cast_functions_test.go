@@ -254,7 +254,7 @@ func TestCastFunction_AllSupportedTypes(t *testing.T) {
 	for _, edmType := range supportedTypes {
 		t.Run("cast to "+edmType, func(t *testing.T) {
 			filter := "cast(Price, '" + edmType + "') eq 100"
-			
+
 			tokenizer := NewTokenizer(filter)
 			tokens, err := tokenizer.TokenizeAll()
 			if err != nil {

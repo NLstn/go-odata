@@ -569,7 +569,7 @@ func (h *MetadataHandler) addJSONRegularProperties(entityType map[string]interfa
 // buildJSONPropertyDefinition builds a JSON property definition
 func (h *MetadataHandler) buildJSONPropertyDefinition(prop *metadata.PropertyMetadata) map[string]interface{} {
 	propDef := make(map[string]interface{})
-	
+
 	// Determine the type
 	if prop.IsEnum && prop.EnumTypeName != "" {
 		propDef["$Type"] = fmt.Sprintf("ODataService.%s", prop.EnumTypeName)
