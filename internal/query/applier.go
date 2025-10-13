@@ -259,6 +259,9 @@ func buildFunctionSQL(op FilterOperator, columnName string, value interface{}) (
 		return fmt.Sprintf("INSTR(%s, ?)", columnName), []interface{}{value}
 	case OpConcat:
 		return fmt.Sprintf("CONCAT(%s, ?)", columnName), []interface{}{value}
+	case OpHas:
+		// Bitwise AND for enum flags: (column & value) = value
+		return fmt.Sprintf("(%s & ?)", columnName), []interface{}{value}
 	case OpSubstring:
 		return buildSubstringSQL(columnName, value)
 	case OpAdd:
@@ -473,6 +476,9 @@ func buildSimpleOperatorCondition(op FilterOperator, fieldName string, value int
 		return fmt.Sprintf("%s LIKE ?", fieldName), []interface{}{fmt.Sprint(value) + "%"}
 	case OpEndsWith:
 		return fmt.Sprintf("%s LIKE ?", fieldName), []interface{}{"%" + fmt.Sprint(value)}
+	case OpHas:
+		// Bitwise AND for enum flags: (column & value) = value
+		return fmt.Sprintf("(%s & ?) = ?", fieldName), []interface{}{value, value}
 	default:
 		return "", nil
 	}
