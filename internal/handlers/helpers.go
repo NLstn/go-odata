@@ -286,7 +286,8 @@ func parseVersion(version string) (int, int) {
 	
 	minor := 0
 	if len(parts) > 1 {
-		minor, _ = strconv.Atoi(parts[1])
+		// Ignore error - if minor version can't be parsed, default to 0
+		minor, _ = strconv.Atoi(parts[1]) //nolint:errcheck
 	}
 	
 	return major, minor
