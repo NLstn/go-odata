@@ -91,9 +91,46 @@ const (
 	LogicalOr  LogicalOperator = "or"
 )
 
+// validQueryOptions is a set of valid OData v4 system query options
+var validQueryOptions = map[string]bool{
+	"$filter":        true,
+	"$select":        true,
+	"$expand":        true,
+	"$orderby":       true,
+	"$top":           true,
+	"$skip":          true,
+	"$count":         true,
+	"$search":        true,
+	"$format":        true,
+	"$compute":       true,
+	"$index":         true,
+	"$schemaversion": true,
+	"$apply":         true,
+	"$deltatoken":    true,
+	"$skiptoken":     true,
+}
+
+// validateQueryOptions validates that all query parameters starting with $ are valid OData query options
+func validateQueryOptions(queryParams url.Values) error {
+	for key := range queryParams {
+		// Only validate parameters that start with $
+		if strings.HasPrefix(key, "$") {
+			if !validQueryOptions[key] {
+				return fmt.Errorf("unknown query option: '%s'", key)
+			}
+		}
+	}
+	return nil
+}
+
 // ParseQueryOptions parses OData query options from the URL
 func ParseQueryOptions(queryParams url.Values, entityMetadata *metadata.EntityMetadata) (*QueryOptions, error) {
 	options := &QueryOptions{}
+
+	// Validate that all query parameters starting with $ are valid OData query options
+	if err := validateQueryOptions(queryParams); err != nil {
+		return nil, err
+	}
 
 	// Parse each query option
 	if err := parseFilterOption(queryParams, entityMetadata, options); err != nil {

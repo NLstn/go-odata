@@ -211,6 +211,31 @@ func TestParseQueryOptions(t *testing.T) {
 			query:     "$orderby=InvalidProperty desc",
 			expectErr: true,
 		},
+		{
+			name:      "Invalid query option",
+			query:     "$invalidQuery=1234",
+			expectErr: true,
+		},
+		{
+			name:      "Multiple invalid query options",
+			query:     "$invalidOption=value&$anotherInvalid=test",
+			expectErr: true,
+		},
+		{
+			name:      "Valid and invalid query options mixed",
+			query:     "$filter=Price gt 100&$invalidQuery=1234",
+			expectErr: true,
+		},
+		{
+			name:      "Non-$ prefixed parameter should not cause error",
+			query:     "$filter=Price gt 100&customParam=value",
+			expectErr: false,
+			validate: func(t *testing.T, opts *QueryOptions) {
+				if opts.Filter == nil {
+					t.Error("Expected filter to be set")
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {
