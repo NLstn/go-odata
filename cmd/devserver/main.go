@@ -16,8 +16,8 @@ func main() {
 		log.Fatal("Failed to connect to database:", err)
 	}
 
-	// Auto-migrate the Product and ProductDescription models
-	if err := db.AutoMigrate(&Product{}, &ProductDescription{}); err != nil {
+	// Auto-migrate the Product, ProductDescription, and CompanyInfo models
+	if err := db.AutoMigrate(&Product{}, &ProductDescription{}, &CompanyInfo{}); err != nil {
 		log.Fatal("Failed to migrate database:", err)
 	}
 
@@ -32,7 +32,13 @@ func main() {
 		log.Fatal("Failed to seed product descriptions:", err)
 	}
 
-	fmt.Printf("Database initialized with %d products and %d descriptions\n", len(sampleProducts), len(sampleDescriptions))
+	// Seed company info singleton
+	companyInfo := GetCompanyInfo()
+	if err := db.Create(&companyInfo).Error; err != nil {
+		log.Fatal("Failed to seed company info:", err)
+	}
+
+	fmt.Printf("Database initialized with %d products, %d descriptions, and company info\n", len(sampleProducts), len(sampleDescriptions))
 
 	// Create OData service
 	service := odata.NewService(db)
@@ -43,6 +49,11 @@ func main() {
 	}
 	if err := service.RegisterEntity(&ProductDescription{}); err != nil {
 		log.Fatal("Failed to register ProductDescription entity:", err)
+	}
+
+	// Register the CompanyInfo singleton
+	if err := service.RegisterSingleton(&CompanyInfo{}, "Company"); err != nil {
+		log.Fatal("Failed to register Company singleton:", err)
 	}
 
 	// Register example functions
@@ -61,6 +72,7 @@ func main() {
 	fmt.Println("  Single Product:       http://localhost:8080/Products(1)")
 	fmt.Println("  ProductDescriptions:  http://localhost:8080/ProductDescriptions")
 	fmt.Println("  Product Descriptions: http://localhost:8080/ProductDescriptions(ProductID=1,LanguageKey='EN')")
+	fmt.Println("  Company (Singleton):  http://localhost:8080/Company")
 	fmt.Println()
 	fmt.Println("OData Actions and Functions:")
 	fmt.Println("  Unbound Functions:")

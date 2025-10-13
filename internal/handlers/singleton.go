@@ -1,10 +1,13 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"reflect"
 
+	"github.com/nlstn/go-odata/internal/etag"
+	"github.com/nlstn/go-odata/internal/preference"
 	"github.com/nlstn/go-odata/internal/response"
 )
 
@@ -52,9 +55,7 @@ func (h *EntityHandler) handleGetSingleton(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Write the singleton entity response
-	if err := response.WriteODataEntity(w, r, h.metadata.SingletonName, entityInstance, h.metadata); err != nil {
-		fmt.Printf("Error writing singleton response: %v\n", err)
-	}
+	h.writeEntityResponseWithETag(w, r, entityInstance, "")
 }
 
 // handlePatchSingleton handles PATCH requests for singleton entities (partial update)
@@ -82,57 +83,42 @@ func (h *EntityHandler) handlePatchSingleton(w http.ResponseWriter, r *http.Requ
 	// Handle ETag if present
 	if h.metadata.ETagProperty != nil {
 		ifMatch := r.Header.Get(HeaderIfMatch)
-		if ifMatch != "" {
-			currentETag := generateETag(entityInstance, h.metadata.ETagProperty)
-			if !matchesETag(ifMatch, currentETag) {
-				if writeErr := response.WriteError(w, http.StatusPreconditionFailed, ErrMsgETagMismatch,
-					"The entity has been modified by another user"); writeErr != nil {
-					fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
-				}
-				return
+		currentETag := etag.Generate(entityInstance, h.metadata)
+
+		if !etag.Match(ifMatch, currentETag) {
+			if writeErr := response.WriteError(w, http.StatusPreconditionFailed, ErrMsgPreconditionFailed,
+				ErrDetailPreconditionFailed); writeErr != nil {
+				fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
 			}
+			return
 		}
 	}
 
 	// Parse the update data from request body
-	updates, err := parseRequestBody(r)
-	if err != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidRequestBody, err.Error()); writeErr != nil {
+	var updateData map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&updateData); err != nil {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidRequestBody,
+			fmt.Sprintf(ErrDetailFailedToParseJSON, err.Error())); writeErr != nil {
 			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
 		}
 		return
 	}
 
 	// Apply updates to the entity
-	if err := h.db.Model(entityInstance).Updates(updates).Error; err != nil {
-		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
-		}
+	if err := h.db.Model(entityInstance).Updates(updateData).Error; err != nil {
+		h.writeDatabaseError(w, err)
 		return
 	}
 
 	// Reload the entity to get the updated values
 	if err := h.db.First(entityInstance).Error; err != nil {
-		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
-		}
+		h.writeDatabaseError(w, err)
 		return
 	}
 
 	// Handle Prefer header for response
-	preferReturn := getPreferReturn(r)
-	if preferReturn == preferMinimal {
-		w.Header().Set(HeaderPreferenceApplied, "return=minimal")
-		w.Header().Set("OData-Version", "4.0")
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-
-	// Default: return the updated entity
-	w.Header().Set(HeaderPreferenceApplied, "return=representation")
-	if err := response.WriteODataEntity(w, r, h.metadata.SingletonName, entityInstance, h.metadata); err != nil {
-		fmt.Printf("Error writing entity response: %v\n", err)
-	}
+	pref := preference.ParsePrefer(r)
+	h.writeUpdateResponse(w, r, pref, h.db, false)
 }
 
 // handlePutSingleton handles PUT requests for singleton entities (full replace)
@@ -160,65 +146,42 @@ func (h *EntityHandler) handlePutSingleton(w http.ResponseWriter, r *http.Reques
 	// Handle ETag if present
 	if h.metadata.ETagProperty != nil {
 		ifMatch := r.Header.Get(HeaderIfMatch)
-		if ifMatch != "" {
-			currentETag := generateETag(existingEntity, h.metadata.ETagProperty)
-			if !matchesETag(ifMatch, currentETag) {
-				if writeErr := response.WriteError(w, http.StatusPreconditionFailed, ErrMsgETagMismatch,
-					"The entity has been modified by another user"); writeErr != nil {
-					fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
-				}
-				return
+		currentETag := etag.Generate(existingEntity, h.metadata)
+
+		if !etag.Match(ifMatch, currentETag) {
+			if writeErr := response.WriteError(w, http.StatusPreconditionFailed, ErrMsgPreconditionFailed,
+				ErrDetailPreconditionFailed); writeErr != nil {
+				fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
 			}
+			return
 		}
 	}
 
 	// Parse the new entity data from request body
 	newEntity := reflect.New(h.metadata.EntityType).Interface()
-	if err := parseJSONBody(r, newEntity); err != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidRequestBody, err.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
-		}
-		return
-	}
-
-	// Validate required properties
-	if err := h.validateRequiredProperties(newEntity); err != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgValidationFailed, err.Error()); writeErr != nil {
+	if err := json.NewDecoder(r.Body).Decode(newEntity); err != nil {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidRequestBody,
+			fmt.Sprintf(ErrDetailFailedToParseJSON, err.Error())); writeErr != nil {
 			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
 		}
 		return
 	}
 
 	// Update the entity in the database (replace all fields)
-	if err := h.db.Model(existingEntity).Updates(newEntity).Error; err != nil {
-		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
-		}
+	if err := h.db.Model(existingEntity).Select("*").Updates(newEntity).Error; err != nil {
+		h.writeDatabaseError(w, err)
 		return
 	}
 
 	// Reload the entity to get the updated values
 	if err := h.db.First(existingEntity).Error; err != nil {
-		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
-		}
+		h.writeDatabaseError(w, err)
 		return
 	}
 
 	// Handle Prefer header for response
-	preferReturn := getPreferReturn(r)
-	if preferReturn == preferMinimal {
-		w.Header().Set(HeaderPreferenceApplied, "return=minimal")
-		w.Header().Set("OData-Version", "4.0")
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-
-	// Default: return the updated entity
-	w.Header().Set(HeaderPreferenceApplied, "return=representation")
-	if err := response.WriteODataEntity(w, r, h.metadata.SingletonName, existingEntity, h.metadata); err != nil {
-		fmt.Printf("Error writing entity response: %v\n", err)
-	}
+	pref := preference.ParsePrefer(r)
+	h.writeUpdateResponse(w, r, pref, h.db, false)
 }
 
 // handleOptionsSingleton handles OPTIONS requests for singleton endpoint
