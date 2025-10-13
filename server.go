@@ -302,8 +302,9 @@ func (s *Service) handleActionOrFunction(w http.ResponseWriter, r *http.Request,
 			return
 		}
 
-		// Write the result
-		w.Header().Set("Content-Type", "application/json;odata.metadata=minimal")
+		// Write the result with dynamic metadata level
+		metadataLevel := response.GetODataMetadataLevel(r)
+		w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
 		w.Header().Set("OData-Version", "4.0")
 		w.WriteHeader(http.StatusOK)
 

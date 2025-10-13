@@ -126,7 +126,9 @@ func (h *EntityHandler) writeEntityResponseWithETag(w http.ResponseWriter, r *ht
 		w.Header().Set(HeaderETag, etagValue)
 	}
 
-	w.Header().Set(HeaderContentType, ContentTypeJSON)
+	// Set Content-Type with dynamic metadata level
+	metadataLevel := response.GetODataMetadataLevel(r)
+	w.Header().Set(HeaderContentType, fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
 	w.Header().Set(HeaderODataVersion, "4.0")
 	w.WriteHeader(http.StatusOK)
 
