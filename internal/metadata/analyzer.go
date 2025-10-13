@@ -8,13 +8,15 @@ import (
 
 // EntityMetadata holds metadata information about an OData entity
 type EntityMetadata struct {
-	EntityType    reflect.Type
-	EntityName    string
-	EntitySetName string
-	Properties    []PropertyMetadata
-	KeyProperties []PropertyMetadata // Support for composite keys
-	KeyProperty   *PropertyMetadata  // Deprecated: Use KeyProperties for single or composite keys, kept for backwards compatibility
-	ETagProperty  *PropertyMetadata  // Property used for ETag generation (optional)
+	EntityType     reflect.Type
+	EntityName     string
+	EntitySetName  string
+	Properties     []PropertyMetadata
+	KeyProperties  []PropertyMetadata // Support for composite keys
+	KeyProperty    *PropertyMetadata  // Deprecated: Use KeyProperties for single or composite keys, kept for backwards compatibility
+	ETagProperty   *PropertyMetadata  // Property used for ETag generation (optional)
+	IsSingleton    bool               // True if this is a singleton (single instance accessible by name)
+	SingletonName  string             // Name of the singleton (if IsSingleton is true)
 }
 
 // PropertyMetadata holds metadata information about an entity property
@@ -88,6 +90,57 @@ func AnalyzeEntity(entity interface{}) (*EntityMetadata, error) {
 	return metadata, nil
 }
 
+// AnalyzeSingleton extracts metadata from a Go struct for OData singleton usage
+// Singletons are single instances of an entity type that can be accessed directly by name
+func AnalyzeSingleton(entity interface{}, singletonName string) (*EntityMetadata, error) {
+	entityType := reflect.TypeOf(entity)
+
+	// Handle pointer types
+	if entityType.Kind() == reflect.Ptr {
+		entityType = entityType.Elem()
+	}
+
+	if entityType.Kind() != reflect.Struct {
+		return nil, fmt.Errorf("singleton must be a struct, got %s", entityType.Kind())
+	}
+
+	metadata := initializeSingletonMetadata(entityType, singletonName)
+
+	// Analyze struct fields
+	for i := 0; i < entityType.NumField(); i++ {
+		field := entityType.Field(i)
+
+		// Skip unexported fields
+		if !field.IsExported() {
+			continue
+		}
+
+		property := analyzeField(field, metadata)
+		metadata.Properties = append(metadata.Properties, property)
+	}
+
+	// Singletons don't require key properties for URL addressing,
+	// but may still have them for database operations
+	// We'll be lenient and allow singletons without keys
+	if len(metadata.KeyProperties) == 0 {
+		// Auto-detect key if field name is "ID"
+		for i := range metadata.Properties {
+			if metadata.Properties[i].Name == "ID" {
+				metadata.Properties[i].IsKey = true
+				metadata.KeyProperties = append(metadata.KeyProperties, metadata.Properties[i])
+				break
+			}
+		}
+	}
+
+	// For backwards compatibility, set KeyProperty to first key if only one key exists
+	if len(metadata.KeyProperties) == 1 {
+		metadata.KeyProperty = &metadata.KeyProperties[0]
+	}
+
+	return metadata, nil
+}
+
 // initializeMetadata creates a new EntityMetadata struct with basic information
 func initializeMetadata(entityType reflect.Type) *EntityMetadata {
 	entityName := entityType.Name()
@@ -98,6 +151,21 @@ func initializeMetadata(entityType reflect.Type) *EntityMetadata {
 		EntityName:    entityName,
 		EntitySetName: entitySetName,
 		Properties:    make([]PropertyMetadata, 0),
+		IsSingleton:   false,
+	}
+}
+
+// initializeSingletonMetadata creates a new EntityMetadata struct for a singleton
+func initializeSingletonMetadata(entityType reflect.Type, singletonName string) *EntityMetadata {
+	entityName := entityType.Name()
+
+	return &EntityMetadata{
+		EntityType:    entityType,
+		EntityName:    entityName,
+		EntitySetName: singletonName, // For singletons, we use the singleton name
+		SingletonName: singletonName,
+		Properties:    make([]PropertyMetadata, 0),
+		IsSingleton:   true,
 	}
 }
 

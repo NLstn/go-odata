@@ -454,7 +454,7 @@ func WriteErrorWithTarget(w http.ResponseWriter, code int, message string, targe
 }
 
 // WriteServiceDocument writes the OData service document
-func WriteServiceDocument(w http.ResponseWriter, r *http.Request, entitySets []string) error {
+func WriteServiceDocument(w http.ResponseWriter, r *http.Request, entitySets []string, singletons []string) error {
 	// Check if the requested format is supported
 	if !IsAcceptableFormat(r) {
 		return WriteError(w, http.StatusNotAcceptable, "Not Acceptable",
@@ -463,12 +463,23 @@ func WriteServiceDocument(w http.ResponseWriter, r *http.Request, entitySets []s
 
 	baseURL := buildBaseURL(r)
 
-	entities := make([]map[string]interface{}, 0, len(entitySets))
+	entities := make([]map[string]interface{}, 0, len(entitySets)+len(singletons))
+	
+	// Add entity sets
 	for _, entitySet := range entitySets {
 		entities = append(entities, map[string]interface{}{
 			"name": entitySet,
 			"kind": "EntitySet",
 			"url":  entitySet,
+		})
+	}
+	
+	// Add singletons
+	for _, singleton := range singletons {
+		entities = append(entities, map[string]interface{}{
+			"name": singleton,
+			"kind": "Singleton",
+			"url":  singleton,
 		})
 	}
 

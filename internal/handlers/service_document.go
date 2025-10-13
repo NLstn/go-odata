@@ -37,13 +37,19 @@ func (h *ServiceDocumentHandler) HandleServiceDocument(w http.ResponseWriter, r 
 
 // handleGetServiceDocument handles GET requests for service document
 func (h *ServiceDocumentHandler) handleGetServiceDocument(w http.ResponseWriter, r *http.Request) {
-	// Build list of entity sets
-	entitySets := make([]string, 0, len(h.entities))
-	for entitySetName := range h.entities {
-		entitySets = append(entitySets, entitySetName)
+	// Build separate lists for entity sets and singletons
+	entitySets := make([]string, 0)
+	singletons := make([]string, 0)
+	
+	for name, meta := range h.entities {
+		if meta.IsSingleton {
+			singletons = append(singletons, name)
+		} else {
+			entitySets = append(entitySets, name)
+		}
 	}
 
-	if err := response.WriteServiceDocument(w, r, entitySets); err != nil {
+	if err := response.WriteServiceDocument(w, r, entitySets, singletons); err != nil {
 		fmt.Printf("Error writing service document: %v\n", err)
 	}
 }

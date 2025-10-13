@@ -74,10 +74,22 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // routeRequest routes the request to the appropriate handler method based on URL components
 func (s *Service) routeRequest(w http.ResponseWriter, r *http.Request, handler *handlers.EntityHandler, components *response.ODataURLComponents) {
 	hasKey := components.EntityKey != "" || len(components.EntityKeyMap) > 0
+	
+	// Check if this is a singleton
+	isSingleton := handler.IsSingleton()
 
 	if components.IsCount {
 		// $count request: Products/$count
 		handler.HandleCount(w, r)
+	} else if isSingleton {
+		// Singleton request - treat as single entity without key
+		if components.NavigationProperty != "" {
+			// Navigation property on singleton: /Me/Friends
+			s.handlePropertyRequest(w, r, handler, components)
+		} else {
+			// Direct singleton access: /Me
+			handler.HandleSingleton(w, r)
+		}
 	} else if !hasKey {
 		// Check if this is an unbound action/function on the collection
 		if components.NavigationProperty != "" && s.isActionOrFunction(components.NavigationProperty) {
