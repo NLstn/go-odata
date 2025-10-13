@@ -98,6 +98,11 @@ func WriteODataCollection(w http.ResponseWriter, r *http.Request, entitySetName 
 	// Build the context URL
 	contextURL := buildContextURL(r, entitySetName)
 
+	// Ensure empty collections are represented as [] not null per OData v4 spec
+	if data == nil {
+		data = []interface{}{}
+	}
+
 	response := ODataResponse{
 		Context:  contextURL,
 		Count:    count,
@@ -135,6 +140,11 @@ func WriteODataCollectionWithNavigation(w http.ResponseWriter, r *http.Request, 
 	// Transform the data to add navigation links
 	transformedData := addNavigationLinks(data, metadata, expandedProps, r, entitySetName)
 
+	// Ensure empty collections are represented as [] not null per OData v4 spec
+	if transformedData == nil {
+		transformedData = []interface{}{}
+	}
+
 	response := ODataResponse{
 		Context:  contextURL,
 		Count:    count,
@@ -162,7 +172,9 @@ func WriteODataCollectionWithNavigation(w http.ResponseWriter, r *http.Request, 
 func addNavigationLinks(data interface{}, metadata EntityMetadataProvider, expandedProps []string, r *http.Request, entitySetName string) []interface{} {
 	dataValue := reflect.ValueOf(data)
 	if dataValue.Kind() != reflect.Slice {
-		return nil
+		// Return empty slice instead of nil to ensure JSON marshaling produces []
+		// instead of null, per OData v4 specification
+		return []interface{}{}
 	}
 
 	result := make([]interface{}, dataValue.Len())
