@@ -13,7 +13,7 @@ func parseApplyOption(queryParams map[string][]string, entityMetadata *metadata.
 	if vals, ok := queryParams["$apply"]; ok && len(vals) > 0 {
 		applyStr = vals[0]
 	}
-	
+
 	if applyStr == "" {
 		return nil
 	}

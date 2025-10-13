@@ -441,8 +441,8 @@ func TestIntegrationApplyFilter(t *testing.T) {
 			},
 		},
 		{
-			name: "Filter then groupby with aggregate",
-			path: "/ApplyTestProducts?$apply=filter(Price%20gt%20100)/groupby((Category)%2Caggregate(Price%20with%20sum%20as%20TotalPrice))",
+			name:           "Filter then groupby with aggregate",
+			path:           "/ApplyTestProducts?$apply=filter(Price%20gt%20100)/groupby((Category)%2Caggregate(Price%20with%20sum%20as%20TotalPrice))",
 			expectedStatus: http.StatusOK,
 			validate: func(t *testing.T, response map[string]interface{}) {
 				value, ok := response["value"].([]interface{})

@@ -8,15 +8,15 @@ import (
 
 // EntityMetadata holds metadata information about an OData entity
 type EntityMetadata struct {
-	EntityType     reflect.Type
-	EntityName     string
-	EntitySetName  string
-	Properties     []PropertyMetadata
-	KeyProperties  []PropertyMetadata // Support for composite keys
-	KeyProperty    *PropertyMetadata  // Deprecated: Use KeyProperties for single or composite keys, kept for backwards compatibility
-	ETagProperty   *PropertyMetadata  // Property used for ETag generation (optional)
-	IsSingleton    bool               // True if this is a singleton (single instance accessible by name)
-	SingletonName  string             // Name of the singleton (if IsSingleton is true)
+	EntityType    reflect.Type
+	EntityName    string
+	EntitySetName string
+	Properties    []PropertyMetadata
+	KeyProperties []PropertyMetadata // Support for composite keys
+	KeyProperty   *PropertyMetadata  // Deprecated: Use KeyProperties for single or composite keys, kept for backwards compatibility
+	ETagProperty  *PropertyMetadata  // Property used for ETag generation (optional)
+	IsSingleton   bool               // True if this is a singleton (single instance accessible by name)
+	SingletonName string             // Name of the singleton (if IsSingleton is true)
 }
 
 // PropertyMetadata holds metadata information about an entity property
@@ -41,12 +41,12 @@ type PropertyMetadata struct {
 	// Referential constraints for navigation properties
 	ReferentialConstraints map[string]string // Maps dependent property to principal property
 	// Search properties
-	IsSearchable     bool // True if this property should be considered in $search
-	SearchFuzziness  int  // Fuzziness level for search (default 1, meaning exact match)
+	IsSearchable    bool // True if this property should be considered in $search
+	SearchFuzziness int  // Fuzziness level for search (default 1, meaning exact match)
 	// Enum properties
-	IsEnum           bool   // True if this property is an enum type
-	EnumTypeName     string // Name of the enum type (for metadata generation)
-	IsFlags          bool   // True if this enum supports flag combinations (bitwise operations)
+	IsEnum       bool   // True if this property is an enum type
+	EnumTypeName string // Name of the enum type (for metadata generation)
+	IsFlags      bool   // True if this enum supports flag combinations (bitwise operations)
 }
 
 // AnalyzeEntity extracts metadata from a Go struct for OData usage

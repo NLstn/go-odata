@@ -14,7 +14,7 @@ import (
 func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Validate OData version before processing any request
 	if !handlers.ValidateODataVersion(r) {
-		if err := response.WriteError(w, http.StatusNotAcceptable, 
+		if err := response.WriteError(w, http.StatusNotAcceptable,
 			handlers.ErrMsgVersionNotSupported,
 			handlers.ErrDetailVersionNotSupported); err != nil {
 			fmt.Printf("Error writing error response: %v\n", err)
@@ -74,7 +74,7 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // routeRequest routes the request to the appropriate handler method based on URL components
 func (s *Service) routeRequest(w http.ResponseWriter, r *http.Request, handler *handlers.EntityHandler, components *response.ODataURLComponents) {
 	hasKey := components.EntityKey != "" || len(components.EntityKeyMap) > 0
-	
+
 	// Check if this is a singleton
 	isSingleton := handler.IsSingleton()
 

@@ -18,7 +18,7 @@ type QueryOptions struct {
 	Skip    *int
 	Count   bool
 	Apply   []ApplyTransformation
-	Search  string             // Search query string
+	Search  string                 // Search query string
 	Compute *ComputeTransformation // Standalone $compute option
 }
 
@@ -270,11 +270,11 @@ func parseFilterOption(queryParams url.Values, entityMetadata *metadata.EntityMe
 func parseSelectOption(queryParams url.Values, entityMetadata *metadata.EntityMetadata, options *QueryOptions) error {
 	if selectStr := queryParams.Get("$select"); selectStr != "" {
 		selectedProps := parseSelect(selectStr)
-		
+
 		// If $compute or $apply with compute is present, we need to extract computed property aliases
 		// to avoid validation errors for properties that will be computed
 		computedAliases := make(map[string]bool)
-		
+
 		// Check for standalone $compute parameter
 		if computeStr := queryParams.Get("$compute"); computeStr != "" {
 			aliases := extractComputeAliasesFromString(computeStr)
@@ -282,7 +282,7 @@ func parseSelectOption(queryParams url.Values, entityMetadata *metadata.EntityMe
 				computedAliases[alias] = true
 			}
 		}
-		
+
 		// Check for compute within $apply
 		if applyStr := queryParams.Get("$apply"); applyStr != "" {
 			aliases := extractComputedAliases(applyStr)
@@ -290,7 +290,7 @@ func parseSelectOption(queryParams url.Values, entityMetadata *metadata.EntityMe
 				computedAliases[alias] = true
 			}
 		}
-		
+
 		// Validate that all selected properties exist (either as entity properties or computed properties)
 		for _, propName := range selectedProps {
 			// Handle navigation property paths (e.g., "Product/Name")
@@ -298,12 +298,12 @@ func parseSelectOption(queryParams url.Values, entityMetadata *metadata.EntityMe
 				parts := strings.SplitN(propName, "/", 2)
 				navPropName := strings.TrimSpace(parts[0])
 				subPropName := strings.TrimSpace(parts[1])
-				
+
 				// Validate navigation property exists
 				if !isNavigationProperty(navPropName, entityMetadata) {
 					return fmt.Errorf("property '%s' does not exist in entity type", propName)
 				}
-				
+
 				// Note: We can't easily validate the sub-property without loading the target entity metadata
 				// The validation of sub-properties will be handled when the expand is processed
 				// For now, we just validate that the navigation property itself exists
@@ -323,7 +323,7 @@ func parseSelectOption(queryParams url.Values, entityMetadata *metadata.EntityMe
 // extractComputeAliasesFromString extracts aliases from a $compute string
 func extractComputeAliasesFromString(computeStr string) map[string]bool {
 	aliases := make(map[string]bool)
-	
+
 	// Split by comma and extract aliases
 	expressions := splitComputeExpressions(computeStr)
 	for _, expr := range expressions {
@@ -334,21 +334,21 @@ func extractComputeAliasesFromString(computeStr string) map[string]bool {
 			aliases[alias] = true
 		}
 	}
-	
+
 	return aliases
 }
 
 // extractComputedAliases extracts aliases from $compute expressions in $apply
 func extractComputedAliases(applyStr string) map[string]bool {
 	aliases := make(map[string]bool)
-	
+
 	// Look for compute(...) in the apply string
 	// Format: compute(expression as alias, ...)
 	computeStart := strings.Index(applyStr, "compute(")
 	if computeStart == -1 {
 		return aliases
 	}
-	
+
 	// Find the matching closing parenthesis
 	depth := 0
 	start := computeStart + 8 // Skip "compute("
@@ -374,7 +374,7 @@ func extractComputedAliases(applyStr string) map[string]bool {
 			depth--
 		}
 	}
-	
+
 	return aliases
 }
 

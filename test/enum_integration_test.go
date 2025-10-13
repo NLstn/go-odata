@@ -49,12 +49,12 @@ func setupEnumTestDB(t *testing.T) *gorm.DB {
 
 	// Seed test data with different flag combinations
 	products := []EnumProduct{
-		{ID: 1, Name: "Laptop", Price: 999.99, Status: ProductStatusInStock | ProductStatusFeatured},         // 1 | 8 = 9
-		{ID: 2, Name: "Mouse", Price: 29.99, Status: ProductStatusInStock | ProductStatusOnSale},             // 1 | 2 = 3
-		{ID: 3, Name: "Keyboard", Price: 79.99, Status: ProductStatusInStock},                                // 1
+		{ID: 1, Name: "Laptop", Price: 999.99, Status: ProductStatusInStock | ProductStatusFeatured},                        // 1 | 8 = 9
+		{ID: 2, Name: "Mouse", Price: 29.99, Status: ProductStatusInStock | ProductStatusOnSale},                            // 1 | 2 = 3
+		{ID: 3, Name: "Keyboard", Price: 79.99, Status: ProductStatusInStock},                                               // 1
 		{ID: 4, Name: "Monitor", Price: 299.99, Status: ProductStatusInStock | ProductStatusOnSale | ProductStatusFeatured}, // 1 | 2 | 8 = 11
-		{ID: 5, Name: "Chair", Price: 249.99, Status: ProductStatusDiscontinued},                             // 4
-		{ID: 6, Name: "Desk", Price: 449.99, Status: ProductStatusOnSale},                                    // 2
+		{ID: 5, Name: "Chair", Price: 249.99, Status: ProductStatusDiscontinued},                                            // 4
+		{ID: 6, Name: "Desk", Price: 449.99, Status: ProductStatusOnSale},                                                   // 2
 	}
 
 	if err := db.Create(&products).Error; err != nil {
@@ -252,11 +252,11 @@ func TestEnumMetadata(t *testing.T) {
 	}
 
 	tests := []struct {
-		name           string
-		format         string
-		contentType    string
-		checkContent   func(t *testing.T, body string)
-		description    string
+		name         string
+		format       string
+		contentType  string
+		checkContent func(t *testing.T, body string)
+		description  string
 	}{
 		{
 			name:        "XML metadata contains EnumType",

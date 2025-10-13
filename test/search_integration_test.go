@@ -213,10 +213,10 @@ func TestIntegrationSearch_NoSearchableFields(t *testing.T) {
 	_ = service.RegisterEntity(&SearchTestProductNoTags{})
 
 	tests := []struct {
-		name           string
-		searchQuery    string
-		expectedCount  int
-		description    string
+		name          string
+		searchQuery   string
+		expectedCount int
+		description   string
 	}{
 		{
 			name:          "Search in Name field",

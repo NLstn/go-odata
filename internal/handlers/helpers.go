@@ -251,7 +251,7 @@ func (a *metadataAdapter) GetEntitySetName() string {
 // Returns true if the version is acceptable, false if it should be rejected
 func ValidateODataVersion(r *http.Request) bool {
 	maxVersion := r.Header.Get(HeaderODataMaxVersion)
-	
+
 	// If no OData-MaxVersion header is present, accept the request
 	if maxVersion == "" {
 		return true
@@ -260,12 +260,12 @@ func ValidateODataVersion(r *http.Request) bool {
 	// Parse the version string (e.g., "4.0", "3.0", "4.01")
 	// We need to check if it's below 4.0
 	majorVersion, _ := parseVersion(maxVersion)
-	
+
 	// Accept if major version is >= 4
 	if majorVersion >= 4 {
 		return true
 	}
-	
+
 	// Reject if major version is < 4
 	return false
 }
@@ -274,21 +274,21 @@ func ValidateODataVersion(r *http.Request) bool {
 func parseVersion(version string) (int, int) {
 	version = strings.TrimSpace(version)
 	parts := strings.Split(version, ".")
-	
+
 	if len(parts) == 0 {
 		return 0, 0
 	}
-	
+
 	major, err := strconv.Atoi(parts[0])
 	if err != nil {
 		return 0, 0
 	}
-	
+
 	minor := 0
 	if len(parts) > 1 {
 		// Ignore error - if minor version can't be parsed, default to 0
 		minor, _ = strconv.Atoi(parts[1]) //nolint:errcheck
 	}
-	
+
 	return major, minor
 }

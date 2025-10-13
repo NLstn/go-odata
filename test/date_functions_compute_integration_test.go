@@ -36,7 +36,7 @@ func TestDateFunctions_ComputeIntegration(t *testing.T) {
 				if len(value) == 0 {
 					t.Fatal("Expected non-empty result")
 				}
-				
+
 				// Check first item has OrderYear field
 				firstItem := value[0].(map[string]interface{})
 				if _, hasOrderYear := firstItem["OrderYear"]; !hasOrderYear {
@@ -59,7 +59,7 @@ func TestDateFunctions_ComputeIntegration(t *testing.T) {
 				if len(value) == 0 {
 					t.Fatal("Expected non-empty result")
 				}
-				
+
 				firstItem := value[0].(map[string]interface{})
 				if _, hasOrderMonth := firstItem["OrderMonth"]; !hasOrderMonth {
 					t.Error("Expected OrderMonth field in result")
@@ -78,7 +78,7 @@ func TestDateFunctions_ComputeIntegration(t *testing.T) {
 				if len(value) == 0 {
 					t.Fatal("Expected non-empty result")
 				}
-				
+
 				firstItem := value[0].(map[string]interface{})
 				if _, hasYear := firstItem["Year"]; !hasYear {
 					t.Error("Expected Year field in result")
@@ -103,7 +103,7 @@ func TestDateFunctions_ComputeIntegration(t *testing.T) {
 				if len(value) == 0 {
 					t.Fatal("Expected non-empty result")
 				}
-				
+
 				firstItem := value[0].(map[string]interface{})
 				if _, hasHour := firstItem["Hour"]; !hasHour {
 					t.Error("Expected Hour field in result")
@@ -122,7 +122,7 @@ func TestDateFunctions_ComputeIntegration(t *testing.T) {
 				if len(value) == 0 {
 					t.Fatal("Expected non-empty result")
 				}
-				
+
 				firstItem := value[0].(map[string]interface{})
 				if _, hasMinute := firstItem["Minute"]; !hasMinute {
 					t.Error("Expected Minute field in result")
@@ -141,7 +141,7 @@ func TestDateFunctions_ComputeIntegration(t *testing.T) {
 				if len(value) == 0 {
 					t.Fatal("Expected non-empty result")
 				}
-				
+
 				firstItem := value[0].(map[string]interface{})
 				if _, hasSecond := firstItem["Second"]; !hasSecond {
 					t.Error("Expected Second field in result")
@@ -160,7 +160,7 @@ func TestDateFunctions_ComputeIntegration(t *testing.T) {
 				if len(value) == 0 {
 					t.Fatal("Expected non-empty result")
 				}
-				
+
 				firstItem := value[0].(map[string]interface{})
 				if _, hasDatePart := firstItem["DatePart"]; !hasDatePart {
 					t.Error("Expected DatePart field in result")
@@ -179,7 +179,7 @@ func TestDateFunctions_ComputeIntegration(t *testing.T) {
 				if len(value) == 0 {
 					t.Fatal("Expected non-empty result")
 				}
-				
+
 				firstItem := value[0].(map[string]interface{})
 				if _, hasTimePart := firstItem["TimePart"]; !hasTimePart {
 					t.Error("Expected TimePart field in result")
@@ -198,7 +198,7 @@ func TestDateFunctions_ComputeIntegration(t *testing.T) {
 				if len(value) == 0 {
 					t.Fatal("Expected non-empty result")
 				}
-				
+
 				firstItem := value[0].(map[string]interface{})
 				// Should have all original fields plus OrderYear
 				if _, hasID := firstItem["ID"]; !hasID {

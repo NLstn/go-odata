@@ -40,7 +40,7 @@ func (h *ServiceDocumentHandler) handleGetServiceDocument(w http.ResponseWriter,
 	// Build separate lists for entity sets and singletons
 	entitySets := make([]string, 0)
 	singletons := make([]string, 0)
-	
+
 	for name, meta := range h.entities {
 		if meta.IsSingleton {
 			singletons = append(singletons, name)

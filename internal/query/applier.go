@@ -28,7 +28,7 @@ func applySelectToExpandedEntity(expandedValue interface{}, selectedProps []stri
 	}
 
 	val := reflect.ValueOf(expandedValue)
-	
+
 	// Handle pointer
 	if val.Kind() == reflect.Ptr {
 		if val.IsNil() {
@@ -62,11 +62,11 @@ func filterEntityFields(entityVal reflect.Value, selectedPropMap map[string]bool
 
 	// Always include ID/key fields
 	idFields := []string{"ID", "Id", "id"}
-	
+
 	for i := 0; i < entityVal.NumField(); i++ {
 		field := entityType.Field(i)
 		fieldVal := entityVal.Field(i)
-		
+
 		if !fieldVal.CanInterface() {
 			continue
 		}
@@ -89,7 +89,7 @@ func filterEntityFields(entityVal reflect.Value, selectedPropMap map[string]bool
 				break
 			}
 		}
-		
+
 		// Also check for odata:"key" tag
 		if odataTag := field.Tag.Get("odata"); odataTag != "" {
 			if strings.Contains(odataTag, "key") {
@@ -672,7 +672,7 @@ func ApplySelect(results interface{}, selectedProperties []string, entityMetadat
 	selectedPropMap := make(map[string]bool)
 	// Also track navigation property selects (e.g., "Product/Name")
 	navPropSelects := make(map[string][]string) // nav prop name -> list of sub-properties
-	
+
 	for _, propName := range selectedProperties {
 		propName = strings.TrimSpace(propName)
 		// Check if this is a navigation property path (e.g., "Product/Name")
@@ -718,7 +718,7 @@ func ApplySelect(results interface{}, selectedProperties []string, entityMetadat
 				fieldValue := item.FieldByName(prop.Name)
 				if fieldValue.IsValid() && fieldValue.CanInterface() {
 					fieldVal := fieldValue.Interface()
-					
+
 					// If this is an expanded navigation property with a nested select, apply it
 					if prop.IsNavigationProp && (isExpanded || hasNavSelect) {
 						var expandOpt *ExpandOption
@@ -727,7 +727,7 @@ func ApplySelect(results interface{}, selectedProperties []string, entityMetadat
 						} else if expandedPropMap[prop.JsonName] != nil {
 							expandOpt = expandedPropMap[prop.JsonName]
 						}
-						
+
 						// Get nested select from expand option or from navigation path selects
 						var nestedSelect []string
 						if expandOpt != nil && len(expandOpt.Select) > 0 {
@@ -737,13 +737,13 @@ func ApplySelect(results interface{}, selectedProperties []string, entityMetadat
 						} else if len(navPropSelects[prop.Name]) > 0 {
 							nestedSelect = navPropSelects[prop.Name]
 						}
-						
+
 						// Apply nested select if specified
 						if len(nestedSelect) > 0 && fieldVal != nil {
 							fieldVal = applySelectToExpandedEntity(fieldVal, nestedSelect)
 						}
 					}
-					
+
 					filteredItem[prop.JsonName] = fieldVal
 				}
 			}
@@ -765,7 +765,7 @@ func ApplySelectToEntity(entity interface{}, selectedProperties []string, entity
 	selectedPropMap := make(map[string]bool)
 	// Also track navigation property selects (e.g., "Product/Name")
 	navPropSelects := make(map[string][]string) // nav prop name -> list of sub-properties
-	
+
 	for _, propName := range selectedProperties {
 		propName = strings.TrimSpace(propName)
 		// Check if this is a navigation property path (e.g., "Product/Name")
@@ -816,7 +816,7 @@ func ApplySelectToEntity(entity interface{}, selectedProperties []string, entity
 			fieldValue := entityValue.FieldByName(prop.Name)
 			if fieldValue.IsValid() && fieldValue.CanInterface() {
 				fieldVal := fieldValue.Interface()
-				
+
 				// If this is an expanded navigation property with a nested select, apply it
 				if prop.IsNavigationProp && (isExpanded || hasNavSelect) {
 					var expandOpt *ExpandOption
@@ -825,7 +825,7 @@ func ApplySelectToEntity(entity interface{}, selectedProperties []string, entity
 					} else if expandedPropMap[prop.JsonName] != nil {
 						expandOpt = expandedPropMap[prop.JsonName]
 					}
-					
+
 					// Get nested select from expand option or from navigation path selects
 					var nestedSelect []string
 					if expandOpt != nil && len(expandOpt.Select) > 0 {
@@ -835,13 +835,13 @@ func ApplySelectToEntity(entity interface{}, selectedProperties []string, entity
 					} else if len(navPropSelects[prop.Name]) > 0 {
 						nestedSelect = navPropSelects[prop.Name]
 					}
-					
+
 					// Apply nested select if specified
 					if len(nestedSelect) > 0 && fieldVal != nil {
 						fieldVal = applySelectToExpandedEntity(fieldVal, nestedSelect)
 					}
 				}
-				
+
 				filteredEntity[prop.JsonName] = fieldVal
 			}
 		}

@@ -477,5 +477,3 @@ func TestSingletonHead(t *testing.T) {
 		t.Error("Expected OData-Version header")
 	}
 }
-
-

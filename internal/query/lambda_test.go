@@ -13,8 +13,6 @@ type TestEntityForLambda struct {
 	Categories []string `json:"Categories"`
 }
 
-
-
 func TestLambdaTokenizer(t *testing.T) {
 	tests := []struct {
 		name      string
