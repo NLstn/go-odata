@@ -220,6 +220,9 @@ func buildComparisonCondition(filter *FilterExpression, entityMetadata *metadata
 		return fmt.Sprintf("%s LIKE ?", columnName), []interface{}{fmt.Sprint(filter.Value) + "%"}
 	case OpEndsWith:
 		return fmt.Sprintf("%s LIKE ?", columnName), []interface{}{"%" + fmt.Sprint(filter.Value)}
+	case OpHas:
+		// Bitwise AND for enum flags: (column & value) = value
+		return fmt.Sprintf("(%s & ?) = ?", columnName), []interface{}{filter.Value, filter.Value}
 	default:
 		return "", nil
 	}
