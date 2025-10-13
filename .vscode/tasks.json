@@ -6,7 +6,7 @@
             "type": "shell",
             "command": "air",
             "options": {
-                "cwd": "${workspaceFolder}/cmd/devserver"
+                "cwd": "${workspaceFolder}"
             },
             "group": "build",
             "isBackground": true,
