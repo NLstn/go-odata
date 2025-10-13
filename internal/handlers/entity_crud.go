@@ -104,6 +104,15 @@ func (h *EntityHandler) fetchEntityByKey(entityKey string, queryOptions *query.Q
 
 // writeEntityResponseWithETag writes an entity response with an optional pre-computed ETag
 func (h *EntityHandler) writeEntityResponseWithETag(w http.ResponseWriter, r *http.Request, result interface{}, precomputedETag string) {
+	// Check if the requested format is supported
+	if !response.IsAcceptableFormat(r) {
+		if err := response.WriteError(w, http.StatusNotAcceptable, "Not Acceptable",
+			"The requested format is not supported. Only application/json is supported for data responses."); err != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, err)
+		}
+		return
+	}
+
 	contextURL := fmt.Sprintf(ODataContextFormat, response.BuildBaseURL(r), h.metadata.EntitySetName)
 	odataResponse := h.buildOrderedEntityResponse(result, contextURL)
 

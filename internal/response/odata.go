@@ -89,6 +89,12 @@ type PropertyMetadata struct {
 
 // WriteODataCollection writes an OData collection response
 func WriteODataCollection(w http.ResponseWriter, r *http.Request, entitySetName string, data interface{}, count *int64, nextLink *string) error {
+	// Check if the requested format is supported
+	if !IsAcceptableFormat(r) {
+		return WriteError(w, http.StatusNotAcceptable, "Not Acceptable",
+			"The requested format is not supported. Only application/json is supported for data responses.")
+	}
+
 	// Build the context URL
 	contextURL := buildContextURL(r, entitySetName)
 
@@ -117,6 +123,12 @@ func WriteODataCollection(w http.ResponseWriter, r *http.Request, entitySetName 
 
 // WriteODataCollectionWithNavigation writes an OData collection response with navigation links
 func WriteODataCollectionWithNavigation(w http.ResponseWriter, r *http.Request, entitySetName string, data interface{}, count *int64, nextLink *string, metadata EntityMetadataProvider, expandedProps []string) error {
+	// Check if the requested format is supported
+	if !IsAcceptableFormat(r) {
+		return WriteError(w, http.StatusNotAcceptable, "Not Acceptable",
+			"The requested format is not supported. Only application/json is supported for data responses.")
+	}
+
 	// Build the context URL
 	contextURL := buildContextURL(r, entitySetName)
 
@@ -431,6 +443,12 @@ func WriteErrorWithTarget(w http.ResponseWriter, code int, message string, targe
 
 // WriteServiceDocument writes the OData service document
 func WriteServiceDocument(w http.ResponseWriter, r *http.Request, entitySets []string) error {
+	// Check if the requested format is supported
+	if !IsAcceptableFormat(r) {
+		return WriteError(w, http.StatusNotAcceptable, "Not Acceptable",
+			"The requested format is not supported. Only application/json is supported for service documents.")
+	}
+
 	baseURL := buildBaseURL(r)
 
 	entities := make([]map[string]interface{}, 0, len(entitySets))
@@ -459,6 +477,96 @@ func WriteServiceDocument(w http.ResponseWriter, r *http.Request, entitySets []s
 	encoder := json.NewEncoder(w)
 	encoder.SetIndent("", "  ")
 	return encoder.Encode(serviceDoc)
+}
+
+// IsAcceptableFormat checks if the requested format via Accept header or $format is supported
+// Returns true if the format is acceptable (JSON or wildcard), false otherwise (e.g., XML)
+func IsAcceptableFormat(r *http.Request) bool {
+	// Check $format query parameter first (highest priority)
+	format := r.URL.Query().Get("$format")
+	if format != "" {
+		// Only JSON format is supported for data responses
+		return format == "json" || format == "application/json"
+	}
+
+	// Check Accept header with proper content negotiation
+	accept := r.Header.Get("Accept")
+	if accept == "" {
+		// No Accept header - default to JSON (acceptable)
+		return true
+	}
+
+	// Parse Accept header to find the best match
+	type mediaType struct {
+		mimeType string
+		quality  float64
+	}
+
+	parts := strings.Split(accept, ",")
+	mediaTypes := make([]mediaType, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+
+		// Split by semicolon to separate media type from parameters
+		subparts := strings.Split(part, ";")
+		mimeType := strings.TrimSpace(subparts[0])
+		quality := 1.0 // Default quality
+
+		// Parse quality value if present
+		for _, param := range subparts[1:] {
+			param = strings.TrimSpace(param)
+			if strings.HasPrefix(param, "q=") {
+				var q float64
+				if _, err := fmt.Sscanf(param[2:], "%f", &q); err == nil {
+					if q >= 0 && q <= 1 {
+						quality = q
+					}
+				}
+			}
+		}
+
+		mediaTypes = append(mediaTypes, mediaType{mimeType: mimeType, quality: quality})
+	}
+
+	// Find the best matching media type
+	var bestJSON, bestXML, bestWildcard float64
+	for _, mt := range mediaTypes {
+		switch mt.mimeType {
+		case "application/json":
+			if mt.quality > bestJSON {
+				bestJSON = mt.quality
+			}
+		case "application/xml", "text/xml", "application/atom+xml":
+			if mt.quality > bestXML {
+				bestXML = mt.quality
+			}
+		case "*/*", "application/*":
+			if mt.quality > bestWildcard {
+				bestWildcard = mt.quality
+			}
+		}
+	}
+
+	// If there's a wildcard, we can always return JSON (it matches the wildcard)
+	if bestWildcard > 0 {
+		return true
+	}
+
+	// If JSON is explicitly requested, accept
+	if bestJSON > 0 {
+		return true
+	}
+
+	// If only XML is specified (no JSON, no wildcard), reject
+	if bestXML > 0 {
+		return false
+	}
+
+	// No specific format requested - accept (defaults to JSON)
+	return true
 }
 
 // buildContextURL builds the @odata.context URL for a response
