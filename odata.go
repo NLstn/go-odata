@@ -68,3 +68,24 @@ func (s *Service) RegisterEntity(entity interface{}) error {
 	fmt.Printf("Registered entity: %s (EntitySet: %s)\n", entityMetadata.EntityName, entityMetadata.EntitySetName)
 	return nil
 }
+
+// RegisterSingleton registers a singleton type with the OData service.
+// Singletons are single instances of an entity type that can be accessed directly by name.
+// For example, RegisterSingleton(&MyCompany{}, "Company") allows access via /Company instead of /Companies(1)
+func (s *Service) RegisterSingleton(entity interface{}, singletonName string) error {
+	// Analyze the singleton structure
+	singletonMetadata, err := metadata.AnalyzeSingleton(entity, singletonName)
+	if err != nil {
+		return fmt.Errorf("failed to analyze singleton: %w", err)
+	}
+
+	// Store the metadata using singleton name as key
+	s.entities[singletonName] = singletonMetadata
+
+	// Create and store the handler (same handler type works for both entities and singletons)
+	handler := handlers.NewEntityHandler(s.db, singletonMetadata)
+	s.handlers[singletonName] = handler
+
+	fmt.Printf("Registered singleton: %s (Singleton: %s)\n", singletonMetadata.EntityName, singletonName)
+	return nil
+}

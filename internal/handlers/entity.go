@@ -18,3 +18,8 @@ func NewEntityHandler(db *gorm.DB, entityMetadata *metadata.EntityMetadata) *Ent
 		metadata: entityMetadata,
 	}
 }
+
+// IsSingleton returns true if this handler is for a singleton
+func (h *EntityHandler) IsSingleton() bool {
+	return h.metadata.IsSingleton
+}

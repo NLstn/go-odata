@@ -406,25 +406,45 @@ func (h *MetadataHandler) buildNavigationProperties(entityMeta *metadata.EntityM
 	return result
 }
 
-// buildEntityContainer builds the entity container with entity sets
+// buildEntityContainer builds the entity container with entity sets and singletons
 func (h *MetadataHandler) buildEntityContainer() string {
 	result := `      <EntityContainer Name="Container">
 `
+	// Build entity sets and singletons
 	for entitySetName, entityMeta := range h.entities {
-		result += fmt.Sprintf(`        <EntitySet Name="%s" EntityType="ODataService.%s">
+		if entityMeta.IsSingleton {
+			// Output singleton definition
+			result += fmt.Sprintf(`        <Singleton Name="%s" Type="ODataService.%s">
+`, entityMeta.SingletonName, entityMeta.EntityName)
+
+			// Add navigation property bindings for singleton
+			for _, prop := range entityMeta.Properties {
+				if prop.IsNavigationProp {
+					targetEntitySet := pluralize(prop.NavigationTarget)
+					result += fmt.Sprintf(`          <NavigationPropertyBinding Path="%s" Target="%s" />
+`, prop.JsonName, targetEntitySet)
+				}
+			}
+
+			result += `        </Singleton>
+`
+		} else {
+			// Output entity set definition
+			result += fmt.Sprintf(`        <EntitySet Name="%s" EntityType="ODataService.%s">
 `, entitySetName, entityMeta.EntityName)
 
-		// Add navigation property bindings
-		for _, prop := range entityMeta.Properties {
-			if prop.IsNavigationProp {
-				targetEntitySet := pluralize(prop.NavigationTarget)
-				result += fmt.Sprintf(`          <NavigationPropertyBinding Path="%s" Target="%s" />
+			// Add navigation property bindings
+			for _, prop := range entityMeta.Properties {
+				if prop.IsNavigationProp {
+					targetEntitySet := pluralize(prop.NavigationTarget)
+					result += fmt.Sprintf(`          <NavigationPropertyBinding Path="%s" Target="%s" />
 `, prop.JsonName, targetEntitySet)
+				}
 			}
-		}
 
-		result += `        </EntitySet>
+			result += `        </EntitySet>
 `
+		}
 	}
 
 	result += `      </EntityContainer>
@@ -625,25 +645,41 @@ func (h *MetadataHandler) buildJSONNavigationProperty(prop *metadata.PropertyMet
 	return navProp
 }
 
-// buildJSONEntityContainer builds the JSON entity container
+// buildJSONEntityContainer builds the JSON entity container with entity sets and singletons
 func (h *MetadataHandler) buildJSONEntityContainer() map[string]interface{} {
 	container := map[string]interface{}{
 		"$Kind": "EntityContainer",
 	}
 
 	for entitySetName, entityMeta := range h.entities {
-		entitySet := map[string]interface{}{
-			"$Collection": true,
-			"$Type":       fmt.Sprintf("ODataService.%s", entityMeta.EntityName),
-		}
+		if entityMeta.IsSingleton {
+			// Build singleton definition
+			singleton := map[string]interface{}{
+				"$Type": fmt.Sprintf("ODataService.%s", entityMeta.EntityName),
+			}
 
-		// Add navigation property bindings
-		navigationBindings := h.buildNavigationBindings(entityMeta)
-		if len(navigationBindings) > 0 {
-			entitySet["$NavigationPropertyBinding"] = navigationBindings
-		}
+			// Add navigation property bindings
+			navigationBindings := h.buildNavigationBindings(entityMeta)
+			if len(navigationBindings) > 0 {
+				singleton["$NavigationPropertyBinding"] = navigationBindings
+			}
 
-		container[entitySetName] = entitySet
+			container[entityMeta.SingletonName] = singleton
+		} else {
+			// Build entity set definition
+			entitySet := map[string]interface{}{
+				"$Collection": true,
+				"$Type":       fmt.Sprintf("ODataService.%s", entityMeta.EntityName),
+			}
+
+			// Add navigation property bindings
+			navigationBindings := h.buildNavigationBindings(entityMeta)
+			if len(navigationBindings) > 0 {
+				entitySet["$NavigationPropertyBinding"] = navigationBindings
+			}
+
+			container[entitySetName] = entitySet
+		}
 	}
 
 	return container
