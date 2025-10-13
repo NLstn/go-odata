@@ -42,6 +42,9 @@ A Go library for building services that expose OData APIs with automatic handlin
   - Fuzzy matching support with customizable fuzziness level
   - Defaults to searching all string fields if no searchable fields defined
 - ✅ Selection ($select) - choose specific properties to return
+- ✅ **Computed Properties ($compute)** - extract and compute properties from data
+  - Date extraction functions: `year`, `month`, `day`, `hour`, `minute`, `second`, `date`, `time`
+  - Use with $select to return only computed properties
 - ✅ Ordering ($orderby) - sort by one or more properties
 - ✅ Pagination ($top, $skip) with automatic @odata.nextLink generation
 - ✅ Count ($count) - inline count with results or standalone count endpoint
@@ -490,6 +493,50 @@ When using `$top`, if more results are available, the response will include an `
   "@odata.context": "http://localhost:8080/$metadata#Products",
   "@odata.nextLink": "http://localhost:8080/Products?$skip=10&$top=10",
   "value": [ /* ... */ ]
+}
+```
+
+### Computed Properties (`$compute`)
+
+Extract and compute new properties from existing data using date functions and other operations:
+
+```
+# Extract date components
+GET /Orders?$compute=year(OrderDate) as OrderYear&$select=OrderNo,OrderYear
+GET /Orders?$compute=month(OrderDate) as Month,day(OrderDate) as Day&$select=OrderNo,Month,Day
+
+# Extract time components
+GET /Orders?$compute=hour(OrderDate) as Hour,minute(OrderDate) as Minute&$select=OrderNo,Hour,Minute
+
+# Extract date and time parts
+GET /Orders?$compute=date(OrderDate) as DatePart,time(OrderDate) as TimePart&$select=OrderNo,DatePart,TimePart
+
+# Combine with filters
+GET /Orders?$compute=year(OrderDate) as Year&$filter=year(OrderDate) eq 2024&$select=OrderNo,Year
+```
+
+Supported date extraction functions in `$compute`:
+- **year(property)** - Extract year as integer
+- **month(property)** - Extract month (1-12) as integer
+- **day(property)** - Extract day of month (1-31) as integer
+- **hour(property)** - Extract hour (0-23) as integer
+- **minute(property)** - Extract minute (0-59) as integer
+- **second(property)** - Extract second (0-59) as integer
+- **date(property)** - Extract date part (without time)
+- **time(property)** - Extract time part (without date)
+
+Response example:
+```json
+{
+  "@odata.context": "http://localhost:8080/$metadata#Orders",
+  "value": [
+    {
+      "OrderNo": "ORD001",
+      "Year": 2024,
+      "Month": 12,
+      "Day": 25
+    }
+  ]
 }
 ```
 
