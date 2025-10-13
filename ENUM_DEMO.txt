@@ -1,0 +1,32 @@
+=== ENUM SUPPORT DEMONSTRATION ===
+
+1. XML Metadata - EnumType Definition:
+      <EnumType Name="ProductStatus" UnderlyingType="Edm.Int32" IsFlags="true">
+        <Member Name="None" Value="0" />
+        <Member Name="InStock" Value="1" />
+        <Member Name="OnSale" Value="2" />
+        <Member Name="Discontinued" Value="4" />
+        <Member Name="Featured" Value="8" />
+      </EnumType>
+      <EntityType Name="ProductDescription">
+
+2. All Products with Status Values:
+  ID 1: Laptop               Status=9 (0b1001)
+  ID 2: Wireless Mouse       Status=3 (0b11)
+  ID 3: Coffee Mug           Status=1 (0b1)
+  ID 4: Office Chair         Status=4 (0b100)
+  ID 5: Smartphone           Status=11 (0b1011)
+
+3. has(Status, 1) - InStock Products:
+  ID 1: Laptop               Status=9
+  ID 2: Wireless Mouse       Status=3
+  ID 3: Coffee Mug           Status=1
+  ID 5: Smartphone           Status=11
+
+4. has(Status, 8) - Featured Products:
+  ID 1: Laptop               Status=9
+  ID 5: Smartphone           Status=11
+
+5. has(Status, 1) and has(Status, 2) - InStock AND OnSale:
+  ID 2: Wireless Mouse       Status=3
+  ID 5: Smartphone           Status=11
