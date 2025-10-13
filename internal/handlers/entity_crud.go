@@ -74,7 +74,7 @@ func (h *EntityHandler) handleGetEntity(w http.ResponseWriter, r *http.Request, 
 
 	// Apply $select if specified (after ETag generation)
 	if len(queryOptions.Select) > 0 {
-		result = query.ApplySelectToEntity(result, queryOptions.Select, h.metadata)
+		result = query.ApplySelectToEntity(result, queryOptions.Select, h.metadata, queryOptions.Expand)
 	}
 
 	// Build and write response

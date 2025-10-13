@@ -347,7 +347,7 @@ func (h *EntityHandler) fetchResults(queryOptions *query.QueryOptions) (interfac
 
 	// Apply $select if specified
 	if len(queryOptions.Select) > 0 {
-		sliceValue = query.ApplySelect(sliceValue, queryOptions.Select, h.metadata)
+		sliceValue = query.ApplySelect(sliceValue, queryOptions.Select, h.metadata, queryOptions.Expand)
 	}
 
 	return sliceValue, nil
