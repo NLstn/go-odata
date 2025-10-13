@@ -11,7 +11,7 @@ import (
 
 // ShouldUseMapResults returns true if the query options require map results instead of entity results
 func ShouldUseMapResults(options *QueryOptions) bool {
-	return options != nil && len(options.Apply) > 0
+	return options != nil && (len(options.Apply) > 0 || options.Compute != nil)
 }
 
 // ApplyQueryOptions applies parsed query options to a GORM database query
@@ -25,8 +25,14 @@ func ApplyQueryOptions(db *gorm.DB, options *QueryOptions, entityMetadata *metad
 		return applyTransformations(db, options.Apply, entityMetadata)
 	}
 
+	// Apply standalone compute transformation (before select)
+	if options.Compute != nil {
+		db = applyCompute(db, options.Compute, entityMetadata)
+	}
+
 	// Apply select at database level to fetch only needed columns
-	if len(options.Select) > 0 {
+	// Skip this if compute is present, as compute handles the select clause
+	if len(options.Select) > 0 && options.Compute == nil {
 		db = applySelect(db, options.Select, entityMetadata)
 	}
 
@@ -640,9 +646,7 @@ func applyTransformations(db *gorm.DB, transformations []ApplyTransformation, en
 		case ApplyTypeFilter:
 			db = applyFilter(db, transformation.Filter, entityMetadata)
 		case ApplyTypeCompute:
-			// Compute transformations would require more complex handling
-			// For now, we'll skip them
-			continue
+			db = applyCompute(db, transformation.Compute, entityMetadata)
 		}
 	}
 	return db
@@ -753,6 +757,78 @@ func buildAggregateSQL(aggExpr AggregateExpression, entityMetadata *metadata.Ent
 	}
 
 	return fmt.Sprintf("%s(%s) as %s", sqlFunc, prop.Name, aggExpr.Alias)
+}
+
+// applyCompute applies a compute transformation to the GORM query
+func applyCompute(db *gorm.DB, compute *ComputeTransformation, entityMetadata *metadata.EntityMetadata) *gorm.DB {
+	if compute == nil || len(compute.Expressions) == 0 {
+		return db
+	}
+
+	// Set the table/model for the query - similar to applyTransformations
+	if db.Statement != nil && db.Statement.Dest == nil {
+		// Create an instance of the entity type to set the model
+		modelInstance := reflect.New(entityMetadata.EntityType).Interface()
+		db = db.Model(modelInstance)
+	}
+
+	// Build SELECT clause with computed expressions
+	// We need to select all original columns plus computed columns
+	selectColumns := make([]string, 0)
+
+	// Add all original entity properties
+	for _, prop := range entityMetadata.Properties {
+		if !prop.IsNavigationProp {
+			// Use snake_case column name for SELECT
+			columnName := toSnakeCase(prop.Name)
+			selectColumns = append(selectColumns, fmt.Sprintf("%s as %s", columnName, prop.JsonName))
+		}
+	}
+
+	// Add computed expressions
+	for _, computeExpr := range compute.Expressions {
+		computeSQL := buildComputeSQL(computeExpr, entityMetadata)
+		if computeSQL != "" {
+			selectColumns = append(selectColumns, computeSQL)
+		}
+	}
+
+	if len(selectColumns) > 0 {
+		db = db.Select(strings.Join(selectColumns, ", "))
+	}
+
+	return db
+}
+
+// buildComputeSQL builds the SQL for a compute expression
+func buildComputeSQL(computeExpr ComputeExpression, entityMetadata *metadata.EntityMetadata) string {
+	if computeExpr.Expression == nil {
+		return ""
+	}
+
+	expr := computeExpr.Expression
+
+	// Check if this is a simple function call (no left/right expressions)
+	if expr.Left == nil && expr.Right == nil && expr.Operator != "" && expr.Property != "" {
+		// This is a simple function like year(CreatedAt)
+		prop := findProperty(expr.Property, entityMetadata)
+		if prop == nil {
+			return ""
+		}
+
+		// Generate SQL for the function using snake_case column name
+		columnName := toSnakeCase(prop.Name)
+		funcSQL, _ := buildFunctionSQL(expr.Operator, columnName, nil)
+		if funcSQL == "" {
+			return ""
+		}
+
+		return fmt.Sprintf("%s as %s", funcSQL, computeExpr.Alias)
+	}
+
+	// For more complex expressions, we would need additional handling
+	// For now, we'll handle simple cases
+	return ""
 }
 
 // findProperty finds a property by name or JSON name in the entity metadata

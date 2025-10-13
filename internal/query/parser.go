@@ -18,7 +18,8 @@ type QueryOptions struct {
 	Skip    *int
 	Count   bool
 	Apply   []ApplyTransformation
-	Search  string // Search query string
+	Search  string             // Search query string
+	Compute *ComputeTransformation // Standalone $compute option
 }
 
 // ExpandOption represents a single $expand clause
@@ -237,6 +238,10 @@ func ParseQueryOptions(queryParams url.Values, entityMetadata *metadata.EntityMe
 		return nil, err
 	}
 
+	if err := parseComputeOption(queryParams, entityMetadata, options); err != nil {
+		return nil, err
+	}
+
 	return options, nil
 }
 
@@ -256,15 +261,94 @@ func parseFilterOption(queryParams url.Values, entityMetadata *metadata.EntityMe
 func parseSelectOption(queryParams url.Values, entityMetadata *metadata.EntityMetadata, options *QueryOptions) error {
 	if selectStr := queryParams.Get("$select"); selectStr != "" {
 		selectedProps := parseSelect(selectStr)
-		// Validate that all selected properties exist
+		
+		// If $compute or $apply with compute is present, we need to extract computed property aliases
+		// to avoid validation errors for properties that will be computed
+		computedAliases := make(map[string]bool)
+		
+		// Check for standalone $compute parameter
+		if computeStr := queryParams.Get("$compute"); computeStr != "" {
+			aliases := extractComputeAliasesFromString(computeStr)
+			for alias := range aliases {
+				computedAliases[alias] = true
+			}
+		}
+		
+		// Check for compute within $apply
+		if applyStr := queryParams.Get("$apply"); applyStr != "" {
+			aliases := extractComputedAliases(applyStr)
+			for alias := range aliases {
+				computedAliases[alias] = true
+			}
+		}
+		
+		// Validate that all selected properties exist (either as entity properties or computed properties)
 		for _, propName := range selectedProps {
-			if !propertyExists(propName, entityMetadata) {
+			if !propertyExists(propName, entityMetadata) && !computedAliases[propName] {
 				return fmt.Errorf("property '%s' does not exist in entity type", propName)
 			}
 		}
 		options.Select = selectedProps
 	}
 	return nil
+}
+
+// extractComputeAliasesFromString extracts aliases from a $compute string
+func extractComputeAliasesFromString(computeStr string) map[string]bool {
+	aliases := make(map[string]bool)
+	
+	// Split by comma and extract aliases
+	expressions := splitComputeExpressions(computeStr)
+	for _, expr := range expressions {
+		// Each expression has format: "expression as alias"
+		asIdx := strings.Index(expr, " as ")
+		if asIdx != -1 {
+			alias := strings.TrimSpace(expr[asIdx+4:])
+			aliases[alias] = true
+		}
+	}
+	
+	return aliases
+}
+
+// extractComputedAliases extracts aliases from $compute expressions in $apply
+func extractComputedAliases(applyStr string) map[string]bool {
+	aliases := make(map[string]bool)
+	
+	// Look for compute(...) in the apply string
+	// Format: compute(expression as alias, ...)
+	computeStart := strings.Index(applyStr, "compute(")
+	if computeStart == -1 {
+		return aliases
+	}
+	
+	// Find the matching closing parenthesis
+	depth := 0
+	start := computeStart + 8 // Skip "compute("
+	for i := start; i < len(applyStr); i++ {
+		if applyStr[i] == '(' {
+			depth++
+		} else if applyStr[i] == ')' {
+			if depth == 0 {
+				// Extract the content between compute( and )
+				content := applyStr[start:i]
+				// Split by comma and extract aliases
+				expressions := splitComputeExpressions(content)
+				for _, expr := range expressions {
+					// Each expression has format: "expression as alias"
+					asIdx := strings.Index(expr, " as ")
+					if asIdx != -1 {
+						alias := strings.TrimSpace(expr[asIdx+4:])
+						aliases[alias] = true
+					}
+				}
+				break
+			}
+			depth--
+		}
+	}
+	
+	return aliases
 }
 
 // parseExpandOption parses the $expand query parameter
@@ -336,6 +420,25 @@ func parseSearchOption(queryParams url.Values, options *QueryOptions) error {
 			return fmt.Errorf("invalid $search: search query cannot be empty")
 		}
 		options.Search = searchStr
+	}
+	return nil
+}
+
+// parseComputeOption parses the $compute query parameter
+func parseComputeOption(queryParams url.Values, entityMetadata *metadata.EntityMetadata, options *QueryOptions) error {
+	if computeStr := queryParams.Get("$compute"); computeStr != "" {
+		// Parse the compute transformation using the existing parseCompute function from apply_parser.go
+		// We need to wrap it in compute(...) format
+		computeTransformation, err := parseCompute("compute("+computeStr+")", entityMetadata)
+		if err != nil {
+			return fmt.Errorf("invalid $compute: %w", err)
+		}
+
+		if computeTransformation == nil || computeTransformation.Compute == nil {
+			return fmt.Errorf("invalid $compute: failed to parse compute transformation")
+		}
+
+		options.Compute = computeTransformation.Compute
 	}
 	return nil
 }
