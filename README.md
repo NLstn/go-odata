@@ -31,6 +31,7 @@ A Go library for building services that expose OData APIs with automatic handlin
   - Comparison operators: `eq`, `ne`, `gt`, `ge`, `lt`, `le`
   - String functions: `contains`, `startswith`, `endswith`, `tolower`, `toupper`, `trim`, `length`, `indexof`, `substring`, `concat`
   - Date functions: `year`, `month`, `day`, `hour`, `minute`, `second`, `date`, `time`
+  - Type functions: `cast`, `isof` - type conversion and type checking
   - Boolean operators: `and`, `or`, `not`
   - Parentheses for complex expressions
   - Literal types: strings, numbers, booleans, null
@@ -349,6 +350,29 @@ GET /Orders?$filter=date(OrderDate) ge '2024-01-01' and date(OrderDate) le '2024
 Supported date functions:
 - **Component extraction**: `year`, `month`, `day`, `hour`, `minute`, `second`
 - **Date/time parts**: `date`, `time`
+
+#### Type Functions
+```
+# Type conversion with cast
+GET /Products?$filter=cast(Price, 'Edm.String') eq '100'
+GET /Products?$filter=cast(Price, 'Edm.Int32') gt 50
+GET /Products?$filter=cast(Name, 'Edm.String') eq 'Laptop'
+
+# Type checking with isof
+GET /Products?$filter=isof(Price, 'Edm.Decimal') eq true
+GET /Products?$filter=isof(Price, 'Edm.Int32') eq true and Price gt 100
+GET /Products?$filter=isof('Edm.String') eq true
+
+# Combined usage
+GET /Products?$filter=isof(Price, 'Edm.Int32') eq true and cast(Price, 'Edm.String') eq '100'
+```
+
+Supported type functions:
+- **`cast(property, 'TypeName')`**: Converts a property to the specified EDM type
+- **`isof(property, 'TypeName')`**: Returns true if the property is of the specified type
+- **`isof('TypeName')`**: Returns true if the current instance is of the specified type
+
+Supported EDM types: `Edm.String`, `Edm.Int32`, `Edm.Int64`, `Edm.Decimal`, `Edm.Double`, `Edm.Single`, `Edm.Boolean`, `Edm.DateTimeOffset`, `Edm.Date`, `Edm.TimeOfDay`, `Edm.Guid`, `Edm.Binary`, `Edm.Byte`, `Edm.SByte`, `Edm.Int16`
 
 #### Boolean Logic with Parentheses
 ```
