@@ -238,6 +238,12 @@ func (t *Tokenizer) tokenizeIdentifierOrKeyword(pos int) *Token {
 		return &Token{Type: TokenIdentifier, Value: value, Pos: pos}
 	}
 
+	// Check for 'has' function: can be either a function (when followed by '(') or infix operator
+	if lower == "has" && t.ch == '(' {
+		// Treat as identifier (function name) when followed by '('
+		return &Token{Type: TokenIdentifier, Value: value, Pos: pos}
+	}
+
 	// Check for keywords
 	if token := t.classifyKeyword(lower, pos); token != nil {
 		return token
@@ -261,7 +267,7 @@ func (t *Tokenizer) classifyKeyword(lower string, pos int) *Token {
 		return &Token{Type: TokenBoolean, Value: lower, Pos: pos}
 	case "null":
 		return &Token{Type: TokenNull, Value: "null", Pos: pos}
-	case "eq", "ne", "gt", "ge", "lt", "le", "in":
+	case "eq", "ne", "gt", "ge", "lt", "le", "in", "has":
 		return &Token{Type: TokenOperator, Value: lower, Pos: pos}
 	case "add", "sub", "mul", "div", "mod":
 		return &Token{Type: TokenArithmetic, Value: lower, Pos: pos}
