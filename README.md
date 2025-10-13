@@ -55,6 +55,11 @@ A Go library for building services that expose OData APIs with automatic handlin
 
 ### Advanced Features
 - ✅ Composite keys support (e.g., /EntitySet(key1=value1,key2=value2))
+- ✅ **Singletons** - single entity instances accessible by name
+  - Direct access without keys (e.g., /Company instead of /Companies(1))
+  - Full CRUD support (GET, PATCH, PUT)
+  - Automatic metadata and service document generation
+  - ETag support for optimistic concurrency control
 - ✅ Navigation properties - access related entities (e.g., /Products(1)/Category)
 - ✅ Structural properties with $value endpoint (e.g., /Products(1)/Name/$value)
 - ✅ Prefer header support (return=representation, return=minimal)
@@ -181,6 +186,10 @@ Once your service is running, the following endpoints will be available:
 - **Structural Properties**: `GET /Products(1)/Name` - Access individual property values
 - **Raw Property Value**: `GET /Products(1)/Name/$value` - Get raw property value without JSON wrapping
 - **Composite Keys**: `GET /EntitySet(key1=value1,key2=value2)` - Access entities with composite keys
+- **Singletons**: 
+  - `GET /Company` - Access singleton entity directly by name
+  - `PATCH /Company` - Update singleton (partial update)
+  - `PUT /Company` - Replace singleton (full update)
 - **Batch Requests**: `POST /$batch` - Execute multiple operations in a single HTTP request
 - **Functions (Unbound)**: `GET /FunctionName?param=value` - Invoke custom read-only operations
 - **Functions (Bound)**: `GET /Products(1)/FunctionName?param=value` - Invoke functions on specific entities
@@ -816,6 +825,104 @@ type Customer struct {
 - `odata:"nullable=false"` - Explicitly marks the field as non-nullable
 - `json:"fieldname"` - Specifies the JSON field name
 - `gorm:"..."` - GORM database tags (including foreign key relationships)
+
+## Singletons
+
+Singletons are special entities in OData v4 that represent a single instance of an entity type, accessible directly by name without requiring a key. They are useful for representing unique resources like company information, application settings, or user profiles.
+
+### Defining a Singleton
+
+```go
+type CompanyInfo struct {
+    ID          uint      `json:"ID" gorm:"primaryKey" odata:"key"`
+    Name        string    `json:"Name" gorm:"not null" odata:"required"`
+    CEO         string    `json:"CEO" gorm:"not null"`
+    Founded     int       `json:"Founded"`
+    HeadQuarter string    `json:"HeadQuarter"`
+    Version     int       `json:"Version" gorm:"default:1" odata:"etag"`
+}
+```
+
+### Registering a Singleton
+
+```go
+service := odata.NewService(db)
+
+// Register as a singleton
+err := service.RegisterSingleton(&CompanyInfo{}, "Company")
+if err != nil {
+    log.Fatal(err)
+}
+```
+
+### Accessing Singletons
+
+Singletons are accessed directly by their name without keys:
+
+```bash
+# Get singleton
+GET /Company
+
+# Update singleton (partial update)
+PATCH /Company
+Content-Type: application/json
+{ "CEO": "New CEO Name" }
+
+# Replace singleton (full update)
+PUT /Company
+Content-Type: application/json
+{
+  "Name": "Updated Company Name",
+  "CEO": "New CEO",
+  "Founded": 1990,
+  "HeadQuarter": "New Location"
+}
+```
+
+### Singleton Features
+
+- **Direct Access**: No key required - access via `/Company` instead of `/Companies(1)`
+- **Full CRUD Support**: Supports GET, PATCH, and PUT operations (POST and DELETE are not applicable)
+- **Metadata Integration**: Automatically appears in service document and metadata with `$Kind: "Singleton"`
+- **ETag Support**: Full support for optimistic concurrency control using ETag
+- **Prefer Header**: Supports `return=representation` and `return=minimal` preferences
+- **Navigation Properties**: Singletons can have navigation properties to other entities
+
+### Singleton vs Entity Set
+
+| Feature | Entity Set | Singleton |
+|---------|-----------|-----------|
+| URL Pattern | `/EntitySet(key)` | `/SingletonName` |
+| Key Required | Yes | No |
+| Multiple Instances | Yes | No |
+| POST (Create) | ✅ Supported | ❌ Not applicable |
+| GET (Read) | ✅ Supported | ✅ Supported |
+| PATCH (Update) | ✅ Supported | ✅ Supported |
+| PUT (Replace) | ✅ Supported | ✅ Supported |
+| DELETE | ✅ Supported | ❌ Not applicable |
+| Use Case | Multiple entities | Single global entity |
+
+### Example: Service Document with Singleton
+
+When you register a singleton, it automatically appears in the service document:
+
+```json
+{
+  "@odata.context": "http://localhost:8080/$metadata",
+  "value": [
+    {
+      "name": "Products",
+      "kind": "EntitySet",
+      "url": "Products"
+    },
+    {
+      "name": "Company",
+      "kind": "Singleton",
+      "url": "Company"
+    }
+  ]
+}
+```
 
 ## Development Server
 
