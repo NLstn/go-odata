@@ -59,15 +59,143 @@ func (h *MetadataHandler) handleOptionsMetadata(w http.ResponseWriter) {
 
 // shouldReturnJSON determines if JSON format should be returned based on request
 func shouldReturnJSON(r *http.Request) bool {
-	// Check $format query parameter first
+	// Check $format query parameter first (highest priority)
 	format := r.URL.Query().Get("$format")
 	if format == "json" || format == "application/json" {
 		return true
 	}
+	if format == "xml" || format == "application/xml" {
+		return false
+	}
 
-	// Check Accept header
+	// Check Accept header with proper content negotiation
 	accept := r.Header.Get("Accept")
-	return strings.Contains(accept, "application/json")
+	if accept == "" {
+		// No Accept header - default to XML for metadata per OData v4 spec
+		return false
+	}
+
+	// Parse Accept header and find the best match
+	// Handle cases like:
+	// - "application/json"
+	// - "application/xml"
+	// - "application/json;q=0.9, application/xml;q=0.8"
+	// - "*/*"
+	// - "text/html, application/xml;q=0.9, */*;q=0.8"
+
+	type mediaType struct {
+		mimeType string
+		quality  float64
+	}
+
+	parts := strings.Split(accept, ",")
+	mediaTypes := make([]mediaType, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+
+		// Split by semicolon to separate media type from parameters
+		subparts := strings.Split(part, ";")
+		mimeType := strings.TrimSpace(subparts[0])
+		quality := 1.0 // Default quality
+
+		// Parse quality value if present
+		for _, param := range subparts[1:] {
+			param = strings.TrimSpace(param)
+			if strings.HasPrefix(param, "q=") {
+				if q, err := parseQuality(param[2:]); err == nil {
+					quality = q
+				}
+			}
+		}
+
+		mediaTypes = append(mediaTypes, mediaType{mimeType: mimeType, quality: quality})
+	}
+
+	// Find the best matching media type
+	var bestJSON, bestXML, bestWildcard float64
+	for _, mt := range mediaTypes {
+		switch mt.mimeType {
+		case "application/json":
+			if mt.quality > bestJSON {
+				bestJSON = mt.quality
+			}
+		case "application/xml", "text/xml":
+			if mt.quality > bestXML {
+				bestXML = mt.quality
+			}
+		case "*/*", "application/*":
+			if mt.quality > bestWildcard {
+				bestWildcard = mt.quality
+			}
+		}
+	}
+
+	// If both JSON and XML are explicitly specified, choose the one with higher quality
+	// If qualities are equal, prefer JSON (tie-breaking rule)
+	if bestJSON > 0 && bestXML > 0 {
+		return bestJSON >= bestXML
+	}
+
+	// If only JSON is specified (not via wildcard), return JSON
+	if bestJSON > 0 {
+		return true
+	}
+
+	// If only XML is specified, return XML
+	if bestXML > 0 {
+		return false
+	}
+
+	// If only wildcard is specified, default to XML for metadata
+	if bestWildcard > 0 {
+		return false
+	}
+
+	// Default to XML for metadata per OData v4 spec
+	return false
+}
+
+// parseQuality parses a quality value from Accept header
+func parseQuality(s string) (float64, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 1.0, nil
+	}
+	// Simple parsing - just handle common cases
+	switch s {
+	case "1", "1.0", "1.00", "1.000":
+		return 1.0, nil
+	case "0.9":
+		return 0.9, nil
+	case "0.8":
+		return 0.8, nil
+	case "0.7":
+		return 0.7, nil
+	case "0.6":
+		return 0.6, nil
+	case "0.5":
+		return 0.5, nil
+	case "0":
+		return 0.0, nil
+	default:
+		// Try to parse as float
+		var q float64
+		_, err := fmt.Sscanf(s, "%f", &q)
+		if err != nil {
+			return 1.0, err
+		}
+		// Quality must be between 0 and 1
+		if q < 0 {
+			q = 0
+		}
+		if q > 1 {
+			q = 1
+		}
+		return q, nil
+	}
 }
 
 // handleMetadataXML handles XML metadata format (existing implementation)
