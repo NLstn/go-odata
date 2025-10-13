@@ -139,3 +139,30 @@ func GetSampleProductDescriptions() []ProductDescription {
 		},
 	}
 }
+
+// CompanyInfo represents a singleton entity for company information
+// This demonstrates the singleton feature - a single entity accessed directly by name
+type CompanyInfo struct {
+	ID          uint      `json:"ID" gorm:"primaryKey" odata:"key"`
+	Name        string    `json:"Name" gorm:"not null" odata:"required,maxlength=200"`
+	CEO         string    `json:"CEO" gorm:"not null" odata:"required,maxlength=100"`
+	Founded     int       `json:"Founded" gorm:"not null"`
+	HeadQuarter string    `json:"HeadQuarter" gorm:"not null" odata:"maxlength=200"`
+	Website     string    `json:"Website" gorm:"not null" odata:"maxlength=100"`
+	Version     int       `json:"Version" gorm:"default:1" odata:"etag"`
+	UpdatedAt   time.Time `json:"UpdatedAt" gorm:"not null"`
+}
+
+// GetCompanyInfo returns the singleton company information
+func GetCompanyInfo() CompanyInfo {
+	return CompanyInfo{
+		ID:          1,
+		Name:        "TechStore Inc.",
+		CEO:         "Sarah Johnson",
+		Founded:     2010,
+		HeadQuarter: "Seattle, WA, USA",
+		Website:     "https://techstore.example.com",
+		Version:     1,
+		UpdatedAt:   time.Now(),
+	}
+}
