@@ -42,6 +42,11 @@ A Go library for building services that expose OData APIs with automatic handlin
 - ✅ **Expand ($expand)** - retrieve related entities with nested query options
   - Nested $filter, $select, $orderby, $top, $skip on expanded properties
   - Complex filters on expanded navigation properties
+- ✅ **Data Aggregation ($apply)** - analytical queries with transformations
+  - `groupby` - group results by one or more properties
+  - `aggregate` - perform aggregations (sum, average, min, max, count, countdistinct)
+  - `filter` - apply filters before transformations
+  - Multiple transformations in sequence (pipeline)
 
 ### Advanced Features
 - ✅ Composite keys support (e.g., /EntitySet(key1=value1,key2=value2))
@@ -606,6 +611,70 @@ Expand multiple navigation properties:
 ```
 GET /Products?$expand=Category,Reviews
 GET /Authors?$expand=Books,Publisher
+```
+
+### Data Aggregation (`$apply`)
+
+The library supports OData v4 data aggregation transformations for analytical queries:
+
+#### GroupBy Transformation
+Group results by one or more properties:
+```
+# Group by single property
+GET /Products?$apply=groupby((Category))
+
+# Group by multiple properties
+GET /Products?$apply=groupby((Category,Name))
+
+# Group by with aggregation
+GET /Products?$apply=groupby((Category),aggregate(Price with sum as TotalPrice))
+```
+
+#### Aggregate Transformation
+Perform aggregations on data:
+```
+# Sum aggregation
+GET /Products?$apply=aggregate(Price with sum as TotalPrice)
+
+# Count aggregation
+GET /Products?$apply=aggregate($count as Total)
+
+# Average aggregation
+GET /Products?$apply=aggregate(Price with average as AvgPrice)
+
+# Min/Max aggregation
+GET /Products?$apply=aggregate(Price with min as MinPrice,Price with max as MaxPrice)
+
+# Multiple aggregations
+GET /Products?$apply=aggregate(Price with sum as TotalPrice,Quantity with sum as TotalQuantity)
+```
+
+Supported aggregation methods:
+- **sum** - Sum of values
+- **average** or **avg** - Average of values
+- **min** - Minimum value
+- **max** - Maximum value
+- **count** - Count of rows (use `$count as alias`)
+- **countdistinct** - Count of distinct values
+
+#### Filter Transformation
+Apply filters before other transformations:
+```
+# Filter then group
+GET /Products?$apply=filter(Price gt 100)/groupby((Category))
+
+# Filter then aggregate
+GET /Products?$apply=filter(Category eq 'Electronics')/aggregate(Price with sum as Total)
+```
+
+#### Combining Transformations
+Chain multiple transformations using `/`:
+```
+# Filter, then group by, then aggregate
+GET /Products?$apply=filter(Price gt 100)/groupby((Category),aggregate(Price with sum as TotalPrice))
+
+# Complex transformation pipeline
+GET /Products?$apply=filter(IsAvailable eq true)/groupby((Category),aggregate(Price with average as AvgPrice,$count as Count))
 ```
 
 ### Combining Query Options
