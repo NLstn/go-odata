@@ -33,10 +33,10 @@ func (h *ActionFunctionHandler) HandleActionOrFunction(w http.ResponseWriter, r 
 	switch r.Method {
 	case http.MethodPost:
 		// Actions are invoked with POST
-		h.handleAction(w, name, key, isBound)
+		h.handleAction(w, r, name, key, isBound)
 	case http.MethodGet:
 		// Functions are invoked with GET
-		h.handleFunction(w, name, key, isBound)
+		h.handleFunction(w, r, name, key, isBound)
 	default:
 		if err := response.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
 			fmt.Sprintf("Method %s is not allowed for actions or functions", r.Method)); err != nil {
@@ -46,7 +46,7 @@ func (h *ActionFunctionHandler) HandleActionOrFunction(w http.ResponseWriter, r 
 }
 
 // handleAction handles action invocation
-func (h *ActionFunctionHandler) handleAction(w http.ResponseWriter, name string, key string, isBound bool) {
+func (h *ActionFunctionHandler) handleAction(w http.ResponseWriter, r *http.Request, name string, key string, isBound bool) {
 	actions := h.actionsGetter()
 	actionDef, exists := actions[name]
 	if !exists {
@@ -57,9 +57,10 @@ func (h *ActionFunctionHandler) handleAction(w http.ResponseWriter, name string,
 		return
 	}
 
-	// Write a simple success response for now
+	// Write a simple success response for now with dynamic metadata level
 	// In a real implementation, this would invoke the action handler
-	w.Header().Set("Content-Type", "application/json;odata.metadata=minimal")
+	metadataLevel := response.GetODataMetadataLevel(r)
+	w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
 	w.Header().Set("OData-Version", "4.0")
 	w.WriteHeader(http.StatusOK)
 
@@ -74,7 +75,7 @@ func (h *ActionFunctionHandler) handleAction(w http.ResponseWriter, name string,
 }
 
 // handleFunction handles function invocation
-func (h *ActionFunctionHandler) handleFunction(w http.ResponseWriter, name string, key string, isBound bool) {
+func (h *ActionFunctionHandler) handleFunction(w http.ResponseWriter, r *http.Request, name string, key string, isBound bool) {
 	functions := h.functionsGetter()
 	functionDef, exists := functions[name]
 	if !exists {
@@ -85,9 +86,10 @@ func (h *ActionFunctionHandler) handleFunction(w http.ResponseWriter, name strin
 		return
 	}
 
-	// Write a simple success response for now
+	// Write a simple success response for now with dynamic metadata level
 	// In a real implementation, this would invoke the function handler
-	w.Header().Set("Content-Type", "application/json;odata.metadata=minimal")
+	metadataLevel := response.GetODataMetadataLevel(r)
+	w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
 	w.Header().Set("OData-Version", "4.0")
 	w.WriteHeader(http.StatusOK)
 

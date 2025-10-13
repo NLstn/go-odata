@@ -205,7 +205,9 @@ func (h *EntityHandler) writePropertyResponse(w http.ResponseWriter, r *http.Req
 		"value":              fieldValue.Interface(),
 	}
 
-	w.Header().Set(HeaderContentType, ContentTypeJSON)
+	// Set Content-Type with dynamic metadata level
+	metadataLevel := response.GetODataMetadataLevel(r)
+	w.Header().Set(HeaderContentType, fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
 	w.Header().Set(HeaderODataVersion, "4.0")
 	w.WriteHeader(http.StatusOK)
 
@@ -314,7 +316,9 @@ func (h *EntityHandler) writeSingleNavigationEntity(w http.ResponseWriter, r *ht
 	// Handle pointer and check for nil
 	if navValue.Kind() == reflect.Ptr {
 		if navValue.IsNil() {
-			w.Header().Set(HeaderContentType, ContentTypeJSON)
+			// Set Content-Type with dynamic metadata level even for 204 responses
+			metadataLevel := response.GetODataMetadataLevel(r)
+			w.Header().Set(HeaderContentType, fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
 			w.Header().Set(HeaderODataVersion, "4.0")
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -328,7 +332,9 @@ func (h *EntityHandler) writeSingleNavigationEntity(w http.ResponseWriter, r *ht
 	contextURL := fmt.Sprintf("%s/$metadata#%s/$entity", response.BuildBaseURL(r), navigationPath)
 	odataResponse := h.buildEntityResponse(navValue, contextURL)
 
-	w.Header().Set(HeaderContentType, ContentTypeJSON)
+	// Set Content-Type with dynamic metadata level
+	metadataLevel := response.GetODataMetadataLevel(r)
+	w.Header().Set(HeaderContentType, fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
 	w.Header().Set(HeaderODataVersion, "4.0")
 	w.WriteHeader(http.StatusOK)
 

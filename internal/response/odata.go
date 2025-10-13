@@ -110,8 +110,9 @@ func WriteODataCollection(w http.ResponseWriter, r *http.Request, entitySetName 
 		Value:    data,
 	}
 
-	// Set OData-compliant headers
-	w.Header().Set("Content-Type", "application/json;odata.metadata=minimal")
+	// Set OData-compliant headers with dynamic metadata level
+	metadataLevel := GetODataMetadataLevel(r)
+	w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
 	w.Header().Set("OData-Version", "4.0")
 	w.WriteHeader(http.StatusOK)
 
@@ -152,8 +153,9 @@ func WriteODataCollectionWithNavigation(w http.ResponseWriter, r *http.Request, 
 		Value:    transformedData,
 	}
 
-	// Set OData-compliant headers
-	w.Header().Set("Content-Type", "application/json;odata.metadata=minimal")
+	// Set OData-compliant headers with dynamic metadata level
+	metadataLevel := GetODataMetadataLevel(r)
+	w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
 	w.Header().Set("OData-Version", "4.0")
 	w.WriteHeader(http.StatusOK)
 
@@ -488,7 +490,9 @@ func WriteServiceDocument(w http.ResponseWriter, r *http.Request, entitySets []s
 		"value":          entities,
 	}
 
-	w.Header().Set("Content-Type", "application/json;odata.metadata=minimal")
+	// Set OData-compliant headers with dynamic metadata level
+	metadataLevel := GetODataMetadataLevel(r)
+	w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
 	w.Header().Set("OData-Version", "4.0")
 	w.WriteHeader(http.StatusOK)
 
@@ -502,14 +506,99 @@ func WriteServiceDocument(w http.ResponseWriter, r *http.Request, entitySets []s
 	return encoder.Encode(serviceDoc)
 }
 
+// GetODataMetadataLevel extracts the odata.metadata parameter value from the request
+// Returns "minimal" (default), "full", or "none" based on Accept header or $format parameter
+func GetODataMetadataLevel(r *http.Request) string {
+	// Check $format query parameter first (highest priority)
+	format := r.URL.Query().Get("$format")
+	if format != "" {
+		return extractMetadataFromFormat(format)
+	}
+
+	// Check Accept header
+	accept := r.Header.Get("Accept")
+	if accept != "" {
+		return extractMetadataFromAccept(accept)
+	}
+
+	// Default to minimal
+	return "minimal"
+}
+
+// extractMetadataFromFormat parses odata.metadata from $format parameter
+func extractMetadataFromFormat(format string) string {
+	// Format can be:
+	// - "json" or "application/json" -> minimal (default)
+	// - "application/json;odata.metadata=minimal"
+	// - "application/json;odata.metadata=full"
+	// - "application/json;odata.metadata=none"
+
+	// Split by semicolon
+	parts := strings.Split(format, ";")
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if strings.HasPrefix(part, "odata.metadata=") {
+			value := strings.TrimPrefix(part, "odata.metadata=")
+			value = strings.TrimSpace(value)
+			switch value {
+			case "full", "none", "minimal":
+				return value
+			}
+		}
+	}
+
+	// Default to minimal
+	return "minimal"
+}
+
+// extractMetadataFromAccept parses odata.metadata from Accept header
+func extractMetadataFromAccept(accept string) string {
+	// Accept header can contain multiple media types with parameters
+	// e.g., "application/json;odata.metadata=full, application/xml;q=0.8"
+
+	parts := strings.Split(accept, ",")
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+
+		// Split by semicolon to get media type and parameters
+		subparts := strings.Split(part, ";")
+		mimeType := strings.TrimSpace(subparts[0])
+
+		// Only check JSON media types
+		if mimeType == "application/json" || mimeType == "*/*" || mimeType == "application/*" {
+			// Look for odata.metadata parameter
+			for _, param := range subparts[1:] {
+				param = strings.TrimSpace(param)
+				if strings.HasPrefix(param, "odata.metadata=") {
+					value := strings.TrimPrefix(param, "odata.metadata=")
+					value = strings.TrimSpace(value)
+					switch value {
+					case "full", "none", "minimal":
+						return value
+					}
+				}
+			}
+		}
+	}
+
+	// Default to minimal
+	return "minimal"
+}
+
 // IsAcceptableFormat checks if the requested format via Accept header or $format is supported
 // Returns true if the format is acceptable (JSON or wildcard), false otherwise (e.g., XML)
 func IsAcceptableFormat(r *http.Request) bool {
 	// Check $format query parameter first (highest priority)
 	format := r.URL.Query().Get("$format")
 	if format != "" {
+		// Extract the base format (remove parameters like odata.metadata)
+		parts := strings.Split(format, ";")
+		baseFormat := strings.TrimSpace(parts[0])
 		// Only JSON format is supported for data responses
-		return format == "json" || format == "application/json"
+		return baseFormat == "json" || baseFormat == "application/json"
 	}
 
 	// Check Accept header with proper content negotiation
