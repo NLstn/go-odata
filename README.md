@@ -53,6 +53,10 @@ A Go library for building services that expose OData APIs with automatic handlin
 - ✅ Navigation properties - access related entities (e.g., /Products(1)/Category)
 - ✅ Structural properties with $value endpoint (e.g., /Products(1)/Name/$value)
 - ✅ Prefer header support (return=representation, return=minimal)
+- ✅ **OData-MaxVersion header support** - version negotiation and validation
+  - Rejects requests with versions below 4.0 (returns 406 Not Acceptable)
+  - Accepts version 4.0 and above
+  - Compliant with OData v4 specification
 - ✅ **ETag support with If-Match headers** - optimistic concurrency control
 - ✅ Filter operations on expanded navigation properties
 - ✅ **Rich metadata document generation (XML and JSON)**
@@ -1167,6 +1171,77 @@ Parameters: []odata.ParameterDefinition{
 | Parameters | In request body (JSON) | In query string |
 | Caching | Not cacheable | Cacheable |
 | Use Cases | Create, update, delete operations | Calculations, queries, aggregations |
+
+## OData Version Negotiation
+
+The library supports the `OData-MaxVersion` header for protocol version negotiation, as specified in the OData v4 standard. This allows clients to indicate the maximum OData protocol version they support.
+
+### How It Works
+
+1. **Client sends OData-MaxVersion header**: The client can optionally include the `OData-MaxVersion` header in the request to specify the maximum OData version it can handle.
+
+2. **Server validates version**: The service validates that it can provide a response compatible with the client's requested version.
+
+3. **Version compatibility**:
+   - ✅ **Accepted**: Requests with `OData-MaxVersion: 4.0` or higher (e.g., `4.01`, `5.0`)
+   - ✅ **Accepted**: Requests without the `OData-MaxVersion` header (no version constraint)
+   - ❌ **Rejected**: Requests with `OData-MaxVersion` below `4.0` (e.g., `3.0`, `2.0`, `1.0`)
+
+### Examples
+
+**Successful request with OData-MaxVersion: 4.0**
+```bash
+GET /Products HTTP/1.1
+Host: localhost:8080
+OData-MaxVersion: 4.0
+```
+
+Response:
+```
+HTTP/1.1 200 OK
+OData-Version: 4.0
+Content-Type: application/json;odata.metadata=minimal
+
+{
+  "@odata.context": "http://localhost:8080/$metadata#Products",
+  "value": [...]
+}
+```
+
+**Rejected request with OData-MaxVersion: 3.0**
+```bash
+GET /Products HTTP/1.1
+Host: localhost:8080
+OData-MaxVersion: 3.0
+```
+
+Response:
+```
+HTTP/1.1 406 Not Acceptable
+OData-Version: 4.0
+Content-Type: application/json;odata.metadata=minimal
+
+{
+  "error": {
+    "code": "406",
+    "message": "OData version not supported",
+    "details": [
+      {
+        "message": "This service only supports OData version 4.0 and above. The maximum version specified in the OData-MaxVersion header is below 4.0."
+      }
+    ]
+  }
+}
+```
+
+### Why This Matters
+
+The `OData-MaxVersion` header ensures that clients don't receive responses they cannot process. If a client only supports OData v3.0, it should include `OData-MaxVersion: 3.0` in its requests. Since this library only supports OData v4.0, it will properly reject such requests with a `406 Not Acceptable` status, preventing potential compatibility issues.
+
+This is particularly important when:
+- Migrating from older OData versions to v4.0
+- Ensuring backward compatibility in client applications
+- Following OData v4 specification requirements
 
 ## Error Handling
 
