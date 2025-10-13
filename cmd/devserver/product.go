@@ -5,9 +5,9 @@ import "time"
 // Product represents a product entity for the development server with rich metadata
 type Product struct {
 	ID        uint      `json:"ID" gorm:"primaryKey" odata:"key"`
-	Name      string    `json:"Name" gorm:"not null" odata:"required,maxlength=100"`
+	Name      string    `json:"Name" gorm:"not null" odata:"required,maxlength=100,searchable"`
 	Price     float64   `json:"Price" gorm:"not null" odata:"required,precision=10,scale=2"`
-	Category  string    `json:"Category" gorm:"not null" odata:"required,maxlength=50"`
+	Category  string    `json:"Category" gorm:"not null" odata:"required,maxlength=50,searchable"`
 	Version   int       `json:"Version" gorm:"default:1" odata:"etag"` // Version field used for optimistic concurrency control via ETag
 	CreatedAt time.Time `json:"CreatedAt" gorm:"not null"`
 	// Navigation property for ProductDescriptions
@@ -18,8 +18,8 @@ type Product struct {
 type ProductDescription struct {
 	ProductID   uint   `json:"ProductID" gorm:"primaryKey" odata:"key"`
 	LanguageKey string `json:"LanguageKey" gorm:"primaryKey;size:2" odata:"key,maxlength=2"`
-	Description string `json:"Description" gorm:"not null" odata:"required,maxlength=500"`
-	LongText    string `json:"LongText" gorm:"type:text" odata:"maxlength=2000,nullable"`
+	Description string `json:"Description" gorm:"not null" odata:"required,maxlength=500,searchable"`
+	LongText    string `json:"LongText" gorm:"type:text" odata:"maxlength=2000,nullable,searchable"`
 	// Navigation property back to Product
 	Product *Product `json:"Product,omitempty" gorm:"foreignKey:ProductID;references:ID"`
 }
