@@ -149,6 +149,9 @@ const (
 	OpSecond FilterOperator = "second"
 	OpDate   FilterOperator = "date"
 	OpTime   FilterOperator = "time"
+	// Lambda operators
+	OpAny FilterOperator = "any"
+	OpAll FilterOperator = "all"
 )
 
 // LogicalOperator represents logical operators for combining filters

@@ -23,6 +23,7 @@ const (
 	TokenRParen
 	TokenComma
 	TokenArithmetic
+	TokenColon
 )
 
 // Token represents a single token in the filter expression
@@ -214,6 +215,9 @@ func (t *Tokenizer) tokenizeSpecialChar(pos int) *Token {
 	case ',':
 		t.advance()
 		return &Token{Type: TokenComma, Value: ",", Pos: pos}
+	case ':':
+		t.advance()
+		return &Token{Type: TokenColon, Value: ":", Pos: pos}
 	case '+', '-', '*', '/':
 		op := string(t.ch)
 		t.advance()
