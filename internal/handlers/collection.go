@@ -307,10 +307,6 @@ func (h *EntityHandler) getTotalCount(queryOptions *query.QueryOptions, w http.R
 
 // fetchResults fetches the results from the database
 func (h *EntityHandler) fetchResults(queryOptions *query.QueryOptions) (interface{}, error) {
-	// Create a slice to hold the results
-	sliceType := reflect.SliceOf(h.metadata.EntityType)
-	results := reflect.New(sliceType).Interface()
-
 	// If $top is specified, fetch $top + 1 records to check if there are more results
 	// This avoids an extra database query for pagination
 	modifiedOptions := *queryOptions
@@ -321,6 +317,20 @@ func (h *EntityHandler) fetchResults(queryOptions *query.QueryOptions) (interfac
 
 	// Apply query options to the database query
 	db := query.ApplyQueryOptions(h.db, &modifiedOptions, h.metadata)
+
+	// Check if we need to use map results (for $apply transformations)
+	if query.ShouldUseMapResults(queryOptions) {
+		// Use maps for aggregated/transformed results
+		var results []map[string]interface{}
+		if err := db.Find(&results).Error; err != nil {
+			return nil, err
+		}
+		return results, nil
+	}
+
+	// Create a slice to hold the results
+	sliceType := reflect.SliceOf(h.metadata.EntityType)
+	results := reflect.New(sliceType).Interface()
 
 	// Execute the database query
 	if err := db.Find(results).Error; err != nil {
