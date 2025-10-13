@@ -218,7 +218,7 @@ func (h *EntityHandler) handlePatchEntity(w http.ResponseWriter, r *http.Request
 	}
 
 	// Write response based on preference
-	h.writeUpdateResponse(w, r, pref, db, false)
+	h.writeUpdateResponse(w, r, pref, db)
 }
 
 // fetchAndUpdateEntity fetches an entity and applies PATCH updates
@@ -271,14 +271,14 @@ func (h *EntityHandler) fetchAndUpdateEntity(w http.ResponseWriter, r *http.Requ
 }
 
 // writeUpdateResponse writes the response for PATCH/PUT operations based on preferences
-func (h *EntityHandler) writeUpdateResponse(w http.ResponseWriter, r *http.Request, pref *preference.Preference, db *gorm.DB, isDefaultReturnContent bool) {
+func (h *EntityHandler) writeUpdateResponse(w http.ResponseWriter, r *http.Request, pref *preference.Preference, db *gorm.DB) {
 	w.Header().Set(HeaderODataVersion, "4.0")
 
 	if applied := pref.GetPreferenceApplied(); applied != "" {
 		w.Header().Set(HeaderPreferenceApplied, applied)
 	}
 
-	if pref.ShouldReturnContent(isDefaultReturnContent) {
+	if pref.ShouldReturnContent(false) {
 		h.returnUpdatedEntity(w, r, db)
 	} else {
 		w.WriteHeader(http.StatusNoContent)
@@ -321,7 +321,7 @@ func (h *EntityHandler) handlePutEntity(w http.ResponseWriter, r *http.Request, 
 	}
 
 	// Write response based on preference
-	h.writeUpdateResponse(w, r, pref, db, false)
+	h.writeUpdateResponse(w, r, pref, db)
 }
 
 // fetchAndReplaceEntity fetches an entity and performs PUT replacement

@@ -118,7 +118,7 @@ func (h *EntityHandler) handlePatchSingleton(w http.ResponseWriter, r *http.Requ
 
 	// Handle Prefer header for response
 	pref := preference.ParsePrefer(r)
-	h.writeUpdateResponse(w, r, pref, h.db, false)
+	h.writeUpdateResponse(w, r, pref, h.db)
 }
 
 // handlePutSingleton handles PUT requests for singleton entities (full replace)
@@ -181,7 +181,7 @@ func (h *EntityHandler) handlePutSingleton(w http.ResponseWriter, r *http.Reques
 
 	// Handle Prefer header for response
 	pref := preference.ParsePrefer(r)
-	h.writeUpdateResponse(w, r, pref, h.db, false)
+	h.writeUpdateResponse(w, r, pref, h.db)
 }
 
 // handleOptionsSingleton handles OPTIONS requests for singleton endpoint
