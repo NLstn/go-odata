@@ -1087,7 +1087,23 @@ func convertIsOfFunction(n *FunctionCallExpr, entityMetadata *metadata.EntityMet
 		"Edm.Int16":          true,
 	}
 
-	if !validTypes[typeName] {
+	// Check if it's a valid EDM type
+	isEdmType := validTypes[typeName]
+
+	// If it's not an EDM type, check if it might be an entity type
+	// Entity types don't have the "Edm." prefix and should start with uppercase
+	// For entity type checks, we'll accept any non-Edm type that looks like a valid identifier
+	isEntityType := false
+	if !isEdmType && len(typeName) > 0 {
+		// Check if it starts with "Edm."
+		hasEdmPrefix := len(typeName) >= 4 && typeName[:4] == "Edm."
+		// Entity types should not have the Edm. prefix and should start with uppercase
+		if !hasEdmPrefix && len(typeName) > 0 && typeName[0] >= 'A' && typeName[0] <= 'Z' {
+			isEntityType = true
+		}
+	}
+
+	if !isEdmType && !isEntityType {
 		return nil, fmt.Errorf("unsupported isof type: %s", typeName)
 	}
 
