@@ -148,14 +148,30 @@ func (h *EntityHandler) buildOrderedEntityResponse(result interface{}, contextUR
 	odataResponse := response.NewOrderedMap()
 	odataResponse.Set(ODataContextProperty, contextURL)
 
-	// Merge the entity fields into the response
-	entityValue := reflect.ValueOf(result).Elem()
-	entityType := entityValue.Type()
+	// Check if result is a map (from $select) or a struct
+	resultValue := reflect.ValueOf(result)
 
-	for i := 0; i < entityValue.NumField(); i++ {
+	// Handle map[string]interface{} (from $select filtering)
+	if resultValue.Kind() == reflect.Map {
+		// Iterate over map keys in a consistent order
+		for _, key := range resultValue.MapKeys() {
+			keyStr := key.String()
+			value := resultValue.MapIndex(key)
+			odataResponse.Set(keyStr, value.Interface())
+		}
+		return odataResponse
+	}
+
+	// Handle struct/pointer to struct (original entity)
+	if resultValue.Kind() == reflect.Ptr {
+		resultValue = resultValue.Elem()
+	}
+
+	entityType := resultValue.Type()
+	for i := 0; i < resultValue.NumField(); i++ {
 		field := entityType.Field(i)
 		if field.IsExported() {
-			fieldValue := entityValue.Field(i)
+			fieldValue := resultValue.Field(i)
 			jsonName := getJsonName(field)
 			odataResponse.Set(jsonName, fieldValue.Interface())
 		}
