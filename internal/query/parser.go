@@ -69,21 +69,21 @@ type AggregateTransformation struct {
 
 // AggregateExpression represents a single aggregation expression
 type AggregateExpression struct {
-	Property   string              // Property to aggregate
-	Method     AggregationMethod   // Aggregation method (sum, avg, min, max, count, etc.)
-	Alias      string              // Alias for the result
-	Expression *FilterExpression   // Optional expression for countdistinct, etc.
+	Property   string            // Property to aggregate
+	Method     AggregationMethod // Aggregation method (sum, avg, min, max, count, etc.)
+	Alias      string            // Alias for the result
+	Expression *FilterExpression // Optional expression for countdistinct, etc.
 }
 
 // AggregationMethod represents aggregation methods
 type AggregationMethod string
 
 const (
-	AggregationSum          AggregationMethod = "sum"
-	AggregationAvg          AggregationMethod = "average"
-	AggregationMin          AggregationMethod = "min"
-	AggregationMax          AggregationMethod = "max"
-	AggregationCount        AggregationMethod = "count"
+	AggregationSum           AggregationMethod = "sum"
+	AggregationAvg           AggregationMethod = "average"
+	AggregationMin           AggregationMethod = "min"
+	AggregationMax           AggregationMethod = "max"
+	AggregationCount         AggregationMethod = "count"
 	AggregationCountDistinct AggregationMethod = "countdistinct"
 )
 
