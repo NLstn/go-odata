@@ -247,6 +247,10 @@ func ParseQueryOptions(queryParams url.Values, entityMetadata *metadata.EntityMe
 		return nil, err
 	}
 
+	// Post-process: merge navigation property selections into expand options
+	// This handles cases like $select=Product/Name with $expand=Product
+	mergeNavigationSelects(options)
+
 	return options, nil
 }
 
@@ -289,8 +293,26 @@ func parseSelectOption(queryParams url.Values, entityMetadata *metadata.EntityMe
 		
 		// Validate that all selected properties exist (either as entity properties or computed properties)
 		for _, propName := range selectedProps {
-			if !propertyExists(propName, entityMetadata) && !computedAliases[propName] {
-				return fmt.Errorf("property '%s' does not exist in entity type", propName)
+			// Handle navigation property paths (e.g., "Product/Name")
+			if strings.Contains(propName, "/") {
+				parts := strings.SplitN(propName, "/", 2)
+				navPropName := strings.TrimSpace(parts[0])
+				subPropName := strings.TrimSpace(parts[1])
+				
+				// Validate navigation property exists
+				if !isNavigationProperty(navPropName, entityMetadata) {
+					return fmt.Errorf("property '%s' does not exist in entity type", propName)
+				}
+				
+				// Note: We can't easily validate the sub-property without loading the target entity metadata
+				// The validation of sub-properties will be handled when the expand is processed
+				// For now, we just validate that the navigation property itself exists
+				_ = subPropName // Used to track sub-property for later processing
+			} else {
+				// Regular property validation (also check computed aliases)
+				if !propertyExists(propName, entityMetadata) && !computedAliases[propName] {
+					return fmt.Errorf("property '%s' does not exist in entity type", propName)
+				}
 			}
 		}
 		options.Select = selectedProps
@@ -458,4 +480,65 @@ func parseNonNegativeInt(str, paramName string) (int, error) {
 		return 0, fmt.Errorf("invalid %s: must be a non-negative integer", paramName)
 	}
 	return value, nil
+}
+
+// mergeNavigationSelects processes $select with navigation paths and merges them into expand options
+// For example: $select=Product/Name with $expand=Product should result in Product being expanded with $select=Name
+func mergeNavigationSelects(options *QueryOptions) {
+	if len(options.Select) == 0 {
+		return
+	}
+
+	// Track navigation property selections
+	navSelects := make(map[string][]string) // nav prop name -> list of sub-properties
+
+	// Process select properties to extract navigation paths
+	for _, propName := range options.Select {
+		if strings.Contains(propName, "/") {
+			parts := strings.SplitN(propName, "/", 2)
+			navProp := strings.TrimSpace(parts[0])
+			subProp := strings.TrimSpace(parts[1])
+			if navSelects[navProp] == nil {
+				navSelects[navProp] = []string{}
+			}
+			navSelects[navProp] = append(navSelects[navProp], subProp)
+		}
+	}
+
+	// If there are navigation selects, update or add expand options
+	if len(navSelects) > 0 {
+		// Build a map of existing expand options
+		expandMap := make(map[string]*ExpandOption)
+		for i := range options.Expand {
+			expandMap[options.Expand[i].NavigationProperty] = &options.Expand[i]
+		}
+
+		// For each navigation property in select, update or create expand option
+		for navProp, subProps := range navSelects {
+			if expandOpt, exists := expandMap[navProp]; exists {
+				// Merge with existing expand: combine select properties
+				if expandOpt.Select == nil {
+					expandOpt.Select = subProps
+				} else {
+					// Merge the lists, avoiding duplicates
+					selectMap := make(map[string]bool)
+					for _, s := range expandOpt.Select {
+						selectMap[s] = true
+					}
+					for _, s := range subProps {
+						if !selectMap[s] {
+							expandOpt.Select = append(expandOpt.Select, s)
+						}
+					}
+				}
+			} else {
+				// Create a new expand option with nested select
+				newExpand := ExpandOption{
+					NavigationProperty: navProp,
+					Select:             subProps,
+				}
+				options.Expand = append(options.Expand, newExpand)
+			}
+		}
+	}
 }
