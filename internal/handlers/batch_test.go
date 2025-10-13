@@ -518,6 +518,17 @@ Content-Type: application/json
 			url:         "/BatchTestProducts",
 		},
 		{
+			name: "GET request without leading slash",
+			input: `GET BatchTestProducts(1) HTTP/1.1
+Host: localhost
+Accept: application/json
+
+`,
+			expectError: false,
+			method:      "GET",
+			url:         "BatchTestProducts(1)",
+		},
+		{
 			name:        "Empty request",
 			input:       "",
 			expectError: true,

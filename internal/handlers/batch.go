@@ -243,8 +243,14 @@ func (h *BatchHandler) parseHTTPRequest(r io.Reader) (*batchRequest, error) {
 
 // executeRequest executes a single batch request
 func (h *BatchHandler) executeRequest(req *batchRequest) batchResponse {
+	// Ensure URL has a leading slash to avoid httptest.NewRequest panic
+	url := req.URL
+	if !strings.HasPrefix(url, "/") {
+		url = "/" + url
+	}
+
 	// Create an HTTP request
-	httpReq := httptest.NewRequest(req.Method, req.URL, bytes.NewReader(req.Body))
+	httpReq := httptest.NewRequest(req.Method, url, bytes.NewReader(req.Body))
 	for key, values := range req.Headers {
 		for _, value := range values {
 			httpReq.Header.Add(key, value)
@@ -295,8 +301,14 @@ func (h *BatchHandler) executeRequestInTransaction(req *batchRequest, tx *gorm.D
 		}
 	})
 
+	// Ensure URL has a leading slash to avoid httptest.NewRequest panic
+	url := req.URL
+	if !strings.HasPrefix(url, "/") {
+		url = "/" + url
+	}
+
 	// Create an HTTP request
-	httpReq := httptest.NewRequest(req.Method, req.URL, bytes.NewReader(req.Body))
+	httpReq := httptest.NewRequest(req.Method, url, bytes.NewReader(req.Body))
 	for key, values := range req.Headers {
 		for _, value := range values {
 			httpReq.Header.Add(key, value)
