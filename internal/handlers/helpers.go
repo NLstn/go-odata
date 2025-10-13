@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"strconv"
 	"strings"
 
 	"github.com/nlstn/go-odata/internal/metadata"
@@ -244,4 +245,49 @@ func (a *metadataAdapter) GetKeyProperties() []response.PropertyMetadata {
 
 func (a *metadataAdapter) GetEntitySetName() string {
 	return a.metadata.EntitySetName
+}
+
+// ValidateODataVersion checks if the OData-MaxVersion header is compatible with OData v4.0
+// Returns true if the version is acceptable, false if it should be rejected
+func ValidateODataVersion(r *http.Request) bool {
+	maxVersion := r.Header.Get(HeaderODataMaxVersion)
+	
+	// If no OData-MaxVersion header is present, accept the request
+	if maxVersion == "" {
+		return true
+	}
+
+	// Parse the version string (e.g., "4.0", "3.0", "4.01")
+	// We need to check if it's below 4.0
+	majorVersion, _ := parseVersion(maxVersion)
+	
+	// Accept if major version is >= 4
+	if majorVersion >= 4 {
+		return true
+	}
+	
+	// Reject if major version is < 4
+	return false
+}
+
+// parseVersion parses a version string like "4.0" or "3.0" into major and minor components
+func parseVersion(version string) (int, int) {
+	version = strings.TrimSpace(version)
+	parts := strings.Split(version, ".")
+	
+	if len(parts) == 0 {
+		return 0, 0
+	}
+	
+	major, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return 0, 0
+	}
+	
+	minor := 0
+	if len(parts) > 1 {
+		minor, _ = strconv.Atoi(parts[1])
+	}
+	
+	return major, minor
 }
