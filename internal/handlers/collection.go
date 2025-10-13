@@ -133,15 +133,18 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 	// Determine whether to return content based on preferences
 	if pref.ShouldReturnContent(true) {
 		// Return representation (default for POST)
+		// Get metadata level
+		metadataLevel := response.GetODataMetadataLevel(r)
+
 		contextURL := fmt.Sprintf(ODataContextFormat, response.BuildBaseURL(r), h.metadata.EntitySetName)
-		odataResponse := h.buildOrderedEntityResponse(entity, contextURL)
+		odataResponse := h.buildOrderedEntityResponseWithMetadata(entity, contextURL, metadataLevel)
 
 		// Generate and set ETag header if entity has an ETag property
 		if etagValue := etag.Generate(entity, h.metadata); etagValue != "" {
 			w.Header().Set(HeaderETag, etagValue)
 		}
 
-		w.Header().Set(HeaderContentType, ContentTypeJSON)
+		w.Header().Set(HeaderContentType, fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
 		w.WriteHeader(http.StatusCreated)
 
 		if err := json.NewEncoder(w).Encode(odataResponse); err != nil {

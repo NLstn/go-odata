@@ -138,8 +138,11 @@ func WriteODataCollectionWithNavigation(w http.ResponseWriter, r *http.Request, 
 	// Build the context URL
 	contextURL := buildContextURL(r, entitySetName)
 
-	// Transform the data to add navigation links
-	transformedData := addNavigationLinks(data, metadata, expandedProps, r, entitySetName)
+	// Get metadata level to determine if we need to add @odata.type
+	metadataLevel := GetODataMetadataLevel(r)
+
+	// Transform the data to add navigation links and type annotations
+	transformedData := addNavigationLinks(data, metadata, expandedProps, r, entitySetName, metadataLevel)
 
 	// Ensure empty collections are represented as [] not null per OData v4 spec
 	if transformedData == nil {
@@ -153,8 +156,7 @@ func WriteODataCollectionWithNavigation(w http.ResponseWriter, r *http.Request, 
 		Value:    transformedData,
 	}
 
-	// Set OData-compliant headers with dynamic metadata level
-	metadataLevel := GetODataMetadataLevel(r)
+	// Set OData-compliant headers with dynamic metadata level (already retrieved above)
 	w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
 	w.Header().Set("OData-Version", "4.0")
 	w.WriteHeader(http.StatusOK)
@@ -171,7 +173,8 @@ func WriteODataCollectionWithNavigation(w http.ResponseWriter, r *http.Request, 
 }
 
 // addNavigationLinks adds @odata.navigationLink annotations for navigation properties
-func addNavigationLinks(data interface{}, metadata EntityMetadataProvider, expandedProps []string, r *http.Request, entitySetName string) []interface{} {
+// and @odata.type annotations when full metadata is requested
+func addNavigationLinks(data interface{}, metadata EntityMetadataProvider, expandedProps []string, r *http.Request, entitySetName string, metadataLevel string) []interface{} {
 	dataValue := reflect.ValueOf(data)
 	if dataValue.Kind() != reflect.Slice {
 		// Return empty slice instead of nil to ensure JSON marshaling produces []
@@ -187,9 +190,9 @@ func addNavigationLinks(data interface{}, metadata EntityMetadataProvider, expan
 		var entityMap interface{}
 
 		if entity.Kind() == reflect.Map {
-			entityMap = processMapEntity(entity, metadata, expandedProps, baseURL, entitySetName)
+			entityMap = processMapEntity(entity, metadata, expandedProps, baseURL, entitySetName, metadataLevel)
 		} else {
-			entityMap = processStructEntityOrdered(entity, metadata, expandedProps, baseURL, entitySetName)
+			entityMap = processStructEntityOrdered(entity, metadata, expandedProps, baseURL, entitySetName, metadataLevel)
 		}
 
 		if entityMap != nil {
@@ -201,10 +204,19 @@ func addNavigationLinks(data interface{}, metadata EntityMetadataProvider, expan
 }
 
 // processMapEntity processes an entity that is already a map and adds navigation links
-func processMapEntity(entity reflect.Value, metadata EntityMetadataProvider, expandedProps []string, baseURL, entitySetName string) map[string]interface{} {
+// and @odata.type annotation when full metadata is requested
+func processMapEntity(entity reflect.Value, metadata EntityMetadataProvider, expandedProps []string, baseURL, entitySetName string, metadataLevel string) map[string]interface{} {
 	entityMap, ok := entity.Interface().(map[string]interface{})
 	if !ok {
 		return nil
+	}
+
+	// Add @odata.type annotation for full metadata
+	if metadataLevel == "full" {
+		// Get entity type name from entity set name (remove trailing 's' for simple pluralization)
+		// This is a simplified approach - in a real implementation, we'd get this from metadata
+		entityTypeName := getEntityTypeFromSetName(entitySetName)
+		entityMap["@odata.type"] = "#ODataService." + entityTypeName
 	}
 
 	// Add navigation links for properties that are not in the map and not expanded
@@ -231,9 +243,16 @@ func processMapEntity(entity reflect.Value, metadata EntityMetadataProvider, exp
 }
 
 // processStructEntityOrdered processes an entity that is a struct and returns an OrderedMap
-func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataProvider, expandedProps []string, baseURL, entitySetName string) *OrderedMap {
+// and adds @odata.type annotation when full metadata is requested
+func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataProvider, expandedProps []string, baseURL, entitySetName string, metadataLevel string) *OrderedMap {
 	entityMap := NewOrderedMap()
 	entityType := entity.Type()
+
+	// Add @odata.type annotation for full metadata
+	if metadataLevel == "full" {
+		entityTypeName := getEntityTypeFromSetName(entitySetName)
+		entityMap.Set("@odata.type", "#ODataService."+entityTypeName)
+	}
 
 	for j := 0; j < entity.NumField(); j++ {
 		field := entityType.Field(j)
@@ -685,6 +704,26 @@ func IsAcceptableFormat(r *http.Request) bool {
 func buildContextURL(r *http.Request, entitySetName string) string {
 	baseURL := buildBaseURL(r)
 	return baseURL + "/$metadata#" + entitySetName
+}
+
+// getEntityTypeFromSetName derives the entity type name from the entity set name
+// This uses simple pluralization rules - removes trailing 's' or 'es'
+func getEntityTypeFromSetName(entitySetName string) string {
+	// Handle common pluralization patterns
+	if strings.HasSuffix(entitySetName, "ies") {
+		// Categories -> Category
+		return entitySetName[:len(entitySetName)-3] + "y"
+	}
+	if strings.HasSuffix(entitySetName, "ses") || strings.HasSuffix(entitySetName, "xes") || strings.HasSuffix(entitySetName, "ches") || strings.HasSuffix(entitySetName, "shes") {
+		// Classes -> Class, Boxes -> Box, Churches -> Church, Dishes -> Dish
+		return entitySetName[:len(entitySetName)-2]
+	}
+	if strings.HasSuffix(entitySetName, "s") {
+		// Products -> Product
+		return entitySetName[:len(entitySetName)-1]
+	}
+	// No change needed
+	return entitySetName
 }
 
 // BuildBaseURL builds the base URL for the service (exported for use in handlers)

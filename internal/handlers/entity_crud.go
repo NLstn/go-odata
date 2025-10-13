@@ -113,8 +113,11 @@ func (h *EntityHandler) writeEntityResponseWithETag(w http.ResponseWriter, r *ht
 		return
 	}
 
+	// Get metadata level
+	metadataLevel := response.GetODataMetadataLevel(r)
+
 	contextURL := fmt.Sprintf(ODataContextFormat, response.BuildBaseURL(r), h.metadata.EntitySetName)
-	odataResponse := h.buildOrderedEntityResponse(result, contextURL)
+	odataResponse := h.buildOrderedEntityResponseWithMetadata(result, contextURL, metadataLevel)
 
 	// Use pre-computed ETag if provided, otherwise generate it
 	etagValue := precomputedETag
@@ -127,7 +130,6 @@ func (h *EntityHandler) writeEntityResponseWithETag(w http.ResponseWriter, r *ht
 	}
 
 	// Set Content-Type with dynamic metadata level
-	metadataLevel := response.GetODataMetadataLevel(r)
 	w.Header().Set(HeaderContentType, fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
 	w.Header().Set(HeaderODataVersion, "4.0")
 	w.WriteHeader(http.StatusOK)
@@ -295,15 +297,18 @@ func (h *EntityHandler) returnUpdatedEntity(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	// Get metadata level
+	metadataLevel := response.GetODataMetadataLevel(r)
+
 	contextURL := fmt.Sprintf(ODataContextFormat, response.BuildBaseURL(r), h.metadata.EntitySetName)
-	odataResponse := h.buildOrderedEntityResponse(updatedEntity, contextURL)
+	odataResponse := h.buildOrderedEntityResponseWithMetadata(updatedEntity, contextURL, metadataLevel)
 
 	// Generate and set ETag header if entity has an ETag property
 	if etagValue := etag.Generate(updatedEntity, h.metadata); etagValue != "" {
 		w.Header().Set(HeaderETag, etagValue)
 	}
 
-	w.Header().Set(HeaderContentType, ContentTypeJSON)
+	w.Header().Set(HeaderContentType, fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
 	w.WriteHeader(http.StatusOK)
 
 	if err := json.NewEncoder(w).Encode(odataResponse); err != nil {

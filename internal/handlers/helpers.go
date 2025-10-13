@@ -126,10 +126,15 @@ func (h *EntityHandler) handleFetchError(w http.ResponseWriter, err error, entit
 	}
 }
 
-// buildEntityResponse builds an OData entity response from a reflect.Value
-func (h *EntityHandler) buildEntityResponse(navValue reflect.Value, contextURL string) map[string]interface{} {
+// buildEntityResponseWithMetadata builds an OData entity response with metadata level support
+func (h *EntityHandler) buildEntityResponseWithMetadata(navValue reflect.Value, contextURL string, metadataLevel string) map[string]interface{} {
 	odataResponse := response.NewOrderedMap()
 	odataResponse.Set(ODataContextProperty, contextURL)
+
+	// Add @odata.type for full metadata
+	if metadataLevel == "full" {
+		odataResponse.Set("@odata.type", "#ODataService."+h.metadata.EntityName)
+	}
 
 	navType := navValue.Type()
 	for i := 0; i < navValue.NumField(); i++ {
@@ -144,10 +149,15 @@ func (h *EntityHandler) buildEntityResponse(navValue reflect.Value, contextURL s
 	return odataResponse.ToMap()
 }
 
-// buildOrderedEntityResponse builds an ordered OData entity response
-func (h *EntityHandler) buildOrderedEntityResponse(result interface{}, contextURL string) *response.OrderedMap {
+// buildOrderedEntityResponseWithMetadata builds an ordered OData entity response with metadata level support
+func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{}, contextURL string, metadataLevel string) *response.OrderedMap {
 	odataResponse := response.NewOrderedMap()
 	odataResponse.Set(ODataContextProperty, contextURL)
+
+	// Add @odata.type for full metadata
+	if metadataLevel == "full" {
+		odataResponse.Set("@odata.type", "#ODataService."+h.metadata.EntityName)
+	}
 
 	// Check if result is a map (from $select) or a struct
 	resultValue := reflect.ValueOf(result)
