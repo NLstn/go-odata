@@ -12,8 +12,8 @@ func TestAddNavigationLinksWithNilData(t *testing.T) {
 	// Create a mock request
 	req := httptest.NewRequest("GET", "http://example.com/Products", nil)
 
-	// Test with nil data
-	result := addNavigationLinks(nil, nil, nil, req, "Products")
+	// Test with nil data (metadataLevel minimal is default)
+	result := addNavigationLinks(nil, nil, nil, req, "Products", "minimal")
 
 	// Result should not be nil
 	if result == nil {
@@ -37,9 +37,9 @@ func TestAddNavigationLinksWithEmptySlice(t *testing.T) {
 	// Create a mock request
 	req := httptest.NewRequest("GET", "http://example.com/Products", nil)
 
-	// Test with empty slice
+	// Test with empty slice (metadataLevel minimal is default)
 	emptySlice := []interface{}{}
-	result := addNavigationLinks(emptySlice, nil, nil, req, "Products")
+	result := addNavigationLinks(emptySlice, nil, nil, req, "Products", "minimal")
 
 	// Result should be an empty slice
 	if result == nil {
@@ -67,9 +67,9 @@ func TestAddNavigationLinksWithNonSliceData(t *testing.T) {
 	// Create a mock request
 	req := httptest.NewRequest("GET", "http://example.com/Products", nil)
 
-	// Test with non-slice data (e.g., a single object)
+	// Test with non-slice data (e.g., a single object) (metadataLevel minimal is default)
 	singleObject := map[string]interface{}{"ID": 1, "Name": "Product"}
-	result := addNavigationLinks(singleObject, nil, nil, req, "Products")
+	result := addNavigationLinks(singleObject, nil, nil, req, "Products", "minimal")
 
 	// Result should be an empty slice (not nil)
 	if result == nil {

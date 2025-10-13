@@ -326,14 +326,16 @@ func (h *EntityHandler) writeSingleNavigationEntity(w http.ResponseWriter, r *ht
 		navValue = navValue.Elem()
 	}
 
+	// Get metadata level
+	metadataLevel := response.GetODataMetadataLevel(r)
+
 	// Build the OData response with navigation path according to OData V4 spec: EntitySet(key)/NavigationProperty/$entity
 	navigationPath := fmt.Sprintf(ODataEntityKeyFormat, h.metadata.EntitySetName, entityKey)
 	navigationPath = fmt.Sprintf("%s/%s", navigationPath, navProp.JsonName)
 	contextURL := fmt.Sprintf("%s/$metadata#%s/$entity", response.BuildBaseURL(r), navigationPath)
-	odataResponse := h.buildEntityResponse(navValue, contextURL)
+	odataResponse := h.buildEntityResponseWithMetadata(navValue, contextURL, metadataLevel)
 
 	// Set Content-Type with dynamic metadata level
-	metadataLevel := response.GetODataMetadataLevel(r)
 	w.Header().Set(HeaderContentType, fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
 	w.Header().Set(HeaderODataVersion, "4.0")
 	w.WriteHeader(http.StatusOK)

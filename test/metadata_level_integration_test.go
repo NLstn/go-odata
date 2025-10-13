@@ -188,6 +188,161 @@ func TestODataMetadataLevelIntegration(t *testing.T) {
 	}
 }
 
+// TestODataTypeAnnotation tests that @odata.type field is included when full metadata is requested
+func TestODataTypeAnnotation(t *testing.T) {
+	// Setup test database and service
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("Failed to open database: %v", err)
+	}
+
+	type Product struct {
+		ID    int     `json:"id" gorm:"primaryKey" odata:"key"`
+		Name  string  `json:"name"`
+		Price float64 `json:"price"`
+	}
+
+	if err := db.AutoMigrate(&Product{}); err != nil {
+		t.Fatalf("Failed to migrate: %v", err)
+	}
+
+	// Insert test data
+	db.Create(&Product{ID: 1, Name: "Laptop", Price: 999.99})
+	db.Create(&Product{ID: 2, Name: "Mouse", Price: 29.99})
+
+	service := odata.NewService(db)
+	service.RegisterEntity(&Product{})
+
+	tests := []struct {
+		name               string
+		url                string
+		acceptHeader       string
+		formatParam        string
+		shouldHaveODataType bool
+		description        string
+	}{
+		{
+			name:               "Full metadata via Accept header - collection",
+			url:                "/Products",
+			acceptHeader:       "application/json;odata.metadata=full",
+			shouldHaveODataType: true,
+			description:        "Should include @odata.type in collection with full metadata",
+		},
+		{
+			name:               "Full metadata via $format - collection",
+			url:                "/Products",
+			formatParam:        "application/json;odata.metadata=full",
+			shouldHaveODataType: true,
+			description:        "Should include @odata.type in collection with $format=full",
+		},
+		{
+			name:               "Full metadata via Accept header - single entity",
+			url:                "/Products(1)",
+			acceptHeader:       "application/json;odata.metadata=full",
+			shouldHaveODataType: true,
+			description:        "Should include @odata.type in single entity with full metadata",
+		},
+		{
+			name:               "Full metadata via $format - single entity",
+			url:                "/Products(1)",
+			formatParam:        "application/json;odata.metadata=full",
+			shouldHaveODataType: true,
+			description:        "Should include @odata.type in single entity with $format=full",
+		},
+		{
+			name:               "Minimal metadata - collection",
+			url:                "/Products",
+			acceptHeader:       "application/json;odata.metadata=minimal",
+			shouldHaveODataType: false,
+			description:        "Should NOT include @odata.type with minimal metadata",
+		},
+		{
+			name:               "Minimal metadata - single entity",
+			url:                "/Products(1)",
+			acceptHeader:       "application/json;odata.metadata=minimal",
+			shouldHaveODataType: false,
+			description:        "Should NOT include @odata.type with minimal metadata",
+		},
+		{
+			name:               "None metadata - collection",
+			url:                "/Products",
+			acceptHeader:       "application/json;odata.metadata=none",
+			shouldHaveODataType: false,
+			description:        "Should NOT include @odata.type with none metadata",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tt.url, nil)
+			if tt.formatParam != "" {
+				q := req.URL.Query()
+				q.Set("$format", tt.formatParam)
+				req.URL.RawQuery = q.Encode()
+			}
+			if tt.acceptHeader != "" {
+				req.Header.Set("Accept", tt.acceptHeader)
+			}
+			w := httptest.NewRecorder()
+
+			service.ServeHTTP(w, req)
+
+			if w.Code != http.StatusOK {
+				t.Errorf("Expected status 200, got %d", w.Code)
+			}
+
+			var response map[string]interface{}
+			if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+				t.Fatalf("Failed to parse JSON response: %v", err)
+			}
+
+			if strings.Contains(tt.url, "Products(") {
+				// Single entity response - check root level
+				_, hasODataType := response["@odata.type"]
+				if tt.shouldHaveODataType && !hasODataType {
+					t.Errorf("Expected @odata.type in response (test: %s)", tt.description)
+				}
+				if !tt.shouldHaveODataType && hasODataType {
+					t.Errorf("Did not expect @odata.type in response (test: %s)", tt.description)
+				}
+				if hasODataType {
+					// Verify the format is correct
+					odataType := response["@odata.type"].(string)
+					if odataType != "#ODataService.Product" {
+						t.Errorf("Expected @odata.type=#ODataService.Product, got %s", odataType)
+					}
+				}
+			} else {
+				// Collection response - check in value array
+				value, ok := response["value"].([]interface{})
+				if !ok || len(value) == 0 {
+					t.Fatal("Expected value array in response")
+				}
+
+				firstEntity, ok := value[0].(map[string]interface{})
+				if !ok {
+					t.Fatal("Expected first entity to be a map")
+				}
+
+				_, hasODataType := firstEntity["@odata.type"]
+				if tt.shouldHaveODataType && !hasODataType {
+					t.Errorf("Expected @odata.type in entity (test: %s)", tt.description)
+				}
+				if !tt.shouldHaveODataType && hasODataType {
+					t.Errorf("Did not expect @odata.type in entity (test: %s)", tt.description)
+				}
+				if hasODataType {
+					// Verify the format is correct
+					odataType := firstEntity["@odata.type"].(string)
+					if odataType != "#ODataService.Product" {
+						t.Errorf("Expected @odata.type=#ODataService.Product, got %s", odataType)
+					}
+				}
+			}
+		})
+	}
+}
+
 // TestODataMetadataWithQueryOptions tests metadata level with other query options
 func TestODataMetadataWithQueryOptions(t *testing.T) {
 	// Setup test database and service
