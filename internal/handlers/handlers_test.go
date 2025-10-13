@@ -773,6 +773,11 @@ func TestEntityHandlerCollectionWithSelect(t *testing.T) {
 			t.Fatal("Item is not a map")
 		}
 
+		// Explicitly check that we have exactly 2 properties (Name and Price)
+		if len(item) != 2 {
+			t.Errorf("Expected exactly 2 properties (Name, Price), got %d properties: %v", len(item), item)
+		}
+
 		if _, hasName := item["Name"]; !hasName {
 			t.Error("Expected Name property to be present")
 		}
@@ -787,6 +792,132 @@ func TestEntityHandlerCollectionWithSelect(t *testing.T) {
 
 		if _, hasCategory := item["Category"]; hasCategory {
 			t.Error("Did not expect Category property to be present")
+		}
+
+		if _, hasID := item["ID"]; hasID {
+			t.Error("Did not expect ID property to be present (not in $select)")
+		}
+	}
+}
+
+func TestEntityHandlerCollectionWithSelectSingleProperty(t *testing.T) {
+	handler, db := setupProductHandler(t)
+
+	// Insert test data
+	products := []Product{
+		{ID: 1, Name: "Laptop", Description: "High-performance laptop", Price: 999.99, Category: "Electronics"},
+		{ID: 2, Name: "Mouse", Description: "Wireless mouse", Price: 29.99, Category: "Electronics"},
+	}
+	for _, product := range products {
+		db.Create(&product)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/Products?$select=Name", nil)
+	w := httptest.NewRecorder()
+
+	handler.HandleCollection(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Status = %v, want %v", w.Code, http.StatusOK)
+	}
+
+	var response map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	value, ok := response["value"].([]interface{})
+	if !ok {
+		t.Fatal("value field is not an array")
+	}
+
+	if len(value) != 2 {
+		t.Errorf("Expected 2 results, got %d", len(value))
+	}
+
+	// Check that only Name property is present
+	if len(value) > 0 {
+		item, ok := value[0].(map[string]interface{})
+		if !ok {
+			t.Fatal("Item is not a map")
+		}
+
+		// Should have exactly 1 property (Name only)
+		if len(item) != 1 {
+			t.Errorf("Expected exactly 1 property (Name), got %d properties: %v", len(item), item)
+		}
+
+		if _, hasName := item["Name"]; !hasName {
+			t.Error("Expected Name property to be present")
+		}
+
+		// Verify other properties are not present
+		if _, hasPrice := item["Price"]; hasPrice {
+			t.Error("Did not expect Price property to be present")
+		}
+
+		if _, hasDescription := item["Description"]; hasDescription {
+			t.Error("Did not expect Description property to be present")
+		}
+
+		if _, hasCategory := item["Category"]; hasCategory {
+			t.Error("Did not expect Category property to be present")
+		}
+
+		if _, hasID := item["ID"]; hasID {
+			t.Error("Did not expect ID property to be present")
+		}
+	}
+}
+
+func TestEntityHandlerCollectionWithSelectAllProperties(t *testing.T) {
+	handler, db := setupProductHandler(t)
+
+	// Insert test data
+	products := []Product{
+		{ID: 1, Name: "Laptop", Description: "High-performance laptop", Price: 999.99, Category: "Electronics"},
+	}
+	for _, product := range products {
+		db.Create(&product)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/Products?$select=ID,Name,Description,Price,Category", nil)
+	w := httptest.NewRecorder()
+
+	handler.HandleCollection(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Status = %v, want %v", w.Code, http.StatusOK)
+	}
+
+	var response map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	value, ok := response["value"].([]interface{})
+	if !ok {
+		t.Fatal("value field is not an array")
+	}
+
+	// Check that all properties are present
+	if len(value) > 0 {
+		item, ok := value[0].(map[string]interface{})
+		if !ok {
+			t.Fatal("Item is not a map")
+		}
+
+		// Should have all 5 properties
+		if len(item) != 5 {
+			t.Errorf("Expected exactly 5 properties, got %d properties: %v", len(item), item)
+		}
+
+		// Verify all properties are present
+		expectedProps := []string{"ID", "Name", "Description", "Price", "Category"}
+		for _, prop := range expectedProps {
+			if _, has := item[prop]; !has {
+				t.Errorf("Expected %s property to be present", prop)
+			}
 		}
 	}
 }
