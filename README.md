@@ -59,6 +59,11 @@ A Go library for building services that expose OData APIs with automatic handlin
   - Support for multipart/mixed format (OData v4 standard)
   - Changesets for atomic operations (transaction support)
   - Mix read and write operations in a single batch
+- ✅ **Actions and Functions** - custom operations beyond CRUD
+  - Bound and unbound actions (POST)
+  - Bound and unbound functions (GET)
+  - Parameter validation and type conversion
+  - Support for return values and void operations
 
 ## Installation
 
@@ -163,6 +168,10 @@ Once your service is running, the following endpoints will be available:
 - **Raw Property Value**: `GET /Products(1)/Name/$value` - Get raw property value without JSON wrapping
 - **Composite Keys**: `GET /EntitySet(key1=value1,key2=value2)` - Access entities with composite keys
 - **Batch Requests**: `POST /$batch` - Execute multiple operations in a single HTTP request
+- **Functions (Unbound)**: `GET /FunctionName?param=value` - Invoke custom read-only operations
+- **Functions (Bound)**: `GET /Products(1)/FunctionName?param=value` - Invoke functions on specific entities
+- **Actions (Unbound)**: `POST /ActionName` - Invoke custom operations that may modify data
+- **Actions (Bound)**: `POST /Products(1)/ActionName` - Invoke actions on specific entities
 
 ## Metadata Document
 
@@ -902,6 +911,193 @@ ETags are automatically generated as weak ETags (format: `W/"hash"`) using SHA-2
 - `PATCH /EntitySet(key)` - Partial update with ETag validation
 - `PUT /EntitySet(key)` - Full replacement with ETag validation
 - `DELETE /EntitySet(key)` - Delete with ETag validation
+
+## Actions and Functions
+
+OData v4 supports custom operations beyond standard CRUD through Actions and Functions. Actions can have side effects and are invoked with POST, while Functions are side-effect free and are invoked with GET.
+
+### Registering Functions
+
+Functions are read-only operations that compute and return values. They can be bound to entities or unbound (standalone).
+
+#### Unbound Function Example
+
+```go
+// Register a function that returns the top N products by price
+service.RegisterFunction(odata.FunctionDefinition{
+    Name:    "GetTopProducts",
+    IsBound: false,
+    Parameters: []odata.ParameterDefinition{
+        {Name: "count", Type: reflect.TypeOf(int64(0)), Required: true},
+    },
+    ReturnType: reflect.TypeOf([]Product{}),
+    Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) (interface{}, error) {
+        count := params["count"].(int64)
+        var products []Product
+        if err := db.Order("price DESC").Limit(int(count)).Find(&products).Error; err != nil {
+            return nil, err
+        }
+        return products, nil
+    },
+})
+```
+
+Invoke with:
+```bash
+GET /GetTopProducts?count=3
+```
+
+Response:
+```json
+{
+  "@odata.context": "$metadata#Edm.String",
+  "value": [
+    {"ID": 1, "Name": "Laptop", "Price": 999.99},
+    {"ID": 5, "Name": "Smartphone", "Price": 799.99},
+    {"ID": 4, "Name": "Office Chair", "Price": 249.99}
+  ]
+}
+```
+
+#### Bound Function Example
+
+```go
+// Register a function that calculates total price with tax for a specific product
+service.RegisterFunction(odata.FunctionDefinition{
+    Name:      "GetTotalPrice",
+    IsBound:   true,
+    EntitySet: "Products",
+    Parameters: []odata.ParameterDefinition{
+        {Name: "taxRate", Type: reflect.TypeOf(float64(0)), Required: true},
+    },
+    ReturnType: reflect.TypeOf(float64(0)),
+    Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) (interface{}, error) {
+        taxRate := params["taxRate"].(float64)
+        // Extract product from context or fetch from database
+        // Calculate total price with tax
+        return totalPrice, nil
+    },
+})
+```
+
+Invoke with:
+```bash
+GET /Products(1)/GetTotalPrice?taxRate=0.08
+```
+
+Response:
+```json
+{
+  "@odata.context": "$metadata#Edm.String",
+  "value": 1079.99
+}
+```
+
+### Registering Actions
+
+Actions can have side effects (create, update, delete data) and are invoked with POST.
+
+#### Unbound Action Example
+
+```go
+// Register an action that resets all product prices
+service.RegisterAction(odata.ActionDefinition{
+    Name:       "ResetAllPrices",
+    IsBound:    false,
+    Parameters: []odata.ParameterDefinition{},
+    ReturnType: nil, // No return value
+    Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) error {
+        // Reset prices in database
+        w.Header().Set("OData-Version", "4.0")
+        w.WriteHeader(http.StatusNoContent)
+        return nil
+    },
+})
+```
+
+Invoke with:
+```bash
+POST /ResetAllPrices
+```
+
+Response:
+```
+HTTP/1.1 204 No Content
+OData-Version: 4.0
+```
+
+#### Bound Action Example
+
+```go
+// Register an action that applies a discount to a specific product
+service.RegisterAction(odata.ActionDefinition{
+    Name:      "ApplyDiscount",
+    IsBound:   true,
+    EntitySet: "Products",
+    Parameters: []odata.ParameterDefinition{
+        {Name: "percentage", Type: reflect.TypeOf(float64(0)), Required: true},
+    },
+    ReturnType: reflect.TypeOf(Product{}),
+    Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) error {
+        percentage := params["percentage"].(float64)
+        // Apply discount and save to database
+        // Return the updated product
+        response := map[string]interface{}{
+            "@odata.context": "$metadata#Products/$entity",
+            "value": updatedProduct,
+        }
+        w.Header().Set("Content-Type", "application/json;odata.metadata=minimal")
+        w.Header().Set("OData-Version", "4.0")
+        return json.NewEncoder(w).Encode(response)
+    },
+})
+```
+
+Invoke with:
+```bash
+POST /Products(1)/ApplyDiscount
+Content-Type: application/json
+
+{"percentage": 10}
+```
+
+Response:
+```json
+{
+  "@odata.context": "$metadata#Products/$entity",
+  "value": {
+    "ID": 1,
+    "Name": "Laptop",
+    "Price": 899.99
+  }
+}
+```
+
+### Parameter Types
+
+Actions and Functions support various parameter types:
+- `string` - Text values
+- `int`, `int32`, `int64` - Integer values
+- `float32`, `float64` - Decimal values
+- `bool` - Boolean values (`true`/`false`)
+
+Parameters can be marked as required or optional:
+```go
+Parameters: []odata.ParameterDefinition{
+    {Name: "filter", Type: reflect.TypeOf(""), Required: false},  // Optional
+    {Name: "count", Type: reflect.TypeOf(int64(0)), Required: true}, // Required
+}
+```
+
+### Key Differences
+
+| Feature | Actions | Functions |
+|---------|---------|-----------|
+| HTTP Method | POST | GET |
+| Side Effects | Yes (can modify data) | No (read-only) |
+| Parameters | In request body (JSON) | In query string |
+| Caching | Not cacheable | Cacheable |
+| Use Cases | Create, update, delete operations | Calculations, queries, aggregations |
 
 ## Error Handling
 
