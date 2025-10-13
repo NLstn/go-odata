@@ -348,3 +348,88 @@ func TestSelectDoesNotReturnEmptyObjects(t *testing.T) {
 		t.Error("Response should contain 'error' object for invalid $select")
 	}
 }
+
+// TestSelectReturnsOnlySelectedProperties ensures $select query properly filters properties
+func TestSelectReturnsOnlySelectedProperties(t *testing.T) {
+	service := setupValidationTestService(t)
+
+	tests := []struct {
+		name             string
+		selectParam      string
+		expectedProps    []string
+		unexpectedProps  []string
+		expectedPropCount int
+	}{
+		{
+			name:             "Single property",
+			selectParam:      "name",
+			expectedProps:    []string{"name"},
+			unexpectedProps:  []string{"price", "description", "category", "id"},
+			expectedPropCount: 1,
+		},
+		{
+			name:             "Multiple properties",
+			selectParam:      "name,price",
+			expectedProps:    []string{"name", "price"},
+			unexpectedProps:  []string{"description", "category", "id"},
+			expectedPropCount: 2,
+		},
+		{
+			name:             "All properties except one",
+			selectParam:      "id,name,price,category",
+			expectedProps:    []string{"id", "name", "price", "category"},
+			unexpectedProps:  []string{"description"},
+			expectedPropCount: 4,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			url := "/TestProductValidations?$select=" + tt.selectParam
+			req := httptest.NewRequest(http.MethodGet, url, nil)
+			w := httptest.NewRecorder()
+
+			service.ServeHTTP(w, req)
+
+			if w.Code != http.StatusOK {
+				t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+				return
+			}
+
+			var response map[string]interface{}
+			if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+				t.Fatalf("Failed to decode response: %v", err)
+			}
+
+			value, ok := response["value"].([]interface{})
+			if !ok || len(value) == 0 {
+				t.Fatal("Response does not contain value array or is empty")
+			}
+
+			firstItem, ok := value[0].(map[string]interface{})
+			if !ok {
+				t.Fatal("First value item is not a map")
+			}
+
+			// Verify exact number of properties
+			if len(firstItem) != tt.expectedPropCount {
+				t.Errorf("Expected exactly %d properties, got %d. Properties: %v", 
+					tt.expectedPropCount, len(firstItem), firstItem)
+			}
+
+			// Verify expected properties are present
+			for _, prop := range tt.expectedProps {
+				if _, exists := firstItem[prop]; !exists {
+					t.Errorf("Expected property %s not found in response", prop)
+				}
+			}
+
+			// Verify unexpected properties are NOT present
+			for _, prop := range tt.unexpectedProps {
+				if _, exists := firstItem[prop]; exists {
+					t.Errorf("Unexpected property %s found in response (should not be present)", prop)
+				}
+			}
+		})
+	}
+}
