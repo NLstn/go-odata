@@ -415,10 +415,24 @@ func buildFunctionSQL(op FilterOperator, columnName string, value interface{}) (
 		// In SQLite, we use a CASE expression to check if CAST succeeds
 		// Returns 1 (true) if cast is valid, 0 (false) otherwise
 		if typeName, ok := value.(string); ok {
+			// Check if this is an entity type check (no "Edm." prefix)
+			// For entity type checks on the current instance ($it), always return true
+			if len(typeName) > 0 && (len(typeName) < 4 || typeName[:4] != "Edm.") {
+				// Entity type check - for the current instance, always return 1 (true)
+				// because all records in the entity set are of that entity type
+				if columnName == "$it" {
+					return "1", nil
+				}
+				// For property-level entity type checks, we can't really validate at SQL level
+				// so we return 0 (false) as entity types don't apply to properties
+				return "0", nil
+			}
+
+			// EDM primitive type check
 			sqlType := edmTypeToSQLType(typeName)
 			// Use a safe type check that doesn't fail on invalid casts
 			// We try to cast and compare with the original to see if it's valid
-			return fmt.Sprintf("CASE WHEN CAST(%s AS %s) IS NOT NULL THEN 1 ELSE 0 END", 
+			return fmt.Sprintf("CASE WHEN CAST(%s AS %s) IS NOT NULL THEN 1 ELSE 0 END",
 				columnName, sqlType), nil
 		}
 		return "", nil

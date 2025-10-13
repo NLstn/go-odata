@@ -172,8 +172,8 @@ func TestIsOfFunction_ErrorCases(t *testing.T) {
 			expectErr: true,
 		},
 		{
-			name:      "isof with invalid type",
-			filter:    "isof(Price, 'InvalidType') eq true",
+			name:      "isof with invalid type (lowercase)",
+			filter:    "isof(Price, 'invalidtype') eq true",
 			expectErr: true,
 		},
 		{
