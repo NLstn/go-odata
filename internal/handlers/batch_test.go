@@ -621,3 +621,49 @@ func TestBatchHandler_WriteBatchResponse(t *testing.T) {
 		t.Error("Response does not contain second body")
 	}
 }
+
+func TestBatchHandler_URLWithoutLeadingSlash(t *testing.T) {
+	handler, db, _ := setupBatchTestHandler(t)
+
+	// Insert test data
+	product := BatchTestProduct{
+		ID:       1,
+		Name:     "Test Product",
+		Price:    99.99,
+		Category: "Electronics",
+	}
+	db.Create(&product)
+
+	// Create batch request WITHOUT leading slash
+	// This should not crash the server
+	boundary := "batch_boundary"
+	body := fmt.Sprintf(`--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+GET BatchTestProducts(1) HTTP/1.1
+Host: localhost
+Accept: application/json
+
+
+--%s--
+`, boundary, boundary)
+
+	req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+	req.Header.Set("Content-Type", fmt.Sprintf("multipart/mixed; boundary=%s", boundary))
+	w := httptest.NewRecorder()
+
+	// This should not panic
+	handler.HandleBatch(w, req)
+
+	// Should get a valid response (either success or error, but not a crash)
+	if w.Code == 0 {
+		t.Error("No response code set, handler may have panicked")
+	}
+
+	// The request should either succeed or return a proper error response
+	// but should never crash
+	if w.Code != http.StatusOK {
+		t.Logf("Response code: %d, Body: %s", w.Code, w.Body.String())
+	}
+}
