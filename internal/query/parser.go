@@ -18,6 +18,7 @@ type QueryOptions struct {
 	Skip    *int
 	Count   bool
 	Apply   []ApplyTransformation
+	Search  string // Search query string
 }
 
 // ExpandOption represents a single $expand clause
@@ -227,6 +228,10 @@ func ParseQueryOptions(queryParams url.Values, entityMetadata *metadata.EntityMe
 		return nil, err
 	}
 
+	if err := parseSearchOption(queryParams, options); err != nil {
+		return nil, err
+	}
+
 	return options, nil
 }
 
@@ -314,6 +319,18 @@ func parseCountOption(queryParams url.Values, options *QueryOptions) error {
 		} else if countLower != "false" {
 			return fmt.Errorf("invalid $count: must be 'true' or 'false'")
 		}
+	}
+	return nil
+}
+
+// parseSearchOption parses the $search query parameter
+func parseSearchOption(queryParams url.Values, options *QueryOptions) error {
+	if searchStr := queryParams.Get("$search"); searchStr != "" {
+		searchStr = strings.TrimSpace(searchStr)
+		if searchStr == "" {
+			return fmt.Errorf("invalid $search: search query cannot be empty")
+		}
+		options.Search = searchStr
 	}
 	return nil
 }

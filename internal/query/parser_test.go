@@ -302,3 +302,124 @@ func TestSplitFunctionArgs(t *testing.T) {
 		})
 	}
 }
+
+func TestParseSearchOption(t *testing.T) {
+tests := []struct {
+name        string
+searchQuery string
+expectError bool
+expected    string
+}{
+{
+name:        "Valid search query",
+searchQuery: "laptop",
+expectError: false,
+expected:    "laptop",
+},
+{
+name:        "Search query with spaces",
+searchQuery: "  laptop pro  ",
+expectError: false,
+expected:    "laptop pro",
+},
+{
+name:        "Empty search query",
+searchQuery: "",
+expectError: false,
+expected:    "",
+},
+{
+name:        "Search query with only spaces",
+searchQuery: "   ",
+expectError: true,
+expected:    "",
+},
+{
+name:        "Multi-word search",
+searchQuery: "high performance laptop",
+expectError: false,
+expected:    "high performance laptop",
+},
+}
+
+for _, tt := range tests {
+t.Run(tt.name, func(t *testing.T) {
+queryParams := url.Values{}
+if tt.searchQuery != "" || tt.expectError {
+queryParams.Set("$search", tt.searchQuery)
+}
+
+options := &QueryOptions{}
+err := parseSearchOption(queryParams, options)
+
+if tt.expectError && err == nil {
+t.Error("Expected error but got none")
+}
+if !tt.expectError && err != nil {
+t.Errorf("Unexpected error: %v", err)
+}
+
+if !tt.expectError && options.Search != tt.expected {
+t.Errorf("Expected search query '%s', got '%s'", tt.expected, options.Search)
+}
+})
+}
+}
+
+func TestParseQueryOptions_WithSearch(t *testing.T) {
+meta := getTestMetadata(t)
+
+tests := []struct {
+name        string
+queryString string
+expectError bool
+expectedSearch string
+}{
+{
+name:        "Valid search parameter",
+queryString: "$search=laptop",
+expectError: false,
+expectedSearch: "laptop",
+},
+{
+name:        "Search with filter",
+queryString: "$search=laptop&$filter=Price gt 500",
+expectError: false,
+expectedSearch: "laptop",
+},
+{
+name:        "Search with multiple query options",
+queryString: "$search=gaming&$top=10&$skip=5&$orderby=Price desc",
+expectError: false,
+expectedSearch: "gaming",
+},
+{
+name:        "Empty search value",
+queryString: "$search=   ",
+expectError: true,
+expectedSearch: "",
+},
+}
+
+for _, tt := range tests {
+t.Run(tt.name, func(t *testing.T) {
+queryParams, err := url.ParseQuery(tt.queryString)
+if err != nil {
+t.Fatalf("Failed to parse query string: %v", err)
+}
+
+options, err := ParseQueryOptions(queryParams, meta)
+
+if tt.expectError && err == nil {
+t.Error("Expected error but got none")
+}
+if !tt.expectError && err != nil {
+t.Errorf("Unexpected error: %v", err)
+}
+
+if !tt.expectError && options != nil && options.Search != tt.expectedSearch {
+t.Errorf("Expected search query '%s', got '%s'", tt.expectedSearch, options.Search)
+}
+})
+}
+}

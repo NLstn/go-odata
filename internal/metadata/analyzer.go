@@ -38,6 +38,9 @@ type PropertyMetadata struct {
 	Nullable     *bool  // Explicit nullable override (nil means use default behavior)
 	// Referential constraints for navigation properties
 	ReferentialConstraints map[string]string // Maps dependent property to principal property
+	// Search properties
+	IsSearchable     bool // True if this property should be considered in $search
+	SearchFuzziness  int  // Fuzziness level for search (default 1, meaning exact match)
 }
 
 // AnalyzeEntity extracts metadata from a Go struct for OData usage
@@ -208,6 +211,18 @@ func processODataTagPart(property *PropertyMetadata, part string, metadata *Enti
 	case part == "nullable=false":
 		nullable := false
 		property.Nullable = &nullable
+	case part == "searchable":
+		property.IsSearchable = true
+		// Default fuzziness is 1 (exact match)
+		if property.SearchFuzziness == 0 {
+			property.SearchFuzziness = 1
+		}
+	case strings.HasPrefix(part, "fuzziness="):
+		processIntFacet(part, "fuzziness=", &property.SearchFuzziness)
+		// If fuzziness is set, also mark as searchable
+		if property.SearchFuzziness > 0 {
+			property.IsSearchable = true
+		}
 	}
 }
 
