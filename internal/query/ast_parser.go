@@ -706,7 +706,8 @@ func isSingleArgFunction(name string) bool {
 	return name == "tolower" || name == "toupper" || name == "trim" || name == "length" ||
 		name == "year" || name == "month" || name == "day" ||
 		name == "hour" || name == "minute" || name == "second" ||
-		name == "date" || name == "time"
+		name == "date" || name == "time" ||
+		name == "ceiling" || name == "floor" || name == "round"
 }
 
 // isTwoArgFunction checks if a function takes two arguments
