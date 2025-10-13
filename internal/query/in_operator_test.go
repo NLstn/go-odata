@@ -158,11 +158,11 @@ func TestInOperator_SQLGeneration(t *testing.T) {
 	meta := getTestMetadata(t)
 
 	tests := []struct {
-		name           string
-		filter         string
-		expectedSQL    string
-		expectedArgs   int
-		expectErr      bool
+		name         string
+		filter       string
+		expectedSQL  string
+		expectedArgs int
+		expectErr    bool
 	}{
 		{
 			name:         "in operator with string values",

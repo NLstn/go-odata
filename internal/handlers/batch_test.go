@@ -621,5 +621,3 @@ func TestBatchHandler_WriteBatchResponse(t *testing.T) {
 		t.Error("Response does not contain second body")
 	}
 }
-
-

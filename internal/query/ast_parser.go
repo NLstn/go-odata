@@ -137,7 +137,7 @@ func (p *ASTParser) parseComparison() (ASTNode, error) {
 	// Check for comparison operators
 	if p.currentToken().Type == TokenOperator {
 		op := p.advance()
-		
+
 		// Special handling for 'in' operator - expect a collection
 		if op.Value == "in" {
 			right, err := p.parseCollection()
@@ -150,7 +150,7 @@ func (p *ASTParser) parseComparison() (ASTNode, error) {
 				Right:    right,
 			}, nil
 		}
-		
+
 		right, err := p.parseArithmetic()
 		if err != nil {
 			return nil, err

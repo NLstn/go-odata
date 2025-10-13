@@ -45,6 +45,12 @@ func main() {
 		log.Fatal("Failed to register ProductDescription entity:", err)
 	}
 
+	// Register example functions
+	registerFunctions(service, db)
+
+	// Register example actions
+	registerActions(service, db)
+
 	// Start the HTTP server
 	fmt.Println("🚀 Development server starting with hot reload...")
 	fmt.Println("Service endpoints:")
@@ -55,6 +61,18 @@ func main() {
 	fmt.Println("  Single Product:       http://localhost:8080/Products(1)")
 	fmt.Println("  ProductDescriptions:  http://localhost:8080/ProductDescriptions")
 	fmt.Println("  Product Descriptions: http://localhost:8080/ProductDescriptions(ProductID=1,LanguageKey='EN')")
+	fmt.Println()
+	fmt.Println("OData Actions and Functions:")
+	fmt.Println("  Unbound Functions:")
+	fmt.Println("    GET  http://localhost:8080/GetTopProducts?count=3")
+	fmt.Println("    GET  http://localhost:8080/GetProductStats")
+	fmt.Println("  Bound Functions:")
+	fmt.Println("    GET  http://localhost:8080/Products(1)/GetTotalPrice?taxRate=0.08")
+	fmt.Println("  Unbound Actions:")
+	fmt.Println("    POST http://localhost:8080/ResetAllPrices")
+	fmt.Println("  Bound Actions:")
+	fmt.Println("    POST http://localhost:8080/Products(1)/ApplyDiscount (body: {\"percentage\": 10})")
+	fmt.Println("    POST http://localhost:8080/Products(1)/IncreasePrice (body: {\"amount\": 5.0})")
 	fmt.Println()
 
 	if err := service.ListenAndServe(":8080"); err != nil {

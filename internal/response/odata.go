@@ -520,6 +520,10 @@ type ODataURLComponents struct {
 	PropertyPath       string            // For structural property paths like Products(1)/Name
 	IsCount            bool              // For paths like Products/$count
 	IsValue            bool              // For paths like Products(1)/Name/$value
+	ActionName         string            // For action invocations like Products(1)/Namespace.ActionName
+	FunctionName       string            // For function invocations like Products(1)/Namespace.FunctionName
+	IsAction           bool              // True if this is an action invocation
+	IsFunction         bool              // True if this is a function invocation
 }
 
 // ParseODataURL parses an OData URL and extracts components (exported for use in main package)
@@ -573,7 +577,15 @@ func ParseODataURLComponents(path string) (*ODataURLComponents, error) {
 			if pathParts[1] == "$count" {
 				components.IsCount = true
 			} else {
-				components.NavigationProperty = pathParts[1]
+				// Check if this is an action or function (contains dot for namespace)
+				// or is a simple identifier that could be action/function name
+				secondPart := pathParts[1]
+
+				// For now, treat any segment after entity(key) as either:
+				// 1. Navigation property (if it's a known property)
+				// 2. Action/Function (if it contains namespace separator or is registered)
+				// The caller will need to determine which it is based on registered actions/functions
+				components.NavigationProperty = secondPart
 
 				// Check for $value suffix: Products(1)/Name/$value
 				if len(pathParts) > 2 && pathParts[2] == "$value" {
