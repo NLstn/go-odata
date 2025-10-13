@@ -4,21 +4,6 @@
 
 `go-odata` is a Go library for building services that expose OData APIs with automatic handling of OData protocol logic. It allows you to define Go structs representing entities and automatically handles the necessary OData protocol logic, making it easy to build OData-compliant APIs.
 
-### Key Features
-
-- ✅ Automatic OData endpoint generation from Go structs
-- ✅ GORM database integration
-- ✅ Entity collection retrieval (GET /EntitySet)
-- ✅ Individual entity retrieval (GET /EntitySet(key))
-- ✅ OData-compliant JSON responses with @odata.context
-- ✅ Service document generation
-- ✅ Basic metadata document
-- ✅ Proper HTTP headers and error handling
-- ✅ OData query operations ($filter, $select, $orderby)
-- ✅ Pagination support ($top, $skip, $count, @odata.nextLink)
-- 🔄 Complete metadata document generation - Coming soon
-- 🔄 Entity relationship handling - Coming soon
-
 ### Architecture
 
 The library is structured with:
