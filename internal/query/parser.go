@@ -155,6 +155,7 @@ const (
 	OpAll FilterOperator = "all"
 	// Type conversion functions
 	OpCast FilterOperator = "cast"
+	OpIsOf FilterOperator = "isof"
 )
 
 // LogicalOperator represents logical operators for combining filters
