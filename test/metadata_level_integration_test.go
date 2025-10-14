@@ -127,9 +127,22 @@ func TestODataMetadataLevelIntegration(t *testing.T) {
 					t.Errorf("Failed to parse JSON response: %v", err)
 				}
 
-				// Check that @odata.context is present (part of minimal and full metadata)
-				if _, ok := response["@odata.context"]; !ok && !strings.Contains(tt.expectedCT, "none") {
-					t.Error("Expected @odata.context in response for minimal/full metadata")
+				// Check @odata.context presence based on metadata level
+				hasContext := false
+				if _, ok := response["@odata.context"]; ok {
+					hasContext = true
+				}
+				
+				if strings.Contains(tt.expectedCT, "none") {
+					// For metadata=none, @odata.context should NOT be present
+					if hasContext {
+						t.Error("@odata.context should NOT be present for metadata=none")
+					}
+				} else {
+					// For minimal and full metadata, @odata.context should be present
+					if !hasContext {
+						t.Error("Expected @odata.context in response for minimal/full metadata")
+					}
 				}
 			})
 
