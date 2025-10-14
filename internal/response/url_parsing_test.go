@@ -142,3 +142,81 @@ func TestParseODataURLComponentsCount(t *testing.T) {
 		})
 	}
 }
+
+func TestParseODataURLComponentsRef(t *testing.T) {
+	tests := []struct {
+		name            string
+		path            string
+		expectEntitySet string
+		expectIsRef     bool
+		expectHasKey    bool
+		expectNavProp   string
+	}{
+		{
+			name:            "Entity reference",
+			path:            "Products(1)/$ref",
+			expectEntitySet: "Products",
+			expectIsRef:     true,
+			expectHasKey:    true,
+			expectNavProp:   "",
+		},
+		{
+			name:            "Navigation property reference",
+			path:            "Products(1)/Descriptions/$ref",
+			expectEntitySet: "Products",
+			expectIsRef:     true,
+			expectHasKey:    true,
+			expectNavProp:   "Descriptions",
+		},
+		{
+			name:            "Collection reference",
+			path:            "Products/$ref",
+			expectEntitySet: "Products",
+			expectIsRef:     true,
+			expectHasKey:    false,
+			expectNavProp:   "",
+		},
+		{
+			name:            "Leading slash",
+			path:            "/Products(1)/Descriptions/$ref",
+			expectEntitySet: "Products",
+			expectIsRef:     true,
+			expectHasKey:    true,
+			expectNavProp:   "Descriptions",
+		},
+		{
+			name:            "Without $ref",
+			path:            "Products(1)/Descriptions",
+			expectEntitySet: "Products",
+			expectIsRef:     false,
+			expectHasKey:    true,
+			expectNavProp:   "Descriptions",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			components, err := ParseODataURLComponents(tt.path)
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+
+			if components.EntitySet != tt.expectEntitySet {
+				t.Errorf("Expected entity set %s, got %s", tt.expectEntitySet, components.EntitySet)
+			}
+
+			if components.IsRef != tt.expectIsRef {
+				t.Errorf("Expected IsRef %v, got %v", tt.expectIsRef, components.IsRef)
+			}
+
+			hasKey := components.EntityKey != "" || len(components.EntityKeyMap) > 0
+			if hasKey != tt.expectHasKey {
+				t.Errorf("Expected HasKey %v, got %v", tt.expectHasKey, hasKey)
+			}
+
+			if components.NavigationProperty != tt.expectNavProp {
+				t.Errorf("Expected NavigationProperty %s, got %s", tt.expectNavProp, components.NavigationProperty)
+			}
+		})
+	}
+}

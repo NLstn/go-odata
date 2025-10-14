@@ -82,6 +82,19 @@ func (s *Service) routeRequest(w http.ResponseWriter, r *http.Request, handler *
 	if components.IsCount {
 		// $count request: Products/$count
 		handler.HandleCount(w, r)
+	} else if components.IsRef {
+		// $ref request: Products/$ref or Products(1)/$ref
+		if hasKey && components.NavigationProperty == "" {
+			// Entity reference: Products(1)/$ref
+			keyString := s.getKeyString(components)
+			handler.HandleEntityRef(w, r, keyString)
+		} else if !hasKey && components.NavigationProperty == "" {
+			// Collection reference: Products/$ref
+			handler.HandleCollectionRef(w, r)
+		} else {
+			// Navigation property reference handled in handlePropertyRequest
+			s.handlePropertyRequest(w, r, handler, components)
+		}
 	} else if isSingleton {
 		// Singleton request - treat as single entity without key
 		if components.NavigationProperty != "" {
@@ -131,8 +144,16 @@ func (s *Service) handlePropertyRequest(w http.ResponseWriter, r *http.Request, 
 			}
 			return
 		}
-		handler.HandleNavigationProperty(w, r, keyString, components.NavigationProperty)
+		handler.HandleNavigationProperty(w, r, keyString, components.NavigationProperty, components.IsRef)
 	} else if handler.IsStructuralProperty(components.NavigationProperty) {
+		if components.IsRef {
+			// /$ref is not supported on structural properties
+			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid request",
+				"$ref is not supported on structural properties"); writeErr != nil {
+				fmt.Printf("Error writing error response: %v\n", writeErr)
+			}
+			return
+		}
 		handler.HandleStructuralProperty(w, r, keyString, components.NavigationProperty, components.IsValue)
 	} else {
 		// Property not found

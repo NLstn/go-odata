@@ -12,10 +12,10 @@ import (
 )
 
 // HandleNavigationProperty handles GET, HEAD, and OPTIONS requests for navigation properties (e.g., Products(1)/Descriptions)
-func (h *EntityHandler) HandleNavigationProperty(w http.ResponseWriter, r *http.Request, entityKey string, navigationProperty string) {
+func (h *EntityHandler) HandleNavigationProperty(w http.ResponseWriter, r *http.Request, entityKey string, navigationProperty string, isRef bool) {
 	switch r.Method {
 	case http.MethodGet, http.MethodHead:
-		h.handleGetNavigationProperty(w, r, entityKey, navigationProperty)
+		h.handleGetNavigationProperty(w, r, entityKey, navigationProperty, isRef)
 	case http.MethodOptions:
 		h.handleOptionsNavigationProperty(w)
 	default:
@@ -27,7 +27,7 @@ func (h *EntityHandler) HandleNavigationProperty(w http.ResponseWriter, r *http.
 }
 
 // handleGetNavigationProperty handles GET requests for navigation properties
-func (h *EntityHandler) handleGetNavigationProperty(w http.ResponseWriter, r *http.Request, entityKey string, navigationProperty string) {
+func (h *EntityHandler) handleGetNavigationProperty(w http.ResponseWriter, r *http.Request, entityKey string, navigationProperty string, isRef bool) {
 	// Find and validate the navigation property
 	navProp := h.findNavigationProperty(navigationProperty)
 	if navProp == nil {
@@ -55,7 +55,11 @@ func (h *EntityHandler) handleGetNavigationProperty(w http.ResponseWriter, r *ht
 		return
 	}
 
-	h.writeNavigationResponse(w, r, entityKey, navProp, navFieldValue)
+	if isRef {
+		h.writeNavigationRefResponse(w, r, entityKey, navProp, navFieldValue)
+	} else {
+		h.writeNavigationResponse(w, r, entityKey, navProp, navFieldValue)
+	}
 }
 
 // handleOptionsNavigationProperty handles OPTIONS requests for navigation properties
@@ -354,4 +358,99 @@ func (h *EntityHandler) writeSingleNavigationEntity(w http.ResponseWriter, r *ht
 	if err := json.NewEncoder(w).Encode(odataResponse); err != nil {
 		fmt.Printf("Error writing navigation property response: %v\n", err)
 	}
+}
+
+// writeNavigationRefResponse writes entity reference(s) for navigation properties
+func (h *EntityHandler) writeNavigationRefResponse(w http.ResponseWriter, r *http.Request, entityKey string, navProp *metadata.PropertyMetadata, navFieldValue reflect.Value) {
+	if navProp.NavigationIsArray {
+		h.writeNavigationCollectionRef(w, r, navProp, navFieldValue)
+	} else {
+		h.writeSingleNavigationRef(w, r, entityKey, navProp, navFieldValue)
+	}
+}
+
+// writeNavigationCollectionRef writes entity references for a collection navigation property
+func (h *EntityHandler) writeNavigationCollectionRef(w http.ResponseWriter, r *http.Request, navProp *metadata.PropertyMetadata, navFieldValue reflect.Value) {
+	// Get the target entity metadata to extract keys
+	targetMetadata, err := h.getTargetMetadata(navProp.NavigationTarget)
+	if err != nil {
+		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgInternalError,
+			fmt.Sprintf("Failed to get target metadata: %v", err)); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	}
+
+	// Build entity IDs for each entity in the collection
+	var entityIDs []string
+	if navFieldValue.Kind() == reflect.Slice {
+		for i := 0; i < navFieldValue.Len(); i++ {
+			entity := navFieldValue.Index(i).Interface()
+			keyValues := response.ExtractEntityKeys(entity, targetMetadata.KeyProperties)
+			entityID := response.BuildEntityID(targetMetadata.EntitySetName, keyValues)
+			entityIDs = append(entityIDs, entityID)
+		}
+	}
+
+	if err := response.WriteEntityReferenceCollection(w, r, entityIDs, nil, nil); err != nil {
+		fmt.Printf("Error writing entity reference collection: %v\n", err)
+	}
+}
+
+// writeSingleNavigationRef writes an entity reference for a single navigation property
+func (h *EntityHandler) writeSingleNavigationRef(w http.ResponseWriter, r *http.Request, entityKey string, navProp *metadata.PropertyMetadata, navFieldValue reflect.Value) {
+	navData := navFieldValue.Interface()
+	navValue := reflect.ValueOf(navData)
+
+	// Handle pointer and check for nil
+	if navValue.Kind() == reflect.Ptr {
+		if navValue.IsNil() {
+			// Set Content-Type with dynamic metadata level even for 204 responses
+			metadataLevel := response.GetODataMetadataLevel(r)
+			w.Header().Set(HeaderContentType, fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
+			w.Header().Set(HeaderODataVersion, "4.0")
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		navValue = navValue.Elem()
+	}
+
+	// Get the target entity metadata to extract keys
+	targetMetadata, err := h.getTargetMetadata(navProp.NavigationTarget)
+	if err != nil {
+		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgInternalError,
+			fmt.Sprintf("Failed to get target metadata: %v", err)); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	}
+
+	// Extract key values and build entity ID
+	keyValues := response.ExtractEntityKeys(navValue.Interface(), targetMetadata.KeyProperties)
+	entityID := response.BuildEntityID(targetMetadata.EntitySetName, keyValues)
+
+	if err := response.WriteEntityReference(w, r, entityID); err != nil {
+		fmt.Printf("Error writing entity reference: %v\n", err)
+	}
+}
+
+// getTargetMetadata retrieves metadata for a navigation target entity type
+func (h *EntityHandler) getTargetMetadata(targetName string) (*metadata.EntityMetadata, error) {
+	if h.entitiesMetadata == nil {
+		return nil, fmt.Errorf("entities metadata not available")
+	}
+	
+	// Try with the target name as-is (entity set name)
+	if meta, ok := h.entitiesMetadata[targetName]; ok {
+		return meta, nil
+	}
+	
+	// Try to find by entity name
+	for _, meta := range h.entitiesMetadata {
+		if meta.EntityName == targetName {
+			return meta, nil
+		}
+	}
+	
+	return nil, fmt.Errorf("metadata for target '%s' not found", targetName)
 }

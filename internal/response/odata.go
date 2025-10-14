@@ -7,6 +7,8 @@ import (
 	"net/url"
 	"reflect"
 	"strings"
+
+	"github.com/nlstn/go-odata/internal/metadata"
 )
 
 // OrderedMap maintains insertion order of keys
@@ -85,6 +87,120 @@ type PropertyMetadata struct {
 	IsNavigationProp  bool
 	NavigationTarget  string
 	NavigationIsArray bool
+}
+
+// BuildEntityID constructs the entity ID path from entity set name and key values
+// For single key: "Products(1)"
+// For composite key: "ProductDescriptions(ProductID=1,LanguageKey='EN')"
+func BuildEntityID(entitySetName string, keyValues map[string]interface{}) string {
+	if len(keyValues) == 1 {
+		// Single key - check if it's named or just a value
+		for _, v := range keyValues {
+			return fmt.Sprintf("%s(%v)", entitySetName, v)
+		}
+	}
+	
+	// Composite key or named single key
+	var keyParts []string
+	for k, v := range keyValues {
+		// Quote string values
+		if str, ok := v.(string); ok {
+			keyParts = append(keyParts, fmt.Sprintf("%s='%s'", k, str))
+		} else {
+			keyParts = append(keyParts, fmt.Sprintf("%s=%v", k, v))
+		}
+	}
+	return fmt.Sprintf("%s(%s)", entitySetName, strings.Join(keyParts, ","))
+}
+
+// ExtractEntityKeys extracts key values from an entity using metadata
+func ExtractEntityKeys(entity interface{}, keyProperties []metadata.PropertyMetadata) map[string]interface{} {
+	keyValues := make(map[string]interface{})
+	entityValue := reflect.ValueOf(entity)
+	
+	// Handle pointer
+	if entityValue.Kind() == reflect.Ptr {
+		entityValue = entityValue.Elem()
+	}
+	
+	for _, keyProp := range keyProperties {
+		fieldValue := entityValue.FieldByName(keyProp.Name)
+		if fieldValue.IsValid() {
+			keyValues[keyProp.JsonName] = fieldValue.Interface()
+		}
+	}
+	
+	return keyValues
+}
+
+// WriteEntityReference writes an OData entity reference response for a single entity
+func WriteEntityReference(w http.ResponseWriter, r *http.Request, entityID string) error {
+	// Check if the requested format is supported
+	if !IsAcceptableFormat(r) {
+		return WriteError(w, http.StatusNotAcceptable, "Not Acceptable",
+			"The requested format is not supported. Only application/json is supported for data responses.")
+	}
+
+	baseURL := buildBaseURL(r)
+	contextURL := baseURL + "/$metadata#$ref"
+	
+	response := map[string]interface{}{
+		"@odata.context": contextURL,
+		"@odata.id":      baseURL + "/" + entityID,
+	}
+
+	// Set OData-compliant headers with dynamic metadata level
+	metadataLevel := GetODataMetadataLevel(r)
+	w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
+	w.Header().Set("OData-Version", "4.0")
+	w.WriteHeader(http.StatusOK)
+
+	encoder := json.NewEncoder(w)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(response)
+}
+
+// WriteEntityReferenceCollection writes an OData entity reference collection response
+func WriteEntityReferenceCollection(w http.ResponseWriter, r *http.Request, entityIDs []string, count *int64, nextLink *string) error {
+	// Check if the requested format is supported
+	if !IsAcceptableFormat(r) {
+		return WriteError(w, http.StatusNotAcceptable, "Not Acceptable",
+			"The requested format is not supported. Only application/json is supported for data responses.")
+	}
+
+	baseURL := buildBaseURL(r)
+	contextURL := baseURL + "/$metadata#Collection($ref)"
+	
+	// Build the references
+	refs := make([]map[string]string, len(entityIDs))
+	for i, entityID := range entityIDs {
+		refs[i] = map[string]string{
+			"@odata.id": baseURL + "/" + entityID,
+		}
+	}
+
+	response := map[string]interface{}{
+		"@odata.context": contextURL,
+		"value":          refs,
+	}
+
+	if count != nil {
+		response["@odata.count"] = *count
+	}
+
+	if nextLink != nil && *nextLink != "" {
+		response["@odata.nextLink"] = *nextLink
+	}
+
+	// Set OData-compliant headers with dynamic metadata level
+	metadataLevel := GetODataMetadataLevel(r)
+	w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
+	w.Header().Set("OData-Version", "4.0")
+	w.WriteHeader(http.StatusOK)
+
+	encoder := json.NewEncoder(w)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(response)
 }
 
 // WriteODataCollection writes an OData collection response
@@ -793,6 +909,7 @@ type ODataURLComponents struct {
 	PropertyPath       string            // For structural property paths like Products(1)/Name
 	IsCount            bool              // For paths like Products/$count
 	IsValue            bool              // For paths like Products(1)/Name/$value
+	IsRef              bool              // For paths like Products(1)/Descriptions/$ref
 	ActionName         string            // For action invocations like Products(1)/Namespace.ActionName
 	FunctionName       string            // For function invocations like Products(1)/Namespace.FunctionName
 	IsAction           bool              // True if this is an action invocation
@@ -845,10 +962,12 @@ func ParseODataURLComponents(path string) (*ODataURLComponents, error) {
 			components.EntitySet = entitySet
 		}
 
-		// Check for $count or navigation property: Products/$count or Products(1)/Descriptions
+		// Check for $count, $ref or navigation property: Products/$count, Products(1)/$ref, Products(1)/Descriptions
 		if len(pathParts) > 1 {
 			if pathParts[1] == "$count" {
 				components.IsCount = true
+			} else if pathParts[1] == "$ref" {
+				components.IsRef = true
 			} else {
 				// Check if this is an action or function (contains dot for namespace)
 				// or is a simple identifier that could be action/function name
@@ -860,9 +979,13 @@ func ParseODataURLComponents(path string) (*ODataURLComponents, error) {
 				// The caller will need to determine which it is based on registered actions/functions
 				components.NavigationProperty = secondPart
 
-				// Check for $value suffix: Products(1)/Name/$value
-				if len(pathParts) > 2 && pathParts[2] == "$value" {
-					components.IsValue = true
+				// Check for $value or $ref suffix: Products(1)/Name/$value, Products(1)/Descriptions/$ref
+				if len(pathParts) > 2 {
+					if pathParts[2] == "$value" {
+						components.IsValue = true
+					} else if pathParts[2] == "$ref" {
+						components.IsRef = true
+					}
 				}
 			}
 		}
