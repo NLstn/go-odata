@@ -151,7 +151,8 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 	} else {
 		// Return minimal (204 No Content)
 		// Set OData-EntityId header as per OData v4 spec
-		w.Header().Set(HeaderODataEntityId, location)
+		// Using helper function to preserve exact capitalization
+		SetODataHeader(w, HeaderODataEntityId, location)
 		w.WriteHeader(http.StatusNoContent)
 	}
 }

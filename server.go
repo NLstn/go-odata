@@ -14,9 +14,9 @@ import (
 // ServeHTTP implements http.Handler interface
 func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Set OData-Version header for all responses
-	// Using direct map assignment to preserve exact capitalization (OData-Version with capital 'D')
+	// Using helper function to preserve exact capitalization (OData-Version with capital 'D')
 	// as specified in OData v4 spec. Header.Set() would canonicalize to "Odata-Version".
-	w.Header()["OData-Version"] = []string{"4.0"}
+	handlers.SetODataHeader(w, "OData-Version", "4.0")
 
 	// Validate OData version before processing any request
 	if !handlers.ValidateODataVersion(r) {
