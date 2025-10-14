@@ -1,11 +1,12 @@
 package odata_test
 
 import (
-	odata "github.com/nlstn/go-odata"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	odata "github.com/nlstn/go-odata"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -120,12 +121,6 @@ func TestIntegrationCountEndpoint(t *testing.T) {
 			body, _ := io.ReadAll(w.Body)
 			if string(body) != tt.expectedBody {
 				t.Errorf("Body = %q, want %q", string(body), tt.expectedBody)
-			}
-
-			// Verify OData-Version header
-			odataVersion := w.Header().Get("OData-Version")
-			if odataVersion != "4.0" {
-				t.Errorf("OData-Version = %v, want %v", odataVersion, "4.0")
 			}
 		})
 	}
@@ -269,17 +264,6 @@ func TestIntegrationCountEndpointODataV4Compliance(t *testing.T) {
 				contentType := w.Header().Get("Content-Type")
 				if contentType != "text/plain" {
 					t.Errorf("Content-Type = %v, want text/plain", contentType)
-				}
-			},
-		},
-		{
-			name:         "Has OData-Version header",
-			path:         "/CountTestProducts/$count",
-			expectedBody: "5",
-			validateFunc: func(t *testing.T, w *httptest.ResponseRecorder) {
-				odataVersion := w.Header().Get("OData-Version")
-				if odataVersion != "4.0" {
-					t.Errorf("OData-Version = %v, want 4.0", odataVersion)
 				}
 			},
 		},

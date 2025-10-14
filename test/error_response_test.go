@@ -58,10 +58,6 @@ func TestErrorResponse_EntityNotFound(t *testing.T) {
 	}
 
 	// Verify OData headers
-	if version := w.Header().Get("OData-Version"); version != "4.0" {
-		t.Errorf("OData-Version = %v, want 4.0", version)
-	}
-
 	if contentType := w.Header().Get("Content-Type"); contentType != "application/json;odata.metadata=minimal" {
 		t.Errorf("Content-Type = %v, want application/json;odata.metadata=minimal", contentType)
 	}

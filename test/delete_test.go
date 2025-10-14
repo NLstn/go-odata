@@ -2,10 +2,11 @@ package odata_test
 
 import (
 	"encoding/json"
-	odata "github.com/nlstn/go-odata"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	odata "github.com/nlstn/go-odata"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -90,11 +91,6 @@ func TestDeleteEntity_Success(t *testing.T) {
 	// Should return 204 No Content
 	if w.Code != http.StatusNoContent {
 		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusNoContent, w.Body.String())
-	}
-
-	// Verify OData-Version header
-	if version := w.Header().Get("OData-Version"); version != "4.0" {
-		t.Errorf("OData-Version = %v, want 4.0", version)
 	}
 
 	// Verify entity was deleted

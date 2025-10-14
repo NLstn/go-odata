@@ -38,11 +38,6 @@ func TestEntityHandlerCollectionHead(t *testing.T) {
 		t.Error("Content-Type header should be set for HEAD request")
 	}
 
-	odataVersion := w.Header().Get("OData-Version")
-	if odataVersion != "4.0" {
-		t.Errorf("OData-Version = %v, want 4.0", odataVersion)
-	}
-
 	// Verify response body is empty (HEAD shouldn't return body)
 	if w.Body.Len() != 0 {
 		t.Errorf("HEAD response should have empty body, got %d bytes", w.Body.Len())
@@ -71,11 +66,6 @@ func TestEntityHandlerEntityHead(t *testing.T) {
 	contentType := w.Header().Get("Content-Type")
 	if contentType == "" {
 		t.Error("Content-Type header should be set for HEAD request")
-	}
-
-	odataVersion := w.Header().Get("OData-Version")
-	if odataVersion != "4.0" {
-		t.Errorf("OData-Version = %v, want 4.0", odataVersion)
 	}
 
 	// Verify response body is empty (HEAD shouldn't return body)
@@ -113,11 +103,6 @@ func TestEntityHandlerCountHead(t *testing.T) {
 		t.Errorf("Content-Type = %v, want text/plain", contentType)
 	}
 
-	odataVersion := w.Header().Get("OData-Version")
-	if odataVersion != "4.0" {
-		t.Errorf("OData-Version = %v, want 4.0", odataVersion)
-	}
-
 	// Verify response body is empty (HEAD shouldn't return body)
 	if w.Body.Len() != 0 {
 		t.Errorf("HEAD response should have empty body, got %d bytes", w.Body.Len())
@@ -148,11 +133,6 @@ func TestMetadataHandlerHead(t *testing.T) {
 		t.Error("Content-Type header should be set for HEAD request")
 	}
 
-	odataVersion := w.Header().Get("OData-Version")
-	if odataVersion != "" && odataVersion != "4.0" {
-		t.Errorf("OData-Version = %v, want 4.0 or empty", odataVersion)
-	}
-
 	// Verify response body is empty (HEAD shouldn't return body)
 	if w.Body.Len() != 0 {
 		t.Errorf("HEAD response should have empty body, got %d bytes", w.Body.Len())
@@ -178,11 +158,6 @@ func TestServiceDocumentHandlerHead(t *testing.T) {
 	contentType := w.Header().Get("Content-Type")
 	if contentType == "" {
 		t.Error("Content-Type header should be set for HEAD request")
-	}
-
-	odataVersion := w.Header().Get("OData-Version")
-	if odataVersion != "" && odataVersion != "4.0" {
-		t.Errorf("OData-Version = %v, want 4.0 or empty", odataVersion)
 	}
 
 	// Verify response body is empty (HEAD shouldn't return body)

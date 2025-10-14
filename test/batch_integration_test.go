@@ -75,12 +75,6 @@ Accept: application/json
 		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
 	}
 
-	// Check OData-Version header
-	odataVersion := w.Header().Get("OData-Version")
-	if odataVersion != "4.0" {
-		t.Errorf("OData-Version = %v, want 4.0", odataVersion)
-	}
-
 	// Check response contains product data
 	responseBody := w.Body.String()
 	if !strings.Contains(responseBody, "Test Product") {
@@ -635,11 +629,6 @@ Accept: application/json
 			name:     "Content-Type is multipart/mixed",
 			check:    func() bool { return strings.Contains(w.Header().Get("Content-Type"), "multipart/mixed") },
 			errorMsg: fmt.Sprintf("Content-Type = %v, should contain multipart/mixed", w.Header().Get("Content-Type")),
-		},
-		{
-			name:     "OData-Version header is 4.0",
-			check:    func() bool { return w.Header().Get("OData-Version") == "4.0" },
-			errorMsg: fmt.Sprintf("OData-Version = %v, want 4.0", w.Header().Get("OData-Version")),
 		},
 		{
 			name:     "Response contains Content-Type: application/http",

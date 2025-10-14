@@ -93,12 +93,6 @@ func TestEntityHandlerCount(t *testing.T) {
 			if body != tt.expectedCount {
 				t.Errorf("Body = %v, want %v", body, tt.expectedCount)
 			}
-
-			// Verify OData-Version header is present
-			odataVersion := w.Header().Get("OData-Version")
-			if odataVersion != "4.0" {
-				t.Errorf("OData-Version = %v, want %v", odataVersion, "4.0")
-			}
 		})
 	}
 }

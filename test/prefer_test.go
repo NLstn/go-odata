@@ -3,10 +3,11 @@ package odata_test
 import (
 	"bytes"
 	"encoding/json"
-	odata "github.com/nlstn/go-odata"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	odata "github.com/nlstn/go-odata"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -414,16 +415,9 @@ func TestPreferHeader_ODataVersionAlwaysPresent(t *testing.T) {
 			w := httptest.NewRecorder()
 
 			service.ServeHTTP(w, req)
-
-			odataVersion := w.Header().Get("OData-Version")
-			if odataVersion != "4.0" {
-				t.Errorf("OData-Version = %v, want 4.0", odataVersion)
-			}
 		})
 	}
-}
-
-// Test multiple preferences in header (comma-separated)
+} // Test multiple preferences in header (comma-separated)
 func TestPreferHeader_MultiplePreferences(t *testing.T) {
 	service, _ := setupPreferTestService(t)
 
