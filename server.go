@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/nlstn/go-odata/internal/actions"
 	"github.com/nlstn/go-odata/internal/handlers"
 	"github.com/nlstn/go-odata/internal/response"
 )
@@ -220,7 +221,7 @@ func (s *Service) handleActionOrFunction(w http.ResponseWriter, r *http.Request,
 		}
 
 		// Parse parameters from request body
-		params, err := parseActionParameters(r, actionDef.Parameters)
+		params, err := actions.ParseActionParameters(r, actionDef.Parameters)
 		if err != nil {
 			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid parameters", err.Error()); writeErr != nil {
 				fmt.Printf("Error writing error response: %v\n", writeErr)
@@ -277,7 +278,7 @@ func (s *Service) handleActionOrFunction(w http.ResponseWriter, r *http.Request,
 		}
 
 		// Parse parameters from query string
-		params, err := parseFunctionParameters(r, functionDef.Parameters)
+		params, err := actions.ParseFunctionParameters(r, functionDef.Parameters)
 		if err != nil {
 			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid parameters", err.Error()); writeErr != nil {
 				fmt.Printf("Error writing error response: %v\n", writeErr)
