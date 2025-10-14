@@ -129,7 +129,11 @@ func (h *EntityHandler) handleFetchError(w http.ResponseWriter, err error, entit
 // buildEntityResponseWithMetadata builds an OData entity response with metadata level support
 func (h *EntityHandler) buildEntityResponseWithMetadata(navValue reflect.Value, contextURL string, metadataLevel string) map[string]interface{} {
 	odataResponse := response.NewOrderedMap()
-	odataResponse.Set(ODataContextProperty, contextURL)
+	
+	// Only include @odata.context for minimal and full metadata (not for none)
+	if metadataLevel != "none" {
+		odataResponse.Set(ODataContextProperty, contextURL)
+	}
 
 	// Add @odata.type for full metadata
 	if metadataLevel == "full" {
@@ -152,7 +156,11 @@ func (h *EntityHandler) buildEntityResponseWithMetadata(navValue reflect.Value, 
 // buildOrderedEntityResponseWithMetadata builds an ordered OData entity response with metadata level support
 func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{}, contextURL string, metadataLevel string, r *http.Request) *response.OrderedMap {
 	odataResponse := response.NewOrderedMap()
-	odataResponse.Set(ODataContextProperty, contextURL)
+	
+	// Only include @odata.context for minimal and full metadata (not for none)
+	if metadataLevel != "none" {
+		odataResponse.Set(ODataContextProperty, contextURL)
+	}
 
 	// Add @odata.type for full metadata
 	if metadataLevel == "full" {

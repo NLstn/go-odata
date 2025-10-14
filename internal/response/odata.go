@@ -64,7 +64,7 @@ func (om *OrderedMap) MarshalJSON() ([]byte, error) {
 
 // ODataResponse represents the structure of an OData JSON response
 type ODataResponse struct {
-	Context  string      `json:"@odata.context"`
+	Context  string      `json:"@odata.context,omitempty"`
 	Count    *int64      `json:"@odata.count,omitempty"`
 	NextLink *string     `json:"@odata.nextLink,omitempty"`
 	Value    interface{} `json:"value"`
@@ -95,8 +95,14 @@ func WriteODataCollection(w http.ResponseWriter, r *http.Request, entitySetName 
 			"The requested format is not supported. Only application/json is supported for data responses.")
 	}
 
-	// Build the context URL
-	contextURL := buildContextURL(r, entitySetName)
+	// Get metadata level to determine which fields to include
+	metadataLevel := GetODataMetadataLevel(r)
+
+	// Build the context URL (only for minimal and full metadata)
+	contextURL := ""
+	if metadataLevel != "none" {
+		contextURL = buildContextURL(r, entitySetName)
+	}
 
 	// Ensure empty collections are represented as [] not null per OData v4 spec
 	if data == nil {
@@ -111,7 +117,6 @@ func WriteODataCollection(w http.ResponseWriter, r *http.Request, entitySetName 
 	}
 
 	// Set OData-compliant headers with dynamic metadata level
-	metadataLevel := GetODataMetadataLevel(r)
 	w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
 	w.Header().Set("OData-Version", "4.0")
 	w.WriteHeader(http.StatusOK)
@@ -135,11 +140,14 @@ func WriteODataCollectionWithNavigation(w http.ResponseWriter, r *http.Request, 
 			"The requested format is not supported. Only application/json is supported for data responses.")
 	}
 
-	// Build the context URL
-	contextURL := buildContextURL(r, entitySetName)
-
-	// Get metadata level to determine if we need to add @odata.type
+	// Get metadata level to determine if we need to add @odata.type and @odata.context
 	metadataLevel := GetODataMetadataLevel(r)
+
+	// Build the context URL (only for minimal and full metadata)
+	contextURL := ""
+	if metadataLevel != "none" {
+		contextURL = buildContextURL(r, entitySetName)
+	}
 
 	// Transform the data to add navigation links and type annotations
 	transformedData := addNavigationLinks(data, metadata, expandedProps, r, entitySetName, metadataLevel)

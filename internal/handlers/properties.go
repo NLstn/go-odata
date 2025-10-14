@@ -199,14 +199,20 @@ func (h *EntityHandler) handlePropertyFetchError(w http.ResponseWriter, err erro
 
 // writePropertyResponse writes a property response with OData context
 func (h *EntityHandler) writePropertyResponse(w http.ResponseWriter, r *http.Request, entityKey string, prop *metadata.PropertyMetadata, fieldValue reflect.Value) {
-	contextURL := fmt.Sprintf("%s/$metadata#%s(%s)/%s", response.BuildBaseURL(r), h.metadata.EntitySetName, entityKey, prop.JsonName)
+	// Get metadata level to determine which fields to include
+	metadataLevel := response.GetODataMetadataLevel(r)
+	
 	odataResponse := map[string]interface{}{
-		ODataContextProperty: contextURL,
-		"value":              fieldValue.Interface(),
+		"value": fieldValue.Interface(),
+	}
+	
+	// Only include @odata.context for minimal and full metadata (not for none)
+	if metadataLevel != "none" {
+		contextURL := fmt.Sprintf("%s/$metadata#%s(%s)/%s", response.BuildBaseURL(r), h.metadata.EntitySetName, entityKey, prop.JsonName)
+		odataResponse[ODataContextProperty] = contextURL
 	}
 
 	// Set Content-Type with dynamic metadata level
-	metadataLevel := response.GetODataMetadataLevel(r)
 	w.Header().Set(HeaderContentType, fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
 	w.Header().Set(HeaderODataVersion, "4.0")
 	w.WriteHeader(http.StatusOK)
