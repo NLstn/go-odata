@@ -142,6 +142,10 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 			w.Header().Set(HeaderETag, etagValue)
 		}
 
+		// Set OData-EntityId header as per OData v4 spec
+		// Using helper function to preserve exact capitalization
+		SetODataHeader(w, HeaderODataEntityId, location)
+
 		w.Header().Set(HeaderContentType, fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
 		w.WriteHeader(http.StatusCreated)
 
