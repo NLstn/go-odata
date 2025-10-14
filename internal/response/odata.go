@@ -219,22 +219,25 @@ func processMapEntity(entity reflect.Value, metadata EntityMetadataProvider, exp
 		entityMap["@odata.type"] = "#ODataService." + entityTypeName
 	}
 
-	// Add navigation links for properties that are not in the map and not expanded
-	for _, prop := range metadata.GetProperties() {
-		if !prop.IsNavigationProp {
-			continue
-		}
+	// Add navigation links only for full metadata (per OData v4 spec)
+	// Minimal and none metadata levels do not include navigation links as they are computable by the client
+	if metadataLevel == "full" {
+		for _, prop := range metadata.GetProperties() {
+			if !prop.IsNavigationProp {
+				continue
+			}
 
-		if isPropertyExpanded(prop, expandedProps) {
-			continue
-		}
+			if isPropertyExpanded(prop, expandedProps) {
+				continue
+			}
 
-		// If property doesn't exist in map, add navigation link
-		if _, exists := entityMap[prop.JsonName]; !exists {
-			keySegment := buildKeySegmentFromMap(entityMap, metadata)
-			if keySegment != "" {
-				navLink := fmt.Sprintf("%s/%s(%s)/%s", baseURL, entitySetName, keySegment, prop.JsonName)
-				entityMap[prop.JsonName+"@odata.navigationLink"] = navLink
+			// If property doesn't exist in map, add navigation link
+			if _, exists := entityMap[prop.JsonName]; !exists {
+				keySegment := buildKeySegmentFromMap(entityMap, metadata)
+				if keySegment != "" {
+					navLink := fmt.Sprintf("%s/%s(%s)/%s", baseURL, entitySetName, keySegment, prop.JsonName)
+					entityMap[prop.JsonName+"@odata.navigationLink"] = navLink
+				}
 			}
 		}
 	}
@@ -265,7 +268,7 @@ func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataPro
 		propMeta := findPropertyMetadata(field.Name, metadata)
 
 		if propMeta != nil && propMeta.IsNavigationProp {
-			processNavigationPropertyOrderedWithMetadata(entityMap, entity, propMeta, fieldValue, jsonName, expandedProps, baseURL, entitySetName, metadata)
+			processNavigationPropertyOrderedWithMetadata(entityMap, entity, propMeta, fieldValue, jsonName, expandedProps, baseURL, entitySetName, metadata, metadataLevel)
 		} else {
 			// Regular property - include its value
 			entityMap.Set(jsonName, fieldValue.Interface())
@@ -295,17 +298,20 @@ func findPropertyMetadata(fieldName string, metadata EntityMetadataProvider) *Pr
 	return nil
 }
 
-// processNavigationPropertyOrderedWithMetadata handles navigation properties with full metadata support
-func processNavigationPropertyOrderedWithMetadata(entityMap *OrderedMap, entity reflect.Value, propMeta *PropertyMetadata, fieldValue reflect.Value, jsonName string, expandedProps []string, baseURL, entitySetName string, metadata EntityMetadataProvider) {
+// processNavigationPropertyOrderedWithMetadata handles navigation properties with metadata level support
+func processNavigationPropertyOrderedWithMetadata(entityMap *OrderedMap, entity reflect.Value, propMeta *PropertyMetadata, fieldValue reflect.Value, jsonName string, expandedProps []string, baseURL, entitySetName string, metadata EntityMetadataProvider, metadataLevel string) {
 	if isPropertyExpanded(*propMeta, expandedProps) {
 		// Include the expanded data
 		entityMap.Set(jsonName, fieldValue.Interface())
 	} else {
-		// Add navigation link instead of null value
-		keySegment := BuildKeySegmentFromEntity(entity, metadata)
-		if keySegment != "" {
-			navLink := fmt.Sprintf("%s/%s(%s)/%s", baseURL, entitySetName, keySegment, propMeta.JsonName)
-			entityMap.Set(jsonName+"@odata.navigationLink", navLink)
+		// Add navigation link only for full metadata (per OData v4 spec)
+		// Minimal and none metadata levels do not include navigation links as they are computable by the client
+		if metadataLevel == "full" {
+			keySegment := BuildKeySegmentFromEntity(entity, metadata)
+			if keySegment != "" {
+				navLink := fmt.Sprintf("%s/%s(%s)/%s", baseURL, entitySetName, keySegment, propMeta.JsonName)
+				entityMap.Set(jsonName+"@odata.navigationLink", navLink)
+			}
 		}
 	}
 }
