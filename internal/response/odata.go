@@ -964,11 +964,12 @@ func ParseODataURLComponents(path string) (*ODataURLComponents, error) {
 
 		// Check for $count, $ref or navigation property: Products/$count, Products(1)/$ref, Products(1)/Descriptions
 		if len(pathParts) > 1 {
-			if pathParts[1] == "$count" {
+			switch pathParts[1] {
+			case "$count":
 				components.IsCount = true
-			} else if pathParts[1] == "$ref" {
+			case "$ref":
 				components.IsRef = true
-			} else {
+			default:
 				// Check if this is an action or function (contains dot for namespace)
 				// or is a simple identifier that could be action/function name
 				secondPart := pathParts[1]
@@ -981,9 +982,10 @@ func ParseODataURLComponents(path string) (*ODataURLComponents, error) {
 
 				// Check for $value or $ref suffix: Products(1)/Name/$value, Products(1)/Descriptions/$ref
 				if len(pathParts) > 2 {
-					if pathParts[2] == "$value" {
+					switch pathParts[2] {
+					case "$value":
 						components.IsValue = true
-					} else if pathParts[2] == "$ref" {
+					case "$ref":
 						components.IsRef = true
 					}
 				}

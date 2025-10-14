@@ -518,6 +518,13 @@ func (h *EntityHandler) HandleCollectionRef(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	// Calculate next link if pagination is active and trim results if needed
+	nextLink, needsTrimming := h.calculateNextLink(queryOptions, results, r)
+	if needsTrimming && queryOptions.Top != nil {
+		// Trim the results to $top (we fetched $top + 1 to check for more pages)
+		results = h.trimResults(results, *queryOptions.Top)
+	}
+
 	// Build entity IDs for each entity
 	var entityIDs []string
 	sliceValue := reflect.ValueOf(results)
@@ -527,16 +534,6 @@ func (h *EntityHandler) HandleCollectionRef(w http.ResponseWriter, r *http.Reque
 			keyValues := response.ExtractEntityKeys(entity, h.metadata.KeyProperties)
 			entityID := response.BuildEntityID(h.metadata.EntitySetName, keyValues)
 			entityIDs = append(entityIDs, entityID)
-		}
-	}
-
-	// Build next link if needed
-	var nextLink *string
-	if queryOptions.Skip != nil && queryOptions.Top != nil {
-		nextSkip := *queryOptions.Skip + *queryOptions.Top
-		if int64(nextSkip) < *totalCount {
-			nextLinkValue := response.BuildNextLink(r, nextSkip)
-			nextLink = &nextLinkValue
 		}
 	}
 
