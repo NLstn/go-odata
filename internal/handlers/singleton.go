@@ -187,6 +187,5 @@ func (h *EntityHandler) handlePutSingleton(w http.ResponseWriter, r *http.Reques
 // handleOptionsSingleton handles OPTIONS requests for singleton endpoint
 func (h *EntityHandler) handleOptionsSingleton(w http.ResponseWriter) {
 	w.Header().Set("Allow", "GET, HEAD, PATCH, PUT, OPTIONS")
-	setODataHeader(w.Header(), "OData-Version", "4.0")
 	w.WriteHeader(http.StatusOK)
 }

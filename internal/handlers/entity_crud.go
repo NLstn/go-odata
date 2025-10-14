@@ -37,7 +37,6 @@ func (h *EntityHandler) HandleEntity(w http.ResponseWriter, r *http.Request, ent
 // handleOptionsEntity handles OPTIONS requests for individual entities
 func (h *EntityHandler) handleOptionsEntity(w http.ResponseWriter) {
 	w.Header().Set("Allow", "GET, HEAD, DELETE, PATCH, PUT, OPTIONS")
-	setODataHeader(w.Header(), "OData-Version", "4.0")
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -66,7 +65,6 @@ func (h *EntityHandler) handleGetEntity(w http.ResponseWriter, r *http.Request, 
 		// If ETags match, return 304 Not Modified
 		if !etag.NoneMatch(ifNoneMatch, currentETag) {
 			w.Header().Set(HeaderETag, currentETag)
-			setODataHeader(w.Header(), "OData-Version", "4.0")
 			w.WriteHeader(http.StatusNotModified)
 			return
 		}
@@ -131,7 +129,6 @@ func (h *EntityHandler) writeEntityResponseWithETag(w http.ResponseWriter, r *ht
 
 	// Set Content-Type with dynamic metadata level
 	w.Header().Set(HeaderContentType, fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
-	setODataHeader(w.Header(), "OData-Version", "4.0")
 	w.WriteHeader(http.StatusOK)
 
 	// For HEAD requests, don't write the body
@@ -180,7 +177,6 @@ func (h *EntityHandler) handleDeleteEntity(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Return 204 No Content according to OData v4 spec
-	setODataHeader(w.Header(), "OData-Version", "4.0")
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -276,7 +272,6 @@ func (h *EntityHandler) fetchAndUpdateEntity(w http.ResponseWriter, r *http.Requ
 
 // writeUpdateResponse writes the response for PATCH/PUT operations based on preferences
 func (h *EntityHandler) writeUpdateResponse(w http.ResponseWriter, r *http.Request, pref *preference.Preference, db *gorm.DB) {
-	setODataHeader(w.Header(), "OData-Version", "4.0")
 
 	if applied := pref.GetPreferenceApplied(); applied != "" {
 		w.Header().Set(HeaderPreferenceApplied, applied)

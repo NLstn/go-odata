@@ -33,7 +33,6 @@ func (h *EntityHandler) HandleCollection(w http.ResponseWriter, r *http.Request)
 // handleOptionsCollection handles OPTIONS requests for entity collections
 func (h *EntityHandler) handleOptionsCollection(w http.ResponseWriter) {
 	w.Header().Set("Allow", "GET, HEAD, POST, OPTIONS")
-	setODataHeader(w.Header(), "OData-Version", "4.0")
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -122,7 +121,6 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 	location := h.buildEntityLocation(r, entity)
 
 	// Set common headers
-	setODataHeader(w.Header(), "OData-Version", "4.0")
 	w.Header().Set("Location", location)
 
 	// Add Preference-Applied header if a preference was specified
@@ -265,7 +263,6 @@ func (h *EntityHandler) handleGetCount(w http.ResponseWriter, r *http.Request) {
 
 	// Write the count as plain text according to OData v4 spec
 	w.Header().Set(HeaderContentType, "text/plain")
-	setODataHeader(w.Header(), "OData-Version", "4.0")
 	w.WriteHeader(http.StatusOK)
 
 	// For HEAD requests, don't write the body
@@ -281,7 +278,6 @@ func (h *EntityHandler) handleGetCount(w http.ResponseWriter, r *http.Request) {
 // handleOptionsCount handles OPTIONS requests for $count endpoint
 func (h *EntityHandler) handleOptionsCount(w http.ResponseWriter) {
 	w.Header().Set("Allow", "GET, HEAD, OPTIONS")
-	setODataHeader(w.Header(), "OData-Version", "4.0")
 	w.WriteHeader(http.StatusOK)
 }
 

@@ -53,7 +53,6 @@ func (h *MetadataHandler) handleGetMetadata(w http.ResponseWriter, r *http.Reque
 // handleOptionsMetadata handles OPTIONS requests for metadata document
 func (h *MetadataHandler) handleOptionsMetadata(w http.ResponseWriter) {
 	w.Header().Set("Allow", "GET, HEAD, OPTIONS")
-	setODataHeader(w.Header(), "OData-Version", "4.0")
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -201,7 +200,6 @@ func parseQuality(s string) (float64, error) {
 // handleMetadataXML handles XML metadata format (existing implementation)
 func (h *MetadataHandler) handleMetadataXML(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/xml")
-	setODataHeader(w.Header(), "OData-Version", "4.0")
 	w.WriteHeader(http.StatusOK)
 
 	// For HEAD requests, don't write the body
@@ -456,7 +454,6 @@ func (h *MetadataHandler) buildEntityContainer() string {
 // handleMetadataJSON handles JSON metadata format (CSDL JSON)
 func (h *MetadataHandler) handleMetadataJSON(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	setODataHeader(w.Header(), "OData-Version", "4.0")
 	w.WriteHeader(http.StatusOK)
 
 	// For HEAD requests, don't write the body
