@@ -19,15 +19,12 @@ import (
 // 
 // This function sets the header using direct map assignment to preserve the exact key,
 // ensuring the header is sent over the wire with the correct capitalization as required by OData spec.
-// It also sets the canonical form so that Header.Get() works correctly.
+//
+// Note: Due to the non-canonical key, Header.Get() will not work for accessing these headers.
+// Use direct map access (w.Header()["OData-Version"]) instead when you need to read them.
 func SetODataHeader(w http.ResponseWriter, key, value string) {
 	// Set with exact capitalization for wire format (OData spec compliance)
 	w.Header()[key] = []string{value}
-	// Also set the canonical form so Header.Get() works
-	canonicalKey := http.CanonicalHeaderKey(key)
-	if canonicalKey != key {
-		w.Header()[canonicalKey] = []string{value}
-	}
 }
 
 // buildKeyQuery builds a GORM query with WHERE conditions for the entity key(s)
