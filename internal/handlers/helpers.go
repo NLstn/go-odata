@@ -162,13 +162,39 @@ func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{
 		odataResponse.Set(ODataContextProperty, contextURL)
 	}
 
+	// Check if result is a map (from $select) or a struct
+	resultValue := reflect.ValueOf(result)
+
+	// Build the entity ID for @odata.id
+	var entityID string
+	switch resultValue.Kind() {
+	case reflect.Ptr:
+		entityID = h.buildEntityIDFromValue(resultValue.Elem(), r)
+	case reflect.Struct:
+		entityID = h.buildEntityIDFromValue(resultValue, r)
+	case reflect.Map:
+		if mapResult, ok := result.(map[string]interface{}); ok {
+			entityID = h.buildEntityIDFromMap(mapResult, r)
+		}
+	}
+
+	// Add @odata.id based on metadata level
+	if entityID != "" {
+		switch metadataLevel {
+		case "full":
+			// Always include @odata.id in full metadata
+			odataResponse.Set("@odata.id", entityID)
+		case "minimal":
+			// For minimal metadata, check later after processing fields
+			odataResponse.Set("__temp_entity_id", entityID)
+		}
+		// For "none" metadata level, never include @odata.id
+	}
+
 	// Add @odata.type for full metadata
 	if metadataLevel == "full" {
 		odataResponse.Set("@odata.type", "#ODataService."+h.metadata.EntityName)
 	}
-
-	// Check if result is a map (from $select) or a struct
-	resultValue := reflect.ValueOf(result)
 
 	// Handle map[string]interface{} (from $select filtering)
 	if resultValue.Kind() == reflect.Map {
@@ -178,6 +204,29 @@ func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{
 			value := resultValue.MapIndex(key)
 			odataResponse.Set(keyStr, value.Interface())
 		}
+
+		// For minimal metadata with map, check if all key fields are present
+		if metadataLevel == "minimal" {
+			if tempID, exists := odataResponse.ToMap()["__temp_entity_id"]; exists {
+				// Remove the temporary ID
+				odataResponse.Delete("__temp_entity_id")
+				
+				// Check if all key fields are present
+				allKeysPresent := true
+				for _, keyProp := range h.metadata.KeyProperties {
+					if _, exists := odataResponse.ToMap()[keyProp.JsonName]; !exists {
+						allKeysPresent = false
+						break
+					}
+				}
+				
+				if !allKeysPresent {
+					// Add @odata.id after @odata.context
+					odataResponse.InsertAfter(ODataContextProperty, "@odata.id", tempID)
+				}
+			}
+		}
+
 		return odataResponse
 	}
 
@@ -229,6 +278,18 @@ func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{
 		} else {
 			// Regular property - include its value
 			odataResponse.Set(jsonName, fieldValue.Interface())
+		}
+	}
+
+	// For minimal metadata, check if all key fields are present in struct
+	if metadataLevel == "minimal" {
+		if _, exists := odataResponse.ToMap()["__temp_entity_id"]; exists {
+			// Remove the temporary ID
+			odataResponse.Delete("__temp_entity_id")
+			
+			// For struct responses (not from $select), all key fields are always present
+			// So we don't need to add @odata.id in minimal metadata for full struct responses
+			// The @odata.id is only needed when key fields are omitted (e.g., with $select)
 		}
 	}
 
@@ -389,4 +450,58 @@ func parseVersion(version string) (int, int) {
 	}
 
 	return major, minor
+}
+
+// buildEntityIDFromValue builds the @odata.id value from an entity value
+func (h *EntityHandler) buildEntityIDFromValue(entityValue reflect.Value, r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	baseURL := response.BuildBaseURL(r)
+	keySegment := h.buildKeySegmentFromEntity(entityValue)
+	if keySegment == "" {
+		return ""
+	}
+	return fmt.Sprintf("%s/%s(%s)", baseURL, h.metadata.EntitySetName, keySegment)
+}
+
+// buildEntityIDFromMap builds the @odata.id value from a map entity
+func (h *EntityHandler) buildEntityIDFromMap(entityMap map[string]interface{}, r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	baseURL := response.BuildBaseURL(r)
+	
+	// Build key segment from map
+	keyProps := h.metadata.KeyProperties
+	if len(keyProps) == 0 {
+		return ""
+	}
+
+	// Single key
+	if len(keyProps) == 1 {
+		if keyValue, exists := entityMap[keyProps[0].JsonName]; exists && keyValue != nil {
+			return fmt.Sprintf("%s/%s(%v)", baseURL, h.metadata.EntitySetName, keyValue)
+		}
+		return ""
+	}
+
+	// Composite keys
+	var parts []string
+	for _, keyProp := range keyProps {
+		if keyValue, exists := entityMap[keyProp.JsonName]; exists && keyValue != nil {
+			// Quote string values
+			if strVal, ok := keyValue.(string); ok {
+				parts = append(parts, fmt.Sprintf("%s='%s'", keyProp.JsonName, strVal))
+			} else {
+				parts = append(parts, fmt.Sprintf("%s=%v", keyProp.JsonName, keyValue))
+			}
+		}
+	}
+
+	if len(parts) == 0 {
+		return ""
+	}
+
+	return fmt.Sprintf("%s/%s(%s)", baseURL, h.metadata.EntitySetName, strings.Join(parts, ","))
 }
