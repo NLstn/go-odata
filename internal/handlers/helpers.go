@@ -12,6 +12,24 @@ import (
 	"gorm.io/gorm"
 )
 
+// SetODataHeader sets an HTTP header preserving the exact capitalization.
+// This is needed for OData-specific headers like "OData-Version" and "OData-EntityId"
+// which do not follow Go's standard HTTP header canonicalization (which would turn them into "Odata-Version").
+// The OData v4 specification requires these headers to have exact capitalization with a capital 'D'.
+// 
+// This function sets the header using direct map assignment to preserve the exact key,
+// ensuring the header is sent over the wire with the correct capitalization as required by OData spec.
+// It also sets the canonical form so that Header.Get() works correctly.
+func SetODataHeader(w http.ResponseWriter, key, value string) {
+	// Set with exact capitalization for wire format (OData spec compliance)
+	w.Header()[key] = []string{value}
+	// Also set the canonical form so Header.Get() works
+	canonicalKey := http.CanonicalHeaderKey(key)
+	if canonicalKey != key {
+		w.Header()[canonicalKey] = []string{value}
+	}
+}
+
 // buildKeyQuery builds a GORM query with WHERE conditions for the entity key(s)
 // Supports both single keys and composite keys
 func (h *EntityHandler) buildKeyQuery(entityKey string) (*gorm.DB, error) {

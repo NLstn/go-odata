@@ -286,7 +286,8 @@ func (h *EntityHandler) writeUpdateResponse(w http.ResponseWriter, r *http.Reque
 			entity := reflect.New(h.metadata.EntityType).Interface()
 			if err := db.First(entity).Error; err == nil {
 				entityId := h.buildEntityLocation(r, entity)
-				w.Header().Set(HeaderODataEntityId, entityId)
+				// Using helper function to preserve exact capitalization
+				SetODataHeader(w, HeaderODataEntityId, entityId)
 			}
 		}
 		w.WriteHeader(http.StatusNoContent)
