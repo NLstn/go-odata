@@ -7,6 +7,7 @@ package odata
 import (
 	"fmt"
 
+	"github.com/nlstn/go-odata/internal/actions"
 	"github.com/nlstn/go-odata/internal/handlers"
 	"github.com/nlstn/go-odata/internal/metadata"
 	"gorm.io/gorm"
@@ -27,9 +28,9 @@ type Service struct {
 	// batchHandler handles batch requests
 	batchHandler *handlers.BatchHandler
 	// actions holds registered actions keyed by action name
-	actions map[string]*ActionDefinition
+	actions map[string]*actions.ActionDefinition
 	// functions holds registered functions keyed by function name
-	functions map[string]*FunctionDefinition
+	functions map[string]*actions.FunctionDefinition
 }
 
 // NewService creates a new OData service instance with database connection.
@@ -42,8 +43,8 @@ func NewService(db *gorm.DB) *Service {
 		handlers:               handlersMap,
 		metadataHandler:        handlers.NewMetadataHandler(entities),
 		serviceDocumentHandler: handlers.NewServiceDocumentHandler(entities),
-		actions:                make(map[string]*ActionDefinition),
-		functions:              make(map[string]*FunctionDefinition),
+		actions:                make(map[string]*actions.ActionDefinition),
+		functions:              make(map[string]*actions.FunctionDefinition),
 	}
 	// Initialize batch handler with reference to service
 	s.batchHandler = handlers.NewBatchHandler(db, handlersMap, s)
@@ -87,5 +88,63 @@ func (s *Service) RegisterSingleton(entity interface{}, singletonName string) er
 	s.handlers[singletonName] = handler
 
 	fmt.Printf("Registered singleton: %s (Singleton: %s)\n", singletonMetadata.EntityName, singletonName)
+	return nil
+}
+
+// Re-export types from internal/actions package for public API
+type (
+	ParameterDefinition = actions.ParameterDefinition
+	ActionDefinition    = actions.ActionDefinition
+	FunctionDefinition  = actions.FunctionDefinition
+	ActionHandler       = actions.ActionHandler
+	FunctionHandler     = actions.FunctionHandler
+)
+
+// RegisterAction registers an action with the OData service
+func (s *Service) RegisterAction(action actions.ActionDefinition) error {
+	if action.Name == "" {
+		return fmt.Errorf("action name cannot be empty")
+	}
+	if action.Handler == nil {
+		return fmt.Errorf("action handler cannot be nil")
+	}
+	if action.IsBound && action.EntitySet == "" {
+		return fmt.Errorf("bound action must specify entity set")
+	}
+	if action.IsBound {
+		// Verify entity set exists
+		if _, exists := s.entities[action.EntitySet]; !exists {
+			return fmt.Errorf("entity set '%s' not found", action.EntitySet)
+		}
+	}
+
+	s.actions[action.Name] = &action
+	fmt.Printf("Registered action: %s (Bound: %v, EntitySet: %s)\n", action.Name, action.IsBound, action.EntitySet)
+	return nil
+}
+
+// RegisterFunction registers a function with the OData service
+func (s *Service) RegisterFunction(function actions.FunctionDefinition) error {
+	if function.Name == "" {
+		return fmt.Errorf("function name cannot be empty")
+	}
+	if function.Handler == nil {
+		return fmt.Errorf("function handler cannot be nil")
+	}
+	if function.ReturnType == nil {
+		return fmt.Errorf("function must have a return type")
+	}
+	if function.IsBound && function.EntitySet == "" {
+		return fmt.Errorf("bound function must specify entity set")
+	}
+	if function.IsBound {
+		// Verify entity set exists
+		if _, exists := s.entities[function.EntitySet]; !exists {
+			return fmt.Errorf("entity set '%s' not found", function.EntitySet)
+		}
+	}
+
+	s.functions[function.Name] = &function
+	fmt.Printf("Registered function: %s (Bound: %v, EntitySet: %s)\n", function.Name, function.IsBound, function.EntitySet)
 	return nil
 }
