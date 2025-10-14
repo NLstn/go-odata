@@ -285,8 +285,16 @@ func buildComparisonCondition(filter *FilterExpression, entityMetadata *metadata
 
 	switch filter.Operator {
 	case OpEqual:
+		// Handle null comparisons with IS NULL
+		if filter.Value == nil {
+			return fmt.Sprintf("%s IS NULL", columnName), []interface{}{}
+		}
 		return fmt.Sprintf("%s = ?", columnName), []interface{}{filter.Value}
 	case OpNotEqual:
+		// Handle null comparisons with IS NOT NULL
+		if filter.Value == nil {
+			return fmt.Sprintf("%s IS NOT NULL", columnName), []interface{}{}
+		}
 		return fmt.Sprintf("%s != ?", columnName), []interface{}{filter.Value}
 	case OpGreaterThan:
 		return fmt.Sprintf("%s > ?", columnName), []interface{}{filter.Value}

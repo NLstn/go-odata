@@ -47,14 +47,14 @@ func TestNavigationLinkMetadataLevels(t *testing.T) {
 	service.RegisterEntity(&Product{})
 
 	tests := []struct {
-		name                    string
-		url                     string
-		acceptHeader            string
-		formatParam             string
-		shouldHaveNavLinks      bool
-		shouldHaveODataType     bool
-		expectedMetadataLevel   string
-		description             string
+		name                  string
+		url                   string
+		acceptHeader          string
+		formatParam           string
+		shouldHaveNavLinks    bool
+		shouldHaveODataType   bool
+		expectedMetadataLevel string
+		description           string
 	}{
 		{
 			name:                  "Default (minimal) - no navigation links",
@@ -268,10 +268,10 @@ func TestNavigationLinkWithExpand(t *testing.T) {
 	service.RegisterEntity(&Product{})
 
 	tests := []struct {
-		name        string
-		url         string
+		name         string
+		url          string
 		acceptHeader string
-		description string
+		description  string
 	}{
 		{
 			name:        "Expanded with minimal metadata - no nav link",

@@ -203,11 +203,11 @@ func (h *EntityHandler) handlePropertyFetchError(w http.ResponseWriter, err erro
 func (h *EntityHandler) writePropertyResponse(w http.ResponseWriter, r *http.Request, entityKey string, prop *metadata.PropertyMetadata, fieldValue reflect.Value) {
 	// Get metadata level to determine which fields to include
 	metadataLevel := response.GetODataMetadataLevel(r)
-	
+
 	odataResponse := map[string]interface{}{
 		"value": fieldValue.Interface(),
 	}
-	
+
 	// Only include @odata.context for minimal and full metadata (not for none)
 	if metadataLevel != "none" {
 		contextURL := fmt.Sprintf("%s/$metadata#%s(%s)/%s", response.BuildBaseURL(r), h.metadata.EntitySetName, entityKey, prop.JsonName)
@@ -433,18 +433,18 @@ func (h *EntityHandler) getTargetMetadata(targetName string) (*metadata.EntityMe
 	if h.entitiesMetadata == nil {
 		return nil, fmt.Errorf("entities metadata not available")
 	}
-	
+
 	// Try with the target name as-is (entity set name)
 	if meta, ok := h.entitiesMetadata[targetName]; ok {
 		return meta, nil
 	}
-	
+
 	// Try to find by entity name
 	for _, meta := range h.entitiesMetadata {
 		if meta.EntityName == targetName {
 			return meta, nil
 		}
 	}
-	
+
 	return nil, fmt.Errorf("metadata for target '%s' not found", targetName)
 }

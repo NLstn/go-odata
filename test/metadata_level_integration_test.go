@@ -132,7 +132,7 @@ func TestODataMetadataLevelIntegration(t *testing.T) {
 				if _, ok := response["@odata.context"]; ok {
 					hasContext = true
 				}
-				
+
 				if strings.Contains(tt.expectedCT, "none") {
 					// For metadata=none, @odata.context should NOT be present
 					if hasContext {
@@ -227,61 +227,61 @@ func TestODataTypeAnnotation(t *testing.T) {
 	service.RegisterEntity(&Product{})
 
 	tests := []struct {
-		name               string
-		url                string
-		acceptHeader       string
-		formatParam        string
+		name                string
+		url                 string
+		acceptHeader        string
+		formatParam         string
 		shouldHaveODataType bool
-		description        string
+		description         string
 	}{
 		{
-			name:               "Full metadata via Accept header - collection",
-			url:                "/Products",
-			acceptHeader:       "application/json;odata.metadata=full",
+			name:                "Full metadata via Accept header - collection",
+			url:                 "/Products",
+			acceptHeader:        "application/json;odata.metadata=full",
 			shouldHaveODataType: true,
-			description:        "Should include @odata.type in collection with full metadata",
+			description:         "Should include @odata.type in collection with full metadata",
 		},
 		{
-			name:               "Full metadata via $format - collection",
-			url:                "/Products",
-			formatParam:        "application/json;odata.metadata=full",
+			name:                "Full metadata via $format - collection",
+			url:                 "/Products",
+			formatParam:         "application/json;odata.metadata=full",
 			shouldHaveODataType: true,
-			description:        "Should include @odata.type in collection with $format=full",
+			description:         "Should include @odata.type in collection with $format=full",
 		},
 		{
-			name:               "Full metadata via Accept header - single entity",
-			url:                "/Products(1)",
-			acceptHeader:       "application/json;odata.metadata=full",
+			name:                "Full metadata via Accept header - single entity",
+			url:                 "/Products(1)",
+			acceptHeader:        "application/json;odata.metadata=full",
 			shouldHaveODataType: true,
-			description:        "Should include @odata.type in single entity with full metadata",
+			description:         "Should include @odata.type in single entity with full metadata",
 		},
 		{
-			name:               "Full metadata via $format - single entity",
-			url:                "/Products(1)",
-			formatParam:        "application/json;odata.metadata=full",
+			name:                "Full metadata via $format - single entity",
+			url:                 "/Products(1)",
+			formatParam:         "application/json;odata.metadata=full",
 			shouldHaveODataType: true,
-			description:        "Should include @odata.type in single entity with $format=full",
+			description:         "Should include @odata.type in single entity with $format=full",
 		},
 		{
-			name:               "Minimal metadata - collection",
-			url:                "/Products",
-			acceptHeader:       "application/json;odata.metadata=minimal",
+			name:                "Minimal metadata - collection",
+			url:                 "/Products",
+			acceptHeader:        "application/json;odata.metadata=minimal",
 			shouldHaveODataType: false,
-			description:        "Should NOT include @odata.type with minimal metadata",
+			description:         "Should NOT include @odata.type with minimal metadata",
 		},
 		{
-			name:               "Minimal metadata - single entity",
-			url:                "/Products(1)",
-			acceptHeader:       "application/json;odata.metadata=minimal",
+			name:                "Minimal metadata - single entity",
+			url:                 "/Products(1)",
+			acceptHeader:        "application/json;odata.metadata=minimal",
 			shouldHaveODataType: false,
-			description:        "Should NOT include @odata.type with minimal metadata",
+			description:         "Should NOT include @odata.type with minimal metadata",
 		},
 		{
-			name:               "None metadata - collection",
-			url:                "/Products",
-			acceptHeader:       "application/json;odata.metadata=none",
+			name:                "None metadata - collection",
+			url:                 "/Products",
+			acceptHeader:        "application/json;odata.metadata=none",
 			shouldHaveODataType: false,
-			description:        "Should NOT include @odata.type with none metadata",
+			description:         "Should NOT include @odata.type with none metadata",
 		},
 	}
 
@@ -451,7 +451,7 @@ func TestODataMetadataWithQueryOptions(t *testing.T) {
 				q.Set(key, value)
 			}
 			req.URL.RawQuery = q.Encode()
-			
+
 			w := httptest.NewRecorder()
 
 			service.ServeHTTP(w, req)

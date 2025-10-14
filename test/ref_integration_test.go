@@ -13,10 +13,10 @@ import (
 
 // Test entities for $ref tests
 type RefProduct struct {
-	ID             int              `json:"ID" gorm:"primaryKey" odata:"key"`
-	Name           string           `json:"Name"`
-	RefCategoryID  int              `json:"CategoryID"`
-	RefCategory    *RefCategory     `json:"Category,omitempty" gorm:"foreignKey:RefCategoryID"`
+	ID              int              `json:"ID" gorm:"primaryKey" odata:"key"`
+	Name            string           `json:"Name"`
+	RefCategoryID   int              `json:"CategoryID"`
+	RefCategory     *RefCategory     `json:"Category,omitempty" gorm:"foreignKey:RefCategoryID"`
 	RefDescriptions []RefDescription `json:"Descriptions,omitempty" gorm:"foreignKey:ProductID"`
 }
 

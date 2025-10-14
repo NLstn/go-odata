@@ -16,7 +16,7 @@ import (
 // This is needed for OData-specific headers like "OData-Version" and "OData-EntityId"
 // which do not follow Go's standard HTTP header canonicalization (which would turn them into "Odata-Version").
 // The OData v4 specification requires these headers to have exact capitalization with a capital 'D'.
-// 
+//
 // This function sets the header using direct map assignment to preserve the exact key,
 // ensuring the header is sent over the wire with the correct capitalization as required by OData spec.
 //
@@ -144,7 +144,7 @@ func (h *EntityHandler) handleFetchError(w http.ResponseWriter, err error, entit
 // buildEntityResponseWithMetadata builds an OData entity response with metadata level support
 func (h *EntityHandler) buildEntityResponseWithMetadata(navValue reflect.Value, contextURL string, metadataLevel string) map[string]interface{} {
 	odataResponse := response.NewOrderedMap()
-	
+
 	// Only include @odata.context for minimal and full metadata (not for none)
 	if metadataLevel != "none" {
 		odataResponse.Set(ODataContextProperty, contextURL)
@@ -171,7 +171,7 @@ func (h *EntityHandler) buildEntityResponseWithMetadata(navValue reflect.Value, 
 // buildOrderedEntityResponseWithMetadata builds an ordered OData entity response with metadata level support
 func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{}, contextURL string, metadataLevel string, r *http.Request) *response.OrderedMap {
 	odataResponse := response.NewOrderedMap()
-	
+
 	// Only include @odata.context for minimal and full metadata (not for none)
 	if metadataLevel != "none" {
 		odataResponse.Set(ODataContextProperty, contextURL)
@@ -225,7 +225,7 @@ func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{
 			if tempID, exists := odataResponse.ToMap()["__temp_entity_id"]; exists {
 				// Remove the temporary ID
 				odataResponse.Delete("__temp_entity_id")
-				
+
 				// Check if all key fields are present
 				allKeysPresent := true
 				for _, keyProp := range h.metadata.KeyProperties {
@@ -234,7 +234,7 @@ func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{
 						break
 					}
 				}
-				
+
 				if !allKeysPresent {
 					// Add @odata.id after @odata.context
 					odataResponse.InsertAfter(ODataContextProperty, "@odata.id", tempID)
@@ -301,7 +301,7 @@ func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{
 		if _, exists := odataResponse.ToMap()["__temp_entity_id"]; exists {
 			// Remove the temporary ID
 			odataResponse.Delete("__temp_entity_id")
-			
+
 			// For struct responses (not from $select), all key fields are always present
 			// So we don't need to add @odata.id in minimal metadata for full struct responses
 			// The @odata.id is only needed when key fields are omitted (e.g., with $select)
@@ -486,7 +486,7 @@ func (h *EntityHandler) buildEntityIDFromMap(entityMap map[string]interface{}, r
 		return ""
 	}
 	baseURL := response.BuildBaseURL(r)
-	
+
 	// Build key segment from map
 	keyProps := h.metadata.KeyProperties
 	if len(keyProps) == 0 {
