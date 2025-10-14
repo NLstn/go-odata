@@ -37,14 +37,14 @@ func TestODataIDFieldIntegration(t *testing.T) {
 	service.RegisterEntity(&Product{})
 
 	tests := []struct {
-		name                string
-		url                 string
-		acceptHeader        string
-		formatParam         string
-		metadataLevel       string
-		shouldHaveODataID   bool
-		expectedODataID     string
-		description         string
+		name              string
+		url               string
+		acceptHeader      string
+		formatParam       string
+		metadataLevel     string
+		shouldHaveODataID bool
+		expectedODataID   string
+		description       string
 	}{
 		{
 			name:              "Full metadata - collection should have @odata.id",
@@ -183,27 +183,27 @@ func TestODataIDFieldIntegration(t *testing.T) {
 
 			// Check for @odata.id
 			odataID, hasODataID := entityToCheck["@odata.id"]
-			
+
 			if tt.shouldHaveODataID && !hasODataID {
-				t.Errorf("Expected @odata.id in %s (test: %s)", 
-					map[bool]string{true: "collection", false: "entity"}[isCollection], 
+				t.Errorf("Expected @odata.id in %s (test: %s)",
+					map[bool]string{true: "collection", false: "entity"}[isCollection],
 					tt.description)
 			}
-			
+
 			if !tt.shouldHaveODataID && hasODataID {
-				t.Errorf("Did not expect @odata.id in %s, but got: %v (test: %s)", 
-					map[bool]string{true: "collection", false: "entity"}[isCollection], 
-					odataID, 
+				t.Errorf("Did not expect @odata.id in %s, but got: %v (test: %s)",
+					map[bool]string{true: "collection", false: "entity"}[isCollection],
+					odataID,
 					tt.description)
 			}
-			
+
 			if tt.shouldHaveODataID && hasODataID && tt.expectedODataID != "" {
 				// Verify the format is correct
 				odataIDStr, ok := odataID.(string)
 				if !ok {
 					t.Errorf("Expected @odata.id to be a string, got %T", odataID)
 				} else if odataIDStr != tt.expectedODataID {
-					t.Errorf("Expected @odata.id=%s, got %s (test: %s)", 
+					t.Errorf("Expected @odata.id=%s, got %s (test: %s)",
 						tt.expectedODataID, odataIDStr, tt.description)
 				}
 			}
@@ -309,22 +309,22 @@ func TestODataIDFieldWithCompositeKeys(t *testing.T) {
 
 			// Check for @odata.id
 			odataID, hasODataID := firstEntity["@odata.id"]
-			
+
 			if tt.shouldHaveODataID && !hasODataID {
 				t.Errorf("Expected @odata.id in entity (test: %s)", tt.description)
 			}
-			
+
 			if !tt.shouldHaveODataID && hasODataID {
 				t.Errorf("Did not expect @odata.id in entity, but got: %v (test: %s)", odataID, tt.description)
 			}
-			
+
 			if tt.shouldHaveODataID && hasODataID && tt.expectedODataID != "" {
 				// Verify the format is correct
 				odataIDStr, ok := odataID.(string)
 				if !ok {
 					t.Errorf("Expected @odata.id to be a string, got %T", odataID)
 				} else if odataIDStr != tt.expectedODataID {
-					t.Errorf("Expected @odata.id=%s, got %s (test: %s)", 
+					t.Errorf("Expected @odata.id=%s, got %s (test: %s)",
 						tt.expectedODataID, odataIDStr, tt.description)
 				}
 			}
@@ -370,13 +370,13 @@ func TestODataIDFieldOrdering(t *testing.T) {
 
 	// Parse the raw JSON to check field order
 	body := w.Body.String()
-	
+
 	// Check that @odata.id comes after @odata.context but before regular properties
 	contextPos := findPosition(body, `"@odata.context"`)
 	idPos := findPosition(body, `"@odata.id"`)
 	typePos := findPosition(body, `"@odata.type"`)
 	valuePos := findPosition(body, `"value"`)
-	
+
 	if contextPos == -1 {
 		t.Error("@odata.context not found in response")
 	}
@@ -386,7 +386,7 @@ func TestODataIDFieldOrdering(t *testing.T) {
 	if typePos == -1 {
 		t.Error("@odata.type not found in response (should be present in full metadata)")
 	}
-	
+
 	// The order should be: @odata.context, then value (collection), and within each entity: @odata.id, @odata.type, then properties
 	if contextPos != -1 && valuePos != -1 && contextPos > valuePos {
 		t.Error("@odata.context should appear before value in collection response")

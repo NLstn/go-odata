@@ -52,7 +52,7 @@ func (om *OrderedMap) Delete(key string) {
 func (om *OrderedMap) InsertAfter(afterKey, key string, value interface{}) {
 	// If key already exists, delete it first
 	om.Delete(key)
-	
+
 	// Find the position of afterKey
 	position := -1
 	for i, k := range om.keys {
@@ -61,7 +61,7 @@ func (om *OrderedMap) InsertAfter(afterKey, key string, value interface{}) {
 			break
 		}
 	}
-	
+
 	if position == -1 {
 		// afterKey not found, append to end
 		om.keys = append(om.keys, key)
@@ -69,7 +69,7 @@ func (om *OrderedMap) InsertAfter(afterKey, key string, value interface{}) {
 		// Insert after the found position
 		om.keys = append(om.keys[:position+1], append([]string{key}, om.keys[position+1:]...)...)
 	}
-	
+
 	om.values[key] = value
 }
 
@@ -139,7 +139,7 @@ func BuildEntityID(entitySetName string, keyValues map[string]interface{}) strin
 			return fmt.Sprintf("%s(%v)", entitySetName, v)
 		}
 	}
-	
+
 	// Composite key or named single key
 	var keyParts []string
 	for k, v := range keyValues {
@@ -157,19 +157,19 @@ func BuildEntityID(entitySetName string, keyValues map[string]interface{}) strin
 func ExtractEntityKeys(entity interface{}, keyProperties []metadata.PropertyMetadata) map[string]interface{} {
 	keyValues := make(map[string]interface{})
 	entityValue := reflect.ValueOf(entity)
-	
+
 	// Handle pointer
 	if entityValue.Kind() == reflect.Ptr {
 		entityValue = entityValue.Elem()
 	}
-	
+
 	for _, keyProp := range keyProperties {
 		fieldValue := entityValue.FieldByName(keyProp.Name)
 		if fieldValue.IsValid() {
 			keyValues[keyProp.JsonName] = fieldValue.Interface()
 		}
 	}
-	
+
 	return keyValues
 }
 
@@ -183,7 +183,7 @@ func WriteEntityReference(w http.ResponseWriter, r *http.Request, entityID strin
 
 	baseURL := buildBaseURL(r)
 	contextURL := baseURL + "/$metadata#$ref"
-	
+
 	response := map[string]interface{}{
 		"@odata.context": contextURL,
 		"@odata.id":      baseURL + "/" + entityID,
@@ -210,7 +210,7 @@ func WriteEntityReferenceCollection(w http.ResponseWriter, r *http.Request, enti
 
 	baseURL := buildBaseURL(r)
 	contextURL := baseURL + "/$metadata#Collection($ref)"
-	
+
 	// Build the references
 	refs := make([]map[string]string, len(entityIDs))
 	for i, entityID := range entityIDs {
@@ -377,7 +377,7 @@ func processMapEntity(entity reflect.Value, metadata EntityMetadataProvider, exp
 	keySegment := buildKeySegmentFromMap(entityMap, metadata)
 	if keySegment != "" {
 		entityID := fmt.Sprintf("%s/%s(%s)", baseURL, entitySetName, keySegment)
-		
+
 		switch metadataLevel {
 		case "full":
 			// Always include @odata.id in full metadata
@@ -435,7 +435,7 @@ func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataPro
 	keySegment := BuildKeySegmentFromEntity(entity, metadata)
 	if keySegment != "" {
 		entityID := fmt.Sprintf("%s/%s(%s)", baseURL, entitySetName, keySegment)
-		
+
 		switch metadataLevel {
 		case "full":
 			// Always include @odata.id in full metadata
@@ -484,7 +484,7 @@ func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataPro
 					break
 				}
 			}
-			
+
 			// Check if all key fields are present
 			if !allKeyFieldsPresentInOrderedMap(entityMap, metadata) {
 				// Add @odata.id at the beginning (after @odata.context and @odata.type if present)
