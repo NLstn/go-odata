@@ -392,7 +392,7 @@ func (h *EntityHandler) writeNavigationCollectionRef(w http.ResponseWriter, r *h
 }
 
 // writeSingleNavigationRef writes an entity reference for a single navigation property
-func (h *EntityHandler) writeSingleNavigationRef(w http.ResponseWriter, r *http.Request, entityKey string, navProp *metadata.PropertyMetadata, navFieldValue reflect.Value) {
+func (h *EntityHandler) writeSingleNavigationRef(w http.ResponseWriter, r *http.Request, _ string, navProp *metadata.PropertyMetadata, navFieldValue reflect.Value) {
 	navData := navFieldValue.Interface()
 	navValue := reflect.ValueOf(navData)
 
