@@ -147,8 +147,10 @@ func TestODataEntityIdHeader_POST_CompositeKey(t *testing.T) {
 	}
 }
 
-// TestODataEntityIdHeader_POST_NoContentNoHeader tests that OData-EntityId is NOT present with 201
-func TestODataEntityIdHeader_POST_NoContentNoHeader(t *testing.T) {
+// TestODataEntityIdHeader_POST_WithRepresentation tests that OData-EntityId is present with 201
+// Note: While the OData spec only REQUIRES OData-EntityId for 204 responses, including it
+// in 201 responses is a best practice for consistency and provides the canonical entity-id to clients.
+func TestODataEntityIdHeader_POST_WithRepresentation(t *testing.T) {
 	service, _ := setupEntityIdTestService(t)
 
 	newProduct := map[string]interface{}{
@@ -169,18 +171,25 @@ func TestODataEntityIdHeader_POST_NoContentNoHeader(t *testing.T) {
 		t.Errorf("Status = %v, want %v", w.Code, http.StatusCreated)
 	}
 
-	// OData-EntityId should NOT be present when returning representation
+	// OData-EntityId should be present (best practice, though only required for 204 by spec)
 	// Access directly with exact casing (OData-EntityId with capital 'D')
 	//nolint:staticcheck // SA1008: intentionally using non-canonical header key per OData spec
 	entityIdValues := w.Header()["OData-EntityId"]
-	if len(entityIdValues) > 0 {
-		t.Errorf("OData-EntityId should not be present with 201 response, got %v", entityIdValues[0])
+	if len(entityIdValues) == 0 {
+		t.Error("OData-EntityId header is missing")
+	}
+	entityId := entityIdValues[0]
+
+	// Verify format: http://example.com/EntityIdTestProducts(1)
+	expectedFormat := "http://example.com/EntityIdTestProducts(1)"
+	if entityId != expectedFormat {
+		t.Errorf("OData-EntityId = %v, want %v", entityId, expectedFormat)
 	}
 
-	// Location header should still be present
+	// Location header should also be present and match
 	location := w.Header().Get("Location")
-	if location == "" {
-		t.Error("Location header is missing")
+	if location != entityId {
+		t.Errorf("Location = %v, should match OData-EntityId = %v", location, entityId)
 	}
 }
 
@@ -224,7 +233,9 @@ func TestODataEntityIdHeader_PATCH(t *testing.T) {
 	}
 }
 
-// TestODataEntityIdHeader_PATCH_WithRepresentation tests that OData-EntityId is NOT present with 200
+// TestODataEntityIdHeader_PATCH_WithRepresentation tests OData-EntityId with 200 response
+// Note: OData-EntityId is only REQUIRED by spec for 204 responses. For 200 OK responses
+// (when returning representation), the spec doesn't require it, so we verify it's not included.
 func TestODataEntityIdHeader_PATCH_WithRepresentation(t *testing.T) {
 	service, db := setupEntityIdTestService(t)
 
@@ -249,7 +260,8 @@ func TestODataEntityIdHeader_PATCH_WithRepresentation(t *testing.T) {
 		t.Errorf("Status = %v, want %v", w.Code, http.StatusOK)
 	}
 
-	// OData-EntityId should NOT be present when returning representation
+	// OData-EntityId should NOT be present when returning representation (200 OK)
+	// The spec only requires it for 204 No Content responses
 	// Access directly with exact casing (OData-EntityId with capital 'D')
 	//nolint:staticcheck // SA1008: intentionally using non-canonical header key per OData spec
 	entityIdValues := w.Header()["OData-EntityId"]
