@@ -57,6 +57,6 @@ func (h *ServiceDocumentHandler) handleGetServiceDocument(w http.ResponseWriter,
 // handleOptionsServiceDocument handles OPTIONS requests for service document
 func (h *ServiceDocumentHandler) handleOptionsServiceDocument(w http.ResponseWriter) {
 	w.Header().Set("Allow", "GET, HEAD, OPTIONS")
-	w.Header().Set("OData-Version", "4.0")
+	setODataHeader(w.Header(), "OData-Version", "4.0")
 	w.WriteHeader(http.StatusOK)
 }
