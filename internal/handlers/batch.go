@@ -331,7 +331,7 @@ func (h *BatchHandler) createErrorResponse(statusCode int, message string) batch
 	errorBody := fmt.Sprintf(`{"error":{"code":"%d","message":"%s"}}`, statusCode, message)
 	headers := http.Header{}
 	headers.Set("Content-Type", "application/json")
-	headers.Set("OData-Version", "4.0")
+	setODataHeader(headers, "OData-Version", "4.0")
 
 	return batchResponse{
 		StatusCode: statusCode,
@@ -346,7 +346,7 @@ func (h *BatchHandler) writeBatchResponse(w http.ResponseWriter, responses []bat
 	boundary := fmt.Sprintf("batchresponse_%s", generateBoundary())
 
 	w.Header().Set("Content-Type", fmt.Sprintf("multipart/mixed; boundary=%s", boundary))
-	w.Header().Set("OData-Version", "4.0")
+	setODataHeader(w.Header(), "OData-Version", "4.0")
 	w.WriteHeader(http.StatusOK)
 
 	// Write each response as a multipart part

@@ -61,7 +61,7 @@ func (h *ActionFunctionHandler) handleAction(w http.ResponseWriter, r *http.Requ
 	// In a real implementation, this would invoke the action handler
 	metadataLevel := response.GetODataMetadataLevel(r)
 	w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
-	w.Header().Set("OData-Version", "4.0")
+	setODataHeader(w.Header(), "OData-Version", "4.0")
 	w.WriteHeader(http.StatusOK)
 
 	responseMap := map[string]interface{}{
@@ -90,7 +90,7 @@ func (h *ActionFunctionHandler) handleFunction(w http.ResponseWriter, r *http.Re
 	// In a real implementation, this would invoke the function handler
 	metadataLevel := response.GetODataMetadataLevel(r)
 	w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
-	w.Header().Set("OData-Version", "4.0")
+	setODataHeader(w.Header(), "OData-Version", "4.0")
 	w.WriteHeader(http.StatusOK)
 
 	responseMap := map[string]interface{}{

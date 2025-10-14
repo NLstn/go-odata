@@ -174,7 +174,7 @@ func TestUnboundAction(t *testing.T) {
 				return err
 			}
 
-			w.Header().Set("OData-Version", "4.0")
+			w.Header()["OData-Version"] = []string{"4.0"}
 			w.WriteHeader(http.StatusNoContent)
 			return nil
 		},
@@ -227,7 +227,7 @@ func TestBoundAction(t *testing.T) {
 				return err
 			}
 
-			w.Header().Set("OData-Version", "4.0")
+			w.Header()["OData-Version"] = []string{"4.0"}
 			w.WriteHeader(http.StatusNoContent)
 			return nil
 		},
@@ -394,7 +394,7 @@ func TestActionWithParameters(t *testing.T) {
 				return err
 			}
 
-			w.Header().Set("OData-Version", "4.0")
+			w.Header()["OData-Version"] = []string{"4.0"}
 			w.WriteHeader(http.StatusNoContent)
 			return nil
 		},
@@ -539,7 +539,7 @@ func TestActionReturningValue(t *testing.T) {
 		ReturnType: reflect.TypeOf(""),
 		Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) error {
 			w.Header().Set("Content-Type", "application/json;odata.metadata=minimal")
-			w.Header().Set("OData-Version", "4.0")
+			w.Header()["OData-Version"] = []string{"4.0"}
 			w.WriteHeader(http.StatusOK)
 
 			response := map[string]interface{}{

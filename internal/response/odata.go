@@ -11,6 +11,30 @@ import (
 	"github.com/nlstn/go-odata/internal/metadata"
 )
 
+// setODataHeader sets an OData header with proper capitalization as specified in OData v4 spec.
+// The OData v4 specification conventionally uses "OData-Version" and "OData-MaxVersion" with
+// capital 'D'. While HTTP headers are case-insensitive per RFC 7230, this function attempts to 
+// send headers with the conventional OData capitalization.
+//
+// Note: Go's HTTP stack canonicalizes headers when sending over HTTP/1.x (e.g., "OData-Version" 
+// becomes "Odata-Version"), but since HTTP headers are case-insensitive, this is functionally 
+// equivalent. This function sets both the desired form and canonical form so that Header.Get() 
+// works correctly in tests and the desired capitalization is used where possible.
+func setODataHeader(h http.Header, key, value string) {
+	canonical := http.CanonicalHeaderKey(key)
+	
+	// Delete any existing header (case-insensitive)
+	h.Del(key)
+	
+	// Set with exact capitalization (for HTTP/2 and direct map access)
+	h[key] = []string{value}
+	
+	// Also set canonical form if different (so Get() works in tests)
+	if canonical != key {
+		h[canonical] = []string{value}
+	}
+}
+
 // OrderedMap maintains insertion order of keys
 type OrderedMap struct {
 	keys   []string
@@ -274,7 +298,7 @@ func WriteODataCollection(w http.ResponseWriter, r *http.Request, entitySetName 
 
 	// Set OData-compliant headers with dynamic metadata level
 	w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
-	w.Header().Set("OData-Version", "4.0")
+	setODataHeader(w.Header(), "OData-Version", "4.0")
 	w.WriteHeader(http.StatusOK)
 
 	// For HEAD requests, don't write the body
@@ -322,7 +346,7 @@ func WriteODataCollectionWithNavigation(w http.ResponseWriter, r *http.Request, 
 
 	// Set OData-compliant headers with dynamic metadata level (already retrieved above)
 	w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
-	w.Header().Set("OData-Version", "4.0")
+	setODataHeader(w.Header(), "OData-Version", "4.0")
 	w.WriteHeader(http.StatusOK)
 
 	// For HEAD requests, don't write the body
@@ -699,7 +723,7 @@ func WriteODataError(w http.ResponseWriter, httpStatusCode int, odataError *ODat
 	}
 
 	w.Header().Set("Content-Type", "application/json;odata.metadata=minimal")
-	w.Header().Set("OData-Version", "4.0")
+	setODataHeader(w.Header(), "OData-Version", "4.0")
 	w.WriteHeader(httpStatusCode)
 
 	encoder := json.NewEncoder(w)
@@ -765,7 +789,7 @@ func WriteServiceDocument(w http.ResponseWriter, r *http.Request, entitySets []s
 	// Set OData-compliant headers with dynamic metadata level
 	metadataLevel := GetODataMetadataLevel(r)
 	w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
-	w.Header().Set("OData-Version", "4.0")
+	setODataHeader(w.Header(), "OData-Version", "4.0")
 	w.WriteHeader(http.StatusOK)
 
 	// For HEAD requests, don't write the body
