@@ -72,6 +72,7 @@ A Go library for building services that expose OData APIs with automatic handlin
   - Rejects requests with versions below 4.0 (returns 406 Not Acceptable)
   - Accepts version 4.0 and above
   - Compliant with OData v4 specification
+- ✅ **OData-EntityId header** - returned in 204 No Content responses for POST, PUT, and PATCH operations
 - ✅ **ETag support with If-Match headers** - optimistic concurrency control
 - ✅ Filter operations on expanded navigation properties
 - ✅ **Rich metadata document generation (XML and JSON)**
@@ -1150,6 +1151,13 @@ The response includes:
 - Header `OData-Version`: `4.0`
 - Body: The created entity with all properties
 
+When using `Prefer: return=minimal` header:
+- Status: `204 No Content`
+- Header `Location`: URL of the created entity
+- Header `OData-EntityId`: Canonical URL of the created entity (same as Location)
+- Header `OData-Version`: `4.0`
+- No body content
+
 ### Update Entity (`PUT /Products(1)` vs `PATCH /Products(1)`)
 
 The library supports both PUT and PATCH for updating entities, following OData v4 specifications:
@@ -1157,7 +1165,7 @@ The library supports both PUT and PATCH for updating entities, following OData v
 **PUT - Complete Replacement:**
 - Replaces the entire entity
 - All properties not included in the request are set to their default values
-- Returns `204 No Content` on success
+- Returns `204 No Content` on success (with `OData-EntityId` header)
 
 Request body (PUT):
 ```json
@@ -1171,7 +1179,7 @@ Result: Name and Price are updated, but Description and Category are set to empt
 **PATCH - Partial Update:**
 - Updates only the properties included in the request
 - Other properties remain unchanged
-- Returns `204 No Content` on success
+- Returns `204 No Content` on success (with `OData-EntityId` header)
 
 Request body (PATCH):
 ```json
