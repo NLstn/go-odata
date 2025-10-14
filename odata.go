@@ -64,6 +64,7 @@ func (s *Service) RegisterEntity(entity interface{}) error {
 
 	// Create and store the handler
 	handler := handlers.NewEntityHandler(s.db, entityMetadata)
+	handler.SetEntitiesMetadata(s.entities)
 	s.handlers[entityMetadata.EntitySetName] = handler
 
 	fmt.Printf("Registered entity: %s (EntitySet: %s)\n", entityMetadata.EntityName, entityMetadata.EntitySetName)
@@ -85,6 +86,7 @@ func (s *Service) RegisterSingleton(entity interface{}, singletonName string) er
 
 	// Create and store the handler (same handler type works for both entities and singletons)
 	handler := handlers.NewEntityHandler(s.db, singletonMetadata)
+	handler.SetEntitiesMetadata(s.entities)
 	s.handlers[singletonName] = handler
 
 	fmt.Printf("Registered singleton: %s (Singleton: %s)\n", singletonMetadata.EntityName, singletonName)

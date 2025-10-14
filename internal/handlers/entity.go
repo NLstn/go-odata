@@ -7,8 +7,9 @@ import (
 
 // EntityHandler handles HTTP requests for entity collections
 type EntityHandler struct {
-	db       *gorm.DB
-	metadata *metadata.EntityMetadata
+	db               *gorm.DB
+	metadata         *metadata.EntityMetadata
+	entitiesMetadata map[string]*metadata.EntityMetadata
 }
 
 // NewEntityHandler creates a new entity handler
@@ -17,6 +18,11 @@ func NewEntityHandler(db *gorm.DB, entityMetadata *metadata.EntityMetadata) *Ent
 		db:       db,
 		metadata: entityMetadata,
 	}
+}
+
+// SetEntitiesMetadata sets the entities metadata registry for navigation property handling
+func (h *EntityHandler) SetEntitiesMetadata(entitiesMetadata map[string]*metadata.EntityMetadata) {
+	h.entitiesMetadata = entitiesMetadata
 }
 
 // IsSingleton returns true if this handler is for a singleton

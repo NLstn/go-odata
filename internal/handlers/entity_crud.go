@@ -444,3 +444,103 @@ func (h *EntityHandler) validateKeyPropertiesNotUpdated(updateData map[string]in
 	}
 	return nil
 }
+
+// HandleEntityRef handles GET requests for entity references (e.g., Products(1)/$ref)
+func (h *EntityHandler) HandleEntityRef(w http.ResponseWriter, r *http.Request, entityKey string) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+			fmt.Sprintf("Method %s is not supported for entity references", r.Method)); err != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, err)
+		}
+		return
+	}
+
+	// Fetch the entity to ensure it exists
+	entity := reflect.New(h.metadata.EntityType).Interface()
+	db, err := h.buildKeyQuery(entityKey)
+	if err != nil {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidKey, err.Error()); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	}
+
+	if err := db.First(entity).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			if writeErr := response.WriteError(w, http.StatusNotFound, ErrMsgEntityNotFound,
+				fmt.Sprintf("Entity with key '%s' not found", entityKey)); writeErr != nil {
+				fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			}
+		} else {
+			h.writeDatabaseError(w, err)
+		}
+		return
+	}
+
+	// Extract key values and build entity ID
+	keyValues := response.ExtractEntityKeys(entity, h.metadata.KeyProperties)
+	entityID := response.BuildEntityID(h.metadata.EntitySetName, keyValues)
+
+	if err := response.WriteEntityReference(w, r, entityID); err != nil {
+		fmt.Printf("Error writing entity reference: %v\n", err)
+	}
+}
+
+// HandleCollectionRef handles GET requests for collection references (e.g., Products/$ref)
+func (h *EntityHandler) HandleCollectionRef(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+			fmt.Sprintf("Method %s is not supported for collection references", r.Method)); err != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, err)
+		}
+		return
+	}
+
+	// Parse query options (support filtering, ordering, pagination for references)
+	queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata)
+	if err != nil {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions, err.Error()); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	}
+
+	// Get the total count if $count=true is specified
+	totalCount := h.getTotalCount(queryOptions, w)
+	if totalCount == nil && queryOptions.Count {
+		return // Error already written
+	}
+
+	// Fetch the results
+	results, err := h.fetchResults(queryOptions)
+	if err != nil {
+		h.writeDatabaseError(w, err)
+		return
+	}
+
+	// Build entity IDs for each entity
+	var entityIDs []string
+	sliceValue := reflect.ValueOf(results)
+	if sliceValue.Kind() == reflect.Slice {
+		for i := 0; i < sliceValue.Len(); i++ {
+			entity := sliceValue.Index(i).Interface()
+			keyValues := response.ExtractEntityKeys(entity, h.metadata.KeyProperties)
+			entityID := response.BuildEntityID(h.metadata.EntitySetName, keyValues)
+			entityIDs = append(entityIDs, entityID)
+		}
+	}
+
+	// Build next link if needed
+	var nextLink *string
+	if queryOptions.Skip != nil && queryOptions.Top != nil {
+		nextSkip := *queryOptions.Skip + *queryOptions.Top
+		if int64(nextSkip) < *totalCount {
+			nextLinkValue := response.BuildNextLink(r, nextSkip)
+			nextLink = &nextLinkValue
+		}
+	}
+
+	if err := response.WriteEntityReferenceCollection(w, r, entityIDs, totalCount, nextLink); err != nil {
+		fmt.Printf("Error writing entity reference collection: %v\n", err)
+	}
+}

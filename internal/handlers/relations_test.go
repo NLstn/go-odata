@@ -297,7 +297,7 @@ func TestNavigationPropertyPath(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/Authors(1)/Books", nil)
 	w := httptest.NewRecorder()
 
-	handler.HandleNavigationProperty(w, req, "1", "Books")
+	handler.HandleNavigationProperty(w, req, "1", "Books", false)
 
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", w.Code)
@@ -327,7 +327,7 @@ func TestNavigationPropertyPathSingle(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/Books(1)/Author", nil)
 	w := httptest.NewRecorder()
 
-	handler.HandleNavigationProperty(w, req, "1", "Author")
+	handler.HandleNavigationProperty(w, req, "1", "Author", false)
 
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", w.Code)
@@ -369,7 +369,7 @@ func TestNavigationPropertyNotFound(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/Authors(1)/InvalidProperty", nil)
 	w := httptest.NewRecorder()
 
-	handler.HandleNavigationProperty(w, req, "1", "InvalidProperty")
+	handler.HandleNavigationProperty(w, req, "1", "InvalidProperty", false)
 
 	if w.Code != http.StatusNotFound {
 		t.Errorf("Expected status 404, got %d", w.Code)
