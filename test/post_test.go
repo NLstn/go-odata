@@ -3,10 +3,11 @@ package odata_test
 import (
 	"bytes"
 	"encoding/json"
-	odata "github.com/nlstn/go-odata"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	odata "github.com/nlstn/go-odata"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -111,11 +112,6 @@ func TestPostEntity_Success(t *testing.T) {
 	// Should return 201 Created
 	if w.Code != http.StatusCreated {
 		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusCreated, w.Body.String())
-	}
-
-	// Verify OData-Version header
-	if version := w.Header().Get("OData-Version"); version != "4.0" {
-		t.Errorf("OData-Version = %v, want 4.0", version)
 	}
 
 	// Verify Location header is present

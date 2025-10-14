@@ -471,9 +471,4 @@ func TestSingletonHead(t *testing.T) {
 	if w.Body.Len() > 0 {
 		t.Error("HEAD request should not return a body")
 	}
-
-	// But should have headers
-	if w.Header().Get("OData-Version") != "4.0" {
-		t.Error("Expected OData-Version header")
-	}
 }

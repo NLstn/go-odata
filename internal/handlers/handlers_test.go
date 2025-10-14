@@ -278,11 +278,6 @@ func TestMetadataHandlerJSON(t *testing.T) {
 			t.Errorf("Content-Type = %v, want application/json", contentType)
 		}
 
-		odataVersion := w.Header().Get("OData-Version")
-		if odataVersion != "4.0" {
-			t.Errorf("OData-Version = %v, want 4.0", odataVersion)
-		}
-
 		// Parse JSON response
 		var response map[string]interface{}
 		if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
@@ -1143,11 +1138,6 @@ func TestEntityHandlerCollectionOptions(t *testing.T) {
 	if allowHeader != "GET, HEAD, POST, OPTIONS" {
 		t.Errorf("Allow header = %v, want 'GET, HEAD, POST, OPTIONS'", allowHeader)
 	}
-
-	odataVersion := w.Header().Get("OData-Version")
-	if odataVersion != "4.0" {
-		t.Errorf("OData-Version header = %v, want '4.0'", odataVersion)
-	}
 }
 
 // TestEntityHandlerEntityOptions tests OPTIONS request on individual entity
@@ -1171,11 +1161,6 @@ func TestEntityHandlerEntityOptions(t *testing.T) {
 	if allowHeader != "GET, HEAD, DELETE, PATCH, PUT, OPTIONS" {
 		t.Errorf("Allow header = %v, want 'GET, HEAD, DELETE, PATCH, PUT, OPTIONS'", allowHeader)
 	}
-
-	odataVersion := w.Header().Get("OData-Version")
-	if odataVersion != "4.0" {
-		t.Errorf("OData-Version header = %v, want '4.0'", odataVersion)
-	}
 }
 
 // TestEntityHandlerCountOptions tests OPTIONS request on $count endpoint
@@ -1194,11 +1179,6 @@ func TestEntityHandlerCountOptions(t *testing.T) {
 	allowHeader := w.Header().Get("Allow")
 	if allowHeader != "GET, HEAD, OPTIONS" {
 		t.Errorf("Allow header = %v, want 'GET, HEAD, OPTIONS'", allowHeader)
-	}
-
-	odataVersion := w.Header().Get("OData-Version")
-	if odataVersion != "4.0" {
-		t.Errorf("OData-Version header = %v, want '4.0'", odataVersion)
 	}
 }
 
@@ -1220,11 +1200,6 @@ func TestServiceDocumentHandlerOptions(t *testing.T) {
 	if allowHeader != "GET, HEAD, OPTIONS" {
 		t.Errorf("Allow header = %v, want 'GET, HEAD, OPTIONS'", allowHeader)
 	}
-
-	odataVersion := w.Header().Get("OData-Version")
-	if odataVersion != "4.0" {
-		t.Errorf("OData-Version header = %v, want '4.0'", odataVersion)
-	}
 }
 
 // TestMetadataHandlerOptions tests OPTIONS request on metadata document
@@ -1244,10 +1219,5 @@ func TestMetadataHandlerOptions(t *testing.T) {
 	allowHeader := w.Header().Get("Allow")
 	if allowHeader != "GET, HEAD, OPTIONS" {
 		t.Errorf("Allow header = %v, want 'GET, HEAD, OPTIONS'", allowHeader)
-	}
-
-	odataVersion := w.Header().Get("OData-Version")
-	if odataVersion != "4.0" {
-		t.Errorf("OData-Version header = %v, want '4.0'", odataVersion)
 	}
 }

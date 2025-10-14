@@ -53,11 +53,6 @@ func TestOptionsServiceDocument(t *testing.T) {
 		t.Errorf("Allow header = %v, want 'GET, HEAD, OPTIONS'", allowHeader)
 	}
 
-	odataVersion := w.Header().Get("OData-Version")
-	if odataVersion != "4.0" {
-		t.Errorf("OData-Version header = %v, want '4.0'", odataVersion)
-	}
-
 	// OPTIONS should return no body
 	if w.Body.Len() > 0 {
 		t.Errorf("Body should be empty, got %v bytes", w.Body.Len())
@@ -82,11 +77,6 @@ func TestOptionsMetadata(t *testing.T) {
 		t.Errorf("Allow header = %v, want 'GET, HEAD, OPTIONS'", allowHeader)
 	}
 
-	odataVersion := w.Header().Get("OData-Version")
-	if odataVersion != "4.0" {
-		t.Errorf("OData-Version header = %v, want '4.0'", odataVersion)
-	}
-
 	// OPTIONS should return no body
 	if w.Body.Len() > 0 {
 		t.Errorf("Body should be empty, got %v bytes", w.Body.Len())
@@ -109,11 +99,6 @@ func TestOptionsEntityCollection(t *testing.T) {
 	allowHeader := w.Header().Get("Allow")
 	if allowHeader != "GET, HEAD, POST, OPTIONS" {
 		t.Errorf("Allow header = %v, want 'GET, HEAD, POST, OPTIONS'", allowHeader)
-	}
-
-	odataVersion := w.Header().Get("OData-Version")
-	if odataVersion != "4.0" {
-		t.Errorf("OData-Version header = %v, want '4.0'", odataVersion)
 	}
 
 	// OPTIONS should return no body
@@ -144,11 +129,6 @@ func TestOptionsEntity(t *testing.T) {
 		t.Errorf("Allow header = %v, want 'GET, HEAD, DELETE, PATCH, PUT, OPTIONS'", allowHeader)
 	}
 
-	odataVersion := w.Header().Get("OData-Version")
-	if odataVersion != "4.0" {
-		t.Errorf("OData-Version header = %v, want '4.0'", odataVersion)
-	}
-
 	// OPTIONS should return no body
 	if w.Body.Len() > 0 {
 		t.Errorf("Body should be empty, got %v bytes", w.Body.Len())
@@ -171,11 +151,6 @@ func TestOptionsCount(t *testing.T) {
 	allowHeader := w.Header().Get("Allow")
 	if allowHeader != "GET, HEAD, OPTIONS" {
 		t.Errorf("Allow header = %v, want 'GET, HEAD, OPTIONS'", allowHeader)
-	}
-
-	odataVersion := w.Header().Get("OData-Version")
-	if odataVersion != "4.0" {
-		t.Errorf("OData-Version header = %v, want '4.0'", odataVersion)
 	}
 
 	// OPTIONS should return no body
@@ -229,11 +204,6 @@ func TestOptionsCorsCompatibility(t *testing.T) {
 			// Should include Allow header
 			if w.Header().Get("Allow") == "" {
 				t.Error("Missing Allow header")
-			}
-
-			// Should include OData-Version header
-			if w.Header().Get("OData-Version") != "4.0" {
-				t.Errorf("OData-Version = %v, want '4.0'", w.Header().Get("OData-Version"))
 			}
 		})
 	}

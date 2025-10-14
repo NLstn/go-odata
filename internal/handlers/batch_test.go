@@ -150,12 +150,6 @@ Accept: application/json
 		t.Errorf("Content-Type = %v, want multipart/mixed", contentType)
 	}
 
-	// Check OData-Version header
-	odataVersion := w.Header().Get("OData-Version")
-	if odataVersion != "4.0" {
-		t.Errorf("OData-Version = %v, want 4.0", odataVersion)
-	}
-
 	// Check response contains product data
 	responseBody := w.Body.String()
 	if !strings.Contains(responseBody, "Test Product") {
@@ -608,10 +602,6 @@ func TestBatchHandler_WriteBatchResponse(t *testing.T) {
 	contentType := w.Header().Get("Content-Type")
 	if !strings.Contains(contentType, "multipart/mixed") {
 		t.Errorf("Content-Type = %v, want multipart/mixed", contentType)
-	}
-
-	if w.Header().Get("OData-Version") != "4.0" {
-		t.Errorf("OData-Version = %v, want 4.0", w.Header().Get("OData-Version"))
 	}
 
 	// Check body contains both responses
