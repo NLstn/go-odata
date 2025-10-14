@@ -87,10 +87,13 @@ func TestODataEntityIdHeader_POST(t *testing.T) {
 	}
 
 	// Check OData-EntityId header is present
-	entityId := w.Header().Get("OData-EntityId")
-	if entityId == "" {
+	// Access directly with exact casing (OData-EntityId with capital 'D')
+	//nolint:staticcheck // SA1008: intentionally using non-canonical header key per OData spec
+	entityIdValues := w.Header()["OData-EntityId"]
+	if len(entityIdValues) == 0 {
 		t.Error("OData-EntityId header is missing")
 	}
+	entityId := entityIdValues[0]
 
 	// Verify format: http://example.com/EntityIdTestProducts(1)
 	expectedFormat := "http://example.com/EntityIdTestProducts(1)"
@@ -129,10 +132,13 @@ func TestODataEntityIdHeader_POST_CompositeKey(t *testing.T) {
 	}
 
 	// Check OData-EntityId header is present
-	entityId := w.Header().Get("OData-EntityId")
-	if entityId == "" {
+	// Access directly with exact casing (OData-EntityId with capital 'D')
+	//nolint:staticcheck // SA1008: intentionally using non-canonical header key per OData spec
+	entityIdValues := w.Header()["OData-EntityId"]
+	if len(entityIdValues) == 0 {
 		t.Error("OData-EntityId header is missing")
 	}
+	entityId := entityIdValues[0]
 
 	// Verify format: http://example.com/EntityIdTestCompositeKeys(productID=1,languageKey='EN')
 	expectedFormat := "http://example.com/EntityIdTestCompositeKeys(productID=1,languageKey='EN')"
@@ -164,9 +170,11 @@ func TestODataEntityIdHeader_POST_NoContentNoHeader(t *testing.T) {
 	}
 
 	// OData-EntityId should NOT be present when returning representation
-	entityId := w.Header().Get("OData-EntityId")
-	if entityId != "" {
-		t.Errorf("OData-EntityId should not be present with 201 response, got %v", entityId)
+	// Access directly with exact casing (OData-EntityId with capital 'D')
+	//nolint:staticcheck // SA1008: intentionally using non-canonical header key per OData spec
+	entityIdValues := w.Header()["OData-EntityId"]
+	if len(entityIdValues) > 0 {
+		t.Errorf("OData-EntityId should not be present with 201 response, got %v", entityIdValues[0])
 	}
 
 	// Location header should still be present
@@ -201,10 +209,13 @@ func TestODataEntityIdHeader_PATCH(t *testing.T) {
 	}
 
 	// Check OData-EntityId header is present
-	entityId := w.Header().Get("OData-EntityId")
-	if entityId == "" {
+	// Access directly with exact casing (OData-EntityId with capital 'D')
+	//nolint:staticcheck // SA1008: intentionally using non-canonical header key per OData spec
+	entityIdValues := w.Header()["OData-EntityId"]
+	if len(entityIdValues) == 0 {
 		t.Error("OData-EntityId header is missing")
 	}
+	entityId := entityIdValues[0]
 
 	// Verify format
 	expectedFormat := "http://example.com/EntityIdTestProducts(1)"
@@ -239,9 +250,11 @@ func TestODataEntityIdHeader_PATCH_WithRepresentation(t *testing.T) {
 	}
 
 	// OData-EntityId should NOT be present when returning representation
-	entityId := w.Header().Get("OData-EntityId")
-	if entityId != "" {
-		t.Errorf("OData-EntityId should not be present with 200 response, got %v", entityId)
+	// Access directly with exact casing (OData-EntityId with capital 'D')
+	//nolint:staticcheck // SA1008: intentionally using non-canonical header key per OData spec
+	entityIdValues := w.Header()["OData-EntityId"]
+	if len(entityIdValues) > 0 {
+		t.Errorf("OData-EntityId should not be present with 200 response, got %v", entityIdValues[0])
 	}
 }
 
@@ -271,10 +284,13 @@ func TestODataEntityIdHeader_PUT(t *testing.T) {
 	}
 
 	// Check OData-EntityId header is present
-	entityId := w.Header().Get("OData-EntityId")
-	if entityId == "" {
+	// Access directly with exact casing (OData-EntityId with capital 'D')
+	//nolint:staticcheck // SA1008: intentionally using non-canonical header key per OData spec
+	entityIdValues := w.Header()["OData-EntityId"]
+	if len(entityIdValues) == 0 {
 		t.Error("OData-EntityId header is missing")
 	}
+	entityId := entityIdValues[0]
 
 	// Verify format
 	expectedFormat := "http://example.com/EntityIdTestProducts(1)"
@@ -308,10 +324,13 @@ func TestODataEntityIdHeader_PUT_CompositeKey(t *testing.T) {
 	}
 
 	// Check OData-EntityId header is present
-	entityId := w.Header().Get("OData-EntityId")
-	if entityId == "" {
+	// Access directly with exact casing (OData-EntityId with capital 'D')
+	//nolint:staticcheck // SA1008: intentionally using non-canonical header key per OData spec
+	entityIdValues := w.Header()["OData-EntityId"]
+	if len(entityIdValues) == 0 {
 		t.Error("OData-EntityId header is missing")
 	}
+	entityId := entityIdValues[0]
 
 	// Verify format
 	expectedFormat := "http://example.com/EntityIdTestCompositeKeys(productID=1,languageKey='EN')"
