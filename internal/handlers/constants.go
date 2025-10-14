@@ -9,6 +9,7 @@ const (
 	HeaderIfMatch           = "If-Match"
 	HeaderIfNoneMatch       = "If-None-Match"
 	HeaderETag              = "ETag"
+	HeaderODataEntityId     = "OData-EntityId"
 )
 
 // Content type constants
