@@ -285,6 +285,15 @@ func (h *EntityHandler) writeUpdateResponse(w http.ResponseWriter, r *http.Reque
 	if pref.ShouldReturnContent(false) {
 		h.returnUpdatedEntity(w, r, db)
 	} else {
+		// For 204 No Content responses, we need to include OData-EntityId header
+		// Fetch the entity to build its entity-id
+		if db != nil {
+			entity := reflect.New(h.metadata.EntityType).Interface()
+			if err := db.First(entity).Error; err == nil {
+				entityId := h.buildEntityLocation(r, entity)
+				w.Header().Set(HeaderODataEntityId, entityId)
+			}
+		}
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
