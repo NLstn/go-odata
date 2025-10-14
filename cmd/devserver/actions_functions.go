@@ -130,7 +130,6 @@ func registerActions(service *odata.Service, db *gorm.DB) {
 
 			// Return updated product
 			w.Header().Set("Content-Type", "application/json;odata.metadata=minimal")
-			w.Header().Set("OData-Version", "4.0")
 			w.WriteHeader(http.StatusOK)
 
 			response := map[string]interface{}{
@@ -176,7 +175,6 @@ func registerActions(service *odata.Service, db *gorm.DB) {
 
 			// Return result
 			w.Header().Set("Content-Type", "application/json;odata.metadata=minimal")
-			w.Header().Set("OData-Version", "4.0")
 			w.WriteHeader(http.StatusOK)
 
 			response := map[string]interface{}{
@@ -224,7 +222,6 @@ func registerActions(service *odata.Service, db *gorm.DB) {
 			}
 
 			// Return 204 No Content for void actions
-			w.Header().Set("OData-Version", "4.0")
 			w.WriteHeader(http.StatusNoContent)
 			return nil
 		},

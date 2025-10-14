@@ -65,7 +65,6 @@ func (h *EntityHandler) handleGetNavigationProperty(w http.ResponseWriter, r *ht
 // handleOptionsNavigationProperty handles OPTIONS requests for navigation properties
 func (h *EntityHandler) handleOptionsNavigationProperty(w http.ResponseWriter) {
 	w.Header().Set("Allow", "GET, HEAD, OPTIONS")
-	setODataHeader(w.Header(), "OData-Version", "4.0")
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -138,7 +137,6 @@ func (h *EntityHandler) handleGetStructuralProperty(w http.ResponseWriter, r *ht
 // handleOptionsStructuralProperty handles OPTIONS requests for structural properties
 func (h *EntityHandler) handleOptionsStructuralProperty(w http.ResponseWriter) {
 	w.Header().Set("Allow", "GET, HEAD, OPTIONS")
-	setODataHeader(w.Header(), "OData-Version", "4.0")
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -218,7 +216,6 @@ func (h *EntityHandler) writePropertyResponse(w http.ResponseWriter, r *http.Req
 
 	// Set Content-Type with dynamic metadata level
 	w.Header().Set(HeaderContentType, fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
-	setODataHeader(w.Header(), "OData-Version", "4.0")
 	w.WriteHeader(http.StatusOK)
 
 	// For HEAD requests, don't write the body
@@ -251,7 +248,6 @@ func (h *EntityHandler) writeRawPropertyValue(w http.ResponseWriter, r *http.Req
 		w.Header().Set(HeaderContentType, "application/octet-stream")
 	}
 
-	setODataHeader(w.Header(), "OData-Version", "4.0")
 	w.WriteHeader(http.StatusOK)
 
 	// For HEAD requests, don't write the body
@@ -329,7 +325,6 @@ func (h *EntityHandler) writeSingleNavigationEntity(w http.ResponseWriter, r *ht
 			// Set Content-Type with dynamic metadata level even for 204 responses
 			metadataLevel := response.GetODataMetadataLevel(r)
 			w.Header().Set(HeaderContentType, fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
-			setODataHeader(w.Header(), "OData-Version", "4.0")
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
@@ -347,7 +342,6 @@ func (h *EntityHandler) writeSingleNavigationEntity(w http.ResponseWriter, r *ht
 
 	// Set Content-Type with dynamic metadata level
 	w.Header().Set(HeaderContentType, fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
-	setODataHeader(w.Header(), "OData-Version", "4.0")
 	w.WriteHeader(http.StatusOK)
 
 	// For HEAD requests, don't write the body
