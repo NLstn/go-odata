@@ -31,6 +31,46 @@ func (om *OrderedMap) Set(key string, value interface{}) {
 	om.values[key] = value
 }
 
+// Delete removes a key-value pair from the ordered map
+func (om *OrderedMap) Delete(key string) {
+	if _, exists := om.values[key]; exists {
+		delete(om.values, key)
+		// Remove from keys slice
+		for i, k := range om.keys {
+			if k == key {
+				om.keys = append(om.keys[:i], om.keys[i+1:]...)
+				break
+			}
+		}
+	}
+}
+
+// InsertAfter inserts a key-value pair after the specified key
+// If afterKey is empty or not found, appends to the end
+func (om *OrderedMap) InsertAfter(afterKey, key string, value interface{}) {
+	// If key already exists, delete it first
+	om.Delete(key)
+	
+	// Find the position of afterKey
+	position := -1
+	for i, k := range om.keys {
+		if k == afterKey {
+			position = i
+			break
+		}
+	}
+	
+	if position == -1 {
+		// afterKey not found, append to end
+		om.keys = append(om.keys, key)
+	} else {
+		// Insert after the found position
+		om.keys = append(om.keys[:position+1], append([]string{key}, om.keys[position+1:]...)...)
+	}
+	
+	om.values[key] = value
+}
+
 // ToMap returns the underlying map (loses ordering)
 func (om *OrderedMap) ToMap() map[string]interface{} {
 	return om.values
@@ -211,6 +251,24 @@ func processMapEntity(entity reflect.Value, metadata EntityMetadataProvider, exp
 		return nil
 	}
 
+	// Add @odata.id for full metadata (always) and minimal metadata (if key fields are omitted)
+	keySegment := buildKeySegmentFromMap(entityMap, metadata)
+	if keySegment != "" {
+		entityID := fmt.Sprintf("%s/%s(%s)", baseURL, entitySetName, keySegment)
+		
+		switch metadataLevel {
+		case "full":
+			// Always include @odata.id in full metadata
+			entityMap["@odata.id"] = entityID
+		case "minimal":
+			// Include @odata.id in minimal metadata if any key field is missing
+			if !allKeyFieldsPresent(entityMap, metadata) {
+				entityMap["@odata.id"] = entityID
+			}
+		}
+		// For "none" metadata level, never include @odata.id
+	}
+
 	// Add @odata.type annotation for full metadata
 	if metadataLevel == "full" {
 		// Get entity type name from entity set name (remove trailing 's' for simple pluralization)
@@ -251,6 +309,23 @@ func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataPro
 	entityMap := NewOrderedMap()
 	entityType := entity.Type()
 
+	// Add @odata.id for full metadata (always) and minimal metadata (if key fields are omitted)
+	keySegment := BuildKeySegmentFromEntity(entity, metadata)
+	if keySegment != "" {
+		entityID := fmt.Sprintf("%s/%s(%s)", baseURL, entitySetName, keySegment)
+		
+		switch metadataLevel {
+		case "full":
+			// Always include @odata.id in full metadata
+			entityMap.Set("@odata.id", entityID)
+		case "minimal":
+			// For minimal metadata, we'll check later if key fields are included
+			// Store the entityID temporarily to decide after processing fields
+			entityMap.Set("__temp_entity_id", entityID)
+		}
+		// For "none" metadata level, never include @odata.id
+	}
+
 	// Add @odata.type annotation for full metadata
 	if metadataLevel == "full" {
 		entityTypeName := getEntityTypeFromSetName(entitySetName)
@@ -272,6 +347,32 @@ func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataPro
 		} else {
 			// Regular property - include its value
 			entityMap.Set(jsonName, fieldValue.Interface())
+		}
+	}
+
+	// For minimal metadata, check if all key fields are present
+	if metadataLevel == "minimal" {
+		if tempID, exists := entityMap.values["__temp_entity_id"]; exists {
+			// Remove the temporary ID
+			delete(entityMap.values, "__temp_entity_id")
+			// Remove from keys list
+			for i, key := range entityMap.keys {
+				if key == "__temp_entity_id" {
+					entityMap.keys = append(entityMap.keys[:i], entityMap.keys[i+1:]...)
+					break
+				}
+			}
+			
+			// Check if all key fields are present
+			if !allKeyFieldsPresentInOrderedMap(entityMap, metadata) {
+				// Add @odata.id at the beginning (after @odata.context and @odata.type if present)
+				insertPosition := 0
+				if len(entityMap.keys) > 0 && strings.HasPrefix(entityMap.keys[0], "@odata.") {
+					insertPosition = 1
+				}
+				entityMap.keys = append(entityMap.keys[:insertPosition], append([]string{"@odata.id"}, entityMap.keys[insertPosition:]...)...)
+				entityMap.values["@odata.id"] = tempID
+			}
 		}
 	}
 
@@ -399,6 +500,28 @@ func getJsonFieldName(field reflect.StructField) string {
 	}
 
 	return field.Name
+}
+
+// allKeyFieldsPresent checks if all key fields are present in a map entity
+func allKeyFieldsPresent(entityMap map[string]interface{}, metadata EntityMetadataProvider) bool {
+	keyProps := metadata.GetKeyProperties()
+	for _, keyProp := range keyProps {
+		if _, exists := entityMap[keyProp.JsonName]; !exists {
+			return false
+		}
+	}
+	return true
+}
+
+// allKeyFieldsPresentInOrderedMap checks if all key fields are present in an OrderedMap
+func allKeyFieldsPresentInOrderedMap(entityMap *OrderedMap, metadata EntityMetadataProvider) bool {
+	keyProps := metadata.GetKeyProperties()
+	for _, keyProp := range keyProps {
+		if _, exists := entityMap.values[keyProp.JsonName]; !exists {
+			return false
+		}
+	}
+	return true
 }
 
 // ODataErrorDetail represents an additional error detail in an OData error response
