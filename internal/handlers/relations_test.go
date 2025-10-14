@@ -468,12 +468,15 @@ func parseExpandForTest(expandStr string) []query.ExpandOption {
 }
 
 // TestNavigationLinksWithoutExpand tests that navigation links are included when properties are not expanded
+// and full metadata is requested (per OData v4 spec)
 func TestNavigationLinksWithoutExpand(t *testing.T) {
 	db := setupRelationTestDB(t)
 	authorMeta, _ := metadata.AnalyzeEntity(&Author{})
 	handler := NewEntityHandler(db, authorMeta)
 
 	req := httptest.NewRequest(http.MethodGet, "http://localhost:8080/Authors", nil)
+	// Request full metadata to get navigation links (per OData v4 spec)
+	req.Header.Set("Accept", "application/json;odata.metadata=full")
 	w := httptest.NewRecorder()
 
 	handler.HandleCollection(w, req)
@@ -563,12 +566,15 @@ func TestNavigationLinksWithExpand(t *testing.T) {
 }
 
 // TestNavigationLinksWithSelect tests that navigation links work correctly with $select
+// and full metadata (per OData v4 spec)
 func TestNavigationLinksWithSelect(t *testing.T) {
 	db := setupRelationTestDB(t)
 	authorMeta, _ := metadata.AnalyzeEntity(&Author{})
 	handler := NewEntityHandler(db, authorMeta)
 
 	req := httptest.NewRequest(http.MethodGet, "http://localhost:8080/Authors?$select=ID,Name", nil)
+	// Request full metadata to get navigation links (per OData v4 spec)
+	req.Header.Set("Accept", "application/json;odata.metadata=full")
 	w := httptest.NewRecorder()
 
 	handler.HandleCollection(w, req)

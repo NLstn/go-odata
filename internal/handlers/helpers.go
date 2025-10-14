@@ -150,7 +150,7 @@ func (h *EntityHandler) buildEntityResponseWithMetadata(navValue reflect.Value, 
 }
 
 // buildOrderedEntityResponseWithMetadata builds an ordered OData entity response with metadata level support
-func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{}, contextURL string, metadataLevel string) *response.OrderedMap {
+func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{}, contextURL string, metadataLevel string, r *http.Request) *response.OrderedMap {
 	odataResponse := response.NewOrderedMap()
 	odataResponse.Set(ODataContextProperty, contextURL)
 
@@ -181,9 +181,45 @@ func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{
 	entityType := resultValue.Type()
 	for i := 0; i < resultValue.NumField(); i++ {
 		field := entityType.Field(i)
-		if field.IsExported() {
-			fieldValue := resultValue.Field(i)
-			jsonName := getJsonName(field)
+		if !field.IsExported() {
+			continue
+		}
+
+		fieldValue := resultValue.Field(i)
+		jsonName := getJsonName(field)
+
+		// Check if this field is a navigation property
+		propMeta := h.findPropertyMetadata(field.Name)
+		if propMeta != nil && propMeta.IsNavigationProp {
+			// Check if the navigation property is populated (expanded)
+			isExpanded := false
+			if fieldValue.Kind() == reflect.Ptr {
+				// For pointer types, check if not nil
+				isExpanded = !fieldValue.IsNil()
+			} else if fieldValue.Kind() == reflect.Slice {
+				// For slices, check if not nil and not empty
+				isExpanded = !fieldValue.IsNil() && fieldValue.Len() > 0
+			}
+
+			if isExpanded {
+				// Include the expanded data
+				odataResponse.Set(jsonName, fieldValue.Interface())
+			} else {
+				// Handle navigation property based on metadata level
+				// Only add navigation link for full metadata (per OData v4 spec)
+				// Minimal and none metadata levels do not include navigation links
+				if metadataLevel == "full" && r != nil {
+					// Build the key segment for the navigation link
+					keySegment := h.buildKeySegmentFromEntity(resultValue)
+					if keySegment != "" {
+						baseURL := response.BuildBaseURL(r)
+						navLink := fmt.Sprintf("%s/%s(%s)/%s", baseURL, h.metadata.EntitySetName, keySegment, propMeta.JsonName)
+						odataResponse.Set(jsonName+"@odata.navigationLink", navLink)
+					}
+				}
+			}
+		} else {
+			// Regular property - include its value
 			odataResponse.Set(jsonName, fieldValue.Interface())
 		}
 	}
@@ -205,6 +241,50 @@ func getJsonName(field reflect.StructField) string {
 	}
 
 	return field.Name
+}
+
+// findPropertyMetadata finds metadata for a property by field name
+func (h *EntityHandler) findPropertyMetadata(fieldName string) *metadata.PropertyMetadata {
+	for i := range h.metadata.Properties {
+		if h.metadata.Properties[i].Name == fieldName || h.metadata.Properties[i].FieldName == fieldName {
+			return &h.metadata.Properties[i]
+		}
+	}
+	return nil
+}
+
+// buildKeySegmentFromEntity builds the key segment for URLs from an entity value
+func (h *EntityHandler) buildKeySegmentFromEntity(entity reflect.Value) string {
+	keyProps := h.metadata.KeyProperties
+	if len(keyProps) == 0 {
+		return ""
+	}
+
+	// Single key - return just the value
+	if len(keyProps) == 1 {
+		keyFieldValue := entity.FieldByName(keyProps[0].Name)
+		if keyFieldValue.IsValid() {
+			return fmt.Sprintf("%v", keyFieldValue.Interface())
+		}
+		return ""
+	}
+
+	// Composite keys - return key1=value1,key2=value2
+	var parts []string
+	for _, keyProp := range keyProps {
+		keyFieldValue := entity.FieldByName(keyProp.Name)
+		if keyFieldValue.IsValid() {
+			keyValue := keyFieldValue.Interface()
+			// Quote string values
+			if keyFieldValue.Kind() == reflect.String {
+				parts = append(parts, fmt.Sprintf("%s='%v'", keyProp.JsonName, keyValue))
+			} else {
+				parts = append(parts, fmt.Sprintf("%s=%v", keyProp.JsonName, keyValue))
+			}
+		}
+	}
+
+	return strings.Join(parts, ",")
 }
 
 // metadataAdapter adapts metadata.EntityMetadata to response.EntityMetadataProvider
