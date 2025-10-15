@@ -1218,7 +1218,7 @@ You can use any field type for ETags:
 
 ### How ETags Work
 
-1. **GET requests** return an `ETag` header with a hash of the ETag field value
+1. **GET requests** return an `ETag` header and `@odata.etag` annotation in the response body with a hash of the ETag field value
 2. **Clients** store the ETag value and send it back in an `If-Match` header when updating
 3. **UPDATE/DELETE operations** validate that the `If-Match` header matches the current ETag
 4. If ETags don't match, a `412 Precondition Failed` response is returned
@@ -1242,12 +1242,15 @@ Response body:
 ```json
 {
   "@odata.context": "http://localhost:8080/$metadata#Products/$entity",
+  "@odata.etag": "W/\"abc123def456...\"",
   "ID": 1,
   "Name": "Laptop",
   "Price": 999.99,
   "Version": 1
 }
 ```
+
+Note: The `@odata.etag` annotation in the response body is included per OData v4 specification, in addition to the `ETag` HTTP header.
 
 **Step 2: Update the entity with If-Match header (PATCH)**
 ```bash
@@ -1291,6 +1294,12 @@ Content-Type: application/json
 ### ETag Generation
 
 ETags are automatically generated as weak ETags (format: `W/"hash"`) using SHA-256 hash of the ETag field value. The same field value always produces the same ETag, ensuring consistency.
+
+Per OData v4 specification, ETags are included in responses in two ways:
+1. **HTTP Header**: `ETag: W/"abc123..."` - Used by clients for conditional requests
+2. **Response Body**: `"@odata.etag": "W/\"abc123...\""` - Included in the JSON response body for each entity
+
+Both the header and the annotation contain the same ETag value.
 
 ### Best Practices
 
