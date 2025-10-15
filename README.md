@@ -47,7 +47,9 @@ A Go library for building services that expose OData APIs with automatic handlin
   - Date extraction functions: `year`, `month`, `day`, `hour`, `minute`, `second`, `date`, `time`
   - Use with $select to return only computed properties
 - ✅ Ordering ($orderby) - sort by one or more properties
-- ✅ Pagination ($top, $skip) with automatic @odata.nextLink generation
+- ✅ **Pagination ($top, $skip)** with automatic @odata.nextLink generation
+  - Server-driven paging with `odata.maxpagesize` preference header
+  - Stable pagination with `$skiptoken` for ordered queries
 - ✅ Count ($count) - inline count with results or standalone count endpoint
 - ✅ **Expand ($expand)** - retrieve related entities with nested query options
   - Nested $filter, $select, $orderby, $top, $skip on expanded properties
@@ -67,7 +69,9 @@ A Go library for building services that expose OData APIs with automatic handlin
   - ETag support for optimistic concurrency control
 - ✅ Navigation properties - access related entities (e.g., /Products(1)/Category)
 - ✅ Structural properties with $value endpoint (e.g., /Products(1)/Name/$value)
-- ✅ Prefer header support (return=representation, return=minimal)
+- ✅ **Prefer header support** 
+  - `return=representation`, `return=minimal` for CRUD operations
+  - `odata.maxpagesize` for server-driven paging
 - ✅ **OData-MaxVersion header support** - version negotiation and validation
   - Rejects requests with versions below 4.0 (returns 406 Not Acceptable)
   - Accepts version 4.0 and above
@@ -520,6 +524,50 @@ When using `$top`, if more results are available, the response will include an `
   "value": [ /* ... */ ]
 }
 ```
+
+### Server-Driven Paging
+
+The library supports OData v4 server-driven paging features:
+
+#### `odata.maxpagesize` Preference
+Control the maximum page size using the `Prefer` header:
+```bash
+GET /Products HTTP/1.1
+Host: localhost:8080
+Prefer: odata.maxpagesize=50
+```
+
+The server will limit results to the specified page size and include a `Preference-Applied` response header:
+```
+HTTP/1.1 200 OK
+Preference-Applied: odata.maxpagesize=50
+OData-Version: 4.0
+Content-Type: application/json;odata.metadata=minimal
+```
+
+If both `odata.maxpagesize` and `$top` are specified, the smaller value is used.
+
+#### `$skiptoken` for Stable Paging
+When using `$orderby`, the library generates `$skiptoken`-based pagination instead of `$skip`:
+```
+GET /Products?$top=10&$orderby=Price
+```
+
+Response includes a `$skiptoken` in the `@odata.nextLink`:
+```json
+{
+  "@odata.context": "http://localhost:8080/$metadata#Products",
+  "@odata.nextLink": "http://localhost:8080/Products?$skiptoken=eyJrIjp7IklEIjoxMH0sIm8iOnsiUHJpY2UiOjk5Ljk5fX0%3D&$top=10&$orderby=Price",
+  "value": [ /* ... */ ]
+}
+```
+
+The `$skiptoken` encodes the position in the result set using the last entity's key and orderby values, providing:
+- Stable pagination even when data changes between requests
+- Better performance for large offsets compared to `$skip`
+- Proper handling of ordered queries
+
+**Note:** `$skiptoken` and `$skip` are mutually exclusive and cannot be used together.
 
 ### Computed Properties (`$compute`)
 

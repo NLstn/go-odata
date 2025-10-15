@@ -107,7 +107,10 @@ func extractFromMap(entityValue reflect.Value, keyProperties []string, orderByPr
 		KeyValues: make(map[string]interface{}),
 	}
 
-	mapValue := entityValue.Interface().(map[string]interface{})
+	mapValue, ok := entityValue.Interface().(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("value is not a map[string]interface{}")
+	}
 
 	// Extract key values
 	for _, keyProp := range keyProperties {
