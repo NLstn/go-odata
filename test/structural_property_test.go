@@ -737,3 +737,40 @@ func TestStructuralPropertyRead_NullBinary(t *testing.T) {
 		t.Errorf("Null binary value = %v, want nil", response["value"])
 	}
 }
+
+func TestStructuralPropertyValue_BinaryHEAD(t *testing.T) {
+	service, db := setupStructuralPropTestService(t)
+
+	// Insert test data with binary content
+	binaryData := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A} // PNG header
+	product := TestProductForStructuralProp{
+		ID:          1,
+		Name:        "Laptop",
+		Price:       999.99,
+		Description: "A high-performance laptop",
+		InStock:     true,
+		Image:       binaryData,
+	}
+	db.Create(&product)
+
+	req := httptest.NewRequest(http.MethodHead, "/TestProductForStructuralProps(1)/image/$value", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	// Check content type for binary data
+	contentType := w.Header().Get("Content-Type")
+	if contentType != "application/octet-stream" {
+		t.Errorf("Content-Type = %v, want 'application/octet-stream'", contentType)
+	}
+
+	// HEAD request should have no body
+	body := w.Body.Bytes()
+	if len(body) != 0 {
+		t.Errorf("HEAD request should have no body, got %d bytes", len(body))
+	}
+}
