@@ -115,7 +115,7 @@ func (h *EntityHandler) writeEntityResponseWithETag(w http.ResponseWriter, r *ht
 	metadataLevel := response.GetODataMetadataLevel(r)
 
 	contextURL := fmt.Sprintf(ODataContextFormat, response.BuildBaseURL(r), h.metadata.EntitySetName)
-	
+
 	// Use pre-computed ETag if provided, otherwise generate it
 	etagValue := precomputedETag
 	if etagValue == "" && h.metadata.ETagProperty != nil {
@@ -307,10 +307,10 @@ func (h *EntityHandler) returnUpdatedEntity(w http.ResponseWriter, r *http.Reque
 	metadataLevel := response.GetODataMetadataLevel(r)
 
 	contextURL := fmt.Sprintf(ODataContextFormat, response.BuildBaseURL(r), h.metadata.EntitySetName)
-	
+
 	// Generate ETag if entity has an ETag property
 	etagValue := etag.Generate(updatedEntity, h.metadata)
-	
+
 	odataResponse := h.buildOrderedEntityResponseWithMetadata(updatedEntity, contextURL, metadataLevel, r, etagValue)
 
 	// Set ETag header if available

@@ -135,10 +135,10 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 		metadataLevel := response.GetODataMetadataLevel(r)
 
 		contextURL := fmt.Sprintf(ODataContextFormat, response.BuildBaseURL(r), h.metadata.EntitySetName)
-		
+
 		// Generate ETag if entity has an ETag property
 		etagValue := etag.Generate(entity, h.metadata)
-		
+
 		odataResponse := h.buildOrderedEntityResponseWithMetadata(entity, contextURL, metadataLevel, r, etagValue)
 
 		// Set ETag header if available
