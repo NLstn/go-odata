@@ -12,6 +12,7 @@ import (
 	"github.com/nlstn/go-odata/internal/query"
 	"github.com/nlstn/go-odata/internal/response"
 	"github.com/nlstn/go-odata/internal/skiptoken"
+	"gorm.io/gorm"
 )
 
 // HandleCollection handles GET, HEAD, POST, and OPTIONS requests for entity collections
@@ -335,8 +336,16 @@ func (h *EntityHandler) fetchResults(queryOptions *query.QueryOptions) (interfac
 		modifiedOptions.Top = &topPlusOne
 	}
 
+	// Start with the base database query
+	db := h.db
+
+	// Apply skiptoken filter if present (must be done before other query options)
+	if queryOptions.SkipToken != nil {
+		db = h.applySkipTokenFilter(db, queryOptions)
+	}
+
 	// Apply query options to the database query
-	db := query.ApplyQueryOptions(h.db, &modifiedOptions, h.metadata)
+	db = query.ApplyQueryOptions(db, &modifiedOptions, h.metadata)
 
 	// Check if we need to use map results (for $apply transformations)
 	if query.ShouldUseMapResults(queryOptions) {
@@ -491,3 +500,96 @@ func (h *EntityHandler) buildNextLinkWithSkipToken(queryOptions *query.QueryOpti
 	nextURL := response.BuildNextLinkWithSkipToken(r, encoded)
 	return &nextURL
 }
+
+// applySkipTokenFilter decodes the skiptoken and applies appropriate WHERE clauses
+// to skip to the correct position in the result set
+func (h *EntityHandler) applySkipTokenFilter(db *gorm.DB, queryOptions *query.QueryOptions) *gorm.DB {
+	if queryOptions.SkipToken == nil {
+		return db
+	}
+
+	// Decode the skip token
+	token, err := skiptoken.Decode(*queryOptions.SkipToken)
+	if err != nil {
+		// Invalid skiptoken - just return db as-is
+		// The query will return from the beginning
+		return db
+	}
+
+	// Build WHERE clause based on orderby and key values
+	// For ordered queries, we need to filter based on the orderby columns
+	// and use the key as a tiebreaker
+
+	if len(queryOptions.OrderBy) > 0 {
+		// Build a compound WHERE clause for ordered results
+		// For example, with ORDER BY Price DESC, Name ASC, ID:
+		// WHERE (Price < ? OR (Price = ? AND Name > ?) OR (Price = ? AND Name = ? AND ID > ?))
+
+		// This is a simplified implementation that handles single orderby column
+		// A full implementation would handle multiple orderby columns with proper logic
+
+		orderByProp := queryOptions.OrderBy[0]
+		orderByValue, ok := token.OrderByValues[orderByProp.Property]
+		if !ok {
+			return db
+		}
+
+		// Get the key property value
+		var keyValue interface{}
+		for keyProp := range token.KeyValues {
+			keyValue = token.KeyValues[keyProp]
+			break
+		}
+
+		// Build the WHERE clause
+		// Find the database column name for the orderby property
+		var orderByColumnName string
+		for _, prop := range h.metadata.Properties {
+			if prop.JsonName == orderByProp.Property || prop.Name == orderByProp.Property {
+				orderByColumnName = toSnakeCase(prop.Name)
+				break
+			}
+		}
+
+		if orderByColumnName == "" {
+			return db
+		}
+
+		// Find the database column name for the key property
+		var keyColumnName string
+		for _, keyProp := range h.metadata.KeyProperties {
+			keyColumnName = toSnakeCase(keyProp.Name)
+			break
+		}
+
+		if orderByProp.Descending {
+			// For descending order: WHERE col < ? OR (col = ? AND key > ?)
+			db = db.Where(fmt.Sprintf("(%s < ? OR (%s = ? AND %s > ?))",
+				orderByColumnName, orderByColumnName, keyColumnName),
+				orderByValue, orderByValue, keyValue)
+		} else {
+			// For ascending order: WHERE col > ? OR (col = ? AND key > ?)
+			db = db.Where(fmt.Sprintf("(%s > ? OR (%s = ? AND %s > ?))",
+				orderByColumnName, orderByColumnName, keyColumnName),
+				orderByValue, orderByValue, keyValue)
+		}
+	} else {
+		// No orderby - just filter by key
+		// WHERE key > ?
+		var keyColumnName string
+		var keyValue interface{}
+		for _, keyProp := range h.metadata.KeyProperties {
+			keyColumnName = toSnakeCase(keyProp.Name)
+			keyValue = token.KeyValues[keyProp.JsonName]
+			break
+		}
+
+		if keyColumnName != "" && keyValue != nil {
+			db = db.Where(fmt.Sprintf("%s > ?", keyColumnName), keyValue)
+		}
+	}
+
+	return db
+}
+
+

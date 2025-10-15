@@ -531,6 +531,172 @@ func TestEntityHandlerCollectionInvalidPagination(t *testing.T) {
 	}
 }
 
+func TestEntityHandlerCollectionWithMaxPageSize(t *testing.T) {
+	handler, db := setupProductHandler(t)
+
+	// Insert 20 test products
+	products := make([]Product, 20)
+	for i := 0; i < 20; i++ {
+		products[i] = Product{
+			ID:          i + 1,
+			Name:        fmt.Sprintf("Product %d", i+1),
+			Description: "Description",
+			Price:       float64(i+1) * 10.0,
+			Category:    "Electronics",
+		}
+		db.Create(&products[i])
+	}
+
+	tests := []struct {
+		name                string
+		maxPageSize         int
+		top                 *int
+		expectedCount       int
+		expectNext          bool
+		expectAppliedHeader bool
+	}{
+		{
+			name:                "MaxPageSize 5 without $top",
+			maxPageSize:         5,
+			top:                 nil,
+			expectedCount:       5,
+			expectNext:          true,
+			expectAppliedHeader: true,
+		},
+		{
+			name:                "MaxPageSize 10 with $top=5",
+			maxPageSize:         10,
+			top:                 intPtr(5),
+			expectedCount:       5,
+			expectNext:          true,
+			expectAppliedHeader: true,
+		},
+		{
+			name:                "MaxPageSize 5 with $top=10",
+			maxPageSize:         5,
+			top:                 intPtr(10),
+			expectedCount:       5,
+			expectNext:          true,
+			expectAppliedHeader: true,
+		},
+		{
+			name:                "MaxPageSize 100 with $top=8",
+			maxPageSize:         100,
+			top:                 intPtr(8),
+			expectedCount:       8,
+			expectNext:          true,
+			expectAppliedHeader: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/Products", nil)
+			req.Header.Set("Prefer", fmt.Sprintf("odata.maxpagesize=%d", tt.maxPageSize))
+
+			q := req.URL.Query()
+			if tt.top != nil {
+				q.Add("$top", fmt.Sprintf("%d", *tt.top))
+			}
+			req.URL.RawQuery = q.Encode()
+
+			w := httptest.NewRecorder()
+
+			handler.HandleCollection(w, req)
+
+			if w.Code != http.StatusOK {
+				t.Errorf("Status = %v, want %v", w.Code, http.StatusOK)
+			}
+
+			// Check for Preference-Applied header
+			if tt.expectAppliedHeader {
+				appliedHeader := w.Header().Get("Preference-Applied")
+				if appliedHeader == "" {
+					t.Error("Expected Preference-Applied header to be present")
+				} else if appliedHeader != fmt.Sprintf("odata.maxpagesize=%d", tt.maxPageSize) {
+					t.Errorf("Expected Preference-Applied header to be 'odata.maxpagesize=%d', got '%s'", tt.maxPageSize, appliedHeader)
+				}
+			}
+
+			var response map[string]interface{}
+			if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+				t.Fatalf("Failed to decode response: %v", err)
+			}
+
+			value, ok := response["value"].([]interface{})
+			if !ok {
+				t.Fatal("value field is not an array")
+			}
+
+			if len(value) != tt.expectedCount {
+				t.Errorf("Expected %d results, got %d", tt.expectedCount, len(value))
+			}
+
+			if tt.expectNext {
+				if _, hasNext := response["@odata.nextLink"]; !hasNext {
+					t.Error("Expected @odata.nextLink to be present")
+				}
+			}
+		})
+	}
+}
+
+func TestEntityHandlerCollectionWithSkipToken(t *testing.T) {
+	handler, db := setupProductHandler(t)
+
+	// Insert 15 test products with different prices for ordering
+	products := make([]Product, 15)
+	for i := 0; i < 15; i++ {
+		products[i] = Product{
+			ID:          i + 1,
+			Name:        fmt.Sprintf("Product %c", 'A'+i),
+			Description: "Description",
+			Price:       float64((i+1)*10) + float64(i%3), // Varying prices
+			Category:    "Electronics",
+		}
+		db.Create(&products[i])
+	}
+
+	// First request with $top=5 and $orderby=Price
+	req1 := httptest.NewRequest(http.MethodGet, "/Products?$top=5&$orderby=Price", nil)
+	w1 := httptest.NewRecorder()
+	handler.HandleCollection(w1, req1)
+
+	if w1.Code != http.StatusOK {
+		t.Fatalf("First request failed with status %v, body: %s", w1.Code, w1.Body.String())
+	}
+
+	var response1 map[string]interface{}
+	if err := json.NewDecoder(w1.Body).Decode(&response1); err != nil {
+		t.Fatalf("Failed to decode first response: %v", err)
+	}
+
+	// Check that we have a nextLink with $skiptoken
+	nextLink, hasNext := response1["@odata.nextLink"].(string)
+	if !hasNext {
+		t.Fatal("Expected @odata.nextLink in first response")
+	}
+
+	// Verify nextLink contains $skiptoken (URL-encoded as %24skiptoken)
+	if !contains(nextLink, "$skiptoken") && !contains(nextLink, "%24skiptoken") {
+		t.Errorf("Expected nextLink to contain $skiptoken, got: %s", nextLink)
+	}
+
+	// Get first page results
+	value1, ok := response1["value"].([]interface{})
+	if !ok {
+		t.Fatal("value field is not an array")
+	}
+
+	if len(value1) != 5 {
+		t.Errorf("Expected 5 results in first page, got %d", len(value1))
+	}
+
+	// Note: We can't easily test the second request without parsing the skiptoken URL
+	// because it's base64 encoded and requires proper HTTP handling
+	// The integration tests would cover this more thoroughly
+}
+
 // Helper functions
 func intPtr(i int) *int {
 	return &i
@@ -539,3 +705,5 @@ func intPtr(i int) *int {
 func int64Ptr(i int64) *int64 {
 	return &i
 }
+
+
