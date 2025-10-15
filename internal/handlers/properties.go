@@ -233,6 +233,26 @@ func (h *EntityHandler) writeRawPropertyValue(w http.ResponseWriter, r *http.Req
 	// Set appropriate content type based on the value type
 	valueInterface := fieldValue.Interface()
 
+	// Check for binary data ([]byte) first
+	if fieldValue.Kind() == reflect.Slice && fieldValue.Type().Elem().Kind() == reflect.Uint8 {
+		// Binary data - set appropriate content type and write raw bytes
+		w.Header().Set(HeaderContentType, "application/octet-stream")
+		w.WriteHeader(http.StatusOK)
+
+		// For HEAD requests, don't write the body
+		if r.Method == http.MethodHead {
+			return
+		}
+
+		// Write raw binary data
+		if byteData, ok := valueInterface.([]byte); ok {
+			if _, err := w.Write(byteData); err != nil {
+				fmt.Printf("Error writing binary value: %v\n", err)
+			}
+		}
+		return
+	}
+
 	// Determine content type based on the property type
 	switch fieldValue.Kind() {
 	case reflect.String:

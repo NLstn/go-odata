@@ -1,6 +1,7 @@
 package odata_test
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	odata "github.com/nlstn/go-odata"
 	"net/http"
@@ -17,6 +18,7 @@ type TestProductForStructuralProp struct {
 	Price       float64 `json:"price"`
 	Description string  `json:"description"`
 	InStock     bool    `json:"inStock"`
+	Image       []byte  `json:"image" gorm:"type:blob" odata:"nullable"` // Binary data field
 }
 
 func setupStructuralPropTestService(t *testing.T) (*odata.Service, *gorm.DB) {
@@ -537,5 +539,201 @@ func TestStructuralPropertyValue_OnNavigationProperty(t *testing.T) {
 
 	if _, ok := response["error"]; !ok {
 		t.Error("Response missing error field")
+	}
+}
+
+// Binary (Edm.Binary) type tests
+
+func TestStructuralPropertyRead_Binary(t *testing.T) {
+	service, db := setupStructuralPropTestService(t)
+
+	// Insert test data with binary content
+	binaryData := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A} // PNG header
+	product := TestProductForStructuralProp{
+		ID:          1,
+		Name:        "Laptop",
+		Price:       999.99,
+		Description: "A high-performance laptop",
+		InStock:     true,
+		Image:       binaryData,
+	}
+	db.Create(&product)
+
+	req := httptest.NewRequest(http.MethodGet, "/TestProductForStructuralProps(1)/image", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var response map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	// Check for @odata.context
+	if _, ok := response["@odata.context"]; !ok {
+		t.Error("Response missing @odata.context")
+	}
+
+	// Check the value is base64 encoded (Go's json.Marshal automatically encodes []byte as base64)
+	if valueStr, ok := response["value"].(string); ok {
+		// Decode base64 and verify it matches original data
+		decoded, err := base64.StdEncoding.DecodeString(valueStr)
+		if err != nil {
+			t.Errorf("Failed to decode base64 value: %v", err)
+		}
+		if string(decoded) != string(binaryData) {
+			t.Errorf("Decoded binary data = %v, want %v", decoded, binaryData)
+		}
+	} else {
+		t.Errorf("value is not a string, got type %T", response["value"])
+	}
+}
+
+func TestStructuralPropertyValue_Binary(t *testing.T) {
+	service, db := setupStructuralPropTestService(t)
+
+	// Insert test data with binary content
+	binaryData := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A} // PNG header
+	product := TestProductForStructuralProp{
+		ID:          1,
+		Name:        "Laptop",
+		Price:       999.99,
+		Description: "A high-performance laptop",
+		InStock:     true,
+		Image:       binaryData,
+	}
+	db.Create(&product)
+
+	req := httptest.NewRequest(http.MethodGet, "/TestProductForStructuralProps(1)/image/$value", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	// Check content type for binary data
+	contentType := w.Header().Get("Content-Type")
+	if contentType != "application/octet-stream" {
+		t.Errorf("Content-Type = %v, want 'application/octet-stream'", contentType)
+	}
+
+	// Check the raw binary value
+	body := w.Body.Bytes()
+	if string(body) != string(binaryData) {
+		t.Errorf("Body = %v, want %v", body, binaryData)
+	}
+}
+
+func TestStructuralPropertyRead_EmptyBinary(t *testing.T) {
+	service, db := setupStructuralPropTestService(t)
+
+	// Insert test data with empty binary content
+	product := TestProductForStructuralProp{
+		ID:          1,
+		Name:        "Laptop",
+		Price:       999.99,
+		Description: "A high-performance laptop",
+		InStock:     true,
+		Image:       []byte{}, // Empty binary data
+	}
+	db.Create(&product)
+
+	req := httptest.NewRequest(http.MethodGet, "/TestProductForStructuralProps(1)/image", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var response map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	// Empty binary should be encoded as empty string in JSON
+	if valueStr, ok := response["value"].(string); ok {
+		if valueStr != "" {
+			t.Errorf("Empty binary value = %v, want empty string", valueStr)
+		}
+	} else {
+		t.Errorf("value is not a string, got type %T", response["value"])
+	}
+}
+
+func TestStructuralPropertyValue_EmptyBinary(t *testing.T) {
+	service, db := setupStructuralPropTestService(t)
+
+	// Insert test data with empty binary content
+	product := TestProductForStructuralProp{
+		ID:          1,
+		Name:        "Laptop",
+		Price:       999.99,
+		Description: "A high-performance laptop",
+		InStock:     true,
+		Image:       []byte{}, // Empty binary data
+	}
+	db.Create(&product)
+
+	req := httptest.NewRequest(http.MethodGet, "/TestProductForStructuralProps(1)/image/$value", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	// Check content type for binary data
+	contentType := w.Header().Get("Content-Type")
+	if contentType != "application/octet-stream" {
+		t.Errorf("Content-Type = %v, want 'application/octet-stream'", contentType)
+	}
+
+	// Check the raw binary value is empty
+	body := w.Body.Bytes()
+	if len(body) != 0 {
+		t.Errorf("Body length = %v, want 0", len(body))
+	}
+}
+
+func TestStructuralPropertyRead_NullBinary(t *testing.T) {
+	service, db := setupStructuralPropTestService(t)
+
+	// Insert test data with null binary content
+	product := TestProductForStructuralProp{
+		ID:          1,
+		Name:        "Laptop",
+		Price:       999.99,
+		Description: "A high-performance laptop",
+		InStock:     true,
+		Image:       nil, // Null binary data
+	}
+	db.Create(&product)
+
+	req := httptest.NewRequest(http.MethodGet, "/TestProductForStructuralProps(1)/image", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var response map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	// Null binary should be encoded as null in JSON
+	if response["value"] != nil {
+		t.Errorf("Null binary value = %v, want nil", response["value"])
 	}
 }
