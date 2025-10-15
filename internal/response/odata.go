@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/nlstn/go-odata/internal/etag"
 	"github.com/nlstn/go-odata/internal/metadata"
 )
 
@@ -118,6 +119,7 @@ type EntityMetadataProvider interface {
 	GetKeyProperty() *PropertyMetadata    // Deprecated: Use GetKeyProperties for composite key support
 	GetKeyProperties() []PropertyMetadata // Returns all key properties (single or composite)
 	GetEntitySetName() string
+	GetETagProperty() *PropertyMetadata // Returns the ETag property if configured
 }
 
 // PropertyMetadata represents metadata about a property
@@ -288,7 +290,7 @@ func WriteODataCollection(w http.ResponseWriter, r *http.Request, entitySetName 
 }
 
 // WriteODataCollectionWithNavigation writes an OData collection response with navigation links
-func WriteODataCollectionWithNavigation(w http.ResponseWriter, r *http.Request, entitySetName string, data interface{}, count *int64, nextLink *string, metadata EntityMetadataProvider, expandedProps []string) error {
+func WriteODataCollectionWithNavigation(w http.ResponseWriter, r *http.Request, entitySetName string, data interface{}, count *int64, nextLink *string, metadata EntityMetadataProvider, expandedProps []string, fullMetadata *metadata.EntityMetadata) error {
 	// Check if the requested format is supported
 	if !IsAcceptableFormat(r) {
 		return WriteError(w, http.StatusNotAcceptable, "Not Acceptable",
@@ -305,7 +307,7 @@ func WriteODataCollectionWithNavigation(w http.ResponseWriter, r *http.Request, 
 	}
 
 	// Transform the data to add navigation links and type annotations
-	transformedData := addNavigationLinks(data, metadata, expandedProps, r, entitySetName, metadataLevel)
+	transformedData := addNavigationLinks(data, metadata, expandedProps, r, entitySetName, metadataLevel, fullMetadata)
 
 	// Ensure empty collections are represented as [] not null per OData v4 spec
 	if transformedData == nil {
@@ -336,7 +338,7 @@ func WriteODataCollectionWithNavigation(w http.ResponseWriter, r *http.Request, 
 
 // addNavigationLinks adds @odata.navigationLink annotations for navigation properties
 // and @odata.type annotations when full metadata is requested
-func addNavigationLinks(data interface{}, metadata EntityMetadataProvider, expandedProps []string, r *http.Request, entitySetName string, metadataLevel string) []interface{} {
+func addNavigationLinks(data interface{}, metadata EntityMetadataProvider, expandedProps []string, r *http.Request, entitySetName string, metadataLevel string, fullMetadata *metadata.EntityMetadata) []interface{} {
 	dataValue := reflect.ValueOf(data)
 	if dataValue.Kind() != reflect.Slice {
 		// Return empty slice instead of nil to ensure JSON marshaling produces []
@@ -352,9 +354,9 @@ func addNavigationLinks(data interface{}, metadata EntityMetadataProvider, expan
 		var entityMap interface{}
 
 		if entity.Kind() == reflect.Map {
-			entityMap = processMapEntity(entity, metadata, expandedProps, baseURL, entitySetName, metadataLevel)
+			entityMap = processMapEntity(entity, metadata, expandedProps, baseURL, entitySetName, metadataLevel, fullMetadata)
 		} else {
-			entityMap = processStructEntityOrdered(entity, metadata, expandedProps, baseURL, entitySetName, metadataLevel)
+			entityMap = processStructEntityOrdered(entity, metadata, expandedProps, baseURL, entitySetName, metadataLevel, fullMetadata)
 		}
 
 		if entityMap != nil {
@@ -367,10 +369,18 @@ func addNavigationLinks(data interface{}, metadata EntityMetadataProvider, expan
 
 // processMapEntity processes an entity that is already a map and adds navigation links
 // and @odata.type annotation when full metadata is requested
-func processMapEntity(entity reflect.Value, metadata EntityMetadataProvider, expandedProps []string, baseURL, entitySetName string, metadataLevel string) map[string]interface{} {
+func processMapEntity(entity reflect.Value, metadata EntityMetadataProvider, expandedProps []string, baseURL, entitySetName string, metadataLevel string, fullMetadata *metadata.EntityMetadata) map[string]interface{} {
 	entityMap, ok := entity.Interface().(map[string]interface{})
 	if !ok {
 		return nil
+	}
+
+	// Add @odata.etag annotation if ETag is configured
+	if fullMetadata != nil && fullMetadata.ETagProperty != nil {
+		etagValue := etag.Generate(entityMap, fullMetadata)
+		if etagValue != "" {
+			entityMap["@odata.etag"] = etagValue
+		}
 	}
 
 	// Add @odata.id for full metadata (always) and minimal metadata (if key fields are omitted)
@@ -427,9 +437,29 @@ func processMapEntity(entity reflect.Value, metadata EntityMetadataProvider, exp
 
 // processStructEntityOrdered processes an entity that is a struct and returns an OrderedMap
 // and adds @odata.type annotation when full metadata is requested
-func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataProvider, expandedProps []string, baseURL, entitySetName string, metadataLevel string) *OrderedMap {
+func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataProvider, expandedProps []string, baseURL, entitySetName string, metadataLevel string, fullMetadata *metadata.EntityMetadata) *OrderedMap {
 	entityMap := NewOrderedMap()
 	entityType := entity.Type()
+
+	// Add @odata.etag annotation if ETag is configured
+	if fullMetadata != nil && fullMetadata.ETagProperty != nil {
+		// Get the entity interface for etag.Generate
+		var entityInterface interface{}
+		if entity.Kind() == reflect.Ptr {
+			entityInterface = entity.Interface()
+		} else {
+			// For non-pointer values, we need to get the address if possible
+			if entity.CanAddr() {
+				entityInterface = entity.Addr().Interface()
+			} else {
+				entityInterface = entity.Interface()
+			}
+		}
+		etagValue := etag.Generate(entityInterface, fullMetadata)
+		if etagValue != "" {
+			entityMap.Set("@odata.etag", etagValue)
+		}
+	}
 
 	// Add @odata.id for full metadata (always) and minimal metadata (if key fields are omitted)
 	keySegment := BuildKeySegmentFromEntity(entity, metadata)
