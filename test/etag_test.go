@@ -708,6 +708,166 @@ func TestGetEntity_WithoutIfNoneMatch(t *testing.T) {
 	}
 }
 
+// Test that @odata.etag annotation is present in response body (OData v4 compliance)
+func TestGetEntity_ResponseBodyContainsODataETag(t *testing.T) {
+	service, db := setupETagTestService(t)
+
+	// Create a test product
+	product := ETagProduct{
+		ID:          1,
+		Name:        "Laptop",
+		Price:       999.99,
+		Version:     1,
+		LastUpdated: time.Now(),
+	}
+	db.Create(&product)
+
+	req := httptest.NewRequest(http.MethodGet, "/ETagProducts(1)", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Status = %v, want %v", w.Code, http.StatusOK)
+	}
+
+	// Parse response body
+	var response map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to parse response body: %v", err)
+	}
+
+	// Check that @odata.etag annotation is present
+	odataEtag, exists := response["@odata.etag"]
+	if !exists {
+		t.Error("@odata.etag annotation is missing from response body")
+	}
+
+	// Check that @odata.etag has correct format (W/"hash")
+	if odataEtag != nil {
+		etagStr, ok := odataEtag.(string)
+		if !ok {
+			t.Error("@odata.etag should be a string")
+		} else if len(etagStr) < 3 || etagStr[:3] != "W/\"" {
+			t.Errorf("@odata.etag = %v, want format W/\"...\"", etagStr)
+		}
+
+		// Check that @odata.etag matches ETag header
+		headerETag := w.Header().Get("ETag")
+		if headerETag != etagStr {
+			t.Errorf("@odata.etag (%v) doesn't match ETag header (%v)", etagStr, headerETag)
+		}
+	}
+}
+
+// Test that @odata.etag annotation is present in POST response body
+func TestPostEntity_ResponseBodyContainsODataETag(t *testing.T) {
+	service, _ := setupETagTestService(t)
+
+	newProduct := map[string]interface{}{
+		"name":    "Mouse",
+		"price":   29.99,
+		"version": 1,
+	}
+	body, _ := json.Marshal(newProduct)
+
+	req := httptest.NewRequest(http.MethodPost, "/ETagProducts", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Prefer", "return=representation")
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Errorf("Status = %v, want %v", w.Code, http.StatusCreated)
+	}
+
+	// Parse response body
+	var response map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to parse response body: %v", err)
+	}
+
+	// Check that @odata.etag annotation is present
+	odataEtag, exists := response["@odata.etag"]
+	if !exists {
+		t.Error("@odata.etag annotation is missing from response body")
+	}
+
+	// Check that @odata.etag has correct format
+	if odataEtag != nil {
+		etagStr, ok := odataEtag.(string)
+		if !ok {
+			t.Error("@odata.etag should be a string")
+		} else if len(etagStr) < 3 || etagStr[:3] != "W/\"" {
+			t.Errorf("@odata.etag = %v, want format W/\"...\"", etagStr)
+		}
+	}
+}
+
+// Test that @odata.etag annotation is present in collection responses
+func TestGetCollection_ResponseBodyContainsODataETag(t *testing.T) {
+	service, db := setupETagTestService(t)
+
+	// Create test products
+	products := []ETagProduct{
+		{ID: 1, Name: "Laptop", Price: 999.99, Version: 1, LastUpdated: time.Now()},
+		{ID: 2, Name: "Mouse", Price: 29.99, Version: 2, LastUpdated: time.Now()},
+	}
+	for _, p := range products {
+		db.Create(&p)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/ETagProducts", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Status = %v, want %v", w.Code, http.StatusOK)
+	}
+
+	// Parse response body
+	var response map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to parse response body: %v", err)
+	}
+
+	// Check that value array exists
+	value, exists := response["value"]
+	if !exists {
+		t.Fatal("value array is missing from response")
+	}
+
+	valueArray, ok := value.([]interface{})
+	if !ok {
+		t.Fatal("value should be an array")
+	}
+
+	// Check that each entity has @odata.etag annotation
+	for i, item := range valueArray {
+		entity, ok := item.(map[string]interface{})
+		if !ok {
+			t.Errorf("Entity %d is not a map", i)
+			continue
+		}
+
+		odataEtag, exists := entity["@odata.etag"]
+		if !exists {
+			t.Errorf("Entity %d is missing @odata.etag annotation", i)
+			continue
+		}
+
+		// Check that @odata.etag has correct format
+		etagStr, ok := odataEtag.(string)
+		if !ok {
+			t.Errorf("Entity %d: @odata.etag should be a string", i)
+		} else if len(etagStr) < 3 || etagStr[:3] != "W/\"" {
+			t.Errorf("Entity %d: @odata.etag = %v, want format W/\"...\"", i, etagStr)
+		}
+	}
+}
+
 // Test GET with If-None-Match wildcard (*)
 func TestGetEntity_WithIfNoneMatch_Wildcard(t *testing.T) {
 	service, db := setupETagTestService(t)

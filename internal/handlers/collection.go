@@ -93,7 +93,7 @@ func (h *EntityHandler) handleGetCollection(w http.ResponseWriter, r *http.Reque
 
 	// Write the OData response with navigation links
 	metadataProvider := &metadataAdapter{metadata: h.metadata}
-	if err := response.WriteODataCollectionWithNavigation(w, r, h.metadata.EntitySetName, sliceValue, totalCount, nextLink, metadataProvider, expandedProps); err != nil {
+	if err := response.WriteODataCollectionWithNavigation(w, r, h.metadata.EntitySetName, sliceValue, totalCount, nextLink, metadataProvider, expandedProps, h.metadata); err != nil {
 		// If we can't write the response, log the error but don't try to write another response
 		fmt.Printf("Error writing OData response: %v\n", err)
 	}
@@ -150,10 +150,14 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 		metadataLevel := response.GetODataMetadataLevel(r)
 
 		contextURL := fmt.Sprintf(ODataContextFormat, response.BuildBaseURL(r), h.metadata.EntitySetName)
-		odataResponse := h.buildOrderedEntityResponseWithMetadata(entity, contextURL, metadataLevel, r)
+		
+		// Generate ETag if entity has an ETag property
+		etagValue := etag.Generate(entity, h.metadata)
+		
+		odataResponse := h.buildOrderedEntityResponseWithMetadata(entity, contextURL, metadataLevel, r, etagValue)
 
-		// Generate and set ETag header if entity has an ETag property
-		if etagValue := etag.Generate(entity, h.metadata); etagValue != "" {
+		// Set ETag header if available
+		if etagValue != "" {
 			w.Header().Set(HeaderETag, etagValue)
 		}
 

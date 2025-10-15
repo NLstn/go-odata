@@ -169,12 +169,18 @@ func (h *EntityHandler) buildEntityResponseWithMetadata(navValue reflect.Value, 
 }
 
 // buildOrderedEntityResponseWithMetadata builds an ordered OData entity response with metadata level support
-func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{}, contextURL string, metadataLevel string, r *http.Request) *response.OrderedMap {
+func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{}, contextURL string, metadataLevel string, r *http.Request, etagValue string) *response.OrderedMap {
 	odataResponse := response.NewOrderedMap()
 
 	// Only include @odata.context for minimal and full metadata (not for none)
 	if metadataLevel != "none" {
 		odataResponse.Set(ODataContextProperty, contextURL)
+	}
+
+	// Add @odata.etag annotation if ETag value is available
+	// Per OData v4 spec, this should be included in the response body
+	if etagValue != "" {
+		odataResponse.Set("@odata.etag", etagValue)
 	}
 
 	// Check if result is a map (from $select) or a struct
@@ -419,6 +425,19 @@ func (a *metadataAdapter) GetKeyProperties() []response.PropertyMetadata {
 
 func (a *metadataAdapter) GetEntitySetName() string {
 	return a.metadata.EntitySetName
+}
+
+func (a *metadataAdapter) GetETagProperty() *response.PropertyMetadata {
+	if a.metadata.ETagProperty == nil {
+		return nil
+	}
+	return &response.PropertyMetadata{
+		Name:              a.metadata.ETagProperty.Name,
+		JsonName:          a.metadata.ETagProperty.JsonName,
+		IsNavigationProp:  a.metadata.ETagProperty.IsNavigationProp,
+		NavigationTarget:  a.metadata.ETagProperty.NavigationTarget,
+		NavigationIsArray: a.metadata.ETagProperty.NavigationIsArray,
+	}
 }
 
 // ValidateODataVersion checks if the OData-MaxVersion header is compatible with OData v4.0

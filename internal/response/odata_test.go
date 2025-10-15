@@ -13,7 +13,7 @@ func TestAddNavigationLinksWithNilData(t *testing.T) {
 	req := httptest.NewRequest("GET", "http://example.com/Products", nil)
 
 	// Test with nil data (metadataLevel minimal is default)
-	result := addNavigationLinks(nil, nil, nil, req, "Products", "minimal")
+	result := addNavigationLinks(nil, nil, nil, req, "Products", "minimal", nil)
 
 	// Result should not be nil
 	if result == nil {
@@ -39,7 +39,7 @@ func TestAddNavigationLinksWithEmptySlice(t *testing.T) {
 
 	// Test with empty slice (metadataLevel minimal is default)
 	emptySlice := []interface{}{}
-	result := addNavigationLinks(emptySlice, nil, nil, req, "Products", "minimal")
+	result := addNavigationLinks(emptySlice, nil, nil, req, "Products", "minimal", nil)
 
 	// Result should be an empty slice
 	if result == nil {
@@ -69,7 +69,7 @@ func TestAddNavigationLinksWithNonSliceData(t *testing.T) {
 
 	// Test with non-slice data (e.g., a single object) (metadataLevel minimal is default)
 	singleObject := map[string]interface{}{"ID": 1, "Name": "Product"}
-	result := addNavigationLinks(singleObject, nil, nil, req, "Products", "minimal")
+	result := addNavigationLinks(singleObject, nil, nil, req, "Products", "minimal", nil)
 
 	// Result should be an empty slice (not nil)
 	if result == nil {
@@ -130,7 +130,7 @@ func TestWriteODataCollectionWithNavigationWithNilData(t *testing.T) {
 	w := httptest.NewRecorder()
 
 	// Write response with nil data (no metadata provider needed for this test)
-	err := WriteODataCollectionWithNavigation(w, req, "Products", nil, nil, nil, nil, nil)
+	err := WriteODataCollectionWithNavigation(w, req, "Products", nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("WriteODataCollectionWithNavigation failed: %v", err)
 	}
