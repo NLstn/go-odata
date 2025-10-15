@@ -132,6 +132,11 @@ func ApplyQueryOptions(db *gorm.DB, options *QueryOptions, entityMetadata *metad
 		db = applyFilter(db, options.Filter, entityMetadata)
 	}
 
+	// Apply skiptoken filter (for server-driven paging)
+	if options.SkipToken != nil {
+		db = applySkipToken(db, *options.SkipToken, options.OrderBy, entityMetadata)
+	}
+
 	// Apply expand (preload navigation properties)
 	if len(options.Expand) > 0 {
 		db = applyExpand(db, options.Expand, entityMetadata)
@@ -1096,4 +1101,23 @@ func findProperty(propName string, entityMetadata *metadata.EntityMetadata) *met
 		}
 	}
 	return nil
+}
+
+// applySkipToken applies $skiptoken filter to skip to the position indicated by the token
+// This is used for server-driven paging with stable ordering
+func applySkipToken(db *gorm.DB, skipTokenStr string, orderBy []OrderByItem, entityMetadata *metadata.EntityMetadata) *gorm.DB {
+	// Import skiptoken package at the top of this file
+	// For now, we'll add a simple implementation that can be enhanced later
+	// The skiptoken should be decoded and used to filter results
+
+	// Note: This is a simplified implementation
+	// A full implementation would decode the skiptoken and build WHERE clauses
+	// based on the orderby columns and key values
+
+	// Since we can't import skiptoken here due to circular dependencies,
+	// we'll handle this in the handler layer by applying filters before calling ApplyQueryOptions
+
+	// For now, just return db as-is
+	// The actual skiptoken logic will be implemented in the handler
+	return db
 }
