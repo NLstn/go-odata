@@ -57,10 +57,12 @@ Added a `Logo` field to the `CompanyInfo` singleton (`cmd/devserver/product.go`)
 ```go
 type CompanyInfo struct {
     // ... other fields ...
-    Logo []byte `json:"Logo" gorm:"type:blob" odata:"nullable"`
+    Logo []byte `json:"Logo" gorm:"type:blob" odata:"nullable,contenttype=image/svg+xml"`
     // ... other fields ...
 }
 ```
+
+The `contenttype=image/svg+xml` tag ensures the Logo is served with the correct MIME type when accessed via the `/$value` endpoint.
 
 Initialized with an SVG logo:
 ```go
@@ -72,7 +74,7 @@ svgLogo := []byte(`<svg xmlns="http://www.w3.org/2000/svg" width="100" height="1
 
 ## Test Coverage
 
-Created 6 comprehensive tests in `test/structural_property_test.go`:
+Created 7 comprehensive tests in `test/structural_property_test.go`:
 
 | Test Name | Description | Status |
 |-----------|-------------|--------|
@@ -82,6 +84,7 @@ Created 6 comprehensive tests in `test/structural_property_test.go`:
 | `TestStructuralPropertyValue_EmptyBinary` | `/$value` with empty binary | ✅ PASS |
 | `TestStructuralPropertyRead_NullBinary` | Null binary (nil) handling | ✅ PASS |
 | `TestStructuralPropertyValue_BinaryHEAD` | HEAD request support | ✅ PASS |
+| `TestStructuralPropertyValue_BinaryCustomContentType` | Custom MIME type via odata tag | ✅ PASS |
 
 All tests validate:
 - Correct Content-Type headers
@@ -118,9 +121,10 @@ All tests validate:
 ```
 
 ### Binary Property Access via `/$value`
-- **Content-Type**: `application/octet-stream`
+- **Content-Type**: Custom MIME type if specified via `odata:"contenttype=..."` tag, otherwise `application/octet-stream`
 - **Body**: Raw binary bytes (not base64, not slice notation)
 - **HEAD Support**: Returns headers only, no body
+- **Example**: Logo field with `contenttype=image/svg+xml` returns `Content-Type: image/svg+xml`
 
 ## Code Quality
 
@@ -135,7 +139,8 @@ All tests validate:
 - ✅ Metadata correctly declares binary properties
 - ✅ JSON responses use base64 encoding (per spec)
 - ✅ `/$value` endpoint returns raw binary octets
-- ✅ Content-Type is `application/octet-stream` for raw binary
+- ✅ Content-Type customizable via `odata:"contenttype=..."` tag
+- ✅ Content-Type defaults to `application/octet-stream` for raw binary
 - ✅ HEAD requests supported
 - ✅ Empty and null binary data handled correctly
 - ✅ Works with both regular entities and singletons

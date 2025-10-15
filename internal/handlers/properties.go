@@ -128,7 +128,7 @@ func (h *EntityHandler) handleGetStructuralProperty(w http.ResponseWriter, r *ht
 
 	// Write response
 	if isValue {
-		h.writeRawPropertyValue(w, r, fieldValue)
+		h.writeRawPropertyValue(w, r, prop, fieldValue)
 	} else {
 		h.writePropertyResponse(w, r, entityKey, prop, fieldValue)
 	}
@@ -229,14 +229,19 @@ func (h *EntityHandler) writePropertyResponse(w http.ResponseWriter, r *http.Req
 }
 
 // writeRawPropertyValue writes a property value in raw format for /$value requests
-func (h *EntityHandler) writeRawPropertyValue(w http.ResponseWriter, r *http.Request, fieldValue reflect.Value) {
+func (h *EntityHandler) writeRawPropertyValue(w http.ResponseWriter, r *http.Request, prop *metadata.PropertyMetadata, fieldValue reflect.Value) {
 	// Set appropriate content type based on the value type
 	valueInterface := fieldValue.Interface()
 
 	// Check for binary data ([]byte) first
 	if fieldValue.Kind() == reflect.Slice && fieldValue.Type().Elem().Kind() == reflect.Uint8 {
 		// Binary data - set appropriate content type and write raw bytes
-		w.Header().Set(HeaderContentType, "application/octet-stream")
+		// Use custom content type if specified, otherwise default to application/octet-stream
+		contentType := "application/octet-stream"
+		if prop.ContentType != "" {
+			contentType = prop.ContentType
+		}
+		w.Header().Set(HeaderContentType, contentType)
 		w.WriteHeader(http.StatusOK)
 
 		// For HEAD requests, don't write the body

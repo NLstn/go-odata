@@ -18,7 +18,8 @@ type TestProductForStructuralProp struct {
 	Price       float64 `json:"price"`
 	Description string  `json:"description"`
 	InStock     bool    `json:"inStock"`
-	Image       []byte  `json:"image" gorm:"type:blob" odata:"nullable"` // Binary data field
+	Image       []byte  `json:"image" gorm:"type:blob" odata:"nullable"`                      // Binary data field
+	Icon        []byte  `json:"icon" gorm:"type:blob" odata:"nullable,contenttype=image/png"` // Binary data with custom MIME type
 }
 
 func setupStructuralPropTestService(t *testing.T) (*odata.Service, *gorm.DB) {
@@ -772,5 +773,42 @@ func TestStructuralPropertyValue_BinaryHEAD(t *testing.T) {
 	body := w.Body.Bytes()
 	if len(body) != 0 {
 		t.Errorf("HEAD request should have no body, got %d bytes", len(body))
+	}
+}
+
+func TestStructuralPropertyValue_BinaryCustomContentType(t *testing.T) {
+	service, db := setupStructuralPropTestService(t)
+
+	// Insert test data with binary content for Icon field (which has custom content type)
+	pngData := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A} // PNG header
+	product := TestProductForStructuralProp{
+		ID:          1,
+		Name:        "Laptop",
+		Price:       999.99,
+		Description: "A high-performance laptop",
+		InStock:     true,
+		Icon:        pngData,
+	}
+	db.Create(&product)
+
+	req := httptest.NewRequest(http.MethodGet, "/TestProductForStructuralProps(1)/icon/$value", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	// Check content type - should use custom MIME type from odata tag
+	contentType := w.Header().Get("Content-Type")
+	if contentType != "image/png" {
+		t.Errorf("Content-Type = %v, want 'image/png'", contentType)
+	}
+
+	// Check the raw binary value
+	body := w.Body.Bytes()
+	if string(body) != string(pngData) {
+		t.Errorf("Body = %v, want %v", body, pngData)
 	}
 }
