@@ -47,6 +47,8 @@ type PropertyMetadata struct {
 	IsEnum       bool   // True if this property is an enum type
 	EnumTypeName string // Name of the enum type (for metadata generation)
 	IsFlags      bool   // True if this enum supports flag combinations (bitwise operations)
+	// Binary properties
+	ContentType string // MIME type for binary properties (e.g., "image/svg+xml"), used when serving /$value
 }
 
 // AnalyzeEntity extracts metadata from a Go struct for OData usage
@@ -304,6 +306,8 @@ func processODataTagPart(property *PropertyMetadata, part string, metadata *Enti
 		if !property.IsEnum {
 			property.IsEnum = true
 		}
+	case strings.HasPrefix(part, "contenttype="):
+		property.ContentType = strings.TrimPrefix(part, "contenttype=")
 	}
 }
 

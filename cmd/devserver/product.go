@@ -149,7 +149,7 @@ type CompanyInfo struct {
 	Founded     int       `json:"Founded" gorm:"not null"`
 	HeadQuarter string    `json:"HeadQuarter" gorm:"not null" odata:"maxlength=200"`
 	Website     string    `json:"Website" gorm:"not null" odata:"maxlength=100"`
-	Logo        []byte    `json:"Logo" gorm:"type:blob" odata:"nullable"` // Binary data example (company logo)
+	Logo        []byte    `json:"Logo" gorm:"type:blob" odata:"nullable,contenttype=image/svg+xml"` // Binary data example (company logo)
 	Version     int       `json:"Version" gorm:"default:1" odata:"etag"`
 	UpdatedAt   time.Time `json:"UpdatedAt" gorm:"not null"`
 }
