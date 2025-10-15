@@ -1000,7 +1000,7 @@ func buildBaseURL(r *http.Request) string {
 	return scheme + "://" + host
 }
 
-// BuildNextLink builds the next link URL for pagination
+// BuildNextLink builds the next link URL for pagination using $skip
 func BuildNextLink(r *http.Request, skipValue int) string {
 	baseURL := buildBaseURL(r)
 
@@ -1010,8 +1010,34 @@ func BuildNextLink(r *http.Request, skipValue int) string {
 	// Get existing query parameters
 	query := nextURL.Query()
 
+	// Remove $skiptoken if present (we're using $skip)
+	query.Del("$skiptoken")
+
 	// Update the $skip parameter
 	query.Set("$skip", fmt.Sprintf("%d", skipValue))
+
+	// Rebuild the URL with updated query
+	nextURL.RawQuery = query.Encode()
+
+	return baseURL + nextURL.Path + "?" + nextURL.RawQuery
+}
+
+// BuildNextLinkWithSkipToken builds the next link URL for server-driven pagination using $skiptoken
+func BuildNextLinkWithSkipToken(r *http.Request, skipToken string) string {
+	baseURL := buildBaseURL(r)
+
+	// Clone the URL to avoid modifying the original
+	nextURL := *r.URL
+
+	// Get existing query parameters
+	query := nextURL.Query()
+
+	// Remove $skip and $skiptoken if present
+	query.Del("$skip")
+	query.Del("$skiptoken")
+
+	// Add the new $skiptoken parameter
+	query.Set("$skiptoken", skipToken)
 
 	// Rebuild the URL with updated query
 	nextURL.RawQuery = query.Encode()

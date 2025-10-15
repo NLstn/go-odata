@@ -10,16 +10,17 @@ import (
 
 // QueryOptions represents parsed OData query options
 type QueryOptions struct {
-	Filter  *FilterExpression
-	Select  []string
-	Expand  []ExpandOption
-	OrderBy []OrderByItem
-	Top     *int
-	Skip    *int
-	Count   bool
-	Apply   []ApplyTransformation
-	Search  string                 // Search query string
-	Compute *ComputeTransformation // Standalone $compute option
+	Filter    *FilterExpression
+	Select    []string
+	Expand    []ExpandOption
+	OrderBy   []OrderByItem
+	Top       *int
+	Skip      *int
+	SkipToken *string                // Skip token for server-driven paging
+	Count     bool
+	Apply     []ApplyTransformation
+	Search    string                 // Search query string
+	Compute   *ComputeTransformation // Standalone $compute option
 }
 
 // ExpandOption represents a single $expand clause
@@ -232,6 +233,10 @@ func ParseQueryOptions(queryParams url.Values, entityMetadata *metadata.EntityMe
 		return nil, err
 	}
 
+	if err := parseSkipTokenOption(queryParams, options); err != nil {
+		return nil, err
+	}
+
 	if err := parseCountOption(queryParams, options); err != nil {
 		return nil, err
 	}
@@ -423,6 +428,18 @@ func parseSkipOption(queryParams url.Values, options *QueryOptions) error {
 			return err
 		}
 		options.Skip = &skip
+	}
+	return nil
+}
+
+// parseSkipTokenOption parses the $skiptoken query parameter
+func parseSkipTokenOption(queryParams url.Values, options *QueryOptions) error {
+	if skipTokenStr := queryParams.Get("$skiptoken"); skipTokenStr != "" {
+		// $skiptoken and $skip are mutually exclusive according to OData spec
+		if options.Skip != nil {
+			return fmt.Errorf("$skiptoken and $skip cannot be used together")
+		}
+		options.SkipToken = &skipTokenStr
 	}
 	return nil
 }

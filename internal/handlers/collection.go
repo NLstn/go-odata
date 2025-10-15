@@ -11,6 +11,7 @@ import (
 	"github.com/nlstn/go-odata/internal/preference"
 	"github.com/nlstn/go-odata/internal/query"
 	"github.com/nlstn/go-odata/internal/response"
+	"github.com/nlstn/go-odata/internal/skiptoken"
 )
 
 // HandleCollection handles GET, HEAD, POST, and OPTIONS requests for entity collections
@@ -39,6 +40,9 @@ func (h *EntityHandler) handleOptionsCollection(w http.ResponseWriter) {
 // handleGetCollection handles GET requests for entity collections
 func (h *EntityHandler) handleGetCollection(w http.ResponseWriter, r *http.Request) {
 
+	// Parse Prefer header for server-side preferences
+	pref := preference.ParsePrefer(r)
+
 	// Parse query options
 	queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata)
 	if err != nil {
@@ -46,6 +50,11 @@ func (h *EntityHandler) handleGetCollection(w http.ResponseWriter, r *http.Reque
 			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
 		}
 		return
+	}
+
+	// Apply odata.maxpagesize preference if specified
+	if pref.MaxPageSize != nil {
+		queryOptions = h.applyMaxPageSize(queryOptions, *pref.MaxPageSize)
 	}
 
 	// Get the total count if $count=true is specified
@@ -68,6 +77,11 @@ func (h *EntityHandler) handleGetCollection(w http.ResponseWriter, r *http.Reque
 	if needsTrimming && queryOptions.Top != nil {
 		// Trim the results to $top (we fetched $top + 1 to check for more pages)
 		sliceValue = h.trimResults(sliceValue, *queryOptions.Top)
+	}
+
+	// Add Preference-Applied header if any preference was applied
+	if applied := pref.GetPreferenceApplied(); applied != "" {
+		w.Header().Set(HeaderPreferenceApplied, applied)
 	}
 
 	// Get list of expanded properties
@@ -372,7 +386,16 @@ func (h *EntityHandler) calculateNextLink(queryOptions *query.QueryOptions, slic
 	// If we got more than $top results, it means there are more pages
 	// We fetched $top + 1 to determine this without an extra query
 	if resultCount > *queryOptions.Top {
-		// Calculate the new skip value for the next page
+		// Use $skiptoken for server-driven paging when $orderby is present
+		// This is more efficient and follows OData best practices
+		if len(queryOptions.OrderBy) > 0 {
+			nextURL := h.buildNextLinkWithSkipToken(queryOptions, sliceValue, r)
+			if nextURL != nil {
+				return nextURL, true
+			}
+		}
+
+		// Fall back to $skip-based pagination
 		currentSkip := 0
 		if queryOptions.Skip != nil {
 			currentSkip = *queryOptions.Skip
@@ -408,4 +431,63 @@ func (h *EntityHandler) trimResults(sliceValue interface{}, maxLen int) interfac
 
 	// Handle regular slice
 	return v.Slice(0, maxLen).Interface()
+}
+
+// applyMaxPageSize applies the odata.maxpagesize preference to query options
+// If $top is not specified or is greater than maxpagesize, set $top to maxpagesize
+func (h *EntityHandler) applyMaxPageSize(queryOptions *query.QueryOptions, maxPageSize int) *query.QueryOptions {
+	if queryOptions.Top == nil || *queryOptions.Top > maxPageSize {
+		queryOptions.Top = &maxPageSize
+	}
+	return queryOptions
+}
+
+// buildNextLinkWithSkipToken builds a nextLink using $skiptoken for server-driven paging
+func (h *EntityHandler) buildNextLinkWithSkipToken(queryOptions *query.QueryOptions, sliceValue interface{}, r *http.Request) *string {
+	// Get the last entity in the result set (which should be at index $top)
+	v := reflect.ValueOf(sliceValue)
+	if v.Kind() != reflect.Slice || v.Len() == 0 {
+		return nil
+	}
+
+	// The last entity we want to return is at index $top - 1
+	// (we fetched $top + 1 to check for more pages)
+	lastIndex := *queryOptions.Top - 1
+	if lastIndex < 0 || lastIndex >= v.Len() {
+		return nil
+	}
+
+	lastEntity := v.Index(lastIndex).Interface()
+
+	// Extract key property names
+	keyProps := make([]string, len(h.metadata.KeyProperties))
+	for i, kp := range h.metadata.KeyProperties {
+		keyProps[i] = kp.JsonName
+	}
+
+	// Extract orderby property names
+	orderByProps := make([]string, len(queryOptions.OrderBy))
+	for i, ob := range queryOptions.OrderBy {
+		orderByProps[i] = ob.Property
+		if ob.Descending {
+			orderByProps[i] += " desc"
+		}
+	}
+
+	// Create skip token from the last entity
+	token, err := skiptoken.ExtractFromEntity(lastEntity, keyProps, orderByProps)
+	if err != nil {
+		// If we can't create a skiptoken, fall back to $skip
+		return nil
+	}
+
+	// Encode the skip token
+	encoded, err := skiptoken.Encode(token)
+	if err != nil {
+		return nil
+	}
+
+	// Build the next link with $skiptoken
+	nextURL := response.BuildNextLinkWithSkipToken(r, encoded)
+	return &nextURL
 }
