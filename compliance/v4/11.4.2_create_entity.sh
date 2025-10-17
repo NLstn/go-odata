@@ -5,7 +5,8 @@
 # Spec: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_CreateanEntity
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SERVER_URL="${SERVER_URL:-http://localhost:8080}"
+source "$SCRIPT_DIR/test_framework.sh"
+source "$SCRIPT_DIR/test_framework.sh"
 
 echo "======================================"
 echo "OData v4 Compliance Test"
@@ -18,27 +19,7 @@ echo ""
 echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_CreateanEntity"
 echo ""
 
-PASSED=0
-FAILED=0
-TOTAL=0
 
-test_result() {
-    local test_name="$1"
-    local result="$2"
-    local details="$3"
-    
-    TOTAL=$((TOTAL + 1))
-    if [ "$result" = "PASS" ]; then
-        PASSED=$((PASSED + 1))
-        echo "✓ PASS: $test_name"
-    else
-        FAILED=$((FAILED + 1))
-        echo "✗ FAIL: $test_name"
-        if [ -n "$details" ]; then
-            echo "  Details: $details"
-        fi
-    fi
-}
 
 # Cleanup function to remove test data
 cleanup_entity() {
@@ -165,13 +146,5 @@ if [ -n "$CREATED_ID" ]; then
     cleanup_entity "$CREATED_ID"
 fi
 
-# Summary
-echo "======================================"
-echo "Summary: $PASSED/$TOTAL tests passed"
-if [ $FAILED -gt 0 ]; then
-    echo "Status: FAILING"
-    exit 1
-else
-    echo "Status: PASSING"
-    exit 0
-fi
+
+print_summary

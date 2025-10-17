@@ -2,7 +2,7 @@
 tmp/
 
 # Compliance test reports (generated)
-compliance/v4/compliance-report.md
+**/compliance-report.md
 
 # Build artifacts
 *.exe
