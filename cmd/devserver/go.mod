@@ -1,6 +1,6 @@
 module github.com/NLstn/go-odata/devserver
 
-go 1.25
+go 1.24
 
 require (
 	github.com/nlstn/go-odata v0.1.0

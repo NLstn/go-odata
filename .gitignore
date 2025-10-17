@@ -1,6 +1,9 @@
 # Temporary files
 tmp/
 
+# Compliance test reports (generated)
+compliance/v4/compliance-report.md
+
 # Build artifacts
 *.exe
 *.exe~
