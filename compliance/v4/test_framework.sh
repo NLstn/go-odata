@@ -166,5 +166,4 @@ cleanup_and_exit() {
         echo "Cleaning up test data..."
         cleanup
     fi
-    print_summary
 }
