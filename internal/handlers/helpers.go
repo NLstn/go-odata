@@ -304,13 +304,20 @@ func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{
 
 	// For minimal metadata, check if all key fields are present in struct
 	if metadataLevel == "minimal" {
-		if _, exists := odataResponse.ToMap()["__temp_entity_id"]; exists {
+		if tempID, exists := odataResponse.ToMap()["__temp_entity_id"]; exists {
 			// Remove the temporary ID
 			odataResponse.Delete("__temp_entity_id")
 
-			// For struct responses (not from $select), all key fields are always present
-			// So we don't need to add @odata.id in minimal metadata for full struct responses
-			// The @odata.id is only needed when key fields are omitted (e.g., with $select)
+			// Per OData v4 spec: For individual entity responses (with /$entity in context URL),
+			// @odata.id MUST be included even if all key fields are present
+			// For collection items, @odata.id is only needed when key fields are omitted
+			isIndividualEntity := strings.Contains(contextURL, "/$entity")
+			if isIndividualEntity {
+				// Always add @odata.id for individual entity responses
+				odataResponse.InsertAfter(ODataContextProperty, "@odata.id", tempID)
+			}
+			// For collection items (not individual entities), @odata.id is only added when key fields are omitted
+			// This is already handled in the map case above (lines 230-248)
 		}
 	}
 

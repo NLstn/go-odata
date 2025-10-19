@@ -1137,13 +1137,15 @@ func ParseODataURLComponents(path string) (*ODataURLComponents, error) {
 			components.EntitySet = entitySet
 		}
 
-		// Check for $count, $ref or navigation property: Products/$count, Products(1)/$ref, Products(1)/Descriptions
+		// Check for $count, $ref, $value or navigation property: Products/$count, Products(1)/$ref, Products(1)/Descriptions
 		if len(pathParts) > 1 {
 			switch pathParts[1] {
 			case "$count":
 				components.IsCount = true
 			case "$ref":
 				components.IsRef = true
+			case "$value":
+				components.IsValue = true
 			default:
 				// Check if this is an action or function (contains dot for namespace)
 				// or is a simple identifier that could be action/function name

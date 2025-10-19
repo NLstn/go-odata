@@ -83,10 +83,11 @@ test_json_string_values() {
 
 # Test 6: Null values represented as JSON null
 test_json_null_values() {
-    local RESPONSE=$(http_get_body "$SERVER_URL/Products?\$select=Name")
+    local RESPONSE=$(http_get_body "$SERVER_URL/Products")
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products")
     
-    # Should be valid JSON even with potential nulls
-    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$select=Name")
+    # Should return valid JSON (status 200) 
+    # If entity has null fields, they should be represented as null in JSON
     check_status "$HTTP_CODE" "200"
 }
 
@@ -94,8 +95,8 @@ test_json_null_values() {
 test_json_array_format() {
     local RESPONSE=$(http_get_body "$SERVER_URL/Products")
     
-    # value should be an array
-    if echo "$RESPONSE" | grep -q '"value":\['; then
+    # value should be an array (allow optional whitespace after colon)
+    if echo "$RESPONSE" | grep -q '"value":[[:space:]]*\['; then
         return 0
     else
         echo "  Details: 'value' property is not an array"
