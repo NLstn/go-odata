@@ -30,15 +30,8 @@ register_cleanup
 
 # Test 1: String data type
 test_string_type() {
-<<<<<<< HEAD
     local RESPONSE=$(http_get_body "$SERVER_URL/Products?\$filter=Name eq 'Laptop'")
     local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=Name eq 'Laptop'")
-=======
-    local FILTER="Name eq 'Laptop'"
-    local ENCODED_FILTER=$(printf %s "$FILTER" | jq -sRr @uri)
-    local RESPONSE=$(curl -s "$SERVER_URL/Products?\$filter=$ENCODED_FILTER")
-    local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Products?\$filter=$ENCODED_FILTER")
->>>>>>> e5188ff (Fix test 5.1.1)
     
     if [ "$HTTP_CODE" = "200" ]; then
         if echo "$RESPONSE" | grep -q '"Name"'; then

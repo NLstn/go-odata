@@ -40,7 +40,7 @@ test_enum_retrieval() {
 # Test 2: Filter by enum value using numeric representation
 test_filter_enum_numeric() {
     # Filter by enum numeric value (e.g., Status eq 1)
-    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=Status eq 1")
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?%24filter=Status%20eq%201")
     
     if [ "$HTTP_CODE" = "200" ]; then
         return 0
@@ -56,7 +56,7 @@ test_filter_enum_numeric() {
 # Test 3: Filter by enum value using string representation
 test_filter_enum_string() {
     # Filter by enum string value with type prefix (e.g., Status eq Namespace.EnumType'Active')
-    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=Status eq ProductStatus'Active'")
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?%24filter=Status%20eq%20ProductStatus'Active'")
     
     if [ "$HTTP_CODE" = "200" ]; then
         return 0
@@ -72,7 +72,7 @@ test_filter_enum_string() {
 # Test 4: Filter by enum with comparison operators
 test_enum_comparison() {
     # Enum comparison (e.g., Status gt 0, Status le 2)
-    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=Status gt 0")
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?%24filter=Status%20gt%200")
     
     if [ "$HTTP_CODE" = "200" ]; then
         return 0
@@ -88,7 +88,7 @@ test_enum_comparison() {
 # Test 5: $select with enum property
 test_select_enum() {
     # Select enum property
-    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$select=Name,Status")
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?%24select=Name,Status")
     
     if [ "$HTTP_CODE" = "200" ]; then
         return 0
@@ -104,7 +104,7 @@ test_select_enum() {
 # Test 6: $orderby with enum property
 test_orderby_enum() {
     # Order by enum property
-    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$orderby=Status")
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?%24orderby=Status")
     
     if [ "$HTTP_CODE" = "200" ]; then
         return 0
@@ -120,7 +120,7 @@ test_orderby_enum() {
 # Test 7: Enum with has operator (flags enum)
 test_enum_has_operator() {
     # For flags enums, test 'has' operator (e.g., Permissions has Namespace.Permission'Read')
-    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=Flags has 'Read'")
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?%24filter=Flags%20has%20'Read'")
     
     if [ "$HTTP_CODE" = "200" ]; then
         return 0
@@ -136,7 +136,7 @@ test_enum_has_operator() {
 # Test 8: Enum null value
 test_enum_null() {
     # Filter for null enum values
-    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=Status eq null")
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?%24filter=Status%20eq%20null")
     
     if [ "$HTTP_CODE" = "200" ]; then
         return 0
@@ -203,7 +203,7 @@ test_update_enum() {
 # Test 12: Invalid enum value
 test_invalid_enum_value() {
     # Filter with invalid enum value should return error or empty result
-    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=Status eq 999999")
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?%24filter=Status%20eq%20999999")
     
     # Either 200 (empty result) or 400 (validation error) is acceptable
     if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "400" ]; then
