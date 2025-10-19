@@ -236,7 +236,7 @@ func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{
 				// @odata.id MUST be included even if all key fields are present
 				// For collection items, @odata.id is only needed when key fields are omitted
 				isIndividualEntity := strings.Contains(contextURL, "/$entity")
-				
+
 				if isIndividualEntity {
 					// Always add @odata.id for individual entity responses
 					odataResponse.InsertAfter(ODataContextProperty, "@odata.id", tempID)

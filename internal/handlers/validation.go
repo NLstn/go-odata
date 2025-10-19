@@ -130,7 +130,7 @@ func (h *EntityHandler) validateRequiredFieldsNotNull(updateData map[string]inte
 // validateContentType checks that the Content-Type header is present and valid for write operations
 func validateContentType(w http.ResponseWriter, r *http.Request) error {
 	contentType := r.Header.Get("Content-Type")
-	
+
 	// Check if Content-Type is missing
 	if contentType == "" {
 		if writeErr := response.WriteError(w, http.StatusUnsupportedMediaType, "Unsupported Media Type",
@@ -177,4 +177,3 @@ func validateContentType(w http.ResponseWriter, r *http.Request) error {
 
 	return nil
 }
-

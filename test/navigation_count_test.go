@@ -13,10 +13,10 @@ import (
 
 // NavCountTestProduct for navigation count testing
 type NavCountTestProduct struct {
-	ID           uint                        `json:"ID" gorm:"primaryKey" odata:"key"`
-	Name         string                      `json:"Name" odata:"required"`
-	Price        float64                     `json:"Price"`
-	Descriptions []NavCountTestDescription    `json:"Descriptions" gorm:"foreignKey:ProductID;references:ID"`
+	ID           uint                      `json:"ID" gorm:"primaryKey" odata:"key"`
+	Name         string                    `json:"Name" odata:"required"`
+	Price        float64                   `json:"Price"`
+	Descriptions []NavCountTestDescription `json:"Descriptions" gorm:"foreignKey:ProductID;references:ID"`
 }
 
 // NavCountTestDescription for navigation count testing

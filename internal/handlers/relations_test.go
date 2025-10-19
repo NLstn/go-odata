@@ -451,7 +451,6 @@ func TestNavigationPropertyCountOPTIONS(t *testing.T) {
 	}
 }
 
-
 // TestNavigationPropertyPath tests accessing navigation properties via path
 func TestNavigationPropertyPath(t *testing.T) {
 	db := setupRelationTestDB(t)
