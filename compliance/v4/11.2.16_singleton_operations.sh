@@ -53,12 +53,11 @@ test_singleton_select() {
 test_patch_singleton() {
     local ORIGINAL=$(http_get_body "$SERVER_URL/Company")
     
-    # Update CEO field
-    local RESPONSE=$(http_patch "$SERVER_URL/Company" '{"CEO":"Test CEO"}' -H "Content-Type: application/json")
-    local HTTP_CODE=$(echo "$RESPONSE" | tail -n 1)
+    # Update CEO field - use curl directly to get status code
+    local HTTP_CODE=$(curl -g -s -o /dev/null -w "%{http_code}" -X PATCH "$SERVER_URL/Company" -H "Content-Type: application/json" -d '{"CEO":"Test CEO"}')
     
     # Restore original (cleanup inline)
-    http_patch "$SERVER_URL/Company" "$ORIGINAL" -H "Content-Type: application/json" > /dev/null 2>&1
+    curl -g -s -X PATCH "$SERVER_URL/Company" -H "Content-Type: application/json" -d "$ORIGINAL" > /dev/null 2>&1
     
     # PATCH should return 204 No Content or 200 OK
     if [ "$HTTP_CODE" = "204" ] || [ "$HTTP_CODE" = "200" ]; then
