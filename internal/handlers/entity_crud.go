@@ -49,6 +49,23 @@ func (h *EntityHandler) handleGetEntity(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
+	// Validate that $top and $skip are not used on individual entities
+	// Per OData v4 spec, these query options only apply to collections
+	if queryOptions.Top != nil {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions,
+			"$top query option is not applicable to individual entities"); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	}
+	if queryOptions.Skip != nil {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions,
+			"$skip query option is not applicable to individual entities"); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	}
+
 	// Fetch the entity
 	result, err := h.fetchEntityByKey(entityKey, queryOptions)
 	if err != nil {
@@ -263,6 +280,11 @@ func (h *EntityHandler) fetchAndUpdateEntity(w http.ResponseWriter, r *http.Requ
 		return nil, nil, err
 	}
 
+	// Validate that all properties in updateData are valid entity properties
+	if err := h.validatePropertiesExist(updateData, w); err != nil {
+		return nil, nil, err
+	}
+
 	if err := h.db.Model(entity).Updates(updateData).Error; err != nil {
 		h.writeDatabaseError(w, err)
 		return nil, nil, err
@@ -447,6 +469,28 @@ func (h *EntityHandler) validateKeyPropertiesNotUpdated(updateData map[string]in
 		if _, exists := updateData[keyProp.Name]; exists {
 			err := fmt.Errorf("key property '%s' cannot be modified", keyProp.Name)
 			if writeErr := response.WriteError(w, http.StatusBadRequest, "Cannot update key property", err.Error()); writeErr != nil {
+				fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			}
+			return err
+		}
+	}
+	return nil
+}
+
+// validatePropertiesExist validates that all properties in updateData are valid entity properties
+func (h *EntityHandler) validatePropertiesExist(updateData map[string]interface{}, w http.ResponseWriter) error {
+	// Build a map of valid property names (both JSON names and struct field names)
+	validProperties := make(map[string]bool)
+	for _, prop := range h.metadata.Properties {
+		validProperties[prop.JsonName] = true
+		validProperties[prop.Name] = true
+	}
+	
+	// Check each property in updateData
+	for propName := range updateData {
+		if !validProperties[propName] {
+			err := fmt.Errorf("property '%s' does not exist on entity type '%s'", propName, h.metadata.EntityName)
+			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid property", err.Error()); writeErr != nil {
 				fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
 			}
 			return err
