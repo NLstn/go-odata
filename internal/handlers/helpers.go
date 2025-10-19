@@ -232,18 +232,28 @@ func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{
 				// Remove the temporary ID
 				odataResponse.Delete("__temp_entity_id")
 
-				// Check if all key fields are present
-				allKeysPresent := true
-				for _, keyProp := range h.metadata.KeyProperties {
-					if _, exists := odataResponse.ToMap()[keyProp.JsonName]; !exists {
-						allKeysPresent = false
-						break
-					}
-				}
-
-				if !allKeysPresent {
-					// Add @odata.id after @odata.context
+				// Per OData v4 spec: For individual entity responses (with /$entity in context URL),
+				// @odata.id MUST be included even if all key fields are present
+				// For collection items, @odata.id is only needed when key fields are omitted
+				isIndividualEntity := strings.Contains(contextURL, "/$entity")
+				
+				if isIndividualEntity {
+					// Always add @odata.id for individual entity responses
 					odataResponse.InsertAfter(ODataContextProperty, "@odata.id", tempID)
+				} else {
+					// For collection items, check if all key fields are present
+					allKeysPresent := true
+					for _, keyProp := range h.metadata.KeyProperties {
+						if _, exists := odataResponse.ToMap()[keyProp.JsonName]; !exists {
+							allKeysPresent = false
+							break
+						}
+					}
+
+					if !allKeysPresent {
+						// Add @odata.id after @odata.context
+						odataResponse.InsertAfter(ODataContextProperty, "@odata.id", tempID)
+					}
 				}
 			}
 		}

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	odata "github.com/nlstn/go-odata"
@@ -427,16 +428,17 @@ func TestSelectOnSingleEntity(t *testing.T) {
 				t.Error("Response should have '@odata.context'")
 			}
 
-			// Verify exact number of properties (excluding @odata.context)
+			// Verify exact number of properties (excluding OData control annotations)
 			actualPropCount := 0
 			for key := range response {
-				if key != "@odata.context" {
+				// Exclude OData control annotations (starting with @odata.)
+				if !strings.HasPrefix(key, "@odata.") {
 					actualPropCount++
 				}
 			}
 
 			if actualPropCount != tt.expectedPropCount {
-				t.Errorf("Expected exactly %d properties (excluding @odata.context), got %d. Properties: %v",
+				t.Errorf("Expected exactly %d properties (excluding @odata.* annotations), got %d. Properties: %v",
 					tt.expectedPropCount, actualPropCount, response)
 			}
 
