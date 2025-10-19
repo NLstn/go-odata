@@ -2,8 +2,16 @@
 
 # OData v4 Compliance Test: Collection-Valued Navigation Properties
 # Tests collection-valued navigation properties, lambda operators (any/all), and $count
+# 
+# STRICT VALIDATION MODE: This test validates EXACT compliance with OData v4 specification
+# - $count on collections MUST return plain text integer (Section 11.2.5.5)
+# - Navigation properties MUST be supported in $select (Section 11.2.4.1)
+# - Lambda operators (any/all) are part of Advanced conformance level
+#
 # Spec: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html
 #       Section 11.2.6 (Querying Collections)
+#       Section 11.2.5.5 ($count system query option)
+#       Section 11.2.4.1 ($select system query option)
 #       Section 11.2.6.1.1 (Built-in Filter Operations - lambda operators)
 #       Section 13.1.3 (OData 4.0 Advanced Conformance Level - point 5: lambda operators)
 
@@ -83,28 +91,36 @@ test_collection_all_operator() {
 }
 
 # Test 4: Count items in collection navigation property
+# OData v4 REQUIRES: $count on collections MUST return plain text integer (not JSON)
+# Spec: Section 11.2.5.5 - "The $count system query option with a value of true specifies 
+#       that the total count of items within a collection matching the request be returned 
+#       along with the result. The count is provided as a single integer value."
+# When used as a path segment (e.g., /Products(1)/Descriptions/$count), it MUST return
+# ONLY the integer count as text/plain, not a JSON response.
 test_collection_count() {
     # Get count of descriptions for a product
     local HTTP_CODE=$(http_get "$SERVER_URL/Products(1)/Descriptions/\$count")
     
     if [ "$HTTP_CODE" = "200" ]; then
         local RESPONSE=$(http_get_body "$SERVER_URL/Products(1)/Descriptions/\$count")
-        # Should return ONLY a number, not a JSON object
-        # The response should be plain text like "2" or "3", not {"@odata.context": ...}
+        # MUST return ONLY a number, not a JSON object
+        # The response MUST be plain text like "2" or "3", not {"@odata.context": ...}
         if echo "$RESPONSE" | grep -qE '^\s*[0-9]+\s*$'; then
             return 0
         elif echo "$RESPONSE" | grep -q '@odata.context'; then
-            echo "  Details: $count should return plain text number, not JSON collection"
+            echo "  Details: SPEC VIOLATION - \$count MUST return plain text number, not JSON"
+            echo "           Spec: OData v4.01 Section 11.2.5.5"
+            echo "           Expected: text/plain with integer value"
+            echo "           Received: JSON with @odata.context"
             return 1
         else
             echo "  Details: Response is not a valid count: $RESPONSE"
             return 1
         fi
-    elif [ "$HTTP_CODE" = "404" ]; then
-        echo "  Details: Collection \$count not supported (status: 404)"
-        return 0  # Pass - optional feature
     else
-        echo "  Details: Unexpected status: $HTTP_CODE"
+        echo "  Details: SPEC VIOLATION - \$count on navigation collections MUST be supported"
+        echo "           Status: $HTTP_CODE (expected 200)"
+        echo "           Spec: OData v4.01 Section 11.2.5.5"
         return 1
     fi
 }
@@ -184,21 +200,36 @@ test_empty_collection() {
 }
 
 # Test 9: Select with navigation property
+# OData v4 REQUIRES: Navigation properties CAN be included in $select
+# Spec: Section 11.2.4.1 - "The $select system query option allows clients to request 
+#       a specific set of properties for each entity or complex type."
+# Navigation properties are valid in $select. The server MUST either:
+# 1. Return the data with the navigation property included (expanded), OR
+# 2. Return the data with navigation links for the property
+# The server MUST NOT crash or return malformed responses.
 test_select_navigation_property() {
     # Select should work with navigation properties
     local HTTP_CODE=$(curl --globoff -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Products?\$select=Name,Descriptions")
     
     if [ "$HTTP_CODE" = "200" ]; then
-        return 0
-    elif [ "$HTTP_CODE" = "400" ]; then
-        echo "  Details: Navigation property in \$select not supported (status: 400)"
-        return 0  # Pass - may not be supported
+        # Verify the response is valid JSON
+        local RESPONSE=$(curl --globoff -s "$SERVER_URL/Products?\$select=Name,Descriptions")
+        if echo "$RESPONSE" | jq . > /dev/null 2>&1; then
+            return 0
+        else
+            echo "  Details: Server returned 200 but response is not valid JSON"
+            return 1
+        fi
     elif [ "$HTTP_CODE" = "000" ]; then
-        echo "  Details: Server returned empty response or crashed (curl exit code 52)"
-        echo "           This indicates a server error when processing \$select with navigation properties"
+        echo "  Details: CRITICAL - Server crashed or returned empty response"
+        echo "           This indicates a fatal error when processing \$select with navigation properties"
+        echo "           Status: Empty reply from server (curl error 52)"
+        echo "           Spec: OData v4.01 Section 11.2.4.1 - navigation properties are valid in \$select"
         return 1
     else
-        echo "  Details: Unexpected status: $HTTP_CODE"
+        echo "  Details: SPEC VIOLATION - \$select with navigation properties MUST be supported"
+        echo "           Status: $HTTP_CODE (expected 200)"
+        echo "           Spec: OData v4.01 Section 11.2.4.1"
         return 1
     fi
 }
