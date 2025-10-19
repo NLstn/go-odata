@@ -2,6 +2,23 @@ package main
 
 import "time"
 
+// Address represents a complex type for physical addresses
+type Address struct {
+	Street     string `json:"Street" odata:"maxlength=100"`
+	City       string `json:"City" odata:"maxlength=50,searchable"`
+	State      string `json:"State" odata:"maxlength=2"`
+	PostalCode string `json:"PostalCode" odata:"maxlength=10"`
+	Country    string `json:"Country" odata:"maxlength=50"`
+}
+
+// Dimensions represents a complex type for product dimensions
+type Dimensions struct {
+	Length float64 `json:"Length" odata:"precision=10,scale=2"`
+	Width  float64 `json:"Width" odata:"precision=10,scale=2"`
+	Height float64 `json:"Height" odata:"precision=10,scale=2"`
+	Unit   string  `json:"Unit" odata:"maxlength=10"` // e.g., "cm", "in"
+}
+
 // ProductStatus represents product status as a flags enum
 type ProductStatus int
 
@@ -27,6 +44,9 @@ type Product struct {
 	Status    ProductStatus `json:"Status" gorm:"not null" odata:"enum=ProductStatus,flags"`
 	Version   int           `json:"Version" gorm:"default:1" odata:"etag"` // Version field used for optimistic concurrency control via ETag
 	CreatedAt time.Time     `json:"CreatedAt" gorm:"not null"`
+	// Complex type properties
+	ShippingAddress *Address    `json:"ShippingAddress,omitempty" gorm:"embedded;embeddedPrefix:shipping_" odata:"nullable"`
+	Dimensions      *Dimensions `json:"Dimensions,omitempty" gorm:"embedded;embeddedPrefix:dim_" odata:"nullable"`
 	// Navigation property for ProductDescriptions
 	Descriptions []ProductDescription `json:"Descriptions" gorm:"foreignKey:ProductID;references:ID"`
 }
@@ -52,6 +72,19 @@ func GetSampleProducts() []Product {
 			Status:    ProductStatusInStock | ProductStatusFeatured, // In stock and featured
 			Version:   1,
 			CreatedAt: time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC),
+			ShippingAddress: &Address{
+				Street:     "123 Tech Way",
+				City:       "Seattle",
+				State:      "WA",
+				PostalCode: "98101",
+				Country:    "USA",
+			},
+			Dimensions: &Dimensions{
+				Length: 35.5,
+				Width:  25.0,
+				Height: 2.5,
+				Unit:   "cm",
+			},
 		},
 		{
 			ID:        2,
@@ -61,6 +94,19 @@ func GetSampleProducts() []Product {
 			Status:    ProductStatusInStock | ProductStatusOnSale, // In stock and on sale
 			Version:   1,
 			CreatedAt: time.Date(2024, 3, 20, 14, 45, 0, 0, time.UTC),
+			ShippingAddress: &Address{
+				Street:     "456 Innovation Blvd",
+				City:       "San Francisco",
+				State:      "CA",
+				PostalCode: "94102",
+				Country:    "USA",
+			},
+			Dimensions: &Dimensions{
+				Length: 10.0,
+				Width:  6.0,
+				Height: 4.0,
+				Unit:   "cm",
+			},
 		},
 		{
 			ID:        3,
@@ -70,6 +116,19 @@ func GetSampleProducts() []Product {
 			Status:    ProductStatusInStock, // Only in stock
 			Version:   1,
 			CreatedAt: time.Date(2023, 11, 5, 9, 15, 0, 0, time.UTC),
+			ShippingAddress: &Address{
+				Street:     "789 Home St",
+				City:       "Portland",
+				State:      "OR",
+				PostalCode: "97201",
+				Country:    "USA",
+			},
+			Dimensions: &Dimensions{
+				Length: 8.0,
+				Width:  8.0,
+				Height: 10.0,
+				Unit:   "cm",
+			},
 		},
 		{
 			ID:        4,
@@ -79,6 +138,9 @@ func GetSampleProducts() []Product {
 			Status:    ProductStatusDiscontinued, // Discontinued
 			Version:   1,
 			CreatedAt: time.Date(2023, 8, 12, 16, 20, 0, 0, time.UTC),
+			// No shipping address or dimensions (testing null complex types)
+			ShippingAddress: nil,
+			Dimensions:      nil,
 		},
 		{
 			ID:        5,
@@ -88,6 +150,19 @@ func GetSampleProducts() []Product {
 			Status:    ProductStatusInStock | ProductStatusOnSale | ProductStatusFeatured, // In stock, on sale, and featured
 			Version:   1,
 			CreatedAt: time.Date(2024, 6, 28, 11, 0, 0, 0, time.UTC),
+			ShippingAddress: &Address{
+				Street:     "321 Mobile Ave",
+				City:       "Austin",
+				State:      "TX",
+				PostalCode: "78701",
+				Country:    "USA",
+			},
+			Dimensions: &Dimensions{
+				Length: 15.0,
+				Width:  7.5,
+				Height: 0.8,
+				Unit:   "cm",
+			},
 		},
 	}
 }
