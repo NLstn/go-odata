@@ -112,7 +112,7 @@ The `compliance/v4/` directory contains executable shell scripts that validate t
 
 ### General Instructions
 
-- **DO NOT generate file-based summaries of changes**
+- **DO NOT generate summary documents of your changes**
 
 ### Code Quality Requirements
 
