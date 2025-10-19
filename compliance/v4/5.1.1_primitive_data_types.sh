@@ -74,7 +74,7 @@ test_boolean_type() {
 
 # Test 5: DateTimeOffset data type
 test_datetime_type() {
-    local FILTER="CreatedAt lt 2025-12-31T23:59:59Z"
+    local FILTER="CreatedAt lt '2025-12-31T23:59:59Z'"
     local ENCODED_FILTER=$(printf %s "$FILTER" | jq -sRr @uri)
     local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Products?\$filter=$ENCODED_FILTER")
     check_status "$HTTP_CODE" "200"
