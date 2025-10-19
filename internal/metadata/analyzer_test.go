@@ -2,6 +2,7 @@ package metadata
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -188,12 +189,11 @@ func TestPropertyMetadata(t *testing.T) {
 
 func TestPropertyFacets(t *testing.T) {
 	type EntityWithFacets struct {
-		ID          int     `json:"id" odata:"key"`
-		Name        string  `json:"name" odata:"maxlength=100"`
-		Description string  `json:"description" odata:"maxlength=500,nullable"`
-		Price       float64 `json:"price" odata:"precision=10,scale=2"`
-		SKU         string  `json:"sku" odata:"default=AUTO"`
-		Active      bool    `json:"active" odata:"nullable=false"`
+		ID     int     `json:"id" odata:"key"`
+		Name   string  `json:"name" odata:"maxlength=100"`
+		Price  float64 `json:"price" odata:"precision=10,scale=2"`
+		SKU    string  `json:"sku" odata:"default=AUTO"`
+		Active bool    `json:"active" odata:"nullable=false"`
 	}
 
 	meta, err := AnalyzeEntity(EntityWithFacets{})
@@ -214,24 +214,6 @@ func TestPropertyFacets(t *testing.T) {
 	}
 	if nameProp.MaxLength != 100 {
 		t.Errorf("Name MaxLength = %v, want 100", nameProp.MaxLength)
-	}
-
-	// Check description with maxlength and nullable
-	var descProp *PropertyMetadata
-	for i, prop := range meta.Properties {
-		if prop.Name == "Description" {
-			descProp = &meta.Properties[i]
-			break
-		}
-	}
-	if descProp == nil {
-		t.Fatal("Description property not found")
-	}
-	if descProp.MaxLength != 500 {
-		t.Errorf("Description MaxLength = %v, want 500", descProp.MaxLength)
-	}
-	if descProp.Nullable == nil || !*descProp.Nullable {
-		t.Error("Description should be nullable")
 	}
 
 	// Check price with precision and scale
@@ -327,5 +309,89 @@ func TestNavigationPropertyWithReferentialConstraints(t *testing.T) {
 
 	if referencedProp, ok := customerProp.ReferentialConstraints["CustomerID"]; !ok || referencedProp != "ID" {
 		t.Errorf("Expected CustomerID -> ID constraint, got %v", customerProp.ReferentialConstraints)
+	}
+}
+
+func TestAutoDetectNullability(t *testing.T) {
+	type TestEntity struct {
+		ID                int     `json:"id" odata:"key"`
+		NonNullableInt    int     `json:"nonNullableInt"`                         // Value type - should be non-nullable
+		NullableIntPtr    *int    `json:"nullableIntPtr"`                         // Pointer - can be nullable
+		StringWithNotNull string  `json:"stringWithNotNull" gorm:"not null"`      // GORM not null - should be non-nullable
+		StringWithDefault string  `json:"stringWithDefault" gorm:"default:test"`  // Non-pointer with default - should be non-nullable
+		NullableString    *string `json:"nullableString"`                         // Pointer - can be nullable
+		ExplicitNonNull   *string `json:"explicitNonNull" odata:"nullable=false"` // Explicit non-nullable - should respect
+		SliceField        []byte  `json:"sliceField"`                             // Slice - can be nullable
+		RequiredField     string  `json:"requiredField" odata:"required"`         // Required - handled separately
+	}
+
+	meta, err := AnalyzeEntity(TestEntity{})
+	if err != nil {
+		t.Fatalf("AnalyzeEntity() error = %v", err)
+	}
+
+	tests := []struct {
+		fieldName      string
+		expectNullable *bool // nil means should be nil (let metadata handler decide), true/false means should be set
+	}{
+		{"id", boolPtr(false)},                // Key field, int type is non-nullable
+		{"nonNullableInt", boolPtr(false)},    // Value type
+		{"nullableIntPtr", nil},               // Pointer type, no constraints
+		{"stringWithNotNull", boolPtr(false)}, // GORM not null
+		{"stringWithDefault", boolPtr(false)}, // Value type with default
+		{"nullableString", nil},               // Pointer type
+		{"explicitNonNull", boolPtr(false)},   // Explicit non-nullable
+		{"sliceField", nil},                   // Slice type
+		{"requiredField", boolPtr(false)},     // Required field, string type is non-nullable
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.fieldName, func(t *testing.T) {
+			var prop *PropertyMetadata
+			for i := range meta.Properties {
+				if meta.Properties[i].JsonName == tt.fieldName {
+					prop = &meta.Properties[i]
+					break
+				}
+			}
+
+			if prop == nil {
+				t.Fatalf("Property %s not found", tt.fieldName)
+			}
+
+			if tt.expectNullable == nil {
+				if prop.Nullable != nil {
+					t.Errorf("Property %s: expected Nullable to be nil, got %v", tt.fieldName, *prop.Nullable)
+				}
+			} else {
+				if prop.Nullable == nil {
+					t.Errorf("Property %s: expected Nullable to be %v, got nil", tt.fieldName, *tt.expectNullable)
+				} else if *prop.Nullable != *tt.expectNullable {
+					t.Errorf("Property %s: expected Nullable to be %v, got %v", tt.fieldName, *tt.expectNullable, *prop.Nullable)
+				}
+			}
+		})
+	}
+}
+
+func boolPtr(b bool) *bool {
+	return &b
+}
+
+func TestNullableMismatchError(t *testing.T) {
+	// Test that we get an error when a non-nullable type has odata:"nullable" tag
+	type InvalidEntity struct {
+		ID          int    `json:"id" odata:"key"`
+		Description string `json:"description" odata:"nullable"` // string is not nullable, but tag says it is
+	}
+
+	_, err := AnalyzeEntity(InvalidEntity{})
+	if err == nil {
+		t.Fatal("Expected error for non-nullable type with nullable tag, got nil")
+	}
+
+	expectedErrMsg := "property Description is marked as nullable"
+	if !strings.Contains(err.Error(), expectedErrMsg) {
+		t.Errorf("Expected error message to contain %q, got: %v", expectedErrMsg, err)
 	}
 }

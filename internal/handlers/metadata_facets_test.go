@@ -15,7 +15,7 @@ import (
 type ProductWithFacets struct {
 	ID          int       `json:"id" odata:"key"`
 	Name        string    `json:"name" odata:"required,maxlength=100"`
-	Description string    `json:"description" odata:"maxlength=500,nullable"`
+	Description *string   `json:"description" odata:"maxlength=500,nullable"`
 	Price       float64   `json:"price" odata:"precision=10,scale=2"`
 	SKU         string    `json:"sku" odata:"maxlength=50,default=AUTO"`
 	CreatedAt   time.Time `json:"createdAt"`
@@ -311,10 +311,10 @@ func TestEdmTypeMapping(t *testing.T) {
 
 func TestNullableOverride(t *testing.T) {
 	type EntityWithNullable struct {
-		ID             int    `json:"id" odata:"key"`
-		RequiredField  string `json:"requiredField" odata:"required"`
-		NullableField  string `json:"nullableField" odata:"nullable"`
-		NonNullableOpt string `json:"nonNullableOpt" odata:"nullable=false"`
+		ID             int     `json:"id" odata:"key"`
+		RequiredField  string  `json:"requiredField" odata:"required"`
+		NullableField  *string `json:"nullableField" odata:"nullable"`
+		NonNullableOpt *string `json:"nonNullableOpt" odata:"nullable=false"`
 	}
 
 	entities := make(map[string]*metadata.EntityMetadata)

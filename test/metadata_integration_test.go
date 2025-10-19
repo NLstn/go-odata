@@ -18,7 +18,7 @@ import (
 type Customer struct {
 	ID        int       `json:"id" gorm:"primarykey" odata:"key"`
 	Name      string    `json:"name" odata:"required,maxlength=100"`
-	Email     string    `json:"email" odata:"maxlength=255,nullable"`
+	Email     *string   `json:"email" odata:"maxlength=255,nullable"`
 	Phone     string    `json:"phone" odata:"maxlength=20"`
 	CreatedAt time.Time `json:"createdAt"`
 	Orders    []Order   `json:"orders" gorm:"foreignKey:CustomerID;references:ID"`
@@ -48,7 +48,7 @@ type OrderItem struct {
 type Product struct {
 	ID          int     `json:"id" gorm:"primarykey" odata:"key"`
 	Name        string  `json:"name" odata:"required,maxlength=100"`
-	Description string  `json:"description" odata:"maxlength=1000,nullable"`
+	Description *string `json:"description" odata:"maxlength=1000,nullable"`
 	SKU         string  `json:"sku" odata:"maxlength=50,default=AUTO"`
 	Price       float64 `json:"price" odata:"precision=10,scale=2"`
 	Stock       int     `json:"stock" odata:"default=0"`

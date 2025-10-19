@@ -75,7 +75,10 @@ func AnalyzeEntity(entity interface{}) (*EntityMetadata, error) {
 			continue
 		}
 
-		property := analyzeField(field, metadata)
+		property, err := analyzeField(field, metadata)
+		if err != nil {
+			return nil, fmt.Errorf("error analyzing field %s: %w", field.Name, err)
+		}
 		metadata.Properties = append(metadata.Properties, property)
 	}
 
@@ -117,7 +120,10 @@ func AnalyzeSingleton(entity interface{}, singletonName string) (*EntityMetadata
 			continue
 		}
 
-		property := analyzeField(field, metadata)
+		property, err := analyzeField(field, metadata)
+		if err != nil {
+			return nil, fmt.Errorf("error analyzing field %s: %w", field.Name, err)
+		}
 		metadata.Properties = append(metadata.Properties, property)
 	}
 
@@ -172,7 +178,7 @@ func initializeSingletonMetadata(entityType reflect.Type, singletonName string) 
 }
 
 // analyzeField analyzes a single struct field and creates a PropertyMetadata
-func analyzeField(field reflect.StructField, metadata *EntityMetadata) PropertyMetadata {
+func analyzeField(field reflect.StructField, metadata *EntityMetadata) (PropertyMetadata, error) {
 	property := PropertyMetadata{
 		Name:      field.Name,
 		Type:      field.Type,
@@ -187,7 +193,13 @@ func analyzeField(field reflect.StructField, metadata *EntityMetadata) PropertyM
 	// Check for OData tags
 	analyzeODataTags(&property, field, metadata)
 
-	return property
+	// Auto-detect nullability based on Go type and GORM tags
+	// This runs after OData tags so explicit odata:"nullable" takes precedence
+	if err := autoDetectNullability(&property); err != nil {
+		return PropertyMetadata{}, err
+	}
+
+	return property, nil
 }
 
 // analyzeNavigationProperty determines if a field is a navigation property
@@ -372,4 +384,81 @@ func parseInt(s string) (int, error) {
 	var result int
 	_, err := fmt.Sscanf(s, "%d", &result)
 	return result, err
+}
+
+// isTypeNullable checks if a Go type can represent null values
+func isTypeNullable(t reflect.Type) bool {
+	switch t.Kind() {
+	case reflect.Ptr, reflect.Interface, reflect.Map, reflect.Slice:
+		// These types can be nil in Go
+		return true
+	default:
+		// Value types like int, bool, time.Time cannot be nil
+		return false
+	}
+}
+
+// hasGormNotNull checks if a GORM tag contains "not null" constraint
+func hasGormNotNull(gormTag string) bool {
+	return strings.Contains(gormTag, "not null")
+}
+
+// hasGormDefault checks if a GORM tag contains a default value
+func hasGormDefault(gormTag string) bool {
+	return strings.Contains(gormTag, "default:")
+}
+
+// autoDetectNullability automatically sets the Nullable field based on Go type and GORM constraints
+// This ensures the OData metadata accurately reflects whether a property can actually be null
+func autoDetectNullability(property *PropertyMetadata) error {
+	// Skip navigation properties - they have different nullability semantics
+	if property.IsNavigationProp {
+		return nil
+	}
+
+	// If there's an explicit odata:"nullable" or odata:"nullable=false" tag, validate it
+	if property.Nullable != nil {
+		if *property.Nullable && !isTypeNullable(property.Type) {
+			// User explicitly marked as nullable but type doesn't support it
+			return fmt.Errorf("property %s is marked as nullable with odata:\"nullable\" tag, but has non-nullable Go type %s (use *%s to make it nullable)",
+				property.Name, property.Type, property.Type)
+		}
+		return nil
+	}
+
+	// Auto-detect nullability based on Go type and GORM constraints
+	// A property can only be nullable if:
+	// 1. The Go type can represent null (pointer, slice, map, interface)
+	// 2. GORM doesn't enforce "not null"
+	// 3. It's not a key or required field
+
+	canBeNull := isTypeNullable(property.Type)
+	hasNotNull := hasGormNotNull(property.GormTag)
+	hasDefault := hasGormDefault(property.GormTag)
+
+	// If the type cannot be null in Go, mark as non-nullable
+	if !canBeNull {
+		nullable := false
+		property.Nullable = &nullable
+		return nil
+	}
+
+	// If GORM enforces "not null", mark as non-nullable
+	if hasNotNull {
+		nullable := false
+		property.Nullable = &nullable
+		return nil
+	}
+
+	// If it has a default value and is not a pointer type, it's effectively non-nullable
+	// (GORM will use the default instead of null)
+	if hasDefault && !canBeNull {
+		nullable := false
+		property.Nullable = &nullable
+		return nil
+	}
+
+	// For pointer types without "not null", leave nullable as nil
+	// The metadata handler will decide based on IsRequired and IsKey
+	return nil
 }
