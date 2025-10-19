@@ -18,16 +18,6 @@ echo ""
 echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part3-csdl.html#sec_PrimitiveTypes"
 echo ""
 
-CREATED_IDS=()
-
-cleanup() {
-    for id in "${CREATED_IDS[@]}"; do
-        curl -s -X DELETE "$SERVER_URL/Products($id)" > /dev/null 2>&1
-    done
-}
-
-register_cleanup
-
 # Test 1: String data type
 test_string_type() {
     local RESPONSE=$(http_get_body "$SERVER_URL/Products?\$filter=Name eq 'Laptop'")
@@ -88,50 +78,19 @@ test_null_value() {
     check_status "$HTTP_CODE" "200"
 }
 
-# Test 7: Create entity with various primitive types
-test_create_with_primitives() {
-    local RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$SERVER_URL/Products" \
-        -H "Content-Type: application/json" \
-        -d '{"Name":"Test Primitive Types","Price":123.45,"Category":"Test","Status":1}' 2>&1)
-    local HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-    local BODY=$(echo "$RESPONSE" | head -n -1)
-    
-    if [ "$HTTP_CODE" = "201" ]; then
-        local ID=$(echo "$BODY" | grep -o '"ID":[0-9]*' | head -1 | grep -o '[0-9]*')
-        if [ -n "$ID" ]; then
-            CREATED_IDS+=("$ID")
-        fi
+# Test 7: Number precision - verify existing data maintains precision
+test_number_precision() {
+    local RESPONSE=$(curl -s "$SERVER_URL/Products(1)" 2>&1)
+    # Check that price field exists and has decimal precision
+    if echo "$RESPONSE" | grep -q '"Price":999.99'; then
         return 0
     else
-        echo "  Details: Status code: $HTTP_CODE (expected 201)"
+        echo "  Details: Price precision not maintained or product not found"
         return 1
     fi
 }
 
-# Test 8: Number precision
-test_number_precision() {
-    local RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$SERVER_URL/Products" \
-        -H "Content-Type: application/json" \
-        -d '{"Name":"Precision Test","Price":999.999,"Category":"Test","Status":1}' 2>&1)
-    local HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-    local BODY=$(echo "$RESPONSE" | head -n -1)
-    
-    if [ "$HTTP_CODE" = "201" ]; then
-        local ID=$(echo "$BODY" | grep -o '"ID":[0-9]*' | head -1 | grep -o '[0-9]*')
-        if [ -n "$ID" ]; then
-            CREATED_IDS+=("$ID")
-            # Verify precision is maintained
-            local VERIFY=$(curl -s "$SERVER_URL/Products($ID)" 2>&1)
-            if echo "$VERIFY" | grep -q '"Price"'; then
-                return 0
-            fi
-        fi
-    fi
-    echo "  Details: Failed to verify precision"
-    return 1
-}
-
-# Test 9: Special characters in strings
+# Test 8: Special characters in strings
 test_special_characters() {
     local FILTER="contains(Name,'&') or contains(Name,'/')"
     local ENCODED_FILTER=$(printf %s "$FILTER" | jq -sRr @uri)
@@ -139,7 +98,7 @@ test_special_characters() {
     check_status "$HTTP_CODE" "200"
 }
 
-# Test 10: Empty string handling
+# Test 9: Empty string handling
 test_empty_string() {
     local FILTER="Name ne ''"
     local ENCODED_FILTER=$(printf %s "$FILTER" | jq -sRr @uri)
@@ -165,10 +124,7 @@ run_test "Edm.DateTimeOffset type handles datetime values" test_datetime_type
 echo "  Request: GET \$filter=Category ne null"
 run_test "Null value handling in filters" test_null_value
 
-echo "  Request: POST with various primitive types"
-run_test "Create entity with primitive types" test_create_with_primitives
-
-echo "  Request: POST with high precision decimal"
+echo "  Request: GET existing product with decimal price"
 run_test "Decimal precision is maintained" test_number_precision
 
 echo "  Request: GET \$filter with special characters"

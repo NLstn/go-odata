@@ -19,11 +19,42 @@ NC='\033[0m' # No Color
 # Server URL (can be overridden by environment variable)
 SERVER_URL="${SERVER_URL:-http://localhost:8080}"
 
+# Note: Database reseeding is handled centrally by run_compliance_tests.sh
+# before each test script runs when running the full suite.
+# For individual test runs, call reseed_database() at the start of your test script.
+
+# Function to reseed the database to default state
+# Call this at the beginning of a test script if running it individually
+reseed_database() {
+    echo -n "Reseeding database... "
+    local RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$SERVER_URL/Reseed" 2>&1)
+    local HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+    
+    if [ "$HTTP_CODE" = "200" ]; then
+        echo -e "${GREEN}✓${NC}"
+        return 0
+    else
+        echo -e "${YELLOW}⚠ Failed (status: $HTTP_CODE)${NC}"
+        return 1
+    fi
+}
+
+# Automatically reseed before the first test in each script
+# This ensures individual test runs start with clean data
+FIRST_TEST=1
+
 # Function to run a test and track results
 # Usage: run_test "Test description" command [expected_output]
 run_test() {
     local description="$1"
     local test_func="$2"
+    
+    # Automatically reseed before first test when running individual scripts
+    if [ $FIRST_TEST -eq 1 ]; then
+        FIRST_TEST=0
+        reseed_database
+        echo ""
+    fi
     
     TOTAL=$((TOTAL + 1))
     echo ""

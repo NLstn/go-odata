@@ -18,15 +18,6 @@ echo ""
 echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html"
 echo ""
 
-CREATED_IDS=()
-
-cleanup() {
-    for id in "${CREATED_IDS[@]}"; do
-        curl -s -X DELETE "$SERVER_URL/Products($id)" > /dev/null 2>&1
-    done
-}
-
-register_cleanup
 
 # Test 1: Missing required field returns error
 test_missing_required_field() {
@@ -40,12 +31,6 @@ test_missing_required_field() {
     if [ "$HTTP_CODE" = "400" ]; then
         return 0
     else
-        # If it succeeds, clean up
-        local BODY=$(echo "$RESPONSE" | head -n -1)
-        local ID=$(echo "$BODY" | grep -o '"ID":[0-9]*' | head -1 | grep -o '[0-9]*')
-        if [ -n "$ID" ]; then
-            CREATED_IDS+=("$ID")
-        fi
         echo "  Details: Status $HTTP_CODE (expected 400 for missing required field)"
         return 1
     fi
@@ -61,14 +46,6 @@ test_empty_required_field() {
     
     # May accept empty string or reject it depending on implementation
     if [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "201" ]; then
-        # Clean up if created
-        if [ "$HTTP_CODE" = "201" ]; then
-            local BODY=$(echo "$RESPONSE" | head -n -1)
-            local ID=$(echo "$BODY" | grep -o '"ID":[0-9]*' | head -1 | grep -o '[0-9]*')
-            if [ -n "$ID" ]; then
-                CREATED_IDS+=("$ID")
-            fi
-        fi
         return 0
     else
         echo "  Details: Status $HTTP_CODE"
@@ -107,9 +84,6 @@ test_negative_price() {
         if [ "$HTTP_CODE" = "201" ]; then
             local BODY=$(echo "$RESPONSE" | head -n -1)
             local ID=$(echo "$BODY" | grep -o '"ID":[0-9]*' | head -1 | grep -o '[0-9]*')
-            if [ -n "$ID" ]; then
-                CREATED_IDS+=("$ID")
-            fi
         fi
         return 0
     else
@@ -146,9 +120,6 @@ test_unknown_properties() {
     if [ "$HTTP_CODE" = "201" ] || [ "$HTTP_CODE" = "400" ]; then
         if [ "$HTTP_CODE" = "201" ]; then
             local ID=$(echo "$BODY" | grep -o '"ID":[0-9]*' | head -1 | grep -o '[0-9]*')
-            if [ -n "$ID" ]; then
-                CREATED_IDS+=("$ID")
-            fi
         fi
         return 0
     else
@@ -168,8 +139,6 @@ test_patch_invalid_type() {
     
     if [ "$CREATE_CODE" = "201" ]; then
         local ID=$(echo "$CREATE_BODY" | grep -o '"ID":[0-9]*' | head -1 | grep -o '[0-9]*')
-        if [ -n "$ID" ]; then
-            CREATED_IDS+=("$ID")
             
             # Try to update with invalid type
             local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH "$SERVER_URL/Products($ID)" \
@@ -178,7 +147,6 @@ test_patch_invalid_type() {
             
             check_status "$HTTP_CODE" "400"
             return $?
-        fi
     fi
     
     echo "  Details: Could not create test entity"
@@ -196,8 +164,6 @@ test_patch_required_to_null() {
     
     if [ "$CREATE_CODE" = "201" ]; then
         local ID=$(echo "$CREATE_BODY" | grep -o '"ID":[0-9]*' | head -1 | grep -o '[0-9]*')
-        if [ -n "$ID" ]; then
-            CREATED_IDS+=("$ID")
             
             # Try to set required field to null
             local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH "$SERVER_URL/Products($ID)" \
@@ -210,7 +176,6 @@ test_patch_required_to_null() {
             else
                 echo "  Details: Status $HTTP_CODE"
                 return 1
-            fi
         fi
     fi
     
@@ -246,7 +211,6 @@ test_readonly_property_post() {
         # Verify that ID was assigned by server, not the provided value
         local ACTUAL_ID=$(echo "$BODY" | grep -o '"ID":[0-9]*' | head -1 | grep -o '[0-9]*')
         if [ -n "$ACTUAL_ID" ]; then
-            CREATED_IDS+=("$ACTUAL_ID")
             # ID should be auto-assigned, not 99999
             if [ "$ACTUAL_ID" != "99999" ]; then
                 return 0

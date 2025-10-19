@@ -18,38 +18,8 @@ echo ""
 echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_HeaderIfMatch"
 echo ""
 
-CREATED_IDS=()
-
-cleanup() {
-    for id in "${CREATED_IDS[@]}"; do
-        curl -s -X DELETE "$SERVER_URL/Products($id)" > /dev/null 2>&1
-    done
-}
-
-register_cleanup
-
-# Create test entity
-echo "Setting up: Creating test entity..."
-CREATE_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$SERVER_URL/Products" \
-    -H "Content-Type: application/json" \
-    -d '{"Name":"Test ETag Product","Price":99.99,"Category":"Test","Status":1}' 2>&1)
-CREATE_CODE=$(echo "$CREATE_RESPONSE" | tail -1)
-CREATE_BODY=$(echo "$CREATE_RESPONSE" | head -n -1)
-
-if [ "$CREATE_CODE" = "201" ]; then
-    TEST_ID=$(echo "$CREATE_BODY" | grep -o '"ID":[0-9]*' | head -1 | grep -o '[0-9]*')
-    if [ -n "$TEST_ID" ]; then
-        CREATED_IDS+=("$TEST_ID")
-        echo "  Created test entity with ID: $TEST_ID"
-    else
-        echo "  WARNING: Could not extract ID"
-        TEST_ID=1
-    fi
-else
-    echo "  WARNING: Failed to create test entity"
-    TEST_ID=1
-fi
-echo ""
+# Use existing product from seeded data (ID 1 = Laptop)
+TEST_ID=1
 
 # Test 1: GET request returns ETag header
 test_get_returns_etag() {
@@ -163,7 +133,7 @@ test_if_none_match_incorrect_etag() {
 
 # Test 7: If-Match on DELETE
 test_if_match_delete() {
-    # Create another entity for deletion test
+    # Create entity for deletion test
     CREATE_DEL=$(curl -s -w "\n%{http_code}" -X POST "$SERVER_URL/Products" \
         -H "Content-Type: application/json" \
         -d '{"Name":"Delete Test","Price":50,"Category":"Test","Status":1}' 2>&1)
@@ -186,13 +156,10 @@ test_if_match_delete() {
                     return 0
                 else
                     echo "  Details: Status $HTTP_CODE"
-                    # Cleanup in case delete failed
-                    CREATED_IDS+=("$DEL_ID")
                     return 1
                 fi
             else
                 # No ETag support
-                curl -s -X DELETE "$SERVER_URL/Products($DEL_ID)" > /dev/null 2>&1
                 echo "  Details: No ETag available"
                 return 0
             fi

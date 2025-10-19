@@ -18,15 +18,6 @@ echo ""
 echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_ResponseStatusCodes"
 echo ""
 
-CREATED_IDS=()
-
-cleanup() {
-    for id in "${CREATED_IDS[@]}"; do
-        curl -s -X DELETE "$SERVER_URL/Products($id)" > /dev/null 2>&1
-    done
-}
-
-register_cleanup
 
 # Test 1: 200 OK for successful GET
 test_status_200_ok() {
@@ -43,10 +34,6 @@ test_status_201_created() {
     local BODY=$(echo "$RESPONSE" | head -n -1)
     
     if [ "$HTTP_CODE" = "201" ]; then
-        local ID=$(echo "$BODY" | grep -o '"ID":[0-9]*' | head -1 | grep -o '[0-9]*')
-        if [ -n "$ID" ]; then
-            CREATED_IDS+=("$ID")
-        fi
         return 0
     else
         echo "  Details: Status code: $HTTP_CODE (expected 201)"
@@ -71,7 +58,6 @@ test_status_204_no_content() {
             if [ "$DELETE_CODE" = "204" ] || [ "$DELETE_CODE" = "200" ]; then
                 return 0
             else
-                CREATED_IDS+=("$ID")  # Clean up if delete failed
                 echo "  Details: Delete status: $DELETE_CODE (expected 204 or 200)"
                 return 1
             fi

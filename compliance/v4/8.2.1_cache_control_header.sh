@@ -79,12 +79,6 @@ test_post_not_cached() {
     
     # POST should return 201 and typically shouldn't be cached
     if [ "$HTTP_CODE" = "201" ]; then
-        # Clean up
-        local BODY=$(echo "$RESPONSE" | tail -n 5)
-        local ID=$(echo "$BODY" | grep -o '"ID":[0-9]*' | head -1 | grep -o '[0-9]*')
-        if [ -n "$ID" ]; then
-            curl -s -X DELETE "$SERVER_URL/Products($ID)" > /dev/null 2>&1
-        fi
         return 0
     else
         echo "  Details: Status code: $HTTP_CODE (expected 201)"

@@ -27,15 +27,6 @@ echo ""
 echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part3-csdl.html#sec_Nullable"
 echo ""
 
-CREATED_IDS=()
-
-cleanup() {
-    for id in "${CREATED_IDS[@]}"; do
-        curl -s -X DELETE "$SERVER_URL/Products($id)" > /dev/null 2>&1
-    done
-}
-
-register_cleanup
 
 # Test 1: Create entity with null value in nullable property
 test_create_with_null() {
@@ -48,10 +39,6 @@ test_create_with_null() {
     local BODY=$(echo "$RESPONSE" | head -n -1)
     
     if [ "$HTTP_CODE" = "201" ]; then
-        local ID=$(echo "$BODY" | grep -o '"ID":[0-9]*' | head -1 | grep -o '[0-9]*')
-        if [ -n "$ID" ]; then
-            CREATED_IDS+=("$ID")
-        fi
         return 0
     else
         echo "  Details: Status $HTTP_CODE, Body: $BODY"
@@ -88,7 +75,6 @@ test_response_null_representation() {
     if [ "$CREATE_CODE" = "201" ]; then
         local ID=$(echo "$CREATE_BODY" | grep -o '"ID":[0-9]*' | head -1 | grep -o '[0-9]*')
         if [ -n "$ID" ]; then
-            CREATED_IDS+=("$ID")
             
             # Get the entity and verify Version is represented as null
             local GET_RESPONSE=$(http_get_body "$SERVER_URL/Products($ID)")
@@ -121,7 +107,6 @@ test_update_to_null() {
     if [ "$HTTP_CODE" = "201" ]; then
         local ID=$(echo "$BODY" | grep -o '"ID":[0-9]*' | head -1 | grep -o '[0-9]*')
         if [ -n "$ID" ]; then
-            CREATED_IDS+=("$ID")
             
             # Now update Version to null
             local UPDATE_RESPONSE=$(curl -s -w "\n%{http_code}" -X PATCH "$SERVER_URL/Products($ID)" \
@@ -165,7 +150,6 @@ test_access_null_property() {
     if [ "$HTTP_CODE" = "201" ]; then
         local ID=$(echo "$BODY" | grep -o '"ID":[0-9]*' | head -1 | grep -o '[0-9]*')
         if [ -n "$ID" ]; then
-            CREATED_IDS+=("$ID")
             
             # Access the null property
             local PROP_RESPONSE=$(curl -s -w "\n%{http_code}" "$SERVER_URL/Products($ID)/Version" 2>&1)
