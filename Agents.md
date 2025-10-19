@@ -110,6 +110,10 @@ The `compliance/v4/` directory contains executable shell scripts that validate t
 
 ## Code Review Instructions
 
+### General Instructions
+
+- **DO NOT generate file-based summaries of changes**
+
 ### Code Quality Requirements
 
 When reviewing or making code changes, ensure the following quality checks are performed:
