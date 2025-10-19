@@ -511,7 +511,7 @@ func (h *EntityHandler) validatePropertiesExist(updateData map[string]interface{
 		validProperties[prop.JsonName] = true
 		validProperties[prop.Name] = true
 	}
-	
+
 	// Check each property in updateData
 	for propName := range updateData {
 		if !validProperties[propName] {

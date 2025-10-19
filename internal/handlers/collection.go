@@ -259,7 +259,6 @@ func (h *EntityHandler) clearAutoIncrementKeys(entity interface{}) {
 	}
 }
 
-
 // buildEntityLocation builds the Location header URL for a created entity
 func (h *EntityHandler) buildEntityLocation(r *http.Request, entity interface{}) string {
 	baseURL := response.BuildBaseURL(r)
