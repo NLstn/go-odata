@@ -18,29 +18,12 @@ echo ""
 echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_HeaderODataEntityId"
 echo ""
 
-CREATED_IDS=()
-
-cleanup() {
-    for id in "${CREATED_IDS[@]}"; do
-        curl -s -X DELETE "$SERVER_URL/Products($id)" > /dev/null 2>&1
-    done
-}
-
-register_cleanup
-
 # Test 1: POST returns OData-EntityId header
 test_post_returns_entityid() {
     local HEADERS=$(curl -s -i -X POST "$SERVER_URL/Products" \
         -H "Content-Type: application/json" \
         -H "Prefer: return=minimal" \
         -d '{"Name":"EntityId Test","Price":99.99,"Category":"Test","Status":1}' 2>&1)
-    
-    # Extract ID for cleanup
-    local BODY=$(echo "$HEADERS" | tail -n 1)
-    local ID=$(echo "$BODY" | grep -o '"ID":[0-9]*' | head -1 | grep -o '[0-9]*')
-    if [ -n "$ID" ]; then
-        CREATED_IDS+=("$ID")
-    fi
     
     # Check for OData-EntityId header (case-insensitive)
     if echo "$HEADERS" | grep -i "odata-entityid:" > /dev/null; then
@@ -59,12 +42,6 @@ test_entityid_contains_url() {
         -H "Prefer: return=minimal" \
         -d '{"Name":"EntityId URL Test","Price":50,"Category":"Test","Status":1}' 2>&1)
     
-    # Extract ID for cleanup
-    local BODY=$(echo "$HEADERS" | tail -n 1)
-    local ID=$(echo "$BODY" | grep -o '"ID":[0-9]*' | head -1 | grep -o '[0-9]*')
-    if [ -n "$ID" ]; then
-        CREATED_IDS+=("$ID")
-    fi
     
     if echo "$HEADERS" | grep -i "odata-entityid:" > /dev/null; then
         local ENTITYID=$(echo "$HEADERS" | grep -i "odata-entityid:" | head -1)
@@ -91,12 +68,6 @@ test_entityid_return_minimal() {
     
     local HTTP_CODE=$(echo "$HEADERS" | head -1 | grep -o '[0-9]\{3\}')
     
-    # Extract ID for cleanup
-    local BODY=$(echo "$HEADERS" | tail -n 1)
-    local ID=$(echo "$BODY" | grep -o '"ID":[0-9]*' | head -1 | grep -o '[0-9]*')
-    if [ -n "$ID" ]; then
-        CREATED_IDS+=("$ID")
-    fi
     
     # With return=minimal, should prefer OData-EntityId over body
     if [ "$HTTP_CODE" = "201" ] || [ "$HTTP_CODE" = "204" ]; then
@@ -120,7 +91,6 @@ test_patch_entityid() {
     if [ "$CREATE_CODE" = "201" ]; then
         local ID=$(echo "$CREATE_BODY" | grep -o '"ID":[0-9]*' | head -1 | grep -o '[0-9]*')
         if [ -n "$ID" ]; then
-            CREATED_IDS+=("$ID")
             
             # Now PATCH with return=minimal
             local HEADERS=$(curl -s -i -X PATCH "$SERVER_URL/Products($ID)" \
@@ -150,12 +120,6 @@ test_entityid_valid_url() {
         -H "Prefer: return=minimal" \
         -d '{"Name":"Valid URL Test","Price":60,"Category":"Test","Status":1}' 2>&1)
     
-    # Extract ID for cleanup
-    local BODY=$(echo "$HEADERS" | tail -n 1)
-    local ID=$(echo "$BODY" | grep -o '"ID":[0-9]*' | head -1 | grep -o '[0-9]*')
-    if [ -n "$ID" ]; then
-        CREATED_IDS+=("$ID")
-    fi
     
     if echo "$HEADERS" | grep -i "odata-entityid:" > /dev/null; then
         local ENTITYID=$(echo "$HEADERS" | grep -i "odata-entityid:" | head -1 | cut -d: -f2- | tr -d '\r\n ' )
@@ -183,12 +147,6 @@ test_header_case() {
         -H "Content-Type: application/json" \
         -d '{"Name":"Case Test","Price":85,"Category":"Test","Status":1}' 2>&1)
     
-    # Extract ID for cleanup
-    local BODY=$(echo "$HEADERS" | tail -n 1)
-    local ID=$(echo "$BODY" | grep -o '"ID":[0-9]*' | head -1 | grep -o '[0-9]*')
-    if [ -n "$ID" ]; then
-        CREATED_IDS+=("$ID")
-    fi
     
     # HTTP headers are case-insensitive, but OData spec uses specific casing
     # We accept any case

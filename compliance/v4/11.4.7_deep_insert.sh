@@ -18,15 +18,6 @@ echo ""
 echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_CreateRelatedEntitiesWhenCreatinganE"
 echo ""
 
-CREATED_IDS=()
-
-cleanup() {
-    for id in "${CREATED_IDS[@]}"; do
-        curl -s -X DELETE "$SERVER_URL/Products($id)" > /dev/null 2>&1
-    done
-}
-
-register_cleanup
 
 # Test 1: Deep insert with inline related entity
 test_deep_insert_basic() {
@@ -45,10 +36,6 @@ test_deep_insert_basic() {
     local BODY=$(echo "$RESPONSE" | head -n -1)
     
     if [ "$HTTP_CODE" = "201" ]; then
-        local ID=$(echo "$BODY" | grep -o '"ID":[0-9]*' | head -1 | grep -o '[0-9]*')
-        if [ -n "$ID" ]; then
-            CREATED_IDS+=("$ID")
-        fi
         return 0
     else
         echo "  Details: Status $HTTP_CODE (expected 201)"
@@ -101,11 +88,6 @@ test_deep_insert_response_body() {
     local BODY=$(echo "$RESPONSE" | head -n -1)
     
     if [ "$HTTP_CODE" = "201" ]; then
-        local ID=$(echo "$BODY" | grep -o '"ID":[0-9]*' | head -1 | grep -o '[0-9]*')
-        if [ -n "$ID" ]; then
-            CREATED_IDS+=("$ID")
-        fi
-        
         # Response should include the created entity
         if check_json_field "$BODY" "Name"; then
             return 0
@@ -153,9 +135,6 @@ test_deep_insert_location_header() {
         # Extract ID from response to cleanup
         local BODY=$(echo "$HEADERS" | tail -n 1)
         local ID=$(echo "$BODY" | grep -o '"ID":[0-9]*' | head -1 | grep -o '[0-9]*')
-        if [ -n "$ID" ]; then
-            CREATED_IDS+=("$ID")
-        fi
         return 0
     else
         echo "  Details: Location header not found"

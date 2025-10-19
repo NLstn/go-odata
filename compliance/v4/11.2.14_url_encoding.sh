@@ -18,15 +18,6 @@ echo ""
 echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part2-url-conventions.html"
 echo ""
 
-CREATED_IDS=()
-
-cleanup() {
-    for id in "${CREATED_IDS[@]}"; do
-        curl -s -X DELETE "$SERVER_URL/Products($id)" > /dev/null 2>&1
-    done
-}
-
-register_cleanup
 
 # Test 1: String literal with spaces in filter
 test_filter_with_spaces() {

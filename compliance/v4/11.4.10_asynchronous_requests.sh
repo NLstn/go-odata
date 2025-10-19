@@ -18,15 +18,6 @@ echo ""
 echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_AsynchronousRequests"
 echo ""
 
-CREATED_IDS=()
-
-cleanup() {
-    for id in "${CREATED_IDS[@]}"; do
-        curl -s -X DELETE "$SERVER_URL/Products($id)" > /dev/null 2>&1
-    done
-}
-
-register_cleanup
 
 # Test 1: Prefer respond-async header is accepted
 test_async_header_accepted() {
@@ -53,12 +44,6 @@ test_async_post() {
     
     # Should return 201 (sync) or 202 (async)
     if [ "$HTTP_CODE" = "201" ] || [ "$HTTP_CODE" = "202" ]; then
-        # Try to extract ID for cleanup
-        local BODY=$(echo "$RESPONSE" | tail -n 1)
-        local ID=$(echo "$BODY" | grep -o '"ID":[0-9]*' | head -1 | grep -o '[0-9]*')
-        if [ -n "$ID" ]; then
-            CREATED_IDS+=("$ID")
-        fi
         return 0
     else
         echo "  Details: Status code: $HTTP_CODE (expected 201 or 202)"
@@ -86,7 +71,6 @@ test_async_delete() {
             if [ "$DELETE_CODE" = "204" ] || [ "$DELETE_CODE" = "200" ] || [ "$DELETE_CODE" = "202" ]; then
                 return 0
             else
-                CREATED_IDS+=("$ID")  # Clean up if delete failed
                 echo "  Details: Status code: $DELETE_CODE (expected 204, 200, or 202)"
                 return 1
             fi

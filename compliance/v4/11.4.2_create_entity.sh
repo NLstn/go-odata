@@ -19,16 +19,6 @@ echo ""
 echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_CreateanEntity"
 echo ""
 
-
-
-# Cleanup function to remove test data
-cleanup_entity() {
-    local entity_id="$1"
-    if [ -n "$entity_id" ]; then
-        curl -s -X DELETE "$SERVER_URL/Products($entity_id)" > /dev/null 2>&1
-    fi
-}
-
 # Test 1: POST should return 201 Created
 echo "Test 1: POST entity returns 201 Created"
 PAYLOAD='{"Name":"ComplianceTestProduct1","Price":99.99,"Category":"Test"}'
@@ -65,7 +55,6 @@ HTTP_CODE=$(echo "$RESPONSE" | grep "HTTP" | head -1 | awk '{print $2}')
 if [ -n "$LOCATION" ] && [ "$HTTP_CODE" = "201" ]; then
     test_result "201 response includes Location header" "PASS"
     CREATED_ID2=$(echo "$LOCATION" | grep -o 'Products([0-9]*)' | grep -o '[0-9]*')
-    cleanup_entity "$CREATED_ID2"
 else
     test_result "201 response includes Location header" "FAIL" "Location header not found or status not 201"
 fi
@@ -84,7 +73,6 @@ if echo "$RESPONSE" | grep -q '"ID"'; then
     if echo "$RESPONSE" | grep -q '"Name"[[:space:]]*:[[:space:]]*"ComplianceTestProduct3"'; then
         test_result "Response body includes created entity" "PASS"
         CREATED_ID3=$(echo "$RESPONSE" | grep -o '"ID"[[:space:]]*:[[:space:]]*[0-9]*' | grep -o '[0-9]*')
-        cleanup_entity "$CREATED_ID3"
     else
         test_result "Response body includes created entity" "FAIL" "Entity data incomplete"
     fi
@@ -110,7 +98,6 @@ if [ "$HTTP_CODE" = "204" ]; then
     if [ -n "$LOCATION" ]; then
         test_result "POST with Prefer: return=minimal returns 204 with Location header" "PASS"
         CREATED_ID4=$(echo "$LOCATION" | grep -o 'Products([0-9]*)' | grep -o '[0-9]*')
-        cleanup_entity "$CREATED_ID4"
     else
         test_result "POST with Prefer: return=minimal returns 204 with Location header" "FAIL" "Location header missing"
     fi
@@ -135,7 +122,6 @@ ODATA_ENTITYID=$(echo "$RESPONSE" | grep -i "^OData-EntityId:" | head -1 | sed '
 if [ "$HTTP_CODE" = "204" ] && [ -n "$ODATA_ENTITYID" ]; then
     test_result "204 response includes OData-EntityId header" "PASS"
     CREATED_ID5=$(echo "$ODATA_ENTITYID" | grep -o 'Products([0-9]*)' | grep -o '[0-9]*')
-    cleanup_entity "$CREATED_ID5"
 else
     test_result "204 response includes OData-EntityId header" "FAIL" "Header not found or status not 204"
 fi
@@ -143,7 +129,6 @@ echo ""
 
 # Clean up any remaining test entities
 if [ -n "$CREATED_ID" ]; then
-    cleanup_entity "$CREATED_ID"
 fi
 
 

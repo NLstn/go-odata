@@ -48,8 +48,6 @@ HTTP_CODE=$(echo "$RESPONSE" | tail -1)
 
 if [ "$HTTP_CODE" = "201" ]; then
     test_result "PUT creates non-existent entity" "PASS"
-    # Clean up
-    curl -s -X DELETE "$SERVER_URL/Products(999999)" > /dev/null 2>&1
 elif [ "$HTTP_CODE" = "404" ]; then
     test_result "PUT creates non-existent entity" "PASS" "Server requires POST for creation (valid behavior)"
 else

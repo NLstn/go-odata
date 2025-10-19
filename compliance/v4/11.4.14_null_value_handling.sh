@@ -18,15 +18,8 @@ echo ""
 echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html"
 echo ""
 
-CREATED_IDS=()
-
-cleanup() {
-    for id in "${CREATED_IDS[@]}"; do
-        curl -s -X DELETE "$SERVER_URL/Products($id)" > /dev/null 2>&1
-    done
-}
-
-register_cleanup
+# Track created entity ID for subsequent tests
+CREATED_ID=""
 
 # Test 1: Create entity with null property
 test_create_with_null() {
@@ -38,10 +31,8 @@ test_create_with_null() {
     local BODY=$(echo "$RESPONSE" | head -n -1)
     
     if [ "$HTTP_CODE" = "201" ]; then
-        local ID=$(echo "$BODY" | grep -o '"ID":[0-9]*' | head -1 | grep -o '[0-9]*')
-        if [ -n "$ID" ]; then
-            CREATED_IDS+=("$ID")
-        fi
+        # Store ID for subsequent tests
+        CREATED_ID=$(echo "$BODY" | grep -o '"ID":[0-9]*' | head -1 | grep -o '[0-9]*')
         return 0
     else
         echo "  Details: Status $HTTP_CODE (expected 201)"
@@ -51,9 +42,8 @@ test_create_with_null() {
 
 # Test 2: Retrieve entity with null property
 test_retrieve_null_property() {
-    if [ ${#CREATED_IDS[@]} -gt 0 ]; then
-        local ID=${CREATED_IDS[0]}
-        local RESPONSE=$(curl -s "$SERVER_URL/Products($ID)")
+    if [ -n "$CREATED_ID" ]; then
+        local RESPONSE=$(curl -s "$SERVER_URL/Products($CREATED_ID)")
         
         # Check that Description is either absent or null
         if echo "$RESPONSE" | grep -q '"Description":null' || ! echo "$RESPONSE" | grep -q '"Description"'; then
@@ -70,8 +60,8 @@ test_retrieve_null_property() {
 
 # Test 3: Update property to null using PATCH
 test_patch_to_null() {
-    if [ ${#CREATED_IDS[@]} -gt 0 ]; then
-        local ID=${CREATED_IDS[0]}
+    if [ -n "$CREATED_ID" ]; then
+        local ID=${CREATED_ID}
         local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH "$SERVER_URL/Products($ID)" \
             -H "Content-Type: application/json" \
             -d '{"Description":null}')
@@ -102,8 +92,8 @@ test_filter_ne_null() {
 
 # Test 6: PUT with null property
 test_put_with_null() {
-    if [ ${#CREATED_IDS[@]} -gt 0 ]; then
-        local ID=${CREATED_IDS[0]}
+    if [ -n "$CREATED_ID" ]; then
+        local ID=${CREATED_ID}
         local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PUT "$SERVER_URL/Products($ID)" \
             -H "Content-Type: application/json" \
             -d '{"Name":"Updated Product","Price":149.99,"Category":"Test","Description":null,"Status":1}')
@@ -132,7 +122,6 @@ test_null_vs_string_null() {
     if [ "$HTTP_CODE" = "201" ]; then
         local ID=$(echo "$BODY" | grep -o '"ID":[0-9]*' | head -1 | grep -o '[0-9]*')
         if [ -n "$ID" ]; then
-            CREATED_IDS+=("$ID")
             # Verify that Description is the string "null" not null
             if echo "$BODY" | grep -q '"Description":"null"'; then
                 return 0
@@ -149,8 +138,8 @@ test_null_vs_string_null() {
 
 # Test 8: Select null properties
 test_select_null_property() {
-    if [ ${#CREATED_IDS[@]} -gt 0 ]; then
-        local ID=${CREATED_IDS[0]}
+    if [ -n "$CREATED_ID" ]; then
+        local ID=${CREATED_ID}
         local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Products($ID)?\$select=Description")
         check_status "$HTTP_CODE" "200"
     else

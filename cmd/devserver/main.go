@@ -9,6 +9,49 @@ import (
 	"gorm.io/gorm"
 )
 
+// seedDatabase initializes the database with sample data
+// This function clears all existing data and resets to the default state
+func seedDatabase(db *gorm.DB) error {
+	// Clear existing data
+	if err := db.Exec("DELETE FROM product_descriptions").Error; err != nil {
+		return fmt.Errorf("failed to clear product descriptions: %w", err)
+	}
+	if err := db.Exec("DELETE FROM products").Error; err != nil {
+		return fmt.Errorf("failed to clear products: %w", err)
+	}
+	if err := db.Exec("DELETE FROM company_infos").Error; err != nil {
+		return fmt.Errorf("failed to clear company info: %w", err)
+	}
+
+	// Reset auto-increment counters (SQLite specific)
+	if err := db.Exec("DELETE FROM sqlite_sequence WHERE name IN ('products', 'product_descriptions', 'company_infos')").Error; err != nil {
+		// This is not critical, just continue
+		log.Printf("Warning: Could not reset auto-increment counters: %v", err)
+	}
+
+	// Seed products
+	sampleProducts := GetSampleProducts()
+	if err := db.Create(&sampleProducts).Error; err != nil {
+		return fmt.Errorf("failed to seed products: %w", err)
+	}
+
+	// Seed product descriptions
+	sampleDescriptions := GetSampleProductDescriptions()
+	if err := db.Create(&sampleDescriptions).Error; err != nil {
+		return fmt.Errorf("failed to seed product descriptions: %w", err)
+	}
+
+	// Seed company info singleton
+	companyInfo := GetCompanyInfo()
+	if err := db.Create(&companyInfo).Error; err != nil {
+		return fmt.Errorf("failed to seed company info: %w", err)
+	}
+
+	fmt.Printf("Database seeded with %d products, %d descriptions, and company info\n",
+		len(sampleProducts), len(sampleDescriptions))
+	return nil
+}
+
 func main() {
 	// Initialize SQLite in-memory database
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
@@ -22,23 +65,9 @@ func main() {
 	}
 
 	// Seed the database with sample data
-	sampleProducts := GetSampleProducts()
-	if err := db.Create(&sampleProducts).Error; err != nil {
+	if err := seedDatabase(db); err != nil {
 		log.Fatal("Failed to seed database:", err)
 	}
-
-	sampleDescriptions := GetSampleProductDescriptions()
-	if err := db.Create(&sampleDescriptions).Error; err != nil {
-		log.Fatal("Failed to seed product descriptions:", err)
-	}
-
-	// Seed company info singleton
-	companyInfo := GetCompanyInfo()
-	if err := db.Create(&companyInfo).Error; err != nil {
-		log.Fatal("Failed to seed company info:", err)
-	}
-
-	fmt.Printf("Database initialized with %d products, %d descriptions, and company info\n", len(sampleProducts), len(sampleDescriptions))
 
 	// Create OData service
 	service := odata.NewService(db)
@@ -62,6 +91,9 @@ func main() {
 	// Register example actions
 	registerActions(service, db)
 
+	// Register reseed action for testing
+	registerReseedAction(service, db)
+
 	// Start the HTTP server
 	fmt.Println("🚀 Development server starting with hot reload...")
 	fmt.Println("Service endpoints:")
@@ -82,6 +114,7 @@ func main() {
 	fmt.Println("    GET  http://localhost:8080/Products(1)/GetTotalPrice?taxRate=0.08")
 	fmt.Println("  Unbound Actions:")
 	fmt.Println("    POST http://localhost:8080/ResetAllPrices")
+	fmt.Println("    POST http://localhost:8080/Reseed  (Test utility - resets database to default state)")
 	fmt.Println("  Bound Actions:")
 	fmt.Println("    POST http://localhost:8080/Products(1)/ApplyDiscount (body: {\"percentage\": 10})")
 	fmt.Println("    POST http://localhost:8080/Products(1)/IncreasePrice (body: {\"amount\": 5.0})")

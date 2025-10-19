@@ -18,40 +18,8 @@ echo ""
 echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_UpdateanEntity"
 echo ""
 
-CREATED_IDS=()
-
-cleanup() {
-    for id in "${CREATED_IDS[@]}"; do
-        curl -s -X DELETE "$SERVER_URL/Products($id)" > /dev/null 2>&1
-    done
-}
-
-register_cleanup
-
-# Create a test entity first
-echo "Setting up: Creating test entity..."
-CREATE_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$SERVER_URL/Products" \
-    -H "Content-Type: application/json" \
-    -d '{"Name":"Test Product for Update","Price":99.99,"Category":"Test","Status":1}' 2>&1)
-CREATE_CODE=$(echo "$CREATE_RESPONSE" | tail -1)
-CREATE_BODY=$(echo "$CREATE_RESPONSE" | head -n -1)
-
-if [ "$CREATE_CODE" = "201" ]; then
-    TEST_ID=$(echo "$CREATE_BODY" | grep -o '"ID":[0-9]*' | head -1 | grep -o '[0-9]*')
-    if [ -n "$TEST_ID" ]; then
-        CREATED_IDS+=("$TEST_ID")
-        echo "  Created test entity with ID: $TEST_ID"
-    else
-        echo "  WARNING: Could not extract ID from created entity"
-        echo "  Will use ID 1 for tests (may fail if entity doesn't exist)"
-        TEST_ID=1
-    fi
-else
-    echo "  WARNING: Failed to create test entity (status: $CREATE_CODE)"
-    echo "  Will use ID 1 for tests (may fail if entity doesn't exist)"
-    TEST_ID=1
-fi
-echo ""
+# Use existing product from seeded data (ID 1 = Laptop)
+TEST_ID=1
 
 # Test 1: PATCH updates specified properties only
 test_patch_update() {
