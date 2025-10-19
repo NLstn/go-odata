@@ -4,17 +4,17 @@ This directory contains compliance tests for validating the go-odata library aga
 
 ## Overview
 
-The compliance test suite consists of **59 individual test scripts** organized by OData v4 specification sections. Each test script validates specific aspects of the OData protocol implementation.
+The compliance test suite consists of **67 individual test scripts** organized by OData v4 specification sections. Each test script validates specific aspects of the OData protocol implementation.
 
 ### Test Coverage Summary
 
-- **13 Header & Format Tests** - HTTP headers, status codes, JSON format, caching, ETags, OData-EntityId
+- **14 Header & Format Tests** - HTTP headers, status codes, JSON format, caching, ETags, OData-EntityId, error response consistency
 - **3 Metadata Tests** - Service Document, Metadata Document, Operations
-- **11 URL Convention Tests** - Entity Addressing, Canonical URL, Property Access, Collection Operations, Metadata Levels, Delta Links, Lambda Operators, Property $value, Stream Properties, Type Casting
-- **18 Query Option Tests** - $filter (with string/date/arithmetic/type/logical/comparison/geo operators), $select, $orderby, $top, $skip, $skiptoken, $count, $expand, $search, $format, $apply, $compute
-- **10 Data Modification Tests** - GET, POST, PATCH, PUT, DELETE, HEAD, Conditional Requests, Relationships, Modify Relationships, Deep Insert, Batch, Asynchronous
+- **12 URL Convention Tests** - Entity Addressing, Canonical URL, Property Access, Collection Operations, Metadata Levels, Delta Links, Lambda Operators, Property $value, Stream Properties, Type Casting, Singleton Operations
+- **21 Query Option Tests** - $filter (with string/date/arithmetic/type/logical/comparison/geo operators), $select, $orderby, $top, $skip, $skiptoken, $count, $expand, $search, $format, $apply, $compute, nested expand options, query option combinations, orderby with computed properties
+- **12 Data Modification Tests** - GET, POST, PATCH, PUT, DELETE, HEAD, Conditional Requests, Relationships, Modify Relationships, Deep Insert, Batch, Asynchronous, Navigation Property Operations, Action/Function Parameters
 - **5 Data Type Tests** - Primitive data types handling, Nullable properties, Collection properties, Complex types, Enum types
-- **1 Annotations Test** - Instance annotations and control information
+- **2 Advanced Filter Tests** - Lambda operators, filter on expanded properties
 
 ## Test Structure
 
@@ -145,6 +145,7 @@ Example report structure:
 - **8.2.8_header_prefer.sh** - Tests Prefer header (return=minimal, return=representation, odata.maxpagesize)
 - **8.2.9_header_maxversion.sh** - Tests OData-MaxVersion header for version negotiation
 - **8.3_error_responses.sh** - Validates error response format and structure
+- **8.4_error_response_consistency.sh** - Tests consistency of error responses across different error scenarios
 
 ### Service Document & Metadata (Section 9.x)
 - **9.1_service_document.sh** - Validates service document structure and format
@@ -160,11 +161,12 @@ Example report structure:
 - **11.2.4_collection_operations.sh** - Tests addressing entity collections vs single entities, collection format with value wrapper
 - **11.2.7_metadata_levels.sh** - Tests odata.metadata parameter (minimal, full, none)
 - **11.2.8_delta_links.sh** - Tests delta link support for change tracking (optional feature)
-- **11.2.12_stream_properties.sh** - Tests media entities, stream properties, and $value access for binary content (optional feature)
-- **11.2.13_type_casting.sh** - Tests derived types, type casting in URLs, isof/cast functions, and polymorphic queries (optional feature)
 - **11.2.9_lambda_operators.sh** - Tests lambda operators (any, all) for collection filtering
 - **11.2.10_addressing_operations.sh** - Tests addressing bound and unbound actions and functions
 - **11.2.11_property_value.sh** - Tests accessing raw property values using $value path segment
+- **11.2.12_stream_properties.sh** - Tests media entities, stream properties, and $value access for binary content (optional feature)
+- **11.2.13_type_casting.sh** - Tests derived types, type casting in URLs, isof/cast functions, and polymorphic queries (optional feature)
+- **11.2.16_singleton_operations.sh** - Tests singleton entity operations (GET, PATCH, PUT) and proper error responses for invalid operations
 
 ### Query Options - Search (Section 11.2.4.x)
 - **11.2.4.1_query_search.sh** - Tests $search query option for free-text search
@@ -178,6 +180,9 @@ Example report structure:
 - **11.2.5.6_query_expand.sh** - Tests $expand query option for expanding related entities
 - **11.2.5.7_query_skiptoken.sh** - Tests $skiptoken for server-driven paging and continuation tokens
 - **11.2.5.8_query_compute.sh** - Tests $compute query option for computed properties (OData v4.01 feature, optional)
+- **11.2.5.9_nested_expand_options.sh** - Tests nested $expand with multiple levels and nested query options ($filter, $select, $orderby, $top)
+- **11.2.5.10_query_option_combinations.sh** - Tests valid combinations of query options and proper error handling
+- **11.2.5.11_orderby_computed_properties.sh** - Tests $orderby with computed properties from $compute (OData v4.01 feature)
 
 ### Query Options - Format (Section 11.2.6)
 - **11.2.6_query_format.sh** - Tests $format query option for specifying response format
@@ -190,6 +195,7 @@ Example report structure:
 - **11.3.5_filter_logical_operators.sh** - Tests logical operators (and, or, not) and operator precedence with parentheses
 - **11.3.6_filter_comparison_operators.sh** - Tests all comparison operators (eq, ne, gt, ge, lt, le) with various data types
 - **11.3.7_filter_geo_functions.sh** - Tests geospatial functions (geo.distance, geo.length, geo.intersects) for geographic queries (optional feature)
+- **11.3.8_filter_expanded_properties.sh** - Tests filtering entities based on properties of expanded navigation entities using any() and all()
 
 ### Data Modification (Section 11.4.x)
 - **11.4.1_requesting_entities.sh** - Tests various methods to request individual entities (GET, HEAD, conditional)
@@ -198,11 +204,13 @@ Example report structure:
 - **11.4.4_delete_entity.sh** - Tests entity deletion (DELETE) and verification
 - **11.4.5_upsert.sh** - Tests upsert operations (PUT) for creating or replacing entities
 - **11.4.6_relationships.sh** - Tests relationship management with $ref (optional feature)
+- **11.4.6.1_navigation_property_operations.sh** - Tests operations on navigation properties including accessing, filtering, and query options
 - **11.4.7_deep_insert.sh** - Tests creating entities with related entities in a single POST request (deep insert)
 - **11.4.8_modify_relationships.sh** - Tests modifying relationships using $ref endpoints (PUT, POST, DELETE on $ref)
 - **11.4.9_batch_requests.sh** - Tests batch request processing (optional feature)
 - **11.4.10_asynchronous_requests.sh** - Tests asynchronous request processing with Prefer: respond-async header
 - **11.4.11_head_requests.sh** - Tests HEAD requests for entities and collections, validates headers without body
+- **11.4.13_action_function_parameters.sh** - Tests parameter validation for actions and functions including required parameters and type validation
 
 ### Conditional Operations (Section 11.5.x)
 - **11.5.1_conditional_requests.sh** - Tests conditional requests with ETags (If-Match, If-None-Match)
