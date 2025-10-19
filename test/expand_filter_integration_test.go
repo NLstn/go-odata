@@ -262,4 +262,56 @@ func TestExpandWithFilterIntegration(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("Select navigation property auto-expands", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/ExpandTestProducts?$select=Name,Descriptions", nil)
+		w := httptest.NewRecorder()
+
+		service.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("Expected status 200, got %d: %s", w.Code, w.Body.String())
+		}
+
+		var response map[string]interface{}
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+			t.Fatalf("Failed to parse response: %v", err)
+		}
+
+		value := response["value"].([]interface{})
+		if len(value) == 0 {
+			t.Fatal("Expected at least one result")
+		}
+
+		item := value[0].(map[string]interface{})
+
+		// Should have Name property
+		if _, ok := item["Name"]; !ok {
+			t.Error("Expected Name property")
+		}
+
+		// Should have Descriptions array (auto-expanded)
+		descriptions, ok := item["Descriptions"].([]interface{})
+		if !ok {
+			t.Fatalf("Expected Descriptions to be auto-expanded as array, got %T: %v", item["Descriptions"], item["Descriptions"])
+		}
+
+		if len(descriptions) == 0 {
+			t.Fatal("Expected at least one description")
+		}
+
+		// Verify description has expected properties
+		firstDesc, ok := descriptions[0].(map[string]interface{})
+		if !ok {
+			t.Fatalf("Expected description to be a map, got %T", descriptions[0])
+		}
+
+		if _, ok := firstDesc["Description"]; !ok {
+			t.Error("Expected Description property in expanded entity")
+		}
+
+		if _, ok := firstDesc["LanguageKey"]; !ok {
+			t.Error("Expected LanguageKey property in expanded entity")
+		}
+	})
 }
