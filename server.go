@@ -122,6 +122,12 @@ func (s *Service) routeRequest(w http.ResponseWriter, r *http.Request, handler *
 		// Check if this is an unbound action/function on the collection
 		if components.NavigationProperty != "" && s.isActionOrFunction(components.NavigationProperty) {
 			s.handleActionOrFunction(w, r, components.NavigationProperty, "", false, components.EntitySet)
+		} else if components.NavigationProperty != "" {
+			// Navigation property or action/function not found on collection
+			if writeErr := response.WriteError(w, http.StatusNotFound, "Property or operation not found",
+				fmt.Sprintf("'%s' is not a valid property, action, or function for %s", components.NavigationProperty, components.EntitySet)); writeErr != nil {
+				fmt.Printf("Error writing error response: %v\n", writeErr)
+			}
 		} else {
 			// Collection request
 			handler.HandleCollection(w, r)
