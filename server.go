@@ -85,8 +85,21 @@ func (s *Service) routeRequest(w http.ResponseWriter, r *http.Request, handler *
 	isSingleton := handler.IsSingleton()
 
 	if components.IsCount {
-		// $count request: Products/$count
-		handler.HandleCount(w, r)
+		// $count request: Products/$count or Products(1)/Descriptions/$count
+		if hasKey && components.NavigationProperty != "" {
+			// Navigation property count: Products(1)/Descriptions/$count
+			keyString := s.getKeyString(components)
+			handler.HandleNavigationPropertyCount(w, r, keyString, components.NavigationProperty)
+		} else if !hasKey && components.NavigationProperty == "" {
+			// Collection count: Products/$count
+			handler.HandleCount(w, r)
+		} else {
+			// Invalid: count on entity without navigation property (Products(1)/$count)
+			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid request",
+				"$count is not supported on individual entities. Use $count on collections or navigation properties."); writeErr != nil {
+				fmt.Printf("Error writing error response: %v\n", writeErr)
+			}
+		}
 	} else if components.IsRef {
 		// $ref request: Products/$ref or Products(1)/$ref
 		if hasKey && components.NavigationProperty == "" {

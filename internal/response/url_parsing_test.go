@@ -118,6 +118,20 @@ func TestParseODataURLComponentsCount(t *testing.T) {
 			expectIsCount:   true,
 			expectHasKey:    false,
 		},
+		{
+			name:            "Navigation property with count",
+			path:            "Products(1)/Descriptions/$count",
+			expectEntitySet: "Products",
+			expectIsCount:   true,
+			expectHasKey:    true,
+		},
+		{
+			name:            "Navigation property with count - leading slash",
+			path:            "/Products(1)/Descriptions/$count",
+			expectEntitySet: "Products",
+			expectIsCount:   true,
+			expectHasKey:    true,
+		},
 	}
 
 	for _, tt := range tests {

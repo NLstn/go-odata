@@ -288,6 +288,170 @@ func TestExpandWithCount(t *testing.T) {
 	}
 }
 
+// TestNavigationPropertyCount tests $count on navigation properties
+func TestNavigationPropertyCount(t *testing.T) {
+	db := setupRelationTestDB(t)
+	authorMeta, _ := metadata.AnalyzeEntity(&Author{})
+	entitiesMetadata := map[string]*metadata.EntityMetadata{
+		"Authors": authorMeta,
+	}
+	handler := NewEntityHandler(db, authorMeta)
+	handler.SetEntitiesMetadata(entitiesMetadata)
+
+	tests := []struct {
+		name          string
+		path          string
+		entityKey     string
+		navProp       string
+		expectedCount string
+	}{
+		{
+			name:          "J.K. Rowling's books count",
+			path:          "/Authors(1)/Books/$count",
+			entityKey:     "1",
+			navProp:       "Books",
+			expectedCount: "2",
+		},
+		{
+			name:          "George R.R. Martin's books count",
+			path:          "/Authors(2)/Books/$count",
+			entityKey:     "2",
+			navProp:       "Books",
+			expectedCount: "2",
+		},
+		{
+			name:          "J.R.R. Tolkien's books count",
+			path:          "/Authors(3)/Books/$count",
+			entityKey:     "3",
+			navProp:       "Books",
+			expectedCount: "2",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tt.path, nil)
+			w := httptest.NewRecorder()
+
+			handler.HandleNavigationPropertyCount(w, req, tt.entityKey, tt.navProp)
+
+			if w.Code != http.StatusOK {
+				t.Errorf("Expected status 200, got %d. Body: %s", w.Code, w.Body.String())
+			}
+
+			// Check Content-Type
+			contentType := w.Header().Get("Content-Type")
+			if contentType != "text/plain" {
+				t.Errorf("Expected Content-Type text/plain, got %s", contentType)
+			}
+
+			// Check count value
+			count := w.Body.String()
+			if count != tt.expectedCount {
+				t.Errorf("Expected count %s, got %s", tt.expectedCount, count)
+			}
+		})
+	}
+}
+
+// TestNavigationPropertyCountNotFound tests $count on navigation property when entity not found
+func TestNavigationPropertyCountNotFound(t *testing.T) {
+	db := setupRelationTestDB(t)
+	authorMeta, _ := metadata.AnalyzeEntity(&Author{})
+	handler := NewEntityHandler(db, authorMeta)
+
+	req := httptest.NewRequest(http.MethodGet, "/Authors(999)/Books/$count", nil)
+	w := httptest.NewRecorder()
+
+	handler.HandleNavigationPropertyCount(w, req, "999", "Books")
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("Expected status 404, got %d", w.Code)
+	}
+}
+
+// TestNavigationPropertyCountInvalidProperty tests $count on invalid navigation property
+func TestNavigationPropertyCountInvalidProperty(t *testing.T) {
+	db := setupRelationTestDB(t)
+	authorMeta, _ := metadata.AnalyzeEntity(&Author{})
+	handler := NewEntityHandler(db, authorMeta)
+
+	req := httptest.NewRequest(http.MethodGet, "/Authors(1)/InvalidProperty/$count", nil)
+	w := httptest.NewRecorder()
+
+	handler.HandleNavigationPropertyCount(w, req, "1", "InvalidProperty")
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("Expected status 404, got %d", w.Code)
+	}
+}
+
+// TestNavigationPropertyCountOnSingleValuedProperty tests $count on single-valued navigation property (should fail)
+func TestNavigationPropertyCountOnSingleValuedProperty(t *testing.T) {
+	db := setupRelationTestDB(t)
+	bookMeta, _ := metadata.AnalyzeEntity(&Book{})
+	handler := NewEntityHandler(db, bookMeta)
+
+	req := httptest.NewRequest(http.MethodGet, "/Books(1)/Author/$count", nil)
+	w := httptest.NewRecorder()
+
+	handler.HandleNavigationPropertyCount(w, req, "1", "Author")
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status 400, got %d", w.Code)
+	}
+}
+
+// TestNavigationPropertyCountHEAD tests HEAD request on navigation property count
+func TestNavigationPropertyCountHEAD(t *testing.T) {
+	db := setupRelationTestDB(t)
+	authorMeta, _ := metadata.AnalyzeEntity(&Author{})
+	handler := NewEntityHandler(db, authorMeta)
+
+	req := httptest.NewRequest(http.MethodHead, "/Authors(1)/Books/$count", nil)
+	w := httptest.NewRecorder()
+
+	handler.HandleNavigationPropertyCount(w, req, "1", "Books")
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", w.Code)
+	}
+
+	// HEAD should not return body
+	if w.Body.Len() > 0 {
+		t.Errorf("Expected empty body for HEAD request, got %d bytes", w.Body.Len())
+	}
+
+	// But should have correct Content-Type header
+	contentType := w.Header().Get("Content-Type")
+	if contentType != "text/plain" {
+		t.Errorf("Expected Content-Type text/plain, got %s", contentType)
+	}
+}
+
+// TestNavigationPropertyCountOPTIONS tests OPTIONS request on navigation property count
+func TestNavigationPropertyCountOPTIONS(t *testing.T) {
+	db := setupRelationTestDB(t)
+	authorMeta, _ := metadata.AnalyzeEntity(&Author{})
+	handler := NewEntityHandler(db, authorMeta)
+
+	req := httptest.NewRequest(http.MethodOptions, "/Authors(1)/Books/$count", nil)
+	w := httptest.NewRecorder()
+
+	handler.HandleNavigationPropertyCount(w, req, "1", "Books")
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", w.Code)
+	}
+
+	// Check Allow header
+	allow := w.Header().Get("Allow")
+	if allow != "GET, HEAD, OPTIONS" {
+		t.Errorf("Expected Allow header 'GET, HEAD, OPTIONS', got %s", allow)
+	}
+}
+
+
 // TestNavigationPropertyPath tests accessing navigation properties via path
 func TestNavigationPropertyPath(t *testing.T) {
 	db := setupRelationTestDB(t)
