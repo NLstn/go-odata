@@ -705,5 +705,3 @@ func intPtr(i int) *int {
 func int64Ptr(i int64) *int64 {
 	return &i
 }
-
-

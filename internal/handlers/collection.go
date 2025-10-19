@@ -595,5 +595,3 @@ func (h *EntityHandler) applySkipTokenFilter(db *gorm.DB, queryOptions *query.Qu
 
 	return db
 }
-
-
