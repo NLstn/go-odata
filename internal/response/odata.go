@@ -1157,13 +1157,15 @@ func ParseODataURLComponents(path string) (*ODataURLComponents, error) {
 				// The caller will need to determine which it is based on registered actions/functions
 				components.NavigationProperty = secondPart
 
-				// Check for $value or $ref suffix: Products(1)/Name/$value, Products(1)/Descriptions/$ref
+				// Check for $value, $ref, or $count suffix: Products(1)/Name/$value, Products(1)/Descriptions/$ref, Products(1)/Descriptions/$count
 				if len(pathParts) > 2 {
 					switch pathParts[2] {
 					case "$value":
 						components.IsValue = true
 					case "$ref":
 						components.IsRef = true
+					case "$count":
+						components.IsCount = true
 					}
 				}
 			}

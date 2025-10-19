@@ -26,6 +26,21 @@ func (h *EntityHandler) HandleNavigationProperty(w http.ResponseWriter, r *http.
 	}
 }
 
+// HandleNavigationPropertyCount handles GET, HEAD, and OPTIONS requests for navigation property count (e.g., Products(1)/Descriptions/$count)
+func (h *EntityHandler) HandleNavigationPropertyCount(w http.ResponseWriter, r *http.Request, entityKey string, navigationProperty string) {
+	switch r.Method {
+	case http.MethodGet, http.MethodHead:
+		h.handleGetNavigationPropertyCount(w, r, entityKey, navigationProperty)
+	case http.MethodOptions:
+		h.handleOptionsNavigationPropertyCount(w)
+	default:
+		if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+			fmt.Sprintf("Method %s is not supported for navigation property $count", r.Method)); err != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, err)
+		}
+	}
+}
+
 // handleGetNavigationProperty handles GET requests for navigation properties
 func (h *EntityHandler) handleGetNavigationProperty(w http.ResponseWriter, r *http.Request, entityKey string, navigationProperty string, isRef bool) {
 	// Find and validate the navigation property
@@ -64,6 +79,70 @@ func (h *EntityHandler) handleGetNavigationProperty(w http.ResponseWriter, r *ht
 
 // handleOptionsNavigationProperty handles OPTIONS requests for navigation properties
 func (h *EntityHandler) handleOptionsNavigationProperty(w http.ResponseWriter) {
+	w.Header().Set("Allow", "GET, HEAD, OPTIONS")
+	w.WriteHeader(http.StatusOK)
+}
+
+// handleGetNavigationPropertyCount handles GET requests for navigation property count
+func (h *EntityHandler) handleGetNavigationPropertyCount(w http.ResponseWriter, r *http.Request, entityKey string, navigationProperty string) {
+	// Find and validate the navigation property
+	navProp := h.findNavigationProperty(navigationProperty)
+	if navProp == nil {
+		if err := response.WriteError(w, http.StatusNotFound, "Navigation property not found",
+			fmt.Sprintf("'%s' is not a valid navigation property for %s", navigationProperty, h.metadata.EntitySetName)); err != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, err)
+		}
+		return
+	}
+
+	// $count is only valid for collection navigation properties
+	if !navProp.NavigationIsArray {
+		if err := response.WriteError(w, http.StatusBadRequest, "Invalid request",
+			fmt.Sprintf("$count is only supported on collection navigation properties. '%s' is a single-valued navigation property.", navigationProperty)); err != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, err)
+		}
+		return
+	}
+
+	// Fetch the parent entity with the navigation property preloaded
+	parent, err := h.fetchParentEntityWithNav(entityKey, navProp.Name)
+	if err != nil {
+		h.handleFetchError(w, err, entityKey)
+		return
+	}
+
+	// Extract the navigation property value
+	navFieldValue := h.extractNavigationField(parent, navProp.Name)
+	if !navFieldValue.IsValid() {
+		if err := response.WriteError(w, http.StatusInternalServerError, ErrMsgInternalError,
+			"Could not access navigation property"); err != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, err)
+		}
+		return
+	}
+
+	// Get the count of the navigation collection
+	var count int64
+	if navFieldValue.Kind() == reflect.Slice {
+		count = int64(navFieldValue.Len())
+	}
+
+	// Write the count as plain text according to OData v4 spec
+	w.Header().Set(HeaderContentType, "text/plain")
+	w.WriteHeader(http.StatusOK)
+
+	// For HEAD requests, don't write the body
+	if r.Method == http.MethodHead {
+		return
+	}
+
+	if _, err := fmt.Fprintf(w, "%d", count); err != nil {
+		fmt.Printf("Error writing count response: %v\n", err)
+	}
+}
+
+// handleOptionsNavigationPropertyCount handles OPTIONS requests for navigation property count
+func (h *EntityHandler) handleOptionsNavigationPropertyCount(w http.ResponseWriter) {
 	w.Header().Set("Allow", "GET, HEAD, OPTIONS")
 	w.WriteHeader(http.StatusOK)
 }
