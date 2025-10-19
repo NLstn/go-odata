@@ -227,6 +227,11 @@ func (h *EntityHandler) writeDatabaseError(w http.ResponseWriter, err error) {
 
 // handlePatchEntity handles PATCH requests for individual entities
 func (h *EntityHandler) handlePatchEntity(w http.ResponseWriter, r *http.Request, entityKey string) {
+	// Validate Content-Type header
+	if err := validateContentType(w, r); err != nil {
+		return
+	}
+
 	pref := preference.ParsePrefer(r)
 
 	// Fetch and update the entity
@@ -282,6 +287,22 @@ func (h *EntityHandler) fetchAndUpdateEntity(w http.ResponseWriter, r *http.Requ
 
 	// Validate that all properties in updateData are valid entity properties
 	if err := h.validatePropertiesExist(updateData, w); err != nil {
+		return nil, nil, err
+	}
+
+	// Validate data types
+	if err := h.validateDataTypes(updateData); err != nil {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid data type", err.Error()); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return nil, nil, err
+	}
+
+	// Validate that required fields are not being set to null
+	if err := h.validateRequiredFieldsNotNull(updateData); err != nil {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid value for required property", err.Error()); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
 		return nil, nil, err
 	}
 
@@ -351,6 +372,11 @@ func (h *EntityHandler) returnUpdatedEntity(w http.ResponseWriter, r *http.Reque
 // handlePutEntity handles PUT requests for individual entities
 // PUT performs a complete replacement according to OData v4 spec
 func (h *EntityHandler) handlePutEntity(w http.ResponseWriter, r *http.Request, entityKey string) {
+	// Validate Content-Type header
+	if err := validateContentType(w, r); err != nil {
+		return
+	}
+
 	pref := preference.ParsePrefer(r)
 
 	// Fetch and replace the entity

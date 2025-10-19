@@ -101,6 +101,11 @@ func (h *EntityHandler) handleGetCollection(w http.ResponseWriter, r *http.Reque
 
 // handlePostEntity handles POST requests to create new entities in a collection
 func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request) {
+	// Validate Content-Type header
+	if err := validateContentType(w, r); err != nil {
+		return
+	}
+
 	// Parse Prefer header
 	pref := preference.ParsePrefer(r)
 
@@ -115,6 +120,10 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 		}
 		return
 	}
+
+	// Clear auto-increment key properties (ignore client-provided values)
+	// This ensures the database auto-generates the ID
+	h.clearAutoIncrementKeys(entity)
 
 	// Validate required properties
 	if err := h.validateRequiredProperties(entity); err != nil {
@@ -210,6 +219,46 @@ func (h *EntityHandler) validateRequiredProperties(entity interface{}) error {
 
 	return nil
 }
+
+// clearAutoIncrementKeys clears the values of auto-increment key properties
+// This ensures that client-provided ID values are ignored and the database
+// auto-generates the ID value as per OData spec requirements
+func (h *EntityHandler) clearAutoIncrementKeys(entity interface{}) {
+	entityValue := reflect.ValueOf(entity)
+	if entityValue.Kind() == reflect.Ptr {
+		entityValue = entityValue.Elem()
+	}
+
+	// For composite keys, we don't clear any values - composite keys are typically not auto-increment
+	if len(h.metadata.KeyProperties) > 1 {
+		return
+	}
+
+	// For single keys, check if it should be auto-incremented
+	for _, keyProp := range h.metadata.KeyProperties {
+		// If explicitly marked as autoIncrement:false, don't clear
+		if strings.Contains(keyProp.GormTag, "autoIncrement:false") {
+			continue
+		}
+
+		field := entityValue.FieldByName(keyProp.Name)
+		if !field.IsValid() || !field.CanSet() {
+			continue
+		}
+
+		// In GORM, unsigned integer primary keys (uint, uint32, uint64) default to auto-increment
+		// Signed integers (int, int32, int64) do NOT auto-increment by default
+		// We only clear unsigned integer keys as those are auto-increment by convention
+		switch field.Kind() {
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			// Unsigned integers are auto-increment in GORM unless marked otherwise
+			field.SetZero()
+		}
+		// For signed integers, strings, or other types, don't clear them
+		// They typically require client-provided values
+	}
+}
+
 
 // buildEntityLocation builds the Location header URL for a created entity
 func (h *EntityHandler) buildEntityLocation(r *http.Request, entity interface{}) string {
