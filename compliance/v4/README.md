@@ -4,16 +4,17 @@ This directory contains compliance tests for validating the go-odata library aga
 
 ## Overview
 
-The compliance test suite consists of **39+ individual test scripts** organized by OData v4 specification sections. Each test script validates specific aspects of the OData protocol implementation.
+The compliance test suite consists of **59 individual test scripts** organized by OData v4 specification sections. Each test script validates specific aspects of the OData protocol implementation.
 
 ### Test Coverage Summary
 
-- **11 Header & Format Tests** - HTTP headers, status codes, JSON format, caching
+- **13 Header & Format Tests** - HTTP headers, status codes, JSON format, caching, ETags, OData-EntityId
 - **3 Metadata Tests** - Service Document, Metadata Document, Operations
-- **7 URL Convention Tests** - Entity Addressing, Canonical URL, Property Access, Metadata Levels, Delta Links, Lambda Operators
-- **12 Query Option Tests** - $filter (with string/date/arithmetic/type functions), $select, $orderby, $top, $skip, $count, $expand, $search, $format, $apply
-- **7 Data Modification Tests** - GET, POST, PATCH, PUT, DELETE, Conditional Requests, Relationships, Batch, Asynchronous
-- **1 Data Type Test** - Primitive data types handling
+- **11 URL Convention Tests** - Entity Addressing, Canonical URL, Property Access, Collection Operations, Metadata Levels, Delta Links, Lambda Operators, Property $value, Stream Properties, Type Casting
+- **18 Query Option Tests** - $filter (with string/date/arithmetic/type/logical/comparison/geo operators), $select, $orderby, $top, $skip, $skiptoken, $count, $expand, $search, $format, $apply, $compute
+- **10 Data Modification Tests** - GET, POST, PATCH, PUT, DELETE, HEAD, Conditional Requests, Relationships, Modify Relationships, Deep Insert, Batch, Asynchronous
+- **5 Data Type Tests** - Primitive data types handling, Nullable properties, Collection properties, Complex types, Enum types
+- **1 Annotations Test** - Instance annotations and control information
 
 ## Test Structure
 
@@ -128,11 +129,17 @@ Example report structure:
 
 ### Primitive Types (Section 5.x)
 - **5.1.1_primitive_data_types.sh** - Tests handling of OData primitive data types (String, Int32, Decimal, Boolean, DateTime, etc.)
+- **5.1.2_nullable_properties.sh** - Tests handling of nullable properties, null values in filters and responses, setting properties to null
+- **5.1.3_collection_properties.sh** - Tests collection-valued properties (arrays), filtering with any/all operators, and collection operations
+- **5.2_complex_types.sh** - Tests complex (structured) types, nested properties, filtering, and complex type operations
+- **5.3_enum_types.sh** - Tests enumeration types, enum filtering with numeric/string values, and enum operations
 
 ### Headers & Response Codes (Section 8.x)
 - **8.1.1_header_content_type.sh** - Validates Content-Type headers for different response types
 - **8.1.5_response_status_codes.sh** - Tests correct HTTP status codes for various operations (200, 201, 204, 400, 404, etc.)
 - **8.2.1_cache_control_header.sh** - Tests Cache-Control header handling for HTTP caching
+- **8.2.2_header_if_match.sh** - Tests If-Match and If-None-Match headers for optimistic concurrency control with ETags
+- **8.2.3_header_odata_entityid.sh** - Tests OData-EntityId response header for entity operations
 - **8.2.6_header_odata_version.sh** - Tests OData-Version header and version negotiation
 - **8.2.7_header_accept.sh** - Tests Accept header content negotiation and media type handling
 - **8.2.8_header_prefer.sh** - Tests Prefer header (return=minimal, return=representation, odata.maxpagesize)
@@ -150,10 +157,14 @@ Example report structure:
 - **11.2.1_addressing_entities.sh** - Tests entity addressing (entity sets, single entities, properties, $value)
 - **11.2.2_canonical_url.sh** - Tests canonical URL representation in @odata.id and dereferenceability
 - **11.2.3_property_access.sh** - Tests accessing individual properties and property $value
+- **11.2.4_collection_operations.sh** - Tests addressing entity collections vs single entities, collection format with value wrapper
 - **11.2.7_metadata_levels.sh** - Tests odata.metadata parameter (minimal, full, none)
 - **11.2.8_delta_links.sh** - Tests delta link support for change tracking (optional feature)
+- **11.2.12_stream_properties.sh** - Tests media entities, stream properties, and $value access for binary content (optional feature)
+- **11.2.13_type_casting.sh** - Tests derived types, type casting in URLs, isof/cast functions, and polymorphic queries (optional feature)
 - **11.2.9_lambda_operators.sh** - Tests lambda operators (any, all) for collection filtering
 - **11.2.10_addressing_operations.sh** - Tests addressing bound and unbound actions and functions
+- **11.2.11_property_value.sh** - Tests accessing raw property values using $value path segment
 
 ### Query Options - Search (Section 11.2.4.x)
 - **11.2.4.1_query_search.sh** - Tests $search query option for free-text search
@@ -165,6 +176,8 @@ Example report structure:
 - **11.2.5.4_query_apply.sh** - Tests $apply query option for data aggregation (optional extension)
 - **11.2.5.5_query_count.sh** - Tests $count query option (count with filter, top, etc.)
 - **11.2.5.6_query_expand.sh** - Tests $expand query option for expanding related entities
+- **11.2.5.7_query_skiptoken.sh** - Tests $skiptoken for server-driven paging and continuation tokens
+- **11.2.5.8_query_compute.sh** - Tests $compute query option for computed properties (OData v4.01 feature, optional)
 
 ### Query Options - Format (Section 11.2.6)
 - **11.2.6_query_format.sh** - Tests $format query option for specifying response format
@@ -174,6 +187,9 @@ Example report structure:
 - **11.3.2_filter_date_functions.sh** - Tests date/time functions (year, month, day, hour, minute, second, date, time, now)
 - **11.3.3_filter_arithmetic_functions.sh** - Tests arithmetic operators and math functions (add, sub, mul, div, mod, ceiling, floor, round)
 - **11.3.4_filter_type_functions.sh** - Tests type checking and casting functions (isof, cast)
+- **11.3.5_filter_logical_operators.sh** - Tests logical operators (and, or, not) and operator precedence with parentheses
+- **11.3.6_filter_comparison_operators.sh** - Tests all comparison operators (eq, ne, gt, ge, lt, le) with various data types
+- **11.3.7_filter_geo_functions.sh** - Tests geospatial functions (geo.distance, geo.length, geo.intersects) for geographic queries (optional feature)
 
 ### Data Modification (Section 11.4.x)
 - **11.4.1_requesting_entities.sh** - Tests various methods to request individual entities (GET, HEAD, conditional)
@@ -182,11 +198,17 @@ Example report structure:
 - **11.4.4_delete_entity.sh** - Tests entity deletion (DELETE) and verification
 - **11.4.5_upsert.sh** - Tests upsert operations (PUT) for creating or replacing entities
 - **11.4.6_relationships.sh** - Tests relationship management with $ref (optional feature)
+- **11.4.7_deep_insert.sh** - Tests creating entities with related entities in a single POST request (deep insert)
+- **11.4.8_modify_relationships.sh** - Tests modifying relationships using $ref endpoints (PUT, POST, DELETE on $ref)
 - **11.4.9_batch_requests.sh** - Tests batch request processing (optional feature)
 - **11.4.10_asynchronous_requests.sh** - Tests asynchronous request processing with Prefer: respond-async header
+- **11.4.11_head_requests.sh** - Tests HEAD requests for entities and collections, validates headers without body
 
 ### Conditional Operations (Section 11.5.x)
 - **11.5.1_conditional_requests.sh** - Tests conditional requests with ETags (If-Match, If-None-Match)
+
+### Annotations (Section 11.6)
+- **11.6_annotations.sh** - Tests instance annotations, @odata control information, and custom annotations in responses
 
 ## Test Output
 
@@ -530,12 +552,14 @@ Potential improvements to the test framework:
 - Test coverage metrics
 
 Additional OData features to test:
-- Derived types and type casting
+- Derived types and type casting (expanded coverage)
 - Enum types edge cases
-- Stream properties
+- Stream properties and media entities
 - Annotations in responses
-- Asynchronous requests
-- Advanced filtering with functions (geo, math, etc.)
+- Geographic functions (geo.distance, geo.intersects, etc.)
+- Advanced aggregation transformations
+- Complex type nested properties
+- Collection-valued complex properties
 
 ## License
 
