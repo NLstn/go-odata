@@ -110,6 +110,15 @@ func (s *Service) routeRequest(w http.ResponseWriter, r *http.Request, handler *
 			handler.HandleSingleton(w, r)
 		}
 	} else if !hasKey {
+		// Check for invalid operations on collections
+		if components.IsValue {
+			// $value is not supported on collections
+			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid request",
+				"$value is not supported on entity collections. Use $value on individual properties: EntitySet(key)/PropertyName/$value"); writeErr != nil {
+				fmt.Printf("Error writing error response: %v\n", writeErr)
+			}
+			return
+		}
 		// Check if this is an unbound action/function on the collection
 		if components.NavigationProperty != "" && s.isActionOrFunction(components.NavigationProperty) {
 			s.handleActionOrFunction(w, r, components.NavigationProperty, "", false, components.EntitySet)
