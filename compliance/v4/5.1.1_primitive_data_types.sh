@@ -30,8 +30,15 @@ register_cleanup
 
 # Test 1: String data type
 test_string_type() {
+<<<<<<< HEAD
     local RESPONSE=$(http_get_body "$SERVER_URL/Products?\$filter=Name eq 'Laptop'")
     local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=Name eq 'Laptop'")
+=======
+    local FILTER="Name eq 'Laptop'"
+    local ENCODED_FILTER=$(printf %s "$FILTER" | jq -sRr @uri)
+    local RESPONSE=$(curl -s "$SERVER_URL/Products?\$filter=$ENCODED_FILTER")
+    local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Products?\$filter=$ENCODED_FILTER")
+>>>>>>> e5188ff (Fix test 5.1.1)
     
     if [ "$HTTP_CODE" = "200" ]; then
         if echo "$RESPONSE" | grep -q '"Name"'; then
@@ -42,37 +49,49 @@ test_string_type() {
         fi
     else
         echo "  Details: Status code: $HTTP_CODE (expected 200)"
+        echo "  Response: $RESPONSE"
         return 1
     fi
 }
 
 # Test 2: Int32 data type
 test_int32_type() {
-    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=ID eq 1")
+    local FILTER="ID eq 1"
+    local ENCODED_FILTER=$(printf %s "$FILTER" | jq -sRr @uri)
+    local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Products?\$filter=$ENCODED_FILTER")
     check_status "$HTTP_CODE" "200"
 }
 
 # Test 3: Decimal data type
 test_decimal_type() {
-    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=Price eq 99.99")
+    # Use actual price from sample data (999.99 for Laptop)
+    local FILTER="Price eq 999.99"
+    local ENCODED_FILTER=$(printf %s "$FILTER" | jq -sRr @uri)
+    local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Products?\$filter=$ENCODED_FILTER")
     check_status "$HTTP_CODE" "200"
 }
 
 # Test 4: Boolean data type (using Status as int, but testing boolean filters)
 test_boolean_type() {
-    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=Status eq 1")
+    local FILTER="Status eq 1"
+    local ENCODED_FILTER=$(printf %s "$FILTER" | jq -sRr @uri)
+    local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Products?\$filter=$ENCODED_FILTER")
     check_status "$HTTP_CODE" "200"
 }
 
 # Test 5: DateTimeOffset data type
 test_datetime_type() {
-    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=CreatedAt lt 2025-12-31T23:59:59Z")
+    local FILTER="CreatedAt lt 2025-12-31T23:59:59Z"
+    local ENCODED_FILTER=$(printf %s "$FILTER" | jq -sRr @uri)
+    local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Products?\$filter=$ENCODED_FILTER")
     check_status "$HTTP_CODE" "200"
 }
 
 # Test 6: Null value handling
 test_null_value() {
-    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=Category ne null")
+    local FILTER="Category ne null"
+    local ENCODED_FILTER=$(printf %s "$FILTER" | jq -sRr @uri)
+    local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Products?\$filter=$ENCODED_FILTER")
     check_status "$HTTP_CODE" "200"
 }
 
@@ -121,13 +140,17 @@ test_number_precision() {
 
 # Test 9: Special characters in strings
 test_special_characters() {
-    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=contains(Name,'%26') or contains(Name,'/')")
+    local FILTER="contains(Name,'&') or contains(Name,'/')"
+    local ENCODED_FILTER=$(printf %s "$FILTER" | jq -sRr @uri)
+    local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Products?\$filter=$ENCODED_FILTER")
     check_status "$HTTP_CODE" "200"
 }
 
 # Test 10: Empty string handling
 test_empty_string() {
-    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=Name ne ''")
+    local FILTER="Name ne ''"
+    local ENCODED_FILTER=$(printf %s "$FILTER" | jq -sRr @uri)
+    local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Products?\$filter=$ENCODED_FILTER")
     check_status "$HTTP_CODE" "200"
 }
 
@@ -137,7 +160,7 @@ run_test "Edm.String type handles text values" test_string_type
 echo "  Request: GET \$filter=ID eq 1"
 run_test "Edm.Int32 type handles integer values" test_int32_type
 
-echo "  Request: GET \$filter=Price eq 99.99"
+echo "  Request: GET \$filter=Price eq 999.99"
 run_test "Edm.Decimal type handles decimal values" test_decimal_type
 
 echo "  Request: GET \$filter=Status eq 1"
