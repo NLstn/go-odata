@@ -30,8 +30,8 @@ register_cleanup
 
 # Test 1: String data type
 test_string_type() {
-    local RESPONSE=$(http_get_body "$SERVER_URL/Products?\$filter=Name eq 'Gaming Laptop'")
-    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=Name eq 'Gaming Laptop'")
+    local RESPONSE=$(http_get_body "$SERVER_URL/Products?\$filter=Name eq 'Laptop'")
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=Name eq 'Laptop'")
     
     if [ "$HTTP_CODE" = "200" ]; then
         if echo "$RESPONSE" | grep -q '"Name"'; then
@@ -131,7 +131,7 @@ test_empty_string() {
     check_status "$HTTP_CODE" "200"
 }
 
-echo "  Request: GET \$filter=Name eq 'Gaming Laptop'"
+echo "  Request: GET \$filter=Name eq 'Laptop'"
 run_test "Edm.String type handles text values" test_string_type
 
 echo "  Request: GET \$filter=ID eq 1"
