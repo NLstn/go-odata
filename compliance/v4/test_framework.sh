@@ -41,12 +41,29 @@ run_test() {
     fi
 }
 
+# Function to URL encode a string (spaces and special characters)
+# This ensures curl can properly handle OData query parameters
+url_encode() {
+    local string="$1"
+    # Use printf and xxd to properly encode, but for simple case just encode spaces
+    # This is a basic implementation that handles the most common case
+    echo "$string" | sed 's/ /%20/g'
+}
+
 # Function to make HTTP request and return status code
 # Usage: http_get URL [headers...]
 http_get() {
     local url="$1"
     shift
-    curl -s -o /dev/null -w "%{http_code}" "$@" "$url"
+    # Use --globoff to prevent curl from interpreting [] and {} as patterns
+    # URL encode spaces in the query string part
+    if [[ "$url" == *"?"* ]]; then
+        local base="${url%%\?*}"
+        local query="${url#*\?}"
+        query=$(url_encode "$query")
+        url="${base}?${query}"
+    fi
+    curl -g -s -o /dev/null -w "%{http_code}" "$@" "$url"
 }
 
 # Function to make HTTP request and return response body
@@ -54,7 +71,15 @@ http_get() {
 http_get_body() {
     local url="$1"
     shift
-    curl -s "$@" "$url"
+    # Use --globoff to prevent curl from interpreting [] and {} as patterns
+    # URL encode spaces in the query string part
+    if [[ "$url" == *"?"* ]]; then
+        local base="${url%%\?*}"
+        local query="${url#*\?}"
+        query=$(url_encode "$query")
+        url="${base}?${query}"
+    fi
+    curl -g -s "$@" "$url"
 }
 
 # Function to make HTTP POST request
@@ -63,7 +88,14 @@ http_post() {
     local url="$1"
     local data="$2"
     shift 2
-    curl -s -X POST -d "$data" "$@" "$url"
+    # URL encode if needed
+    if [[ "$url" == *"?"* ]]; then
+        local base="${url%%\?*}"
+        local query="${url#*\?}"
+        query=$(url_encode "$query")
+        url="${base}?${query}"
+    fi
+    curl -g -s -X POST -d "$data" "$@" "$url"
 }
 
 # Function to make HTTP PATCH request
@@ -72,7 +104,14 @@ http_patch() {
     local url="$1"
     local data="$2"
     shift 2
-    curl -s -X PATCH -d "$data" "$@" "$url"
+    # URL encode if needed
+    if [[ "$url" == *"?"* ]]; then
+        local base="${url%%\?*}"
+        local query="${url#*\?}"
+        query=$(url_encode "$query")
+        url="${base}?${query}"
+    fi
+    curl -g -s -X PATCH -d "$data" "$@" "$url"
 }
 
 # Function to make HTTP PUT request
@@ -81,7 +120,14 @@ http_put() {
     local url="$1"
     local data="$2"
     shift 2
-    curl -s -X PUT -d "$data" "$@" "$url"
+    # URL encode if needed
+    if [[ "$url" == *"?"* ]]; then
+        local base="${url%%\?*}"
+        local query="${url#*\?}"
+        query=$(url_encode "$query")
+        url="${base}?${query}"
+    fi
+    curl -g -s -X PUT -d "$data" "$@" "$url"
 }
 
 # Function to make HTTP DELETE request
@@ -89,7 +135,14 @@ http_put() {
 http_delete() {
     local url="$1"
     shift
-    curl -s -X DELETE "$@" "$url"
+    # URL encode if needed
+    if [[ "$url" == *"?"* ]]; then
+        local base="${url%%\?*}"
+        local query="${url#*\?}"
+        query=$(url_encode "$query")
+        url="${base}?${query}"
+    fi
+    curl -g -s -X DELETE "$@" "$url"
 }
 
 # Function to check if response contains expected value
