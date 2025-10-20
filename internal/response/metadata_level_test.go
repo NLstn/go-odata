@@ -252,3 +252,78 @@ func TestIsAcceptableFormatWithMetadata(t *testing.T) {
 		})
 	}
 }
+
+// TestGetFormatParameter tests the getFormatParameter helper function
+func TestGetFormatParameter(t *testing.T) {
+	tests := []struct {
+		name      string
+		rawQuery  string
+		expected  string
+	}{
+		{
+			name:     "Empty query string",
+			rawQuery: "",
+			expected: "",
+		},
+		{
+			name:     "No $format parameter",
+			rawQuery: "top=10&skip=5",
+			expected: "",
+		},
+		{
+			name:     "Simple $format without semicolon",
+			rawQuery: "$format=json",
+			expected: "json",
+		},
+		{
+			name:     "Format with semicolon - minimal",
+			rawQuery: "$format=application/json;odata.metadata=minimal",
+			expected: "application/json;odata.metadata=minimal",
+		},
+		{
+			name:     "Format with semicolon - full",
+			rawQuery: "$format=application/json;odata.metadata=full",
+			expected: "application/json;odata.metadata=full",
+		},
+		{
+			name:     "Format with semicolon - none",
+			rawQuery: "$format=application/json;odata.metadata=none",
+			expected: "application/json;odata.metadata=none",
+		},
+		{
+			name:     "URL encoded $format with semicolon",
+			rawQuery: "$format=application%2Fjson%3Bodata.metadata%3Dnone",
+			expected: "application/json;odata.metadata=none",
+		},
+		{
+			name:     "Format with semicolon and other parameters",
+			rawQuery: "top=10&$format=application/json;odata.metadata=full&skip=5",
+			expected: "application/json;odata.metadata=full",
+		},
+		{
+			name:     "Format with multiple semicolons",
+			rawQuery: "$format=application/json;odata.metadata=full;charset=utf-8",
+			expected: "application/json;odata.metadata=full;charset=utf-8",
+		},
+		{
+			name:     "URL encoded $format parameter name",
+			rawQuery: "%24format=application/json;odata.metadata=minimal",
+			expected: "application/json;odata.metadata=minimal",
+		},
+		{
+			name:     "Format parameter after other params with semicolon",
+			rawQuery: "top=10&$format=application/json;odata.metadata=none",
+			expected: "application/json;odata.metadata=none",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := getFormatParameter(tt.rawQuery)
+			if got != tt.expected {
+				t.Errorf("getFormatParameter(%q) = %q, want %q",
+					tt.rawQuery, got, tt.expected)
+			}
+		})
+	}
+}
