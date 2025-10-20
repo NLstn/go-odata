@@ -67,6 +67,12 @@ func ParseActionParameters(r *http.Request, paramDefs []ParameterDefinition) (ma
 			}
 			continue
 		}
+
+		// Validate parameter type
+		if err := validateParameterType(paramDef.Name, value, paramDef.Type); err != nil {
+			return nil, err
+		}
+
 		params[paramDef.Name] = value
 	}
 
@@ -127,4 +133,62 @@ func ParseFunctionParameters(r *http.Request, paramDefs []ParameterDefinition) (
 	}
 
 	return params, nil
+}
+
+// validateParameterType validates that a parameter value matches the expected type
+func validateParameterType(paramName string, value interface{}, expectedType reflect.Type) error {
+	if value == nil {
+		return nil // null values are allowed
+	}
+
+	// Get the actual type of the value
+	actualValue := reflect.ValueOf(value)
+	actualKind := actualValue.Kind()
+
+	// Get the expected kind
+	expectedKind := expectedType.Kind()
+
+	// JSON unmarshaling converts numbers to float64
+	// So we need to handle numeric type conversions
+	switch expectedKind {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		// Accept float64 (from JSON) if it represents a whole number
+		if actualKind == reflect.Float64 {
+			floatVal := actualValue.Float()
+			if floatVal != float64(int64(floatVal)) {
+				return fmt.Errorf("parameter '%s' must be an integer", paramName)
+			}
+			return nil
+		}
+		if actualKind != reflect.Int && actualKind != reflect.Int8 && actualKind != reflect.Int16 &&
+			actualKind != reflect.Int32 && actualKind != reflect.Int64 {
+			return fmt.Errorf("parameter '%s' must be an integer", paramName)
+		}
+
+	case reflect.Float32, reflect.Float64:
+		// Accept both int and float from JSON
+		if actualKind != reflect.Float64 && actualKind != reflect.Float32 &&
+			actualKind != reflect.Int && actualKind != reflect.Int8 && actualKind != reflect.Int16 &&
+			actualKind != reflect.Int32 && actualKind != reflect.Int64 {
+			return fmt.Errorf("parameter '%s' must be a number", paramName)
+		}
+
+	case reflect.String:
+		if actualKind != reflect.String {
+			return fmt.Errorf("parameter '%s' must be a string", paramName)
+		}
+
+	case reflect.Bool:
+		if actualKind != reflect.Bool {
+			return fmt.Errorf("parameter '%s' must be a boolean", paramName)
+		}
+
+	default:
+		// For other types, try to check if they are assignable
+		if !actualValue.Type().AssignableTo(expectedType) {
+			return fmt.Errorf("parameter '%s' has invalid type", paramName)
+		}
+	}
+
+	return nil
 }
