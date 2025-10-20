@@ -913,13 +913,52 @@ func convertSubstringFunction(n *FunctionCallExpr, entityMetadata *metadata.Enti
 		return nil, err
 	}
 
-	// Collect numeric arguments
+	// Collect numeric arguments and validate
 	args := []interface{}{}
 	for i := 1; i < len(n.Args); i++ {
 		lit, ok := n.Args[i].(*LiteralExpr)
 		if !ok {
 			return nil, fmt.Errorf("argument %d of substring must be a number", i+1)
 		}
+		
+		// Validate start parameter (argument 2, index 1)
+		if i == 1 {
+			// Check if start is negative (invalid according to OData spec)
+			switch v := lit.Value.(type) {
+			case int:
+				if v < 0 {
+					return nil, fmt.Errorf("substring start parameter must be non-negative")
+				}
+			case int64:
+				if v < 0 {
+					return nil, fmt.Errorf("substring start parameter must be non-negative")
+				}
+			case float64:
+				if v < 0 {
+					return nil, fmt.Errorf("substring start parameter must be non-negative")
+				}
+			}
+		}
+		
+		// Validate length parameter if present (argument 3, index 2)
+		if i == 2 {
+			// Length should also be non-negative
+			switch v := lit.Value.(type) {
+			case int:
+				if v < 0 {
+					return nil, fmt.Errorf("substring length parameter must be non-negative")
+				}
+			case int64:
+				if v < 0 {
+					return nil, fmt.Errorf("substring length parameter must be non-negative")
+				}
+			case float64:
+				if v < 0 {
+					return nil, fmt.Errorf("substring length parameter must be non-negative")
+				}
+			}
+		}
+		
 		args = append(args, lit.Value)
 	}
 

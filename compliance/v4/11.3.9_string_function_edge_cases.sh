@@ -44,14 +44,14 @@ test_endswith_empty_string() {
 
 # Test 4: length() of empty string
 test_length_empty_string() {
-    local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Products?\$filter=length(Category) eq 0")
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=length(Category) eq 0")
     
     check_status "$HTTP_CODE" "200"
 }
 
 # Test 5: substring() with start beyond length
 test_substring_beyond_length() {
-    local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Products?\$filter=substring(Name,100) eq ''")
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=substring(Name,100) eq ''")
     
     # Implementation dependent - may return 200 or 400
     if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "400" ]; then
@@ -64,7 +64,7 @@ test_substring_beyond_length() {
 
 # Test 6: substring() with negative start (invalid)
 test_substring_negative_start() {
-    local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Products?\$filter=substring(Name,-1) eq ''")
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=substring(Name,-1) eq ''")
     
     # Should return 400 for invalid parameter
     if [ "$HTTP_CODE" = "400" ]; then
@@ -77,56 +77,56 @@ test_substring_negative_start() {
 
 # Test 7: substring() with length of 0
 test_substring_zero_length() {
-    local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Products?\$filter=substring(Name,0,0) eq ''")
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=substring(Name,0,0) eq ''")
     
     check_status "$HTTP_CODE" "200"
 }
 
 # Test 8: indexof() with substring not found returns -1
 test_indexof_not_found() {
-    local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Products?\$filter=indexof(Name,'ZZZZZ') eq -1")
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=indexof(Name,'ZZZZZ') eq -1")
     
     check_status "$HTTP_CODE" "200"
 }
 
 # Test 9: indexof() with empty string returns 0
 test_indexof_empty_string() {
-    local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Products?\$filter=indexof(Name,'') eq 0")
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=indexof(Name,'') eq 0")
     
     check_status "$HTTP_CODE" "200"
 }
 
 # Test 10: tolower() on already lowercase string
 test_tolower_lowercase() {
-    local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Products?\$filter=tolower(Name) eq tolower(Name)")
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=tolower(Name) eq tolower(Name)")
     
     check_status "$HTTP_CODE" "200"
 }
 
 # Test 11: toupper() on already uppercase string
 test_toupper_uppercase() {
-    local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Products?\$filter=toupper(Category) eq toupper(Category)")
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=toupper(Category) eq toupper(Category)")
     
     check_status "$HTTP_CODE" "200"
 }
 
 # Test 12: trim() on string without whitespace
 test_trim_no_whitespace() {
-    local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Products?\$filter=trim(Name) eq Name")
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=trim(Name) eq Name")
     
     check_status "$HTTP_CODE" "200"
 }
 
 # Test 13: concat() with empty strings
 test_concat_empty_strings() {
-    local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Products?\$filter=concat('','') eq ''")
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=concat('','') eq ''")
     
     check_status "$HTTP_CODE" "200"
 }
 
 # Test 14: concat() with multiple arguments
 test_concat_multiple() {
-    local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Products?\$filter=concat(concat(Name,' - '),Category) ne ''")
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=concat(concat(Name,' - '),Category) ne ''")
     
     check_status "$HTTP_CODE" "200"
 }
@@ -140,14 +140,14 @@ test_contains_case_sensitive() {
 
 # Test 16: Nested string functions
 test_nested_string_functions() {
-    local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Products?\$filter=length(trim(toupper(Name))) gt 0")
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=length(trim(toupper(Name))) gt 0")
     
     check_status "$HTTP_CODE" "200"
 }
 
 # Test 17: String function on null property
 test_string_function_on_null() {
-    local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Products?\$filter=length(Description) eq null")
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=length(Description) eq null")
     
     # Implementation dependent - null handling varies
     if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "400" ]; then
