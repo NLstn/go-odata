@@ -32,6 +32,7 @@ type PropertyMetadata struct {
 	NavigationTarget  string // Entity type name for navigation properties
 	NavigationIsArray bool   // True for collection navigation properties
 	IsETag            bool   // True if this property should be used for ETag generation
+	IsComplexType     bool   // True if this property is a complex type (embedded struct)
 	// Facets
 	MaxLength    int    // Maximum length for string properties
 	Precision    int    // Precision for decimal/numeric properties
@@ -202,7 +203,7 @@ func analyzeField(field reflect.StructField, metadata *EntityMetadata) (Property
 	return property, nil
 }
 
-// analyzeNavigationProperty determines if a field is a navigation property
+// analyzeNavigationProperty determines if a field is a navigation property or complex type
 func analyzeNavigationProperty(property *PropertyMetadata, field reflect.StructField) {
 	fieldType := field.Type
 	isSlice := fieldType.Kind() == reflect.Slice
@@ -215,9 +216,11 @@ func analyzeNavigationProperty(property *PropertyMetadata, field reflect.StructF
 		fieldType = fieldType.Elem()
 	}
 
-	// If it's a struct type and has gorm foreign key tag, it's a navigation property
+	// If it's a struct type, determine if it's navigation property or complex type
 	if fieldType.Kind() == reflect.Struct {
 		gormTag := field.Tag.Get("gorm")
+		
+		// Check if it's a navigation property (has foreign key or references)
 		if strings.Contains(gormTag, "foreignKey") || strings.Contains(gormTag, "references") {
 			property.IsNavigationProp = true
 			property.NavigationTarget = fieldType.Name()
@@ -225,6 +228,9 @@ func analyzeNavigationProperty(property *PropertyMetadata, field reflect.StructF
 
 			// Extract referential constraints from GORM tags
 			property.ReferentialConstraints = extractReferentialConstraints(gormTag)
+		} else if strings.Contains(gormTag, "embedded") {
+			// It's a complex type (embedded struct without foreign keys)
+			property.IsComplexType = true
 		}
 	}
 }

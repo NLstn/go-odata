@@ -188,7 +188,8 @@ func applySelect(db *gorm.DB, selectedProperties []string, entityMetadata *metad
 		propName = strings.TrimSpace(propName)
 		// Find the property in metadata
 		for _, prop := range entityMetadata.Properties {
-			if (prop.JsonName == propName || prop.Name == propName) && !prop.IsNavigationProp {
+			// Skip navigation properties and complex types - they are handled separately
+			if (prop.JsonName == propName || prop.Name == propName) && !prop.IsNavigationProp && !prop.IsComplexType {
 				// Use struct field name - GORM will handle column name conversion
 				columns = append(columns, prop.Name)
 				selectedPropMap[prop.Name] = true
@@ -675,12 +676,12 @@ func applyOrderBy(db *gorm.DB, orderBy []OrderByItem, entityMetadata *metadata.E
 		if !propertyExists(item.Property, entityMetadata) {
 			continue // Skip unrecognized properties in $orderby
 		}
-		fieldName := GetPropertyFieldName(item.Property, entityMetadata)
+		columnName := GetColumnName(item.Property, entityMetadata)
 		direction := "ASC"
 		if item.Descending {
 			direction = "DESC"
 		}
-		db = db.Order(fmt.Sprintf("%s %s", fieldName, direction))
+		db = db.Order(fmt.Sprintf("%s %s", columnName, direction))
 	}
 	return db
 }
@@ -741,6 +742,11 @@ func ApplySelect(results interface{}, selectedProperties []string, entityMetadat
 
 		// Extract selected properties and key properties
 		for _, prop := range entityMetadata.Properties {
+			// Skip complex types - they cannot be selected independently
+			if prop.IsComplexType {
+				continue
+			}
+			
 			// Include if selected OR if it's a key property OR if it's an expanded navigation property
 			isSelected := selectedPropMap[prop.JsonName] || selectedPropMap[prop.Name]
 			isKey := keyPropMap[prop.Name]
@@ -839,6 +845,11 @@ func ApplySelectToEntity(entity interface{}, selectedProperties []string, entity
 
 	// Extract selected properties and key properties
 	for _, prop := range entityMetadata.Properties {
+		// Skip complex types - they cannot be selected independently
+		if prop.IsComplexType {
+			continue
+		}
+		
 		// Include if selected OR if it's a key property OR if it's an expanded navigation property
 		isSelected := selectedPropMap[prop.JsonName] || selectedPropMap[prop.Name]
 		isKey := keyPropMap[prop.Name]
