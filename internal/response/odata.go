@@ -376,7 +376,8 @@ func processMapEntity(entity reflect.Value, metadata EntityMetadataProvider, exp
 	}
 
 	// Add @odata.etag annotation if ETag is configured
-	if fullMetadata != nil && fullMetadata.ETagProperty != nil {
+	// Per OData v4 spec, exclude all control information for metadata=none
+	if fullMetadata != nil && fullMetadata.ETagProperty != nil && metadataLevel != "none" {
 		etagValue := etag.Generate(entityMap, fullMetadata)
 		if etagValue != "" {
 			entityMap["@odata.etag"] = etagValue
@@ -442,7 +443,8 @@ func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataPro
 	entityType := entity.Type()
 
 	// Add @odata.etag annotation if ETag is configured
-	if fullMetadata != nil && fullMetadata.ETagProperty != nil {
+	// Per OData v4 spec, exclude all control information for metadata=none
+	if fullMetadata != nil && fullMetadata.ETagProperty != nil && metadataLevel != "none" {
 		// Get the entity interface for etag.Generate
 		var entityInterface interface{}
 		if entity.Kind() == reflect.Ptr {
@@ -808,7 +810,9 @@ func WriteServiceDocument(w http.ResponseWriter, r *http.Request, entitySets []s
 // Returns "minimal" (default), "full", or "none" based on Accept header or $format parameter
 func GetODataMetadataLevel(r *http.Request) string {
 	// Check $format query parameter first (highest priority)
-	format := r.URL.Query().Get("$format")
+	// Use raw query string parsing to handle semicolons in $format value
+	// (Go's standard Query() treats semicolons as parameter separators per HTML spec)
+	format := getFormatParameter(r.URL.RawQuery)
 	if format != "" {
 		return extractMetadataFromFormat(format)
 	}
@@ -821,6 +825,30 @@ func GetODataMetadataLevel(r *http.Request) string {
 
 	// Default to minimal
 	return "minimal"
+}
+
+// getFormatParameter extracts the $format parameter from raw query string
+// Handles semicolons in the value by parsing manually instead of using url.Query()
+func getFormatParameter(rawQuery string) string {
+	// Split by & to get individual parameters
+	params := strings.Split(rawQuery, "&")
+	for _, param := range params {
+		// Find the parameter that starts with $format=
+		if strings.HasPrefix(param, "$format=") || strings.HasPrefix(param, "%24format=") {
+			// Extract the value after the equals sign
+			parts := strings.SplitN(param, "=", 2)
+			if len(parts) == 2 {
+				// URL decode the value
+				decoded, err := url.QueryUnescape(parts[1])
+				if err != nil {
+					// If decoding fails, return the raw value
+					return parts[1]
+				}
+				return decoded
+			}
+		}
+	}
+	return ""
 }
 
 // extractMetadataFromFormat parses odata.metadata from $format parameter
