@@ -173,9 +173,29 @@ func TestTokenizerStrings(t *testing.T) {
 			expected: "Hello World",
 		},
 		{
-			name:     "Escaped quotes",
-			input:    "'It\\'s working'",
+			name:     "Escaped quotes (OData spec - doubled quotes)",
+			input:    "'It''s working'",
 			expected: "It's working",
+		},
+		{
+			name:     "Name with apostrophe",
+			input:    "'O''Neil'",
+			expected: "O'Neil",
+		},
+		{
+			name:     "Just an escaped quote",
+			input:    "''''",
+			expected: "'",
+		},
+		{
+			name:     "Multiple escaped quotes",
+			input:    "'She said ''Hello'' and ''Goodbye'''",
+			expected: "She said 'Hello' and 'Goodbye'",
+		},
+		{
+			name:     "Empty string",
+			input:    "''",
+			expected: "",
 		},
 	}
 

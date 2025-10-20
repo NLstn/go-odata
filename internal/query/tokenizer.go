@@ -78,19 +78,28 @@ func (t *Tokenizer) skipWhitespace() {
 }
 
 // readString reads a quoted string
+// Per OData v4 spec, single quotes within string literals are escaped by doubling them ('')
 func (t *Tokenizer) readString() string {
 	quote := t.ch
 	t.advance() // skip opening quote
 
 	var result strings.Builder
-	for t.ch != 0 && t.ch != quote {
-		if t.ch == '\\' && t.peek() == quote {
-			t.advance()
-			result.WriteRune(t.ch)
+	for t.ch != 0 {
+		if t.ch == quote {
+			// Check if this is an escaped quote (doubled)
+			if t.peek() == quote {
+				// This is an escaped quote - add one quote to result and skip both
+				result.WriteRune(quote)
+				t.advance() // skip first quote
+				t.advance() // skip second quote
+			} else {
+				// This is the closing quote
+				break
+			}
 		} else {
 			result.WriteRune(t.ch)
+			t.advance()
 		}
-		t.advance()
 	}
 
 	if t.ch == quote {
