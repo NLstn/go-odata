@@ -705,3 +705,186 @@ func intPtr(i int) *int {
 func int64Ptr(i int64) *int64 {
 	return &i
 }
+
+// TestSkipTokenValidation tests that invalid skiptoken returns 400 Bad Request
+func TestSkipTokenValidation(t *testing.T) {
+	handler, db := setupProductHandler(t)
+
+	// Insert test products
+	for i := 1; i <= 5; i++ {
+		product := Product{
+			ID:          i,
+			Name:        fmt.Sprintf("Product %d", i),
+			Description: "Test product",
+			Price:       float64(i * 10),
+			Category:    "Electronics",
+		}
+		db.Create(&product)
+	}
+
+	tests := []struct {
+		name           string
+		skiptoken      string
+		expectedStatus int
+		expectError    bool
+	}{
+		{
+			name:           "Invalid skiptoken - not base64",
+			skiptoken:      "invalid-token!@#$%",
+			expectedStatus: http.StatusBadRequest,
+			expectError:    true,
+		},
+		{
+			name:           "Invalid skiptoken - empty",
+			skiptoken:      "",
+			expectedStatus: http.StatusOK, // Empty skiptoken is ignored
+			expectError:    false,
+		},
+		{
+			name:           "Invalid skiptoken - valid base64 but invalid JSON",
+			skiptoken:      "bm90LWpzb24=", // "not-json" in base64
+			expectedStatus: http.StatusBadRequest,
+			expectError:    true,
+		},
+		{
+			name:           "Valid skiptoken",
+			skiptoken:      "eyJrIjp7IklEIjoyfX0=", // Valid token: {"k":{"ID":2}}
+			expectedStatus: http.StatusOK,
+			expectError:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/Products", nil)
+			if tt.skiptoken != "" {
+				q := req.URL.Query()
+				q.Add("$skiptoken", tt.skiptoken)
+				req.URL.RawQuery = q.Encode()
+			}
+			w := httptest.NewRecorder()
+
+			handler.HandleCollection(w, req)
+
+			if w.Code != tt.expectedStatus {
+				t.Errorf("Status = %v, want %v. Body: %s", w.Code, tt.expectedStatus, w.Body.String())
+			}
+
+			if tt.expectError {
+				var response map[string]interface{}
+				if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+					t.Fatalf("Failed to decode error response: %v", err)
+				}
+
+				// Check for error field
+				if _, ok := response["error"]; !ok {
+					t.Error("Expected error field in response")
+				}
+			}
+		})
+	}
+}
+
+// TestSkipTokenInNextLink tests that nextLink contains $skiptoken instead of $skip
+func TestSkipTokenInNextLink(t *testing.T) {
+	handler, db := setupProductHandler(t)
+
+	// Insert 10 test products
+	for i := 1; i <= 10; i++ {
+		product := Product{
+			ID:          i,
+			Name:        fmt.Sprintf("Product %d", i),
+			Description: "Test product",
+			Price:       float64(i * 10),
+			Category:    "Electronics",
+		}
+		db.Create(&product)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/Products", nil)
+	q := req.URL.Query()
+	q.Add("$top", "3")
+	req.URL.RawQuery = q.Encode()
+	w := httptest.NewRecorder()
+
+	handler.HandleCollection(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Status = %v, want %v", w.Code, http.StatusOK)
+	}
+
+	var response map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	// Check that nextLink is present
+	nextLink, ok := response["@odata.nextLink"].(string)
+	if !ok {
+		t.Fatal("Expected @odata.nextLink to be present")
+	}
+
+	// Verify that nextLink contains $skiptoken
+	if !contains(nextLink, "skiptoken") {
+		t.Errorf("Expected nextLink to contain $skiptoken, got: %s", nextLink)
+	}
+
+	// Verify that nextLink does NOT contain $skip
+	if contains(nextLink, "%24skip=") || contains(nextLink, "$skip=") {
+		t.Errorf("Expected nextLink to NOT contain $skip, got: %s", nextLink)
+	}
+}
+
+// TestSkipTokenPreservesQueryOptions tests that $skiptoken preserves other query options
+func TestSkipTokenPreservesQueryOptions(t *testing.T) {
+	handler, db := setupProductHandler(t)
+
+	// Insert 10 test products
+	for i := 1; i <= 10; i++ {
+		product := Product{
+			ID:          i,
+			Name:        fmt.Sprintf("Product %d", i),
+			Description: "Test product",
+			Price:       float64(i * 10),
+			Category:    "Electronics",
+		}
+		db.Create(&product)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/Products", nil)
+	q := req.URL.Query()
+	q.Add("$top", "3")
+	q.Add("$filter", "Price gt 20")
+	q.Add("$orderby", "Price desc")
+	req.URL.RawQuery = q.Encode()
+	w := httptest.NewRecorder()
+
+	handler.HandleCollection(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Status = %v, want %v", w.Code, http.StatusOK)
+	}
+
+	var response map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	// Check that nextLink is present
+	nextLink, ok := response["@odata.nextLink"].(string)
+	if !ok {
+		t.Fatal("Expected @odata.nextLink to be present")
+	}
+
+	// Verify that nextLink preserves filter and orderby
+	if !contains(nextLink, "filter") {
+		t.Errorf("Expected nextLink to preserve $filter, got: %s", nextLink)
+	}
+	if !contains(nextLink, "orderby") {
+		t.Errorf("Expected nextLink to preserve $orderby, got: %s", nextLink)
+	}
+	if !contains(nextLink, "top") {
+		t.Errorf("Expected nextLink to preserve $top, got: %s", nextLink)
+	}
+}
+
