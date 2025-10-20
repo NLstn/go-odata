@@ -53,6 +53,14 @@ func (h *EntityHandler) handleGetCollection(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	// Validate skiptoken if present
+	if err := h.validateSkipToken(queryOptions); err != nil {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid $skiptoken", err.Error()); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	}
+
 	// Validate query options for complex types
 	if err := h.validateComplexTypeUsage(queryOptions); err != nil {
 		if writeErr := response.WriteError(w, http.StatusBadRequest, "Unsupported query option", err.Error()); writeErr != nil {
@@ -455,24 +463,22 @@ func (h *EntityHandler) calculateNextLink(queryOptions *query.QueryOptions, slic
 	// If we got more than $top results, it means there are more pages
 	// We fetched $top + 1 to determine this without an extra query
 	if resultCount > *queryOptions.Top {
-		// Use $skiptoken for server-driven paging when $orderby is present
-		// This is more efficient and follows OData best practices
-		if len(queryOptions.OrderBy) > 0 {
-			nextURL := h.buildNextLinkWithSkipToken(queryOptions, sliceValue, r)
-			if nextURL != nil {
-				return nextURL, true
-			}
+		// Always use $skiptoken for server-driven paging
+		// This follows OData v4 best practices
+		nextURL := h.buildNextLinkWithSkipToken(queryOptions, sliceValue, r)
+		if nextURL != nil {
+			return nextURL, true
 		}
 
-		// Fall back to $skip-based pagination
+		// Fall back to $skip-based pagination only if skiptoken creation fails
 		currentSkip := 0
 		if queryOptions.Skip != nil {
 			currentSkip = *queryOptions.Skip
 		}
 		nextSkip := currentSkip + *queryOptions.Top
 
-		nextURL := response.BuildNextLink(r, nextSkip)
-		return &nextURL, true // true indicates we need to trim the results
+		fallbackURL := response.BuildNextLink(r, nextSkip)
+		return &fallbackURL, true // true indicates we need to trim the results
 	}
 
 	return nil, false
@@ -650,6 +656,21 @@ func (h *EntityHandler) applySkipTokenFilter(db *gorm.DB, queryOptions *query.Qu
 	}
 
 	return db
+}
+
+// validateSkipToken validates that a skiptoken can be decoded properly
+func (h *EntityHandler) validateSkipToken(queryOptions *query.QueryOptions) error {
+	if queryOptions.SkipToken == nil {
+		return nil
+	}
+
+	// Try to decode the skiptoken
+	_, err := skiptoken.Decode(*queryOptions.SkipToken)
+	if err != nil {
+		return fmt.Errorf("invalid skiptoken: %w", err)
+	}
+
+	return nil
 }
 
 // validateComplexTypeUsage validates that complex types are not used in unsupported operations
