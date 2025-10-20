@@ -1140,8 +1140,9 @@ func applyCompute(db *gorm.DB, compute *ComputeTransformation, entityMetadata *m
 
 	// Add all original entity properties
 	for _, prop := range entityMetadata.Properties {
-		if !prop.IsNavigationProp {
-			// Use snake_case column name for SELECT
+		// Skip navigation properties and complex types - they are handled separately
+		if !prop.IsNavigationProp && !prop.IsComplexType {
+			// Use snake_case column name for SQL, but alias as JsonName for the result
 			columnName := toSnakeCase(prop.Name)
 			selectColumns = append(selectColumns, fmt.Sprintf("%s as %s", columnName, prop.JsonName))
 		}
@@ -1178,7 +1179,7 @@ func buildComputeSQL(computeExpr ComputeExpression, entityMetadata *metadata.Ent
 			return ""
 		}
 
-		// Generate SQL for the function using snake_case column name
+		// Use snake_case column name for SQL
 		columnName := toSnakeCase(prop.Name)
 		funcSQL, _ := buildFunctionSQL(expr.Operator, columnName, nil)
 		if funcSQL == "" {
@@ -1188,8 +1189,184 @@ func buildComputeSQL(computeExpr ComputeExpression, entityMetadata *metadata.Ent
 		return fmt.Sprintf("%s as %s", funcSQL, computeExpr.Alias)
 	}
 
-	// For more complex expressions, we would need additional handling
-	// For now, we'll handle simple cases
+	// Handle arithmetic operations stored in Logical field (due to AST parser implementation)
+	// The AST parser stores arithmetic operators like "add", "sub", "mul", "div" in the Logical field
+	if expr.Left != nil && expr.Right != nil && expr.Logical != "" {
+		// Build SQL for left side (typically a property)
+		leftSQL := buildComputeExpressionSQL(expr.Left, entityMetadata)
+		if leftSQL == "" {
+			return ""
+		}
+
+		// Build SQL for right side (typically a literal value or another expression)
+		rightSQL := buildComputeExpressionSQL(expr.Right, entityMetadata)
+		if rightSQL == "" {
+			return ""
+		}
+
+		// Get the SQL operator from the Logical field
+		sqlOp := ""
+		switch expr.Logical {
+		case "add":
+			sqlOp = "+"
+		case "sub":
+			sqlOp = "-"
+		case "mul":
+			sqlOp = "*"
+		case "div":
+			sqlOp = "/"
+		case "mod":
+			sqlOp = "%"
+		default:
+			// Not an arithmetic operator (might be "and"/"or"), not supported here
+			return ""
+		}
+
+		return fmt.Sprintf("(%s %s %s) as %s", leftSQL, sqlOp, rightSQL, computeExpr.Alias)
+	}
+
+	// Handle arithmetic and other binary operations with operator set (legacy/alternative path)
+	if expr.Left != nil && expr.Right != nil && expr.Operator != "" {
+		// Build SQL for left side (typically a property)
+		leftSQL := buildComputeExpressionSQL(expr.Left, entityMetadata)
+		if leftSQL == "" {
+			return ""
+		}
+
+		// Build SQL for right side (typically a literal value or another expression)
+		rightSQL := buildComputeExpressionSQL(expr.Right, entityMetadata)
+		if rightSQL == "" {
+			return ""
+		}
+
+		// Get the SQL operator
+		sqlOp := ""
+		switch expr.Operator {
+		case OpAdd:
+			sqlOp = "+"
+		case OpSub:
+			sqlOp = "-"
+		case OpMul:
+			sqlOp = "*"
+		case OpDiv:
+			sqlOp = "/"
+		case OpMod:
+			sqlOp = "%"
+		default:
+			return ""
+		}
+
+		return fmt.Sprintf("(%s %s %s) as %s", leftSQL, sqlOp, rightSQL, computeExpr.Alias)
+	}
+
+	// For other complex expressions, not yet supported
+	return ""
+}
+
+// buildComputeExpressionSQL builds SQL for a sub-expression in a compute
+func buildComputeExpressionSQL(expr *FilterExpression, entityMetadata *metadata.EntityMetadata) string {
+	if expr == nil {
+		return ""
+	}
+
+	// Handle simple property reference (might have eq/true from AST parser)
+	if expr.Property != "" && expr.Left == nil && expr.Right == nil {
+		// This is a property reference, possibly with Operator=eq and Value=true from AST conversion
+		prop := findProperty(expr.Property, entityMetadata)
+		if prop == nil {
+			return ""
+		}
+		// Use snake_case column name for SQL
+		return toSnakeCase(prop.Name)
+	}
+
+	// Handle literal value
+	if expr.Value != nil && expr.Property == "" && expr.Left == nil && expr.Right == nil {
+		// Format the value appropriately for SQL
+		switch v := expr.Value.(type) {
+		case bool:
+			// For boolean literals in arithmetic, convert true to 1, false to 0
+			// But actually, this is a value like 1.1, so just return it
+			if v {
+				return "1"
+			}
+			return "0"
+		case string:
+			// String literals need quotes
+			return fmt.Sprintf("'%s'", v)
+		default:
+			// Numeric and other literals
+			return fmt.Sprintf("%v", expr.Value)
+		}
+	}
+
+	// Handle function call (e.g., toupper(Name))
+	// Must check Left/Right are nil AND Value is not just a boolean flag
+	if expr.Property != "" && expr.Operator != "" && expr.Operator != OpEqual && expr.Left == nil && expr.Right == nil {
+		prop := findProperty(expr.Property, entityMetadata)
+		if prop == nil {
+			return ""
+		}
+		// Use snake_case column name for SQL
+		columnName := toSnakeCase(prop.Name)
+		funcSQL, _ := buildFunctionSQL(expr.Operator, columnName, expr.Value)
+		return funcSQL
+	}
+
+	// Handle nested arithmetic (recursive case)
+	if expr.Left != nil && expr.Right != nil && expr.Operator != "" {
+		leftSQL := buildComputeExpressionSQL(expr.Left, entityMetadata)
+		rightSQL := buildComputeExpressionSQL(expr.Right, entityMetadata)
+		if leftSQL == "" || rightSQL == "" {
+			return ""
+		}
+
+		sqlOp := ""
+		switch expr.Operator {
+		case OpAdd:
+			sqlOp = "+"
+		case OpSub:
+			sqlOp = "-"
+		case OpMul:
+			sqlOp = "*"
+		case OpDiv:
+			sqlOp = "/"
+		case OpMod:
+			sqlOp = "%"
+		default:
+			return ""
+		}
+
+		return fmt.Sprintf("(%s %s %s)", leftSQL, sqlOp, rightSQL)
+	}
+
+	// Handle nested arithmetic in Logical field (alternative encoding)
+	if expr.Left != nil && expr.Right != nil && expr.Logical != "" {
+		leftSQL := buildComputeExpressionSQL(expr.Left, entityMetadata)
+		rightSQL := buildComputeExpressionSQL(expr.Right, entityMetadata)
+		if leftSQL == "" || rightSQL == "" {
+			return ""
+		}
+
+		sqlOp := ""
+		switch expr.Logical {
+		case "add":
+			sqlOp = "+"
+		case "sub":
+			sqlOp = "-"
+		case "mul":
+			sqlOp = "*"
+		case "div":
+			sqlOp = "/"
+		case "mod":
+			sqlOp = "%"
+		default:
+			return ""
+		}
+
+		return fmt.Sprintf("(%s %s %s)", leftSQL, sqlOp, rightSQL)
+	}
+
 	return ""
 }
 
