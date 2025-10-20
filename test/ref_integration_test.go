@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	odata "github.com/nlstn/go-odata"
@@ -329,5 +330,138 @@ func TestRefNotSupportedOnStructuralProperty(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("Expected status 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// TestRefRejectsSelect tests that $select is not allowed with $ref on collections
+func TestRefRejectsSelect(t *testing.T) {
+	service := setupRefTest(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/RefProducts/$ref?$select=Name", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status 400 for $ref with $select, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Verify error message mentions $select
+	var errorResponse map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &errorResponse); err == nil {
+		if errorObj, ok := errorResponse["error"].(map[string]interface{}); ok {
+			if details, ok := errorObj["details"].([]interface{}); ok && len(details) > 0 {
+				if detail, ok := details[0].(map[string]interface{}); ok {
+					if msg, ok := detail["message"].(string); ok {
+						if !strings.Contains(msg, "$select") {
+							t.Errorf("Error message should mention $select, got: %s", msg)
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+// TestRefRejectsSelectOnEntity tests that $select is not allowed with $ref on single entities
+func TestRefRejectsSelectOnEntity(t *testing.T) {
+	service := setupRefTest(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/RefProducts(1)/$ref?$select=Name", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status 400 for entity $ref with $select, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// TestRefRejectsExpand tests that $expand is not allowed with $ref on collections
+func TestRefRejectsExpand(t *testing.T) {
+	service := setupRefTest(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/RefProducts/$ref?$expand=Category", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status 400 for $ref with $expand, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Verify error message mentions $expand
+	var errorResponse map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &errorResponse); err == nil {
+		if errorObj, ok := errorResponse["error"].(map[string]interface{}); ok {
+			if details, ok := errorObj["details"].([]interface{}); ok && len(details) > 0 {
+				if detail, ok := details[0].(map[string]interface{}); ok {
+					if msg, ok := detail["message"].(string); ok {
+						if !strings.Contains(msg, "$expand") {
+							t.Errorf("Error message should mention $expand, got: %s", msg)
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+// TestRefRejectsExpandOnEntity tests that $expand is not allowed with $ref on single entities
+func TestRefRejectsExpandOnEntity(t *testing.T) {
+	service := setupRefTest(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/RefProducts(1)/$ref?$expand=Category", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status 400 for entity $ref with $expand, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// TestRefWithValidQueryOptions tests that valid query options work with $ref
+func TestRefWithValidQueryOptions(t *testing.T) {
+	service := setupRefTest(t)
+
+	// Test $filter
+	req := httptest.NewRequest(http.MethodGet, "/RefProducts/$ref?$filter=ID%20eq%201", nil)
+	w := httptest.NewRecorder()
+	service.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200 for $ref with $filter, got %d", w.Code)
+	}
+
+	// Test $top
+	req = httptest.NewRequest(http.MethodGet, "/RefProducts/$ref?$top=1", nil)
+	w = httptest.NewRecorder()
+	service.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200 for $ref with $top, got %d", w.Code)
+	}
+
+	// Test $skip
+	req = httptest.NewRequest(http.MethodGet, "/RefProducts/$ref?$skip=1", nil)
+	w = httptest.NewRecorder()
+	service.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200 for $ref with $skip, got %d", w.Code)
+	}
+
+	// Test $orderby
+	req = httptest.NewRequest(http.MethodGet, "/RefProducts/$ref?$orderby=ID", nil)
+	w = httptest.NewRecorder()
+	service.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200 for $ref with $orderby, got %d", w.Code)
+	}
+
+	// Test $count
+	req = httptest.NewRequest(http.MethodGet, "/RefProducts/$ref?$count=true", nil)
+	w = httptest.NewRecorder()
+	service.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200 for $ref with $count, got %d", w.Code)
 	}
 }
