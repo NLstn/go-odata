@@ -105,3 +105,30 @@ func toSnakeCase(s string) string {
 	}
 	return strings.ToLower(result.String())
 }
+
+// pluralize creates a simple pluralized form of a word
+// This follows the same rules as GORM's default table naming
+func pluralize(word string) string {
+	if word == "" {
+		return word
+	}
+
+	// Simple pluralization rules
+	switch {
+	case strings.HasSuffix(word, "y") && len(word) > 1 && !isVowel(rune(word[len(word)-2])):
+		// Only change y to ies if preceded by a consonant (e.g., "Category" -> "Categories")
+		// If preceded by a vowel, just add s (e.g., "Key" -> "Keys")
+		return word[:len(word)-1] + "ies"
+	case strings.HasSuffix(word, "s") || strings.HasSuffix(word, "x") || strings.HasSuffix(word, "z") ||
+		strings.HasSuffix(word, "ch") || strings.HasSuffix(word, "sh"):
+		return word + "es"
+	default:
+		return word + "s"
+	}
+}
+
+// isVowel checks if a rune is a vowel
+func isVowel(r rune) bool {
+	lower := strings.ToLower(string(r))
+	return lower == "a" || lower == "e" || lower == "i" || lower == "o" || lower == "u"
+}
