@@ -220,14 +220,16 @@ func analyzeNavigationProperty(property *PropertyMetadata, field reflect.StructF
 	if fieldType.Kind() == reflect.Struct {
 		gormTag := field.Tag.Get("gorm")
 		
-		// Check if it's a navigation property (has foreign key or references)
-		if strings.Contains(gormTag, "foreignKey") || strings.Contains(gormTag, "references") {
+		// Check if it's a navigation property (has foreign key, references, or many2many)
+		if strings.Contains(gormTag, "foreignKey") || strings.Contains(gormTag, "references") || strings.Contains(gormTag, "many2many") {
 			property.IsNavigationProp = true
 			property.NavigationTarget = fieldType.Name()
 			property.NavigationIsArray = isSlice
 
-			// Extract referential constraints from GORM tags
-			property.ReferentialConstraints = extractReferentialConstraints(gormTag)
+			// Extract referential constraints from GORM tags (only for foreignKey/references)
+			if strings.Contains(gormTag, "foreignKey") || strings.Contains(gormTag, "references") {
+				property.ReferentialConstraints = extractReferentialConstraints(gormTag)
+			}
 		} else if strings.Contains(gormTag, "embedded") {
 			// It's a complex type (embedded struct without foreign keys)
 			property.IsComplexType = true

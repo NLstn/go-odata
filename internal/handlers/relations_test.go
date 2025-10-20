@@ -2,8 +2,10 @@ package handlers
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/nlstn/go-odata/internal/metadata"
@@ -24,6 +26,19 @@ type Book struct {
 	Title    string  `json:"Title"`
 	AuthorID uint    `json:"AuthorID"`
 	Author   *Author `json:"Author,omitempty" gorm:"foreignKey:AuthorID"`
+}
+
+// Helper functions for testing
+func mustAnalyzeEntity(entity interface{}) *metadata.EntityMetadata {
+	meta, err := metadata.AnalyzeEntity(entity)
+	if err != nil {
+		panic(err)
+	}
+	return meta
+}
+
+func createRequestBody(body string) io.ReadCloser {
+	return io.NopCloser(strings.NewReader(body))
 }
 
 func setupRelationTestDB(t *testing.T) *gorm.DB {
@@ -781,5 +796,278 @@ func TestNavigationLinksWithSelect(t *testing.T) {
 	// Books property should not be present
 	if _, hasBooks := firstAuthor["Books"]; hasBooks {
 		t.Error("Books property should not be present when not expanded")
+	}
+}
+
+// TestReadSingleNavigationPropertyRef tests GET on single-valued navigation property with $ref
+func TestReadSingleNavigationPropertyRef(t *testing.T) {
+	db := setupRelationTestDB(t)
+	bookMeta, _ := metadata.AnalyzeEntity(&Book{})
+	entitiesMetadata := map[string]*metadata.EntityMetadata{
+		"Authors": mustAnalyzeEntity(&Author{}),
+		"Books":   bookMeta,
+	}
+	handler := NewEntityHandler(db, bookMeta)
+	handler.entitiesMetadata = entitiesMetadata
+
+	req := httptest.NewRequest(http.MethodGet, "/Books(1)/Author/$ref", nil)
+	w := httptest.NewRecorder()
+
+	handler.HandleNavigationProperty(w, req, "1", "Author", true)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+
+	// Check for @odata.id
+	odataID, ok := response["@odata.id"].(string)
+	if !ok {
+		t.Fatal("Expected @odata.id in response")
+	}
+
+	expectedID := "http://example.com/Authors(1)"
+	if odataID != expectedID {
+		t.Errorf("Expected @odata.id to be %s, got %s", expectedID, odataID)
+	}
+}
+
+// TestReadCollectionNavigationPropertyRef tests GET on collection navigation property with $ref
+func TestReadCollectionNavigationPropertyRef(t *testing.T) {
+	db := setupRelationTestDB(t)
+	authorMeta, _ := metadata.AnalyzeEntity(&Author{})
+	entitiesMetadata := map[string]*metadata.EntityMetadata{
+		"Authors": authorMeta,
+		"Books":   mustAnalyzeEntity(&Book{}),
+	}
+	handler := NewEntityHandler(db, authorMeta)
+	handler.entitiesMetadata = entitiesMetadata
+
+	req := httptest.NewRequest(http.MethodGet, "/Authors(1)/Books/$ref", nil)
+	w := httptest.NewRecorder()
+
+	handler.HandleNavigationProperty(w, req, "1", "Books", true)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+
+	// Check for value array
+	values, ok := response["value"].([]interface{})
+	if !ok {
+		t.Fatal("Expected value array in response")
+	}
+
+	if len(values) != 2 {
+		t.Errorf("Expected 2 references, got %d", len(values))
+	}
+
+	// Check first reference has @odata.id
+	firstRef := values[0].(map[string]interface{})
+	if _, ok := firstRef["@odata.id"]; !ok {
+		t.Error("Expected @odata.id in first reference")
+	}
+}
+
+// TestUpdateSingleNavigationPropertyRef tests PUT on single-valued navigation property with $ref
+func TestUpdateSingleNavigationPropertyRef(t *testing.T) {
+	db := setupRelationTestDB(t)
+	bookMeta, _ := metadata.AnalyzeEntity(&Book{})
+	entitiesMetadata := map[string]*metadata.EntityMetadata{
+		"Authors": mustAnalyzeEntity(&Author{}),
+		"Books":   bookMeta,
+	}
+	handler := NewEntityHandler(db, bookMeta)
+	handler.entitiesMetadata = entitiesMetadata
+
+	// Update Book(1)'s Author to Author(2)
+	reqBody := `{"@odata.id":"http://localhost:8080/Authors(2)"}`
+	req := httptest.NewRequest(http.MethodPut, "/Books(1)/Author/$ref", nil)
+	req.Body = createRequestBody(reqBody)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.HandleNavigationProperty(w, req, "1", "Author", true)
+
+	if w.Code != http.StatusNoContent {
+		t.Errorf("Expected status 204, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Verify the update
+	var book Book
+	db.First(&book, 1)
+	if book.AuthorID != 2 {
+		t.Errorf("Expected AuthorID to be 2, got %d", book.AuthorID)
+	}
+}
+
+// TestAddCollectionNavigationPropertyRef tests POST on collection navigation property with $ref
+func TestAddCollectionNavigationPropertyRef(t *testing.T) {
+	// Create test entities with many-to-many relationship
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("Failed to connect to database: %v", err)
+	}
+
+	type Product struct {
+		ID              uint      `json:"ID" gorm:"primaryKey" odata:"key"`
+		Name            string    `json:"Name"`
+		RelatedProducts []Product `json:"RelatedProducts,omitempty" gorm:"many2many:product_relations;"`
+	}
+
+	if err := db.AutoMigrate(&Product{}); err != nil {
+		t.Fatalf("Failed to migrate database: %v", err)
+	}
+
+	products := []Product{
+		{ID: 1, Name: "Product 1"},
+		{ID: 2, Name: "Product 2"},
+		{ID: 3, Name: "Product 3"},
+	}
+	db.Create(&products)
+
+	productMeta, _ := metadata.AnalyzeEntity(&Product{})
+	entitiesMetadata := map[string]*metadata.EntityMetadata{
+		"Products": productMeta,
+	}
+	handler := NewEntityHandler(db, productMeta)
+	handler.entitiesMetadata = entitiesMetadata
+
+	// Add Product(2) to Product(1)'s RelatedProducts
+	reqBody := `{"@odata.id":"http://localhost:8080/Products(2)"}`
+	req := httptest.NewRequest(http.MethodPost, "/Products(1)/RelatedProducts/$ref", nil)
+	req.Body = createRequestBody(reqBody)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.HandleNavigationProperty(w, req, "1", "RelatedProducts", true)
+
+	if w.Code != http.StatusNoContent {
+		t.Errorf("Expected status 204, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Verify the addition
+	var product Product
+	db.Preload("RelatedProducts").First(&product, 1)
+	if len(product.RelatedProducts) != 1 {
+		t.Errorf("Expected 1 related product, got %d", len(product.RelatedProducts))
+	}
+	if product.RelatedProducts[0].ID != 2 {
+		t.Errorf("Expected related product ID 2, got %d", product.RelatedProducts[0].ID)
+	}
+}
+
+// TestDeleteSingleNavigationPropertyRef tests DELETE on single-valued navigation property with $ref
+func TestDeleteSingleNavigationPropertyRef(t *testing.T) {
+	db := setupRelationTestDB(t)
+	bookMeta, _ := metadata.AnalyzeEntity(&Book{})
+	entitiesMetadata := map[string]*metadata.EntityMetadata{
+		"Authors": mustAnalyzeEntity(&Author{}),
+		"Books":   bookMeta,
+	}
+	handler := NewEntityHandler(db, bookMeta)
+	handler.entitiesMetadata = entitiesMetadata
+
+	// Delete Book(1)'s Author reference
+	req := httptest.NewRequest(http.MethodDelete, "/Books(1)/Author/$ref", nil)
+	w := httptest.NewRecorder()
+
+	handler.HandleNavigationProperty(w, req, "1", "Author", true)
+
+	if w.Code != http.StatusNoContent {
+		t.Errorf("Expected status 204, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Verify the deletion - AuthorID should be 0 (default value for uint)
+	var book Book
+	db.First(&book, 1)
+	if book.AuthorID != 0 {
+		t.Errorf("Expected AuthorID to be 0, got %d", book.AuthorID)
+	}
+}
+
+// TestDeleteCollectionNavigationPropertyRef tests DELETE on collection navigation property with $ref
+func TestDeleteCollectionNavigationPropertyRef(t *testing.T) {
+	// Create test entities with many-to-many relationship
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("Failed to connect to database: %v", err)
+	}
+
+	type Product struct {
+		ID              uint      `json:"ID" gorm:"primaryKey" odata:"key"`
+		Name            string    `json:"Name"`
+		RelatedProducts []Product `json:"RelatedProducts,omitempty" gorm:"many2many:product_relations;"`
+	}
+
+	if err := db.AutoMigrate(&Product{}); err != nil {
+		t.Fatalf("Failed to migrate database: %v", err)
+	}
+
+	// Create products with relationships
+	product1 := Product{ID: 1, Name: "Product 1"}
+	product2 := Product{ID: 2, Name: "Product 2"}
+	db.Create(&product1)
+	db.Create(&product2)
+
+	// Add relationship
+	db.Model(&product1).Association("RelatedProducts").Append(&product2)
+
+	productMeta, _ := metadata.AnalyzeEntity(&Product{})
+	entitiesMetadata := map[string]*metadata.EntityMetadata{
+		"Products": productMeta,
+	}
+	handler := NewEntityHandler(db, productMeta)
+	handler.entitiesMetadata = entitiesMetadata
+
+	// Delete Product(2) from Product(1)'s RelatedProducts using the special syntax
+	req := httptest.NewRequest(http.MethodDelete, "/Products(1)/RelatedProducts(2)/$ref", nil)
+	w := httptest.NewRecorder()
+
+	handler.HandleNavigationProperty(w, req, "1", "RelatedProducts(2)", true)
+
+	if w.Code != http.StatusNoContent {
+		t.Errorf("Expected status 204, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Verify the deletion
+	var product Product
+	db.Preload("RelatedProducts").First(&product, 1)
+	if len(product.RelatedProducts) != 0 {
+		t.Errorf("Expected 0 related products, got %d", len(product.RelatedProducts))
+	}
+}
+
+// TestInvalidODataIDReturns400 tests that invalid @odata.id returns 400
+func TestInvalidODataIDReturns400(t *testing.T) {
+	db := setupRelationTestDB(t)
+	bookMeta, _ := metadata.AnalyzeEntity(&Book{})
+	entitiesMetadata := map[string]*metadata.EntityMetadata{
+		"Authors": mustAnalyzeEntity(&Author{}),
+		"Books":   bookMeta,
+	}
+	handler := NewEntityHandler(db, bookMeta)
+	handler.entitiesMetadata = entitiesMetadata
+
+	// Try to update with invalid @odata.id
+	reqBody := `{"@odata.id":"invalid-reference"}`
+	req := httptest.NewRequest(http.MethodPut, "/Books(1)/Author/$ref", nil)
+	req.Body = createRequestBody(reqBody)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.HandleNavigationProperty(w, req, "1", "Author", true)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status 400, got %d: %s", w.Code, w.Body.String())
 	}
 }
