@@ -293,12 +293,27 @@ func (s *Service) handleActionOrFunction(w http.ResponseWriter, r *http.Request,
 		// Get entity context for bound actions
 		var ctx interface{}
 		if isBound && key != "" {
-			// Fetch the entity from database
+			// Fetch the entity from database to verify it exists
 			handler := s.handlers[entitySet]
 			if handler != nil {
-				// For now, we'll pass nil as context
-				// In a full implementation, we'd fetch the entity here
-				ctx = nil
+				// Try to fetch the entity to ensure it exists
+				entity, err := handler.FetchEntity(key)
+				if err != nil {
+					// Check if it's a "not found" error
+					if handlers.IsNotFoundError(err) {
+						if writeErr := response.WriteError(w, http.StatusNotFound, "Entity not found",
+							fmt.Sprintf("Entity with key '%s' not found", key)); writeErr != nil {
+							fmt.Printf("Error writing error response: %v\n", writeErr)
+						}
+						return
+					}
+					// Other database errors
+					if writeErr := response.WriteError(w, http.StatusInternalServerError, "Database error", err.Error()); writeErr != nil {
+						fmt.Printf("Error writing error response: %v\n", writeErr)
+					}
+					return
+				}
+				ctx = entity
 			}
 		}
 
@@ -350,9 +365,28 @@ func (s *Service) handleActionOrFunction(w http.ResponseWriter, r *http.Request,
 		// Get entity context for bound functions
 		var ctx interface{}
 		if isBound && key != "" {
-			// For now, we'll pass nil as context
-			// In a full implementation, we'd fetch the entity here
-			ctx = nil
+			// Fetch the entity from database to verify it exists
+			handler := s.handlers[entitySet]
+			if handler != nil {
+				// Try to fetch the entity to ensure it exists
+				entity, err := handler.FetchEntity(key)
+				if err != nil {
+					// Check if it's a "not found" error
+					if handlers.IsNotFoundError(err) {
+						if writeErr := response.WriteError(w, http.StatusNotFound, "Entity not found",
+							fmt.Sprintf("Entity with key '%s' not found", key)); writeErr != nil {
+							fmt.Printf("Error writing error response: %v\n", writeErr)
+						}
+						return
+					}
+					// Other database errors
+					if writeErr := response.WriteError(w, http.StatusInternalServerError, "Database error", err.Error()); writeErr != nil {
+						fmt.Printf("Error writing error response: %v\n", writeErr)
+					}
+					return
+				}
+				ctx = entity
+			}
 		}
 
 		// Invoke the function handler
