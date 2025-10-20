@@ -24,31 +24,23 @@ func Generate(entity interface{}, meta *metadata.EntityMetadata) string {
 		entityValue = entityValue.Elem()
 	}
 
-	// Get the ETag field value
+	// Handle map[string]interface{} (from $select queries)
+	if entityValue.Kind() == reflect.Map {
+		entityMap, ok := entity.(map[string]interface{})
+		if !ok {
+			return ""
+		}
+		return generateFromMap(entityMap, meta.ETagProperty)
+	}
+
+	// Get the ETag field value from struct
 	fieldValue := entityValue.FieldByName(meta.ETagProperty.FieldName)
 	if !fieldValue.IsValid() {
 		return ""
 	}
 
 	// Convert the field value to a string for hashing
-	var etagSource string
-	switch fieldValue.Kind() {
-	case reflect.String:
-		etagSource = fieldValue.String()
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		etagSource = strconv.FormatInt(fieldValue.Int(), 10)
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		etagSource = strconv.FormatUint(fieldValue.Uint(), 10)
-	case reflect.Struct:
-		// Handle time.Time specially
-		if t, ok := fieldValue.Interface().(time.Time); ok {
-			etagSource = strconv.FormatInt(t.Unix(), 10)
-		} else {
-			etagSource = fmt.Sprintf("%v", fieldValue.Interface())
-		}
-	default:
-		etagSource = fmt.Sprintf("%v", fieldValue.Interface())
-	}
+	etagSource := convertToETagSource(fieldValue)
 
 	// Generate SHA256 hash of the ETag source
 	hash := sha256.Sum256([]byte(etagSource))
@@ -56,6 +48,97 @@ func Generate(entity interface{}, meta *metadata.EntityMetadata) string {
 
 	// Return as quoted ETag (weak ETag format: W/"hash")
 	return fmt.Sprintf("W/\"%s\"", hashStr)
+}
+
+// generateFromMap generates an ETag from a map[string]interface{} entity
+func generateFromMap(entityMap map[string]interface{}, etagProp *metadata.PropertyMetadata) string {
+	// Try to get the ETag value using both FieldName and JsonName
+	var etagValue interface{}
+	var found bool
+
+	// First try JsonName (most common in maps from $select)
+	if etagProp.JsonName != "" {
+		etagValue, found = entityMap[etagProp.JsonName]
+	}
+
+	// If not found, try FieldName
+	if !found && etagProp.FieldName != "" {
+		etagValue, found = entityMap[etagProp.FieldName]
+	}
+
+	if !found {
+		return ""
+	}
+
+	// Convert the value to string for hashing
+	etagSource := convertInterfaceToETagSource(etagValue)
+
+	// Generate SHA256 hash of the ETag source
+	hash := sha256.Sum256([]byte(etagSource))
+	hashStr := hex.EncodeToString(hash[:])
+
+	// Return as quoted ETag (weak ETag format: W/"hash")
+	return fmt.Sprintf("W/\"%s\"", hashStr)
+}
+
+// convertToETagSource converts a reflect.Value to a string for ETag generation
+func convertToETagSource(fieldValue reflect.Value) string {
+	switch fieldValue.Kind() {
+	case reflect.String:
+		return fieldValue.String()
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return strconv.FormatInt(fieldValue.Int(), 10)
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return strconv.FormatUint(fieldValue.Uint(), 10)
+	case reflect.Struct:
+		// Handle time.Time specially
+		if t, ok := fieldValue.Interface().(time.Time); ok {
+			return strconv.FormatInt(t.Unix(), 10)
+		}
+		return fmt.Sprintf("%v", fieldValue.Interface())
+	default:
+		return fmt.Sprintf("%v", fieldValue.Interface())
+	}
+}
+
+// convertInterfaceToETagSource converts an interface{} to a string for ETag generation
+func convertInterfaceToETagSource(value interface{}) string {
+	if value == nil {
+		return ""
+	}
+
+	switch v := value.(type) {
+	case string:
+		return v
+	case int:
+		return strconv.FormatInt(int64(v), 10)
+	case int8:
+		return strconv.FormatInt(int64(v), 10)
+	case int16:
+		return strconv.FormatInt(int64(v), 10)
+	case int32:
+		return strconv.FormatInt(int64(v), 10)
+	case int64:
+		return strconv.FormatInt(v, 10)
+	case uint:
+		return strconv.FormatUint(uint64(v), 10)
+	case uint8:
+		return strconv.FormatUint(uint64(v), 10)
+	case uint16:
+		return strconv.FormatUint(uint64(v), 10)
+	case uint32:
+		return strconv.FormatUint(uint64(v), 10)
+	case uint64:
+		return strconv.FormatUint(v, 10)
+	case float32:
+		return strconv.FormatFloat(float64(v), 'f', -1, 32)
+	case float64:
+		return strconv.FormatFloat(v, 'f', -1, 64)
+	case time.Time:
+		return strconv.FormatInt(v.Unix(), 10)
+	default:
+		return fmt.Sprintf("%v", v)
+	}
 }
 
 // Parse extracts the ETag value from a quoted ETag string

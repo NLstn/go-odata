@@ -278,3 +278,256 @@ func TestNoneMatch(t *testing.T) {
 		})
 	}
 }
+
+func TestGenerate_WithMap(t *testing.T) {
+	// Test ETag generation from map[string]interface{} (from $select queries)
+	tests := []struct {
+		name         string
+		entityMap    map[string]interface{}
+		etagProperty *metadata.PropertyMetadata
+		wantEmpty    bool
+		description  string
+	}{
+		{
+			name: "Generate ETag from map with integer Version (JsonName)",
+			entityMap: map[string]interface{}{
+				"ID":      1,
+				"Name":    "Test",
+				"Version": 5,
+			},
+			etagProperty: &metadata.PropertyMetadata{
+				FieldName: "Version",
+				JsonName:  "Version",
+				IsETag:    true,
+			},
+			wantEmpty:   false,
+			description: "Should generate ETag from integer field in map",
+		},
+		{
+			name: "Generate ETag from map with string field",
+			entityMap: map[string]interface{}{
+				"ID":   1,
+				"Name": "TestProduct",
+			},
+			etagProperty: &metadata.PropertyMetadata{
+				FieldName: "Name",
+				JsonName:  "Name",
+				IsETag:    true,
+			},
+			wantEmpty:   false,
+			description: "Should generate ETag from string field in map",
+		},
+		{
+			name: "Generate ETag from map with time field",
+			entityMap: map[string]interface{}{
+				"ID":           1,
+				"LastModified": time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+			},
+			etagProperty: &metadata.PropertyMetadata{
+				FieldName: "LastModified",
+				JsonName:  "LastModified",
+				IsETag:    true,
+			},
+			wantEmpty:   false,
+			description: "Should generate ETag from time.Time field in map",
+		},
+		{
+			name: "ETag field not present in map",
+			entityMap: map[string]interface{}{
+				"ID":   1,
+				"Name": "Test",
+			},
+			etagProperty: &metadata.PropertyMetadata{
+				FieldName: "Version",
+				JsonName:  "Version",
+				IsETag:    true,
+			},
+			wantEmpty:   true,
+			description: "Should return empty ETag when field not in map",
+		},
+		{
+			name: "No ETag property defined",
+			entityMap: map[string]interface{}{
+				"ID":      1,
+				"Version": 5,
+			},
+			etagProperty: nil,
+			wantEmpty:    true,
+			description:  "Should return empty ETag when no ETag property configured",
+		},
+		{
+			name: "Generate ETag from map with float field",
+			entityMap: map[string]interface{}{
+				"ID":    1,
+				"Price": 99.99,
+			},
+			etagProperty: &metadata.PropertyMetadata{
+				FieldName: "Price",
+				JsonName:  "Price",
+				IsETag:    true,
+			},
+			wantEmpty:   false,
+			description: "Should generate ETag from float field in map",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			meta := &metadata.EntityMetadata{
+				EntityType:   reflect.TypeOf(TestEntity{}),
+				ETagProperty: tt.etagProperty,
+			}
+
+			etag := Generate(tt.entityMap, meta)
+
+			if tt.wantEmpty {
+				if etag != "" {
+					t.Errorf("Generate() = %v, want empty string. %s", etag, tt.description)
+				}
+			} else {
+				if etag == "" {
+					t.Errorf("Generate() returned empty string, want non-empty. %s", tt.description)
+				}
+				// Check that it starts with W/" (weak ETag format)
+				if len(etag) < 3 || etag[:3] != "W/\"" {
+					t.Errorf("Generate() = %v, want format W/\"...\". %s", etag, tt.description)
+				}
+			}
+		})
+	}
+}
+
+func TestGenerate_MapConsistency(t *testing.T) {
+	// Test that the same map input produces the same ETag
+	entityMap := map[string]interface{}{
+		"ID":      1,
+		"Version": 42,
+	}
+	meta := &metadata.EntityMetadata{
+		EntityType: reflect.TypeOf(TestEntity{}),
+		ETagProperty: &metadata.PropertyMetadata{
+			FieldName: "Version",
+			JsonName:  "Version",
+			IsETag:    true,
+		},
+	}
+
+	etag1 := Generate(entityMap, meta)
+	etag2 := Generate(entityMap, meta)
+
+	if etag1 != etag2 {
+		t.Errorf("Generate() produced different ETags for same map input: %v vs %v", etag1, etag2)
+	}
+}
+
+func TestGenerate_MapVsStruct(t *testing.T) {
+	// Test that ETag from map matches ETag from struct with same values
+	version := 42
+	entity := TestEntity{ID: 1, Version: version}
+	entityMap := map[string]interface{}{
+		"ID":      1,
+		"Version": version,
+	}
+
+	meta := &metadata.EntityMetadata{
+		EntityType: reflect.TypeOf(TestEntity{}),
+		ETagProperty: &metadata.PropertyMetadata{
+			FieldName: "Version",
+			JsonName:  "Version",
+			IsETag:    true,
+		},
+	}
+
+	etagFromStruct := Generate(&entity, meta)
+	etagFromMap := Generate(entityMap, meta)
+
+	if etagFromStruct != etagFromMap {
+		t.Errorf("Generate() produced different ETags for struct vs map with same values:\nStruct: %v\nMap: %v",
+			etagFromStruct, etagFromMap)
+	}
+}
+
+// TestEntity for enum support
+type ProductStatus int
+
+const (
+	ProductStatusNone         ProductStatus = 0
+	ProductStatusInStock      ProductStatus = 1
+	ProductStatusOnSale       ProductStatus = 2
+	ProductStatusDiscontinued ProductStatus = 4
+)
+
+type ProductEntity struct {
+	ID      uint          `json:"ID"`
+	Name    string        `json:"Name"`
+	Status  ProductStatus `json:"Status"`
+	Version int           `json:"Version"`
+}
+
+func TestGenerate_WithEnumInMap(t *testing.T) {
+	// Test that enum types in maps are handled correctly
+	entityMap := map[string]interface{}{
+		"ID":      uint(1),
+		"Name":    "Test Product",
+		"Status":  ProductStatusInStock, // Enum type
+		"Version": 1,
+	}
+
+	meta := &metadata.EntityMetadata{
+		EntityType: reflect.TypeOf(ProductEntity{}),
+		ETagProperty: &metadata.PropertyMetadata{
+			FieldName: "Version",
+			JsonName:  "Version",
+			IsETag:    true,
+		},
+	}
+
+	etag := Generate(entityMap, meta)
+
+	if etag == "" {
+		t.Error("Generate() returned empty string for map with enum, want non-empty ETag")
+	}
+	if len(etag) < 3 || etag[:3] != "W/\"" {
+		t.Errorf("Generate() = %v, want format W/\"...\"", etag)
+	}
+}
+
+func TestGenerate_WithEnumAsETag(t *testing.T) {
+	// Test that enum types can be used as ETag values
+	entityMap := map[string]interface{}{
+		"ID":     uint(1),
+		"Name":   "Test Product",
+		"Status": ProductStatusInStock, // Enum as ETag
+	}
+
+	meta := &metadata.EntityMetadata{
+		EntityType: reflect.TypeOf(ProductEntity{}),
+		ETagProperty: &metadata.PropertyMetadata{
+			FieldName: "Status",
+			JsonName:  "Status",
+			IsETag:    true,
+		},
+	}
+
+	etag := Generate(entityMap, meta)
+
+	if etag == "" {
+		t.Error("Generate() returned empty string when using enum as ETag, want non-empty")
+	}
+	if len(etag) < 3 || etag[:3] != "W/\"" {
+		t.Errorf("Generate() = %v, want format W/\"...\"", etag)
+	}
+
+	// Test that different enum values produce different ETags
+	entityMap2 := map[string]interface{}{
+		"ID":     uint(1),
+		"Name":   "Test Product",
+		"Status": ProductStatusOnSale, // Different enum value
+	}
+
+	etag2 := Generate(entityMap2, meta)
+
+	if etag == etag2 {
+		t.Error("Generate() produced same ETag for different enum values")
+	}
+}
