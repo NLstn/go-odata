@@ -6,7 +6,6 @@
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/test_framework.sh"
-source "$SCRIPT_DIR/test_framework.sh"
 
 echo "======================================"
 echo "OData v4 Compliance Test"
@@ -22,81 +21,94 @@ echo ""
 
 
 # Test 1: Service Document should return application/json with odata.metadata=minimal
-echo "Test 1: Service Document Content-Type"
-echo "  Request: GET $SERVER_URL/"
-RESPONSE=$(curl -s -i "$SERVER_URL/" 2>&1)
-CONTENT_TYPE=$(echo "$RESPONSE" | grep -i "^Content-Type:" | head -1 | sed 's/Content-Type: //i' | tr -d '\r')
+test_service_doc_content_type() {
+    local RESPONSE=$(curl -s -i "$SERVER_URL/" 2>&1)
+    local CONTENT_TYPE=$(echo "$RESPONSE" | grep -i "^Content-Type:" | head -1 | sed 's/Content-Type: //i' | tr -d '\r')
 
-if echo "$CONTENT_TYPE" | grep -q "application/json"; then
-    if echo "$CONTENT_TYPE" | grep -q "odata.metadata=minimal"; then
-        test_result "Service Document returns application/json with odata.metadata=minimal" "PASS"
+    if echo "$CONTENT_TYPE" | grep -q "application/json"; then
+        if echo "$CONTENT_TYPE" | grep -q "odata.metadata=minimal"; then
+            return 0
+        else
+            echo "  Details: Missing odata.metadata parameter. Got: $CONTENT_TYPE"
+            return 1
+        fi
     else
-        test_result "Service Document returns application/json with odata.metadata=minimal" "FAIL" "Missing odata.metadata parameter. Got: $CONTENT_TYPE"
+        echo "  Details: Expected application/json, got: $CONTENT_TYPE"
+        return 1
     fi
-else
-    test_result "Service Document returns application/json" "FAIL" "Expected application/json, got: $CONTENT_TYPE"
-fi
-echo ""
+}
+
+run_test "Service Document returns application/json with odata.metadata=minimal" test_service_doc_content_type
 
 # Test 2: Metadata Document should return application/xml
-echo "Test 2: Metadata Document Content-Type (XML)"
-echo "  Request: GET $SERVER_URL/\$metadata"
-RESPONSE=$(curl -s -i "$SERVER_URL/\$metadata" 2>&1)
-CONTENT_TYPE=$(echo "$RESPONSE" | grep -i "^Content-Type:" | head -1 | sed 's/Content-Type: //i' | tr -d '\r')
+test_metadata_xml_content_type() {
+    local RESPONSE=$(curl -s -i "$SERVER_URL/\$metadata" 2>&1)
+    local CONTENT_TYPE=$(echo "$RESPONSE" | grep -i "^Content-Type:" | head -1 | sed 's/Content-Type: //i' | tr -d '\r')
 
-if echo "$CONTENT_TYPE" | grep -q "application/xml"; then
-    test_result "Metadata Document returns application/xml" "PASS"
-else
-    test_result "Metadata Document returns application/xml" "FAIL" "Expected application/xml, got: $CONTENT_TYPE"
-fi
-echo ""
+    if echo "$CONTENT_TYPE" | grep -q "application/xml"; then
+        return 0
+    else
+        echo "  Details: Expected application/xml, got: $CONTENT_TYPE"
+        return 1
+    fi
+}
+
+run_test "Metadata Document returns application/xml" test_metadata_xml_content_type
 
 # Test 3: Metadata Document with $format=json should return application/json
-echo "Test 3: Metadata Document Content-Type (JSON)"
-echo "  Request: GET $SERVER_URL/\$metadata?\$format=json"
-RESPONSE=$(curl -s -i "$SERVER_URL/\$metadata?\$format=json" 2>&1)
-CONTENT_TYPE=$(echo "$RESPONSE" | grep -i "^Content-Type:" | head -1 | sed 's/Content-Type: //i' | tr -d '\r')
+test_metadata_json_content_type() {
+    local RESPONSE=$(curl -s -i "$SERVER_URL/\$metadata?\$format=json" 2>&1)
+    local CONTENT_TYPE=$(echo "$RESPONSE" | grep -i "^Content-Type:" | head -1 | sed 's/Content-Type: //i' | tr -d '\r')
 
-if echo "$CONTENT_TYPE" | grep -q "application/json"; then
-    test_result "Metadata Document with \$format=json returns application/json" "PASS"
-else
-    test_result "Metadata Document with \$format=json returns application/json" "FAIL" "Expected application/json, got: $CONTENT_TYPE"
-fi
-echo ""
+    if echo "$CONTENT_TYPE" | grep -q "application/json"; then
+        return 0
+    else
+        echo "  Details: Expected application/json, got: $CONTENT_TYPE"
+        return 1
+    fi
+}
+
+run_test "Metadata Document with \$format=json returns application/json" test_metadata_json_content_type
 
 # Test 4: Entity Collection should return application/json with odata.metadata
-echo "Test 4: Entity Collection Content-Type"
-echo "  Request: GET $SERVER_URL/Products"
-RESPONSE=$(curl -s -i "$SERVER_URL/Products" 2>&1)
-CONTENT_TYPE=$(echo "$RESPONSE" | grep -i "^Content-Type:" | head -1 | sed 's/Content-Type: //i' | tr -d '\r')
+test_entity_collection_content_type() {
+    local RESPONSE=$(curl -s -i "$SERVER_URL/Products" 2>&1)
+    local CONTENT_TYPE=$(echo "$RESPONSE" | grep -i "^Content-Type:" | head -1 | sed 's/Content-Type: //i' | tr -d '\r')
 
-if echo "$CONTENT_TYPE" | grep -q "application/json"; then
-    if echo "$CONTENT_TYPE" | grep -q "odata.metadata"; then
-        test_result "Entity Collection returns application/json with odata.metadata" "PASS"
+    if echo "$CONTENT_TYPE" | grep -q "application/json"; then
+        if echo "$CONTENT_TYPE" | grep -q "odata.metadata"; then
+            return 0
+        else
+            echo "  Details: Missing odata.metadata parameter. Got: $CONTENT_TYPE"
+            return 1
+        fi
     else
-        test_result "Entity Collection returns application/json with odata.metadata" "FAIL" "Missing odata.metadata parameter. Got: $CONTENT_TYPE"
+        echo "  Details: Expected application/json, got: $CONTENT_TYPE"
+        return 1
     fi
-else
-    test_result "Entity Collection returns application/json" "FAIL" "Expected application/json, got: $CONTENT_TYPE"
-fi
-echo ""
+}
+
+run_test "Entity Collection returns application/json with odata.metadata" test_entity_collection_content_type
 
 # Test 5: Single Entity should return application/json with odata.metadata
-echo "Test 5: Single Entity Content-Type"
-echo "  Request: GET $SERVER_URL/Products(1)"
-RESPONSE=$(curl -s -i "$SERVER_URL/Products(1)" 2>&1)
-CONTENT_TYPE=$(echo "$RESPONSE" | grep -i "^Content-Type:" | head -1 | sed 's/Content-Type: //i' | tr -d '\r')
+test_single_entity_content_type() {
+    local RESPONSE=$(curl -s -i "$SERVER_URL/Products(1)" 2>&1)
+    local CONTENT_TYPE=$(echo "$RESPONSE" | grep -i "^Content-Type:" | head -1 | sed 's/Content-Type: //i' | tr -d '\r')
 
-if echo "$CONTENT_TYPE" | grep -q "application/json"; then
-    if echo "$CONTENT_TYPE" | grep -q "odata.metadata"; then
-        test_result "Single Entity returns application/json with odata.metadata" "PASS"
+    if echo "$CONTENT_TYPE" | grep -q "application/json"; then
+        if echo "$CONTENT_TYPE" | grep -q "odata.metadata"; then
+            return 0
+        else
+            echo "  Details: Missing odata.metadata parameter. Got: $CONTENT_TYPE"
+            return 1
+        fi
     else
-        test_result "Single Entity returns application/json with odata.metadata" "FAIL" "Missing odata.metadata parameter. Got: $CONTENT_TYPE"
+        echo "  Details: Expected application/json, got: $CONTENT_TYPE"
+        return 1
     fi
-else
-    test_result "Single Entity returns application/json" "FAIL" "Expected application/json, got: $CONTENT_TYPE"
-fi
-echo ""
+}
+
+run_test "Single Entity returns application/json with odata.metadata" test_single_entity_content_type
 
 
 print_summary
