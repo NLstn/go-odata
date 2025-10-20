@@ -7,126 +7,82 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/test_framework.sh"
 
-echo "======================================"
-echo "OData v4 Compliance Test"
-echo "Section: 11.2.8 Delta Links"
-echo "======================================"
-echo ""
-echo "Description: Validates delta link support for tracking entity changes"
-echo "             and synchronization according to OData v4 specification."
-echo ""
-echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_RequestingChanges"
-echo ""
-
-
+# Global variables to store initial response
+INITIAL_RESPONSE=""
+INITIAL_STATUS=""
+INITIAL_BODY=""
+PREFERENCE_APPLIED=""
 
 # Test 1: Request delta with Prefer: odata.track-changes
-echo "Test 1: Request delta with Prefer: odata.track-changes"
-echo "  Request: GET $SERVER_URL/Products with Prefer: odata.track-changes"
-RESPONSE=$(curl -s -i -H "Prefer: odata.track-changes" "$SERVER_URL/Products" 2>&1)
-HTTP_CODE=$(echo "$RESPONSE" | grep "^HTTP" | tail -1 | awk '{print $2}')
-BODY=$(echo "$RESPONSE" | sed -n '/^$/,$p' | tail -n +2)
-PREFERENCE_APPLIED=$(echo "$RESPONSE" | grep -i "^Preference-Applied:" | head -1 | sed 's/Preference-Applied: //i' | tr -d '\r')
-
-if [ "$HTTP_CODE" = "200" ]; then
-    # Check for @odata.deltaLink in response
-    if echo "$BODY" | grep -q '"@odata.deltaLink"'; then
-        test_result "Delta request returns @odata.deltaLink" "PASS"
-    else
-        test_result "Delta request returns @odata.deltaLink" "PASS" "Server doesn't support delta links (optional)"
+test_1() {
+    INITIAL_RESPONSE=$(curl -s -i -H "Prefer: odata.track-changes" "$SERVER_URL/Products" 2>&1)
+    INITIAL_STATUS=$(echo "$INITIAL_RESPONSE" | grep "^HTTP" | tail -1 | awk '{print $2}')
+    INITIAL_BODY=$(echo "$INITIAL_RESPONSE" | sed -n '/^$/,$p' | tail -n +2)
+    PREFERENCE_APPLIED=$(echo "$INITIAL_RESPONSE" | grep -i "^Preference-Applied:" | head -1 | sed 's/Preference-Applied: //i' | tr -d '\r')
+    
+    if [ "$INITIAL_STATUS" = "200" ] || [ "$INITIAL_STATUS" = "501" ]; then
+        return 0
     fi
-elif [ "$HTTP_CODE" = "501" ]; then
-    test_result "Delta request returns @odata.deltaLink" "PASS" "Delta links not implemented (optional)"
-else
-    test_result "Delta request returns @odata.deltaLink" "FAIL" "HTTP $HTTP_CODE"
-fi
+    return 1
+}
 
 # Test 2: Preference-Applied header should indicate track-changes support
-echo ""
-echo "Test 2: Preference-Applied header for track-changes"
-if [ "$HTTP_CODE" = "200" ]; then
-    if echo "$PREFERENCE_APPLIED" | grep -q "odata.track-changes"; then
-        test_result "Preference-Applied includes track-changes" "PASS"
-    else
-        test_result "Preference-Applied includes track-changes" "PASS" "Header not present (delta not supported)"
+test_2() {
+    if [ "$INITIAL_STATUS" = "200" ] || [ "$INITIAL_STATUS" = "501" ]; then
+        return 0
     fi
-else
-    test_result "Preference-Applied includes track-changes" "PASS" "Delta not supported (optional)"
-fi
+    return 1
+}
 
-# Test 3: Delta link should be dereferenceable
-if echo "$BODY" | grep -q '"@odata.deltaLink"'; then
-    echo ""
-    echo "Test 3: Delta link is dereferenceable"
-    DELTA_LINK=$(echo "$BODY" | grep -o '"@odata.deltaLink":"[^"]*"' | cut -d'"' -f4)
-    
-    if [ -n "$DELTA_LINK" ]; then
-        # Try to access the delta link
-        if echo "$DELTA_LINK" | grep -q "^http"; then
-            DELTA_RESPONSE=$(curl -s -w "\n%{http_code}" "$DELTA_LINK" 2>&1)
+# Test 3: Delta link should be dereferenceable (if present)
+test_3() {
+    if echo "$INITIAL_BODY" | grep -q '"@odata.deltaLink"'; then
+        local DELTA_LINK=$(echo "$INITIAL_BODY" | grep -o '"@odata.deltaLink":"[^"]*"' | cut -d'"' -f4)
+        if [ -n "$DELTA_LINK" ]; then
+            if echo "$DELTA_LINK" | grep -q "^http"; then
+                check_status "$DELTA_LINK" 200
+            else
+                check_status "${DELTA_LINK#/}" 200
+            fi
         else
-            DELTA_RESPONSE=$(curl -s -w "\n%{http_code}" "$SERVER_URL/$DELTA_LINK" 2>&1)
+            return 1
         fi
-        
-        DELTA_HTTP_CODE=$(echo "$DELTA_RESPONSE" | tail -1)
-        
-        if [ "$DELTA_HTTP_CODE" = "200" ]; then
-            test_result "Delta link is accessible" "PASS"
-        else
-            test_result "Delta link is accessible" "FAIL" "HTTP $DELTA_HTTP_CODE accessing delta link"
-        fi
-    else
-        test_result "Delta link is accessible" "FAIL" "Delta link is empty"
     fi
-fi
+    return 0
+}
 
-# Test 4: Delta response should include context
-if echo "$BODY" | grep -q '"@odata.deltaLink"'; then
-    echo ""
-    echo "Test 4: Delta response includes @odata.context"
-    if echo "$BODY" | grep -q '"@odata.context"'; then
-        test_result "Delta response has @odata.context" "PASS"
-    else
-        test_result "Delta response has @odata.context" "FAIL" "Missing @odata.context"
+# Test 4: Delta response should include context (if delta supported)
+test_4() {
+    if echo "$INITIAL_BODY" | grep -q '"@odata.deltaLink"'; then
+        check_contains "$INITIAL_BODY" '"@odata.context"' "Delta response has @odata.context"
     fi
-fi
+    return 0
+}
 
 # Test 5: Delta with $filter
-echo ""
-echo "Test 5: Delta request with \$filter"
-echo "  Request: GET $SERVER_URL/Products?\$filter=Price gt 10 with Prefer: odata.track-changes"
-RESPONSE=$(curl -s -w "\n%{http_code}" -H "Prefer: odata.track-changes" \
-    "$SERVER_URL/Products?\$filter=Price%20gt%2010" 2>&1)
-HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-BODY=$(echo "$RESPONSE" | head -n -1)
-
-if [ "$HTTP_CODE" = "200" ]; then
-    if echo "$BODY" | grep -q '"@odata.deltaLink"'; then
-        test_result "Delta with \$filter returns deltaLink" "PASS"
-    else
-        test_result "Delta with \$filter returns deltaLink" "PASS" "Delta not supported (optional)"
+test_5() {
+    local RESPONSE=$(http_get "Products?\$filter=Price%20gt%2010" "-H" "Prefer: odata.track-changes")
+    local STATUS=$(echo "$RESPONSE" | tail -1)
+    if [ "$STATUS" = "200" ] || [ "$STATUS" = "501" ]; then
+        return 0
     fi
-elif [ "$HTTP_CODE" = "501" ]; then
-    test_result "Delta with \$filter returns deltaLink" "PASS" "Delta not supported (optional)"
-else
-    test_result "Delta with \$filter returns deltaLink" "FAIL" "HTTP $HTTP_CODE"
-fi
+    return 1
+}
 
 # Test 6: Delta token parameter handling
-echo ""
-echo "Test 6: Request with delta token parameter"
-echo "  Request: GET $SERVER_URL/Products?\$deltatoken=test-token"
-RESPONSE=$(curl -s -w "\n%{http_code}" "$SERVER_URL/Products?\$deltatoken=test-token" 2>&1)
-HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+test_6() {
+    local STATUS=$(http_get "Products?\$deltatoken=test-token" | tail -1)
+    if [ "$STATUS" = "200" ] || [ "$STATUS" = "410" ] || [ "$STATUS" = "400" ] || [ "$STATUS" = "501" ]; then
+        return 0
+    fi
+    return 1
+}
 
-if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "410" ] || [ "$HTTP_CODE" = "400" ]; then
-    # 200 = valid token, 410 = expired token, 400 = invalid token format
-    test_result "Delta token parameter handled" "PASS"
-elif [ "$HTTP_CODE" = "501" ]; then
-    test_result "Delta token parameter handled" "PASS" "Delta tokens not supported (optional)"
-else
-    test_result "Delta token parameter handled" "FAIL" "HTTP $HTTP_CODE"
-fi
-
+run_test "Request delta with Prefer: odata.track-changes" test_1
+run_test "Preference-Applied header for track-changes" test_2
+run_test "Delta link is dereferenceable" test_3
+run_test "Delta response includes @odata.context" test_4
+run_test "Delta request with \$filter" test_5
+run_test "Request with delta token parameter" test_6
 
 print_summary
