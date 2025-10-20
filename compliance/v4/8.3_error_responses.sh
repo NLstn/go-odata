@@ -6,7 +6,6 @@
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/test_framework.sh"
-source "$SCRIPT_DIR/test_framework.sh"
 
 echo "======================================"
 echo "OData v4 Compliance Test"
@@ -22,105 +21,114 @@ echo ""
 
 
 # Test 1: 404 error contains error object
-echo "Test 1: 404 error response contains error object"
-echo "  Request: GET $SERVER_URL/Products(999999)"
-RESPONSE=$(curl -s -w "\n%{http_code}" "$SERVER_URL/Products(999999)" 2>&1)
-HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-BODY=$(echo "$RESPONSE" | head -n -1)
+test_404_error_object() {
+    local RESPONSE=$(curl -s -w "\n%{http_code}" "$SERVER_URL/Products(999999)" 2>&1)
+    local HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+    local BODY=$(echo "$RESPONSE" | head -n -1)
 
-if [ "$HTTP_CODE" = "404" ]; then
-    if echo "$BODY" | grep -q '"error"'; then
-        test_result "404 error response contains 'error' object" "PASS"
+    if [ "$HTTP_CODE" = "404" ]; then
+        if echo "$BODY" | grep -q '"error"'; then
+            return 0
+        else
+            echo "  Details: No 'error' object in response"
+            return 1
+        fi
     else
-        test_result "404 error response contains 'error' object" "FAIL" "No 'error' object in response"
+        echo "  Details: Status code: $HTTP_CODE"
+        return 1
     fi
-else
-    test_result "Non-existent entity returns 404" "FAIL" "Status code: $HTTP_CODE"
-fi
-echo ""
+}
+
+run_test "404 error response contains 'error' object" test_404_error_object
 
 # Test 2: Error object contains 'code' property
-echo "Test 2: Error object contains 'code' property"
-RESPONSE=$(curl -s "$SERVER_URL/Products(999999)" 2>&1)
+test_error_code_property() {
+    local RESPONSE=$(curl -s "$SERVER_URL/Products(999999)" 2>&1)
+    check_json_field "$RESPONSE" "code"
+}
 
-if echo "$RESPONSE" | grep -q '"code"'; then
-    test_result "Error object contains 'code' property" "PASS"
-else
-    test_result "Error object contains 'code' property" "FAIL" "No 'code' property in error"
-fi
-echo ""
+run_test "Error object contains 'code' property" test_error_code_property
 
 # Test 3: Error object contains 'message' property
-echo "Test 3: Error object contains 'message' property"
-RESPONSE=$(curl -s "$SERVER_URL/Products(999999)" 2>&1)
+test_error_message_property() {
+    local RESPONSE=$(curl -s "$SERVER_URL/Products(999999)" 2>&1)
+    check_json_field "$RESPONSE" "message"
+}
 
-if echo "$RESPONSE" | grep -q '"message"'; then
-    test_result "Error object contains 'message' property" "PASS"
-else
-    test_result "Error object contains 'message' property" "FAIL" "No 'message' property in error"
-fi
-echo ""
+run_test "Error object contains 'message' property" test_error_message_property
 
 # Test 4: Error response has correct Content-Type
-echo "Test 4: Error response has application/json Content-Type"
-RESPONSE=$(curl -s -i "$SERVER_URL/Products(999999)" 2>&1)
-CONTENT_TYPE=$(echo "$RESPONSE" | grep -i "^Content-Type:" | head -1 | sed 's/Content-Type: //i' | tr -d '\r')
+test_error_content_type() {
+    local RESPONSE=$(curl -s -i "$SERVER_URL/Products(999999)" 2>&1)
+    local CONTENT_TYPE=$(echo "$RESPONSE" | grep -i "^Content-Type:" | head -1 | sed 's/Content-Type: //i' | tr -d '\r')
 
-if echo "$CONTENT_TYPE" | grep -q "application/json"; then
-    test_result "Error response has application/json Content-Type" "PASS"
-else
-    test_result "Error response has application/json Content-Type" "FAIL" "Content-Type: $CONTENT_TYPE"
-fi
-echo ""
+    if echo "$CONTENT_TYPE" | grep -q "application/json"; then
+        return 0
+    else
+        echo "  Details: Content-Type: $CONTENT_TYPE"
+        return 1
+    fi
+}
+
+run_test "Error response has application/json Content-Type" test_error_content_type
 
 # Test 5: Invalid filter syntax returns 400 with error
-echo "Test 5: Invalid query syntax returns 400 Bad Request with error"
-echo "  Request: GET $SERVER_URL/Products?\$filter=invalid syntax"
-RESPONSE=$(curl -s -w "\n%{http_code}" "$SERVER_URL/Products?\$filter=invalid%20syntax" 2>&1)
-HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-BODY=$(echo "$RESPONSE" | head -n -1)
+test_invalid_query_error() {
+    local RESPONSE=$(curl -s -w "\n%{http_code}" "$SERVER_URL/Products?\$filter=invalid%20syntax" 2>&1)
+    local HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+    local BODY=$(echo "$RESPONSE" | head -n -1)
 
-if [ "$HTTP_CODE" = "400" ]; then
-    if echo "$BODY" | grep -q '"error"'; then
-        test_result "Invalid query returns 400 with error object" "PASS"
+    if [ "$HTTP_CODE" = "400" ]; then
+        if echo "$BODY" | grep -q '"error"'; then
+            return 0
+        else
+            echo "  Details: No error object"
+            return 1
+        fi
     else
-        test_result "Invalid query returns 400 with error object" "FAIL" "No error object"
+        echo "  Details: Status code: $HTTP_CODE (may accept invalid syntax)"
+        return 1
     fi
-else
-    test_result "Invalid query returns 400" "FAIL" "Status code: $HTTP_CODE (may accept invalid syntax)"
-fi
-echo ""
+}
+
+run_test "Invalid query returns 400 with error object" test_invalid_query_error
 
 # Test 6: Unsupported version returns 406 with error
-echo "Test 6: Unsupported OData version returns 406 Not Acceptable"
-echo "  Request: GET $SERVER_URL/Products with OData-MaxVersion: 3.0"
-RESPONSE=$(curl -s -w "\n%{http_code}" "$SERVER_URL/Products" \
-    -H "OData-MaxVersion: 3.0" 2>&1)
-HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-BODY=$(echo "$RESPONSE" | head -n -1)
+test_unsupported_version() {
+    local RESPONSE=$(curl -s -w "\n%{http_code}" "$SERVER_URL/Products" \
+        -H "OData-MaxVersion: 3.0" 2>&1)
+    local HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+    local BODY=$(echo "$RESPONSE" | head -n -1)
 
-if [ "$HTTP_CODE" = "406" ]; then
-    if echo "$BODY" | grep -q '"error"'; then
-        test_result "Unsupported version returns 406 with error" "PASS"
+    if [ "$HTTP_CODE" = "406" ]; then
+        if echo "$BODY" | grep -q '"error"'; then
+            return 0
+        else
+            echo "  Details: No error object"
+            return 1
+        fi
     else
-        test_result "Unsupported version returns 406 with error" "FAIL" "No error object"
+        echo "  Details: Status code: $HTTP_CODE"
+        return 1
     fi
-else
-    test_result "Unsupported version returns 406" "FAIL" "Status code: $HTTP_CODE"
-fi
-echo ""
+}
+
+run_test "Unsupported version returns 406 with error" test_unsupported_version
 
 # Test 7: Error response includes OData-Version header
-echo "Test 7: Error response includes OData-Version header"
-RESPONSE=$(curl -s -i "$SERVER_URL/Products(999999)" 2>&1)
-ODATA_VERSION=$(echo "$RESPONSE" | grep -i "^OData-Version:" | head -1 | sed 's/OData-Version: //i' | tr -d '\r')
+test_error_odata_version_header() {
+    local RESPONSE=$(curl -s -i "$SERVER_URL/Products(999999)" 2>&1)
+    local ODATA_VERSION=$(echo "$RESPONSE" | grep -i "^OData-Version:" | head -1 | sed 's/OData-Version: //i' | tr -d '\r')
 
-if [ -n "$ODATA_VERSION" ]; then
-    test_result "Error response includes OData-Version header" "PASS"
-else
-    test_result "Error response includes OData-Version header" "FAIL" "No OData-Version header"
-fi
-echo ""
+    if [ -n "$ODATA_VERSION" ]; then
+        return 0
+    else
+        echo "  Details: No OData-Version header"
+        return 1
+    fi
+}
+
+run_test "Error response includes OData-Version header" test_error_odata_version_header
 
 
 print_summary
