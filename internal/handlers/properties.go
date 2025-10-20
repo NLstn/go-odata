@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"strings"
 
 	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/query"
@@ -17,8 +18,39 @@ func (h *EntityHandler) HandleNavigationProperty(w http.ResponseWriter, r *http.
 	switch r.Method {
 	case http.MethodGet, http.MethodHead:
 		h.handleGetNavigationProperty(w, r, entityKey, navigationProperty, isRef)
+	case http.MethodPut:
+		if isRef {
+			h.handlePutNavigationPropertyRef(w, r, entityKey, navigationProperty)
+		} else {
+			if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+				fmt.Sprintf("Method %s is not supported for navigation properties without $ref", r.Method)); err != nil {
+				fmt.Printf(LogMsgErrorWritingErrorResponse, err)
+			}
+		}
+	case http.MethodPost:
+		if isRef {
+			h.handlePostNavigationPropertyRef(w, r, entityKey, navigationProperty)
+		} else {
+			if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+				fmt.Sprintf("Method %s is not supported for navigation properties without $ref", r.Method)); err != nil {
+				fmt.Printf(LogMsgErrorWritingErrorResponse, err)
+			}
+		}
+	case http.MethodDelete:
+		if isRef {
+			h.handleDeleteNavigationPropertyRef(w, r, entityKey, navigationProperty)
+		} else {
+			if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+				fmt.Sprintf("Method %s is not supported for navigation properties without $ref", r.Method)); err != nil {
+				fmt.Printf(LogMsgErrorWritingErrorResponse, err)
+			}
+		}
 	case http.MethodOptions:
-		h.handleOptionsNavigationProperty(w)
+		if isRef {
+			h.handleOptionsNavigationPropertyRef(w)
+		} else {
+			h.handleOptionsNavigationProperty(w)
+		}
 	default:
 		if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
 			fmt.Sprintf("Method %s is not supported for navigation properties", r.Method)); err != nil {
@@ -85,9 +117,15 @@ func (h *EntityHandler) handleGetNavigationProperty(w http.ResponseWriter, r *ht
 	}
 }
 
-// handleOptionsNavigationProperty handles OPTIONS requests for navigation properties
+// handleOptionsNavigationProperty handles OPTIONS requests for navigation properties (without $ref)
 func (h *EntityHandler) handleOptionsNavigationProperty(w http.ResponseWriter) {
 	w.Header().Set("Allow", "GET, HEAD, OPTIONS")
+	w.WriteHeader(http.StatusOK)
+}
+
+// handleOptionsNavigationPropertyRef handles OPTIONS requests for navigation properties with $ref
+func (h *EntityHandler) handleOptionsNavigationPropertyRef(w http.ResponseWriter) {
+	w.Header().Set("Allow", "GET, HEAD, PUT, POST, DELETE, OPTIONS")
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -737,4 +775,496 @@ func (h *EntityHandler) writeNavigationCollectionRefFromData(w http.ResponseWrit
 	if err := response.WriteEntityReferenceCollection(w, r, entityIDs, count, nextLink); err != nil {
 		fmt.Printf("Error writing entity reference collection: %v\n", err)
 	}
+}
+
+// handlePutNavigationPropertyRef handles PUT requests to update a single-valued navigation property reference
+// Example: PUT Products(1)/Category/$ref with body {"@odata.id":"http://localhost:8080/Categories(2)"}
+func (h *EntityHandler) handlePutNavigationPropertyRef(w http.ResponseWriter, r *http.Request, entityKey string, navigationProperty string) {
+	// Find and validate the navigation property
+	navProp := h.findNavigationProperty(navigationProperty)
+	if navProp == nil {
+		if err := response.WriteError(w, http.StatusNotFound, "Navigation property not found",
+			fmt.Sprintf("'%s' is not a valid navigation property for %s", navigationProperty, h.metadata.EntitySetName)); err != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, err)
+		}
+		return
+	}
+
+	// PUT is only valid for single-valued navigation properties
+	if navProp.NavigationIsArray {
+		if err := response.WriteError(w, http.StatusBadRequest, "Invalid request",
+			"PUT $ref is only supported on single-valued navigation properties. Use POST to add to collection navigation properties."); err != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, err)
+		}
+		return
+	}
+
+	// Parse the request body to extract @odata.id
+	var requestBody map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid request body",
+			"Failed to parse JSON request body"); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	}
+
+	odataID, ok := requestBody["@odata.id"]
+	if !ok {
+		if err := response.WriteError(w, http.StatusBadRequest, "Invalid request body",
+			"Request body must contain '@odata.id' property"); err != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, err)
+		}
+		return
+	}
+
+	odataIDStr, ok := odataID.(string)
+	if !ok {
+		if err := response.WriteError(w, http.StatusBadRequest, "Invalid request body",
+			"'@odata.id' must be a string"); err != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, err)
+		}
+		return
+	}
+
+	// Validate and extract the target entity key from @odata.id
+	targetKey, err := h.validateAndExtractEntityKey(odataIDStr, navProp.NavigationTarget)
+	if err != nil {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid @odata.id",
+			err.Error()); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	}
+
+	// Update the navigation property reference
+	if err := h.updateNavigationPropertyReference(entityKey, navProp, targetKey); err != nil {
+		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError,
+			fmt.Sprintf("Failed to update navigation property: %v", err)); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	}
+
+	// Success - return 204 No Content
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handlePostNavigationPropertyRef handles POST requests to add a reference to a collection navigation property
+// Example: POST Products(1)/RelatedProducts/$ref with body {"@odata.id":"http://localhost:8080/Products(2)"}
+func (h *EntityHandler) handlePostNavigationPropertyRef(w http.ResponseWriter, r *http.Request, entityKey string, navigationProperty string) {
+	// Find and validate the navigation property
+	navProp := h.findNavigationProperty(navigationProperty)
+	if navProp == nil {
+		if err := response.WriteError(w, http.StatusNotFound, "Navigation property not found",
+			fmt.Sprintf("'%s' is not a valid navigation property for %s", navigationProperty, h.metadata.EntitySetName)); err != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, err)
+		}
+		return
+	}
+
+	// POST is only valid for collection navigation properties
+	if !navProp.NavigationIsArray {
+		if err := response.WriteError(w, http.StatusBadRequest, "Invalid request",
+			"POST $ref is only supported on collection navigation properties. Use PUT for single-valued navigation properties."); err != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, err)
+		}
+		return
+	}
+
+	// Parse the request body to extract @odata.id
+	var requestBody map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid request body",
+			"Failed to parse JSON request body"); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	}
+
+	odataID, ok := requestBody["@odata.id"]
+	if !ok {
+		if err := response.WriteError(w, http.StatusBadRequest, "Invalid request body",
+			"Request body must contain '@odata.id' property"); err != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, err)
+		}
+		return
+	}
+
+	odataIDStr, ok := odataID.(string)
+	if !ok {
+		if err := response.WriteError(w, http.StatusBadRequest, "Invalid request body",
+			"'@odata.id' must be a string"); err != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, err)
+		}
+		return
+	}
+
+	// Validate and extract the target entity key from @odata.id
+	targetKey, err := h.validateAndExtractEntityKey(odataIDStr, navProp.NavigationTarget)
+	if err != nil {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid @odata.id",
+			err.Error()); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	}
+
+	// Add the reference to the collection navigation property
+	if err := h.addNavigationPropertyReference(entityKey, navProp, targetKey); err != nil {
+		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError,
+			fmt.Sprintf("Failed to add navigation property reference: %v", err)); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	}
+
+	// Success - return 204 No Content
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleDeleteNavigationPropertyRef handles DELETE requests to remove a navigation property reference
+// Example: DELETE Products(1)/Category/$ref (single-valued)
+// Example: DELETE Products(1)/RelatedProducts(2)/$ref (collection - handled here by extracting key from navigation property)
+func (h *EntityHandler) handleDeleteNavigationPropertyRef(w http.ResponseWriter, r *http.Request, entityKey string, navigationProperty string) {
+	// Check if the navigation property contains a key (e.g., RelatedProducts(2))
+	navPropName, targetKey := h.parseNavigationPropertyWithKey(navigationProperty)
+	
+	// Find and validate the navigation property
+	navProp := h.findNavigationProperty(navPropName)
+	if navProp == nil {
+		if err := response.WriteError(w, http.StatusNotFound, "Navigation property not found",
+			fmt.Sprintf("'%s' is not a valid navigation property for %s", navPropName, h.metadata.EntitySetName)); err != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, err)
+		}
+		return
+	}
+
+	// If this is a collection navigation property with a target key specified
+	if navProp.NavigationIsArray && targetKey != "" {
+		// DELETE specific reference from collection: EntitySet(key)/NavProp(targetKey)/$ref
+		if err := h.deleteCollectionNavigationPropertyReference(entityKey, navProp, targetKey); err != nil {
+			if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError,
+				fmt.Sprintf("Failed to delete navigation property reference: %v", err)); writeErr != nil {
+				fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			}
+			return
+		}
+	} else if navProp.NavigationIsArray && targetKey == "" {
+		// Collection navigation property without target key specified
+		if err := response.WriteError(w, http.StatusBadRequest, "Invalid request",
+			"DELETE $ref on collection navigation properties requires specifying the target entity key. Use EntitySet(key)/NavigationProperty(targetKey)/$ref"); err != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, err)
+		}
+		return
+	} else {
+		// Single-valued navigation property
+		// Remove the reference by setting the navigation property to null
+		if err := h.deleteNavigationPropertyReference(entityKey, navProp); err != nil {
+			if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError,
+				fmt.Sprintf("Failed to delete navigation property reference: %v", err)); writeErr != nil {
+				fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			}
+			return
+		}
+	}
+
+	// Success - return 204 No Content
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// parseNavigationPropertyWithKey parses a navigation property that may contain a key
+// Example: "RelatedProducts(2)" returns ("RelatedProducts", "2")
+// Example: "Category" returns ("Category", "")
+func (h *EntityHandler) parseNavigationPropertyWithKey(navigationProperty string) (string, string) {
+	if idx := strings.Index(navigationProperty, "("); idx != -1 {
+		if strings.HasSuffix(navigationProperty, ")") {
+			navPropName := navigationProperty[:idx]
+			targetKey := navigationProperty[idx+1 : len(navigationProperty)-1]
+			return navPropName, targetKey
+		}
+	}
+	return navigationProperty, ""
+}
+
+// validateAndExtractEntityKey validates an @odata.id URL and extracts the entity key
+// Example: http://localhost:8080/Products(1) -> "1"
+// The targetEntityType is the entity type name (e.g., "Product"), but we need to find the entity set name
+func (h *EntityHandler) validateAndExtractEntityKey(odataID string, targetEntityType string) (string, error) {
+	// Get the target entity metadata to find the correct entity set name
+	targetMetadata, err := h.getTargetMetadata(targetEntityType)
+	if err != nil {
+		return "", fmt.Errorf("invalid target entity type '%s': %w", targetEntityType, err)
+	}
+
+	targetEntitySet := targetMetadata.EntitySetName
+	
+	// Parse the @odata.id URL to extract entity set and key
+	// The URL format should be: http://server/EntitySet(key) or http://server/EntitySet(key1=value1,key2=value2)
+	
+	// Find the entity set name in the URL
+	entitySetIndex := strings.LastIndex(odataID, "/"+targetEntitySet+"(")
+	if entitySetIndex == -1 {
+		return "", fmt.Errorf("invalid @odata.id: expected entity set '%s' (for entity type '%s')", targetEntitySet, targetEntityType)
+	}
+
+	// Extract the key portion after EntitySet(
+	keyStart := entitySetIndex + len("/"+targetEntitySet+"(")
+	keyEnd := strings.Index(odataID[keyStart:], ")")
+	if keyEnd == -1 {
+		return "", fmt.Errorf("invalid @odata.id: missing closing parenthesis")
+	}
+
+	key := odataID[keyStart : keyStart+keyEnd]
+	if key == "" {
+		return "", fmt.Errorf("invalid @odata.id: empty key")
+	}
+
+	return key, nil
+}
+
+// updateNavigationPropertyReference updates a single-valued navigation property reference
+func (h *EntityHandler) updateNavigationPropertyReference(entityKey string, navProp *metadata.PropertyMetadata, targetKey string) error {
+	// Get the target entity metadata to find the foreign key fields
+	targetMetadata, err := h.getTargetMetadata(navProp.NavigationTarget)
+	if err != nil {
+		return fmt.Errorf("failed to get target metadata: %w", err)
+	}
+
+	// Fetch the parent entity
+	parent := reflect.New(h.metadata.EntityType).Interface()
+	db, err := h.buildKeyQuery(entityKey)
+	if err != nil {
+		return fmt.Errorf("invalid entity key: %w", err)
+	}
+	if err := db.First(parent).Error; err != nil {
+		return fmt.Errorf("parent entity not found: %w", err)
+	}
+
+	// Fetch the target entity to verify it exists and get its key value
+	target := reflect.New(targetMetadata.EntityType).Interface()
+	targetDB, err := h.buildTargetKeyQuery(targetKey, targetMetadata)
+	if err != nil {
+		return fmt.Errorf("invalid target key: %w", err)
+	}
+	if err := targetDB.First(target).Error; err != nil {
+		return fmt.Errorf("target entity not found: %w", err)
+	}
+
+	// Extract the target entity's key value(s)
+	targetValue := reflect.ValueOf(target).Elem()
+	
+	// Update the foreign key field(s) in the parent entity
+	// This assumes GORM convention: NavigationPropertyID field in parent references ID in target
+	parentValue := reflect.ValueOf(parent).Elem()
+	
+	// For each key property in the target, find the corresponding foreign key field in the parent
+	for _, keyProp := range targetMetadata.KeyProperties {
+		targetKeyValue := targetValue.FieldByName(keyProp.Name)
+		if !targetKeyValue.IsValid() {
+			continue
+		}
+
+		// Build foreign key field name: NavigationPropertyName + KeyPropertyName
+		foreignKeyFieldName := navProp.Name + keyProp.Name
+		foreignKeyField := parentValue.FieldByName(foreignKeyFieldName)
+		
+		if foreignKeyField.IsValid() && foreignKeyField.CanSet() {
+			// Handle type conversion if the foreign key field is a pointer
+			if foreignKeyField.Kind() == reflect.Ptr {
+				// Create a new pointer of the correct type and set it
+				if targetKeyValue.CanAddr() {
+					foreignKeyField.Set(targetKeyValue.Addr())
+				} else {
+					// Create a new value and copy the data
+					newValue := reflect.New(foreignKeyField.Type().Elem())
+					newValue.Elem().Set(targetKeyValue)
+					foreignKeyField.Set(newValue)
+				}
+			} else {
+				// Direct assignment for non-pointer fields
+				foreignKeyField.Set(targetKeyValue)
+			}
+		}
+	}
+
+	// Save the updated parent entity
+	if err := h.db.Save(parent).Error; err != nil {
+		return fmt.Errorf("failed to save entity: %w", err)
+	}
+
+	return nil
+}
+
+// addNavigationPropertyReference adds a reference to a collection navigation property
+func (h *EntityHandler) addNavigationPropertyReference(entityKey string, navProp *metadata.PropertyMetadata, targetKey string) error {
+	// Get the target entity metadata
+	targetMetadata, err := h.getTargetMetadata(navProp.NavigationTarget)
+	if err != nil {
+		return fmt.Errorf("failed to get target metadata: %w", err)
+	}
+
+	// Fetch the parent entity
+	parent := reflect.New(h.metadata.EntityType).Interface()
+	db, err := h.buildKeyQuery(entityKey)
+	if err != nil {
+		return fmt.Errorf("invalid entity key: %w", err)
+	}
+	if err := db.First(parent).Error; err != nil {
+		return fmt.Errorf("parent entity not found: %w", err)
+	}
+
+	// Fetch the target entity to verify it exists
+	target := reflect.New(targetMetadata.EntityType).Interface()
+	targetDB, err := h.buildTargetKeyQuery(targetKey, targetMetadata)
+	if err != nil {
+		return fmt.Errorf("invalid target key: %w", err)
+	}
+	if err := targetDB.First(target).Error; err != nil {
+		return fmt.Errorf("target entity not found: %w", err)
+	}
+
+	// Use GORM's association API to add the relationship
+	parentValue := reflect.ValueOf(parent).Elem()
+	navField := parentValue.FieldByName(navProp.Name)
+	
+	if !navField.IsValid() {
+		return fmt.Errorf("navigation property field not found")
+	}
+
+	// Use GORM Model().Association() to append the target entity
+	if err := h.db.Model(parent).Association(navProp.Name).Append(target); err != nil {
+		return fmt.Errorf("failed to add association: %w", err)
+	}
+
+	return nil
+}
+
+// deleteNavigationPropertyReference removes a single-valued navigation property reference
+func (h *EntityHandler) deleteNavigationPropertyReference(entityKey string, navProp *metadata.PropertyMetadata) error {
+	// Fetch the parent entity
+	parent := reflect.New(h.metadata.EntityType).Interface()
+	db, err := h.buildKeyQuery(entityKey)
+	if err != nil {
+		return fmt.Errorf("invalid entity key: %w", err)
+	}
+	if err := db.First(parent).Error; err != nil {
+		return fmt.Errorf("parent entity not found: %w", err)
+	}
+
+	// Get the target entity metadata to find the foreign key fields
+	targetMetadata, err := h.getTargetMetadata(navProp.NavigationTarget)
+	if err != nil {
+		return fmt.Errorf("failed to get target metadata: %w", err)
+	}
+
+	// Set the foreign key field(s) to null/zero value
+	parentValue := reflect.ValueOf(parent).Elem()
+	
+	for _, keyProp := range targetMetadata.KeyProperties {
+		// Build foreign key field name: NavigationPropertyName + KeyPropertyName
+		foreignKeyFieldName := navProp.Name + keyProp.Name
+		foreignKeyField := parentValue.FieldByName(foreignKeyFieldName)
+		
+		if foreignKeyField.IsValid() && foreignKeyField.CanSet() {
+			// Set to zero value (null for nullable types, 0 for numeric types)
+			foreignKeyField.Set(reflect.Zero(foreignKeyField.Type()))
+		}
+	}
+
+	// Save the updated parent entity
+	if err := h.db.Save(parent).Error; err != nil {
+		return fmt.Errorf("failed to save entity: %w", err)
+	}
+
+	return nil
+}
+
+// deleteCollectionNavigationPropertyReference removes a specific reference from a collection navigation property
+func (h *EntityHandler) deleteCollectionNavigationPropertyReference(entityKey string, navProp *metadata.PropertyMetadata, targetKey string) error {
+	// Get the target entity metadata
+	targetMetadata, err := h.getTargetMetadata(navProp.NavigationTarget)
+	if err != nil {
+		return fmt.Errorf("failed to get target metadata: %w", err)
+	}
+
+	// Fetch the parent entity
+	parent := reflect.New(h.metadata.EntityType).Interface()
+	db, err := h.buildKeyQuery(entityKey)
+	if err != nil {
+		return fmt.Errorf("invalid entity key: %w", err)
+	}
+	if err := db.First(parent).Error; err != nil {
+		return fmt.Errorf("parent entity not found: %w", err)
+	}
+
+	// Fetch the target entity to verify it exists
+	target := reflect.New(targetMetadata.EntityType).Interface()
+	targetDB, err := h.buildTargetKeyQuery(targetKey, targetMetadata)
+	if err != nil {
+		return fmt.Errorf("invalid target key: %w", err)
+	}
+	if err := targetDB.First(target).Error; err != nil {
+		return fmt.Errorf("target entity not found: %w", err)
+	}
+
+	// Use GORM's association API to delete the relationship
+	if err := h.db.Model(parent).Association(navProp.Name).Delete(target); err != nil {
+		return fmt.Errorf("failed to delete association: %w", err)
+	}
+
+	return nil
+}
+
+// buildTargetKeyQuery builds a database query to find an entity by key in a different entity set
+func (h *EntityHandler) buildTargetKeyQuery(keyString string, targetMetadata *metadata.EntityMetadata) (*gorm.DB, error) {
+	// Parse the key string and build query conditions
+	// This reuses the logic from buildKeyQuery but with target metadata
+	
+	db := h.db.Model(reflect.New(targetMetadata.EntityType).Interface())
+	
+	// Check if this is a composite key (contains '=' or ',')
+	if strings.Contains(keyString, "=") || strings.Contains(keyString, ",") {
+		// Composite key: ProductID=1,LanguageKey='EN'
+		keyPairs := strings.Split(keyString, ",")
+		for _, pair := range keyPairs {
+			parts := strings.SplitN(pair, "=", 2)
+			if len(parts) != 2 {
+				return nil, fmt.Errorf("invalid composite key format: %s", keyString)
+			}
+			
+			keyName := strings.TrimSpace(parts[0])
+			keyValue := strings.TrimSpace(parts[1])
+			
+			// Remove quotes if present
+			keyValue = strings.Trim(keyValue, "'\"")
+			
+			// Find the key property in metadata
+			var keyProp *metadata.PropertyMetadata
+			for i := range targetMetadata.KeyProperties {
+				if targetMetadata.KeyProperties[i].Name == keyName || targetMetadata.KeyProperties[i].JsonName == keyName {
+					keyProp = &targetMetadata.KeyProperties[i]
+					break
+				}
+			}
+			
+			if keyProp == nil {
+				return nil, fmt.Errorf("key property '%s' not found", keyName)
+			}
+			
+			// Add where condition using GORM column name
+			db = db.Where(fmt.Sprintf("%s = ?", keyProp.Name), keyValue)
+		}
+	} else {
+		// Single key
+		if len(targetMetadata.KeyProperties) != 1 {
+			return nil, fmt.Errorf("entity requires composite key, but single key provided")
+		}
+		
+		keyProp := targetMetadata.KeyProperties[0]
+		keyValue := strings.Trim(keyString, "'\"")
+		db = db.Where(fmt.Sprintf("%s = ?", keyProp.Name), keyValue)
+	}
+	
+	return db, nil
 }

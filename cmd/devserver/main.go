@@ -12,21 +12,34 @@ import (
 // seedDatabase initializes the database with sample data
 // This function clears all existing data and resets to the default state
 func seedDatabase(db *gorm.DB) error {
-	// Clear existing data
+	// Clear existing data in order (respecting foreign key constraints)
 	if err := db.Exec("DELETE FROM product_descriptions").Error; err != nil {
 		return fmt.Errorf("failed to clear product descriptions: %w", err)
 	}
+	if err := db.Exec("DELETE FROM product_relations").Error; err != nil {
+		// This is a many-to-many table, so it might not exist on first run
+		log.Printf("Info: Could not clear product relations: %v", err)
+	}
 	if err := db.Exec("DELETE FROM products").Error; err != nil {
 		return fmt.Errorf("failed to clear products: %w", err)
+	}
+	if err := db.Exec("DELETE FROM categories").Error; err != nil {
+		return fmt.Errorf("failed to clear categories: %w", err)
 	}
 	if err := db.Exec("DELETE FROM company_infos").Error; err != nil {
 		return fmt.Errorf("failed to clear company info: %w", err)
 	}
 
 	// Reset auto-increment counters (SQLite specific)
-	if err := db.Exec("DELETE FROM sqlite_sequence WHERE name IN ('products', 'product_descriptions', 'company_infos')").Error; err != nil {
+	if err := db.Exec("DELETE FROM sqlite_sequence WHERE name IN ('products', 'categories', 'product_descriptions', 'company_infos')").Error; err != nil {
 		// This is not critical, just continue
 		log.Printf("Warning: Could not reset auto-increment counters: %v", err)
+	}
+
+	// Seed categories first (products reference categories)
+	sampleCategories := GetSampleCategories()
+	if err := db.Create(&sampleCategories).Error; err != nil {
+		return fmt.Errorf("failed to seed categories: %w", err)
 	}
 
 	// Seed products
@@ -47,8 +60,8 @@ func seedDatabase(db *gorm.DB) error {
 		return fmt.Errorf("failed to seed company info: %w", err)
 	}
 
-	fmt.Printf("Database seeded with %d products, %d descriptions, and company info\n",
-		len(sampleProducts), len(sampleDescriptions))
+	fmt.Printf("Database seeded with %d categories, %d products, %d descriptions, and company info\n",
+		len(sampleCategories), len(sampleProducts), len(sampleDescriptions))
 	return nil
 }
 
@@ -59,8 +72,8 @@ func main() {
 		log.Fatal("Failed to connect to database:", err)
 	}
 
-	// Auto-migrate the Product, ProductDescription, and CompanyInfo models
-	if err := db.AutoMigrate(&Product{}, &ProductDescription{}, &CompanyInfo{}); err != nil {
+	// Auto-migrate the Product, ProductDescription, Category, and CompanyInfo models
+	if err := db.AutoMigrate(&Category{}, &Product{}, &ProductDescription{}, &CompanyInfo{}); err != nil {
 		log.Fatal("Failed to migrate database:", err)
 	}
 
@@ -72,7 +85,10 @@ func main() {
 	// Create OData service
 	service := odata.NewService(db)
 
-	// Register the Product and ProductDescription entities
+	// Register the Category, Product and ProductDescription entities
+	if err := service.RegisterEntity(&Category{}); err != nil {
+		log.Fatal("Failed to register Category entity:", err)
+	}
 	if err := service.RegisterEntity(&Product{}); err != nil {
 		log.Fatal("Failed to register Product entity:", err)
 	}
@@ -100,6 +116,8 @@ func main() {
 	fmt.Println("  Service Document:     http://localhost:8080/")
 	fmt.Println("  Metadata (XML):       http://localhost:8080/$metadata")
 	fmt.Println("  Metadata (JSON):      http://localhost:8080/$metadata?$format=json")
+	fmt.Println("  Categories:           http://localhost:8080/Categories")
+	fmt.Println("  Single Category:      http://localhost:8080/Categories(1)")
 	fmt.Println("  Products:             http://localhost:8080/Products")
 	fmt.Println("  Single Product:       http://localhost:8080/Products(1)")
 	fmt.Println("  ProductDescriptions:  http://localhost:8080/ProductDescriptions")

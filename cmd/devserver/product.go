@@ -19,6 +19,15 @@ type Dimensions struct {
 	Unit   string  `json:"Unit" odata:"maxlength=10"` // e.g., "cm", "in"
 }
 
+// Category represents a product category entity
+type Category struct {
+	ID          uint   `json:"ID" gorm:"primaryKey" odata:"key"`
+	Name        string `json:"Name" gorm:"not null;unique" odata:"required,maxlength=100"`
+	Description string `json:"Description" odata:"maxlength=500"`
+	// Navigation property for Products
+	Products []Product `json:"Products,omitempty" gorm:"foreignKey:CategoryID;references:ID"`
+}
+
 // ProductStatus represents product status as a flags enum
 type ProductStatus int
 
@@ -37,18 +46,20 @@ const (
 
 // Product represents a product entity for the development server with rich metadata
 type Product struct {
-	ID        uint          `json:"ID" gorm:"primaryKey" odata:"key"`
-	Name      string        `json:"Name" gorm:"not null" odata:"required,maxlength=100,searchable"`
-	Price     float64       `json:"Price" gorm:"not null" odata:"required,precision=10,scale=2"`
-	Category  string        `json:"Category" gorm:"not null" odata:"required,maxlength=50,searchable"`
-	Status    ProductStatus `json:"Status" gorm:"not null" odata:"enum=ProductStatus,flags"`
-	Version   int           `json:"Version" gorm:"default:1" odata:"etag"` // Version field used for optimistic concurrency control via ETag
-	CreatedAt time.Time     `json:"CreatedAt" gorm:"not null"`
+	ID         uint          `json:"ID" gorm:"primaryKey" odata:"key"`
+	Name       string        `json:"Name" gorm:"not null" odata:"required,maxlength=100,searchable"`
+	Price      float64       `json:"Price" gorm:"not null" odata:"required,precision=10,scale=2"`
+	CategoryID *uint         `json:"CategoryID" odata:"nullable"` // Foreign key for Category navigation property
+	Status     ProductStatus `json:"Status" gorm:"not null" odata:"enum=ProductStatus,flags"`
+	Version    int           `json:"Version" gorm:"default:1" odata:"etag"` // Version field used for optimistic concurrency control via ETag
+	CreatedAt  time.Time     `json:"CreatedAt" gorm:"not null"`
 	// Complex type properties
 	ShippingAddress *Address    `json:"ShippingAddress,omitempty" gorm:"embedded;embeddedPrefix:shipping_" odata:"nullable"`
 	Dimensions      *Dimensions `json:"Dimensions,omitempty" gorm:"embedded;embeddedPrefix:dim_" odata:"nullable"`
-	// Navigation property for ProductDescriptions
-	Descriptions []ProductDescription `json:"Descriptions" gorm:"foreignKey:ProductID;references:ID"`
+	// Navigation properties
+	Category         *Category            `json:"Category,omitempty" gorm:"foreignKey:CategoryID;references:ID"`
+	Descriptions     []ProductDescription `json:"Descriptions,omitempty" gorm:"foreignKey:ProductID;references:ID"`
+	RelatedProducts  []Product            `json:"RelatedProducts,omitempty" gorm:"many2many:product_relations;"`
 }
 
 // ProductDescription represents a multilingual product description entity with rich metadata
@@ -63,15 +74,19 @@ type ProductDescription struct {
 
 // GetSampleProducts returns sample product data for seeding the database
 func GetSampleProducts() []Product {
+	categoryElectronics := uint(1)
+	categoryKitchen := uint(2)
+	categoryFurniture := uint(3)
+	
 	return []Product{
 		{
-			ID:        1,
-			Name:      "Laptop",
-			Price:     999.99,
-			Category:  "Electronics",
-			Status:    ProductStatusInStock | ProductStatusFeatured, // In stock and featured
-			Version:   1,
-			CreatedAt: time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC),
+			ID:         1,
+			Name:       "Laptop",
+			Price:      999.99,
+			CategoryID: &categoryElectronics,
+			Status:     ProductStatusInStock | ProductStatusFeatured, // In stock and featured
+			Version:    1,
+			CreatedAt:  time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC),
 			ShippingAddress: &Address{
 				Street:     "123 Tech Way",
 				City:       "Seattle",
@@ -87,13 +102,13 @@ func GetSampleProducts() []Product {
 			},
 		},
 		{
-			ID:        2,
-			Name:      "Wireless Mouse",
-			Price:     29.99,
-			Category:  "Electronics",
-			Status:    ProductStatusInStock | ProductStatusOnSale, // In stock and on sale
-			Version:   1,
-			CreatedAt: time.Date(2024, 3, 20, 14, 45, 0, 0, time.UTC),
+			ID:         2,
+			Name:       "Wireless Mouse",
+			Price:      29.99,
+			CategoryID: &categoryElectronics,
+			Status:     ProductStatusInStock | ProductStatusOnSale, // In stock and on sale
+			Version:    1,
+			CreatedAt:  time.Date(2024, 3, 20, 14, 45, 0, 0, time.UTC),
 			ShippingAddress: &Address{
 				Street:     "456 Innovation Blvd",
 				City:       "San Francisco",
@@ -109,13 +124,13 @@ func GetSampleProducts() []Product {
 			},
 		},
 		{
-			ID:        3,
-			Name:      "Coffee Mug",
-			Price:     15.50,
-			Category:  "Kitchen",
-			Status:    ProductStatusInStock, // Only in stock
-			Version:   1,
-			CreatedAt: time.Date(2023, 11, 5, 9, 15, 0, 0, time.UTC),
+			ID:         3,
+			Name:       "Coffee Mug",
+			Price:      15.50,
+			CategoryID: &categoryKitchen,
+			Status:     ProductStatusInStock, // Only in stock
+			Version:    1,
+			CreatedAt:  time.Date(2023, 11, 5, 9, 15, 0, 0, time.UTC),
 			ShippingAddress: &Address{
 				Street:     "789 Home St",
 				City:       "Portland",
@@ -131,25 +146,25 @@ func GetSampleProducts() []Product {
 			},
 		},
 		{
-			ID:        4,
-			Name:      "Office Chair",
-			Price:     249.99,
-			Category:  "Furniture",
-			Status:    ProductStatusDiscontinued, // Discontinued
-			Version:   1,
-			CreatedAt: time.Date(2023, 8, 12, 16, 20, 0, 0, time.UTC),
+			ID:         4,
+			Name:       "Office Chair",
+			Price:      249.99,
+			CategoryID: &categoryFurniture,
+			Status:     ProductStatusDiscontinued, // Discontinued
+			Version:    1,
+			CreatedAt:  time.Date(2023, 8, 12, 16, 20, 0, 0, time.UTC),
 			// No shipping address or dimensions (testing null complex types)
 			ShippingAddress: nil,
 			Dimensions:      nil,
 		},
 		{
-			ID:        5,
-			Name:      "Smartphone",
-			Price:     799.99,
-			Category:  "Electronics",
-			Status:    ProductStatusInStock | ProductStatusOnSale | ProductStatusFeatured, // In stock, on sale, and featured
-			Version:   1,
-			CreatedAt: time.Date(2024, 6, 28, 11, 0, 0, 0, time.UTC),
+			ID:         5,
+			Name:       "Smartphone",
+			Price:      799.99,
+			CategoryID: &categoryElectronics,
+			Status:     ProductStatusInStock | ProductStatusOnSale | ProductStatusFeatured, // In stock, on sale, and featured
+			Version:    1,
+			CreatedAt:  time.Date(2024, 6, 28, 11, 0, 0, 0, time.UTC),
 			ShippingAddress: &Address{
 				Street:     "321 Mobile Ave",
 				City:       "Austin",
@@ -163,6 +178,27 @@ func GetSampleProducts() []Product {
 				Height: 0.8,
 				Unit:   "cm",
 			},
+		},
+	}
+}
+
+// GetSampleCategories returns sample category data for seeding the database
+func GetSampleCategories() []Category {
+	return []Category{
+		{
+			ID:          1,
+			Name:        "Electronics",
+			Description: "Electronic devices and accessories",
+		},
+		{
+			ID:          2,
+			Name:        "Kitchen",
+			Description: "Kitchen appliances and utensils",
+		},
+		{
+			ID:          3,
+			Name:        "Furniture",
+			Description: "Home and office furniture",
 		},
 	}
 }
