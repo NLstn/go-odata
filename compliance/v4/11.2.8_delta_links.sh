@@ -61,7 +61,7 @@ test_4() {
 
 # Test 5: Delta with $filter
 test_5() {
-    local RESPONSE=$(http_get "Products?\$filter=Price%20gt%2010" "-H" "Prefer: odata.track-changes")
+    local RESPONSE=$(http_get "$SERVER_URL/Products?\$filter=Price%20gt%2010" "-H" "Prefer: odata.track-changes")
     local STATUS=$(echo "$RESPONSE" | tail -1)
     if [ "$STATUS" = "200" ] || [ "$STATUS" = "501" ]; then
         return 0
@@ -71,7 +71,7 @@ test_5() {
 
 # Test 6: Delta token parameter handling
 test_6() {
-    local STATUS=$(http_get "Products?\$deltatoken=test-token" | tail -1)
+    local STATUS=$(http_get "$SERVER_URL/Products?\$deltatoken=test-token" | tail -1)
     if [ "$STATUS" = "200" ] || [ "$STATUS" = "410" ] || [ "$STATUS" = "400" ] || [ "$STATUS" = "501" ]; then
         return 0
     fi
