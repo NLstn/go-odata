@@ -198,7 +198,7 @@ func WriteEntityReference(w http.ResponseWriter, r *http.Request, entityID strin
 	w.WriteHeader(http.StatusOK)
 
 	encoder := json.NewEncoder(w)
-	encoder.SetIndent("", "  ")
+	encoder.SetEscapeHTML(false)
 	return encoder.Encode(response)
 }
 
@@ -241,7 +241,7 @@ func WriteEntityReferenceCollection(w http.ResponseWriter, r *http.Request, enti
 	w.WriteHeader(http.StatusOK)
 
 	encoder := json.NewEncoder(w)
-	encoder.SetIndent("", "  ")
+	encoder.SetEscapeHTML(false)
 	return encoder.Encode(response)
 }
 
@@ -285,7 +285,7 @@ func WriteODataCollection(w http.ResponseWriter, r *http.Request, entitySetName 
 
 	// Encode and write the response
 	encoder := json.NewEncoder(w)
-	encoder.SetIndent("", "  ")
+	encoder.SetEscapeHTML(false)
 	return encoder.Encode(response)
 }
 
@@ -332,7 +332,7 @@ func WriteODataCollectionWithNavigation(w http.ResponseWriter, r *http.Request, 
 
 	// Encode and write the response
 	encoder := json.NewEncoder(w)
-	encoder.SetIndent("", "  ")
+	encoder.SetEscapeHTML(false)
 	return encoder.Encode(response)
 }
 
@@ -732,7 +732,7 @@ func WriteODataError(w http.ResponseWriter, httpStatusCode int, odataError *ODat
 	w.WriteHeader(httpStatusCode)
 
 	encoder := json.NewEncoder(w)
-	encoder.SetIndent("", "  ")
+	encoder.SetEscapeHTML(false)
 	return encoder.Encode(errorResponse)
 }
 
@@ -802,7 +802,7 @@ func WriteServiceDocument(w http.ResponseWriter, r *http.Request, entitySets []s
 	}
 
 	encoder := json.NewEncoder(w)
-	encoder.SetIndent("", "  ")
+	encoder.SetEscapeHTML(false)
 	return encoder.Encode(serviceDoc)
 }
 
