@@ -535,6 +535,24 @@ func (h *EntityHandler) HandleEntityRef(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
+	// Validate that $expand and $select are not used with $ref
+	// According to OData v4 spec, $ref does not support $expand or $select
+	queryParams := r.URL.Query()
+	if queryParams.Get("$expand") != "" {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions,
+			"$expand is not supported with $ref"); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	}
+	if queryParams.Get("$select") != "" {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions,
+			"$select is not supported with $ref"); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	}
+
 	// Fetch the entity to ensure it exists
 	entity := reflect.New(h.metadata.EntityType).Interface()
 	db, err := h.buildKeyQuery(entityKey)
@@ -572,6 +590,24 @@ func (h *EntityHandler) HandleCollectionRef(w http.ResponseWriter, r *http.Reque
 		if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
 			fmt.Sprintf("Method %s is not supported for collection references", r.Method)); err != nil {
 			fmt.Printf(LogMsgErrorWritingErrorResponse, err)
+		}
+		return
+	}
+
+	// Validate that $expand and $select are not used with $ref
+	// According to OData v4 spec, $ref only supports $filter, $top, $skip, $orderby, and $count
+	queryParams := r.URL.Query()
+	if queryParams.Get("$expand") != "" {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions,
+			"$expand is not supported with $ref"); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	}
+	if queryParams.Get("$select") != "" {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions,
+			"$select is not supported with $ref"); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
 		}
 		return
 	}
