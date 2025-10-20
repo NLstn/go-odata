@@ -153,12 +153,34 @@ test_multiple_errors() {
 test_error_valid_json() {
     local RESPONSE=$(http_get_body "$SERVER_URL/Products(999999)")
     
-    # Try to parse as JSON using grep for basic structure
-    if echo "$RESPONSE" | grep -q '^{.*}$'; then
-        return 0
+    # Try to parse as JSON - check if it's valid JSON structure
+    # Remove newlines and whitespace for validation, or use jq/python if available
+    if command -v jq &> /dev/null; then
+        # Use jq if available for proper JSON validation
+        if echo "$RESPONSE" | jq . > /dev/null 2>&1; then
+            return 0
+        else
+            echo "  Details: Error response is not valid JSON"
+            return 1
+        fi
+    elif command -v python3 &> /dev/null; then
+        # Use python3 as fallback
+        if echo "$RESPONSE" | python3 -m json.tool > /dev/null 2>&1; then
+            return 0
+        else
+            echo "  Details: Error response is not valid JSON"
+            return 1
+        fi
     else
-        echo "  Details: Error response is not valid JSON"
-        return 1
+        # Fallback to basic check - strip whitespace and check structure
+        # Accept both single-line and multi-line JSON
+        local STRIPPED=$(echo "$RESPONSE" | tr -d '\n\r\t ' | grep '^{.*}$')
+        if [ -n "$STRIPPED" ]; then
+            return 0
+        else
+            echo "  Details: Error response is not valid JSON"
+            return 1
+        fi
     fi
 }
 
