@@ -53,6 +53,14 @@ func (h *EntityHandler) handleGetCollection(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	// Validate query options for complex types
+	if err := h.validateComplexTypeUsage(queryOptions); err != nil {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, "Unsupported query option", err.Error()); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	}
+
 	// Apply odata.maxpagesize preference if specified
 	if pref.MaxPageSize != nil {
 		queryOptions = h.applyMaxPageSize(queryOptions, *pref.MaxPageSize)
@@ -642,4 +650,58 @@ func (h *EntityHandler) applySkipTokenFilter(db *gorm.DB, queryOptions *query.Qu
 	}
 
 	return db
+}
+
+// validateComplexTypeUsage validates that complex types are not used in unsupported operations
+func (h *EntityHandler) validateComplexTypeUsage(queryOptions *query.QueryOptions) error {
+	// Check filter for complex type usage
+	if queryOptions.Filter != nil {
+		if err := h.validateFilterForComplexTypes(queryOptions.Filter); err != nil {
+			return err
+		}
+	}
+
+	// Check orderby for complex type usage
+	for _, orderBy := range queryOptions.OrderBy {
+		for _, prop := range h.metadata.Properties {
+			if (prop.JsonName == orderBy.Property || prop.Name == orderBy.Property) && prop.IsComplexType {
+				return fmt.Errorf("ordering by complex type property '%s' is not supported", orderBy.Property)
+			}
+		}
+	}
+
+	return nil
+}
+
+// validateFilterForComplexTypes recursively validates a filter expression for complex type usage
+func (h *EntityHandler) validateFilterForComplexTypes(filter *query.FilterExpression) error {
+	if filter == nil {
+		return nil
+	}
+
+	// Recursively validate nested logical expressions
+	if filter.Logical != "" {
+		if err := h.validateFilterForComplexTypes(filter.Left); err != nil {
+			return err
+		}
+		if err := h.validateFilterForComplexTypes(filter.Right); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	// Check if the property being filtered is a complex type
+	if filter.Property != "" {
+		// Handle nested property paths (e.g., "ShippingAddress/City")
+		propertyPath := strings.Split(filter.Property, "/")
+		rootProperty := propertyPath[0]
+
+		for _, prop := range h.metadata.Properties {
+			if (prop.JsonName == rootProperty || prop.Name == rootProperty) && prop.IsComplexType {
+				return fmt.Errorf("filtering by complex type property '%s' is not supported", filter.Property)
+			}
+		}
+	}
+
+	return nil
 }
