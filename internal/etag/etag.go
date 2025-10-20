@@ -24,6 +24,11 @@ func Generate(entity interface{}, meta *metadata.EntityMetadata) string {
 		entityValue = entityValue.Elem()
 	}
 
+	// Handle map entities (from $select operations)
+	if entityValue.Kind() == reflect.Map {
+		return generateFromMap(entity, meta)
+	}
+
 	// Get the ETag field value
 	fieldValue := entityValue.FieldByName(meta.ETagProperty.FieldName)
 	if !fieldValue.IsValid() {
@@ -48,6 +53,56 @@ func Generate(entity interface{}, meta *metadata.EntityMetadata) string {
 		}
 	default:
 		etagSource = fmt.Sprintf("%v", fieldValue.Interface())
+	}
+
+	// Generate SHA256 hash of the ETag source
+	hash := sha256.Sum256([]byte(etagSource))
+	hashStr := hex.EncodeToString(hash[:])
+
+	// Return as quoted ETag (weak ETag format: W/"hash")
+	return fmt.Sprintf("W/\"%s\"", hashStr)
+}
+
+// generateFromMap generates an ETag from a map entity (from $select operations)
+func generateFromMap(entity interface{}, meta *metadata.EntityMetadata) string {
+	entityMap, ok := entity.(map[string]interface{})
+	if !ok {
+		return ""
+	}
+
+	// Try to get the ETag field value using JsonName first, then FieldName
+	var fieldValue interface{}
+	var found bool
+
+	// Try JsonName
+	if meta.ETagProperty.JsonName != "" {
+		fieldValue, found = entityMap[meta.ETagProperty.JsonName]
+	}
+	
+	// If not found, try FieldName
+	if !found && meta.ETagProperty.FieldName != "" {
+		fieldValue, found = entityMap[meta.ETagProperty.FieldName]
+	}
+
+	if !found || fieldValue == nil {
+		return ""
+	}
+
+	// Convert the field value to a string for hashing
+	var etagSource string
+	switch v := fieldValue.(type) {
+	case string:
+		etagSource = v
+	case int, int8, int16, int32, int64:
+		etagSource = fmt.Sprintf("%d", v)
+	case uint, uint8, uint16, uint32, uint64:
+		etagSource = fmt.Sprintf("%d", v)
+	case float32, float64:
+		etagSource = fmt.Sprintf("%v", v)
+	case time.Time:
+		etagSource = strconv.FormatInt(v.Unix(), 10)
+	default:
+		etagSource = fmt.Sprintf("%v", v)
 	}
 
 	// Generate SHA256 hash of the ETag source
