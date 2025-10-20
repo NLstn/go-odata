@@ -570,3 +570,147 @@ func TestActionReturningValue(t *testing.T) {
 		t.Errorf("Expected 'Hello from action', got %v", value)
 	}
 }
+
+// TestBoundFunctionOnNonExistentEntity tests that bound function on non-existent entity returns 404
+func TestBoundFunctionOnNonExistentEntity(t *testing.T) {
+	service, _ := setupActionFunctionTestService(t)
+
+	// Register a bound function
+	err := service.RegisterFunction(odata.FunctionDefinition{
+		Name:      "TestBoundFunction",
+		IsBound:   true,
+		EntitySet: "ActionTestProducts",
+		Parameters: []odata.ParameterDefinition{
+			{Name: "param", Type: reflect.TypeOf(""), Required: true},
+		},
+		ReturnType: reflect.TypeOf(""),
+		Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) (interface{}, error) {
+			return "result", nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("Failed to register function: %v", err)
+	}
+
+	// Try to invoke on non-existent entity
+	req := httptest.NewRequest(http.MethodGet, "/ActionTestProducts(999999)/TestBoundFunction?param=test", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	// Should return 404
+	if w.Code != http.StatusNotFound {
+		t.Errorf("Status = %v, want %v", w.Code, http.StatusNotFound)
+	}
+}
+
+// TestBoundActionOnNonExistentEntity tests that bound action on non-existent entity returns 404
+func TestBoundActionOnNonExistentEntity(t *testing.T) {
+	service, _ := setupActionFunctionTestService(t)
+
+	// Register a bound action
+	err := service.RegisterAction(odata.ActionDefinition{
+		Name:       "TestBoundAction",
+		IsBound:    true,
+		EntitySet:  "ActionTestProducts",
+		Parameters: []odata.ParameterDefinition{},
+		ReturnType: nil,
+		Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) error {
+			w.WriteHeader(http.StatusNoContent)
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("Failed to register action: %v", err)
+	}
+
+	// Try to invoke on non-existent entity
+	req := httptest.NewRequest(http.MethodPost, "/ActionTestProducts(999999)/TestBoundAction", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	// Should return 404
+	if w.Code != http.StatusNotFound {
+		t.Errorf("Status = %v, want %v", w.Code, http.StatusNotFound)
+	}
+}
+
+// TestActionParameterTypeValidation tests parameter type validation for actions
+func TestActionParameterTypeValidation(t *testing.T) {
+	service, _ := setupActionFunctionTestService(t)
+
+	// Register an action with typed parameter
+	err := service.RegisterAction(odata.ActionDefinition{
+		Name:    "TestTypedAction",
+		IsBound: false,
+		Parameters: []odata.ParameterDefinition{
+			{Name: "count", Type: reflect.TypeOf(int64(0)), Required: true},
+		},
+		ReturnType: nil,
+		Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) error {
+			w.WriteHeader(http.StatusNoContent)
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("Failed to register action: %v", err)
+	}
+
+	// Try to invoke with wrong parameter type (string instead of int)
+	body := []byte(`{"count": "invalid"}`)
+	req := httptest.NewRequest(http.MethodPost, "/TestTypedAction", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	// Should return 400 Bad Request
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+
+	// Verify error message mentions parameter type
+	var response map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&response); err == nil {
+		if errorObj, ok := response["error"].(map[string]interface{}); ok {
+			if message, ok := errorObj["message"].(string); ok {
+				if message != "Invalid parameters" {
+					t.Errorf("Expected 'Invalid parameters' message, got %v", message)
+				}
+			}
+		}
+	}
+}
+
+// TestFunctionParameterTypeValidation tests parameter type validation for functions
+func TestFunctionParameterTypeValidation(t *testing.T) {
+	service, _ := setupActionFunctionTestService(t)
+
+	// Register a function with typed parameter
+	err := service.RegisterFunction(odata.FunctionDefinition{
+		Name:    "TestTypedFunction",
+		IsBound: false,
+		Parameters: []odata.ParameterDefinition{
+			{Name: "rate", Type: reflect.TypeOf(float64(0)), Required: true},
+		},
+		ReturnType: reflect.TypeOf(""),
+		Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) (interface{}, error) {
+			return "result", nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("Failed to register function: %v", err)
+	}
+
+	// Try to invoke with wrong parameter type
+	req := httptest.NewRequest(http.MethodGet, "/TestTypedFunction?rate=invalid", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	// Should return 400 Bad Request
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+}
