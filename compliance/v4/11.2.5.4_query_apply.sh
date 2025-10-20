@@ -6,110 +6,74 @@
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/test_framework.sh"
-source "$SCRIPT_DIR/test_framework.sh"
-
-echo "======================================"
-echo "OData v4 Compliance Test"
-echo "Section: 11.2.5.4 System Query Option \$apply"
-echo "======================================"
-echo ""
-echo "Description: Validates \$apply query option for data aggregation"
-echo "             including groupby, aggregate, and filter transformations."
-echo ""
-echo "Spec Reference: https://docs.oasis-open.org/odata/odata-data-aggregation-ext/v4.0/odata-data-aggregation-ext-v4.0.html"
-echo ""
-
-
 
 # Test 1: Basic aggregate transformation
-echo "Test 1: \$apply with aggregate (count)"
-echo "  Request: GET $SERVER_URL/Products?\$apply=aggregate(\$count as Total)"
-RESPONSE=$(curl -s -w "\n%{http_code}" "$SERVER_URL/Products?\$apply=aggregate(\$count%20as%20Total)" 2>&1)
-HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-BODY=$(echo "$RESPONSE" | head -n -1)
-
-if [ "$HTTP_CODE" = "200" ]; then
-    if echo "$BODY" | grep -q '"Total"'; then
-        test_result "Aggregate \$count" "PASS"
+test_1() {
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$apply=aggregate(\$count%20as%20Total)")
+    if [ "$HTTP_CODE" = "200" ]; then
+        local BODY=$(http_get_body "$SERVER_URL/Products?\$apply=aggregate(\$count%20as%20Total)")
+        check_json_field "$BODY" "Total"
+    elif [ "$HTTP_CODE" = "501" ]; then
+        # $apply not implemented (optional extension)
+        return 0
     else
-        test_result "Aggregate \$count" "FAIL" "Response missing 'Total' property"
+        return 1
     fi
-elif [ "$HTTP_CODE" = "501" ]; then
-    test_result "Aggregate \$count" "PASS" "\$apply not implemented (optional extension)"
-else
-    test_result "Aggregate \$count" "FAIL" "HTTP $HTTP_CODE"
-fi
+}
 
 # Test 2: groupby transformation
-echo ""
-echo "Test 2: \$apply with groupby"
-echo "  Request: GET $SERVER_URL/Products?\$apply=groupby((CategoryID))"
-RESPONSE=$(curl -s -w "\n%{http_code}" "$SERVER_URL/Products?\$apply=groupby((CategoryID))" 2>&1)
-HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-BODY=$(echo "$RESPONSE" | head -n -1)
-
-if [ "$HTTP_CODE" = "200" ]; then
-    if echo "$BODY" | grep -q '"CategoryID"'; then
-        test_result "groupby transformation" "PASS"
+test_2() {
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$apply=groupby((CategoryID))")
+    if [ "$HTTP_CODE" = "200" ]; then
+        local BODY=$(http_get_body "$SERVER_URL/Products?\$apply=groupby((CategoryID))")
+        check_json_field "$BODY" "CategoryID"
+    elif [ "$HTTP_CODE" = "501" ]; then
+        return 0
     else
-        test_result "groupby transformation" "FAIL" "Response missing 'CategoryID' property"
+        return 1
     fi
-elif [ "$HTTP_CODE" = "501" ]; then
-    test_result "groupby transformation" "PASS" "\$apply not implemented (optional extension)"
-else
-    test_result "groupby transformation" "FAIL" "HTTP $HTTP_CODE"
-fi
+}
 
 # Test 3: groupby with aggregate
-echo ""
-echo "Test 3: \$apply with groupby and aggregate"
-echo "  Request: GET $SERVER_URL/Products?\$apply=groupby((CategoryID),aggregate(\$count as Count))"
-RESPONSE=$(curl -s -w "\n%{http_code}" "$SERVER_URL/Products?\$apply=groupby((CategoryID),aggregate(\$count%20as%20Count))" 2>&1)
-HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-BODY=$(echo "$RESPONSE" | head -n -1)
-
-if [ "$HTTP_CODE" = "200" ]; then
-    if echo "$BODY" | grep -q '"CategoryID"' && echo "$BODY" | grep -q '"Count"'; then
-        test_result "groupby with aggregate" "PASS"
+test_3() {
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$apply=groupby((CategoryID),aggregate(\$count%20as%20Count))")
+    if [ "$HTTP_CODE" = "200" ]; then
+        local BODY=$(http_get_body "$SERVER_URL/Products?\$apply=groupby((CategoryID),aggregate(\$count%20as%20Count))")
+        if check_json_field "$BODY" "CategoryID" && check_json_field "$BODY" "Count"; then
+            return 0
+        fi
+        return 1
+    elif [ "$HTTP_CODE" = "501" ]; then
+        return 0
     else
-        test_result "groupby with aggregate" "FAIL" "Response missing expected properties"
+        return 1
     fi
-elif [ "$HTTP_CODE" = "501" ]; then
-    test_result "groupby with aggregate" "PASS" "\$apply not implemented (optional extension)"
-else
-    test_result "groupby with aggregate" "FAIL" "HTTP $HTTP_CODE"
-fi
+}
 
 # Test 4: filter transformation
-echo ""
-echo "Test 4: \$apply with filter transformation"
-echo "  Request: GET $SERVER_URL/Products?\$apply=filter(Price gt 10)"
-RESPONSE=$(curl -s -w "\n%{http_code}" "$SERVER_URL/Products?\$apply=filter(Price%20gt%2010)" 2>&1)
-HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-BODY=$(echo "$RESPONSE" | head -n -1)
-
-if [ "$HTTP_CODE" = "200" ]; then
-    test_result "filter transformation" "PASS"
-elif [ "$HTTP_CODE" = "501" ]; then
-    test_result "filter transformation" "PASS" "\$apply not implemented (optional extension)"
-else
-    test_result "filter transformation" "FAIL" "HTTP $HTTP_CODE"
-fi
+test_4() {
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$apply=filter(Price%20gt%2010)")
+    if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "501" ]; then
+        return 0
+    fi
+    return 1
+}
 
 # Test 5: Invalid $apply expression should return 400
-echo ""
-echo "Test 5: Invalid \$apply expression returns 400"
-echo "  Request: GET $SERVER_URL/Products?\$apply=invalid(syntax)"
-RESPONSE=$(curl -s -w "\n%{http_code}" "$SERVER_URL/Products?\$apply=invalid(syntax)" 2>&1)
-HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+test_5() {
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$apply=invalid(syntax)")
+    if [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "501" ]; then
+        return 0
+    fi
+    echo "  Details: Expected HTTP 400 or 501, got $HTTP_CODE"
+    return 1
+}
 
-if [ "$HTTP_CODE" = "400" ]; then
-    test_result "Invalid \$apply returns 400" "PASS"
-elif [ "$HTTP_CODE" = "501" ]; then
-    test_result "Invalid \$apply returns 400" "PASS" "\$apply not implemented (optional extension)"
-else
-    test_result "Invalid \$apply returns 400" "FAIL" "Expected HTTP 400 or 501, got $HTTP_CODE"
-fi
-
+# Run all tests
+run_test "\$apply with aggregate (count)" test_1
+run_test "\$apply with groupby" test_2
+run_test "\$apply with groupby and aggregate" test_3
+run_test "\$apply with filter transformation" test_4
+run_test "Invalid \$apply expression returns 400" test_5
 
 print_summary

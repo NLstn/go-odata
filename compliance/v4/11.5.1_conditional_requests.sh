@@ -6,7 +6,6 @@
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/test_framework.sh"
-source "$SCRIPT_DIR/test_framework.sh"
 
 echo "======================================"
 echo "OData v4 Compliance Test"
