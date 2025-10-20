@@ -776,10 +776,16 @@ func extractValueFromComparison(node ASTNode) (interface{}, error) {
 		return lit.Value, nil
 	}
 	if ident, ok := node.(*IdentifierExpr); ok {
-		// Allow identifiers as values (for property-to-property comparisons in the future)
+		// Allow identifiers as values (for property-to-property comparisons)
 		return ident.Name, nil
 	}
-	return nil, fmt.Errorf("right side of comparison must be a literal or property")
+	// Support function calls on the right side (e.g., tolower(Name) eq tolower(Name))
+	if funcCall, ok := node.(*FunctionCallExpr); ok {
+		// Return a special marker that this is a function call
+		// The actual function will be processed during SQL generation
+		return funcCall, nil
+	}
+	return nil, fmt.Errorf("right side of comparison must be a literal, property, or function")
 }
 
 // convertFunctionCallExpr converts a function call expression to a filter expression
@@ -889,16 +895,26 @@ func convertTwoArgFunction(n *FunctionCallExpr, functionName string, entityMetad
 		return nil, err
 	}
 
-	// Second argument should be a literal
-	lit, ok := n.Args[1].(*LiteralExpr)
-	if !ok {
-		return nil, fmt.Errorf("second argument of %s must be a literal", functionName)
+	// Second argument can be a literal, property, or function call
+	var value interface{}
+	if lit, ok := n.Args[1].(*LiteralExpr); ok {
+		value = lit.Value
+	} else if ident, ok := n.Args[1].(*IdentifierExpr); ok {
+		// For concat, the second argument can be a property reference
+		// We'll store it as a string and handle it in SQL generation
+		value = ident.Name
+	} else if funcCall, ok := n.Args[1].(*FunctionCallExpr); ok {
+		// For concat, the second argument can be another function call
+		// We'll store the function call for later processing
+		value = funcCall
+	} else {
+		return nil, fmt.Errorf("second argument of %s must be a literal, property, or function", functionName)
 	}
 
 	return &FilterExpression{
 		Property: property,
 		Operator: FilterOperator(functionName),
-		Value:    lit.Value,
+		Value:    value,
 	}, nil
 }
 
