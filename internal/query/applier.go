@@ -365,7 +365,10 @@ func buildFunctionSQL(op FilterOperator, columnName string, value interface{}) (
 	case OpLength:
 		return fmt.Sprintf("LENGTH(%s)", columnName), nil
 	case OpIndexOf:
-		return fmt.Sprintf("INSTR(%s, ?)", columnName), []interface{}{value}
+		// OData indexof is 0-indexed and returns -1 when not found
+		// SQLite INSTR is 1-indexed and returns 0 when not found
+		// Converting: INSTR - 1 gives us the correct OData indexof behavior
+		return fmt.Sprintf("INSTR(%s, ?) - 1", columnName), []interface{}{value}
 	case OpConcat:
 		return fmt.Sprintf("CONCAT(%s, ?)", columnName), []interface{}{value}
 	case OpHas:
@@ -475,16 +478,22 @@ func edmTypeToSQLType(edmType string) string {
 }
 
 // buildSubstringSQL builds SQL for substring function
+// OData substring is 0-indexed, SQLite SUBSTR is 1-indexed
+// So we need to add 1 to the start position
 func buildSubstringSQL(columnName string, value interface{}) (string, []interface{}) {
 	args, ok := value.([]interface{})
 	if !ok {
 		return "", nil
 	}
 	if len(args) == 1 {
-		return fmt.Sprintf("SUBSTR(%s, ?, LENGTH(%s))", columnName, columnName), []interface{}{args[0]}
+		// substring(string, start) - from start to end
+		// Convert 0-indexed OData to 1-indexed SQLite by adding 1
+		return fmt.Sprintf("SUBSTR(%s, ? + 1, LENGTH(%s))", columnName, columnName), []interface{}{args[0]}
 	}
 	if len(args) == 2 {
-		return fmt.Sprintf("SUBSTR(%s, ?, ?)", columnName), args
+		// substring(string, start, length)
+		// Convert 0-indexed OData to 1-indexed SQLite by adding 1 to start
+		return fmt.Sprintf("SUBSTR(%s, ? + 1, ?)", columnName), args
 	}
 	return "", nil
 }
