@@ -344,6 +344,51 @@ func buildFunctionComparison(filter *FilterExpression, entityMetadata *metadata.
 		return "", nil
 	}
 
+	// Check if right side is also a function call
+	if rightFunc, ok := filter.Value.(*FunctionCallExpr); ok {
+		// Convert the right-side function call to a FilterExpression
+		rightFuncExpr, err := convertFunctionCallExpr(rightFunc, entityMetadata)
+		if err != nil {
+			// If conversion fails, fall back to treating it as a literal
+			compSQL := buildComparisonSQL(filter.Operator, funcSQL)
+			if compSQL == "" {
+				return "", nil
+			}
+			allArgs := append(funcArgs, filter.Value)
+			return compSQL, allArgs
+		}
+		
+		// Build SQL for the right-side function
+		rightColumnName := GetColumnName(rightFuncExpr.Property, entityMetadata)
+		rightFuncSQL, rightFuncArgs := buildFunctionSQL(rightFuncExpr.Operator, rightColumnName, rightFuncExpr.Value)
+		if rightFuncSQL == "" {
+			return "", nil
+		}
+		
+		// Build comparison between two functions
+		var compSQL string
+		switch filter.Operator {
+		case OpEqual:
+			compSQL = fmt.Sprintf("%s = %s", funcSQL, rightFuncSQL)
+		case OpNotEqual:
+			compSQL = fmt.Sprintf("%s != %s", funcSQL, rightFuncSQL)
+		case OpGreaterThan:
+			compSQL = fmt.Sprintf("%s > %s", funcSQL, rightFuncSQL)
+		case OpGreaterThanOrEqual:
+			compSQL = fmt.Sprintf("%s >= %s", funcSQL, rightFuncSQL)
+		case OpLessThan:
+			compSQL = fmt.Sprintf("%s < %s", funcSQL, rightFuncSQL)
+		case OpLessThanOrEqual:
+			compSQL = fmt.Sprintf("%s <= %s", funcSQL, rightFuncSQL)
+		default:
+			return "", nil
+		}
+		
+		allArgs := append(funcArgs, rightFuncArgs...)
+		return compSQL, allArgs
+	}
+
+	// Right side is a literal or property
 	compSQL := buildComparisonSQL(filter.Operator, funcSQL)
 	if compSQL == "" {
 		return "", nil
@@ -370,6 +415,33 @@ func buildFunctionSQL(op FilterOperator, columnName string, value interface{}) (
 		// Converting: INSTR - 1 gives us the correct OData indexof behavior
 		return fmt.Sprintf("INSTR(%s, ?) - 1", columnName), []interface{}{value}
 	case OpConcat:
+		// Handle different types of second argument
+		if funcCall, ok := value.(*FunctionCallExpr); ok {
+			// Second argument is a function call - need to convert it
+			rightExpr, err := convertFunctionCallExpr(funcCall, nil)
+			if err != nil {
+				return fmt.Sprintf("CONCAT(%s, ?)", columnName), []interface{}{value}
+			}
+			// Build SQL for the nested function
+			rightColumnName := rightExpr.Property
+			rightSQL, rightArgs := buildFunctionSQL(rightExpr.Operator, rightColumnName, rightExpr.Value)
+			if rightSQL == "" {
+				return fmt.Sprintf("CONCAT(%s, ?)", columnName), []interface{}{value}
+			}
+			return fmt.Sprintf("CONCAT(%s, %s)", columnName, rightSQL), rightArgs
+		}
+		// Check if value is a property name (string identifier)
+		if strVal, ok := value.(string); ok {
+			// Try to determine if it's a column name or a literal
+			// If it looks like a column name (starts with uppercase or contains underscore), treat as column
+			// Otherwise treat as literal
+			if len(strVal) > 0 && (strVal[0] >= 'A' && strVal[0] <= 'Z' || strings.Contains(strVal, "_")) {
+				// Treat as column name - convert to snake_case
+				columnName2 := toSnakeCase(strVal)
+				return fmt.Sprintf("CONCAT(%s, %s)", columnName, columnName2), nil
+			}
+		}
+		// Default: treat as literal
 		return fmt.Sprintf("CONCAT(%s, ?)", columnName), []interface{}{value}
 	case OpHas:
 		// Bitwise AND for enum flags: (column & value) = value
