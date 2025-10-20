@@ -284,7 +284,7 @@ func (h *EntityHandler) findNavigationProperty(navigationProperty string) *metad
 // findStructuralProperty finds a structural (non-navigation) property by name in the entity metadata
 func (h *EntityHandler) findStructuralProperty(propertyName string) *metadata.PropertyMetadata {
 	for _, prop := range h.metadata.Properties {
-		if (prop.JsonName == propertyName || prop.Name == propertyName) && !prop.IsNavigationProp {
+		if (prop.JsonName == propertyName || prop.Name == propertyName) && !prop.IsNavigationProp && !prop.IsComplexType {
 			return &prop
 		}
 	}
@@ -299,6 +299,21 @@ func (h *EntityHandler) IsNavigationProperty(propertyName string) bool {
 // IsStructuralProperty checks if a property name is a structural property
 func (h *EntityHandler) IsStructuralProperty(propertyName string) bool {
 	return h.findStructuralProperty(propertyName) != nil
+}
+
+// findComplexTypeProperty finds a complex type property by name in the entity metadata
+func (h *EntityHandler) findComplexTypeProperty(propertyName string) *metadata.PropertyMetadata {
+	for _, prop := range h.metadata.Properties {
+		if (prop.JsonName == propertyName || prop.Name == propertyName) && prop.IsComplexType {
+			return &prop
+		}
+	}
+	return nil
+}
+
+// IsComplexTypeProperty checks if a property name is a complex type property
+func (h *EntityHandler) IsComplexTypeProperty(propertyName string) bool {
+	return h.findComplexTypeProperty(propertyName) != nil
 }
 
 // HandleStructuralProperty handles GET and OPTIONS requests for structural properties (e.g., Products(1)/Name)
