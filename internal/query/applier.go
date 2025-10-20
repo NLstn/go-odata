@@ -329,6 +329,19 @@ func buildComparisonCondition(filter *FilterExpression, entityMetadata *metadata
 	case OpHas:
 		// Bitwise AND for enum flags: (column & value) = value
 		return fmt.Sprintf("(%s & ?) = ?", columnName), []interface{}{filter.Value, filter.Value}
+	case OpIsOf:
+		// Handle isof as a standalone boolean expression
+		// This generates SQL that can be used directly in a WHERE clause
+		funcSQL, funcArgs := buildFunctionSQL(OpIsOf, columnName, filter.Value)
+		if funcSQL == "" {
+			return "", nil
+		}
+		// isof returns 1 (true) or 0 (false), so we compare it with true (1)
+		return fmt.Sprintf("%s = ?", funcSQL), append(funcArgs, true)
+	case OpCast:
+		// Cast alone doesn't make sense as a boolean expression
+		// It should always be part of a comparison
+		return "", nil
 	default:
 		return "", nil
 	}
