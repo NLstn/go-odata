@@ -173,7 +173,7 @@ test_create_with_enum() {
     # Create entity with enum property
     local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$SERVER_URL/Products" \
         -H "Content-Type: application/json" \
-        -d '{"Name":"Test Enum","Price":100,"Category":"Test","Status":1}' 2>&1)
+        -d '{"Name":"Test Enum","Price":100,"CategoryID":1,"Status":1}' 2>&1)
     
     if [ "$HTTP_CODE" = "201" ] || [ "$HTTP_CODE" = "200" ]; then
         # Clean up if successful

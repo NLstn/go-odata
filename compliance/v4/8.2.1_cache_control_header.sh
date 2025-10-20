@@ -73,7 +73,7 @@ test_dynamic_content_cache() {
 test_post_not_cached() {
     local RESPONSE=$(curl -s -i -X POST "$SERVER_URL/Products" \
         -H "Content-Type: application/json" \
-        -d '{"Name":"Cache Test","Price":99.99,"Category":"Test","Status":1}' 2>&1)
+        -d '{"Name":"Cache Test","Price":99.99,"CategoryID":1,"Status":1}' 2>&1)
     
     local HTTP_CODE=$(echo "$RESPONSE" | grep "HTTP/" | tail -1 | awk '{print $2}')
     

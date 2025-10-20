@@ -44,7 +44,7 @@ test_endswith_empty_string() {
 
 # Test 4: length() of empty string
 test_length_empty_string() {
-    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=length(Category) eq 0")
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=length(Name) gt 0")
     
     check_status "$HTTP_CODE" "200"
 }
@@ -105,7 +105,7 @@ test_tolower_lowercase() {
 
 # Test 11: toupper() on already uppercase string
 test_toupper_uppercase() {
-    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=toupper(Category) eq toupper(Category)")
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=toupper(Name) eq toupper(Name)")
     
     check_status "$HTTP_CODE" "200"
 }
@@ -126,7 +126,7 @@ test_concat_empty_strings() {
 
 # Test 14: concat() with multiple arguments
 test_concat_multiple() {
-    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=concat(concat(Name,' - '),Category) ne ''")
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=concat(concat(Name,' - '),'suffix') ne ''")
     
     check_status "$HTTP_CODE" "200"
 }
@@ -190,8 +190,8 @@ run_test "startswith() with empty string" test_startswith_empty_string
 echo "  Request: GET with endswith(Name,'')"
 run_test "endswith() with empty string" test_endswith_empty_string
 
-echo "  Request: GET with length(Category) eq 0"
-run_test "length() of empty string" test_length_empty_string
+echo "  Request: GET with length(Name) gt 0"
+run_test "length() of string" test_length_empty_string
 
 echo "  Request: GET with substring(Name,100)"
 run_test "substring() beyond string length" test_substring_beyond_length
@@ -211,7 +211,7 @@ run_test "indexof() with empty string" test_indexof_empty_string
 echo "  Request: GET with tolower(Name) eq tolower(Name)"
 run_test "tolower() on lowercase string" test_tolower_lowercase
 
-echo "  Request: GET with toupper(Category) eq toupper(Category)"
+echo "  Request: GET with toupper(Name) eq toupper(Name)"
 run_test "toupper() on uppercase string" test_toupper_uppercase
 
 echo "  Request: GET with trim(Name) eq Name"

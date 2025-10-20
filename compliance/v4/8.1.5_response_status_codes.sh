@@ -29,7 +29,7 @@ test_status_200_ok() {
 test_status_201_created() {
     local RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$SERVER_URL/Products" \
         -H "Content-Type: application/json" \
-        -d '{"Name":"Status Code Test","Price":99.99,"Category":"Test","Status":1}' 2>&1)
+        -d '{"Name":"Status Code Test","Price":99.99,"CategoryID":1,"Status":1}' 2>&1)
     local HTTP_CODE=$(echo "$RESPONSE" | tail -1)
     local BODY=$(echo "$RESPONSE" | head -n -1)
     
@@ -46,7 +46,7 @@ test_status_204_no_content() {
     # Create entity first
     local CREATE_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$SERVER_URL/Products" \
         -H "Content-Type: application/json" \
-        -d '{"Name":"Delete Test","Price":50,"Category":"Test","Status":1}' 2>&1)
+        -d '{"Name":"Delete Test","Price":50,"CategoryID":1,"Status":1}' 2>&1)
     local CREATE_CODE=$(echo "$CREATE_RESPONSE" | tail -1)
     local CREATE_BODY=$(echo "$CREATE_RESPONSE" | head -n -1)
     

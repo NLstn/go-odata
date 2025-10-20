@@ -23,7 +23,7 @@ echo ""
 test_missing_required_field() {
     local RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$SERVER_URL/Products" \
         -H "Content-Type: application/json" \
-        -d '{"Price":99.99,"Category":"Test"}')
+        -d '{"Price":99.99,"CategoryID":1}')
     
     local HTTP_CODE=$(echo "$RESPONSE" | tail -1)
     
@@ -40,7 +40,7 @@ test_missing_required_field() {
 test_empty_required_field() {
     local RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$SERVER_URL/Products" \
         -H "Content-Type: application/json" \
-        -d '{"Name":"","Price":99.99,"Category":"Test","Status":1}')
+        -d '{"Name":"","Price":99.99,"CategoryID":1,"Status":1}')
     
     local HTTP_CODE=$(echo "$RESPONSE" | tail -1)
     
@@ -57,7 +57,7 @@ test_empty_required_field() {
 test_invalid_data_type() {
     local RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$SERVER_URL/Products" \
         -H "Content-Type: application/json" \
-        -d '{"Name":"Test Product","Price":"not-a-number","Category":"Test","Status":1}')
+        -d '{"Name":"Test Product","Price":"not-a-number","CategoryID":1,"Status":1}')
     
     local HTTP_CODE=$(echo "$RESPONSE" | tail -1)
     
@@ -74,7 +74,7 @@ test_invalid_data_type() {
 test_negative_price() {
     local RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$SERVER_URL/Products" \
         -H "Content-Type: application/json" \
-        -d '{"Name":"Negative Price Product","Price":-50,"Category":"Test","Status":1}')
+        -d '{"Name":"Negative Price Product","Price":-50,"CategoryID":1,"Status":1}')
     
     local HTTP_CODE=$(echo "$RESPONSE" | tail -1)
     
@@ -111,7 +111,7 @@ test_malformed_json() {
 test_unknown_properties() {
     local RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$SERVER_URL/Products" \
         -H "Content-Type: application/json" \
-        -d '{"Name":"Test Product","Price":99.99,"Category":"Test","Status":1,"UnknownField":"value"}')
+        -d '{"Name":"Test Product","Price":99.99,"CategoryID":1,"Status":1,"UnknownField":"value"}')
     
     local HTTP_CODE=$(echo "$RESPONSE" | tail -1)
     local BODY=$(echo "$RESPONSE" | head -n -1)
@@ -132,7 +132,7 @@ test_unknown_properties() {
 test_patch_invalid_type() {
     local RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$SERVER_URL/Products" \
         -H "Content-Type: application/json" \
-        -d '{"Name":"Validation Test","Price":99.99,"Category":"Test","Status":1}')
+        -d '{"Name":"Validation Test","Price":99.99,"CategoryID":1,"Status":1}')
     
     local CREATE_CODE=$(echo "$RESPONSE" | tail -1)
     local CREATE_BODY=$(echo "$RESPONSE" | head -n -1)
@@ -157,7 +157,7 @@ test_patch_invalid_type() {
 test_patch_required_to_null() {
     local RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$SERVER_URL/Products" \
         -H "Content-Type: application/json" \
-        -d '{"Name":"Required Field Test","Price":99.99,"Category":"Test","Status":1}')
+        -d '{"Name":"Required Field Test","Price":99.99,"CategoryID":1,"Status":1}')
     
     local CREATE_CODE=$(echo "$RESPONSE" | tail -1)
     local CREATE_BODY=$(echo "$RESPONSE" | head -n -1)
@@ -186,7 +186,7 @@ test_patch_required_to_null() {
 # Test 9: Content-Type header missing or incorrect
 test_missing_content_type() {
     local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$SERVER_URL/Products" \
-        -d '{"Name":"Test","Price":99.99,"Category":"Test","Status":1}')
+        -d '{"Name":"Test","Price":99.99,"CategoryID":1,"Status":1}')
     
     # Should return 415 Unsupported Media Type without Content-Type
     if [ "$HTTP_CODE" = "415" ] || [ "$HTTP_CODE" = "400" ]; then
@@ -202,7 +202,7 @@ test_missing_content_type() {
 test_readonly_property_post() {
     local RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$SERVER_URL/Products" \
         -H "Content-Type: application/json" \
-        -d '{"ID":99999,"Name":"Readonly Test","Price":99.99,"Category":"Test","Status":1}')
+        -d '{"ID":99999,"Name":"Readonly Test","Price":99.99,"CategoryID":1,"Status":1}')
     
     local HTTP_CODE=$(echo "$RESPONSE" | tail -1)
     local BODY=$(echo "$RESPONSE" | head -n -1)

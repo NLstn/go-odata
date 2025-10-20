@@ -52,7 +52,7 @@ test_any_without_lambda() {
 test_nested_lambda() {
     # Would be: Orders?$filter=Items/any(i: i/SubItems/any(s: s/Price gt 50))
     # Testing that service handles complex queries
-    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=Price gt 50 and Category ne null")
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=Price gt 50 and CategoryID ne null")
     check_status "$HTTP_CODE" "200"
 }
 

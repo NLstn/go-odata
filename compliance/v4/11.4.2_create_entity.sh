@@ -21,7 +21,7 @@ register_cleanup
 
 # Test 1: POST should return 201 Created
 test_1() {
-    local PAYLOAD='{"Name":"ComplianceTestProduct1","Price":99.99,"Category":"Test"}'
+    local PAYLOAD='{"Name":"ComplianceTestProduct1","Price":99.99,"CategoryID":1}'
     local HTTP_CODE=$(http_post "$SERVER_URL/Products" "$PAYLOAD" -H "Content-Type: application/json" -o /dev/null -w "%{http_code}")
     
     if [ "$HTTP_CODE" = "201" ]; then
@@ -35,7 +35,7 @@ test_1() {
 
 # Test 2: Location header should be present in 201 response
 test_2() {
-    local PAYLOAD='{"Name":"ComplianceTestProduct2","Price":199.99,"Category":"Test"}'
+    local PAYLOAD='{"Name":"ComplianceTestProduct2","Price":199.99,"CategoryID":1}'
     local RESPONSE=$(curl -s -i -X POST "$SERVER_URL/Products" \
         -H "Content-Type: application/json" \
         -d "$PAYLOAD" 2>&1)
@@ -53,7 +53,7 @@ test_2() {
 
 # Test 3: Created entity should be returned in response body
 test_3() {
-    local PAYLOAD='{"Name":"ComplianceTestProduct3","Price":299.99,"Category":"Test"}'
+    local PAYLOAD='{"Name":"ComplianceTestProduct3","Price":299.99,"CategoryID":1}'
     local BODY=$(http_post "$SERVER_URL/Products" "$PAYLOAD" -H "Content-Type: application/json")
     
     if echo "$BODY" | grep -q '"ID"' && echo "$BODY" | grep -q '"Name"[[:space:]]*:[[:space:]]*"ComplianceTestProduct3"'; then
@@ -66,7 +66,7 @@ test_3() {
 
 # Test 4: POST with Prefer: return=minimal should return 204 No Content
 test_4() {
-    local PAYLOAD='{"Name":"ComplianceTestProduct4","Price":399.99,"Category":"Test"}'
+    local PAYLOAD='{"Name":"ComplianceTestProduct4","Price":399.99,"CategoryID":1}'
     local RESPONSE=$(curl -s -i -X POST "$SERVER_URL/Products" \
         -H "Content-Type: application/json" \
         -H "Prefer: return=minimal" \
@@ -85,7 +85,7 @@ test_4() {
 
 # Test 5: OData-EntityId header should be present in 204 response
 test_5() {
-    local PAYLOAD='{"Name":"ComplianceTestProduct5","Price":499.99,"Category":"Test"}'
+    local PAYLOAD='{"Name":"ComplianceTestProduct5","Price":499.99,"CategoryID":1}'
     local RESPONSE=$(curl -s -i -X POST "$SERVER_URL/Products" \
         -H "Content-Type: application/json" \
         -H "Prefer: return=minimal" \

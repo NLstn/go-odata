@@ -62,14 +62,14 @@ test_le_operator() {
 
 # Test 7: eq with string
 test_eq_string() {
-    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=Category%20eq%20%27Electronics%27")
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=Name%20eq%20%27Laptop%27")
     
     check_status "$HTTP_CODE" "200"
 }
 
 # Test 8: ne with string
 test_ne_string() {
-    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=Category%20ne%20%27Electronics%27")
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=Name%20ne%20%27Laptop%27")
     
     check_status "$HTTP_CODE" "200"
 }
@@ -83,7 +83,7 @@ test_decimal_comparison() {
 
 # Test 10: Comparison with null
 test_null_comparison() {
-    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=Category%20eq%20null")
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=CategoryID%20eq%20null")
     
     check_status "$HTTP_CODE" "200"
 }
@@ -110,8 +110,8 @@ test_comparison_correctness() {
 # Test 13: eq operator case sensitivity for strings
 test_eq_case_sensitive() {
     # OData string comparisons are case-sensitive by default
-    local RESPONSE1=$(http_get_body "$SERVER_URL/Products?\$filter=Category%20eq%20%27Electronics%27")
-    local RESPONSE2=$(http_get_body "$SERVER_URL/Products?\$filter=Category%20eq%20%27electronics%27")
+    local RESPONSE1=$(http_get_body "$SERVER_URL/Products?\$filter=Name%20eq%20%27Laptop%27")
+    local RESPONSE2=$(http_get_body "$SERVER_URL/Products?\$filter=Name%20eq%20%27laptop%27")
     
     # These should potentially return different results if case-sensitive
     # We just verify both requests succeed
@@ -148,16 +148,16 @@ run_test "lt (less than) operator works" test_lt_operator
 echo "  Request: GET $SERVER_URL/Products?\$filter=Price le 100"
 run_test "le (less than or equal) operator works" test_le_operator
 
-echo "  Request: GET $SERVER_URL/Products?\$filter=Category eq 'Electronics'"
+echo "  Request: GET $SERVER_URL/Products?\$filter=Name eq 'Laptop'"
 run_test "eq operator works with strings" test_eq_string
 
-echo "  Request: GET $SERVER_URL/Products?\$filter=Category ne 'Electronics'"
+echo "  Request: GET $SERVER_URL/Products?\$filter=Name ne 'Laptop'"
 run_test "ne operator works with strings" test_ne_string
 
 echo "  Request: GET $SERVER_URL/Products?\$filter=Price eq 99.99"
 run_test "Comparison operators work with decimal numbers" test_decimal_comparison
 
-echo "  Request: GET $SERVER_URL/Products?\$filter=Category eq null"
+echo "  Request: GET $SERVER_URL/Products?\$filter=CategoryID eq null"
 run_test "Comparison with null value" test_null_comparison
 
 echo "  Request: GET $SERVER_URL/Products?\$filter=Price ge 10 and Price le 100"
@@ -166,7 +166,7 @@ run_test "Multiple comparison operators combined" test_multiple_comparisons
 echo "  Request: GET $SERVER_URL/Products?\$filter=Status eq 1"
 run_test "Comparison operators return correct results" test_comparison_correctness
 
-echo "  Request: GET $SERVER_URL/Products?\$filter=Category eq 'Electronics' vs 'electronics'"
+echo "  Request: GET $SERVER_URL/Products?\$filter=Name eq 'Laptop' vs 'laptop'"
 run_test "String comparison case sensitivity" test_eq_case_sensitive
 
 echo "  Request: GET $SERVER_URL/Products?\$filter=Price equals 50"

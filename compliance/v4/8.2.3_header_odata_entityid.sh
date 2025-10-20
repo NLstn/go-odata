@@ -23,7 +23,7 @@ test_post_returns_entityid() {
     local HEADERS=$(curl -s -i -X POST "$SERVER_URL/Products" \
         -H "Content-Type: application/json" \
         -H "Prefer: return=minimal" \
-        -d '{"Name":"EntityId Test","Price":99.99,"Category":"Test","Status":1}' 2>&1)
+        -d '{"Name":"EntityId Test","Price":99.99,"CategoryID":1,"Status":1}' 2>&1)
     
     # Check for OData-EntityId header (case-insensitive)
     if echo "$HEADERS" | grep -i "odata-entityid:" > /dev/null; then
@@ -40,7 +40,7 @@ test_entityid_contains_url() {
     local HEADERS=$(curl -s -i -X POST "$SERVER_URL/Products" \
         -H "Content-Type: application/json" \
         -H "Prefer: return=minimal" \
-        -d '{"Name":"EntityId URL Test","Price":50,"Category":"Test","Status":1}' 2>&1)
+        -d '{"Name":"EntityId URL Test","Price":50,"CategoryID":1,"Status":1}' 2>&1)
     
     
     if echo "$HEADERS" | grep -i "odata-entityid:" > /dev/null; then
@@ -64,7 +64,7 @@ test_entityid_return_minimal() {
     local HEADERS=$(curl -s -i -X POST "$SERVER_URL/Products" \
         -H "Content-Type: application/json" \
         -H "Prefer: return=minimal" \
-        -d '{"Name":"Minimal Test","Price":75,"Category":"Test","Status":1}' 2>&1)
+        -d '{"Name":"Minimal Test","Price":75,"CategoryID":1,"Status":1}' 2>&1)
     
     local HTTP_CODE=$(echo "$HEADERS" | head -1 | grep -o '[0-9]\{3\}')
     
@@ -83,7 +83,7 @@ test_patch_entityid() {
     # Create entity first
     local CREATE=$(curl -s -w "\n%{http_code}" -X POST "$SERVER_URL/Products" \
         -H "Content-Type: application/json" \
-        -d '{"Name":"Patch Test","Price":40,"Category":"Test","Status":1}' 2>&1)
+        -d '{"Name":"Patch Test","Price":40,"CategoryID":1,"Status":1}' 2>&1)
     
     local CREATE_CODE=$(echo "$CREATE" | tail -1)
     local CREATE_BODY=$(echo "$CREATE" | head -n -1)
@@ -118,7 +118,7 @@ test_entityid_valid_url() {
     local HEADERS=$(curl -s -i -X POST "$SERVER_URL/Products" \
         -H "Content-Type: application/json" \
         -H "Prefer: return=minimal" \
-        -d '{"Name":"Valid URL Test","Price":60,"Category":"Test","Status":1}' 2>&1)
+        -d '{"Name":"Valid URL Test","Price":60,"CategoryID":1,"Status":1}' 2>&1)
     
     
     if echo "$HEADERS" | grep -i "odata-entityid:" > /dev/null; then
@@ -145,7 +145,7 @@ test_entityid_valid_url() {
 test_header_case() {
     local HEADERS=$(curl -s -i -X POST "$SERVER_URL/Products" \
         -H "Content-Type: application/json" \
-        -d '{"Name":"Case Test","Price":85,"Category":"Test","Status":1}' 2>&1)
+        -d '{"Name":"Case Test","Price":85,"CategoryID":1,"Status":1}' 2>&1)
     
     
     # HTTP headers are case-insensitive, but OData spec uses specific casing

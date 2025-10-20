@@ -72,7 +72,7 @@ test_datetime_type() {
 
 # Test 6: Null value handling
 test_null_value() {
-    local FILTER="Category ne null"
+    local FILTER="CategoryID ne null"
     local ENCODED_FILTER=$(printf %s "$FILTER" | jq -sRr @uri)
     local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Products?\$filter=$ENCODED_FILTER")
     check_status "$HTTP_CODE" "200"
@@ -121,7 +121,7 @@ run_test "Boolean-like integer filtering works" test_boolean_type
 echo "  Request: GET \$filter=CreatedAt lt 2025-12-31T23:59:59Z"
 run_test "Edm.DateTimeOffset type handles datetime values" test_datetime_type
 
-echo "  Request: GET \$filter=Category ne null"
+echo "  Request: GET \$filter=CategoryID ne null"
 run_test "Null value handling in filters" test_null_value
 
 echo "  Request: GET existing product with decimal price"

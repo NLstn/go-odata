@@ -22,7 +22,7 @@ echo ""
 test_post_default_returns_representation() {
     local RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$SERVER_URL/Products" \
         -H "Content-Type: application/json" \
-        -d '{"Name":"Test Product","Price":99.99,"Category":"Test","Status":1}' 2>&1)
+        -d '{"Name":"Test Product","Price":99.99,"CategoryID":1,"Status":1}' 2>&1)
     
     local HTTP_CODE=$(echo "$RESPONSE" | tail -1)
     local BODY=$(echo "$RESPONSE" | head -n -1)
@@ -46,7 +46,7 @@ test_post_prefer_minimal() {
     local RESPONSE=$(curl -s -i -X POST "$SERVER_URL/Products" \
         -H "Content-Type: application/json" \
         -H "Prefer: return=minimal" \
-        -d '{"Name":"Minimal Product","Price":49.99,"Category":"Test","Status":1}' 2>&1)
+        -d '{"Name":"Minimal Product","Price":49.99,"CategoryID":1,"Status":1}' 2>&1)
     
     local HTTP_CODE=$(echo "$RESPONSE" | grep "HTTP/" | tail -1 | awk '{print $2}')
     
@@ -75,7 +75,7 @@ test_post_prefer_representation() {
     local RESPONSE=$(curl -s -i -X POST "$SERVER_URL/Products" \
         -H "Content-Type: application/json" \
         -H "Prefer: return=representation" \
-        -d '{"Name":"Full Product","Price":149.99,"Category":"Test","Status":1}' 2>&1)
+        -d '{"Name":"Full Product","Price":149.99,"CategoryID":1,"Status":1}' 2>&1)
     
     local HTTP_CODE=$(echo "$RESPONSE" | grep "HTTP/" | tail -1 | awk '{print $2}')
     local BODY=$(echo "$RESPONSE" | sed -n '/^{/,$p')
@@ -169,7 +169,7 @@ test_patch_prefer_minimal() {
 test_put_default_no_content() {
     local RESPONSE=$(curl -s -w "\n%{http_code}" -X PUT "$SERVER_URL/Products(4)" \
         -H "Content-Type: application/json" \
-        -d '{"Name":"Updated Product","Price":499.99,"Category":"Updated","Status":1}' 2>&1)
+        -d '{"Name":"Updated Product","Price":499.99,"CategoryID":2,"Status":1}' 2>&1)
     
     local HTTP_CODE=$(echo "$RESPONSE" | tail -1)
     
@@ -182,7 +182,7 @@ test_put_prefer_representation() {
     local RESPONSE=$(curl -s -i -X PUT "$SERVER_URL/Products(5)" \
         -H "Content-Type: application/json" \
         -H "Prefer: return=representation" \
-        -d '{"Name":"Full Update","Price":599.99,"Category":"Updated","Status":1}' 2>&1)
+        -d '{"Name":"Full Update","Price":599.99,"CategoryID":2,"Status":1}' 2>&1)
     
     local HTTP_CODE=$(echo "$RESPONSE" | grep "HTTP/" | tail -1 | awk '{print $2}')
     local BODY=$(echo "$RESPONSE" | sed -n '/^{/,$p')
@@ -212,7 +212,7 @@ test_prefer_case_insensitive() {
     local RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$SERVER_URL/Products" \
         -H "Content-Type: application/json" \
         -H "Prefer: RETURN=MINIMAL" \
-        -d '{"Name":"Case Test","Price":79.99,"Category":"Test","Status":1}' 2>&1)
+        -d '{"Name":"Case Test","Price":79.99,"CategoryID":1,"Status":1}' 2>&1)
     
     local HTTP_CODE=$(echo "$RESPONSE" | tail -1)
     
@@ -225,7 +225,7 @@ test_multiple_preferences() {
     local RESPONSE=$(curl -s -i -X POST "$SERVER_URL/Products" \
         -H "Content-Type: application/json" \
         -H "Prefer: return=minimal, respond-async" \
-        -d '{"Name":"Multi Pref","Price":129.99,"Category":"Test","Status":1}' 2>&1)
+        -d '{"Name":"Multi Pref","Price":129.99,"CategoryID":1,"Status":1}' 2>&1)
     
     local HTTP_CODE=$(echo "$RESPONSE" | grep "HTTP/" | tail -1 | awk '{print $2}')
     

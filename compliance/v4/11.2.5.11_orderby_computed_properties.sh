@@ -58,7 +58,7 @@ test_orderby_computed_desc() {
 
 # Test 4: OrderBy mixing computed and regular properties
 test_orderby_mixed() {
-    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$compute=Price mul 1.2 as MarkedUpPrice&\$orderby=Category,MarkedUpPrice desc")
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$compute=Price mul 1.2 as MarkedUpPrice&\$orderby=CategoryID,MarkedUpPrice desc")
     
     if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "501" ] || [ "$HTTP_CODE" = "400" ]; then
         return 0

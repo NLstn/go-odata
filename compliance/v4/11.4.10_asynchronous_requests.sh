@@ -39,7 +39,7 @@ test_async_post() {
     local RESPONSE=$(curl -s -i -X POST "$SERVER_URL/Products" \
         -H "Content-Type: application/json" \
         -H "Prefer: respond-async" \
-        -d '{"Name":"Async Test Product","Price":99.99,"Category":"Test","Status":1}' 2>&1)
+        -d '{"Name":"Async Test Product","Price":99.99,"CategoryID":1,"Status":1}' 2>&1)
     local HTTP_CODE=$(echo "$RESPONSE" | grep "HTTP/" | tail -1 | awk '{print $2}')
     
     # Should return 201 (sync) or 202 (async)
@@ -56,7 +56,7 @@ test_async_delete() {
     # Create entity first
     local CREATE_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$SERVER_URL/Products" \
         -H "Content-Type: application/json" \
-        -d '{"Name":"Async Delete Test","Price":50,"Category":"Test","Status":1}' 2>&1)
+        -d '{"Name":"Async Delete Test","Price":50,"CategoryID":1,"Status":1}' 2>&1)
     local CREATE_CODE=$(echo "$CREATE_RESPONSE" | tail -1)
     local CREATE_BODY=$(echo "$CREATE_RESPONSE" | head -n -1)
     

@@ -25,7 +25,7 @@ CREATED_ID=""
 test_create_with_null() {
     local RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$SERVER_URL/Products" \
         -H "Content-Type: application/json" \
-        -d '{"Name":"Null Test Product","Price":99.99,"Category":"Test","Description":null,"Status":1}')
+        -d '{"Name":"Null Test Product","Price":99.99,"CategoryID":1,"Description":null,"Status":1}')
     
     local HTTP_CODE=$(echo "$RESPONSE" | tail -1)
     local BODY=$(echo "$RESPONSE" | head -n -1)
@@ -96,7 +96,7 @@ test_put_with_null() {
         local ID=${CREATED_ID}
         local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PUT "$SERVER_URL/Products($ID)" \
             -H "Content-Type: application/json" \
-            -d '{"Name":"Updated Product","Price":149.99,"Category":"Test","Description":null,"Status":1}')
+            -d '{"Name":"Updated Product","Price":149.99,"CategoryID":1,"Description":null,"Status":1}')
         
         if [ "$HTTP_CODE" = "204" ] || [ "$HTTP_CODE" = "200" ]; then
             return 0
@@ -114,7 +114,7 @@ test_put_with_null() {
 test_null_vs_string_null() {
     local RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$SERVER_URL/Products" \
         -H "Content-Type: application/json" \
-        -d '{"Name":"String Null Test","Price":50,"Category":"Test","Description":"null","Status":1}')
+        -d '{"Name":"String Null Test","Price":50,"CategoryID":1,"Description":"null","Status":1}')
     
     local HTTP_CODE=$(echo "$RESPONSE" | tail -1)
     local BODY=$(echo "$RESPONSE" | head -n -1)

@@ -28,7 +28,7 @@ test_deep_insert_basic() {
         -d '{
             "Name":"Product with Relations",
             "Price":99.99,
-            "Category":"Electronics",
+            "CategoryID":1,
             "Status":1
         }' 2>&1)
     
@@ -50,7 +50,7 @@ test_deep_insert_status() {
         -d '{
             "Name":"Deep Insert Test",
             "Price":50.00,
-            "Category":"Test",
+            "CategoryID":1,
             "Status":1
         }' 2>&1)
     
@@ -65,7 +65,7 @@ test_deep_insert_invalid_data() {
         -d '{
             "Name":"Test",
             "Price":"invalid_price",
-            "Category":"Test"
+            "CategoryID":1
         }' 2>&1)
     
     # Should return 400 Bad Request for invalid data
@@ -80,7 +80,7 @@ test_deep_insert_response_body() {
         -d '{
             "Name":"Response Test Product",
             "Price":75.00,
-            "Category":"Test",
+            "CategoryID":1,
             "Status":1
         }' 2>&1)
     
@@ -127,7 +127,7 @@ test_deep_insert_location_header() {
         -d '{
             "Name":"Location Test Product",
             "Price":80.00,
-            "Category":"Test",
+            "CategoryID":1,
             "Status":1
         }' 2>&1)
     

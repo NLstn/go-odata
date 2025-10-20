@@ -25,7 +25,7 @@ test_delete_success() {
     # Create entity to delete
     local CREATE_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$SERVER_URL/Products" \
         -H "Content-Type: application/json" \
-        -d '{"Name":"Product To Delete","Price":10.00,"Category":"Test","Status":1}' 2>&1)
+        -d '{"Name":"Product To Delete","Price":10.00,"CategoryID":1,"Status":1}' 2>&1)
     local CREATE_CODE=$(echo "$CREATE_RESPONSE" | tail -1)
     local CREATE_BODY=$(echo "$CREATE_RESPONSE" | head -n -1)
 
@@ -59,7 +59,7 @@ test_verify_deleted() {
     # Create entity to delete
     local CREATE_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$SERVER_URL/Products" \
         -H "Content-Type: application/json" \
-        -d '{"Name":"Product To Verify Delete","Price":20.00,"Category":"Test","Status":1}' 2>&1)
+        -d '{"Name":"Product To Verify Delete","Price":20.00,"CategoryID":1,"Status":1}' 2>&1)
     local CREATE_CODE=$(echo "$CREATE_RESPONSE" | tail -1)
     local CREATE_BODY=$(echo "$CREATE_RESPONSE" | head -n -1)
 

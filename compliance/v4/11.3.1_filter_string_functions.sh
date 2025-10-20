@@ -75,7 +75,7 @@ test_tolower_function() {
 
 # Test 8: toupper function
 test_toupper_function() {
-    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=toupper(Category) eq 'ELECTRONICS'")
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=toupper(Name) eq 'LAPTOP'")
     check_status "$HTTP_CODE" "200"
 }
 
@@ -87,7 +87,7 @@ test_trim_function() {
 
 # Test 10: concat function
 test_concat_function() {
-    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=concat(concat(Name,' - '),Category) eq 'Laptop - Electronics'")
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=concat(Name,' Test') eq 'Laptop Test'")
     check_status "$HTTP_CODE" "200"
 }
 
@@ -112,7 +112,7 @@ run_test "substring() function extracts substring" test_substring_function
 echo "  Request: GET \$filter=tolower(Name) eq 'laptop'"
 run_test "tolower() function converts to lowercase" test_tolower_function
 
-echo "  Request: GET \$filter=toupper(Category) eq 'ELECTRONICS'"
+echo "  Request: GET \$filter=toupper(Name) eq 'LAPTOP'"
 run_test "toupper() function converts to uppercase" test_toupper_function
 
 echo "  Request: GET \$filter=trim(Name) eq 'Laptop'"

@@ -52,11 +52,11 @@ test_4() {
 
 # Test 5: $orderby with multiple properties
 test_5() {
-    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$orderby=Category,Price%20desc")
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$orderby=CategoryID,Price%20desc")
     if ! check_status "$HTTP_CODE" "200"; then
         return 1
     fi
-    local BODY=$(http_get_body "$SERVER_URL/Products?\$orderby=Category,Price%20desc")
+    local BODY=$(http_get_body "$SERVER_URL/Products?\$orderby=CategoryID,Price%20desc")
     check_json_field "$BODY" "value"
 }
 

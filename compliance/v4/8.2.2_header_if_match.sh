@@ -136,7 +136,7 @@ test_if_match_delete() {
     # Create entity for deletion test
     CREATE_DEL=$(curl -s -w "\n%{http_code}" -X POST "$SERVER_URL/Products" \
         -H "Content-Type: application/json" \
-        -d '{"Name":"Delete Test","Price":50,"Category":"Test","Status":1}' 2>&1)
+        -d '{"Name":"Delete Test","Price":50,"CategoryID":1,"Status":1}' 2>&1)
     DEL_CODE=$(echo "$CREATE_DEL" | tail -1)
     DEL_BODY=$(echo "$CREATE_DEL" | head -n -1)
     

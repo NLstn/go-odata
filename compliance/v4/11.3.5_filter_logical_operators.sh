@@ -41,7 +41,7 @@ test_not_operator() {
 
 # Test 4: Complex expression with AND and OR
 test_complex_and_or() {
-    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=(Price%20lt%2010%20or%20Price%20gt%20100)%20and%20Category%20eq%20%27Electronics%27")
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=(Price%20lt%2010%20or%20Price%20gt%20100)%20and%20CategoryID%20eq%201")
     
     check_status "$HTTP_CODE" "200"
 }
@@ -55,7 +55,7 @@ test_multiple_and() {
 
 # Test 6: Multiple OR operators
 test_multiple_or() {
-    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=Category%20eq%20%27Electronics%27%20or%20Category%20eq%20%27Books%27%20or%20Category%20eq%20%27Clothing%27")
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=CategoryID%20eq%201%20or%20CategoryID%20eq%202%20or%20CategoryID%20eq%203")
     
     check_status "$HTTP_CODE" "200"
 }
@@ -69,7 +69,7 @@ test_not_with_and() {
 
 # Test 8: Parentheses for precedence
 test_parentheses_precedence() {
-    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=Price%20gt%2010%20and%20(Category%20eq%20%27Electronics%27%20or%20Category%20eq%20%27Books%27)")
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=Price%20gt%2010%20and%20(CategoryID%20eq%201%20or%20CategoryID%20eq%202)")
     
     check_status "$HTTP_CODE" "200"
 }
@@ -129,19 +129,19 @@ run_test "OR operator works in filter expressions" test_or_operator
 echo "  Request: GET $SERVER_URL/Products?\$filter=not (Price gt 50)"
 run_test "NOT operator works in filter expressions" test_not_operator
 
-echo "  Request: GET $SERVER_URL/Products?\$filter=(Price lt 10 or Price gt 100) and Category eq 'Electronics'"
+echo "  Request: GET $SERVER_URL/Products?\$filter=(Price lt 10 or Price gt 100) and CategoryID eq 1"
 run_test "Complex expression with AND and OR" test_complex_and_or
 
 echo "  Request: GET $SERVER_URL/Products?\$filter=Price gt 10 and Price lt 100 and Status eq 1"
 run_test "Multiple AND operators chain correctly" test_multiple_and
 
-echo "  Request: GET $SERVER_URL/Products?\$filter=Category eq 'Electronics' or Category eq 'Books' or Category eq 'Clothing'"
+echo "  Request: GET $SERVER_URL/Products?\$filter=CategoryID eq 1 or CategoryID eq 2 or CategoryID eq 3"
 run_test "Multiple OR operators chain correctly" test_multiple_or
 
 echo "  Request: GET $SERVER_URL/Products?\$filter=not (Price gt 50 and Status eq 1)"
 run_test "NOT with AND expression" test_not_with_and
 
-echo "  Request: GET $SERVER_URL/Products?\$filter=Price gt 10 and (Category eq 'Electronics' or Category eq 'Books')"
+echo "  Request: GET $SERVER_URL/Products?\$filter=Price gt 10 and (CategoryID eq 1 or CategoryID eq 2)"
 run_test "Parentheses control operator precedence" test_parentheses_precedence
 
 echo "  Request: GET $SERVER_URL/Products?\$filter=not (Price lt 10 or Price gt 100)"
