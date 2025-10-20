@@ -9,8 +9,9 @@ source "$SCRIPT_DIR/test_framework.sh"
 
 # Test 1: GET individual entity by key
 test_1() {
-    check_status "Products(1)" 200
-    local BODY=$(http_get_body "Products(1)")
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products(1)")
+    check_status "$HTTP_CODE" "200"
+    local BODY=$(http_get_body "$SERVER_URL/Products(1)")
     check_contains "$BODY" '"ID"' "Entity has ID property"
     if echo "$BODY" | grep -q '"value"'; then
         return 1
@@ -41,16 +42,18 @@ test_3() {
 
 # Test 4: Request non-existent entity returns 404
 test_4() {
-    check_status "Products(999999)" 404
-    local BODY=$(http_get_body "Products(999999)")
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products(999999)")
+    check_status "$HTTP_CODE" "404"
+    local BODY=$(http_get_body "$SERVER_URL/Products(999999)")
     # OData error format optional but recommended
     return 0
 }
 
 # Test 5: Request entity with query options
 test_5() {
-    check_status "Products(1)?\$select=Name,Price" 200
-    local BODY=$(http_get_body "Products(1)?\$select=Name,Price")
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products(1)?\$select=Name,Price")
+    check_status "$HTTP_CODE" "200"
+    local BODY=$(http_get_body "$SERVER_URL/Products(1)?\$select=Name,Price")
     check_contains "$BODY" '"Name"' "Response has Name"
     check_contains "$BODY" '"Price"' "Response has Price"
 }
