@@ -7,6 +7,7 @@ import (
 	"reflect"
 
 	"github.com/nlstn/go-odata/internal/metadata"
+	"github.com/nlstn/go-odata/internal/query"
 	"github.com/nlstn/go-odata/internal/response"
 	"gorm.io/gorm"
 )
@@ -53,6 +54,13 @@ func (h *EntityHandler) handleGetNavigationProperty(w http.ResponseWriter, r *ht
 		return
 	}
 
+	// For collection navigation properties, check if query options are present
+	// If so, we need to query the collection separately to apply filters, etc.
+	if navProp.NavigationIsArray && hasQueryOptions(r) {
+		h.handleNavigationCollectionWithQueryOptions(w, r, entityKey, navProp, isRef)
+		return
+	}
+
 	// Fetch the parent entity with the navigation property preloaded
 	parent, err := h.fetchParentEntityWithNav(entityKey, navProp.Name)
 	if err != nil {
@@ -81,6 +89,122 @@ func (h *EntityHandler) handleGetNavigationProperty(w http.ResponseWriter, r *ht
 func (h *EntityHandler) handleOptionsNavigationProperty(w http.ResponseWriter) {
 	w.Header().Set("Allow", "GET, HEAD, OPTIONS")
 	w.WriteHeader(http.StatusOK)
+}
+
+// handleNavigationCollectionWithQueryOptions handles collection navigation properties with query options
+// This method queries the related collection directly to properly apply filters, orderby, etc.
+func (h *EntityHandler) handleNavigationCollectionWithQueryOptions(w http.ResponseWriter, r *http.Request, entityKey string, navProp *metadata.PropertyMetadata, isRef bool) {
+	// Get the target entity metadata
+	targetMetadata, err := h.getTargetMetadata(navProp.NavigationTarget)
+	if err != nil {
+		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgInternalError,
+			fmt.Sprintf("Failed to get target metadata: %v", err)); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	}
+
+	// Parse query options using the target entity's metadata
+	queryOptions, err := query.ParseQueryOptions(r.URL.Query(), targetMetadata)
+	if err != nil {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions, err.Error()); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	}
+
+	// First verify that the parent entity exists
+	parent := reflect.New(h.metadata.EntityType).Interface()
+	db, err := h.buildKeyQuery(entityKey)
+	if err != nil {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidKey, err.Error()); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	}
+	if err := db.First(parent).Error; err != nil {
+		h.handleFetchError(w, err, entityKey)
+		return
+	}
+
+	// Build a query for the related collection
+	// We need to filter by the foreign key that relates to the parent entity
+	relatedDB := h.db.Model(reflect.New(targetMetadata.EntityType).Interface())
+
+	// Extract the parent entity's key values to filter the related collection
+	parentValue := reflect.ValueOf(parent).Elem()
+	
+	// Build foreign key constraints
+	// This assumes standard GORM conventions: ParentID field in child references ID in parent
+	// For the Product -> ProductDescriptions example: ProductDescription.ProductID = Product.ID
+	// GORM uses snake_case for column names, so ProductID becomes product_id
+	for _, keyProp := range h.metadata.KeyProperties {
+		keyFieldValue := parentValue.FieldByName(keyProp.Name)
+		if keyFieldValue.IsValid() {
+			// Build the foreign key column name using GORM's naming convention
+			// EntityName + KeyProperty name, converted to snake_case
+			foreignKeyFieldName := fmt.Sprintf("%s%s", h.metadata.EntityName, keyProp.Name)
+			foreignKeyColumnName := toSnakeCase(foreignKeyFieldName)
+			relatedDB = relatedDB.Where(fmt.Sprintf("%s = ?", foreignKeyColumnName), keyFieldValue.Interface())
+		}
+	}
+
+	// Get total count if $count=true
+	var totalCount *int64
+	if queryOptions.Count {
+		var count int64
+		countDB := relatedDB
+		// Apply filter to count query if present
+		if queryOptions.Filter != nil {
+			countDB = query.ApplyFilterOnly(countDB, queryOptions.Filter, targetMetadata)
+		}
+		if err := countDB.Count(&count).Error; err != nil {
+			if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error()); writeErr != nil {
+				fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			}
+			return
+		}
+		totalCount = &count
+	}
+
+	// Apply query options to the database query
+	relatedDB = query.ApplyQueryOptions(relatedDB, queryOptions, targetMetadata)
+
+	// Fetch the results
+	resultsSlice := reflect.New(reflect.SliceOf(targetMetadata.EntityType)).Interface()
+	if err := relatedDB.Find(resultsSlice).Error; err != nil {
+		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error()); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	}
+
+	// Calculate next link if pagination is active
+	sliceValue := reflect.ValueOf(resultsSlice).Elem()
+	var nextLink *string
+	if queryOptions.Top != nil && sliceValue.Len() > *queryOptions.Top {
+		// Trim to the requested top count
+		trimmedSlice := reflect.MakeSlice(sliceValue.Type(), *queryOptions.Top, *queryOptions.Top)
+		reflect.Copy(trimmedSlice, sliceValue.Slice(0, *queryOptions.Top))
+		sliceValue = trimmedSlice
+		
+		// Build next link
+		baseURL := response.BuildBaseURL(r)
+		navigationPath := fmt.Sprintf("%s(%s)/%s", h.metadata.EntitySetName, entityKey, navProp.JsonName)
+		nextURL := buildNextLink(baseURL, navigationPath, queryOptions)
+		nextLink = &nextURL
+	}
+
+	// Write response
+	navigationPath := fmt.Sprintf("%s(%s)/%s", h.metadata.EntitySetName, entityKey, navProp.JsonName)
+	
+	if isRef {
+		h.writeNavigationCollectionRefFromData(w, r, targetMetadata, sliceValue.Interface(), totalCount, nextLink)
+	} else {
+		if err := response.WriteODataCollection(w, r, navigationPath, sliceValue.Interface(), totalCount, nextLink); err != nil {
+			fmt.Printf("Error writing navigation property collection: %v\n", err)
+		}
+	}
 }
 
 // handleGetNavigationPropertyCount handles GET requests for navigation property count
@@ -551,4 +675,51 @@ func (h *EntityHandler) getTargetMetadata(targetName string) (*metadata.EntityMe
 	}
 
 	return nil, fmt.Errorf("metadata for target '%s' not found", targetName)
+}
+
+// hasQueryOptions checks if the request has any OData query options
+func hasQueryOptions(r *http.Request) bool {
+	query := r.URL.Query()
+	odataOptions := []string{"$filter", "$select", "$orderby", "$top", "$skip", "$count", "$expand", "$search", "$skiptoken"}
+	for _, option := range odataOptions {
+		if query.Has(option) {
+			return true
+		}
+	}
+	return false
+}
+
+// buildNextLink builds a next link URL for pagination
+func buildNextLink(baseURL, path string, options *query.QueryOptions) string {
+	// Simple implementation - in production this should handle skiptoken properly
+	if options.Skip == nil {
+		skip := 0
+		options.Skip = &skip
+	}
+	if options.Top == nil {
+		top := 20
+		options.Top = &top
+	}
+	nextSkip := *options.Skip + *options.Top
+	return fmt.Sprintf("%s/%s?$skip=%d&$top=%d", baseURL, path, nextSkip, *options.Top)
+}
+
+// writeNavigationCollectionRefFromData writes entity references for a navigation collection from data
+func (h *EntityHandler) writeNavigationCollectionRefFromData(w http.ResponseWriter, r *http.Request, targetMetadata *metadata.EntityMetadata, data interface{}, count *int64, nextLink *string) {
+	// Build entity IDs for each entity in the collection
+	var entityIDs []string
+	
+	sliceValue := reflect.ValueOf(data)
+	if sliceValue.Kind() == reflect.Slice {
+		for i := 0; i < sliceValue.Len(); i++ {
+			entity := sliceValue.Index(i).Interface()
+			keyValues := response.ExtractEntityKeys(entity, targetMetadata.KeyProperties)
+			entityID := response.BuildEntityID(targetMetadata.EntitySetName, keyValues)
+			entityIDs = append(entityIDs, entityID)
+		}
+	}
+
+	if err := response.WriteEntityReferenceCollection(w, r, entityIDs, count, nextLink); err != nil {
+		fmt.Printf("Error writing entity reference collection: %v\n", err)
+	}
 }

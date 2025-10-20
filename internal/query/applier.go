@@ -675,12 +675,12 @@ func applyOrderBy(db *gorm.DB, orderBy []OrderByItem, entityMetadata *metadata.E
 		if !propertyExists(item.Property, entityMetadata) {
 			continue // Skip unrecognized properties in $orderby
 		}
-		fieldName := GetPropertyFieldName(item.Property, entityMetadata)
+		columnName := GetColumnName(item.Property, entityMetadata)
 		direction := "ASC"
 		if item.Descending {
 			direction = "DESC"
 		}
-		db = db.Order(fmt.Sprintf("%s %s", fieldName, direction))
+		db = db.Order(fmt.Sprintf("%s %s", columnName, direction))
 	}
 	return db
 }
