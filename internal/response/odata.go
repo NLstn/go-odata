@@ -729,6 +729,7 @@ func WriteODataError(w http.ResponseWriter, httpStatusCode int, odataError *ODat
 	}
 
 	w.Header().Set("Content-Type", "application/json;odata.metadata=minimal")
+	w.Header().Set("OData-Version", "4.0")
 	w.WriteHeader(httpStatusCode)
 
 	encoder := json.NewEncoder(w)
