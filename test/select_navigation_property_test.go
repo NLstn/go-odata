@@ -2,10 +2,8 @@ package odata_test
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/nlstn/go-odata"
@@ -316,27 +314,4 @@ func setupTestDBForSelectNav(t *testing.T) *gorm.DB {
 		t.Fatalf("Failed to open database: %v", err)
 	}
 	return db
-}
-
-// Custom error response check
-func checkErrorResponse(t *testing.T, body string) {
-	if !strings.Contains(body, "error") {
-		t.Errorf("Expected error response, got: %s", body)
-	}
-}
-
-// Helper to check response contains expected data
-func checkResponseContains(t *testing.T, response map[string]interface{}, key string) {
-	if _, ok := response[key]; !ok {
-		t.Errorf("Response missing '%s' key", key)
-	}
-}
-
-// Format helper for cleaner test output
-func formatJSON(data interface{}) string {
-	b, err := json.MarshalIndent(data, "", "  ")
-	if err != nil {
-		return fmt.Sprintf("%v", data)
-	}
-	return string(b)
 }
