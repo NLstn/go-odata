@@ -9,13 +9,13 @@ source "$SCRIPT_DIR/test_framework.sh"
 
 # Test 1: odata.metadata=minimal (default)
 test_1() {
-    local RESPONSE=$(http_get_body "Products?\$format=application/json;odata.metadata=minimal")
+    local RESPONSE=$(http_get_body "$SERVER_URL/Products?\$format=application/json;odata.metadata=minimal")
     check_contains "$RESPONSE" '"@odata.context"' "metadata=minimal has @odata.context"
 }
 
 # Test 2: odata.metadata=full includes type annotations
 test_2() {
-    local RESPONSE=$(http_get_body "Products(1)?\$format=application/json;odata.metadata=full")
+    local RESPONSE=$(http_get_body "$SERVER_URL/Products(1)?\$format=application/json;odata.metadata=full")
     if echo "$RESPONSE" | grep -q '"@odata.context"'; then
         check_contains "$RESPONSE" '@odata\.type\|@odata\.id' "metadata=full has type annotations"
     else
@@ -25,7 +25,7 @@ test_2() {
 
 # Test 3: odata.metadata=none excludes metadata
 test_3() {
-    local RESPONSE=$(http_get_body "Products(1)?\$format=application/json;odata.metadata=none")
+    local RESPONSE=$(http_get_body "$SERVER_URL/Products(1)?\$format=application/json;odata.metadata=none")
     if echo "$RESPONSE" | grep -q '"@odata.context"'; then
         return 1
     fi
@@ -33,14 +33,14 @@ test_3() {
 
 # Test 4: metadata=none still returns data
 test_4() {
-    check_status "Products(1)?\$format=application/json;odata.metadata=none" 200
-    local RESPONSE=$(http_get_body "Products(1)?\$format=application/json;odata.metadata=none")
+    check_status "$SERVER_URL/Products(1)?\$format=application/json;odata.metadata=none" 200
+    local RESPONSE=$(http_get_body "$SERVER_URL/Products(1)?\$format=application/json;odata.metadata=none")
     check_contains "$RESPONSE" '"ID"\|"Name"' "metadata=none returns entity data"
 }
 
 # Test 5: Invalid metadata value should work or return error
 test_5() {
-    local STATUS=$(http_get "Products(1)?\$format=application/json;odata.metadata=invalid" | tail -1)
+    local STATUS=$(http_get "$SERVER_URL/Products(1)?\$format=application/json;odata.metadata=invalid" | tail -1)
     if [ "$STATUS" = "400" ] || [ "$STATUS" = "200" ]; then
         return 0
     fi
@@ -49,7 +49,7 @@ test_5() {
 
 # Test 6: Collection with metadata=full
 test_6() {
-    local RESPONSE=$(http_get_body "Products?\$top=2&\$format=application/json;odata.metadata=full")
+    local RESPONSE=$(http_get_body "$SERVER_URL/Products?\$top=2&\$format=application/json;odata.metadata=full")
     check_contains "$RESPONSE" '"@odata.context"' "Collection metadata=full has context"
 }
 

@@ -178,8 +178,8 @@ func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{
 	}
 
 	// Add @odata.etag annotation if ETag value is available
-	// Per OData v4 spec, this should be included in the response body
-	if etagValue != "" {
+	// Per OData v4 spec, exclude all control information for metadata=none
+	if etagValue != "" && metadataLevel != "none" {
 		odataResponse.Set("@odata.etag", etagValue)
 	}
 
