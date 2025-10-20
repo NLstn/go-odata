@@ -58,7 +58,7 @@ test_4() {
     local RESPONSE=$(curl -s -w "\n%{http_code}" -X PATCH \
         -H "Content-Type: application/json" \
         -H "If-Match: $ETAG_HEADER" \
-        -d '{"Description":"Test update"}' \
+        -d '{"Name":"Test update"}' \
         "$SERVER_URL/Products(1)" 2>&1)
     local HTTP_CODE=$(echo "$RESPONSE" | tail -1)
     
@@ -74,7 +74,7 @@ test_5() {
     local RESPONSE=$(curl -s -w "\n%{http_code}" -X PATCH \
         -H "Content-Type: application/json" \
         -H 'If-Match: "wrong-etag"' \
-        -d '{"Description":"Test update"}' \
+        -d '{"Name":"Test update"}' \
         "$SERVER_URL/Products(1)" 2>&1)
     local HTTP_CODE=$(echo "$RESPONSE" | tail -1)
     
@@ -90,7 +90,7 @@ test_6() {
     local RESPONSE=$(curl -s -w "\n%{http_code}" -X PATCH \
         -H "Content-Type: application/json" \
         -H "If-Match: *" \
-        -d '{"Description":"Test update with wildcard"}' \
+        -d '{"Name":"Test update with wildcard"}' \
         "$SERVER_URL/Products(1)" 2>&1)
     local HTTP_CODE=$(echo "$RESPONSE" | tail -1)
     
