@@ -9,7 +9,7 @@ source "$SCRIPT_DIR/test_framework.sh"
 
 # Test 1: Read entity reference with \$ref
 test_1() {
-    local RESPONSE=$(http_get "Products(1)/Category/\$ref")
+    local RESPONSE=$(curl -g -s -w "\n%{http_code}" "$SERVER_URL/Products(1)/Category/\$ref" 2>&1)
     local STATUS=$(echo "$RESPONSE" | tail -1)
     local BODY=$(echo "$RESPONSE" | head -n -1)
     
@@ -24,7 +24,7 @@ test_1() {
 
 # Test 2: Read collection of references
 test_2() {
-    local RESPONSE=$(http_get "Products(1)/RelatedProducts/\$ref")
+    local RESPONSE=$(curl -g -s -w "\n%{http_code}" "$SERVER_URL/Products(1)/RelatedProducts/\$ref" 2>&1)
     local STATUS=$(echo "$RESPONSE" | tail -1)
     local BODY=$(echo "$RESPONSE" | head -n -1)
     

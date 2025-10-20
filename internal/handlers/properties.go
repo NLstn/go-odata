@@ -926,7 +926,7 @@ func (h *EntityHandler) handlePostNavigationPropertyRef(w http.ResponseWriter, r
 // handleDeleteNavigationPropertyRef handles DELETE requests to remove a navigation property reference
 // Example: DELETE Products(1)/Category/$ref (single-valued)
 // Example: DELETE Products(1)/RelatedProducts(2)/$ref (collection - handled here by extracting key from navigation property)
-func (h *EntityHandler) handleDeleteNavigationPropertyRef(w http.ResponseWriter, r *http.Request, entityKey string, navigationProperty string) {
+func (h *EntityHandler) handleDeleteNavigationPropertyRef(w http.ResponseWriter, _ *http.Request, entityKey string, navigationProperty string) {
 	// Check if the navigation property contains a key (e.g., RelatedProducts(2))
 	navPropName, targetKey := h.parseNavigationPropertyWithKey(navigationProperty)
 	
