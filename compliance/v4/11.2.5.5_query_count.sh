@@ -7,101 +7,69 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/test_framework.sh"
 
-echo "======================================"
-echo "OData v4 Compliance Test"
-echo "Section: 11.2.5.5 System Query Option \$count"
-echo "======================================"
-echo ""
-echo "Description: Validates \$count query option to include count of matching"
-echo "             entities in the response according to OData v4 specification."
-echo ""
-echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_SystemQueryOptioncount"
-echo ""
-
-
-
 # Test 1: $count=true includes @odata.count in response
-echo "Test 1: \$count=true includes @odata.count in response"
-echo "  Request: GET $SERVER_URL/Products?\$count=true"
-RESPONSE=$(curl -s -w "\n%{http_code}" "$SERVER_URL/Products?\$count=true" 2>&1)
-HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-BODY=$(echo "$RESPONSE" | head -n -1)
-
-if [ "$HTTP_CODE" = "200" ]; then
-    if echo "$BODY" | grep -q '"@odata.count"'; then
-        test_result "\$count=true includes @odata.count property" "PASS"
-    else
-        test_result "\$count=true includes @odata.count property" "FAIL" "No @odata.count in response"
+test_1() {
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$count=true")
+    if ! check_status "$HTTP_CODE" "200"; then
+        return 1
     fi
-else
-    test_result "\$count=true returns 200" "FAIL" "Status code: $HTTP_CODE"
-fi
-echo ""
+    local BODY=$(http_get_body "$SERVER_URL/Products?\$count=true")
+    check_json_field "$BODY" "@odata.count"
+}
 
 # Test 2: $count=false does not include @odata.count
-echo "Test 2: \$count=false excludes @odata.count"
-echo "  Request: GET $SERVER_URL/Products?\$count=false"
-RESPONSE=$(curl -s -w "\n%{http_code}" "$SERVER_URL/Products?\$count=false" 2>&1)
-HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-BODY=$(echo "$RESPONSE" | head -n -1)
-
-if [ "$HTTP_CODE" = "200" ]; then
-    if ! echo "$BODY" | grep -q '"@odata.count"'; then
-        test_result "\$count=false excludes @odata.count" "PASS"
-    else
-        test_result "\$count=false excludes @odata.count" "FAIL" "@odata.count should not be present"
+test_2() {
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$count=false")
+    if ! check_status "$HTTP_CODE" "200"; then
+        return 1
     fi
-else
-    test_result "\$count=false returns 200" "FAIL" "Status code: $HTTP_CODE"
-fi
-echo ""
+    local BODY=$(http_get_body "$SERVER_URL/Products?\$count=false")
+    if ! echo "$BODY" | grep -q '"@odata.count"'; then
+        return 0
+    fi
+    echo "  Details: @odata.count should not be present"
+    return 1
+}
 
 # Test 3: $count with $filter returns filtered count
-echo "Test 3: \$count with \$filter returns filtered count"
-echo "  Request: GET $SERVER_URL/Products?\$count=true&\$filter=Price gt 100"
-RESPONSE=$(curl -s -w "\n%{http_code}" "$SERVER_URL/Products?\$count=true&\$filter=Price%20gt%20100" 2>&1)
-HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-BODY=$(echo "$RESPONSE" | head -n -1)
-
-if [ "$HTTP_CODE" = "200" ]; then
-    if echo "$BODY" | grep -q '"@odata.count"'; then
-        COUNT=$(echo "$BODY" | grep -o '"@odata.count"[[:space:]]*:[[:space:]]*[0-9]*' | grep -o '[0-9]*$')
-        if [ -n "$COUNT" ]; then
-            test_result "\$count with \$filter returns count of filtered items" "PASS"
-        else
-            test_result "\$count with \$filter returns count of filtered items" "FAIL" "Count not numeric"
-        fi
-    else
-        test_result "\$count with \$filter includes @odata.count" "FAIL" "No @odata.count"
+test_3() {
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$count=true&\$filter=Price%20gt%20100")
+    if ! check_status "$HTTP_CODE" "200"; then
+        return 1
     fi
-else
-    test_result "\$count with \$filter" "FAIL" "Status code: $HTTP_CODE"
-fi
-echo ""
+    local BODY=$(http_get_body "$SERVER_URL/Products?\$count=true&\$filter=Price%20gt%20100")
+    if check_json_field "$BODY" "@odata.count"; then
+        local COUNT=$(echo "$BODY" | grep -o '"@odata.count"[[:space:]]*:[[:space:]]*[0-9]*' | grep -o '[0-9]*$')
+        if [ -n "$COUNT" ]; then
+            return 0
+        fi
+        echo "  Details: Count not numeric"
+    fi
+    return 1
+}
 
 # Test 4: $count with $top still returns total count
-echo "Test 4: \$count with \$top returns total count, not page count"
-echo "  Request: GET $SERVER_URL/Products?\$count=true&\$top=1"
-RESPONSE=$(curl -s -w "\n%{http_code}" "$SERVER_URL/Products?\$count=true&\$top=1" 2>&1)
-HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-BODY=$(echo "$RESPONSE" | head -n -1)
-
-if [ "$HTTP_CODE" = "200" ]; then
-    if echo "$BODY" | grep -q '"@odata.count"'; then
-        COUNT=$(echo "$BODY" | grep -o '"@odata.count"[[:space:]]*:[[:space:]]*[0-9]*' | grep -o '[0-9]*$')
-        ITEMS=$(echo "$BODY" | grep -o '"ID"' | wc -l)
-        if [ -n "$COUNT" ] && [ "$COUNT" -ge "$ITEMS" ]; then
-            test_result "\$count with \$top returns total count" "PASS"
-        else
-            test_result "\$count with \$top returns total count" "FAIL" "Count=$COUNT, Items=$ITEMS"
-        fi
-    else
-        test_result "\$count with \$top includes @odata.count" "FAIL" "No @odata.count"
+test_4() {
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$count=true&\$top=1")
+    if ! check_status "$HTTP_CODE" "200"; then
+        return 1
     fi
-else
-    test_result "\$count with \$top" "FAIL" "Status code: $HTTP_CODE"
-fi
-echo ""
+    local BODY=$(http_get_body "$SERVER_URL/Products?\$count=true&\$top=1")
+    if check_json_field "$BODY" "@odata.count"; then
+        local COUNT=$(echo "$BODY" | grep -o '"@odata.count"[[:space:]]*:[[:space:]]*[0-9]*' | grep -o '[0-9]*$')
+        local ITEMS=$(echo "$BODY" | grep -o '"ID"' | wc -l)
+        if [ -n "$COUNT" ] && [ "$COUNT" -ge "$ITEMS" ]; then
+            return 0
+        fi
+        echo "  Details: Count=$COUNT, Items=$ITEMS"
+    fi
+    return 1
+}
 
+# Run all tests
+run_test "\$count=true includes @odata.count in response" test_1
+run_test "\$count=false excludes @odata.count" test_2
+run_test "\$count with \$filter returns filtered count" test_3
+run_test "\$count with \$top returns total count, not page count" test_4
 
 print_summary
