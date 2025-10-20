@@ -326,3 +326,135 @@ func TestErrorResponse_InvalidQueryOption(t *testing.T) {
 		})
 	}
 }
+
+func TestErrorResponse_ODataVersion(t *testing.T) {
+	service := setupErrorTestService(t)
+
+	testCases := []struct {
+		name       string
+		method     string
+		url        string
+		expectCode int
+	}{
+		{
+			name:       "404 error has OData-Version header",
+			method:     http.MethodGet,
+			url:        "/ErrorTestProducts(999)",
+			expectCode: http.StatusNotFound,
+		},
+		{
+			name:       "400 error has OData-Version header",
+			method:     http.MethodGet,
+			url:        "/ErrorTestProducts?$invalidOption=test",
+			expectCode: http.StatusBadRequest,
+		},
+		{
+			name:       "405 error has OData-Version header",
+			method:     http.MethodPut,
+			url:        "/ErrorTestProducts",
+			expectCode: http.StatusMethodNotAllowed,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(tc.method, tc.url, nil)
+			w := httptest.NewRecorder()
+
+			service.ServeHTTP(w, req)
+
+			// Verify OData-Version header is present
+			odataVersion := w.Header().Get("OData-Version")
+			if odataVersion != "4.0" {
+				t.Errorf("OData-Version header = %v, want 4.0", odataVersion)
+			}
+
+			// Verify Content-Type header
+			contentType := w.Header().Get("Content-Type")
+			if contentType != "application/json;odata.metadata=minimal" {
+				t.Errorf("Content-Type = %v, want application/json;odata.metadata=minimal", contentType)
+			}
+		})
+	}
+}
+
+func TestErrorResponse_RequiredFields(t *testing.T) {
+	service := setupErrorTestService(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/ErrorTestProducts(999)", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	// Parse response
+	var response map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	// Verify error object exists
+	errorData, ok := response["error"].(map[string]interface{})
+	if !ok {
+		t.Fatal("error field is missing or not an object")
+	}
+
+	// Verify required fields per OData v4 spec
+	requiredFields := []string{"code", "message"}
+	for _, field := range requiredFields {
+		if _, exists := errorData[field]; !exists {
+			t.Errorf("Required field '%s' is missing from error response", field)
+		}
+	}
+
+	// Verify code is a string
+	if code, ok := errorData["code"].(string); !ok || code == "" {
+		t.Errorf("error.code should be a non-empty string, got: %v", errorData["code"])
+	}
+
+	// Verify message is a string
+	if message, ok := errorData["message"].(string); !ok || message == "" {
+		t.Errorf("error.message should be a non-empty string, got: %v", errorData["message"])
+	}
+}
+
+func TestErrorResponse_DetailsStructure(t *testing.T) {
+	service := setupErrorTestService(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/ErrorTestProducts(999)", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	// Parse response
+	var response map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	errorData, ok := response["error"].(map[string]interface{})
+	if !ok {
+		t.Fatal("error field is missing or not an object")
+	}
+
+	// Verify details field exists and is an array
+	details, ok := errorData["details"].([]interface{})
+	if !ok {
+		t.Fatal("error.details should be an array")
+	}
+
+	// Verify at least one detail exists
+	if len(details) == 0 {
+		t.Fatal("error.details should contain at least one detail")
+	}
+
+	// Verify first detail has required structure
+	firstDetail, ok := details[0].(map[string]interface{})
+	if !ok {
+		t.Fatal("error.details[0] should be an object")
+	}
+
+	// Verify message field exists in detail
+	if message, ok := firstDetail["message"].(string); !ok || message == "" {
+		t.Errorf("error.details[0].message should be a non-empty string, got: %v", firstDetail["message"])
+	}
+}
