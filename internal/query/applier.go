@@ -277,6 +277,11 @@ func buildLogicalCondition(filter *FilterExpression, entityMetadata *metadata.En
 
 // buildComparisonCondition builds a comparison condition
 func buildComparisonCondition(filter *FilterExpression, entityMetadata *metadata.EntityMetadata) (string, []interface{}) {
+	// Check if this is a lambda expression (any/all)
+	if filter.Operator == OpAny || filter.Operator == OpAll {
+		return buildLambdaCondition(filter, entityMetadata)
+	}
+
 	// Check if this is a function comparison (function on left side of comparison)
 	if filter.Left != nil && filter.Left.Operator != "" {
 		return buildFunctionComparison(filter, entityMetadata)
@@ -345,6 +350,171 @@ func buildComparisonCondition(filter *FilterExpression, entityMetadata *metadata
 	default:
 		return "", nil
 	}
+}
+
+// buildLambdaCondition builds SQL for lambda operators (any/all) using EXISTS subquery
+func buildLambdaCondition(filter *FilterExpression, entityMetadata *metadata.EntityMetadata) (string, []interface{}) {
+	// Extract navigation property info
+	navProp := findNavigationProperty(filter.Property, entityMetadata)
+	if navProp == nil {
+		// Not a navigation property, can't apply lambda
+		return "", nil
+	}
+
+	// Get the related entity's table name using GORM conventions
+	// NavigationTarget is the entity type name (e.g., "ProductDescription")
+	// GORM table name would be snake_case + pluralized (e.g., "product_descriptions")
+	relatedEntityName := navProp.NavigationTarget
+	if relatedEntityName == "" {
+		// Fallback to using the property name
+		relatedEntityName = navProp.JsonName
+	}
+	relatedTableName := toSnakeCase(pluralize(relatedEntityName))
+	
+	// Get the parent entity's table name
+	parentTableName := toSnakeCase(pluralize(entityMetadata.EntityName))
+	
+	// Get the foreign key column name (usually parent_id)
+	// For ProductDescription -> Product, foreign key is product_id
+	foreignKeyColumn := toSnakeCase(entityMetadata.EntityName) + "_id"
+	
+	// Get the parent's primary key column name (usually "id")
+	parentPrimaryKey := "id"
+	if len(entityMetadata.KeyProperties) > 0 {
+		parentPrimaryKey = toSnakeCase(entityMetadata.KeyProperties[0].Name)
+	}
+
+	// Handle parameterless any/all
+	if filter.Value == nil || filter.Left == nil {
+		// Parameterless: just check if collection has any elements
+		if filter.Operator == OpAny {
+			// any() - at least one related record exists
+			return fmt.Sprintf("EXISTS (SELECT 1 FROM %s WHERE %s.%s = %s.%s)",
+				relatedTableName, relatedTableName, foreignKeyColumn, parentTableName, parentPrimaryKey), []interface{}{}
+		}
+		// all() without predicate doesn't make semantic sense in OData but we handle it
+		// It would mean "all elements satisfy true" which is always true if collection exists
+		return fmt.Sprintf("NOT EXISTS (SELECT 1 FROM %s WHERE %s.%s = %s.%s) OR EXISTS (SELECT 1 FROM %s WHERE %s.%s = %s.%s)",
+			relatedTableName, relatedTableName, foreignKeyColumn, parentTableName, parentPrimaryKey,
+			relatedTableName, relatedTableName, foreignKeyColumn, parentTableName, parentPrimaryKey), []interface{}{}
+	}
+
+	// Extract predicate from filter.Left
+	predicate := filter.Left
+	if predicate == nil {
+		return "", nil
+	}
+
+	// Build the condition for the subquery based on the predicate
+	// The predicate refers to properties of the related entity
+	predicateSQL, predicateArgs := buildFilterConditionForLambda(predicate, navProp)
+	if predicateSQL == "" {
+		return "", nil
+	}
+
+	// Build the complete EXISTS subquery
+	var sql string
+	if filter.Operator == OpAny {
+		// any(predicate) - at least one related record satisfies the predicate
+		sql = fmt.Sprintf("EXISTS (SELECT 1 FROM %s WHERE %s.%s = %s.%s AND %s)",
+			relatedTableName, relatedTableName, foreignKeyColumn, parentTableName, parentPrimaryKey, predicateSQL)
+	} else {
+		// all(predicate) - all related records satisfy the predicate
+		// This is equivalent to: NOT EXISTS (related record that does NOT satisfy predicate)
+		sql = fmt.Sprintf("NOT EXISTS (SELECT 1 FROM %s WHERE %s.%s = %s.%s AND NOT (%s))",
+			relatedTableName, relatedTableName, foreignKeyColumn, parentTableName, parentPrimaryKey, predicateSQL)
+	}
+
+	return sql, predicateArgs
+}
+
+// buildFilterConditionForLambda builds a filter condition for lambda subquery predicates
+// This is similar to buildFilterCondition but works with the related entity's metadata
+func buildFilterConditionForLambda(filter *FilterExpression, navProp *metadata.PropertyMetadata) (string, []interface{}) {
+	if filter == nil {
+		return "", nil
+	}
+
+	// Handle logical operators recursively
+	if filter.Logical != "" {
+		return buildLogicalConditionForLambda(filter, navProp)
+	}
+
+	// Handle function comparisons
+	if filter.Left != nil && filter.Left.Operator != "" {
+		return buildFunctionComparisonForLambda(filter, navProp)
+	}
+
+	// Simple comparison - convert property to column name for the related entity
+	columnName := toSnakeCase(filter.Property)
+
+	switch filter.Operator {
+	case OpEqual:
+		if filter.Value == nil {
+			return fmt.Sprintf("%s IS NULL", columnName), []interface{}{}
+		}
+		return fmt.Sprintf("%s = ?", columnName), []interface{}{filter.Value}
+	case OpNotEqual:
+		if filter.Value == nil {
+			return fmt.Sprintf("%s IS NOT NULL", columnName), []interface{}{}
+		}
+		return fmt.Sprintf("%s != ?", columnName), []interface{}{filter.Value}
+	case OpGreaterThan:
+		return fmt.Sprintf("%s > ?", columnName), []interface{}{filter.Value}
+	case OpGreaterThanOrEqual:
+		return fmt.Sprintf("%s >= ?", columnName), []interface{}{filter.Value}
+	case OpLessThan:
+		return fmt.Sprintf("%s < ?", columnName), []interface{}{filter.Value}
+	case OpLessThanOrEqual:
+		return fmt.Sprintf("%s <= ?", columnName), []interface{}{filter.Value}
+	case OpContains:
+		return fmt.Sprintf("%s LIKE ?", columnName), []interface{}{"%" + fmt.Sprint(filter.Value) + "%"}
+	case OpStartsWith:
+		return fmt.Sprintf("%s LIKE ?", columnName), []interface{}{fmt.Sprint(filter.Value) + "%"}
+	case OpEndsWith:
+		return fmt.Sprintf("%s LIKE ?", columnName), []interface{}{"%" + fmt.Sprint(filter.Value)}
+	default:
+		return "", nil
+	}
+}
+
+// buildLogicalConditionForLambda builds a logical condition for lambda predicates
+func buildLogicalConditionForLambda(filter *FilterExpression, navProp *metadata.PropertyMetadata) (string, []interface{}) {
+	leftQuery, leftArgs := buildFilterConditionForLambda(filter.Left, navProp)
+	rightQuery, rightArgs := buildFilterConditionForLambda(filter.Right, navProp)
+
+	var query string
+	switch filter.Logical {
+	case LogicalAnd:
+		query = fmt.Sprintf("(%s) AND (%s)", leftQuery, rightQuery)
+	case LogicalOr:
+		query = fmt.Sprintf("(%s) OR (%s)", leftQuery, rightQuery)
+	default:
+		return "", nil
+	}
+
+	args := append(leftArgs, rightArgs...)
+	return query, args
+}
+
+// buildFunctionComparisonForLambda builds a function comparison for lambda predicates
+func buildFunctionComparisonForLambda(filter *FilterExpression, _ *metadata.PropertyMetadata) (string, []interface{}) {
+	funcExpr := filter.Left
+	columnName := toSnakeCase(funcExpr.Property)
+
+	funcSQL, funcArgs := buildFunctionSQL(funcExpr.Operator, columnName, funcExpr.Value)
+	if funcSQL == "" {
+		return "", nil
+	}
+
+	// Build comparison
+	compSQL := buildComparisonSQL(filter.Operator, funcSQL)
+	if compSQL == "" {
+		return "", nil
+	}
+
+	allArgs := append(funcArgs, filter.Value)
+	return compSQL, allArgs
 }
 
 // buildFunctionComparison builds a comparison with a function on the left side
