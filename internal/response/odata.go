@@ -384,20 +384,17 @@ func processMapEntity(entity reflect.Value, metadata EntityMetadataProvider, exp
 		}
 	}
 
-	// Add @odata.id for full metadata (always) and minimal metadata (if key fields are omitted)
+	// Add @odata.id for full and minimal metadata levels
+	// Per OData v4 spec section 4.5.1, @odata.id MUST be included in responses
+	// except when odata.metadata=none
 	keySegment := buildKeySegmentFromMap(entityMap, metadata)
 	if keySegment != "" {
 		entityID := fmt.Sprintf("%s/%s(%s)", baseURL, entitySetName, keySegment)
 
 		switch metadataLevel {
-		case "full":
-			// Always include @odata.id in full metadata
+		case "full", "minimal":
+			// Always include @odata.id in full and minimal metadata
 			entityMap["@odata.id"] = entityID
-		case "minimal":
-			// Include @odata.id in minimal metadata if any key field is missing
-			if !allKeyFieldsPresent(entityMap, metadata) {
-				entityMap["@odata.id"] = entityID
-			}
 		}
 		// For "none" metadata level, never include @odata.id
 	}
@@ -463,19 +460,17 @@ func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataPro
 		}
 	}
 
-	// Add @odata.id for full metadata (always) and minimal metadata (if key fields are omitted)
+	// Add @odata.id for full and minimal metadata levels
+	// Per OData v4 spec section 4.5.1, @odata.id MUST be included in responses
+	// except when odata.metadata=none
 	keySegment := BuildKeySegmentFromEntity(entity, metadata)
 	if keySegment != "" {
 		entityID := fmt.Sprintf("%s/%s(%s)", baseURL, entitySetName, keySegment)
 
 		switch metadataLevel {
-		case "full":
-			// Always include @odata.id in full metadata
+		case "full", "minimal":
+			// Always include @odata.id in full and minimal metadata
 			entityMap.Set("@odata.id", entityID)
-		case "minimal":
-			// For minimal metadata, we'll check later if key fields are included
-			// Store the entityID temporarily to decide after processing fields
-			entityMap.Set("__temp_entity_id", entityID)
 		}
 		// For "none" metadata level, never include @odata.id
 	}
@@ -501,32 +496,6 @@ func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataPro
 		} else {
 			// Regular property - include its value
 			entityMap.Set(jsonName, fieldValue.Interface())
-		}
-	}
-
-	// For minimal metadata, check if all key fields are present
-	if metadataLevel == "minimal" {
-		if tempID, exists := entityMap.values["__temp_entity_id"]; exists {
-			// Remove the temporary ID
-			delete(entityMap.values, "__temp_entity_id")
-			// Remove from keys list
-			for i, key := range entityMap.keys {
-				if key == "__temp_entity_id" {
-					entityMap.keys = append(entityMap.keys[:i], entityMap.keys[i+1:]...)
-					break
-				}
-			}
-
-			// Check if all key fields are present
-			if !allKeyFieldsPresentInOrderedMap(entityMap, metadata) {
-				// Add @odata.id at the beginning (after @odata.context and @odata.type if present)
-				insertPosition := 0
-				if len(entityMap.keys) > 0 && strings.HasPrefix(entityMap.keys[0], "@odata.") {
-					insertPosition = 1
-				}
-				entityMap.keys = append(entityMap.keys[:insertPosition], append([]string{"@odata.id"}, entityMap.keys[insertPosition:]...)...)
-				entityMap.values["@odata.id"] = tempID
-			}
 		}
 	}
 
@@ -654,28 +623,6 @@ func getJsonFieldName(field reflect.StructField) string {
 	}
 
 	return field.Name
-}
-
-// allKeyFieldsPresent checks if all key fields are present in a map entity
-func allKeyFieldsPresent(entityMap map[string]interface{}, metadata EntityMetadataProvider) bool {
-	keyProps := metadata.GetKeyProperties()
-	for _, keyProp := range keyProps {
-		if _, exists := entityMap[keyProp.JsonName]; !exists {
-			return false
-		}
-	}
-	return true
-}
-
-// allKeyFieldsPresentInOrderedMap checks if all key fields are present in an OrderedMap
-func allKeyFieldsPresentInOrderedMap(entityMap *OrderedMap, metadata EntityMetadataProvider) bool {
-	keyProps := metadata.GetKeyProperties()
-	for _, keyProp := range keyProps {
-		if _, exists := entityMap.values[keyProp.JsonName]; !exists {
-			return false
-		}
-	}
-	return true
 }
 
 // ODataErrorDetail represents an additional error detail in an OData error response

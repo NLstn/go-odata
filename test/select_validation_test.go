@@ -521,10 +521,16 @@ func TestSelectReturnsOnlySelectedProperties(t *testing.T) {
 				t.Fatal("First value item is not a map")
 			}
 
-			// Verify exact number of properties
-			if len(firstItem) != tt.expectedPropCount {
+			// Verify exact number of properties (excluding @odata.* control information)
+			nonControlFields := 0
+			for key := range firstItem {
+				if !strings.HasPrefix(key, "@odata.") {
+					nonControlFields++
+				}
+			}
+			if nonControlFields != tt.expectedPropCount {
 				t.Errorf("Expected exactly %d properties, got %d. Properties: %v",
-					tt.expectedPropCount, len(firstItem), firstItem)
+					tt.expectedPropCount, nonControlFields, firstItem)
 			}
 
 			// Verify expected properties are present

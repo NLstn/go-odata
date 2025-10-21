@@ -792,6 +792,11 @@ func extractValueFromComparison(node ASTNode) (interface{}, error) {
 func convertFunctionCallExpr(n *FunctionCallExpr, entityMetadata *metadata.EntityMetadata) (*FilterExpression, error) {
 	functionName := n.Function
 
+	// Handle zero-argument functions (now)
+	if isZeroArgFunction(functionName) {
+		return convertZeroArgFunction(n, functionName)
+	}
+
 	// Handle single-argument functions (tolower, toupper, trim, length)
 	if isSingleArgFunction(functionName) {
 		return convertSingleArgFunction(n, functionName, entityMetadata)
@@ -823,6 +828,11 @@ func convertFunctionCallExpr(n *FunctionCallExpr, entityMetadata *metadata.Entit
 	}
 
 	return nil, fmt.Errorf("unsupported function: %s", functionName)
+}
+
+// isZeroArgFunction checks if a function takes zero arguments
+func isZeroArgFunction(name string) bool {
+	return name == "now"
 }
 
 // isSingleArgFunction checks if a function takes a single argument
@@ -864,6 +874,19 @@ func extractPropertyFromFunctionArg(arg ASTNode, functionName string, entityMeta
 	}
 
 	return "", fmt.Errorf("first argument of %s must be a property name or function call", functionName)
+}
+
+// convertZeroArgFunction converts zero-argument functions like now()
+func convertZeroArgFunction(n *FunctionCallExpr, functionName string) (*FilterExpression, error) {
+	if len(n.Args) != 0 {
+		return nil, fmt.Errorf("function %s requires 0 arguments", functionName)
+	}
+
+	return &FilterExpression{
+		Property: "", // Zero-arg functions don't operate on a property
+		Operator: FilterOperator(functionName),
+		Value:    nil,
+	}, nil
 }
 
 // convertSingleArgFunction converts single-argument functions

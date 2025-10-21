@@ -768,9 +768,16 @@ func TestEntityHandlerCollectionWithSelect(t *testing.T) {
 			t.Fatal("Item is not a map")
 		}
 
-		// Explicitly check that we have exactly 3 properties (Name, Price, and ID which is always included as key)
-		if len(item) != 3 {
-			t.Errorf("Expected exactly 3 properties (Name, Price, ID), got %d properties: %v", len(item), item)
+		// Explicitly check that we have exactly 3 data properties (Name, Price, and ID which is always included as key)
+		// @odata.id is control information and should not be counted
+		dataProps := 0
+		for key := range item {
+			if !strings.HasPrefix(key, "@odata.") {
+				dataProps++
+			}
+		}
+		if dataProps != 3 {
+			t.Errorf("Expected exactly 3 data properties (Name, Price, ID), got %d properties: %v", dataProps, item)
 		}
 
 		if _, hasName := item["Name"]; !hasName {
@@ -837,9 +844,16 @@ func TestEntityHandlerCollectionWithSelectSingleProperty(t *testing.T) {
 			t.Fatal("Item is not a map")
 		}
 
-		// Should have exactly 2 properties (Name and ID which is always included as key)
-		if len(item) != 2 {
-			t.Errorf("Expected exactly 2 properties (Name, ID), got %d properties: %v", len(item), item)
+		// Should have exactly 2 data properties (Name and ID which is always included as key)
+		// @odata.id is control information and should not be counted
+		dataProps := 0
+		for key := range item {
+			if !strings.HasPrefix(key, "@odata.") {
+				dataProps++
+			}
+		}
+		if dataProps != 2 {
+			t.Errorf("Expected exactly 2 data properties (Name, ID), got %d properties: %v", dataProps, item)
 		}
 
 		if _, hasName := item["Name"]; !hasName {
@@ -902,9 +916,16 @@ func TestEntityHandlerCollectionWithSelectAllProperties(t *testing.T) {
 			t.Fatal("Item is not a map")
 		}
 
-		// Should have all 5 properties
-		if len(item) != 5 {
-			t.Errorf("Expected exactly 5 properties, got %d properties: %v", len(item), item)
+		// Should have all 5 data properties
+		// @odata.id is control information and should not be counted
+		dataProps := 0
+		for key := range item {
+			if !strings.HasPrefix(key, "@odata.") {
+				dataProps++
+			}
+		}
+		if dataProps != 5 {
+			t.Errorf("Expected exactly 5 data properties, got %d properties: %v", dataProps, item)
 		}
 
 		// Verify all properties are present
@@ -1090,8 +1111,15 @@ func TestEntityHandlerCollectionWithCombinedOptions(t *testing.T) {
 		}
 
 		// Should have Name, Price, and ID (key properties are always included per OData spec)
-		if len(firstItem) != 3 {
-			t.Errorf("Expected 3 properties (Name, Price, ID), got %d", len(firstItem))
+		// @odata.id is control information and should not be counted
+		dataProps := 0
+		for key := range firstItem {
+			if !strings.HasPrefix(key, "@odata.") {
+				dataProps++
+			}
+		}
+		if dataProps != 3 {
+			t.Errorf("Expected 3 data properties (Name, Price, ID), got %d", dataProps)
 		}
 	}
 }

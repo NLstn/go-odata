@@ -6,6 +6,7 @@ import (
 	odata "github.com/nlstn/go-odata"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"gorm.io/driver/sqlite"
@@ -131,9 +132,16 @@ func TestSelectFetchesOnlyNeededColumns(t *testing.T) {
 				}
 			}
 
-			// The key (id) might be included for proper OData responses, which is acceptable
+			// The key (id) and @odata.id might be included for proper OData responses, which is acceptable
 			// but other fields should not be present
-			if len(firstItem) > len(tt.expectedFields)+1 { // +1 for potential id
+			// Count only non-control-information fields (fields not starting with @odata.)
+			nonControlFields := 0
+			for key := range firstItem {
+				if !strings.HasPrefix(key, "@odata.") {
+					nonControlFields++
+				}
+			}
+			if nonControlFields > len(tt.expectedFields)+1 { // +1 for potential id
 				t.Errorf("Response has more fields than expected. Got %d, expected at most %d. Fields: %v",
 					len(firstItem), len(tt.expectedFields)+1, getMapKeys(firstItem))
 			}
