@@ -252,7 +252,7 @@ func (p *ASTParser) parseGroupedExpression() (ASTNode, error) {
 	return &GroupExpr{Expr: expr}, nil
 }
 
-// parseLiteral parses literal values (string, number, boolean, null)
+// parseLiteral parses literal values (string, number, boolean, null, date, time)
 func (p *ASTParser) parseLiteral(token *Token) ASTNode {
 	switch token.Type {
 	case TokenString:
@@ -268,6 +268,12 @@ func (p *ASTParser) parseLiteral(token *Token) ASTNode {
 	case TokenNull:
 		p.advance()
 		return &LiteralExpr{Value: nil, Type: "null"}
+	case TokenDate:
+		p.advance()
+		return &LiteralExpr{Value: token.Value, Type: "date"}
+	case TokenTime:
+		p.advance()
+		return &LiteralExpr{Value: token.Value, Type: "time"}
 	default:
 		return nil
 	}
@@ -1047,7 +1053,7 @@ func convertArithmeticFunction(n *FunctionCallExpr, functionName string, entityM
 }
 
 // convertCastFunction converts cast function
-// Format: cast(property, 'TypeName')
+// Format: cast(property, TypeName) or cast(property, 'TypeName')
 func convertCastFunction(n *FunctionCallExpr, entityMetadata *metadata.EntityMetadata) (*FilterExpression, error) {
 	if len(n.Args) != 2 {
 		return nil, fmt.Errorf("function cast requires 2 arguments")
@@ -1059,15 +1065,21 @@ func convertCastFunction(n *FunctionCallExpr, entityMetadata *metadata.EntityMet
 		return nil, err
 	}
 
-	// Second argument should be a string literal representing the target type
-	lit, ok := n.Args[1].(*LiteralExpr)
-	if !ok {
-		return nil, fmt.Errorf("second argument of cast must be a type name string")
-	}
-
-	typeName, ok := lit.Value.(string)
-	if !ok {
-		return nil, fmt.Errorf("second argument of cast must be a string")
+	// Second argument should be a type name (either as an identifier or string literal)
+	var typeName string
+	
+	// Try as identifier first (OData v4 spec: unquoted type names)
+	if ident, ok := n.Args[1].(*IdentifierExpr); ok {
+		typeName = ident.Name
+	} else if lit, ok := n.Args[1].(*LiteralExpr); ok {
+		// Also accept string literals for backwards compatibility
+		typeNameVal, ok := lit.Value.(string)
+		if !ok {
+			return nil, fmt.Errorf("second argument of cast must be a type name")
+		}
+		typeName = typeNameVal
+	} else {
+		return nil, fmt.Errorf("second argument of cast must be a type name")
 	}
 
 	// Validate the type name (basic validation)
@@ -1101,7 +1113,7 @@ func convertCastFunction(n *FunctionCallExpr, entityMetadata *metadata.EntityMet
 }
 
 // convertIsOfFunction converts isof function
-// Format: isof(property, 'TypeName') or isof('TypeName')
+// Format: isof(property, TypeName) or isof(TypeName) or isof(property, 'TypeName') or isof('TypeName')
 func convertIsOfFunction(n *FunctionCallExpr, entityMetadata *metadata.EntityMetadata) (*FilterExpression, error) {
 	// isof can have 1 or 2 arguments
 	if len(n.Args) < 1 || len(n.Args) > 2 {
@@ -1112,38 +1124,46 @@ func convertIsOfFunction(n *FunctionCallExpr, entityMetadata *metadata.EntityMet
 	var typeName string
 
 	if len(n.Args) == 1 {
-		// Single argument form: isof('TypeName')
+		// Single argument form: isof(TypeName) or isof('TypeName')
 		// This checks the type of the current instance (implicit property)
-		lit, ok := n.Args[0].(*LiteralExpr)
-		if !ok {
-			return nil, fmt.Errorf("argument of isof must be a type name string")
+		
+		// Try as identifier first (OData v4 spec: unquoted type names)
+		if ident, ok := n.Args[0].(*IdentifierExpr); ok {
+			typeName = ident.Name
+		} else if lit, ok := n.Args[0].(*LiteralExpr); ok {
+			// Also accept string literals for backwards compatibility
+			typeNameVal, ok := lit.Value.(string)
+			if !ok {
+				return nil, fmt.Errorf("argument of isof must be a type name")
+			}
+			typeName = typeNameVal
+		} else {
+			return nil, fmt.Errorf("argument of isof must be a type name")
 		}
-
-		typeNameVal, ok := lit.Value.(string)
-		if !ok {
-			return nil, fmt.Errorf("argument of isof must be a string")
-		}
-		typeName = typeNameVal
+		
 		property = "$it" // Special marker for current instance
 	} else {
-		// Two argument form: isof(property, 'TypeName')
+		// Two argument form: isof(property, TypeName) or isof(property, 'TypeName')
 		var err error
 		property, err = extractPropertyFromFunctionArg(n.Args[0], "isof", entityMetadata)
 		if err != nil {
 			return nil, err
 		}
 
-		// Second argument should be a string literal representing the target type
-		lit, ok := n.Args[1].(*LiteralExpr)
-		if !ok {
-			return nil, fmt.Errorf("second argument of isof must be a type name string")
+		// Second argument should be a type name (either as an identifier or string literal)
+		// Try as identifier first (OData v4 spec: unquoted type names)
+		if ident, ok := n.Args[1].(*IdentifierExpr); ok {
+			typeName = ident.Name
+		} else if lit, ok := n.Args[1].(*LiteralExpr); ok {
+			// Also accept string literals for backwards compatibility
+			typeNameVal, ok := lit.Value.(string)
+			if !ok {
+				return nil, fmt.Errorf("second argument of isof must be a type name")
+			}
+			typeName = typeNameVal
+		} else {
+			return nil, fmt.Errorf("second argument of isof must be a type name")
 		}
-
-		typeNameVal, ok := lit.Value.(string)
-		if !ok {
-			return nil, fmt.Errorf("second argument of isof must be a string")
-		}
-		typeName = typeNameVal
 	}
 
 	// Validate the type name (basic validation)

@@ -269,3 +269,161 @@ func TestTokenizerNumbers(t *testing.T) {
 		})
 	}
 }
+
+func TestTokenizerDateLiterals(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "Date literal",
+			input:    "2024-01-15",
+			expected: "2024-01-15",
+		},
+		{
+			name:     "Date in expression",
+			input:    "date(CreatedAt) eq 2024-01-15",
+			expected: "2024-01-15",
+		},
+		{
+			name:     "Different date",
+			input:    "2023-12-31",
+			expected: "2023-12-31",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tokenizer := NewTokenizer(tt.input)
+			tokens, err := tokenizer.TokenizeAll()
+			if err != nil {
+				t.Fatalf("Tokenization failed: %v", err)
+			}
+
+			// Find the date token
+			var found bool
+			for _, token := range tokens {
+				if token.Type == TokenDate {
+					found = true
+					if token.Value != tt.expected {
+						t.Errorf("Expected date value '%s', got '%s'", tt.expected, token.Value)
+					}
+					break
+				}
+			}
+
+			if !found {
+				t.Errorf("Expected to find a TokenDate, but didn't")
+			}
+		})
+	}
+}
+
+func TestTokenizerTimeLiterals(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "Time literal",
+			input:    "12:00:00",
+			expected: "12:00:00",
+		},
+		{
+			name:     "Time in expression",
+			input:    "time(CreatedAt) lt 12:00:00",
+			expected: "12:00:00",
+		},
+		{
+			name:     "Time with fractional seconds",
+			input:    "14:30:45.123",
+			expected: "14:30:45.123",
+		},
+		{
+			name:     "Morning time",
+			input:    "08:15:30",
+			expected: "08:15:30",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tokenizer := NewTokenizer(tt.input)
+			tokens, err := tokenizer.TokenizeAll()
+			if err != nil {
+				t.Fatalf("Tokenization failed: %v", err)
+			}
+
+			// Find the time token
+			var found bool
+			for _, token := range tokens {
+				if token.Type == TokenTime {
+					found = true
+					if token.Value != tt.expected {
+						t.Errorf("Expected time value '%s', got '%s'", tt.expected, token.Value)
+					}
+					break
+				}
+			}
+
+			if !found {
+				t.Errorf("Expected to find a TokenTime, but didn't")
+			}
+		})
+	}
+}
+
+func TestTokenizerQualifiedTypeNames(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "Qualified type name Edm.String",
+			input:    "Edm.String",
+			expected: "Edm.String",
+		},
+		{
+			name:     "Qualified type name Edm.Decimal",
+			input:    "Edm.Decimal",
+			expected: "Edm.Decimal",
+		},
+		{
+			name:     "isof with qualified type",
+			input:    "isof(Price,Edm.Decimal)",
+			expected: "Edm.Decimal",
+		},
+		{
+			name:     "cast with qualified type",
+			input:    "cast(Status,Edm.String)",
+			expected: "Edm.String",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tokenizer := NewTokenizer(tt.input)
+			tokens, err := tokenizer.TokenizeAll()
+			if err != nil {
+				t.Fatalf("Tokenization failed: %v", err)
+			}
+
+			// Find the identifier with dot
+			var found bool
+			for _, token := range tokens {
+				if token.Type == TokenIdentifier && token.Value == tt.expected {
+					found = true
+					break
+				}
+			}
+
+			if !found {
+				t.Errorf("Expected to find identifier '%s', but didn't. Tokens: %+v", tt.expected, tokens)
+			}
+		})
+	}
+}
+
