@@ -116,11 +116,3 @@ jobs:
       run: |
         cd compliance/v4
         ./run_compliance_tests.sh
-
-    - name: Upload compliance report
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: compliance-report
-        path: compliance/v4/compliance-report.md
-        retention-days: 30
