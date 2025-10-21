@@ -289,6 +289,41 @@ func buildComparisonCondition(filter *FilterExpression, entityMetadata *metadata
 
 	columnName := GetColumnName(filter.Property, entityMetadata)
 
+	// Check if the value is a function call that needs to be converted to SQL
+	if funcCall, ok := filter.Value.(*FunctionCallExpr); ok {
+		// Convert the function call to a filter expression
+		rightExpr, err := convertFunctionCallExpr(funcCall, entityMetadata)
+		if err == nil && rightExpr != nil {
+			// Build SQL for the function
+			rightColumnName := ""
+			if rightExpr.Property != "" {
+				rightColumnName = GetColumnName(rightExpr.Property, entityMetadata)
+			}
+			rightSQL, rightArgs := buildFunctionSQL(rightExpr.Operator, rightColumnName, rightExpr.Value)
+			if rightSQL != "" {
+				// Build comparison with the function result
+				var compSQL string
+				switch filter.Operator {
+				case OpEqual:
+					compSQL = fmt.Sprintf("%s = %s", columnName, rightSQL)
+				case OpNotEqual:
+					compSQL = fmt.Sprintf("%s != %s", columnName, rightSQL)
+				case OpGreaterThan:
+					compSQL = fmt.Sprintf("%s > %s", columnName, rightSQL)
+				case OpGreaterThanOrEqual:
+					compSQL = fmt.Sprintf("%s >= %s", columnName, rightSQL)
+				case OpLessThan:
+					compSQL = fmt.Sprintf("%s < %s", columnName, rightSQL)
+				case OpLessThanOrEqual:
+					compSQL = fmt.Sprintf("%s <= %s", columnName, rightSQL)
+				default:
+					return "", nil
+				}
+				return compSQL, rightArgs
+			}
+		}
+	}
+
 	switch filter.Operator {
 	case OpEqual:
 		// Handle null comparisons with IS NULL
@@ -658,6 +693,10 @@ func buildFunctionSQL(op FilterOperator, columnName string, value interface{}) (
 		return fmt.Sprintf("DATE(%s)", columnName), nil
 	case OpTime:
 		return fmt.Sprintf("TIME(%s)", columnName), nil
+	case OpNow:
+		// now() is a parameterless function that returns current datetime
+		// columnName is ignored for now()
+		return "datetime('now')", nil
 	// Math functions
 	case OpCeiling:
 		// SQLite doesn't have native CEIL, so we implement it
@@ -1201,10 +1240,11 @@ func applyGroupBy(db *gorm.DB, groupBy *GroupByTransformation, entityMetadata *m
 			continue
 		}
 
-		// Use the struct field name for GROUP BY (GORM will convert to column name)
-		groupByColumns = append(groupByColumns, prop.Name)
-		// Use "column as fieldname" to ensure the result has the correct key
-		selectColumns = append(selectColumns, fmt.Sprintf("%s as %s", prop.Name, prop.JsonName))
+		// Get the database column name (snake_case)
+		columnName := GetColumnName(propName, entityMetadata)
+		groupByColumns = append(groupByColumns, columnName)
+		// Use "column as fieldname" to ensure the result has the correct JSON key
+		selectColumns = append(selectColumns, fmt.Sprintf("%s as %s", columnName, prop.JsonName))
 	}
 
 	// Apply nested transformations (typically aggregate)

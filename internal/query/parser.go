@@ -151,6 +151,7 @@ const (
 	OpSecond FilterOperator = "second"
 	OpDate   FilterOperator = "date"
 	OpTime   FilterOperator = "time"
+	OpNow    FilterOperator = "now"
 	// Lambda operators
 	OpAny FilterOperator = "any"
 	OpAll FilterOperator = "all"
