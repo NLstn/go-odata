@@ -76,3 +76,51 @@ jobs:
       with:
         version: v2.5.0
         args: --timeout=5m
+
+  compliance:
+    name: Compliance Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v5
+
+    - name: Set up Go
+      uses: actions/setup-go@v6
+      with:
+        go-version: '1.24'
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Start OData development server
+      run: |
+        cd cmd/devserver
+        go run . &
+        echo "SERVER_PID=$!" >> $GITHUB_ENV
+        # Wait for server to be ready
+        for i in {1..30}; do
+          if curl -s -f http://localhost:8080/ > /dev/null 2>&1; then
+            echo "Server is ready!"
+            break
+          fi
+          echo "Waiting for server to start... ($i/30)"
+          sleep 2
+        done
+        if ! curl -s -f http://localhost:8080/ > /dev/null 2>&1; then
+          echo "Server failed to start"
+          exit 1
+        fi
+
+    - name: Run compliance tests
+      run: |
+        cd compliance/v4
+        ./run_compliance_tests.sh
+
+    - name: Upload compliance report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: compliance-report
+        path: compliance/v4/compliance-report.md
+        retention-days: 30
