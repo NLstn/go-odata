@@ -398,6 +398,92 @@ func TestStringFunctions_Concat(t *testing.T) {
 	}
 }
 
+func TestStringFunctions_ConcatWithLiterals(t *testing.T) {
+	meta := getTestMetadata(t)
+
+	tests := []struct {
+		name      string
+		filter    string
+		expectErr bool
+	}{
+		{
+			name:      "concat with two empty strings",
+			filter:    "concat('','') eq ''",
+			expectErr: false,
+		},
+		{
+			name:      "concat with first arg literal",
+			filter:    "concat('prefix_', Name) eq 'prefix_Laptop'",
+			expectErr: false,
+		},
+		{
+			name:      "concat with both literal strings",
+			filter:    "concat('Hello', ' World') eq 'Hello World'",
+			expectErr: false,
+		},
+		{
+			name:      "concat with literal and property",
+			filter:    "concat('Item: ', Name) ne ''",
+			expectErr: false,
+		},
+		{
+			name:      "concat with empty literal first",
+			filter:    "concat('', Name) eq Name",
+			expectErr: false,
+		},
+		{
+			name:      "concat in complex expression with literals",
+			filter:    "concat('test', 'value') eq 'testvalue' or Price gt 100",
+			expectErr: false,
+		},
+		{
+			name:      "nested concat with literals",
+			filter:    "concat(concat('a', 'b'), 'c') eq 'abc'",
+			expectErr: false,
+		},
+		{
+			name:      "concat literal with function result",
+			filter:    "concat('PREFIX_', tolower(Name)) ne ''",
+			expectErr: false,
+		},
+		{
+			name:      "concat with special characters in literals",
+			filter:    "concat('Hello', '!@#$%') eq 'Hello!@#$%'",
+			expectErr: false,
+		},
+		{
+			name:      "concat with unicode in literals",
+			filter:    "concat('café', ' au lait') eq 'café au lait'",
+			expectErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tokenizer := NewTokenizer(tt.filter)
+			tokens, err := tokenizer.TokenizeAll()
+			if err != nil {
+				t.Fatalf("Tokenization failed: %v", err)
+			}
+
+			parser := NewASTParser(tokens)
+			ast, err := parser.Parse()
+			if err != nil {
+				t.Fatalf("Parsing failed: %v", err)
+			}
+
+			filterExpr, err := ASTToFilterExpression(ast, meta)
+			if (err != nil) != tt.expectErr {
+				t.Errorf("Expected error: %v, got: %v", tt.expectErr, err)
+			}
+
+			if !tt.expectErr && filterExpr == nil {
+				t.Error("Expected non-nil FilterExpression")
+			}
+		})
+	}
+}
+
 func TestStringFunctions_Combined(t *testing.T) {
 	meta := getTestMetadata(t)
 

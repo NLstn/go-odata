@@ -808,7 +808,12 @@ func convertFunctionCallExpr(n *FunctionCallExpr, entityMetadata *metadata.Entit
 		return convertSingleArgFunction(n, functionName, entityMetadata)
 	}
 
-	// Handle two-argument functions (contains, startswith, endswith, indexof, concat)
+	// Handle concat specially (can have literals as first argument)
+	if functionName == "concat" {
+		return convertConcatFunction(n, entityMetadata)
+	}
+
+	// Handle two-argument functions (contains, startswith, endswith, indexof)
 	if isTwoArgFunction(functionName) {
 		return convertTwoArgFunction(n, functionName, entityMetadata)
 	}
@@ -853,7 +858,7 @@ func isSingleArgFunction(name string) bool {
 // isTwoArgFunction checks if a function takes two arguments
 func isTwoArgFunction(name string) bool {
 	return name == "contains" || name == "startswith" || name == "endswith" ||
-		name == "indexof" || name == "concat" || name == "has"
+		name == "indexof" || name == "has"
 }
 
 // isArithmeticFunction checks if a function is an arithmetic function
@@ -947,6 +952,68 @@ func convertTwoArgFunction(n *FunctionCallExpr, functionName string, entityMetad
 	}, nil
 }
 
+// convertConcatFunction converts concat function which can have literals or properties as arguments
+func convertConcatFunction(n *FunctionCallExpr, entityMetadata *metadata.EntityMetadata) (*FilterExpression, error) {
+	if len(n.Args) != 2 {
+		return nil, fmt.Errorf("function concat requires 2 arguments")
+	}
+
+	// First argument can be a literal, property, or function call
+	var firstArg interface{}
+	var property string
+
+	if lit, ok := n.Args[0].(*LiteralExpr); ok {
+		// First argument is a literal
+		firstArg = lit.Value
+		property = "" // Empty property indicates literal-based concat
+	} else if ident, ok := n.Args[0].(*IdentifierExpr); ok {
+		// First argument is a property
+		property = ident.Name
+		if entityMetadata != nil && !propertyExists(property, entityMetadata) {
+			return nil, fmt.Errorf("property '%s' does not exist", property)
+		}
+		firstArg = nil // Property is stored in Property field
+	} else if funcCall, ok := n.Args[0].(*FunctionCallExpr); ok {
+		// First argument is a function call
+		innerExpr, err := convertFunctionCallExpr(funcCall, entityMetadata)
+		if err != nil {
+			return nil, err
+		}
+		property = innerExpr.Property
+		firstArg = funcCall // Store function call for later processing
+	} else {
+		return nil, fmt.Errorf("first argument of concat must be a literal, property, or function")
+	}
+
+	// Second argument can also be a literal, property, or function call
+	var secondArg interface{}
+	if lit, ok := n.Args[1].(*LiteralExpr); ok {
+		secondArg = lit.Value
+	} else if ident, ok := n.Args[1].(*IdentifierExpr); ok {
+		secondArg = ident.Name
+	} else if funcCall, ok := n.Args[1].(*FunctionCallExpr); ok {
+		secondArg = funcCall
+	} else {
+		return nil, fmt.Errorf("second argument of concat must be a literal, property, or function")
+	}
+
+	// Store both arguments in Value as a slice for special handling
+	var value interface{}
+	if firstArg != nil {
+		// First argument is a literal or function, store both arguments
+		value = []interface{}{firstArg, secondArg}
+	} else {
+		// First argument is a property (stored in Property field), store only second argument
+		value = secondArg
+	}
+
+	return &FilterExpression{
+		Property: property,
+		Operator: OpConcat,
+		Value:    value,
+	}, nil
+}
+
 // convertSubstringFunction converts substring function
 func convertSubstringFunction(n *FunctionCallExpr, entityMetadata *metadata.EntityMetadata) (*FilterExpression, error) {
 	if len(n.Args) < 2 || len(n.Args) > 3 {
@@ -965,7 +1032,7 @@ func convertSubstringFunction(n *FunctionCallExpr, entityMetadata *metadata.Enti
 		if !ok {
 			return nil, fmt.Errorf("argument %d of substring must be a number", i+1)
 		}
-		
+
 		// Validate start parameter (argument 2, index 1)
 		if i == 1 {
 			// Check if start is negative (invalid according to OData spec)
@@ -984,7 +1051,7 @@ func convertSubstringFunction(n *FunctionCallExpr, entityMetadata *metadata.Enti
 				}
 			}
 		}
-		
+
 		// Validate length parameter if present (argument 3, index 2)
 		if i == 2 {
 			// Length should also be non-negative
@@ -1003,7 +1070,7 @@ func convertSubstringFunction(n *FunctionCallExpr, entityMetadata *metadata.Enti
 				}
 			}
 		}
-		
+
 		args = append(args, lit.Value)
 	}
 
@@ -1067,7 +1134,7 @@ func convertCastFunction(n *FunctionCallExpr, entityMetadata *metadata.EntityMet
 
 	// Second argument should be a type name (either as an identifier or string literal)
 	var typeName string
-	
+
 	// Try as identifier first (OData v4 spec: unquoted type names)
 	if ident, ok := n.Args[1].(*IdentifierExpr); ok {
 		typeName = ident.Name
@@ -1126,7 +1193,7 @@ func convertIsOfFunction(n *FunctionCallExpr, entityMetadata *metadata.EntityMet
 	if len(n.Args) == 1 {
 		// Single argument form: isof(TypeName) or isof('TypeName')
 		// This checks the type of the current instance (implicit property)
-		
+
 		// Try as identifier first (OData v4 spec: unquoted type names)
 		if ident, ok := n.Args[0].(*IdentifierExpr); ok {
 			typeName = ident.Name
@@ -1140,7 +1207,7 @@ func convertIsOfFunction(n *FunctionCallExpr, entityMetadata *metadata.EntityMet
 		} else {
 			return nil, fmt.Errorf("argument of isof must be a type name")
 		}
-		
+
 		property = "$it" // Special marker for current instance
 	} else {
 		// Two argument form: isof(property, TypeName) or isof(property, 'TypeName')

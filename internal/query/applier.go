@@ -405,14 +405,14 @@ func buildLambdaCondition(filter *FilterExpression, entityMetadata *metadata.Ent
 		relatedEntityName = navProp.JsonName
 	}
 	relatedTableName := toSnakeCase(pluralize(relatedEntityName))
-	
+
 	// Get the parent entity's table name
 	parentTableName := toSnakeCase(pluralize(entityMetadata.EntityName))
-	
+
 	// Get the foreign key column name (usually parent_id)
 	// For ProductDescription -> Product, foreign key is product_id
 	foreignKeyColumn := toSnakeCase(entityMetadata.EntityName) + "_id"
-	
+
 	// Get the parent's primary key column name (usually "id")
 	parentPrimaryKey := "id"
 	if len(entityMetadata.KeyProperties) > 0 {
@@ -575,14 +575,14 @@ func buildFunctionComparison(filter *FilterExpression, entityMetadata *metadata.
 			allArgs := append(funcArgs, filter.Value)
 			return compSQL, allArgs
 		}
-		
+
 		// Build SQL for the right-side function
 		rightColumnName := GetColumnName(rightFuncExpr.Property, entityMetadata)
 		rightFuncSQL, rightFuncArgs := buildFunctionSQL(rightFuncExpr.Operator, rightColumnName, rightFuncExpr.Value)
 		if rightFuncSQL == "" {
 			return "", nil
 		}
-		
+
 		// Build comparison between two functions
 		var compSQL string
 		switch filter.Operator {
@@ -601,7 +601,7 @@ func buildFunctionComparison(filter *FilterExpression, entityMetadata *metadata.
 		default:
 			return "", nil
 		}
-		
+
 		allArgs := append(funcArgs, rightFuncArgs...)
 		return compSQL, allArgs
 	}
@@ -633,6 +633,70 @@ func buildFunctionSQL(op FilterOperator, columnName string, value interface{}) (
 		// Converting: INSTR - 1 gives us the correct OData indexof behavior
 		return fmt.Sprintf("INSTR(%s, ?) - 1", columnName), []interface{}{value}
 	case OpConcat:
+		// Check if value is a slice (both arguments stored)
+		if args, ok := value.([]interface{}); ok && len(args) == 2 {
+			// Both arguments provided (first is literal or function)
+			firstArg := args[0]
+			secondArg := args[1]
+
+			// Build SQL for both arguments
+			var leftSQL string
+			var leftArgs []interface{}
+
+			// Handle first argument
+			if funcCall, ok := firstArg.(*FunctionCallExpr); ok {
+				// First argument is a function call
+				leftExpr, err := convertFunctionCallExpr(funcCall, nil)
+				if err == nil {
+					leftSQL, leftArgs = buildFunctionSQL(leftExpr.Operator, leftExpr.Property, leftExpr.Value)
+				}
+				if leftSQL == "" {
+					leftSQL = "?"
+					leftArgs = []interface{}{firstArg}
+				}
+			} else {
+				// First argument is a literal
+				leftSQL = "?"
+				leftArgs = []interface{}{firstArg}
+			}
+
+			// Handle second argument
+			var rightSQL string
+			var rightArgs []interface{}
+
+			if funcCall, ok := secondArg.(*FunctionCallExpr); ok {
+				// Second argument is a function call
+				rightExpr, err := convertFunctionCallExpr(funcCall, nil)
+				if err == nil {
+					rightSQL, rightArgs = buildFunctionSQL(rightExpr.Operator, rightExpr.Property, rightExpr.Value)
+				}
+				if rightSQL == "" {
+					rightSQL = "?"
+					rightArgs = []interface{}{secondArg}
+				}
+			} else if strVal, ok := secondArg.(string); ok {
+				// Check if it's a property name or literal
+				if len(strVal) > 0 && (strVal[0] >= 'A' && strVal[0] <= 'Z' || strings.Contains(strVal, "_")) {
+					// Treat as column name
+					rightSQL = toSnakeCase(strVal)
+					rightArgs = nil
+				} else {
+					// Treat as literal
+					rightSQL = "?"
+					rightArgs = []interface{}{strVal}
+				}
+			} else {
+				// Other literal type
+				rightSQL = "?"
+				rightArgs = []interface{}{secondArg}
+			}
+
+			// Combine arguments
+			allArgs := append(leftArgs, rightArgs...)
+			return fmt.Sprintf("CONCAT(%s, %s)", leftSQL, rightSQL), allArgs
+		}
+
+		// Standard case: first argument is a property (in columnName)
 		// Handle different types of second argument
 		if funcCall, ok := value.(*FunctionCallExpr); ok {
 			// Second argument is a function call - need to convert it
@@ -1049,7 +1113,7 @@ func ApplySelect(results interface{}, selectedProperties []string, entityMetadat
 			if prop.IsComplexType {
 				continue
 			}
-			
+
 			// Include if selected OR if it's a key property OR if it's an expanded navigation property
 			isSelected := selectedPropMap[prop.JsonName] || selectedPropMap[prop.Name]
 			isKey := keyPropMap[prop.Name]
@@ -1152,7 +1216,7 @@ func ApplySelectToEntity(entity interface{}, selectedProperties []string, entity
 		if prop.IsComplexType {
 			continue
 		}
-		
+
 		// Include if selected OR if it's a key property OR if it's an expanded navigation property
 		isSelected := selectedPropMap[prop.JsonName] || selectedPropMap[prop.Name]
 		isKey := keyPropMap[prop.Name]
