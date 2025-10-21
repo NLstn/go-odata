@@ -93,7 +93,7 @@ func (h *EntityHandler) handleGetEntity(w http.ResponseWriter, r *http.Request, 
 	}
 
 	// Build and write response
-	h.writeEntityResponseWithETag(w, r, result, currentETag)
+	h.writeEntityResponseWithETag(w, r, result, currentETag, http.StatusOK)
 }
 
 // fetchEntityByKey fetches an entity by its key with optional expand
@@ -118,7 +118,8 @@ func (h *EntityHandler) fetchEntityByKey(entityKey string, queryOptions *query.Q
 }
 
 // writeEntityResponseWithETag writes an entity response with an optional pre-computed ETag
-func (h *EntityHandler) writeEntityResponseWithETag(w http.ResponseWriter, r *http.Request, result interface{}, precomputedETag string) {
+// and customizable success status codes while handling common response requirements.
+func (h *EntityHandler) writeEntityResponseWithETag(w http.ResponseWriter, r *http.Request, result interface{}, precomputedETag string, status int) {
 	// Check if the requested format is supported
 	if !response.IsAcceptableFormat(r) {
 		if err := response.WriteError(w, http.StatusNotAcceptable, "Not Acceptable",
@@ -145,9 +146,13 @@ func (h *EntityHandler) writeEntityResponseWithETag(w http.ResponseWriter, r *ht
 		w.Header().Set(HeaderETag, etagValue)
 	}
 
+	if status == 0 {
+		status = http.StatusOK
+	}
+
 	// Set Content-Type with dynamic metadata level
 	w.Header().Set(HeaderContentType, fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
-	w.WriteHeader(http.StatusOK)
+	w.WriteHeader(status)
 
 	// For HEAD requests, don't write the body
 	if r.Method == http.MethodHead {
@@ -346,27 +351,7 @@ func (h *EntityHandler) returnUpdatedEntity(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Get metadata level
-	metadataLevel := response.GetODataMetadataLevel(r)
-
-	contextURL := fmt.Sprintf(ODataContextFormat, response.BuildBaseURL(r), h.metadata.EntitySetName)
-
-	// Generate ETag if entity has an ETag property
-	etagValue := etag.Generate(updatedEntity, h.metadata)
-
-	odataResponse := h.buildOrderedEntityResponseWithMetadata(updatedEntity, contextURL, metadataLevel, r, etagValue)
-
-	// Set ETag header if available
-	if etagValue != "" {
-		w.Header().Set(HeaderETag, etagValue)
-	}
-
-	w.Header().Set(HeaderContentType, fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
-	w.WriteHeader(http.StatusOK)
-
-	if err := json.NewEncoder(w).Encode(odataResponse); err != nil {
-		fmt.Printf(LogMsgErrorWritingEntityResponse, err)
-	}
+	h.writeEntityResponseWithETag(w, r, updatedEntity, "", http.StatusOK)
 }
 
 // handlePutEntity handles PUT requests for individual entities

@@ -7,7 +7,6 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/nlstn/go-odata/internal/etag"
 	"github.com/nlstn/go-odata/internal/preference"
 	"github.com/nlstn/go-odata/internal/query"
 	"github.com/nlstn/go-odata/internal/response"
@@ -171,31 +170,11 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 	// Determine whether to return content based on preferences
 	if pref.ShouldReturnContent(true) {
 		// Return representation (default for POST)
-		// Get metadata level
-		metadataLevel := response.GetODataMetadataLevel(r)
-
-		contextURL := fmt.Sprintf(ODataContextFormat, response.BuildBaseURL(r), h.metadata.EntitySetName)
-
-		// Generate ETag if entity has an ETag property
-		etagValue := etag.Generate(entity, h.metadata)
-
-		odataResponse := h.buildOrderedEntityResponseWithMetadata(entity, contextURL, metadataLevel, r, etagValue)
-
-		// Set ETag header if available
-		if etagValue != "" {
-			w.Header().Set(HeaderETag, etagValue)
-		}
-
 		// Set OData-EntityId header as per OData v4 spec
 		// Using helper function to preserve exact capitalization
 		SetODataHeader(w, HeaderODataEntityId, location)
 
-		w.Header().Set(HeaderContentType, fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
-		w.WriteHeader(http.StatusCreated)
-
-		if err := json.NewEncoder(w).Encode(odataResponse); err != nil {
-			fmt.Printf(LogMsgErrorWritingEntityResponse, err)
-		}
+		h.writeEntityResponseWithETag(w, r, entity, "", http.StatusCreated)
 	} else {
 		// Return minimal (204 No Content)
 		// Set OData-EntityId header as per OData v4 spec
