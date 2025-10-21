@@ -1794,7 +1794,9 @@ All error responses include the appropriate HTTP status code and OData v4 header
 
 ## Testing
 
-Run the test suite:
+### Unit Tests
+
+Run the unit test suite:
 
 ```bash
 # Run all tests
@@ -1807,6 +1809,34 @@ go test -v ./...
 go test -race ./...
 ```
 
+### Compliance Tests
+
+The library includes a comprehensive OData v4 compliance test suite with 67+ test scripts covering all aspects of the OData specification.
+
+To run compliance tests:
+
+```bash
+# Start the development server
+cd cmd/devserver
+go run . &
+
+# In another terminal, run compliance tests
+cd compliance/v4
+./run_compliance_tests.sh
+```
+
+The compliance tests verify:
+- HTTP headers and status codes
+- Service document and metadata generation
+- Query options ($filter, $select, $orderby, $expand, etc.)
+- CRUD operations (Create, Read, Update, Delete)
+- Data types and validation
+- Actions and functions
+- Batch requests
+- ETags and conditional requests
+
+For more information about compliance tests, see [compliance/v4/README.md](compliance/v4/README.md).
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
@@ -1815,10 +1845,20 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 Before submitting a PR, make sure to:
 
-1. Run all tests: `go test ./...`
+1. Run all unit tests: `go test ./...`
 2. Run tests with race detection: `go test -race ./...`
-3. Format your code: `go fmt ./...`
-4. Run go vet: `go vet ./...`
+3. Run compliance tests (see above)
+4. Format your code: `go fmt ./...`
+5. Run go vet: `go vet ./...`
+6. Run linter: `golangci-lint run`
+
+### Continuous Integration
+
+All tests (unit tests, compliance tests, builds, and linting) are automatically run on every push and pull request via GitHub Actions. The CI workflow ensures:
+- All unit tests pass
+- All compliance tests pass (100% compliance with OData v4 specification)
+- Code builds successfully
+- Code meets linting standards
 
 ## License
 
