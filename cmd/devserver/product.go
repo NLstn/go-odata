@@ -58,9 +58,9 @@ type Product struct {
 	ShippingAddress *Address    `json:"ShippingAddress,omitempty" gorm:"embedded;embeddedPrefix:shipping_" odata:"nullable"`
 	Dimensions      *Dimensions `json:"Dimensions,omitempty" gorm:"embedded;embeddedPrefix:dim_" odata:"nullable"`
 	// Navigation properties
-	Category         *Category            `json:"Category,omitempty" gorm:"foreignKey:CategoryID;references:ID"`
-	Descriptions     []ProductDescription `json:"Descriptions,omitempty" gorm:"foreignKey:ProductID;references:ID"`
-	RelatedProducts  []Product            `json:"RelatedProducts,omitempty" gorm:"many2many:product_relations;"`
+	Category        *Category            `json:"Category,omitempty" gorm:"foreignKey:CategoryID;references:ID"`
+	Descriptions    []ProductDescription `json:"Descriptions,omitempty" gorm:"foreignKey:ProductID;references:ID"`
+	RelatedProducts []Product            `json:"RelatedProducts,omitempty" gorm:"many2many:product_relations;"`
 }
 
 // ProductDescription represents a multilingual product description entity with rich metadata
@@ -78,7 +78,7 @@ func GetSampleProducts() []Product {
 	categoryElectronics := uint(1)
 	categoryKitchen := uint(2)
 	categoryFurniture := uint(3)
-	
+
 	return []Product{
 		{
 			ID:         1,
