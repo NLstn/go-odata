@@ -1,6 +1,8 @@
 {
 	"name": "Go OData Development",
-	"image": "mcr.microsoft.com/devcontainers/go:1.25-bookworm",
+	"dockerComposeFile": "docker-compose.yml",
+	"service": "app",
+	"workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
 	"features": {
 		"ghcr.io/devcontainers/features/git:1": {}
 	},
