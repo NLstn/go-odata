@@ -10,7 +10,7 @@ import (
 
 // registerReseedAction registers an unbound action to reseed the database
 // This is useful for testing to reset the database to a known state
-func registerReseedAction(service *odata.Service, db *gorm.DB) {
+func registerReseedAction(service *odata.Service, db *gorm.DB, dbType string) {
 	if err := service.RegisterAction(odata.ActionDefinition{
 		Name:       "Reseed",
 		IsBound:    false,
@@ -18,7 +18,7 @@ func registerReseedAction(service *odata.Service, db *gorm.DB) {
 		ReturnType: nil,
 		Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) error {
 			// Reseed the database
-			if err := seedDatabase(db); err != nil {
+			if err := seedDatabase(db, dbType); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return err
 			}
