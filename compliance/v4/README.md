@@ -4,7 +4,7 @@ This directory contains compliance tests for validating the go-odata library aga
 
 ## Overview
 
-The compliance test suite consists of **78 individual test scripts** organized by OData v4 specification sections. Each test script validates specific aspects of the OData protocol implementation.
+The compliance test suite consists of **85 individual test scripts** with **779 individual test cases** organized by OData v4 specification sections. Each test script validates specific aspects of the OData protocol implementation.
 
 ### Test Coverage Summary
 
@@ -13,8 +13,9 @@ The compliance test suite consists of **78 individual test scripts** organized b
 - **12 URL Convention Tests** - Entity Addressing, Canonical URL, Property Access, Collection Operations, Metadata Levels, Delta Links, Lambda Operators, Property $value, Stream Properties, Type Casting, Singleton Operations
 - **24 Query Option Tests** - $filter (with string/date/arithmetic/type/logical/comparison/geo operators), $select, $orderby, $top, $skip, $skiptoken, $count, $expand, $search, $format, $apply (including advanced transformations), $compute, $index, nested expand options, query option combinations, orderby with computed properties
 - **13 Data Modification Tests** - GET, POST, PATCH, PUT, DELETE, HEAD, Conditional Requests, Relationships, Modify Relationships, Deep Insert, Batch (including error handling), Asynchronous, Navigation Property Operations, Action/Function Parameters
-- **6 Data Type Tests** - Primitive data types handling, Nullable properties, Collection properties, Complex types, Enum types, Temporal types (Date, TimeOfDay, Duration)
-- **5 Advanced Tests** - Lambda operators, filter on expanded properties, vocabulary annotations, batch error handling, advanced aggregation transformations
+- **8 Data Type Tests** - Primitive data types, Numeric edge cases, Nullable properties, Collection properties, Complex types, Enum types, Temporal types, Type definitions
+- **6 Advanced Tests** - Lambda operators, filter on expanded properties, vocabulary annotations, batch error handling, advanced aggregation transformations
+- **5 String & Internationalization Tests** - String functions, Unicode and internationalization, URL encoding, edge cases
 
 ## Test Structure
 
@@ -129,11 +130,13 @@ Example report structure:
 
 ### Primitive Types (Section 5.x)
 - **5.1.1_primitive_data_types.sh** - Tests handling of OData primitive data types (String, Int32, Decimal, Boolean, DateTime, etc.)
+- **5.1.1.1_numeric_edge_cases.sh** - Tests numeric edge cases including division by zero, precision, large numbers, boundary values, and special numeric conditions
 - **5.1.2_nullable_properties.sh** - Tests handling of nullable properties, null values in filters and responses, setting properties to null
 - **5.1.3_collection_properties.sh** - Tests collection-valued properties (arrays), filtering with any/all operators, and collection operations
 - **5.1.4_temporal_data_types.sh** - Tests temporal OData types (Edm.Date, Edm.TimeOfDay, Edm.Duration), cast/isof functions, date/time literals and comparisons
 - **5.2_complex_types.sh** - Tests complex (structured) types, nested properties, filtering, and complex type operations
 - **5.3_enum_types.sh** - Tests enumeration types, enum filtering with numeric/string values, and enum operations
+- **5.4_type_definitions.sh** - Tests custom type definitions in metadata and their usage
 
 ### Headers & Response Codes (Section 8.x)
 - **8.1.1_header_content_type.sh** - Validates Content-Type headers for different response types
@@ -151,6 +154,10 @@ Example report structure:
 ### Service Document & Metadata (Section 9.x)
 - **9.1_service_document.sh** - Validates service document structure and format
 - **9.2_metadata_document.sh** - Tests metadata document structure, XML format, and schema elements
+- **9.3_annotations_metadata.sh** - Tests vocabulary annotations in metadata document
+
+### String Representation (Section 7.x)
+- **7.1.1_unicode_strings.sh** - Tests Unicode and internationalization support including multi-byte characters, emoji, RTL text (Arabic, Hebrew), and international scripts (Chinese, Japanese, Korean, Greek, Thai, Cyrillic)
 
 ### JSON Format (Section 10.x)
 - **10.1_json_format.sh** - Tests JSON format requirements (value property, @odata.context, valid structure, etc.)
