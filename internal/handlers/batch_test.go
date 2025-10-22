@@ -227,6 +227,22 @@ Accept: application/json
 	}
 }
 
+func TestGenerateBoundaryProducesUniqueValues(t *testing.T) {
+	boundaries := make(map[string]struct{})
+
+	for i := 0; i < 10; i++ {
+		boundary := generateBoundary()
+		if boundary == "" {
+			t.Fatalf("expected boundary to be non-empty")
+		}
+
+		if _, exists := boundaries[boundary]; exists {
+			t.Fatalf("duplicate boundary generated: %s", boundary)
+		}
+		boundaries[boundary] = struct{}{}
+	}
+}
+
 func TestBatchHandler_Changeset(t *testing.T) {
 	handler, db, _ := setupBatchTestHandler(t)
 

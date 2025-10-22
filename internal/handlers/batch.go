@@ -3,6 +3,8 @@ package handlers
 import (
 	"bufio"
 	"bytes"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"mime"
@@ -10,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"time"
 
 	"github.com/nlstn/go-odata/internal/response"
 	"gorm.io/gorm"
@@ -407,6 +410,13 @@ func (h *BatchHandler) writeBatchResponse(w http.ResponseWriter, responses []bat
 
 // generateBoundary generates a random boundary string
 func generateBoundary() string {
-	// Simple boundary generation - in production, use crypto/rand
-	return "36d5c8c6-3e8a-4b3e-9b5f-7c8d9e0f1a2b"
+	const boundaryBytes = 18
+
+	buf := make([]byte, boundaryBytes)
+	if _, err := rand.Read(buf); err != nil {
+		// Fallback to time-based boundary if the crypto reader fails
+		return fmt.Sprintf("fallback-%d", time.Now().UnixNano())
+	}
+
+	return hex.EncodeToString(buf)
 }
