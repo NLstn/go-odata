@@ -12,7 +12,7 @@ tmp_dir = "cmd/devserver/tmp"
   exclude_regex = ["_test.go"]
   exclude_unchanged = false
   follow_symlink = false
-  full_bin = ""
+  full_bin = "APP_ARGS=\"$DB_ARGS\" && ./cmd/devserver/tmp/main $APP_ARGS"
   include_dir = []
   include_ext = ["go", "tpl", "tmpl", "html"]
   include_file = []

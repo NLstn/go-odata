@@ -2,17 +2,23 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "Start Dev Server",
+            "label": "Start Dev Server (SQLite)",
             "type": "shell",
             "command": "air",
             "options": {
-                "cwd": "${workspaceFolder}"
+                "cwd": "${workspaceFolder}",
+                "env": {
+                    "DB_ARGS": "-db sqlite -dsn :memory:"
+                }
             },
             "group": "build",
             "isBackground": true,
             "problemMatcher": [
                 {
-                    "fileLocation": ["relative", "${workspaceFolder}"],
+                    "fileLocation": [
+                        "relative",
+                        "${workspaceFolder}"
+                    ],
                     "pattern": {
                         "regexp": "^(.*):(\\d+):(\\d+):\\s+(warning|error):\\s+(.*)$",
                         "file": 1,
@@ -38,6 +44,48 @@
             },
             "runOptions": {
                 "runOn": "default"
+            }
+        },
+        {
+            "label": "Start Dev Server (PostgreSQL)",
+            "type": "shell",
+            "command": "air",
+            "options": {
+                "cwd": "${workspaceFolder}",
+                "env": {
+                    "DB_ARGS": "-db postgres -dsn postgresql://odata:odata_dev@localhost:5432/odata_test?sslmode=disable"
+                }
+            },
+            "group": "build",
+            "isBackground": true,
+            "problemMatcher": [
+                {
+                    "fileLocation": [
+                        "relative",
+                        "${workspaceFolder}"
+                    ],
+                    "pattern": {
+                        "regexp": "^(.*):(\\d+):(\\d+):\\s+(warning|error):\\s+(.*)$",
+                        "file": 1,
+                        "line": 2,
+                        "column": 3,
+                        "severity": 4,
+                        "message": 5
+                    },
+                    "background": {
+                        "activeOnStart": true,
+                        "beginsPattern": "^.*building.*$",
+                        "endsPattern": "^.*running.*$|^.*Service endpoints:.*$"
+                    }
+                }
+            ],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": false
             }
         }
     ]
