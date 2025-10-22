@@ -1,18 +1,21 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/nlstn/go-odata"
+	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
 // seedDatabase initializes the database with sample data
 // This function clears all existing data and resets to the default state
-func seedDatabase(db *gorm.DB) error {
-	// Clear existing data in order (respecting foreign key constraints)
+func seedDatabase(db *gorm.DB, dbType string) error {
+	// Clear existing data
 	if err := db.Exec("DELETE FROM product_descriptions").Error; err != nil {
 		return fmt.Errorf("failed to clear product descriptions: %w", err)
 	}
@@ -30,10 +33,21 @@ func seedDatabase(db *gorm.DB) error {
 		return fmt.Errorf("failed to clear company info: %w", err)
 	}
 
-	// Reset auto-increment counters (SQLite specific)
-	if err := db.Exec("DELETE FROM sqlite_sequence WHERE name IN ('products', 'categories', 'product_descriptions', 'company_infos')").Error; err != nil {
-		// This is not critical, just continue
-		log.Printf("Warning: Could not reset auto-increment counters: %v", err)
+	// Reset auto-increment counters (database specific)
+	switch dbType {
+	case "sqlite":
+		if err := db.Exec("DELETE FROM sqlite_sequence WHERE name IN ('products', 'product_descriptions', 'company_infos')").Error; err != nil {
+			// This is not critical, just continue
+			log.Printf("Warning: Could not reset auto-increment counters: %v", err)
+		}
+	case "postgres":
+		// PostgreSQL: reset sequences
+		sequences := []string{"products_id_seq", "company_infos_id_seq"}
+		for _, seq := range sequences {
+			if err := db.Exec(fmt.Sprintf("ALTER SEQUENCE IF EXISTS %s RESTART WITH 1", seq)).Error; err != nil {
+				log.Printf("Warning: Could not reset sequence %s: %v", seq, err)
+			}
+		}
 	}
 
 	// Seed categories first (products reference categories)
@@ -66,10 +80,44 @@ func seedDatabase(db *gorm.DB) error {
 }
 
 func main() {
-	// Initialize SQLite in-memory database
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	if err != nil {
-		log.Fatal("Failed to connect to database:", err)
+	// Parse command-line flags
+	dbType := flag.String("db", "sqlite", "Database type: sqlite or postgres")
+	dbDSN := flag.String("dsn", "", "Database DSN (connection string). For postgres, use postgresql://... format. For sqlite, use file path or :memory:")
+	flag.Parse()
+
+	// Determine database configuration
+	var db *gorm.DB
+	var err error
+
+	switch *dbType {
+	case "sqlite":
+		dsn := ":memory:"
+		if *dbDSN != "" {
+			dsn = *dbDSN
+		}
+		db, err = gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+		if err != nil {
+			log.Fatal("Failed to connect to SQLite database:", err)
+		}
+		fmt.Println("📦 Using SQLite database:", dsn)
+
+	case "postgres":
+		dsn := *dbDSN
+		if dsn == "" {
+			// Check for environment variable as fallback
+			dsn = os.Getenv("DATABASE_URL")
+			if dsn == "" {
+				log.Fatal("PostgreSQL DSN required. Use -dsn flag or set DATABASE_URL environment variable")
+			}
+		}
+		db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+		if err != nil {
+			log.Fatal("Failed to connect to PostgreSQL database:", err)
+		}
+		fmt.Println("🐘 Using PostgreSQL database")
+
+	default:
+		log.Fatalf("Unsupported database type: %s. Use 'sqlite' or 'postgres'", *dbType)
 	}
 
 	// Auto-migrate the Product, ProductDescription, Category, and CompanyInfo models
@@ -78,7 +126,7 @@ func main() {
 	}
 
 	// Seed the database with sample data
-	if err := seedDatabase(db); err != nil {
+	if err := seedDatabase(db, *dbType); err != nil {
 		log.Fatal("Failed to seed database:", err)
 	}
 
@@ -108,7 +156,7 @@ func main() {
 	registerActions(service, db)
 
 	// Register reseed action for testing
-	registerReseedAction(service, db)
+	registerReseedAction(service, db, *dbType)
 
 	// Start the HTTP server
 	fmt.Println("🚀 Development server starting with hot reload...")
