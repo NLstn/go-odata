@@ -12,73 +12,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// seedDatabase initializes the database with sample data
-// This function clears all existing data and resets to the default state
-func seedDatabase(db *gorm.DB, dbType string) error {
-	// Clear existing data
-	if err := db.Exec("DELETE FROM product_descriptions").Error; err != nil {
-		return fmt.Errorf("failed to clear product descriptions: %w", err)
-	}
-	if err := db.Exec("DELETE FROM product_relations").Error; err != nil {
-		// This is a many-to-many table, so it might not exist on first run
-		log.Printf("Info: Could not clear product relations: %v", err)
-	}
-	if err := db.Exec("DELETE FROM products").Error; err != nil {
-		return fmt.Errorf("failed to clear products: %w", err)
-	}
-	if err := db.Exec("DELETE FROM categories").Error; err != nil {
-		return fmt.Errorf("failed to clear categories: %w", err)
-	}
-	if err := db.Exec("DELETE FROM company_infos").Error; err != nil {
-		return fmt.Errorf("failed to clear company info: %w", err)
-	}
-
-	// Reset auto-increment counters (database specific)
-	switch dbType {
-	case "sqlite":
-		if err := db.Exec("DELETE FROM sqlite_sequence WHERE name IN ('products', 'product_descriptions', 'company_infos')").Error; err != nil {
-			// This is not critical, just continue
-			log.Printf("Warning: Could not reset auto-increment counters: %v", err)
-		}
-	case "postgres":
-		// PostgreSQL: reset sequences
-		sequences := []string{"products_id_seq", "company_infos_id_seq"}
-		for _, seq := range sequences {
-			if err := db.Exec(fmt.Sprintf("ALTER SEQUENCE IF EXISTS %s RESTART WITH 1", seq)).Error; err != nil {
-				log.Printf("Warning: Could not reset sequence %s: %v", seq, err)
-			}
-		}
-	}
-
-	// Seed categories first (products reference categories)
-	sampleCategories := GetSampleCategories()
-	if err := db.Create(&sampleCategories).Error; err != nil {
-		return fmt.Errorf("failed to seed categories: %w", err)
-	}
-
-	// Seed products
-	sampleProducts := GetSampleProducts()
-	if err := db.Create(&sampleProducts).Error; err != nil {
-		return fmt.Errorf("failed to seed products: %w", err)
-	}
-
-	// Seed product descriptions
-	sampleDescriptions := GetSampleProductDescriptions()
-	if err := db.Create(&sampleDescriptions).Error; err != nil {
-		return fmt.Errorf("failed to seed product descriptions: %w", err)
-	}
-
-	// Seed company info singleton
-	companyInfo := GetCompanyInfo()
-	if err := db.Create(&companyInfo).Error; err != nil {
-		return fmt.Errorf("failed to seed company info: %w", err)
-	}
-
-	fmt.Printf("Database seeded with %d categories, %d products, %d descriptions, and company info\n",
-		len(sampleCategories), len(sampleProducts), len(sampleDescriptions))
-	return nil
-}
-
 func main() {
 	// Parse command-line flags
 	dbType := flag.String("db", "sqlite", "Database type: sqlite or postgres")
@@ -126,7 +59,7 @@ func main() {
 	}
 
 	// Seed the database with sample data
-	if err := seedDatabase(db, *dbType); err != nil {
+	if err := seedDatabase(db); err != nil {
 		log.Fatal("Failed to seed database:", err)
 	}
 
@@ -156,7 +89,7 @@ func main() {
 	registerActions(service, db)
 
 	// Register reseed action for testing
-	registerReseedAction(service, db, *dbType)
+	registerReseedAction(service, db)
 
 	// Start the HTTP server
 	fmt.Println("🚀 Development server starting with hot reload...")
