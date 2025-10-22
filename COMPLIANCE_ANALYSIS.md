@@ -125,12 +125,126 @@ This analysis and enhancement effort focused on identifying gaps in OData v4 spe
 
 **Results**: 20/20 passing ✓
 
+## Additional Analysis and Testing (October 2025)
+
+After comprehensive review, identified 5 additional OData v4 specification sections with missing or incomplete test coverage:
+
+### Areas Previously Missing Coverage
+1. **Section 8.2.5 - Location Header**: HTTP Location header for created resources
+2. **Section 8.2.4 - Content-ID Header**: Content-ID usage in batch requests
+3. **Section 11.4.12 - Returning Results from Modifications**: Prefer header behavior
+4. **Section 5.4 - Type Definitions**: Custom type definitions in metadata
+5. **Section 9.3 - Annotations in Metadata**: Vocabulary annotations structure
+
+### New Compliance Tests Added (Phase 2)
+
+#### 1. Location Header (8.2.5)
+**File**: `8.2.5_header_location.sh`
+**Test Cases**: 10
+**Coverage**:
+- POST returns Location header with 201/204
+- Location URL is dereferenceable
+- Location format with entity set and key
+- Location with Prefer: return=representation
+- Location with proper key format
+- PATCH does not return Location
+- PUT does not return Location
+- Location is absolute URL
+- Location consistent with OData-EntityId
+- Deep insert returns Location for main entity
+
+**Results**: 10/10 passing ✓
+
+#### 2. Content-ID Header (8.2.4)
+**File**: `8.2.4_header_content_id.sh`
+**Test Cases**: 8
+**Coverage**:
+- Content-ID in batch changeset
+- Content-ID reference to newly created entities
+- Content-ID with numeric value
+- Multiple unique Content-IDs in changeset
+- Duplicate Content-IDs handling
+- Content-ID in GET operations
+- Content-ID scoped within changesets
+- Alphanumeric Content-ID format
+
+**Results**: 8/8 passing ✓
+
+#### 3. Returning Results from Modifications (11.4.12)
+**File**: `11.4.12_returning_results.sh`
+**Test Cases**: 12
+**Coverage**:
+- POST with return=minimal returns 201/204
+- POST with return=representation returns 201 with entity
+- POST without Prefer header (default behavior)
+- PATCH with return=representation returns entity
+- PATCH with return=minimal returns 204/200
+- PUT with return=representation returns entity
+- return=representation with $select
+- return=representation with $expand
+- Preference-Applied header
+- Invalid Prefer value handling
+- Multiple preferences in Prefer header
+- DELETE ignores return preference
+
+**Results**: 12/12 passing ✓
+
+#### 4. Type Definitions (5.4)
+**File**: `5.4_type_definitions.sh`
+**Test Cases**: 15
+**Coverage**:
+- Metadata contains valid schema structure
+- TypeDefinition elements with UnderlyingType
+- Type definitions with MaxLength facet
+- Type definitions with Precision and Scale facets
+- Type definitions with SRID facet (geographic)
+- Type definitions based on Edm primitive types
+- Entity properties use type definitions
+- Type definitions support Nullable facet
+- Type definitions in JSON metadata format
+- Complex types can use type definitions
+- Properties with default values
+- String types support Unicode facet
+- Schema namespace definition
+- Enum types as type definitions
+- Type definitions distinct from entity types
+
+**Results**: 15/15 passing ✓
+
+#### 5. Annotations in Metadata (9.3)
+**File**: `9.3_annotations_metadata.sh`
+**Test Cases**: 20
+**Coverage**:
+- Metadata structure supports annotations
+- Core vocabulary annotations (Description)
+- Capabilities vocabulary annotations
+- Validation vocabulary annotations
+- Measures vocabulary annotations
+- Annotations target various elements
+- Inline annotations on properties
+- Core.Computed annotation
+- Core.Immutable annotation
+- Annotations with complex structured values
+- References to external standard vocabularies
+- Annotations on EntitySet
+- Annotations on navigation properties
+- Permission and restriction annotations
+- Annotations in JSON metadata format
+- Custom vocabulary annotations
+- Annotation inheritance from base types
+- Custom term definitions
+- Annotations with null values
+- Multiple annotations on same target
+
+**Results**: 20/20 passing ✓
+
 ## Final State
 
-- **Total Tests**: 78 compliance test scripts (+5 new)
-- **Individual Test Cases**: 679 (+80 new)
+- **Total Tests**: 83 compliance test scripts (+5 new in Phase 2)
+- **Individual Test Cases**: 744 (+65 new in Phase 2)
 - **Pass Rate**: 100% (all tests passing)
-- **New Coverage Areas**: Batch error handling, temporal types, $index, advanced $apply, vocabulary annotations
+- **Previous Coverage**: Batch error handling, temporal types, $index, advanced $apply, vocabulary annotations
+- **New Coverage**: Location header, Content-ID, returning results from modifications, type definitions, metadata annotations
 
 ## Library Compliance Assessment
 
@@ -167,19 +281,34 @@ This analysis and enhancement effort focused on identifying gaps in OData v4 spe
 - **Coverage Areas**: Actions, ETags, Handlers, Metadata, Preference, Query, Response, Skiptoken
 
 ### Compliance Tests
-- **Total Scripts**: 78
-- **Individual Tests**: 679
+- **Total Scripts**: 83 (+5 new in Phase 2)
+- **Individual Tests**: 744 (+65 new in Phase 2)
 - **Pass Rate**: 100% ✓
 
 ## Conclusion
 
-The go-odata library demonstrates **excellent compliance** with the OData v4 specification. The new compliance tests added 80 test cases covering previously under-tested areas of the specification. All 679 test cases pass, indicating strong adherence to OData v4 standards.
+The go-odata library demonstrates **excellent compliance** with the OData v4 specification. 
+
+**Phase 1 (Previous)**: Added 80 test cases covering batch error handling, temporal data types, $index query option, advanced $apply transformations, and vocabulary annotations. All 679 test cases passed.
+
+**Phase 2 (Current)**: Identified and addressed 5 additional specification sections that lacked dedicated test coverage:
+- Location header (8.2.5)
+- Content-ID header in batch requests (8.2.4)
+- Returning results from modifications with Prefer header (11.4.12)
+- Type definitions in metadata (5.4)
+- Annotations in metadata documents (9.3)
+
+Added 65 new test cases across 5 new test scripts. All 744 test cases now pass, indicating comprehensive adherence to OData v4 standards.
 
 The library successfully handles:
 - Advanced batch processing with proper error handling
 - Temporal data types and date/time operations
 - Complex data aggregation transformations
 - Proper instance annotations per specification
+- Location headers for resource creation
+- Content-ID references in batch requests
+- Prefer header for controlling response representation
+- Type definitions and metadata annotations
 - Edge cases and error conditions
 
 No code changes were required - the library already implements these features correctly. The new tests provide better coverage and documentation of the library's OData v4 compliance.
