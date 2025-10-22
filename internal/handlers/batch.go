@@ -11,6 +11,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/textproto"
 	"strings"
 	"time"
 
@@ -197,50 +198,45 @@ func (h *BatchHandler) processChangeset(r io.Reader, boundary string) []batchRes
 
 // parseHTTPRequest parses an HTTP request from a multipart part
 func (h *BatchHandler) parseHTTPRequest(r io.Reader) (*batchRequest, error) {
-	scanner := bufio.NewScanner(r)
+	reader := bufio.NewReader(r)
 
-	// Read request line
-	if !scanner.Scan() {
+	requestLine, err := reader.ReadString('\n')
+	if err != nil && err != io.EOF {
+		return nil, fmt.Errorf("failed to read request line: %w", err)
+	}
+	requestLine = strings.TrimRight(requestLine, "\r\n")
+	if requestLine == "" {
 		return nil, fmt.Errorf("empty request")
 	}
-	requestLine := scanner.Text()
+
 	parts := strings.Fields(requestLine)
 	if len(parts) < 2 {
 		return nil, fmt.Errorf("invalid request line: %s", requestLine)
 	}
 
-	method := parts[0]
-	url := parts[1]
+	tp := textproto.NewReader(reader)
+	mimeHeader, err := tp.ReadMIMEHeader()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read headers: %w", err)
+	}
 
-	// Read headers
-	headers := http.Header{}
-	for scanner.Scan() {
-		line := scanner.Text()
-		if line == "" || line == "\r" {
-			break
-		}
-
-		// Parse header
-		idx := strings.Index(line, ":")
-		if idx > 0 {
-			key := strings.TrimSpace(line[:idx])
-			value := strings.TrimSpace(line[idx+1:])
+	headers := make(http.Header, len(mimeHeader))
+	for key, values := range mimeHeader {
+		for _, value := range values {
 			headers.Add(key, value)
 		}
 	}
 
-	// Read body
-	var body bytes.Buffer
-	for scanner.Scan() {
-		body.WriteString(scanner.Text())
-		body.WriteString("\n")
+	body, err := io.ReadAll(reader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read body: %w", err)
 	}
 
 	return &batchRequest{
-		Method:  method,
-		URL:     url,
+		Method:  parts[0],
+		URL:     parts[1],
 		Headers: headers,
-		Body:    bytes.TrimSpace(body.Bytes()),
+		Body:    bytes.TrimSpace(body),
 	}, nil
 }
 

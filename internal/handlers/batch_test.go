@@ -227,6 +227,38 @@ Accept: application/json
 	}
 }
 
+func TestParseHTTPRequestHandlesLargeBody(t *testing.T) {
+	handler := &BatchHandler{}
+
+	largeBody := strings.Repeat("x", 70*1024)
+	request := fmt.Sprintf("POST /BatchTestProducts HTTP/1.1\r\nContent-Type: application/json\r\nContent-Length: %d\r\n\r\n%s", len(largeBody), largeBody)
+
+	parsed, err := handler.parseHTTPRequest(strings.NewReader(request))
+	if err != nil {
+		t.Fatalf("parseHTTPRequest returned error: %v", err)
+	}
+
+	if parsed.Method != http.MethodPost {
+		t.Fatalf("Method = %s, want %s", parsed.Method, http.MethodPost)
+	}
+
+	if parsed.URL != "/BatchTestProducts" {
+		t.Fatalf("URL = %s, want /BatchTestProducts", parsed.URL)
+	}
+
+	if got := parsed.Headers.Get("Content-Length"); got != fmt.Sprintf("%d", len(largeBody)) {
+		t.Fatalf("Content-Length header = %s, want %d", got, len(largeBody))
+	}
+
+	if len(parsed.Body) != len(largeBody) {
+		t.Fatalf("Body length = %d, want %d", len(parsed.Body), len(largeBody))
+	}
+
+	if string(parsed.Body) != largeBody {
+		t.Fatalf("Body mismatch: first 32 bytes %q", string(parsed.Body)[:32])
+	}
+}
+
 func TestGenerateBoundaryProducesUniqueValues(t *testing.T) {
 	boundaries := make(map[string]struct{})
 
