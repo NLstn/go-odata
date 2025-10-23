@@ -193,10 +193,24 @@ func (h *EntityHandler) handleDeleteEntity(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
+	// Call BeforeDelete hook if it exists
+	if err := h.callBeforeDelete(entity, r); err != nil {
+		if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", err.Error()); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	}
+
 	// Delete the entity
 	if err := h.db.Delete(entity).Error; err != nil {
 		h.writeDatabaseError(w, err)
 		return
+	}
+
+	// Call AfterDelete hook if it exists
+	if err := h.callAfterDelete(entity, r); err != nil {
+		// Log the error but don't fail the request since the entity was already deleted
+		fmt.Printf("AfterDelete hook failed: %v\n", err)
 	}
 
 	// Return 204 No Content according to OData v4 spec
@@ -311,9 +325,23 @@ func (h *EntityHandler) fetchAndUpdateEntity(w http.ResponseWriter, r *http.Requ
 		return nil, nil, err
 	}
 
+	// Call BeforeUpdate hook if it exists
+	if err := h.callBeforeUpdate(entity, r); err != nil {
+		if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", err.Error()); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return nil, nil, err
+	}
+
 	if err := h.db.Model(entity).Updates(updateData).Error; err != nil {
 		h.writeDatabaseError(w, err)
 		return nil, nil, err
+	}
+
+	// Call AfterUpdate hook if it exists
+	if err := h.callAfterUpdate(entity, r); err != nil {
+		// Log the error but don't fail the request since the entity was already updated
+		fmt.Printf("AfterUpdate hook failed: %v\n", err)
 	}
 
 	return db, entity, nil
@@ -422,9 +450,23 @@ func (h *EntityHandler) fetchAndReplaceEntity(w http.ResponseWriter, r *http.Req
 		return nil, err
 	}
 
+	// Call BeforeUpdate hook if it exists (PUT is also an update operation)
+	if err := h.callBeforeUpdate(entity, r); err != nil {
+		if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", err.Error()); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return nil, err
+	}
+
 	if err := h.db.Model(entity).Select("*").Updates(replacementEntity).Error; err != nil {
 		h.writeDatabaseError(w, err)
 		return nil, err
+	}
+
+	// Call AfterUpdate hook if it exists
+	if err := h.callAfterUpdate(entity, r); err != nil {
+		// Log the error but don't fail the request since the entity was already updated
+		fmt.Printf("AfterUpdate hook failed: %v\n", err)
 	}
 
 	return db, nil

@@ -148,12 +148,26 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Call BeforeCreate hook if it exists
+	if err := h.callBeforeCreate(entity, r); err != nil {
+		if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", err.Error()); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	}
+
 	// Create the entity in the database
 	if err := h.db.Create(entity).Error; err != nil {
 		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error()); writeErr != nil {
 			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
 		}
 		return
+	}
+
+	// Call AfterCreate hook if it exists
+	if err := h.callAfterCreate(entity, r); err != nil {
+		// Log the error but don't fail the request since the entity was already created
+		fmt.Printf("AfterCreate hook failed: %v\n", err)
 	}
 
 	// Build the Location header with the key(s) of the created entity
