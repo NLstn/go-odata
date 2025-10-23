@@ -1,6 +1,11 @@
 package entities
 
-import "time"
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"time"
+)
 
 // ProductStatus represents product status as a flags enum
 type ProductStatus int
@@ -35,6 +40,34 @@ type Product struct {
 	Category        *Category            `json:"Category,omitempty" gorm:"foreignKey:CategoryID;references:ID"`
 	Descriptions    []ProductDescription `json:"Descriptions,omitempty" gorm:"foreignKey:ProductID;references:ID"`
 	RelatedProducts []Product            `json:"RelatedProducts,omitempty" gorm:"many2many:product_relations;"`
+}
+
+// BeforeCreate is a lifecycle hook that is called before a Product is created.
+// This hook enforces that only admins can create products.
+func (p Product) BeforeCreate(ctx context.Context, r *http.Request) error {
+	// Check if the user is an admin
+	// In a real application, you would extract this from authentication tokens/session
+	isAdmin := r.Header.Get("X-User-Role") == "admin"
+	
+	if !isAdmin {
+		return fmt.Errorf("only administrators are allowed to create products")
+	}
+	
+	return nil
+}
+
+// BeforeUpdate is a lifecycle hook that is called before a Product is updated.
+// This hook enforces that only admins can update products.
+func (p Product) BeforeUpdate(ctx context.Context, r *http.Request) error {
+	// Check if the user is an admin
+	// In a real application, you would extract this from authentication tokens/session
+	isAdmin := r.Header.Get("X-User-Role") == "admin"
+	
+	if !isAdmin {
+		return fmt.Errorf("only administrators are allowed to update products")
+	}
+	
+	return nil
 }
 
 // GetSampleProducts returns sample product data for seeding the database

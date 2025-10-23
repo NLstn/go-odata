@@ -17,6 +17,15 @@ type EntityMetadata struct {
 	ETagProperty  *PropertyMetadata  // Property used for ETag generation (optional)
 	IsSingleton   bool               // True if this is a singleton (single instance accessible by name)
 	SingletonName string             // Name of the singleton (if IsSingleton is true)
+	// Hooks defines which lifecycle hooks are available on this entity
+	Hooks struct {
+		HasBeforeCreate bool
+		HasAfterCreate  bool
+		HasBeforeUpdate bool
+		HasAfterUpdate  bool
+		HasBeforeDelete bool
+		HasAfterDelete  bool
+	}
 }
 
 // PropertyMetadata holds metadata information about an entity property
@@ -93,6 +102,9 @@ func AnalyzeEntity(entity interface{}) (*EntityMetadata, error) {
 		metadata.KeyProperty = &metadata.KeyProperties[0]
 	}
 
+	// Detect available lifecycle hooks
+	detectHooks(metadata)
+
 	return metadata, nil
 }
 
@@ -146,6 +158,9 @@ func AnalyzeSingleton(entity interface{}, singletonName string) (*EntityMetadata
 	if len(metadata.KeyProperties) == 1 {
 		metadata.KeyProperty = &metadata.KeyProperties[0]
 	}
+
+	// Detect available lifecycle hooks
+	detectHooks(metadata)
 
 	return metadata, nil
 }
@@ -385,6 +400,51 @@ func isVowel(r rune) bool {
 	default:
 		return false
 	}
+}
+
+// detectHooks checks if the entity type has any lifecycle hook methods
+func detectHooks(metadata *EntityMetadata) {
+	entityType := metadata.EntityType
+	
+	// Check for both value and pointer receivers
+	valueType := entityType
+	ptrType := reflect.PointerTo(entityType)
+	
+	// Check BeforeCreate
+	if hasMethod(valueType, "BeforeCreate") || hasMethod(ptrType, "BeforeCreate") {
+		metadata.Hooks.HasBeforeCreate = true
+	}
+	
+	// Check AfterCreate
+	if hasMethod(valueType, "AfterCreate") || hasMethod(ptrType, "AfterCreate") {
+		metadata.Hooks.HasAfterCreate = true
+	}
+	
+	// Check BeforeUpdate
+	if hasMethod(valueType, "BeforeUpdate") || hasMethod(ptrType, "BeforeUpdate") {
+		metadata.Hooks.HasBeforeUpdate = true
+	}
+	
+	// Check AfterUpdate
+	if hasMethod(valueType, "AfterUpdate") || hasMethod(ptrType, "AfterUpdate") {
+		metadata.Hooks.HasAfterUpdate = true
+	}
+	
+	// Check BeforeDelete
+	if hasMethod(valueType, "BeforeDelete") || hasMethod(ptrType, "BeforeDelete") {
+		metadata.Hooks.HasBeforeDelete = true
+	}
+	
+	// Check AfterDelete
+	if hasMethod(valueType, "AfterDelete") || hasMethod(ptrType, "AfterDelete") {
+		metadata.Hooks.HasAfterDelete = true
+	}
+}
+
+// hasMethod checks if a type has a method with the given name
+func hasMethod(t reflect.Type, methodName string) bool {
+	_, found := t.MethodByName(methodName)
+	return found
 }
 
 // parseInt parses a string to an integer
