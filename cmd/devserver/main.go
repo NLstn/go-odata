@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 
 	"github.com/nlstn/go-odata"
@@ -91,6 +92,10 @@ func main() {
 	// Register reseed action for testing
 	registerReseedAction(service, db)
 
+	// Create HTTP mux and register the OData service
+	mux := http.NewServeMux()
+	mux.Handle("/", service)
+
 	// Start the HTTP server
 	fmt.Println("🚀 Development server starting with hot reload...")
 	fmt.Println("Service endpoints:")
@@ -119,7 +124,7 @@ func main() {
 	fmt.Println("    POST http://localhost:8080/Products(1)/IncreasePrice (body: {\"amount\": 5.0})")
 	fmt.Println()
 
-	if err := service.ListenAndServe(":8080"); err != nil {
+	if err := http.ListenAndServe(":8080", mux); err != nil {
 		log.Fatal("Server failed:", err)
 	}
 }

@@ -420,8 +420,9 @@ func (s *Service) handleActionOrFunction(w http.ResponseWriter, r *http.Request,
 	}
 }
 
-// ListenAndServe starts the OData service on the specified address.
-func (s *Service) ListenAndServe(addr string) error {
-	fmt.Printf("Starting OData service on %s\n", addr)
-	return http.ListenAndServe(addr, s)
+// Handler returns the Service as an http.Handler.
+// This method provides an explicit way to use the Service as a handler,
+// though the Service already implements http.Handler directly.
+func (s *Service) Handler() http.Handler {
+	return s
 }

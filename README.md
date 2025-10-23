@@ -138,6 +138,7 @@ package main
 
 import (
     "log"
+    "net/http"
     
     "github.com/nlstn/go-odata"
     "gorm.io/driver/sqlite"
@@ -171,9 +172,61 @@ func main() {
     // Register entity
     service.RegisterEntity(&Product{})
     
+    // Create HTTP mux and register the OData service as a handler
+    mux := http.NewServeMux()
+    mux.Handle("/", service)
+    
     // Start server
-    service.ListenAndServe(":8080")
+    log.Println("Starting OData service on :8080")
+    log.Fatal(http.ListenAndServe(":8080", mux))
 }
+```
+
+### Alternative: Using Service as Handler Directly
+
+The `Service` implements `http.Handler`, so you can also use it directly:
+
+```go
+// Option 1: Use the Handler() method
+mux.Handle("/", service.Handler())
+
+// Option 2: Use the service directly (equivalent)
+mux.Handle("/", service)
+```
+
+### Mounting at a Custom Path
+
+You can mount the OData service at a custom path prefix:
+
+```go
+// Mount OData service at /api/odata/
+mux.Handle("/api/odata/", http.StripPrefix("/api/odata", service))
+
+// Now access via http://localhost:8080/api/odata/Products
+```
+
+### Adding Other Handlers
+
+Since the OData service is just a standard HTTP handler, you can easily combine it with other handlers:
+
+```go
+mux := http.NewServeMux()
+
+// OData service at root
+mux.Handle("/", service)
+
+// Health check endpoint
+mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+    w.WriteHeader(http.StatusOK)
+    w.Write([]byte("OK"))
+})
+
+// Metrics endpoint
+mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
+    // Your metrics logic
+})
+
+log.Fatal(http.ListenAndServe(":8080", mux))
 ```
 
 ## Available Endpoints
