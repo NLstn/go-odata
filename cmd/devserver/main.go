@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/NLstn/go-odata/devserver/entities"
 	"github.com/nlstn/go-odata"
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
@@ -54,8 +55,8 @@ func main() {
 		log.Fatalf("Unsupported database type: %s. Use 'sqlite' or 'postgres'", *dbType)
 	}
 
-	// Auto-migrate the Product, ProductDescription, Category, and CompanyInfo models
-	if err := db.AutoMigrate(&Category{}, &Product{}, &ProductDescription{}, &CompanyInfo{}); err != nil {
+	// Auto-migrate the Product, ProductDescription, Category, CompanyInfo, and User models
+	if err := db.AutoMigrate(&entities.Category{}, &entities.Product{}, &entities.ProductDescription{}, &entities.CompanyInfo{}, &entities.User{}); err != nil {
 		log.Fatal("Failed to migrate database:", err)
 	}
 
@@ -68,18 +69,21 @@ func main() {
 	service := odata.NewService(db)
 
 	// Register the Category, Product and ProductDescription entities
-	if err := service.RegisterEntity(&Category{}); err != nil {
+	if err := service.RegisterEntity(&entities.Category{}); err != nil {
 		log.Fatal("Failed to register Category entity:", err)
 	}
-	if err := service.RegisterEntity(&Product{}); err != nil {
+	if err := service.RegisterEntity(&entities.Product{}); err != nil {
 		log.Fatal("Failed to register Product entity:", err)
 	}
-	if err := service.RegisterEntity(&ProductDescription{}); err != nil {
+	if err := service.RegisterEntity(&entities.ProductDescription{}); err != nil {
 		log.Fatal("Failed to register ProductDescription entity:", err)
+	}
+	if err := service.RegisterEntity(&entities.User{}); err != nil {
+		log.Fatal("Failed to register User entity:", err)
 	}
 
 	// Register the CompanyInfo singleton
-	if err := service.RegisterSingleton(&CompanyInfo{}, "Company"); err != nil {
+	if err := service.RegisterSingleton(&entities.CompanyInfo{}, "Company"); err != nil {
 		log.Fatal("Failed to register Company singleton:", err)
 	}
 
@@ -108,6 +112,8 @@ func main() {
 	fmt.Println("  Single Product:       http://localhost:8080/Products(1)")
 	fmt.Println("  ProductDescriptions:  http://localhost:8080/ProductDescriptions")
 	fmt.Println("  Product Descriptions: http://localhost:8080/ProductDescriptions(ProductID=1,LanguageKey='EN')")
+	fmt.Println("  Users:                http://localhost:8080/Users")
+	fmt.Println("  Single User:          http://localhost:8080/Users(1)")
 	fmt.Println("  Company (Singleton):  http://localhost:8080/Company")
 	fmt.Println()
 	fmt.Println("OData Actions and Functions:")
