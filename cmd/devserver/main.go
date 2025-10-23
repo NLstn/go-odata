@@ -14,6 +14,9 @@ import (
 	"gorm.io/gorm"
 )
 
+// db is the global database instance used throughout the devserver
+var Db *gorm.DB
+
 func main() {
 	// Parse command-line flags
 	dbType := flag.String("db", "sqlite", "Database type: sqlite or postgres")
@@ -21,7 +24,6 @@ func main() {
 	flag.Parse()
 
 	// Determine database configuration
-	var db *gorm.DB
 	var err error
 
 	switch *dbType {
@@ -30,7 +32,7 @@ func main() {
 		if *dbDSN != "" {
 			dsn = *dbDSN
 		}
-		db, err = gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+		Db, err = gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 		if err != nil {
 			log.Fatal("Failed to connect to SQLite database:", err)
 		}
@@ -45,7 +47,7 @@ func main() {
 				log.Fatal("PostgreSQL DSN required. Use -dsn flag or set DATABASE_URL environment variable")
 			}
 		}
-		db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+		Db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
 		if err != nil {
 			log.Fatal("Failed to connect to PostgreSQL database:", err)
 		}
@@ -56,17 +58,17 @@ func main() {
 	}
 
 	// Auto-migrate the Product, ProductDescription, Category, CompanyInfo, and User models
-	if err := db.AutoMigrate(&entities.Category{}, &entities.Product{}, &entities.ProductDescription{}, &entities.CompanyInfo{}, &entities.User{}); err != nil {
+	if err := Db.AutoMigrate(&entities.Category{}, &entities.Product{}, &entities.ProductDescription{}, &entities.CompanyInfo{}, &entities.User{}); err != nil {
 		log.Fatal("Failed to migrate database:", err)
 	}
 
 	// Seed the database with sample data
-	if err := seedDatabase(db); err != nil {
+	if err := seedDatabase(Db); err != nil {
 		log.Fatal("Failed to seed database:", err)
 	}
 
 	// Create OData service
-	service := odata.NewService(db)
+	service := odata.NewService(Db)
 
 	// Register the Category, Product and ProductDescription entities
 	if err := service.RegisterEntity(&entities.Category{}); err != nil {
@@ -88,17 +90,24 @@ func main() {
 	}
 
 	// Register example functions
-	registerFunctions(service, db)
+	registerFunctions(service, Db)
 
 	// Register example actions
-	registerActions(service, db)
+	registerActions(service, Db)
 
 	// Register reseed action for testing
-	registerReseedAction(service, db)
+	registerReseedAction(service, Db)
+
+	entities.SetDBGetter(func() *gorm.DB {
+		return Db
+	})
 
 	// Create HTTP mux and register the OData service
 	mux := http.NewServeMux()
 	mux.Handle("/", service)
+
+	// Wrap the mux with the authentication middleware
+	handler := authMiddleware(mux)
 
 	// Start the HTTP server
 	fmt.Println("🚀 Development server starting with hot reload...")
@@ -129,8 +138,12 @@ func main() {
 	fmt.Println("    POST http://localhost:8080/Products(1)/ApplyDiscount (body: {\"percentage\": 10})")
 	fmt.Println("    POST http://localhost:8080/Products(1)/IncreasePrice (body: {\"amount\": 5.0})")
 	fmt.Println()
+	fmt.Println("Authentication:")
+	fmt.Println("  Example: curl -H 'Authorization: Bearer 1' http://localhost:8080/Products")
+	fmt.Println("  Note: This is a DUMMY authentication for demonstration only!")
+	fmt.Println()
 
-	if err := http.ListenAndServe(":8080", mux); err != nil {
+	if err := http.ListenAndServe(":8080", handler); err != nil {
 		log.Fatal("Server failed:", err)
 	}
 }
