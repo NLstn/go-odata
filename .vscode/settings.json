@@ -11,9 +11,5 @@
     },
     "files.watcherExclude": {
         "**/tmp/**": true
-    },
-    "sonarlint.connectedMode.project": {
-        "connectionId": "nlstn",
-        "projectKey": "NLstn_go-odata"
     }
 }
