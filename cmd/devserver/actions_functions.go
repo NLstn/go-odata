@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"reflect"
 
+	"github.com/NLstn/go-odata/devserver/entities"
 	"github.com/nlstn/go-odata"
 	"gorm.io/gorm"
 )
@@ -19,11 +20,11 @@ func registerFunctions(service *odata.Service, db *gorm.DB) {
 		Parameters: []odata.ParameterDefinition{
 			{Name: "count", Type: reflect.TypeOf(int64(0)), Required: true},
 		},
-		ReturnType: reflect.TypeOf([]Product{}),
+		ReturnType: reflect.TypeOf([]entities.Product{}),
 		Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) (interface{}, error) {
 			count := params["count"].(int64)
 
-			var products []Product
+			var products []entities.Product
 			if err := db.Order("price DESC").Limit(int(count)).Find(&products).Error; err != nil {
 				return nil, err
 			}
@@ -55,7 +56,7 @@ func registerFunctions(service *odata.Service, db *gorm.DB) {
 				return nil, fmt.Errorf("invalid product ID")
 			}
 
-			var product Product
+			var product entities.Product
 			if err := db.First(&product, productID).Error; err != nil {
 				return nil, err
 			}
@@ -79,10 +80,10 @@ func registerFunctions(service *odata.Service, db *gorm.DB) {
 			var maxPrice float64
 			var minPrice float64
 
-			db.Model(&Product{}).Count(&count)
-			db.Model(&Product{}).Select("AVG(price)").Row().Scan(&avgPrice)
-			db.Model(&Product{}).Select("MAX(price)").Row().Scan(&maxPrice)
-			db.Model(&Product{}).Select("MIN(price)").Row().Scan(&minPrice)
+			db.Model(&entities.Product{}).Count(&count)
+			db.Model(&entities.Product{}).Select("AVG(price)").Row().Scan(&avgPrice)
+			db.Model(&entities.Product{}).Select("MAX(price)").Row().Scan(&maxPrice)
+			db.Model(&entities.Product{}).Select("MIN(price)").Row().Scan(&minPrice)
 
 			return map[string]interface{}{
 				"totalProducts": count,
@@ -106,7 +107,7 @@ func registerActions(service *odata.Service, db *gorm.DB) {
 		Parameters: []odata.ParameterDefinition{
 			{Name: "percentage", Type: reflect.TypeOf(float64(0)), Required: true},
 		},
-		ReturnType: reflect.TypeOf(Product{}),
+		ReturnType: reflect.TypeOf(entities.Product{}),
 		Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) error {
 			percentage := params["percentage"].(float64)
 
@@ -117,7 +118,7 @@ func registerActions(service *odata.Service, db *gorm.DB) {
 				return fmt.Errorf("invalid product ID")
 			}
 
-			var product Product
+			var product entities.Product
 			if err := db.First(&product, productID).Error; err != nil {
 				return err
 			}
@@ -151,13 +152,13 @@ func registerActions(service *odata.Service, db *gorm.DB) {
 		ReturnType: reflect.TypeOf(map[string]interface{}{}),
 		Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) error {
 			// Get all products and reset their prices to original sample values
-			sampleProducts := GetSampleProducts()
+			sampleProducts := entities.GetSampleProducts()
 			priceMap := make(map[uint]float64)
 			for _, p := range sampleProducts {
 				priceMap[p.ID] = p.Price
 			}
 
-			var products []Product
+			var products []entities.Product
 			if err := db.Find(&products).Error; err != nil {
 				return err
 			}
@@ -210,7 +211,7 @@ func registerActions(service *odata.Service, db *gorm.DB) {
 				return fmt.Errorf("invalid product ID")
 			}
 
-			var product Product
+			var product entities.Product
 			if err := db.First(&product, productID).Error; err != nil {
 				return err
 			}

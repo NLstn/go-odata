@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/NLstn/go-odata/devserver/entities"
 	"github.com/nlstn/go-odata"
 	"gorm.io/gorm"
 )
@@ -13,41 +14,47 @@ import (
 // This function drops and recreates all tables to ensure a clean state
 func seedDatabase(db *gorm.DB) error {
 	// Drop all tables (GORM handles the correct order based on foreign keys)
-	if err := db.Migrator().DropTable(&ProductDescription{}, &Product{}, &Category{}, &CompanyInfo{}); err != nil {
+	if err := db.Migrator().DropTable(&entities.ProductDescription{}, &entities.Product{}, &entities.Category{}, &entities.CompanyInfo{}, &entities.User{}); err != nil {
 		return fmt.Errorf("failed to drop tables: %w", err)
 	}
 
 	// Recreate tables with fresh schema (auto-increment counters are automatically reset)
-	if err := db.AutoMigrate(&Category{}, &Product{}, &ProductDescription{}, &CompanyInfo{}); err != nil {
+	if err := db.AutoMigrate(&entities.Category{}, &entities.Product{}, &entities.ProductDescription{}, &entities.CompanyInfo{}, &entities.User{}); err != nil {
 		return fmt.Errorf("failed to migrate database: %w", err)
 	}
 
 	// Seed categories first (products reference categories)
-	sampleCategories := GetSampleCategories()
+	sampleCategories := entities.GetSampleCategories()
 	if err := db.Create(&sampleCategories).Error; err != nil {
 		return fmt.Errorf("failed to seed categories: %w", err)
 	}
 
 	// Seed products
-	sampleProducts := GetSampleProducts()
+	sampleProducts := entities.GetSampleProducts()
 	if err := db.Create(&sampleProducts).Error; err != nil {
 		return fmt.Errorf("failed to seed products: %w", err)
 	}
 
 	// Seed product descriptions
-	sampleDescriptions := GetSampleProductDescriptions()
+	sampleDescriptions := entities.GetSampleProductDescriptions()
 	if err := db.Create(&sampleDescriptions).Error; err != nil {
 		return fmt.Errorf("failed to seed product descriptions: %w", err)
 	}
 
 	// Seed company info singleton
-	companyInfo := GetCompanyInfo()
+	companyInfo := entities.GetCompanyInfo()
 	if err := db.Create(&companyInfo).Error; err != nil {
 		return fmt.Errorf("failed to seed company info: %w", err)
 	}
 
-	fmt.Printf("Database seeded with %d categories, %d products, %d descriptions, and company info\n",
-		len(sampleCategories), len(sampleProducts), len(sampleDescriptions))
+	// Seed users
+	sampleUsers := entities.GetSampleUsers()
+	if err := db.Create(&sampleUsers).Error; err != nil {
+		return fmt.Errorf("failed to seed users: %w", err)
+	}
+
+	fmt.Printf("Database seeded with %d categories, %d products, %d descriptions, %d users, and company info\n",
+		len(sampleCategories), len(sampleProducts), len(sampleDescriptions), len(sampleUsers))
 	return nil
 }
 
