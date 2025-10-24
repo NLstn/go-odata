@@ -13,6 +13,7 @@ tmp/
 
 # Binary executables
 cmd/devserver/devserver
+cmd/complianceserver/complianceserver
 
 # Test binaries
 *.test
