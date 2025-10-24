@@ -4,7 +4,7 @@
 # Runs all or selected compliance tests and generates a comprehensive report
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SERVER_URL="${SERVER_URL:-http://localhost:8080}"
+SERVER_URL="${SERVER_URL:-http://localhost:9090}"
 REPORT_FILE="${REPORT_FILE:-compliance-report.md}"
 
 # Colors for output
@@ -101,8 +101,8 @@ else
     echo -e "${RED}✗ Failed${NC}"
     echo ""
     echo "Error: Cannot connect to server at $SERVER_URL"
-    echo "Please ensure the development server is running:"
-    echo "  cd cmd/devserver"
+    echo "Please ensure the compliance server is running:"
+    echo "  cd cmd/complianceserver"
     echo "  go run ."
     exit 1
 fi

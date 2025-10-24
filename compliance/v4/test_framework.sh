@@ -17,7 +17,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Server URL (can be overridden by environment variable)
-SERVER_URL="${SERVER_URL:-http://localhost:8080}"
+SERVER_URL="${SERVER_URL:-http://localhost:9090}"
 
 # Note: Database reseeding is handled centrally by run_compliance_tests.sh
 # before each test script runs when running the full suite.
