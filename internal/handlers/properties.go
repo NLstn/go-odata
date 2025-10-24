@@ -171,7 +171,7 @@ func (h *EntityHandler) handleNavigationCollectionWithQueryOptions(w http.Respon
 
 	// Extract the parent entity's key values to filter the related collection
 	parentValue := reflect.ValueOf(parent).Elem()
-	
+
 	// Build foreign key constraints
 	// This assumes standard GORM conventions: ParentID field in child references ID in parent
 	// For the Product -> ProductDescriptions example: ProductDescription.ProductID = Product.ID
@@ -225,7 +225,7 @@ func (h *EntityHandler) handleNavigationCollectionWithQueryOptions(w http.Respon
 		trimmedSlice := reflect.MakeSlice(sliceValue.Type(), *queryOptions.Top, *queryOptions.Top)
 		reflect.Copy(trimmedSlice, sliceValue.Slice(0, *queryOptions.Top))
 		sliceValue = trimmedSlice
-		
+
 		// Build next link
 		baseURL := response.BuildBaseURL(r)
 		navigationPath := fmt.Sprintf("%s(%s)/%s", h.metadata.EntitySetName, entityKey, navProp.JsonName)
@@ -235,7 +235,7 @@ func (h *EntityHandler) handleNavigationCollectionWithQueryOptions(w http.Respon
 
 	// Write response
 	navigationPath := fmt.Sprintf("%s(%s)/%s", h.metadata.EntitySetName, entityKey, navProp.JsonName)
-	
+
 	if isRef {
 		h.writeNavigationCollectionRefFromData(w, r, targetMetadata, sliceValue.Interface(), totalCount, nextLink)
 	} else {
@@ -311,22 +311,12 @@ func (h *EntityHandler) handleOptionsNavigationPropertyCount(w http.ResponseWrit
 
 // findNavigationProperty finds a navigation property by name in the entity metadata
 func (h *EntityHandler) findNavigationProperty(navigationProperty string) *metadata.PropertyMetadata {
-	for _, prop := range h.metadata.Properties {
-		if (prop.JsonName == navigationProperty || prop.Name == navigationProperty) && prop.IsNavigationProp {
-			return &prop
-		}
-	}
-	return nil
+	return h.metadata.FindNavigationProperty(navigationProperty)
 }
 
 // findStructuralProperty finds a structural (non-navigation) property by name in the entity metadata
 func (h *EntityHandler) findStructuralProperty(propertyName string) *metadata.PropertyMetadata {
-	for _, prop := range h.metadata.Properties {
-		if (prop.JsonName == propertyName || prop.Name == propertyName) && !prop.IsNavigationProp && !prop.IsComplexType {
-			return &prop
-		}
-	}
-	return nil
+	return h.metadata.FindStructuralProperty(propertyName)
 }
 
 // IsNavigationProperty checks if a property name is a navigation property
@@ -341,12 +331,7 @@ func (h *EntityHandler) IsStructuralProperty(propertyName string) bool {
 
 // findComplexTypeProperty finds a complex type property by name in the entity metadata
 func (h *EntityHandler) findComplexTypeProperty(propertyName string) *metadata.PropertyMetadata {
-	for _, prop := range h.metadata.Properties {
-		if (prop.JsonName == propertyName || prop.Name == propertyName) && prop.IsComplexType {
-			return &prop
-		}
-	}
-	return nil
+	return h.metadata.FindComplexTypeProperty(propertyName)
 }
 
 // IsComplexTypeProperty checks if a property name is a complex type property
@@ -761,7 +746,7 @@ func buildNextLink(baseURL, path string, options *query.QueryOptions) string {
 func (h *EntityHandler) writeNavigationCollectionRefFromData(w http.ResponseWriter, r *http.Request, targetMetadata *metadata.EntityMetadata, data interface{}, count *int64, nextLink *string) {
 	// Build entity IDs for each entity in the collection
 	var entityIDs []string
-	
+
 	sliceValue := reflect.ValueOf(data)
 	if sliceValue.Kind() == reflect.Slice {
 		for i := 0; i < sliceValue.Len(); i++ {
@@ -929,7 +914,7 @@ func (h *EntityHandler) handlePostNavigationPropertyRef(w http.ResponseWriter, r
 func (h *EntityHandler) handleDeleteNavigationPropertyRef(w http.ResponseWriter, _ *http.Request, entityKey string, navigationProperty string) {
 	// Check if the navigation property contains a key (e.g., RelatedProducts(2))
 	navPropName, targetKey := h.parseNavigationPropertyWithKey(navigationProperty)
-	
+
 	// Find and validate the navigation property
 	navProp := h.findNavigationProperty(navPropName)
 	if navProp == nil {
@@ -998,10 +983,10 @@ func (h *EntityHandler) validateAndExtractEntityKey(odataID string, targetEntity
 	}
 
 	targetEntitySet := targetMetadata.EntitySetName
-	
+
 	// Parse the @odata.id URL to extract entity set and key
 	// The URL format should be: http://server/EntitySet(key) or http://server/EntitySet(key1=value1,key2=value2)
-	
+
 	// Find the entity set name in the URL
 	entitySetIndex := strings.LastIndex(odataID, "/"+targetEntitySet+"(")
 	if entitySetIndex == -1 {
@@ -1053,11 +1038,11 @@ func (h *EntityHandler) updateNavigationPropertyReference(entityKey string, navP
 
 	// Extract the target entity's key value(s)
 	targetValue := reflect.ValueOf(target).Elem()
-	
+
 	// Update the foreign key field(s) in the parent entity
 	// This assumes GORM convention: NavigationPropertyID field in parent references ID in target
 	parentValue := reflect.ValueOf(parent).Elem()
-	
+
 	// For each key property in the target, find the corresponding foreign key field in the parent
 	for _, keyProp := range targetMetadata.KeyProperties {
 		targetKeyValue := targetValue.FieldByName(keyProp.Name)
@@ -1068,7 +1053,7 @@ func (h *EntityHandler) updateNavigationPropertyReference(entityKey string, navP
 		// Build foreign key field name: NavigationPropertyName + KeyPropertyName
 		foreignKeyFieldName := navProp.Name + keyProp.Name
 		foreignKeyField := parentValue.FieldByName(foreignKeyFieldName)
-		
+
 		if foreignKeyField.IsValid() && foreignKeyField.CanSet() {
 			// Handle type conversion if the foreign key field is a pointer
 			if foreignKeyField.Kind() == reflect.Ptr {
@@ -1127,7 +1112,7 @@ func (h *EntityHandler) addNavigationPropertyReference(entityKey string, navProp
 	// Use GORM's association API to add the relationship
 	parentValue := reflect.ValueOf(parent).Elem()
 	navField := parentValue.FieldByName(navProp.Name)
-	
+
 	if !navField.IsValid() {
 		return fmt.Errorf("navigation property field not found")
 	}
@@ -1160,12 +1145,12 @@ func (h *EntityHandler) deleteNavigationPropertyReference(entityKey string, navP
 
 	// Set the foreign key field(s) to null/zero value
 	parentValue := reflect.ValueOf(parent).Elem()
-	
+
 	for _, keyProp := range targetMetadata.KeyProperties {
 		// Build foreign key field name: NavigationPropertyName + KeyPropertyName
 		foreignKeyFieldName := navProp.Name + keyProp.Name
 		foreignKeyField := parentValue.FieldByName(foreignKeyFieldName)
-		
+
 		if foreignKeyField.IsValid() && foreignKeyField.CanSet() {
 			// Set to zero value (null for nullable types, 0 for numeric types)
 			foreignKeyField.Set(reflect.Zero(foreignKeyField.Type()))
@@ -1220,9 +1205,9 @@ func (h *EntityHandler) deleteCollectionNavigationPropertyReference(entityKey st
 func (h *EntityHandler) buildTargetKeyQuery(keyString string, targetMetadata *metadata.EntityMetadata) (*gorm.DB, error) {
 	// Parse the key string and build query conditions
 	// This reuses the logic from buildKeyQuery but with target metadata
-	
+
 	db := h.db.Model(reflect.New(targetMetadata.EntityType).Interface())
-	
+
 	// Check if this is a composite key (contains '=' or ',')
 	if strings.Contains(keyString, "=") || strings.Contains(keyString, ",") {
 		// Composite key: ProductID=1,LanguageKey='EN'
@@ -1232,13 +1217,13 @@ func (h *EntityHandler) buildTargetKeyQuery(keyString string, targetMetadata *me
 			if len(parts) != 2 {
 				return nil, fmt.Errorf("invalid composite key format: %s", keyString)
 			}
-			
+
 			keyName := strings.TrimSpace(parts[0])
 			keyValue := strings.TrimSpace(parts[1])
-			
+
 			// Remove quotes if present
 			keyValue = strings.Trim(keyValue, "'\"")
-			
+
 			// Find the key property in metadata
 			var keyProp *metadata.PropertyMetadata
 			for i := range targetMetadata.KeyProperties {
@@ -1247,11 +1232,11 @@ func (h *EntityHandler) buildTargetKeyQuery(keyString string, targetMetadata *me
 					break
 				}
 			}
-			
+
 			if keyProp == nil {
 				return nil, fmt.Errorf("key property '%s' not found", keyName)
 			}
-			
+
 			// Add where condition using GORM column name
 			db = db.Where(fmt.Sprintf("%s = ?", keyProp.Name), keyValue)
 		}
@@ -1260,11 +1245,11 @@ func (h *EntityHandler) buildTargetKeyQuery(keyString string, targetMetadata *me
 		if len(targetMetadata.KeyProperties) != 1 {
 			return nil, fmt.Errorf("entity requires composite key, but single key provided")
 		}
-		
+
 		keyProp := targetMetadata.KeyProperties[0]
 		keyValue := strings.Trim(keyString, "'\"")
 		db = db.Where(fmt.Sprintf("%s = ?", keyProp.Name), keyValue)
 	}
-	
+
 	return db, nil
 }

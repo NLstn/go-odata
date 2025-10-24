@@ -603,11 +603,8 @@ func (h *EntityHandler) applySkipTokenFilter(db *gorm.DB, queryOptions *query.Qu
 		// Build the WHERE clause
 		// Find the database column name for the orderby property
 		var orderByColumnName string
-		for _, prop := range h.metadata.Properties {
-			if prop.JsonName == orderByProp.Property || prop.Name == orderByProp.Property {
-				orderByColumnName = toSnakeCase(prop.Name)
-				break
-			}
+		if orderByMetadata := h.metadata.FindProperty(orderByProp.Property); orderByMetadata != nil {
+			orderByColumnName = toSnakeCase(orderByMetadata.Name)
 		}
 
 		if orderByColumnName == "" {
@@ -677,10 +674,8 @@ func (h *EntityHandler) validateComplexTypeUsage(queryOptions *query.QueryOption
 
 	// Check orderby for complex type usage
 	for _, orderBy := range queryOptions.OrderBy {
-		for _, prop := range h.metadata.Properties {
-			if (prop.JsonName == orderBy.Property || prop.Name == orderBy.Property) && prop.IsComplexType {
-				return fmt.Errorf("ordering by complex type property '%s' is not supported", orderBy.Property)
-			}
+		if prop := h.metadata.FindProperty(orderBy.Property); prop != nil && prop.IsComplexType {
+			return fmt.Errorf("ordering by complex type property '%s' is not supported", orderBy.Property)
 		}
 	}
 
@@ -710,10 +705,8 @@ func (h *EntityHandler) validateFilterForComplexTypes(filter *query.FilterExpres
 		propertyPath := strings.Split(filter.Property, "/")
 		rootProperty := propertyPath[0]
 
-		for _, prop := range h.metadata.Properties {
-			if (prop.JsonName == rootProperty || prop.Name == rootProperty) && prop.IsComplexType {
-				return fmt.Errorf("filtering by complex type property '%s' is not supported", filter.Property)
-			}
+		if prop := h.metadata.FindProperty(rootProperty); prop != nil && prop.IsComplexType {
+			return fmt.Errorf("filtering by complex type property '%s' is not supported", filter.Property)
 		}
 	}
 

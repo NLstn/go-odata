@@ -6,7 +6,6 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/response"
 )
 
@@ -20,13 +19,7 @@ func (h *EntityHandler) validateDataTypes(updateData map[string]interface{}) err
 		}
 
 		// Find the property metadata
-		var propMeta *metadata.PropertyMetadata
-		for i := range h.metadata.Properties {
-			if h.metadata.Properties[i].JsonName == propName || h.metadata.Properties[i].Name == propName {
-				propMeta = &h.metadata.Properties[i]
-				break
-			}
-		}
+		propMeta := h.metadata.FindProperty(propName)
 
 		// Property validation already handled by validatePropertiesExist
 		if propMeta == nil {
@@ -106,13 +99,7 @@ func (h *EntityHandler) validateRequiredFieldsNotNull(updateData map[string]inte
 		}
 
 		// Find the property metadata
-		var propMeta *metadata.PropertyMetadata
-		for i := range h.metadata.Properties {
-			if h.metadata.Properties[i].JsonName == propName || h.metadata.Properties[i].Name == propName {
-				propMeta = &h.metadata.Properties[i]
-				break
-			}
-		}
+		propMeta := h.metadata.FindProperty(propName)
 
 		// If property is required and value is null, add to error list
 		if propMeta != nil && propMeta.IsRequired {

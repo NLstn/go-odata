@@ -234,7 +234,7 @@ func analyzeNavigationProperty(property *PropertyMetadata, field reflect.StructF
 	// If it's a struct type, determine if it's navigation property or complex type
 	if fieldType.Kind() == reflect.Struct {
 		gormTag := field.Tag.Get("gorm")
-		
+
 		// Check if it's a navigation property (has foreign key, references, or many2many)
 		if strings.Contains(gormTag, "foreignKey") || strings.Contains(gormTag, "references") || strings.Contains(gormTag, "many2many") {
 			property.IsNavigationProp = true
@@ -405,36 +405,36 @@ func isVowel(r rune) bool {
 // detectHooks checks if the entity type has any lifecycle hook methods
 func detectHooks(metadata *EntityMetadata) {
 	entityType := metadata.EntityType
-	
+
 	// Check for both value and pointer receivers
 	valueType := entityType
 	ptrType := reflect.PointerTo(entityType)
-	
+
 	// Check BeforeCreate
 	if hasMethod(valueType, "BeforeCreate") || hasMethod(ptrType, "BeforeCreate") {
 		metadata.Hooks.HasBeforeCreate = true
 	}
-	
+
 	// Check AfterCreate
 	if hasMethod(valueType, "AfterCreate") || hasMethod(ptrType, "AfterCreate") {
 		metadata.Hooks.HasAfterCreate = true
 	}
-	
+
 	// Check BeforeUpdate
 	if hasMethod(valueType, "BeforeUpdate") || hasMethod(ptrType, "BeforeUpdate") {
 		metadata.Hooks.HasBeforeUpdate = true
 	}
-	
+
 	// Check AfterUpdate
 	if hasMethod(valueType, "AfterUpdate") || hasMethod(ptrType, "AfterUpdate") {
 		metadata.Hooks.HasAfterUpdate = true
 	}
-	
+
 	// Check BeforeDelete
 	if hasMethod(valueType, "BeforeDelete") || hasMethod(ptrType, "BeforeDelete") {
 		metadata.Hooks.HasBeforeDelete = true
 	}
-	
+
 	// Check AfterDelete
 	if hasMethod(valueType, "AfterDelete") || hasMethod(ptrType, "AfterDelete") {
 		metadata.Hooks.HasAfterDelete = true
@@ -528,5 +528,52 @@ func autoDetectNullability(property *PropertyMetadata) error {
 
 	// For pointer types without "not null", leave nullable as nil
 	// The metadata handler will decide based on IsRequired and IsKey
+	return nil
+}
+
+// FindProperty returns the property metadata matching the provided name or JSON name.
+// Returns nil if no property matches.
+func (metadata *EntityMetadata) FindProperty(name string) *PropertyMetadata {
+	if metadata == nil {
+		return nil
+	}
+
+	for i := range metadata.Properties {
+		prop := &metadata.Properties[i]
+		if prop.Name == name || prop.JsonName == name {
+			return prop
+		}
+	}
+
+	return nil
+}
+
+// FindNavigationProperty returns the metadata for the requested navigation property.
+// Returns nil if the property does not exist or is not a navigation property.
+func (metadata *EntityMetadata) FindNavigationProperty(name string) *PropertyMetadata {
+	prop := metadata.FindProperty(name)
+	if prop != nil && prop.IsNavigationProp {
+		return prop
+	}
+	return nil
+}
+
+// FindStructuralProperty returns metadata for structural properties (non-navigation, non-complex types).
+// Returns nil if the property does not exist or is not a structural property.
+func (metadata *EntityMetadata) FindStructuralProperty(name string) *PropertyMetadata {
+	prop := metadata.FindProperty(name)
+	if prop != nil && !prop.IsNavigationProp && !prop.IsComplexType {
+		return prop
+	}
+	return nil
+}
+
+// FindComplexTypeProperty returns metadata for complex type properties.
+// Returns nil if the property does not exist or is not a complex type.
+func (metadata *EntityMetadata) FindComplexTypeProperty(name string) *PropertyMetadata {
+	prop := metadata.FindProperty(name)
+	if prop != nil && prop.IsComplexType {
+		return prop
+	}
 	return nil
 }
