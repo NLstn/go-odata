@@ -1646,10 +1646,8 @@ func buildComputeExpressionSQL(expr *FilterExpression, entityMetadata *metadata.
 
 // findProperty finds a property by name or JSON name in the entity metadata
 func findProperty(propName string, entityMetadata *metadata.EntityMetadata) *metadata.PropertyMetadata {
-	for _, prop := range entityMetadata.Properties {
-		if prop.Name == propName || prop.JsonName == propName {
-			return &prop
-		}
+	if entityMetadata == nil {
+		return nil
 	}
-	return nil
+	return entityMetadata.FindProperty(propName)
 }

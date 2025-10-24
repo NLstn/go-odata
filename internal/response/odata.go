@@ -421,9 +421,10 @@ func isPropertyExpanded(prop PropertyMetadata, expandedProps []string) bool {
 
 // findPropertyMetadata finds the metadata for a property by its field name
 func findPropertyMetadata(fieldName string, metadata EntityMetadataProvider) *PropertyMetadata {
-	for _, prop := range metadata.GetProperties() {
-		if prop.Name == fieldName {
-			return &prop
+	props := metadata.GetProperties()
+	for i := range props {
+		if props[i].Name == fieldName {
+			return &props[i]
 		}
 	}
 	return nil

@@ -24,6 +24,22 @@ type TestProductWithAutoKey struct {
 	Price float64 `json:"price"`
 }
 
+type TestOrder struct {
+	ID          int             `json:"id" odata:"key"`
+	Customer    string          `json:"customer"`
+	ShipAddress OrderAddress    `json:"shipAddress" gorm:"embedded"`
+	Lines       []TestOrderLine `json:"lines" gorm:"foreignKey:OrderID"`
+}
+
+type TestOrderLine struct {
+	OrderID int    `json:"orderId"`
+	SKU     string `json:"sku"`
+}
+
+type OrderAddress struct {
+	City string `json:"city"`
+}
+
 func TestAnalyzeEntity(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -156,6 +172,68 @@ func TestGetJsonName(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestEntityMetadataFinders(t *testing.T) {
+	meta, err := AnalyzeEntity(TestOrder{})
+	if err != nil {
+		t.Fatalf("AnalyzeEntity(TestOrder) returned error: %v", err)
+	}
+
+	t.Run("find property by json name", func(t *testing.T) {
+		prop := meta.FindProperty("customer")
+		if prop == nil {
+			t.Fatalf("FindProperty returned nil")
+		}
+		if prop.Name != "Customer" {
+			t.Fatalf("expected struct field name Customer, got %s", prop.Name)
+		}
+	})
+
+	t.Run("find property by struct name", func(t *testing.T) {
+		prop := meta.FindProperty("Customer")
+		if prop == nil {
+			t.Fatal("FindProperty by struct name returned nil")
+		}
+	})
+
+	t.Run("find navigation property", func(t *testing.T) {
+		nav := meta.FindNavigationProperty("lines")
+		if nav == nil {
+			t.Fatal("FindNavigationProperty returned nil for navigation field")
+		}
+		if !nav.IsNavigationProp {
+			t.Fatal("expected navigation property to be marked as such")
+		}
+	})
+
+	t.Run("find complex type property", func(t *testing.T) {
+		complexProp := meta.FindComplexTypeProperty("shipAddress")
+		if complexProp == nil {
+			t.Fatal("FindComplexTypeProperty returned nil for complex field")
+		}
+		if !complexProp.IsComplexType {
+			t.Fatal("expected property to be marked as complex type")
+		}
+	})
+
+	t.Run("find structural property excludes navigation and complex", func(t *testing.T) {
+		if prop := meta.FindStructuralProperty("lines"); prop != nil {
+			t.Fatal("expected navigation property to be excluded from structural lookup")
+		}
+		if prop := meta.FindStructuralProperty("shipAddress"); prop != nil {
+			t.Fatal("expected complex type to be excluded from structural lookup")
+		}
+		if prop := meta.FindStructuralProperty("customer"); prop == nil {
+			t.Fatal("expected structural property to be returned")
+		}
+	})
+
+	t.Run("returns nil for missing property", func(t *testing.T) {
+		if meta.FindProperty("unknown") != nil {
+			t.Fatal("expected FindProperty to return nil for missing property")
+		}
+	})
 }
 
 func TestPropertyMetadata(t *testing.T) {

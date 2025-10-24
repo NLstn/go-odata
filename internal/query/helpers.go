@@ -75,12 +75,10 @@ func GetColumnName(propertyName string, entityMetadata *metadata.EntityMetadata)
 
 // findNavigationProperty finds a navigation property in the entity metadata
 func findNavigationProperty(propName string, entityMetadata *metadata.EntityMetadata) *metadata.PropertyMetadata {
-	for _, prop := range entityMetadata.Properties {
-		if (prop.JsonName == propName || prop.Name == propName) && prop.IsNavigationProp {
-			return &prop
-		}
+	if entityMetadata == nil {
+		return nil
 	}
-	return nil
+	return entityMetadata.FindNavigationProperty(propName)
 }
 
 // toSnakeCase converts a camelCase or PascalCase string to snake_case
