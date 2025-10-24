@@ -62,6 +62,8 @@ cd compliance/v4
 ./run_compliance_tests.sh --external-server
 ```
 
+**Note:** The script will use a pre-built binary (`./complianceserver`) if available, otherwise it will build from source using `go run .`. For faster startup, you can pre-build the server with `go build .`.
+
 ## Differences from Development Server
 
 | Feature | Compliance Server | Development Server |
