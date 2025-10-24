@@ -1199,6 +1199,8 @@ This starts a server on `http://localhost:9090` with:
 - Only essential Reseed action for testing
 - Used by the compliance test suite in `compliance/v4/`
 
+**Note:** The compliance test script (`compliance/v4/run_compliance_tests.sh`) automatically starts and stops the compliance server, so manual server management is optional.
+
 See [cmd/complianceserver/README.md](cmd/complianceserver/README.md) for more details.
 
 ## Example Responses
