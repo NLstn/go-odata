@@ -3,12 +3,15 @@
 This is a simplified OData server specifically designed for running compliance tests. Unlike the development server (`cmd/devserver`), this server:
 
 - **No custom middleware**: Runs without authentication or other middleware to ensure pure OData compliance
-- **No custom actions/functions**: Excludes custom business logic that isn't part of compliance testing
+- **No lifecycle hooks**: Excludes BeforeCreate/BeforeUpdate hooks
 - **Minimal entities**: Only includes the entities required for compliance tests:
   - `Products` - Main entity for most tests
   - `ProductDescriptions` - Entity with composite keys
   - `Categories` - Related entity for navigation properties
   - `Company` - Singleton entity
+- **Standard actions/functions**: Includes actions and functions needed for compliance testing:
+  - Functions: `GetTopProducts`, `GetTotalPrice`, `GetProductStats`
+  - Actions: `ApplyDiscount`, `ResetAllPrices`, `IncreasePrice`, `Reseed`
 - **Port 9090**: Runs on port 9090 by default (devserver uses 8080)
 
 ## Running the Compliance Server
@@ -65,8 +68,8 @@ cd compliance/v4
 |---------|------------------|-------------------|
 | Port | 9090 | 8080 |
 | Authentication | None | Dummy middleware |
-| Custom Actions | Only Reseed | Multiple demo actions |
-| Custom Functions | None | Multiple demo functions |
+| Actions | Standard (for compliance) | Demo examples |
+| Functions | Standard (for compliance) | Demo examples |
 | Entities | 4 (minimal) | 5 (includes User) |
 | Lifecycle Hooks | None | BeforeCreate, BeforeUpdate |
 | Purpose | Compliance testing | Development & demos |

@@ -1195,8 +1195,8 @@ go run .
 
 This starts a server on `http://localhost:9090` with:
 - Minimal entities (Products, Categories, ProductDescriptions, Company singleton)
-- No custom middleware or hooks
-- Only essential Reseed action for testing
+- No custom middleware or lifecycle hooks
+- Standard actions and functions needed for compliance testing
 - Used by the compliance test suite in `compliance/v4/`
 
 **Note:** The compliance test script (`compliance/v4/run_compliance_tests.sh`) automatically starts and stops the compliance server, so manual server management is optional.

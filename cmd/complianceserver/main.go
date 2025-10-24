@@ -87,6 +87,12 @@ func main() {
 		log.Fatal("Failed to register Company singleton:", err)
 	}
 
+	// Register functions for compliance testing
+	registerFunctions(service, Db)
+
+	// Register actions for compliance testing
+	registerActions(service, Db)
+
 	// Register reseed action for compliance testing
 	registerReseedAction(service, Db)
 
