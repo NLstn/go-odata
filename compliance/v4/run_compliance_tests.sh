@@ -6,6 +6,8 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SERVER_URL="${SERVER_URL:-http://localhost:9090}"
 REPORT_FILE="${REPORT_FILE:-compliance-report.md}"
+DB_TYPE="sqlite"           # sqlite | postgres
+DB_DSN=""                  # Optional; for postgres defaults if empty
 
 # Colors for output
 RED='\033[0;31m'
@@ -34,6 +36,8 @@ usage() {
     echo "  -h, --help           Show this help message"
     echo "  -s, --server URL     Set server URL (default: http://localhost:9090)"
     echo "  -o, --output FILE    Set report output file (default: compliance-report.md)"
+    echo "  --db TYPE            Database type to use for the compliance server: sqlite | postgres (default: sqlite)"
+    echo "  --dsn DSN           Database DSN/connection string (required for postgres unless DATABASE_URL is set)"
     echo "  -v, --verbose        Show detailed test output"
     echo "  -f, --failures-only  Only show output for failing tests"
     echo "  --external-server    Use an external server (don't start/stop the compliance server)"
@@ -97,6 +101,14 @@ while [[ $# -gt 0 ]]; do
             REPORT_FILE="$2"
             shift 2
             ;;
+        --db)
+            DB_TYPE="$2"
+            shift 2
+            ;;
+        --dsn)
+            DB_DSN="$2"
+            shift 2
+            ;;
         -v|--verbose)
             VERBOSE=1
             shift
@@ -126,6 +138,7 @@ echo "║     OData v4 Compliance Test Suite                    ║"
 echo "╚════════════════════════════════════════════════════════╝"
 echo ""
 echo "Server URL: $SERVER_URL"
+echo "Database:   $DB_TYPE${DB_DSN:+ (dsn provided)}"
 echo "Report File: $REPORT_FILE"
 echo ""
 
@@ -151,8 +164,27 @@ if [ $EXTERNAL_SERVER -eq 0 ]; then
         exit 1
     fi
     
-    echo "Starting compliance server from $TMP_SERVER_DIR/complianceserver"
-    "$TMP_SERVER_DIR/complianceserver" > /tmp/compliance-server.log 2>&1 &
+    # Determine defaults for DB depending on type
+    if [ "$DB_TYPE" = "postgres" ]; then
+        # If no DSN provided, try DATABASE_URL or fall back to a common local default
+        if [ -z "$DB_DSN" ]; then
+            if [ -n "$DATABASE_URL" ]; then
+                DB_DSN="$DATABASE_URL"
+            else
+                DB_DSN="postgresql://odata:odata_dev@localhost:5432/odata_test?sslmode=disable"
+            fi
+        fi
+        DB_ARGS=( -db postgres -dsn "$DB_DSN" )
+    else
+        # sqlite by default; use :memory: unless a DSN was provided
+        if [ -z "$DB_DSN" ]; then
+            DB_DSN=":memory:"
+        fi
+        DB_ARGS=( -db sqlite -dsn "$DB_DSN" )
+    fi
+
+    echo "Starting compliance server from $TMP_SERVER_DIR/complianceserver (db=$DB_TYPE)"
+    "$TMP_SERVER_DIR/complianceserver" "${DB_ARGS[@]}" > /tmp/compliance-server.log 2>&1 &
     SERVER_PID=$!
     
     echo "Compliance server started (PID: $SERVER_PID)"
@@ -370,6 +402,7 @@ cat > "$REPORT_FILE" << EOF
 
 **Generated:** $(date)  
 **Server:** $SERVER_URL  
+**Database:** $DB_TYPE  
 **Overall Status:** $OVERALL_STATUS
 
 ## Summary
