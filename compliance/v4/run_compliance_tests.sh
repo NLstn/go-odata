@@ -23,6 +23,7 @@ declare -a TEST_TOTAL
 
 # Variable to track if we started the server
 SERVER_PID=""
+TMP_SERVER_DIR=""
 CLEANUP_DONE=0
 
 # Function to print usage
@@ -66,6 +67,11 @@ cleanup() {
         kill $SERVER_PID 2>/dev/null || true
         wait $SERVER_PID 2>/dev/null || true
         echo "Server stopped."
+    fi
+    
+    # Clean up temporary server directory
+    if [ -n "$TMP_SERVER_DIR" ] && [ -d "$TMP_SERVER_DIR" ]; then
+        rm -rf "$TMP_SERVER_DIR"
     fi
 }
 
@@ -130,17 +136,24 @@ if [ $EXTERNAL_SERVER -eq 0 ]; then
     # Find the project root (two directories up from compliance/v4)
     PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
     
-    # Check if pre-built binary exists, otherwise use go run
+    # Build the compliance server into /tmp directory
+    echo "Building compliance server..."
     cd "$PROJECT_ROOT/cmd/complianceserver"
-    if [ -f "./complianceserver" ]; then
-        echo "Using pre-built compliance server binary"
-        ./complianceserver > /tmp/compliance-server.log 2>&1 &
-        SERVER_PID=$!
-    else
-        echo "Building and running compliance server from source"
-        go run . > /tmp/compliance-server.log 2>&1 &
-        SERVER_PID=$!
+    TMP_SERVER_DIR="/tmp/complianceserver-$$"
+    mkdir -p "$TMP_SERVER_DIR"
+    go build -o "$TMP_SERVER_DIR/complianceserver" . > /tmp/compliance-build.log 2>&1
+    
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}✗ Failed to build compliance server${NC}"
+        echo ""
+        echo "Build log:"
+        cat /tmp/compliance-build.log
+        exit 1
     fi
+    
+    echo "Starting compliance server from $TMP_SERVER_DIR/complianceserver"
+    "$TMP_SERVER_DIR/complianceserver" > /tmp/compliance-server.log 2>&1 &
+    SERVER_PID=$!
     
     echo "Compliance server started (PID: $SERVER_PID)"
     echo "Waiting for server to be ready..."

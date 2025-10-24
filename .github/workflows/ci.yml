@@ -106,11 +106,6 @@ jobs:
         cd cmd/complianceserver
         go mod download
 
-    - name: Build compliance server
-      run: |
-        cd cmd/complianceserver
-        go build -v .
-
     - name: Run compliance tests
       run: |
         cd compliance/v4
