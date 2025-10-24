@@ -130,22 +130,29 @@ if [ $EXTERNAL_SERVER -eq 0 ]; then
     # Find the project root (two directories up from compliance/v4)
     PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
     
-    # Start the compliance server in the background
+    # Check if pre-built binary exists, otherwise use go run
     cd "$PROJECT_ROOT/cmd/complianceserver"
-    go run . > /tmp/compliance-server.log 2>&1 &
-    SERVER_PID=$!
+    if [ -f "./complianceserver" ]; then
+        echo "Using pre-built compliance server binary"
+        ./complianceserver > /tmp/compliance-server.log 2>&1 &
+        SERVER_PID=$!
+    else
+        echo "Building and running compliance server from source"
+        go run . > /tmp/compliance-server.log 2>&1 &
+        SERVER_PID=$!
+    fi
     
     echo "Compliance server started (PID: $SERVER_PID)"
     echo "Waiting for server to be ready..."
     
-    # Wait for server to be ready (up to 30 seconds)
-    for i in {1..30}; do
+    # Wait for server to be ready (up to 60 seconds to account for first-time builds)
+    for i in {1..60}; do
         if curl -s -f -o /dev/null -w "%{http_code}" "$SERVER_URL/" > /dev/null 2>&1; then
             echo -e "${GREEN}✓ Server is ready!${NC}"
             break
         fi
-        if [ $i -eq 30 ]; then
-            echo -e "${RED}✗ Server failed to start within 30 seconds${NC}"
+        if [ $i -eq 60 ]; then
+            echo -e "${RED}✗ Server failed to start within 60 seconds${NC}"
             echo ""
             echo "Server log:"
             cat /tmp/compliance-server.log
