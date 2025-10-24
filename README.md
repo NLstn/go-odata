@@ -1167,16 +1167,39 @@ When you register a singleton, it automatically appears in the service document:
 }
 ```
 
-## Development Server
+## Development Servers
 
-A development server is included for testing:
+Two servers are included in this repository:
+
+### Development Server (`cmd/devserver`)
+A full-featured development server with demo functionality:
 
 ```bash
 cd cmd/devserver
 go run .
 ```
 
-This starts a server on `http://localhost:8080` with sample Product data.
+This starts a server on `http://localhost:8080` with:
+- Sample Product, Category, and User data
+- Custom authentication middleware (demo only)
+- Example actions and functions
+- Lifecycle hooks (BeforeCreate, BeforeUpdate)
+
+### Compliance Server (`cmd/complianceserver`)
+A minimal server for OData compliance testing:
+
+```bash
+cd cmd/complianceserver
+go run .
+```
+
+This starts a server on `http://localhost:9090` with:
+- Minimal entities (Products, Categories, ProductDescriptions, Company singleton)
+- No custom middleware or hooks
+- Only essential Reseed action for testing
+- Used by the compliance test suite in `compliance/v4/`
+
+See [cmd/complianceserver/README.md](cmd/complianceserver/README.md) for more details.
 
 ## Example Responses
 
