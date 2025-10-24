@@ -44,14 +44,14 @@ go run . -db postgres -dsn "postgresql://user:pass@localhost/dbname"
 
 The compliance server is used by the compliance test suite in `compliance/v4/`.
 
-The test script automatically starts and stops the compliance server:
+The test script automatically builds, starts, and stops the compliance server:
 
 ```bash
-# Run all compliance tests (server auto-starts)
+# Run all compliance tests (server auto-builds and starts)
 cd compliance/v4
 ./run_compliance_tests.sh
 
-# Run specific tests (server auto-starts)
+# Run specific tests (server auto-builds and starts)
 ./run_compliance_tests.sh 9.1_service_document
 
 # Use an external/manual server
@@ -62,7 +62,7 @@ cd compliance/v4
 ./run_compliance_tests.sh --external-server
 ```
 
-**Note:** The script will use a pre-built binary (`./complianceserver`) if available, otherwise it will build from source using `go run .`. For faster startup, you can pre-build the server with `go build .`.
+**Note:** The script automatically rebuilds the compliance server into a temporary directory (`/tmp/complianceserver-$$`) for each test run, ensuring a clean build every time.
 
 ## Differences from Development Server
 
