@@ -31,13 +31,7 @@ Each test script:
 
 ### Prerequisites
 
-1. Start the development server:
-   ```bash
-   cd cmd/devserver
-   go run .
-   ```
-
-2. The server should be running on http://localhost:8080 (default)
+The compliance test script automatically starts and stops the compliance server, so no manual server setup is required.
 
 ### Run All Tests
 
@@ -47,6 +41,7 @@ cd compliance/v4
 ```
 
 This will:
+- Automatically start the compliance server on port 9090
 - Run all test scripts in sequence
 - Print results to console with color coding
 - Generate a markdown report (`compliance-report.md`)
@@ -54,16 +49,29 @@ This will:
 
 ### Run Specific Tests
 
-Run tests matching a pattern:
+Run tests matching a pattern (server auto-starts):
 ```bash
 ./run_compliance_tests.sh header          # All header tests
 ./run_compliance_tests.sh 8.1.1          # Specific section
 ./run_compliance_tests.sh query          # All query option tests
 ```
 
-Run a single test directly:
+Run a single test directly (requires server to be running):
 ```bash
 ./8.1.1_header_content_type.sh
+```
+
+### Use External Server
+
+If you want to manage the server manually:
+```bash
+# Terminal 1: Start the compliance server
+cd cmd/complianceserver
+go run .
+
+# Terminal 2: Run tests with --external-server flag
+cd compliance/v4
+./run_compliance_tests.sh --external-server
 ```
 
 ### Custom Server URL

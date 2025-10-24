@@ -21,37 +21,63 @@ declare -a TEST_RESULTS
 declare -a TEST_PASSED
 declare -a TEST_TOTAL
 
+# Variable to track if we started the server
+SERVER_PID=""
+CLEANUP_DONE=0
+
 # Function to print usage
 usage() {
     echo "Usage: $0 [options] [test_script_pattern]"
     echo ""
     echo "Options:"
     echo "  -h, --help           Show this help message"
-    echo "  -s, --server URL     Set server URL (default: http://localhost:8080)"
+    echo "  -s, --server URL     Set server URL (default: http://localhost:9090)"
     echo "  -o, --output FILE    Set report output file (default: compliance-report.md)"
     echo "  -v, --verbose        Show detailed test output"
     echo "  -f, --failures-only  Only show output for failing tests"
+    echo "  --external-server    Use an external server (don't start/stop the compliance server)"
     echo ""
     echo "Examples:"
-    echo "  $0                   # Run all tests and generate compliance report"
-    echo "  $0 8.1.1            # Run specific test (no report generated)"
-    echo "  $0 10.1             # Run specific test with detailed output (no report)"
-    echo "  $0 header           # Run all tests containing 'header' (no report)"
-    echo "  $0 -f               # Run all tests, show only failures, generate report"
+    echo "  $0                   # Run all tests (auto-starts compliance server)"
+    echo "  $0 8.1.1            # Run specific test (auto-starts compliance server)"
+    echo "  $0 10.1             # Run specific test with detailed output"
+    echo "  $0 header           # Run all tests containing 'header'"
+    echo "  $0 -f               # Run all tests, show only failures"
     echo "  $0 -v 10.1          # Run specific test with full verbose output"
+    echo "  $0 --external-server # Use already running server"
     echo "  $0 -s http://localhost:9090 -o report.md"
     echo ""
-    echo "Note: When running individual tests (with pattern), the compliance report"
-    echo "      is NOT updated. Only full test runs (no pattern) generate reports."
+    echo "Note: The script automatically starts and stops the compliance server."
+    echo "      Use --external-server if you want to manage the server yourself."
     echo ""
     exit 0
 }
+
+# Function to cleanup and stop server
+cleanup() {
+    if [ $CLEANUP_DONE -eq 1 ]; then
+        return
+    fi
+    CLEANUP_DONE=1
+    
+    if [ -n "$SERVER_PID" ]; then
+        echo ""
+        echo "Stopping compliance server (PID: $SERVER_PID)..."
+        kill $SERVER_PID 2>/dev/null || true
+        wait $SERVER_PID 2>/dev/null || true
+        echo "Server stopped."
+    fi
+}
+
+# Register cleanup function to run on exit
+trap cleanup EXIT INT TERM
 
 # Parse command line arguments
 VERBOSE=0
 FAILURES_ONLY=0
 PATTERN=""
 SKIP_REPORT=0
+EXTERNAL_SERVER=0
 while [[ $# -gt 0 ]]; do
     case $1 in
         -h|--help)
@@ -71,6 +97,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         -f|--failures-only)
             FAILURES_ONLY=1
+            shift
+            ;;
+        --external-server)
+            EXTERNAL_SERVER=1
             shift
             ;;
         *)
@@ -93,20 +123,56 @@ echo "Server URL: $SERVER_URL"
 echo "Report File: $REPORT_FILE"
 echo ""
 
-# Check if server is accessible
-echo -n "Checking server connectivity... "
-if curl -s -f -o /dev/null -w "%{http_code}" "$SERVER_URL/" > /dev/null 2>&1; then
-    echo -e "${GREEN}✓ Connected${NC}"
-else
-    echo -e "${RED}✗ Failed${NC}"
+# Start compliance server if not using external server
+if [ $EXTERNAL_SERVER -eq 0 ]; then
+    echo "Starting compliance server..."
+    
+    # Find the project root (two directories up from compliance/v4)
+    PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+    
+    # Start the compliance server in the background
+    cd "$PROJECT_ROOT/cmd/complianceserver"
+    go run . > /tmp/compliance-server.log 2>&1 &
+    SERVER_PID=$!
+    
+    echo "Compliance server started (PID: $SERVER_PID)"
+    echo "Waiting for server to be ready..."
+    
+    # Wait for server to be ready (up to 30 seconds)
+    for i in {1..30}; do
+        if curl -s -f -o /dev/null -w "%{http_code}" "$SERVER_URL/" > /dev/null 2>&1; then
+            echo -e "${GREEN}✓ Server is ready!${NC}"
+            break
+        fi
+        if [ $i -eq 30 ]; then
+            echo -e "${RED}✗ Server failed to start within 30 seconds${NC}"
+            echo ""
+            echo "Server log:"
+            cat /tmp/compliance-server.log
+            exit 1
+        fi
+        sleep 1
+    done
     echo ""
-    echo "Error: Cannot connect to server at $SERVER_URL"
-    echo "Please ensure the compliance server is running:"
-    echo "  cd cmd/complianceserver"
-    echo "  go run ."
-    exit 1
+    
+    # Return to the compliance/v4 directory
+    cd "$SCRIPT_DIR"
+else
+    # Check if external server is accessible
+    echo -n "Checking external server connectivity... "
+    if curl -s -f -o /dev/null -w "%{http_code}" "$SERVER_URL/" > /dev/null 2>&1; then
+        echo -e "${GREEN}✓ Connected${NC}"
+    else
+        echo -e "${RED}✗ Failed${NC}"
+        echo ""
+        echo "Error: Cannot connect to server at $SERVER_URL"
+        echo "Please ensure the compliance server is running:"
+        echo "  cd cmd/complianceserver"
+        echo "  go run ."
+        exit 1
+    fi
+    echo ""
 fi
-echo ""
 
 # Find all test scripts
 if [ -n "$PATTERN" ]; then
