@@ -81,6 +81,21 @@ jobs:
     name: Compliance Tests
     runs-on: ubuntu-latest
     
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: odata
+          POSTGRES_PASSWORD: odata_dev
+          POSTGRES_DB: odata_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
     steps:
     - name: Check out code
       uses: actions/checkout@v5
@@ -106,7 +121,12 @@ jobs:
         cd cmd/complianceserver
         go mod download
 
-    - name: Run compliance tests
+    - name: Run compliance tests (SQLite)
       run: |
         cd compliance/v4
-        ./run_compliance_tests.sh
+        ./run_compliance_tests.sh --db sqlite --dsn ":memory:" -o compliance-report-sqlite.md
+
+    - name: Run compliance tests (PostgreSQL)
+      run: |
+        cd compliance/v4
+        ./run_compliance_tests.sh --db postgres --dsn "postgresql://odata:odata_dev@localhost:5432/odata_test?sslmode=disable" -o compliance-report-postgres.md
