@@ -93,21 +93,21 @@ jobs:
     - name: Download dependencies
       run: go mod download
 
-    - name: Start OData development server
+    - name: Start OData compliance server
       run: |
-        cd cmd/devserver
+        cd cmd/complianceserver
         go run . &
         echo "SERVER_PID=$!" >> $GITHUB_ENV
         # Wait for server to be ready
         for i in {1..30}; do
-          if curl -s -f http://localhost:8080/ > /dev/null 2>&1; then
+          if curl -s -f http://localhost:9090/ > /dev/null 2>&1; then
             echo "Server is ready!"
             break
           fi
           echo "Waiting for server to start... ($i/30)"
           sleep 2
         done
-        if ! curl -s -f http://localhost:8080/ > /dev/null 2>&1; then
+        if ! curl -s -f http://localhost:9090/ > /dev/null 2>&1; then
           echo "Server failed to start"
           exit 1
         fi
