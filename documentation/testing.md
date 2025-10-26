@@ -207,17 +207,20 @@ go run . -trace-sql -trace-sql-file sql-trace.txt
 go run . -cpuprofile cpu.prof -trace-sql -trace-sql-file sql-trace.txt
 
 # Use PostgreSQL instead of SQLite
-go run . -db postgres -dsn "postgresql://user:pass@localhost:5432/dbname?sslmode=disable"
+go run . -db postgres -dsn "postgresql://username:password@localhost:5432/dbname?sslmode=disable"
 ```
 
 See `cmd/perfserver/README.md` for detailed usage and performance testing scenarios.
 
 ### VS Code Integration
 
-Use the VS Code tasks for easy server launching:
-- **Start Perf Server (SQLite)** - Launch with extensive seeding
-- **Start Perf Server with CPU Profiling** - Launch with CPU profiling enabled
-- **Start Perf Server with SQL Tracing** - Launch with SQL query tracing
+Use the VS Code tasks (defined in `.vscode/tasks.json`) for easy server launching:
+- **Start Perf Server (SQLite)** - Launch with extensive seeding on SQLite
+- **Start Perf Server (PostgreSQL)** - Launch with PostgreSQL database
+- **Start Perf Server with CPU Profiling (SQLite)** - Launch with CPU profiling enabled
+- **Start Perf Server with SQL Tracing (SQLite)** - Launch with SQL query tracing
+
+Access these tasks in VS Code via **Terminal > Run Task...** or the Command Palette (Ctrl/Cmd+Shift+P).
 
 ### Running with CPU Profiling
 
