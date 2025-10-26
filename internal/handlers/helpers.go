@@ -166,7 +166,11 @@ func (h *EntityHandler) buildEntityResponseWithMetadata(navValue reflect.Value, 
 		field := navType.Field(i)
 		if field.IsExported() {
 			fieldValue := navValue.Field(i)
-			jsonName := getJsonName(field)
+			// Use cached metadata instead of reflection for performance
+			jsonName := field.Name // Default to field name
+			if propMeta := h.findPropertyMetadata(field.Name); propMeta != nil {
+				jsonName = propMeta.JsonName
+			}
 			odataResponse.Set(jsonName, fieldValue.Interface())
 		}
 	}
@@ -280,10 +284,14 @@ func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{
 		}
 
 		fieldValue := resultValue.Field(i)
-		jsonName := getJsonName(field)
 
-		// Check if this field is a navigation property
+		// Check if this field is a navigation property and get cached JsonName
 		propMeta := h.findPropertyMetadata(field.Name)
+		// Use cached metadata instead of reflection for performance
+		jsonName := field.Name // Default to field name
+		if propMeta != nil {
+			jsonName = propMeta.JsonName
+		}
 		if propMeta != nil && propMeta.IsNavigationProp {
 			// Check if the navigation property is populated (expanded)
 			isExpanded := false
@@ -338,22 +346,6 @@ func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{
 	}
 
 	return odataResponse
-}
-
-// getJsonName extracts the JSON field name from struct tags
-func getJsonName(field reflect.StructField) string {
-	jsonTag := field.Tag.Get("json")
-	if jsonTag == "" {
-		return field.Name
-	}
-
-	// Handle json:",omitempty" or json:"fieldname,omitempty"
-	parts := strings.Split(jsonTag, ",")
-	if len(parts) > 0 && parts[0] != "" {
-		return parts[0]
-	}
-
-	return field.Name
 }
 
 // findPropertyMetadata finds metadata for a property by field name
