@@ -9,127 +9,15 @@ A Go library for building services that expose OData APIs with automatic handlin
 
 `go-odata` allows you to define Go structs representing entities and automatically handles the necessary OData protocol logic, making it easy to build OData-compliant APIs.
 
-## Features
+## OData v4 Specification
 
-### Core OData Protocol Support
-- ✅ Automatic OData endpoint generation from Go structs
-- ✅ GORM database integration
-- ✅ OData-compliant JSON responses with @odata.context
-- ✅ Service document generation (GET /)
-- ✅ Metadata document generation in both XML and JSON (CSDL) formats (GET /$metadata)
-- ✅ Proper HTTP headers and error handling
-
-### CRUD Operations
-- ✅ Entity collection retrieval (GET /EntitySet)
-- ✅ Individual entity retrieval (GET /EntitySet(key))
-- ✅ Entity creation (POST /EntitySet)
-- ✅ Entity update (PUT and PATCH /EntitySet(key))
-- ✅ Entity deletion (DELETE /EntitySet(key))
-
-### OData Query Options
-- ✅ **Advanced Filtering ($filter)** - AST-based parser with full OData v4 support
-  - Comparison operators: `eq`, `ne`, `gt`, `ge`, `lt`, `le`
-  - String functions: `contains`, `startswith`, `endswith`, `tolower`, `toupper`, `trim`, `length`, `indexof`, `substring`, `concat`
-  - Date functions: `year`, `month`, `day`, `hour`, `minute`, `second`, `date`, `time`
-  - Type functions: `cast`, `isof` - type conversion and type checking
-  - Boolean operators: `and`, `or`, `not`
-  - Parentheses for complex expressions
-  - Literal types: strings, numbers, booleans, null
-  - Basic arithmetic operators: `+`, `-`, `*`, `/`, `mod`
-  - **Lambda operators**: `any`, `all` - collection filtering with range variables
-- ✅ **Search ($search)** - database-agnostic full-text search with fuzzy matching
-  - Case-insensitive substring search across entity properties
-  - Configurable searchable fields using `odata:"searchable"` tag
-  - Fuzzy matching support with customizable fuzziness level
-  - Defaults to searching all string fields if no searchable fields defined
-- ✅ Selection ($select) - choose specific properties to return
-- ✅ **Computed Properties ($compute)** - extract and compute properties from data
-  - Date extraction functions: `year`, `month`, `day`, `hour`, `minute`, `second`, `date`, `time`
-  - Use with $select to return only computed properties
-- ✅ Ordering ($orderby) - sort by one or more properties
-- ✅ **Pagination ($top, $skip)** with automatic @odata.nextLink generation
-  - Server-driven paging with `odata.maxpagesize` preference header
-  - Stable pagination with `$skiptoken` for ordered queries
-- ✅ Count ($count) - inline count with results or standalone count endpoint
-- ✅ **Expand ($expand)** - retrieve related entities with nested query options
-  - Nested $filter, $select, $orderby, $top, $skip on expanded properties
-  - Complex filters on expanded navigation properties
-- ✅ **Data Aggregation ($apply)** - analytical queries with transformations
-  - `groupby` - group results by one or more properties
-  - `aggregate` - perform aggregations (sum, average, min, max, count, countdistinct)
-  - `filter` - apply filters before transformations
-  - Multiple transformations in sequence (pipeline)
-
-### Advanced Features
-- ✅ Composite keys support (e.g., /EntitySet(key1=value1,key2=value2))
-- ✅ **Singletons** - single entity instances accessible by name
-  - Direct access without keys (e.g., /Company instead of /Companies(1))
-  - Full CRUD support (GET, PATCH, PUT)
-  - Automatic metadata and service document generation
-  - ETag support for optimistic concurrency control
-- ✅ Navigation properties - access related entities (e.g., /Products(1)/Category)
-- ✅ Structural properties with $value endpoint (e.g., /Products(1)/Name/$value)
-- ✅ **Prefer header support** 
-  - `return=representation`, `return=minimal` for CRUD operations
-  - `odata.maxpagesize` for server-driven paging
-- ✅ **OData-MaxVersion header support** - version negotiation and validation
-  - Rejects requests with versions below 4.0 (returns 406 Not Acceptable)
-  - Accepts version 4.0 and above
-  - Compliant with OData v4 specification
-- ✅ **OData-EntityId header** - returned in 204 No Content responses for POST, PUT, and PATCH operations
-- ✅ **ETag support with If-Match headers** - optimistic concurrency control
-- ✅ Filter operations on expanded navigation properties
-- ✅ **Rich metadata document generation (XML and JSON)**
-  - Property facets (MaxLength, Precision, Scale, DefaultValue, Nullable)
-  - Extended type support (DateTimeOffset, Guid, Binary)
-  - Navigation properties with referential constraints
-- ✅ Proper snake_case database column mapping for all operations
-- ✅ **Batch requests ($batch)** - group multiple operations in a single HTTP request
-  - Support for multipart/mixed format (OData v4 standard)
-  - Changesets for atomic operations (transaction support)
-  - Mix read and write operations in a single batch
-- ✅ **Actions and Functions** - custom operations beyond CRUD
-  - Bound and unbound actions (POST)
-  - Bound and unbound functions (GET)
-  - Parameter validation and type conversion
-  - Support for return values and void operations
+This library implements the [OData v4 specification](https://www.odata.org/documentation/).
 
 ## Installation
 
 ```bash
 go get github.com/nlstn/go-odata
 ```
-
-## Development Environment
-
-### GitHub Codespaces
-
-The easiest way to start developing is with GitHub Codespaces:
-
-1. Click the "Code" button on the repository
-2. Select the "Codespaces" tab
-3. Click "Create codespace on main"
-
-The development environment includes:
-- Go 1.24 with all tools pre-installed
-- VS Code with Go extension and language server
-- golangci-lint for code quality
-- Automatic dependency installation
-- Pre-configured formatting and linting on save
-
-### VS Code Dev Containers
-
-Alternatively, you can use VS Code Dev Containers:
-
-1. Install the [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
-2. Open the repository in VS Code
-3. Press `F1` and select "Dev Containers: Reopen in Container"
-
-### Local Development
-
-If you prefer to develop locally, ensure you have:
-- Go 1.21 or later installed
-- A GORM-compatible database driver (SQLite is used in examples)
 
 ## Quick Start
 
