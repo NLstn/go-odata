@@ -2,7 +2,7 @@
 
 # OData v4 Compliance Test: 8.1.5 Response Status Codes
 # Tests correct HTTP status codes for various operations and error conditions
-# Spec: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_ResponseStatusCodes
+# Spec: https://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part1-protocol/odata-v4.0-errata03-os-part1-protocol-complete.html#sec_ResponseStatusCodes
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../test_framework.sh"
@@ -15,7 +15,7 @@ echo ""
 echo "Description: Validates correct HTTP status codes for successful operations,"
 echo "             client errors, and server errors according to OData v4 specification"
 echo ""
-echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_ResponseStatusCodes"
+echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part1-protocol/odata-v4.0-errata03-os-part1-protocol-complete.html#sec_ResponseStatusCodes"
 echo ""
 
 

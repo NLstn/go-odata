@@ -2,7 +2,7 @@
 
 # OData v4 Compliance Test: 8.1.1 Header Content-Type
 # Tests that Content-Type header is properly set according to OData v4 specification
-# Spec: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_HeaderContentType
+# Spec: https://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part1-protocol/odata-v4.0-errata03-os-part1-protocol-complete.html#sec_HeaderContentType
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../test_framework.sh"
@@ -15,7 +15,7 @@ echo ""
 echo "Description: Validates that the service returns proper Content-Type headers"
 echo "             with the correct media type and optional parameters."
 echo ""
-echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_HeaderContentType"
+echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part1-protocol/odata-v4.0-errata03-os-part1-protocol-complete.html#sec_HeaderContentType"
 echo ""
 
 

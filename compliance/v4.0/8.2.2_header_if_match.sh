@@ -2,7 +2,7 @@
 
 # OData v4 Compliance Test: 8.2.2 If-Match and If-None-Match Headers
 # Tests conditional request headers for optimistic concurrency
-# Spec: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_HeaderIfMatch
+# Spec: https://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part1-protocol/odata-v4.0-errata03-os-part1-protocol-complete.html#sec_HeaderIfMatch
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../test_framework.sh"
@@ -15,7 +15,7 @@ echo ""
 echo "Description: Validates If-Match and If-None-Match headers for"
 echo "             optimistic concurrency control."
 echo ""
-echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_HeaderIfMatch"
+echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part1-protocol/odata-v4.0-errata03-os-part1-protocol-complete.html#sec_HeaderIfMatch"
 echo ""
 
 # Use existing product from seeded data (ID 1 = Laptop)

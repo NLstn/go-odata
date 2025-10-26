@@ -2,7 +2,7 @@
 
 # OData v4 Compliance Test: 11.3.2 Date and Time Functions in $filter
 # Tests date/time functions (year, month, day, hour, minute, second, date, time, etc.) in filter expressions
-# Spec: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part2-url-conventions.html#sec_BuiltinFilterOperations
+# Spec: https://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part2-url-conventions/odata-v4.0-errata03-os-part2-url-conventions-complete.html#sec_BuiltinFilterOperations
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../test_framework.sh"
@@ -15,7 +15,7 @@ echo ""
 echo "Description: Validates date and time functions in \$filter query option"
 echo "             (year, month, day, hour, minute, second, date, time, now, etc.)"
 echo ""
-echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part2-url-conventions.html#sec_BuiltinFilterOperations"
+echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part2-url-conventions/odata-v4.0-errata03-os-part2-url-conventions-complete.html#sec_BuiltinFilterOperations"
 echo ""
 
 # Test 1: year function

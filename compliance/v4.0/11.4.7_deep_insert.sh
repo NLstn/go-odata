@@ -2,7 +2,7 @@
 
 # OData v4 Compliance Test: 11.4.7 Deep Insert
 # Tests creating entities with related entities in a single request
-# Spec: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_CreateRelatedEntitiesWhenCreatinganE
+# Spec: https://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part1-protocol/odata-v4.0-errata03-os-part1-protocol-complete.html#sec_CreateRelatedEntitiesWhenCreatinganE
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../test_framework.sh"
@@ -15,7 +15,7 @@ echo ""
 echo "Description: Validates creating entities with related entities"
 echo "             in a single POST request (deep insert)."
 echo ""
-echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_CreateRelatedEntitiesWhenCreatinganE"
+echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part1-protocol/odata-v4.0-errata03-os-part1-protocol-complete.html#sec_CreateRelatedEntitiesWhenCreatinganE"
 echo ""
 
 

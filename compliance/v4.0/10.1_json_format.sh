@@ -2,7 +2,7 @@
 
 # OData v4 Compliance Test: 10.1 JSON Format
 # Tests JSON format requirements for OData responses
-# Spec: https://docs.oasis-open.org/odata/odata-json-format/v4.01/odata-json-format-v4.01.html
+# Spec: https://docs.oasis-open.org/odata/odata-json-format/v4.0/odata-json-format-v4.0.html
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../test_framework.sh"
@@ -15,7 +15,7 @@ echo ""
 echo "Description: Validates JSON format requirements for OData responses"
 echo "             (entity representation, collections, metadata annotations, etc.)"
 echo ""
-echo "Spec Reference: https://docs.oasis-open.org/odata/odata-json-format/v4.01/odata-json-format-v4.01.html"
+echo "Spec Reference: https://docs.oasis-open.org/odata/odata-json-format/v4.0/odata-json-format-v4.0.html"
 echo ""
 
 # Test 1: Collection response has 'value' property

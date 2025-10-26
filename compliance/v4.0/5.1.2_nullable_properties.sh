@@ -2,7 +2,7 @@
 
 # OData v4 Compliance Test: 5.1.2 Nullable Properties
 # Tests handling of nullable properties
-# Spec: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part3-csdl.html#sec_Nullable
+# Spec: https://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part3-csdl/odata-v4.0-errata03-os-part3-csdl-complete.html#sec_Nullable
 #
 # Key Requirements:
 # - Properties marked as Nullable="true" in metadata MUST accept null values
@@ -24,7 +24,7 @@ echo ""
 echo "Description: Validates handling of nullable properties including"
 echo "             null values in filters and responses."
 echo ""
-echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part3-csdl.html#sec_Nullable"
+echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part3-csdl/odata-v4.0-errata03-os-part3-csdl-complete.html#sec_Nullable"
 echo ""
 
 

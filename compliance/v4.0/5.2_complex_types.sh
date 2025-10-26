@@ -2,7 +2,7 @@
 
 # OData v4 Compliance Test: 5.2 Complex Types
 # Tests complex (structured) types, nested properties, and complex type filtering
-# Spec: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_ComplexType
+# Spec: https://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part1-protocol/odata-v4.0-errata03-os-part1-protocol-complete.html#sec_ComplexType
 #
 # NOTE: This test validates complex type support in OData v4. According to the specification:
 # 1. Complex types MUST be included in entity responses when they have values
@@ -28,7 +28,7 @@ echo ""
 echo "Description: Validates handling of complex (structured) types including"
 echo "             nested properties, filtering, selecting, and operations."
 echo ""
-echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_ComplexType"
+echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part1-protocol/odata-v4.0-errata03-os-part1-protocol-complete.html#sec_ComplexType"
 echo ""
 
 # Test 1: Retrieve entity with complex type property

@@ -3,7 +3,7 @@
 # OData v4 Compliance Test: 5.1.1.1 Numeric Edge Cases
 # Tests handling of special numeric values including IEEE 754 special values,
 # precision limits, and boundary conditions for numeric types
-# Spec: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part3-csdl.html#sec_PrimitiveTypes
+# Spec: https://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part3-csdl/odata-v4.0-errata03-os-part3-csdl-complete.html#sec_PrimitiveTypes
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../test_framework.sh"
@@ -16,7 +16,7 @@ echo ""
 echo "Description: Tests handling of numeric edge cases including very large numbers,"
 echo "             precision limits, special IEEE 754 values, and boundary conditions"
 echo ""
-echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part3-csdl.html#sec_PrimitiveTypes"
+echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part3-csdl/odata-v4.0-errata03-os-part3-csdl-complete.html#sec_PrimitiveTypes"
 echo ""
 
 CREATED_IDS=()

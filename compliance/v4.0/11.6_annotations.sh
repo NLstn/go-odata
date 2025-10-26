@@ -2,7 +2,7 @@
 
 # OData v4 Compliance Test: 11.6 Annotations
 # Tests instance annotations, @odata annotations, and custom annotations
-# Spec: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_InstanceAnnotations
+# Spec: https://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part1-protocol/odata-v4.0-errata03-os-part1-protocol-complete.html#sec_InstanceAnnotations
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../test_framework.sh"
@@ -15,7 +15,7 @@ echo ""
 echo "Description: Validates handling of instance annotations, control information,"
 echo "             and custom annotations in OData responses."
 echo ""
-echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html#sec_InstanceAnnotations"
+echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part1-protocol/odata-v4.0-errata03-os-part1-protocol-complete.html#sec_InstanceAnnotations"
 echo ""
 
 # Test 1: Standard @odata.context annotation

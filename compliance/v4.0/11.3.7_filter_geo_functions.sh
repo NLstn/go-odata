@@ -2,7 +2,7 @@
 
 # OData v4 Compliance Test: 11.3.7 Geospatial Functions in Filter
 # Tests geographic functions (geo.distance, geo.length, geo.intersects) in filter expressions
-# Spec: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part2-url-conventions.html#sec_GeospatialFunctions
+# Spec: https://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part2-url-conventions/odata-v4.0-errata03-os-part2-url-conventions-complete.html#sec_GeospatialFunctions
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../test_framework.sh"
@@ -16,7 +16,7 @@ echo "Description: Validates geospatial functions in filter expressions"
 echo "             according to OData v4 specification. Tests geo.distance,"
 echo "             geo.length, geo.intersects, and other geographic operations."
 echo ""
-echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part2-url-conventions.html#sec_GeospatialFunctions"
+echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part2-url-conventions/odata-v4.0-errata03-os-part2-url-conventions-complete.html#sec_GeospatialFunctions"
 echo ""
 
 # Note: Geospatial functions are optional OData features
