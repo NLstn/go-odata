@@ -6,6 +6,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"runtime/pprof"
+	"syscall"
 
 	"github.com/NLstn/go-odata/complianceserver/entities"
 	"github.com/nlstn/go-odata"
@@ -22,7 +25,40 @@ func main() {
 	dbType := flag.String("db", "sqlite", "Database type: sqlite or postgres")
 	dbDSN := flag.String("dsn", "", "Database DSN (connection string). For postgres, use postgresql://... format. For sqlite, use file path or :memory:")
 	port := flag.String("port", "9090", "Port to listen on")
+	cpuProfile := flag.String("cpuprofile", "", "Write CPU profile to file")
 	flag.Parse()
+
+	// Start CPU profiling if requested
+	if *cpuProfile != "" {
+		f, err := os.Create(*cpuProfile)
+		if err != nil {
+			log.Fatal("Could not create CPU profile: ", err)
+		}
+		defer func() {
+			if err := f.Close(); err != nil {
+				log.Printf("Error closing CPU profile file: %v", err)
+			}
+		}()
+		if err := pprof.StartCPUProfile(f); err != nil {
+			log.Fatal("Could not start CPU profile: ", err)
+		}
+		defer pprof.StopCPUProfile()
+		fmt.Printf("📊 CPU profiling enabled, writing to: %s\n", *cpuProfile)
+
+		// Set up signal handler to ensure profile is written on interrupt
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+		go func() {
+			<-sigChan
+			fmt.Println("\n⏸️  Received interrupt signal, stopping CPU profiler...")
+			pprof.StopCPUProfile()
+			if err := f.Close(); err != nil {
+				log.Printf("Error closing CPU profile file: %v", err)
+			}
+			fmt.Println("CPU profile written to:", *cpuProfile)
+			os.Exit(0)
+		}()
+	}
 
 	// Determine database configuration
 	var err error
