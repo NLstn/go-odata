@@ -2,7 +2,7 @@
 
 # OData v4 Compliance Test: 7.1.1 Unicode and Internationalization
 # Tests handling of Unicode characters, multi-byte characters, emoji, and international text
-# Spec: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part2-url-conventions.html#sec_LiteralDataValues
+# Spec: https://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part2-url-conventions/odata-v4.0-errata03-os-part2-url-conventions-complete.html#sec_LiteralDataValues
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../test_framework.sh"
@@ -15,7 +15,7 @@ echo ""
 echo "Description: Tests handling of Unicode characters including multi-byte characters,"
 echo "             emoji, international text, and proper URL encoding of Unicode strings"
 echo ""
-echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part2-url-conventions.html#sec_LiteralDataValues"
+echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part2-url-conventions/odata-v4.0-errata03-os-part2-url-conventions-complete.html#sec_LiteralDataValues"
 echo ""
 
 CREATED_IDS=()

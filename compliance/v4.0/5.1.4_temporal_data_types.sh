@@ -2,7 +2,7 @@
 
 # OData v4 Compliance Test: 5.1.4 Temporal Data Types
 # Tests handling of temporal OData primitive types: Edm.Date, Edm.TimeOfDay, Edm.Duration
-# Spec: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part2-url-conventions.html#sec_PrimitiveTypes
+# Spec: https://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part2-url-conventions/odata-v4.0-errata03-os-part2-url-conventions-complete.html#sec_PrimitiveTypes
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../test_framework.sh"
@@ -16,7 +16,7 @@ echo "Description: Validates handling of OData temporal types including"
 echo "             Edm.Date, Edm.TimeOfDay, and Edm.Duration in filters,"
 echo "             metadata, and responses."
 echo ""
-echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part2-url-conventions.html#sec_PrimitiveTypes"
+echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part2-url-conventions/odata-v4.0-errata03-os-part2-url-conventions-complete.html#sec_PrimitiveTypes"
 echo ""
 
 # Test 1: Edm.DateTimeOffset is supported (baseline)

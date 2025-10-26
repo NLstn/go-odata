@@ -2,7 +2,7 @@
 
 # OData v4 Compliance Test: 5.1.1 Primitive Data Types
 # Tests handling of various primitive data types (String, Int32, Decimal, Boolean, DateTime, etc.)
-# Spec: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part3-csdl.html#sec_PrimitiveTypes
+# Spec: https://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part3-csdl/odata-v4.0-errata03-os-part3-csdl-complete.html#sec_PrimitiveTypes
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../test_framework.sh"
@@ -15,7 +15,7 @@ echo ""
 echo "Description: Validates handling of OData primitive data types in requests and responses"
 echo "             (Edm.String, Edm.Int32, Edm.Decimal, Edm.Boolean, Edm.DateTimeOffset, etc.)"
 echo ""
-echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part3-csdl.html#sec_PrimitiveTypes"
+echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part3-csdl/odata-v4.0-errata03-os-part3-csdl-complete.html#sec_PrimitiveTypes"
 echo ""
 
 # Test 1: String data type

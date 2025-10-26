@@ -2,7 +2,7 @@
 
 # OData v4 Compliance Test: 11.3.8 Filter on Expanded Properties
 # Tests filtering based on properties of expanded navigation entities
-# Spec: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part2-url-conventions.html#sec_ExpandSystemQueryOption
+# Spec: https://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part2-url-conventions/odata-v4.0-errata03-os-part2-url-conventions-complete.html#sec_ExpandSystemQueryOption
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../test_framework.sh"
@@ -15,7 +15,7 @@ echo ""
 echo "Description: Validates filtering entities based on properties"
 echo "             of their expanded navigation properties"
 echo ""
-echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part2-url-conventions.html#sec_ExpandSystemQueryOption"
+echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part2-url-conventions/odata-v4.0-errata03-os-part2-url-conventions-complete.html#sec_ExpandSystemQueryOption"
 echo ""
 
 # Test 1: Filter on collection navigation property using any()

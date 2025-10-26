@@ -2,7 +2,7 @@
 
 # OData v4 Compliance Test: 14.1 Vocabulary Annotations
 # Tests support for OData vocabulary annotations in metadata and responses
-# Spec: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part3-csdl.html#sec_Annotation
+# Spec: https://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part3-csdl/odata-v4.0-errata03-os-part3-csdl-complete.html#sec_Annotation
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../test_framework.sh"
@@ -16,7 +16,7 @@ echo "Description: Validates vocabulary annotations in metadata and instance"
 echo "             annotations in responses. Tests Core vocabulary annotations"
 echo "             like Description, LongDescription, and computed/immutable."
 echo ""
-echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part3-csdl.html#sec_Annotation"
+echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part3-csdl/odata-v4.0-errata03-os-part3-csdl-complete.html#sec_Annotation"
 echo ""
 
 # Test 1: Metadata document structure supports annotations

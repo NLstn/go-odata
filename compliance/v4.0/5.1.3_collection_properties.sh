@@ -8,7 +8,7 @@
 # - Navigation properties MUST be supported in $select (Section 11.2.4.1)
 # - Lambda operators (any/all) are part of Advanced conformance level
 #
-# Spec: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html
+# Spec: https://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part1-protocol/odata-v4.0-errata03-os-part1-protocol-complete.html
 #       Section 11.2.6 (Querying Collections)
 #       Section 11.2.5.5 ($count system query option)
 #       Section 11.2.4.1 ($select system query option)
@@ -27,7 +27,7 @@ echo "Description: Validates handling of collection-valued navigation properties
 echo "             lambda operators (any/all), and $count on collections."
 echo "             Uses Products->Descriptions relationship for testing."
 echo ""
-echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html"
+echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part1-protocol/odata-v4.0-errata03-os-part1-protocol-complete.html"
 echo "                Section 11.2.6.1.1 (Lambda operators)"
 echo ""
 
