@@ -93,12 +93,59 @@ Generates large datasets for realistic performance testing:
 ## VS Code Integration
 
 Use the tasks defined in `.vscode/tasks.json`:
-- "Start Perf Server (SQLite)" - Launch with SQLite in-memory database
-- "Start Perf Server (PostgreSQL)" - Launch with PostgreSQL database
+
+### Server Tasks
+- "Start Dev Server (SQLite)" - Launch dev server with SQLite in-memory database
+- "Start Dev Server (PostgreSQL)" - Launch dev server with PostgreSQL database
+
+### Load Testing Tasks
+- "Run load tests (SQLite)" - Automated load tests with wrk
+- "Run load tests (PostgreSQL)" - PostgreSQL load tests with wrk
+- "Run load tests with CPU profiling (SQLite)" - With CPU profiling enabled
+- "Run load tests with SQL tracing (SQLite)" - With SQL query tracing
+- "Run load tests with full profiling (SQLite)" - With both CPU and SQL profiling
+
+**Note:** Load testing tasks automatically start and stop the perfserver.
 
 ## Performance Testing Scenarios
 
-### Query Performance
+### Automated Load Testing
+
+Use the included load testing script to run comprehensive performance tests:
+
+```bash
+# Run all load tests with wrk (auto-starts perfserver)
+./run_load_tests.sh
+
+# Custom configuration
+./run_load_tests.sh -d 60s -t 12 -C 200 -o ./my-results
+
+# Use PostgreSQL
+./run_load_tests.sh --db postgres --dsn "postgresql://user:pass@localhost/dbname"
+
+# With CPU profiling
+./run_load_tests.sh --cpu-profile
+
+# With SQL tracing
+./run_load_tests.sh --sql-trace
+
+# Use external/already running server
+./run_load_tests.sh --external-server
+```
+
+The script automatically:
+- Builds and starts the perfserver
+- Runs 14 different test scenarios
+- Saves detailed results to `./load-test-results/`
+- Stops the server when complete
+
+**Prerequisites:** Install wrk:
+```bash
+sudo apt-get install wrk  # Debian/Ubuntu
+brew install wrk          # macOS
+```
+
+### Manual Query Performance Tests
 Test various OData query patterns:
 ```bash
 # Filter large datasets
@@ -114,14 +161,15 @@ curl "http://localhost:9091/Products?\$top=100&\$skip=1000"
 curl "http://localhost:9091/Products?\$apply=groupby((CategoryID),aggregate(Price with average as AvgPrice))"
 ```
 
-### Load Testing
-Use tools like Apache Bench or wrk:
-```bash
-# Apache Bench
-ab -n 1000 -c 10 http://localhost:9091/Products
+### Manual Load Testing
 
-# wrk
+Use wrk for load testing:
+```bash
+# Basic load test
 wrk -t10 -c100 -d30s http://localhost:9091/Products
+
+# With more threads and connections
+wrk -t12 -c200 -d60s --latency http://localhost:9091/Products
 ```
 
 ## Analyzing Results
@@ -129,12 +177,15 @@ wrk -t10 -c100 -d30s http://localhost:9091/Products
 ### CPU Profile Analysis
 ```bash
 # Interactive analysis
-go tool pprof cpu.prof
+go tool pprof load-test-results/cpu.prof
 > top10
 > web
 
 # Generate SVG graph
-go tool pprof -svg cpu.prof > cpu.svg
+go tool pprof -svg load-test-results/cpu.prof > cpu.svg
+
+# Web UI (recommended)
+go tool pprof -http=:8080 load-test-results/cpu.prof
 ```
 
 ### SQL Trace Analysis
@@ -144,4 +195,22 @@ The SQL trace file contains:
 - Example queries for each pattern
 - Optimization recommendations
 
-Press Ctrl+C to gracefully shutdown and generate the analysis report.
+```bash
+# View the trace
+cat load-test-results/sql-trace.txt
+
+# Find slow queries
+grep SLOW load-test-results/sql-trace.txt
+```
+
+### Complete Performance Analysis Guide
+
+For detailed instructions on analyzing performance bottlenecks, see:
+
+📖 **[PERFORMANCE_ANALYSIS.md](PERFORMANCE_ANALYSIS.md)** - Comprehensive guide covering:
+- How to interpret HTTP metrics
+- CPU profiling techniques
+- SQL query optimization
+- Common bottlenecks and solutions
+- Performance testing best practices
+
