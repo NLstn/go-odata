@@ -121,6 +121,163 @@
                 "reveal": "always",
                 "panel": "shared"
             },
+        },
+        {
+            "label": "Start Perf Server (SQLite)",
+            "type": "shell",
+            "command": "go",
+            "args": [
+                "run",
+                ".",
+                "-db",
+                "sqlite",
+                "-dsn",
+                ":memory:",
+                "-extensive=true"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}/cmd/perfserver"
+            },
+            "group": "build",
+            "isBackground": true,
+            "problemMatcher": [
+                {
+                    "fileLocation": [
+                        "relative",
+                        "${workspaceFolder}"
+                    ],
+                    "pattern": {
+                        "regexp": "^(.*):(\\d+):(\\d+):\\s+(warning|error):\\s+(.*)$",
+                        "file": 1,
+                        "line": 2,
+                        "column": 3,
+                        "severity": 4,
+                        "message": 5
+                    },
+                    "background": {
+                        "activeOnStart": true,
+                        "beginsPattern": "^.*Seeding database.*$",
+                        "endsPattern": "^.*Performance testing server starting.*$|^.*Service endpoints:.*$"
+                    }
+                }
+            ],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": false
+            }
+        },
+        {
+            "label": "Start Perf Server (PostgreSQL)",
+            "type": "shell",
+            "command": "go",
+            "args": [
+                "run",
+                ".",
+                "-db",
+                "postgres",
+                "-dsn",
+                "postgresql://odata:odata_dev@localhost:5432/odata_test?sslmode=disable",
+                "-extensive=true"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}/cmd/perfserver"
+            },
+            "group": "build",
+            "isBackground": true,
+            "problemMatcher": [
+                {
+                    "fileLocation": [
+                        "relative",
+                        "${workspaceFolder}"
+                    ],
+                    "pattern": {
+                        "regexp": "^(.*):(\\d+):(\\d+):\\s+(warning|error):\\s+(.*)$",
+                        "file": 1,
+                        "line": 2,
+                        "column": 3,
+                        "severity": 4,
+                        "message": 5
+                    },
+                    "background": {
+                        "activeOnStart": true,
+                        "beginsPattern": "^.*Seeding database.*$",
+                        "endsPattern": "^.*Performance testing server starting.*$|^.*Service endpoints:.*$"
+                    }
+                }
+            ],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": false
+            }
+        },
+        {
+            "label": "Start Perf Server with CPU Profiling (SQLite)",
+            "type": "shell",
+            "command": "go",
+            "args": [
+                "run",
+                ".",
+                "-db",
+                "sqlite",
+                "-dsn",
+                ":memory:",
+                "-extensive=true",
+                "-cpuprofile",
+                "cpu.prof"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}/cmd/perfserver"
+            },
+            "group": "build",
+            "isBackground": true,
+            "problemMatcher": [],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": false
+            }
+        },
+        {
+            "label": "Start Perf Server with SQL Tracing (SQLite)",
+            "type": "shell",
+            "command": "go",
+            "args": [
+                "run",
+                ".",
+                "-db",
+                "sqlite",
+                "-dsn",
+                ":memory:",
+                "-extensive=true",
+                "-trace-sql",
+                "-trace-sql-file",
+                "sql-trace.txt"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}/cmd/perfserver"
+            },
+            "group": "build",
+            "isBackground": true,
+            "problemMatcher": [],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": false
+            }
         }
     ]
 }
