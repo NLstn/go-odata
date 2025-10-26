@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 
 	odata "github.com/nlstn/go-odata"
@@ -312,6 +313,95 @@ func TestFunctionRequiresGet(t *testing.T) {
 	// Current implementation returns 404 which is acceptable
 	if w.Code != http.StatusNotFound && w.Code != http.StatusMethodNotAllowed {
 		t.Errorf("Status = %v, want %v or %v", w.Code, http.StatusNotFound, http.StatusMethodNotAllowed)
+	}
+}
+
+// TestActionUnsupportedMethod ensures unsupported verbs return method not allowed for actions
+func TestActionUnsupportedMethod(t *testing.T) {
+	service, _ := setupActionFunctionTestService(t)
+
+	err := service.RegisterAction(odata.ActionDefinition{
+		Name:       "TestAction",
+		IsBound:    false,
+		Parameters: []odata.ParameterDefinition{},
+		ReturnType: nil,
+		Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) error {
+			w.WriteHeader(http.StatusNoContent)
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("Failed to register action: %v", err)
+	}
+
+	tests := []struct {
+		name   string
+		method string
+	}{
+		{name: "Put", method: http.MethodPut},
+		{name: "Patch", method: http.MethodPatch},
+		{name: "Delete", method: http.MethodDelete},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(tc.method, "/TestAction", nil)
+			w := httptest.NewRecorder()
+
+			service.ServeHTTP(w, req)
+
+			if w.Code != http.StatusMethodNotAllowed {
+				t.Fatalf("Status = %v, want %v. Body: %s", w.Code, http.StatusMethodNotAllowed, w.Body.String())
+			}
+
+			if !strings.Contains(w.Body.String(), "Method not allowed") {
+				t.Errorf("Expected error message to mention method not allowed, got %q", w.Body.String())
+			}
+		})
+	}
+}
+
+// TestFunctionUnsupportedMethod ensures unsupported verbs return method not allowed for functions
+func TestFunctionUnsupportedMethod(t *testing.T) {
+	service, _ := setupActionFunctionTestService(t)
+
+	err := service.RegisterFunction(odata.FunctionDefinition{
+		Name:       "TestFunction",
+		IsBound:    false,
+		Parameters: []odata.ParameterDefinition{},
+		ReturnType: reflect.TypeOf(""),
+		Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) (interface{}, error) {
+			return "ok", nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("Failed to register function: %v", err)
+	}
+
+	tests := []struct {
+		name   string
+		method string
+	}{
+		{name: "Put", method: http.MethodPut},
+		{name: "Patch", method: http.MethodPatch},
+		{name: "Delete", method: http.MethodDelete},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(tc.method, "/TestFunction", nil)
+			w := httptest.NewRecorder()
+
+			service.ServeHTTP(w, req)
+
+			if w.Code != http.StatusMethodNotAllowed {
+				t.Fatalf("Status = %v, want %v. Body: %s", w.Code, http.StatusMethodNotAllowed, w.Body.String())
+			}
+
+			if !strings.Contains(w.Body.String(), "Method not allowed") {
+				t.Errorf("Expected error message to mention method not allowed, got %q", w.Body.String())
+			}
+		})
 	}
 }
 
