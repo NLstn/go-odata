@@ -11,7 +11,7 @@ A Go library for building services that expose OData APIs with automatic handlin
 
 ## OData v4 Specification
 
-This library implements the [OData v4 specification](https://www.odata.org/documentation/).
+This library implements the [OData v4 specification](https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html).
 
 ## Installation
 
