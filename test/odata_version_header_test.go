@@ -33,13 +33,13 @@ func TestODataVersionHeader(t *testing.T) {
 
 			service.ServeHTTP(w, req)
 
-			// Verify OData-Version header is present and set to 4.0
+			// Verify OData-Version header is present and set to 4.01
 			// Access the header directly with exact casing (OData-Version with capital 'D')
 			// as we intentionally use non-canonical casing per OData v4 spec
 			//nolint:staticcheck // SA1008: intentionally using non-canonical header key per OData spec
 			odataVersionValues := w.Header()["OData-Version"]
-			if len(odataVersionValues) == 0 || odataVersionValues[0] != "4.0" {
-				t.Errorf("OData-Version = %v, want [4.0] (status: %d)", odataVersionValues, w.Code)
+			if len(odataVersionValues) == 0 || odataVersionValues[0] != "4.01" {
+				t.Errorf("OData-Version = %v, want [4.01] (status: %d)", odataVersionValues, w.Code)
 			}
 		})
 	}

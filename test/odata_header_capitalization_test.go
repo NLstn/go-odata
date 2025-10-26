@@ -149,7 +149,7 @@ func TestODataHeaderExactCapitalization(t *testing.T) {
 				// Access directly with exact casing (OData-Version with capital 'D')
 				//nolint:staticcheck // SA1008: intentionally using non-canonical header key per OData spec
 				odataVersionValues := w.Header()["OData-Version"]
-				if len(odataVersionValues) == 0 || odataVersionValues[0] != "4.0" {
+				if len(odataVersionValues) == 0 || odataVersionValues[0] != "4.01" {
 					t.Errorf("OData-Version header with exact capitalization not found. Got: %v", odataVersionValues)
 				}
 

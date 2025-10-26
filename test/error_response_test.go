@@ -364,9 +364,11 @@ func TestErrorResponse_ODataVersion(t *testing.T) {
 			service.ServeHTTP(w, req)
 
 			// Verify OData-Version header is present
-			odataVersion := w.Header().Get("OData-Version")
-			if odataVersion != "4.0" {
-				t.Errorf("OData-Version header = %v, want 4.0", odataVersion)
+			// Access using direct map access since we use non-canonical capitalization
+			//nolint:staticcheck // SA1008: intentionally using non-canonical header key per OData spec
+			odataVersionValues := w.Header()["OData-Version"]
+			if len(odataVersionValues) == 0 || odataVersionValues[0] != "4.01" {
+				t.Errorf("OData-Version header = %v, want [4.01]", odataVersionValues)
 			}
 
 			// Verify Content-Type header

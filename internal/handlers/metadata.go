@@ -216,11 +216,11 @@ func (h *MetadataHandler) handleMetadataXML(w http.ResponseWriter, r *http.Reque
 
 // buildMetadataDocument builds the complete metadata XML document
 func (h *MetadataHandler) buildMetadataDocument() string {
-	metadata := `<?xml version="1.0" encoding="UTF-8"?>
-<edmx:Edmx xmlns:edmx="http://docs.oasis-open.org/odata/ns/edmx" Version="4.0">
+	metadata := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+<edmx:Edmx xmlns:edmx="http://docs.oasis-open.org/odata/ns/edmx" Version="%s">
   <edmx:DataServices>
     <Schema xmlns="http://docs.oasis-open.org/odata/ns/edm" Namespace="ODataService">
-`
+`, ODataVersionValue)
 
 	// Add enum types
 	metadata += h.buildEnumTypes()
@@ -464,7 +464,7 @@ func (h *MetadataHandler) handleMetadataJSON(w http.ResponseWriter, r *http.Requ
 	// Build CSDL JSON structure
 	odataService := make(map[string]interface{})
 	csdl := map[string]interface{}{
-		"$Version":     "4.0",
+		"$Version":     ODataVersionValue,
 		"ODataService": odataService,
 	}
 

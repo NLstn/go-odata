@@ -12,6 +12,20 @@ import (
 	"github.com/nlstn/go-odata/internal/metadata"
 )
 
+// OData version and header constants
+const (
+	// ODataVersionValue is the OData protocol version this library implements
+	ODataVersionValue = "4.01"
+	// HeaderODataVersion is the OData-Version header name (with exact capitalization)
+	HeaderODataVersion = "OData-Version"
+)
+
+// SetODataVersionHeader sets the OData-Version header with the correct capitalization.
+// Using direct map assignment to preserve exact capitalization as required by OData spec.
+func SetODataVersionHeader(w http.ResponseWriter) {
+	w.Header()[HeaderODataVersion] = []string{ODataVersionValue}
+}
+
 // ODataResponse represents the structure of an OData JSON response
 type ODataResponse struct {
 	Context  string      `json:"@odata.context,omitempty"`
@@ -101,7 +115,7 @@ func WriteEntityReference(w http.ResponseWriter, r *http.Request, entityID strin
 	// Set OData-compliant headers with dynamic metadata level
 	metadataLevel := GetODataMetadataLevel(r)
 	w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
-	w.Header().Set("OData-Version", "4.0")
+	SetODataVersionHeader(w)
 	w.WriteHeader(http.StatusOK)
 
 	encoder := json.NewEncoder(w)
@@ -144,7 +158,7 @@ func WriteEntityReferenceCollection(w http.ResponseWriter, r *http.Request, enti
 	// Set OData-compliant headers with dynamic metadata level
 	metadataLevel := GetODataMetadataLevel(r)
 	w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
-	w.Header().Set("OData-Version", "4.0")
+	SetODataVersionHeader(w)
 	w.WriteHeader(http.StatusOK)
 
 	encoder := json.NewEncoder(w)
@@ -584,7 +598,7 @@ func WriteODataError(w http.ResponseWriter, httpStatusCode int, odataError *ODat
 	}
 
 	w.Header().Set("Content-Type", "application/json;odata.metadata=minimal")
-	w.Header().Set("OData-Version", "4.0")
+	SetODataVersionHeader(w)
 	w.WriteHeader(httpStatusCode)
 
 	encoder := json.NewEncoder(w)

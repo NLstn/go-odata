@@ -285,8 +285,8 @@ func TestMetadataHandlerJSON(t *testing.T) {
 		}
 
 		// Validate JSON structure
-		if version, ok := response["$Version"].(string); !ok || version != "4.0" {
-			t.Errorf("Expected $Version to be 4.0, got %v", response["$Version"])
+		if version, ok := response["$Version"].(string); !ok || version != "4.01" {
+			t.Errorf("Expected $Version to be 4.01, got %v", response["$Version"])
 		}
 
 		odataService, ok := response["ODataService"].(map[string]interface{})

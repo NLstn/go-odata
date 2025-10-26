@@ -12,6 +12,13 @@ const (
 	HeaderODataEntityId     = "OData-EntityId"
 )
 
+// OData version constants
+const (
+	// ODataVersionValue is the OData protocol version this library implements
+	// Currently supporting OData v4.01 with backward compatibility for v4.0
+	ODataVersionValue = "4.01"
+)
+
 // Content type constants
 const (
 	ContentTypeJSON      = "application/json;odata.metadata=minimal"

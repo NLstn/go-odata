@@ -618,8 +618,11 @@ func TestBatchHandler_CreateErrorResponse(t *testing.T) {
 		t.Errorf("Content-Type = %v, want application/json", resp.Headers.Get("Content-Type"))
 	}
 
-	if resp.Headers.Get("OData-Version") != "4.0" {
-		t.Errorf("OData-Version = %v, want 4.0", resp.Headers.Get("OData-Version"))
+	// Verify OData-Version header using direct map access (non-canonical capitalization)
+	//nolint:staticcheck // SA1008: intentionally using non-canonical header key per OData spec
+	odataVersionValues := resp.Headers["OData-Version"]
+	if len(odataVersionValues) == 0 || odataVersionValues[0] != "4.01" {
+		t.Errorf("OData-Version = %v, want [4.01]", odataVersionValues)
 	}
 
 	if !strings.Contains(string(resp.Body), "Test error") {

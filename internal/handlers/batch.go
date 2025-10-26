@@ -330,7 +330,7 @@ func (h *BatchHandler) createErrorResponse(statusCode int, message string) batch
 	errorBody := fmt.Sprintf(`{"error":{"code":"%d","message":"%s"}}`, statusCode, message)
 	headers := http.Header{}
 	headers.Set("Content-Type", "application/json")
-	headers.Set("OData-Version", "4.0")
+	headers[HeaderODataVersion] = []string{ODataVersionValue}
 
 	return batchResponse{
 		StatusCode: statusCode,
