@@ -173,8 +173,8 @@ func TestMetadataIntegrationJSON(t *testing.T) {
 	}
 
 	// Verify top-level structure
-	if version, ok := response["$Version"].(string); !ok || version != "4.0" {
-		t.Errorf("Expected $Version=4.0, got %v", response["$Version"])
+	if version, ok := response["$Version"].(string); !ok || version != "4.01" {
+		t.Errorf("Expected $Version=4.01, got %v", response["$Version"])
 	}
 
 	odataService, ok := response["ODataService"].(map[string]interface{})
