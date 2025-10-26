@@ -6,10 +6,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/signal"
-	"runtime/pprof"
-	"syscall"
-	"time"
 
 	"github.com/NLstn/go-odata/complianceserver/entities"
 	"github.com/nlstn/go-odata"
@@ -26,63 +22,7 @@ func main() {
 	dbType := flag.String("db", "sqlite", "Database type: sqlite or postgres")
 	dbDSN := flag.String("dsn", "", "Database DSN (connection string). For postgres, use postgresql://... format. For sqlite, use file path or :memory:")
 	port := flag.String("port", "9090", "Port to listen on")
-	cpuProfile := flag.String("cpuprofile", "", "Write CPU profile to file")
-	traceSQL := flag.Bool("trace-sql", false, "Enable SQL query tracing and optimization analysis")
-	traceSQLFile := flag.String("trace-sql-file", "", "Write SQL trace analysis to file (requires --trace-sql)")
 	flag.Parse()
-
-	// Create SQL tracer if requested (declared early so signal handler can access it)
-	var sqlTracer *SQLTracer
-	if *traceSQL {
-		sqlTracer = NewSQLTracer(100*time.Millisecond, false)
-		WriteQueryLogHeader()
-	}
-
-	// Start CPU profiling if requested
-	if *cpuProfile != "" {
-		f, err := os.Create(*cpuProfile)
-		if err != nil {
-			log.Fatal("Could not create CPU profile: ", err)
-		}
-		defer func() {
-			if err := f.Close(); err != nil {
-				log.Printf("Error closing CPU profile file: %v", err)
-			}
-		}()
-		if err := pprof.StartCPUProfile(f); err != nil {
-			log.Fatal("Could not start CPU profile: ", err)
-		}
-		defer pprof.StopCPUProfile()
-		fmt.Printf("📊 CPU profiling enabled, writing to: %s\n", *cpuProfile)
-	}
-
-	// Set up signal handler for both CPU profiling and SQL tracing
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-sigChan
-		fmt.Println("\n⏸️  Received interrupt signal, shutting down...")
-
-		// Stop CPU profiling if enabled
-		if *cpuProfile != "" {
-			pprof.StopCPUProfile()
-			fmt.Println("CPU profile written to:", *cpuProfile)
-		}
-
-		// Print SQL trace summary if enabled
-		if sqlTracer != nil {
-			sqlTracer.PrintSummary()
-			if *traceSQLFile != "" {
-				if err := sqlTracer.ExportToFile(*traceSQLFile); err != nil {
-					log.Printf("Error writing SQL trace file: %v", err)
-				} else {
-					fmt.Printf("📝 SQL trace analysis written to: %s\n", *traceSQLFile)
-				}
-			}
-		}
-
-		os.Exit(0)
-	}()
 
 	// Determine database configuration
 	var err error
@@ -94,12 +34,7 @@ func main() {
 			dsn = *dbDSN
 		}
 
-		config := &gorm.Config{}
-		if sqlTracer != nil {
-			config.Logger = sqlTracer
-		}
-
-		Db, err = gorm.Open(sqlite.Open(dsn), config)
+		Db, err = gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 		if err != nil {
 			log.Fatal("Failed to connect to SQLite database:", err)
 		}
@@ -115,12 +50,7 @@ func main() {
 			}
 		}
 
-		config := &gorm.Config{}
-		if sqlTracer != nil {
-			config.Logger = sqlTracer
-		}
-
-		Db, err = gorm.Open(postgres.Open(dsn), config)
+		Db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
 		if err != nil {
 			log.Fatal("Failed to connect to PostgreSQL database:", err)
 		}
@@ -187,28 +117,7 @@ func main() {
 	fmt.Printf("  POST http://localhost:%s/Reseed  (Resets database to default state)\n", *port)
 	fmt.Println()
 
-	if *traceSQL {
-		fmt.Println("🔍 SQL Query Tracing: ENABLED")
-		fmt.Println("  Slow query threshold: 100ms")
-		if *traceSQLFile != "" {
-			fmt.Printf("  Trace output file: %s\n", *traceSQLFile)
-		}
-		fmt.Println()
-	}
-
 	if err := http.ListenAndServe(":"+*port, mux); err != nil {
 		log.Fatal("Server failed:", err)
-	}
-
-	// Print SQL summary when server exits normally
-	if sqlTracer != nil {
-		sqlTracer.PrintSummary()
-		if *traceSQLFile != "" {
-			if err := sqlTracer.ExportToFile(*traceSQLFile); err != nil {
-				log.Printf("Error writing SQL trace file: %v", err)
-			} else {
-				fmt.Printf("📝 SQL trace analysis written to: %s\n", *traceSQLFile)
-			}
-		}
 	}
 }

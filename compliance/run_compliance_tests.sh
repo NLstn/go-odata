@@ -8,9 +8,6 @@ SERVER_URL="${SERVER_URL:-http://localhost:9090}"
 REPORT_FILE="${REPORT_FILE:-compliance-report.md}"
 DB_TYPE="sqlite"           # sqlite | postgres
 DB_DSN=""                  # Optional; for postgres defaults if empty
-CPU_PROFILE=""             # Optional; path to write CPU profile
-TRACE_SQL=0                # Enable SQL query tracing
-TRACE_SQL_FILE=""          # Optional; path to write SQL trace analysis
 
 # Colors for output
 RED='\033[0;31m'
@@ -42,9 +39,6 @@ usage() {
     echo "  --db TYPE            Database type to use for the compliance server: sqlite | postgres (default: sqlite)"
     echo "  --dsn DSN           Database DSN/connection string (required for postgres unless DATABASE_URL is set)"
     echo "  --version VERSION    Run tests for specific OData version: 4.0 | 4.01 | all (default: all)"
-    echo "  --cpuprofile FILE   Write CPU profile to file (enables CPU profiling)"
-    echo "  --trace-sql          Enable SQL query tracing and optimization analysis"
-    echo "  --trace-sql-file FILE  Write SQL trace analysis to file (requires --trace-sql)"
     echo "  -v, --verbose        Show detailed test output"
     echo "  -f, --failures-only  Only show output for failing tests"
     echo "  --external-server    Use an external server (don't start/stop the compliance server)"
@@ -53,9 +47,6 @@ usage() {
     echo "  $0                   # Run all tests (auto-starts compliance server)"
     echo "  $0 --version 4.0    # Run only OData 4.0 tests"
     echo "  $0 --version 4.01   # Run only OData 4.01 tests"
-    echo "  $0 --cpuprofile cpu.prof  # Run tests with CPU profiling"
-    echo "  $0 --trace-sql      # Run tests with SQL query tracing"
-    echo "  $0 --trace-sql --trace-sql-file sql-trace.txt  # Save SQL analysis to file"
     echo "  $0 8.1.1            # Run specific test (auto-starts compliance server)"
     echo "  $0 10.1             # Run specific test with detailed output"
     echo "  $0 header           # Run all tests containing 'header'"
@@ -81,7 +72,6 @@ cleanup() {
         echo ""
         echo "Stopping compliance server (PID: $SERVER_PID)..."
         # Send SIGINT (Ctrl+C) instead of SIGKILL to allow graceful shutdown
-        # This ensures deferred functions (like CPU profile writing) execute
         kill -INT $SERVER_PID 2>/dev/null || true
         # Wait a bit for graceful shutdown
         sleep 2
@@ -132,18 +122,6 @@ while [[ $# -gt 0 ]]; do
             ODATA_VERSION="$2"
             shift 2
             ;;
-        --cpuprofile)
-            CPU_PROFILE="$2"
-            shift 2
-            ;;
-        --trace-sql)
-            TRACE_SQL=1
-            shift
-            ;;
-        --trace-sql-file)
-            TRACE_SQL_FILE="$2"
-            shift 2
-            ;;
         -v|--verbose)
             VERBOSE=1
             shift
@@ -176,15 +154,6 @@ echo "Server URL: $SERVER_URL"
 echo "Database:   $DB_TYPE${DB_DSN:+ (dsn provided)}"
 echo "Version:    $ODATA_VERSION"
 echo "Report File: $REPORT_FILE"
-if [ -n "$CPU_PROFILE" ]; then
-    echo "CPU Profile: $CPU_PROFILE"
-fi
-if [ $TRACE_SQL -eq 1 ]; then
-    echo "SQL Tracing: ENABLED"
-    if [ -n "$TRACE_SQL_FILE" ]; then
-        echo "SQL Trace File: $TRACE_SQL_FILE"
-    fi
-fi
 echo ""
 
 # Start compliance server if not using external server
@@ -226,19 +195,6 @@ if [ $EXTERNAL_SERVER -eq 0 ]; then
             DB_DSN=":memory:"
         fi
         DB_ARGS=( -db sqlite -dsn "$DB_DSN" )
-    fi
-
-    # Add CPU profiling argument if specified
-    if [ -n "$CPU_PROFILE" ]; then
-        DB_ARGS+=( -cpuprofile "$CPU_PROFILE" )
-    fi
-    
-    # Add SQL tracing arguments if specified
-    if [ $TRACE_SQL -eq 1 ]; then
-        DB_ARGS+=( -trace-sql )
-        if [ -n "$TRACE_SQL_FILE" ]; then
-            DB_ARGS+=( -trace-sql-file "$TRACE_SQL_FILE" )
-        fi
     fi
 
     echo "Starting compliance server from $TMP_SERVER_DIR/complianceserver (db=$DB_TYPE)"

@@ -1,14 +1,12 @@
 # Testing
 
-This guide covers testing strategies for go-odata applications, including unit tests, integration tests, compliance tests, and performance profiling.
+This guide covers testing strategies for go-odata applications, including unit tests, integration tests, and compliance tests.
 
 ## Table of Contents
 
 - [Unit Tests](#unit-tests)
 - [Integration Tests](#integration-tests)
 - [Compliance Tests](#compliance-tests)
-- [Performance Profiling](#performance-profiling)
-- [SQL Query Tracing](#sql-query-tracing)
 
 ## Unit Tests
 
