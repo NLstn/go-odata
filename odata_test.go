@@ -1,6 +1,8 @@
 package odata
 
 import (
+	"net/http"
+	"reflect"
 	"testing"
 
 	"gorm.io/driver/sqlite"
@@ -135,5 +137,151 @@ func TestServiceRegisterMultipleEntities(t *testing.T) {
 		if _, exists := service.handlers[setName]; !exists {
 			t.Errorf("Handler for %s not found", setName)
 		}
+	}
+}
+
+func TestRegisterActionValidation(t *testing.T) {
+	db := setupTestDB(t)
+	service := NewService(db)
+
+	if err := service.RegisterEntity(Product{}); err != nil {
+		t.Fatalf("failed to register product entity: %v", err)
+	}
+
+	dummyHandler := func(http.ResponseWriter, *http.Request, interface{}, map[string]interface{}) error {
+		return nil
+	}
+
+	tests := []struct {
+		name        string
+		action      ActionDefinition
+		expectedErr string
+	}{
+		{
+			name: "empty name",
+			action: ActionDefinition{
+				Handler: dummyHandler,
+			},
+			expectedErr: "action name cannot be empty",
+		},
+		{
+			name: "nil handler",
+			action: ActionDefinition{
+				Name: "TestAction",
+			},
+			expectedErr: "action handler cannot be nil",
+		},
+		{
+			name: "bound action missing entity set",
+			action: ActionDefinition{
+				Name:    "BoundAction",
+				IsBound: true,
+				Handler: dummyHandler,
+			},
+			expectedErr: "bound action must specify entity set",
+		},
+		{
+			name: "bound action unregistered entity set",
+			action: ActionDefinition{
+				Name:      "BoundAction",
+				IsBound:   true,
+				EntitySet: "UnknownSet",
+				Handler:   dummyHandler,
+			},
+			expectedErr: "entity set 'UnknownSet' not found",
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			err := service.RegisterAction(tc.action)
+			if err == nil {
+				t.Fatalf("RegisterAction() error = nil, want %q", tc.expectedErr)
+			}
+			if err.Error() != tc.expectedErr {
+				t.Fatalf("RegisterAction() error = %q, want %q", err.Error(), tc.expectedErr)
+			}
+		})
+	}
+}
+
+func TestRegisterFunctionValidation(t *testing.T) {
+	db := setupTestDB(t)
+	service := NewService(db)
+
+	if err := service.RegisterEntity(Product{}); err != nil {
+		t.Fatalf("failed to register product entity: %v", err)
+	}
+
+	dummyHandler := func(http.ResponseWriter, *http.Request, interface{}, map[string]interface{}) (interface{}, error) {
+		return nil, nil
+	}
+
+	returnType := reflect.TypeOf("")
+
+	tests := []struct {
+		name        string
+		function    FunctionDefinition
+		expectedErr string
+	}{
+		{
+			name: "empty name",
+			function: FunctionDefinition{
+				Handler:    dummyHandler,
+				ReturnType: returnType,
+			},
+			expectedErr: "function name cannot be empty",
+		},
+		{
+			name: "nil handler",
+			function: FunctionDefinition{
+				Name:       "TestFunction",
+				ReturnType: returnType,
+			},
+			expectedErr: "function handler cannot be nil",
+		},
+		{
+			name: "nil return type",
+			function: FunctionDefinition{
+				Name:    "TestFunction",
+				Handler: dummyHandler,
+			},
+			expectedErr: "function must have a return type",
+		},
+		{
+			name: "bound function missing entity set",
+			function: FunctionDefinition{
+				Name:       "BoundFunction",
+				IsBound:    true,
+				Handler:    dummyHandler,
+				ReturnType: returnType,
+			},
+			expectedErr: "bound function must specify entity set",
+		},
+		{
+			name: "bound function unregistered entity set",
+			function: FunctionDefinition{
+				Name:       "BoundFunction",
+				IsBound:    true,
+				EntitySet:  "UnknownSet",
+				Handler:    dummyHandler,
+				ReturnType: returnType,
+			},
+			expectedErr: "entity set 'UnknownSet' not found",
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			err := service.RegisterFunction(tc.function)
+			if err == nil {
+				t.Fatalf("RegisterFunction() error = nil, want %q", tc.expectedErr)
+			}
+			if err.Error() != tc.expectedErr {
+				t.Fatalf("RegisterFunction() error = %q, want %q", err.Error(), tc.expectedErr)
+			}
+		})
 	}
 }
