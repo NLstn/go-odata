@@ -319,14 +319,11 @@ for script in $SCRIPTS; do
     
     if [ $SHOW_OUTPUT -eq 1 ]; then
         echo -e "${BLUE}Running: $TEST_NAME${NC}"
-        echo "─────────────────────────────────────────────────────────"
         
         if [ $VERBOSE -eq 1 ] || [ $SKIP_REPORT -eq 1 ]; then
             # Show full output for verbose mode OR when running individual tests
+            echo "─────────────────────────────────────────────────────────"
             echo "$OUTPUT"
-        else
-            # Show summary for full test suite runs
-            echo "$OUTPUT" | grep -E "(Test [0-9]+:|✓ PASS:|✗ FAIL:|Summary:|Status:)"
         fi
         
         echo -e "$RESULT_MSG"
