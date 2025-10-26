@@ -89,56 +89,38 @@
             }
         },
         {
-            "label": "Compliance: Run (SQLite)",
-            "dependsOrder": "sequence",
-            "dependsOn": [
-                "internal: Compliance Run (SQLite)"
-            ],
-            "problemMatcher": []
-        },
-        {
-            "label": "Compliance: Run (PostgreSQL)",
-            "dependsOrder": "sequence",
-            "dependsOn": [
-                "internal: Compliance Run (PostgreSQL)"
-            ],
-            "problemMatcher": []
-        },
-        {
-            "label": "internal: Compliance Run (SQLite)",
+            "label": "Run compliance tests (SQLite)",
             "type": "shell",
             "command": "bash",
             "args": [
                 "-lc",
-                "./run_compliance_tests.sh --db sqlite -o ${workspaceFolder}/compliance-report.md"
+                "./compliance/run_compliance_tests.sh --db sqlite -o ${workspaceFolder}/compliance-report.md"
             ],
             "options": {
-                "cwd": "${workspaceFolder}/compliance/v4"
+                "cwd": "${workspaceFolder}"
             },
             "problemMatcher": [],
             "presentation": {
                 "reveal": "always",
                 "panel": "shared"
             },
-            "hide": true
         },
         {
-            "label": "internal: Compliance Run (PostgreSQL)",
+            "label": "Run compliance tests (PostgreSQL)",
             "type": "shell",
             "command": "bash",
             "args": [
                 "-lc",
-                "./run_compliance_tests.sh --db postgres --dsn postgresql://odata:odata_dev@localhost:5432/odata_test?sslmode=disable -o ${workspaceFolder}/compliance-report.md"
+                "./compliance/run_compliance_tests.sh --db postgres --dsn postgresql://odata:odata_dev@localhost:5432/odata_test?sslmode=disable -o ${workspaceFolder}/compliance-report.md"
             ],
             "options": {
-                "cwd": "${workspaceFolder}/compliance/v4"
+                "cwd": "${workspaceFolder}"
             },
             "problemMatcher": [],
             "presentation": {
                 "reveal": "always",
                 "panel": "shared"
             },
-            "hide": true
         }
     ]
 }
