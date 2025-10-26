@@ -14,6 +14,14 @@ tmp/
 # Binary executables
 cmd/devserver/devserver
 cmd/complianceserver/complianceserver
+cmd/perfserver/perfserver
+
+# Performance profiling files
+*.prof
+cpu.prof
+mem.prof
+sql-trace.txt
+perf.db
 
 # Test binaries
 *.test
