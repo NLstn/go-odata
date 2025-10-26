@@ -186,7 +186,38 @@ All tests run automatically on every push and pull request via GitHub Actions:
 
 ## Performance Profiling
 
-Profile CPU usage during compliance tests to identify performance bottlenecks.
+Profile CPU usage and SQL queries during testing to identify performance bottlenecks.
+
+### Performance Testing Server
+
+A dedicated performance testing server is available at `cmd/perfserver` with extensive data seeding (10,000 products, 100 categories, 30,000 descriptions) for realistic performance testing.
+
+```bash
+# Start perfserver with extensive seeding
+cd cmd/perfserver
+go run . -extensive=true
+
+# Start with CPU profiling
+go run . -cpuprofile cpu.prof
+
+# Start with SQL query tracing
+go run . -trace-sql -trace-sql-file sql-trace.txt
+
+# Start with both CPU and SQL profiling
+go run . -cpuprofile cpu.prof -trace-sql -trace-sql-file sql-trace.txt
+
+# Use PostgreSQL instead of SQLite
+go run . -db postgres -dsn "postgresql://user:pass@localhost:5432/dbname?sslmode=disable"
+```
+
+See `cmd/perfserver/README.md` for detailed usage and performance testing scenarios.
+
+### VS Code Integration
+
+Use the VS Code tasks for easy server launching:
+- **Start Perf Server (SQLite)** - Launch with extensive seeding
+- **Start Perf Server with CPU Profiling** - Launch with CPU profiling enabled
+- **Start Perf Server with SQL Tracing** - Launch with SQL query tracing
 
 ### Running with CPU Profiling
 
