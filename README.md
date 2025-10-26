@@ -1777,18 +1777,29 @@ go test -race ./...
 
 ### Compliance Tests
 
-The library includes a comprehensive OData v4 compliance test suite with 67+ test scripts covering all aspects of the OData specification.
+The library includes a comprehensive OData v4 compliance test suite with 95+ test scripts covering all aspects of the OData specification.
 
 To run compliance tests:
 
 ```bash
-# Start the development server
-cd cmd/devserver
-go run . &
+# Run all compliance tests (automatically starts/stops server)
+./compliance/run_compliance_tests.sh
 
-# In another terminal, run compliance tests
-cd compliance/v4
-./run_compliance_tests.sh
+# Run only OData 4.0 tests
+./compliance/run_compliance_tests.sh --version 4.0
+
+# Run only OData 4.01 tests
+./compliance/run_compliance_tests.sh --version 4.01
+
+# Run specific tests
+./compliance/run_compliance_tests.sh 8.1.1_header_content_type
+./compliance/run_compliance_tests.sh header  # Run all header tests
+
+# Run with verbose output
+./compliance/run_compliance_tests.sh -v
+
+# Run with failures only
+./compliance/run_compliance_tests.sh -f
 ```
 
 The compliance tests verify:
@@ -1801,7 +1812,48 @@ The compliance tests verify:
 - Batch requests
 - ETags and conditional requests
 
-For more information about compliance tests, see [compliance/v4/README.md](compliance/v4/README.md).
+For more information about compliance tests, see [compliance/README.md](compliance/README.md).
+
+### Performance Profiling
+
+You can profile the library's CPU usage during compliance tests to identify performance bottlenecks:
+
+```bash
+# Run compliance tests with CPU profiling
+./compliance/run_compliance_tests.sh --cpuprofile /tmp/cpu.prof
+
+# Analyze the profile with pprof
+go tool pprof /tmp/cpu.prof
+
+# Generate interactive web-based profile (requires graphviz)
+go tool pprof -http=:8080 /tmp/cpu.prof
+
+# Generate text-based reports
+go tool pprof -top /tmp/cpu.prof              # Top functions by CPU time
+go tool pprof -list=FunctionName /tmp/cpu.prof  # Line-by-line analysis
+```
+
+The profiling feature helps:
+- Identify CPU hotspots in the library
+- Measure performance improvements
+- Optimize critical code paths
+- Analyze execution patterns during OData operations
+
+**Example profiling workflow:**
+
+```bash
+# 1. Run tests with profiling enabled
+./compliance/run_compliance_tests.sh --cpuprofile /tmp/before.prof
+
+# 2. Make performance improvements to the code
+
+# 3. Run tests again with profiling
+./compliance/run_compliance_tests.sh --cpuprofile /tmp/after.prof
+
+# 4. Compare the profiles
+go tool pprof -top /tmp/before.prof | head -20
+go tool pprof -top /tmp/after.prof | head -20
+```
 
 ## Contributing
 
