@@ -76,23 +76,27 @@ The `compliance/` directory contains executable shell scripts that validate the 
    - Update tests only when the OData specification itself changes
 
 4. **Running Compliance Tests**:
-   ```bash
-   # Start the dev server first
-   cd cmd/devserver && go run . &
    
-   # Run all compliance tests (4.0 + 4.01)
-   cd compliance
-   ./run_compliance_tests.sh
+   **IMPORTANT: Always use the master `run_compliance_tests.sh` script to execute compliance tests.**
+   
+   The master script at `compliance/run_compliance_tests.sh` ensures:
+   - Proper test environment setup and cleanup
+   - Consistent execution across all test versions
+   - Comprehensive reporting and error tracking
+   - Automatic server management
+   
+   ```bash
+   # Run all compliance tests (4.0 + 4.01) - PREFERRED METHOD
+   ./compliance/run_compliance_tests.sh
    
    # Run only OData 4.0 tests
-   ./run_compliance_tests.sh --version 4.0
+   ./compliance/run_compliance_tests.sh --version 4.0
    
    # Run only OData 4.01 tests
-   ./run_compliance_tests.sh --version 4.01
+   ./compliance/run_compliance_tests.sh --version 4.01
    
-   # Run specific test
-   cd v4.0
-   ./11.4.3_update_entity.sh
+   # Run a specific test through the master script
+   ./compliance/run_compliance_tests.sh 11.4.3_update_entity.sh
    ```
 
 5. **Test Coverage**: Currently includes 85 test scripts covering:
