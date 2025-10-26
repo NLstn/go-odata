@@ -292,6 +292,13 @@ for script in $SCRIPTS; do
     TEST_SCRIPTS[$TEST_INDEX]="$script"
     TEST_NAMES[$TEST_INDEX]="$TEST_NAME"
     
+    # Determine OData version based on directory
+    if [[ "$script" == */v4.01/* ]]; then
+        VERSION_PREFIX="V4.01"
+    else
+        VERSION_PREFIX="V4"
+    fi
+    
     # Capture output
     OUTPUT=$(bash "$script" 2>&1)
     EXIT_CODE=$?
@@ -318,7 +325,7 @@ for script in $SCRIPTS; do
     fi
     
     if [ $SHOW_OUTPUT -eq 1 ]; then
-        echo -e "${BLUE}Running: $TEST_NAME${NC}"
+        echo -e "${BLUE}Running: [$VERSION_PREFIX] $TEST_NAME${NC}"
         
         if [ $VERBOSE -eq 1 ] || [ $SKIP_REPORT -eq 1 ]; then
             # Show full output for verbose mode OR when running individual tests
