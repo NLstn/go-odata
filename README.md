@@ -1855,6 +1855,122 @@ go tool pprof -top /tmp/before.prof | head -20
 go tool pprof -top /tmp/after.prof | head -20
 ```
 
+### SQL Query Tracing
+
+The library includes a comprehensive SQL query tracer that helps identify performance bottlenecks and optimization opportunities during compliance testing. The tracer tracks query execution times, counts, and patterns to detect N+1 queries and slow queries.
+
+#### Enabling SQL Tracing
+
+Run compliance tests with SQL tracing enabled:
+
+```bash
+# Enable SQL tracing
+./compliance/run_compliance_tests.sh --trace-sql
+
+# Run specific test with SQL tracing
+./compliance/run_compliance_tests.sh --trace-sql 11.2.5
+
+# Save SQL analysis to a file
+./compliance/run_compliance_tests.sh --trace-sql --trace-sql-file sql-analysis.txt
+```
+
+#### What You Get
+
+When SQL tracing is enabled, you receive a comprehensive optimization analysis:
+
+**1. Overall Statistics**
+- Total queries executed
+- Unique query patterns (normalized)
+- Total SQL time
+- Average query time
+
+**2. Top Queries by Total Time**
+Identifies queries that consume the most cumulative time - your primary optimization targets.
+
+**3. N+1 Query Detection**
+Automatically detects queries executed more than 10 times, which typically indicates N+1 query problems that should be fixed with eager loading.
+
+**4. Slowest Individual Queries**
+Shows the maximum execution time for each query pattern to identify performance bottlenecks.
+
+**5. Optimization Recommendations**
+Automated suggestions based on query patterns:
+- **N+1 Query Warnings**: Queries executed excessively that should use eager loading or batch queries
+- **Slow Query Identification**: Queries with high average execution times that may need indexes
+- **SELECT * Detection**: Queries fetching all columns when only some are needed
+
+#### Example Output
+
+```
+================================================================================
+📊 SQL QUERY OPTIMIZATION ANALYSIS
+================================================================================
+
+📈 Overall Statistics:
+  Total Queries Executed: 150
+  Unique Query Patterns:  45
+  Total SQL Time:         1250.5ms
+  Average Query Time:     8.3ms
+
+🔥 Top Queries by Total Time (Target for Optimization):
+--------------------------------------------------------------------------------
+
+  #1: Executed 50 times | Total: 450.2ms | Avg: 9.0ms | Max: 15.2ms
+      SELECT * FROM `products` WHERE category_id = ?
+
+  #2: Executed 25 times | Total: 280.5ms | Avg: 11.2ms | Max: 18.5ms
+      SELECT * FROM `product_descriptions` WHERE product_id = ?
+
+🔁 Queries with High Execution Count (Potential N+1 Problems):
+--------------------------------------------------------------------------------
+
+  #1: Executed 50 times | Total: 450.2ms | Avg: 9.0ms | Max: 15.2ms
+      SELECT * FROM `products` WHERE category_id = ?
+      ⚠️  This query pattern suggests an N+1 problem!
+
+💡 Optimization Recommendations:
+--------------------------------------------------------------------------------
+  1. ⚠️  N+1 Query Detected: Query executed 50 times. Consider using eager loading or batch queries.
+  2. 🐌 Slow Query on 'products': Avg 9.0ms. Consider adding indexes or optimizing WHERE clauses.
+  3. 📋 SELECT * Detected: Query executed 50 times. Consider selecting only needed columns.
+```
+
+#### How It Works
+
+The SQL tracer:
+1. **Intercepts all GORM SQL queries** via a custom logger
+2. **Normalizes queries** by replacing literal values with placeholders to identify patterns
+3. **Tracks statistics** including execution count, timing (total, average, min, max), and first/last seen times
+4. **Generates analysis** when the server stops (via SIGINT/SIGTERM signal)
+
+#### Use Cases
+
+- **Find N+1 queries**: Identify queries executed excessively that should use eager loading
+- **Identify slow queries**: Find queries with high average or maximum execution times
+- **Optimize compliance tests**: See exactly what SQL is generated for OData operations
+- **Performance tuning**: Get data-driven insights for adding indexes or refactoring queries
+- **Regression detection**: Compare SQL patterns before and after changes to detect performance regressions
+
+#### Combining with CPU Profiling
+
+You can use both SQL tracing and CPU profiling together for comprehensive performance analysis:
+
+```bash
+# Run with both SQL tracing and CPU profiling
+./compliance/run_compliance_tests.sh --trace-sql --cpuprofile /tmp/cpu.prof --trace-sql-file /tmp/sql-analysis.txt
+
+# Analyze CPU profile
+go tool pprof /tmp/cpu.prof
+
+# Review SQL analysis
+cat /tmp/sql-analysis.txt
+```
+
+This combination helps you:
+- Correlate CPU hotspots with SQL query patterns
+- Identify whether performance issues are in query execution or application logic
+- Make informed decisions about optimization priorities
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
