@@ -13,6 +13,17 @@ import (
 	"gorm.io/gorm/logger"
 )
 
+// Pre-compiled regex patterns for query normalization (compiled once, reused for all queries)
+var (
+	whitespaceRegex = regexp.MustCompile(`\s+`)
+	stringLitRegex  = regexp.MustCompile(`'[^']*'`)
+	numericLitRegex = regexp.MustCompile(`\b\d+\b`)
+	inClauseRegex   = regexp.MustCompile(`IN\s*\([^)]+\)`)
+	fromTableRegex  = regexp.MustCompile(`FROM\s+["']?(\w+)["']?`)
+	updateTableRegex = regexp.MustCompile(`UPDATE\s+["']?(\w+)["']?`)
+	insertTableRegex = regexp.MustCompile(`INSERT INTO\s+["']?(\w+)["']?`)
+)
+
 // SQLTracer is a custom GORM logger that tracks query performance and patterns
 // to help identify optimization opportunities
 type SQLTracer struct {
@@ -149,19 +160,20 @@ func (l *SQLTracer) Trace(ctx context.Context, begin time.Time, fc func() (strin
 }
 
 // normalizeQuery converts a query to a pattern by replacing literal values
+// Uses pre-compiled regex patterns for better performance
 func (l *SQLTracer) normalizeQuery(sql string) string {
 	// Remove extra whitespace
-	pattern := regexp.MustCompile(`\s+`).ReplaceAllString(strings.TrimSpace(sql), " ")
+	pattern := whitespaceRegex.ReplaceAllString(strings.TrimSpace(sql), " ")
 
 	// Replace string literals
-	pattern = regexp.MustCompile(`'[^']*'`).ReplaceAllString(pattern, "?")
+	pattern = stringLitRegex.ReplaceAllString(pattern, "?")
 
 	// Replace numeric literals (simple approach - replace all standalone numbers)
 	// This will also replace LIMIT/OFFSET values, but that's okay for pattern matching
-	pattern = regexp.MustCompile(`\b\d+\b`).ReplaceAllString(pattern, "?")
+	pattern = numericLitRegex.ReplaceAllString(pattern, "?")
 
 	// Replace IN clauses with multiple values
-	pattern = regexp.MustCompile(`IN\s*\([^)]+\)`).ReplaceAllString(pattern, "IN (?)")
+	pattern = inClauseRegex.ReplaceAllString(pattern, "IN (?)")
 
 	return pattern
 }
@@ -331,22 +343,20 @@ func (l *SQLTracer) generateRecommendations(byTotalTime, byCount []*QueryStats) 
 }
 
 // extractTableName attempts to extract the main table name from a query
+// Uses pre-compiled regex patterns for better performance
 func (l *SQLTracer) extractTableName(query string) string {
 	// Try to extract FROM clause
-	fromRe := regexp.MustCompile(`FROM\s+["']?(\w+)["']?`)
-	if matches := fromRe.FindStringSubmatch(query); len(matches) > 1 {
+	if matches := fromTableRegex.FindStringSubmatch(query); len(matches) > 1 {
 		return matches[1]
 	}
 
 	// Try to extract UPDATE clause
-	updateRe := regexp.MustCompile(`UPDATE\s+["']?(\w+)["']?`)
-	if matches := updateRe.FindStringSubmatch(query); len(matches) > 1 {
+	if matches := updateTableRegex.FindStringSubmatch(query); len(matches) > 1 {
 		return matches[1]
 	}
 
 	// Try to extract INSERT INTO clause
-	insertRe := regexp.MustCompile(`INSERT INTO\s+["']?(\w+)["']?`)
-	if matches := insertRe.FindStringSubmatch(query); len(matches) > 1 {
+	if matches := insertTableRegex.FindStringSubmatch(query); len(matches) > 1 {
 		return matches[1]
 	}
 

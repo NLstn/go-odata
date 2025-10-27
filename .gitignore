@@ -23,7 +23,7 @@ mem.prof
 sql-trace.txt
 perf.db
 
-load-test-results
+load-test-results*
 
 # Test binaries
 *.test
