@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"reflect"
 	"strings"
+	"sync"
 
 	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/response"
@@ -14,6 +15,11 @@ import (
 // MetadataHandler handles metadata document requests
 type MetadataHandler struct {
 	entities map[string]*metadata.EntityMetadata
+	// Cached metadata documents
+	cachedXML  string
+	cachedJSON []byte
+	onceXML    sync.Once
+	onceJSON   sync.Once
 }
 
 // NewMetadataHandler creates a new metadata handler
@@ -207,9 +213,12 @@ func (h *MetadataHandler) handleMetadataXML(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	metadataDoc := h.buildMetadataDocument()
+	// Use sync.Once to ensure metadata is built only once
+	h.onceXML.Do(func() {
+		h.cachedXML = h.buildMetadataDocument()
+	})
 
-	if _, err := w.Write([]byte(metadataDoc)); err != nil {
+	if _, err := w.Write([]byte(h.cachedXML)); err != nil {
 		fmt.Printf("Error writing metadata response: %v\n", err)
 	}
 }
@@ -461,6 +470,18 @@ func (h *MetadataHandler) handleMetadataJSON(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	// Use sync.Once to ensure metadata is built only once
+	h.onceJSON.Do(func() {
+		h.cachedJSON = h.buildMetadataJSON()
+	})
+
+	if _, err := w.Write(h.cachedJSON); err != nil {
+		fmt.Printf("Error writing JSON metadata response: %v\n", err)
+	}
+}
+
+// buildMetadataJSON builds the JSON metadata document and returns the raw bytes
+func (h *MetadataHandler) buildMetadataJSON() []byte {
 	// Build CSDL JSON structure
 	odataService := make(map[string]interface{})
 	csdl := map[string]interface{}{
@@ -481,12 +502,14 @@ func (h *MetadataHandler) handleMetadataJSON(w http.ResponseWriter, r *http.Requ
 	container := h.buildJSONEntityContainer()
 	odataService["Container"] = container
 
-	// Encode and write JSON
-	encoder := json.NewEncoder(w)
-	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(csdl); err != nil {
-		fmt.Printf("Error writing JSON metadata response: %v\n", err)
+	// Encode to JSON bytes
+	jsonBytes, err := json.MarshalIndent(csdl, "", "  ")
+	if err != nil {
+		fmt.Printf("Error marshaling JSON metadata: %v\n", err)
+		return []byte("{}")
 	}
+
+	return jsonBytes
 }
 
 // addJSONEnumTypes adds enum type definitions to the JSON service
