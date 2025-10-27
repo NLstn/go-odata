@@ -473,3 +473,105 @@ func TestNullableMismatchError(t *testing.T) {
 		t.Errorf("Expected error message to contain %q, got: %v", expectedErrMsg, err)
 	}
 }
+
+func TestSearchSimilarityValidation(t *testing.T) {
+	t.Run("valid similarity", func(t *testing.T) {
+		type ValidEntity struct {
+			ID   int    `json:"id" odata:"key"`
+			Name string `json:"name" odata:"searchable,similarity=0.95"`
+		}
+
+		meta, err := AnalyzeEntity(ValidEntity{})
+		if err != nil {
+			t.Fatalf("Expected no error for valid similarity, got: %v", err)
+		}
+
+		// Check that similarity is properly set
+		nameProp := meta.FindProperty("Name")
+		if nameProp == nil {
+			t.Fatal("Expected to find Name property")
+		}
+		if nameProp.SearchSimilarity != 0.95 {
+			t.Errorf("Expected SearchSimilarity to be 0.95, got %f", nameProp.SearchSimilarity)
+		}
+		if !nameProp.IsSearchable {
+			t.Error("Expected Name property to be marked as searchable")
+		}
+	})
+
+	t.Run("both fuzziness and similarity defined", func(t *testing.T) {
+		type InvalidEntity struct {
+			ID    int    `json:"id" odata:"key"`
+			Name  string `json:"name" odata:"searchable,fuzziness=2,similarity=0.95"`
+		}
+
+		_, err := AnalyzeEntity(InvalidEntity{})
+		if err == nil {
+			t.Fatal("Expected error for field with both fuzziness and similarity, got nil")
+		}
+
+		expectedErrMsg := "cannot have both fuzziness and similarity defined"
+		if !strings.Contains(err.Error(), expectedErrMsg) {
+			t.Errorf("Expected error message to contain %q, got: %v", expectedErrMsg, err)
+		}
+	})
+
+	t.Run("similarity out of range - too high", func(t *testing.T) {
+		type InvalidEntity struct {
+			ID   int    `json:"id" odata:"key"`
+			Name string `json:"name" odata:"searchable,similarity=1.5"`
+		}
+
+		_, err := AnalyzeEntity(InvalidEntity{})
+		if err == nil {
+			t.Fatal("Expected error for similarity > 1.0, got nil")
+		}
+
+		expectedErrMsg := "must be between 0.0 and 1.0"
+		if !strings.Contains(err.Error(), expectedErrMsg) {
+			t.Errorf("Expected error message to contain %q, got: %v", expectedErrMsg, err)
+		}
+	})
+
+	t.Run("similarity out of range - negative", func(t *testing.T) {
+		type InvalidEntity struct {
+			ID   int    `json:"id" odata:"key"`
+			Name string `json:"name" odata:"searchable,similarity=-0.5"`
+		}
+
+		_, err := AnalyzeEntity(InvalidEntity{})
+		if err == nil {
+			t.Fatal("Expected error for negative similarity, got nil")
+		}
+
+		expectedErrMsg := "must be between 0.0 and 1.0"
+		if !strings.Contains(err.Error(), expectedErrMsg) {
+			t.Errorf("Expected error message to contain %q, got: %v", expectedErrMsg, err)
+		}
+	})
+
+	t.Run("similarity without searchable tag", func(t *testing.T) {
+		type ValidEntity struct {
+			ID   int    `json:"id" odata:"key"`
+			Name string `json:"name" odata:"similarity=0.8"`
+		}
+
+		meta, err := AnalyzeEntity(ValidEntity{})
+		if err != nil {
+			t.Fatalf("Expected no error, got: %v", err)
+		}
+
+		// Check that the property is marked as searchable when similarity is set
+		nameProp := meta.FindProperty("Name")
+		if nameProp == nil {
+			t.Fatal("Expected to find Name property")
+		}
+		if !nameProp.IsSearchable {
+			t.Error("Expected Name property to be marked as searchable when similarity is set")
+		}
+		if nameProp.SearchSimilarity != 0.8 {
+			t.Errorf("Expected SearchSimilarity to be 0.8, got %f", nameProp.SearchSimilarity)
+		}
+	})
+}
+

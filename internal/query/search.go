@@ -94,14 +94,21 @@ func matchesSearch(entity reflect.Value, searchQueryLower string, searchableProp
 		// Normalize for case-insensitive matching
 		fieldLower := strings.ToLower(fieldStr)
 
-		// Apply fuzzy matching based on fuzziness level
-		fuzziness := prop.SearchFuzziness
-		if fuzziness == 0 {
-			fuzziness = 1 // Default to exact match
-		}
+		// Use similarity score if defined, otherwise use fuzziness
+		if prop.SearchSimilarity > 0 {
+			if similarityMatch(fieldLower, searchQueryLower, prop.SearchSimilarity) {
+				return true
+			}
+		} else {
+			// Apply fuzzy matching based on fuzziness level
+			fuzziness := prop.SearchFuzziness
+			if fuzziness == 0 {
+				fuzziness = 1 // Default to exact match
+			}
 
-		if fuzzyMatch(fieldLower, searchQueryLower, fuzziness) {
-			return true
+			if fuzzyMatch(fieldLower, searchQueryLower, fuzziness) {
+				return true
+			}
 		}
 	}
 
@@ -211,4 +218,36 @@ func min3(a, b, c int) int {
 		return b
 	}
 	return c
+}
+
+// similarityMatch performs similarity-based matching using a normalized Levenshtein similarity
+// similarity: a value between 0.0 and 1.0, where 1.0 means exact match
+// For example, similarity=0.95 means the field must be at least 95% similar to the search term
+func similarityMatch(text, pattern string, minSimilarity float64) bool {
+	if len(pattern) == 0 {
+		return true
+	}
+	if len(text) == 0 {
+		return false
+	}
+
+	// Check if pattern is contained in text (exact substring match)
+	if strings.Contains(text, pattern) {
+		return true
+	}
+
+	// For similarity matching, we compare the entire field to the pattern
+	// Calculate the Levenshtein distance
+	distance := levenshteinDistance(text, pattern)
+
+	// Normalize the distance based on the longer string length
+	maxLen := len(text)
+	if len(pattern) > maxLen {
+		maxLen = len(pattern)
+	}
+
+	// Calculate similarity score (1.0 = exact match, 0.0 = completely different)
+	similarity := 1.0 - (float64(distance) / float64(maxLen))
+
+	return similarity >= minSimilarity
 }

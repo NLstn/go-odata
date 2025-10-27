@@ -502,3 +502,164 @@ func TestApplySearch_PointerEntities(t *testing.T) {
 		t.Errorf("Expected entity with ID 1, got %d", resultSlice[0].ID)
 	}
 }
+
+// TestEntityWithSimilarity represents a test entity with similarity scores
+type SearchTestEntityWithSimilarity struct {
+	ID      int    `json:"ID" odata:"key"`
+	Name    string `json:"Name" odata:"searchable,similarity=0.8"`
+	Email   string `json:"Email" odata:"searchable,similarity=0.9"`
+	Address string `json:"Address"`
+}
+
+func TestApplySearch_WithSimilarity(t *testing.T) {
+	meta, err := metadata.AnalyzeEntity(SearchTestEntityWithSimilarity{})
+	if err != nil {
+		t.Fatalf("Failed to analyze entity: %v", err)
+	}
+
+	entities := []SearchTestEntityWithSimilarity{
+		{ID: 1, Name: "John Doe", Email: "john.doe@example.com", Address: "123 Main St"},
+		{ID: 2, Name: "Jane Smith", Email: "jane.smith@example.com", Address: "456 Oak Ave"},
+		{ID: 3, Name: "Bob Johnson", Email: "bob.johnson@example.com", Address: "789 Pine Rd"},
+	}
+
+	tests := []struct {
+		name          string
+		searchQuery   string
+		expectedCount int
+		expectedIDs   []int
+		description   string
+	}{
+		{
+			name:          "Exact substring match",
+			searchQuery:   "John",
+			expectedCount: 2,
+			expectedIDs:   []int{1, 3}, // John Doe and Bob Johnson
+			description:   "Should find exact substring matches",
+		},
+		{
+			name:          "High similarity match",
+			searchQuery:   "John Dae",
+			expectedCount: 1,
+			expectedIDs:   []int{1}, // John Doe is similar enough (1 char difference in 8 chars = 0.875 similarity)
+			description:   "Should match with high similarity (0.8)",
+		},
+		{
+			name:          "Email exact match",
+			searchQuery:   "example.com",
+			expectedCount: 3,
+			expectedIDs:   []int{1, 2, 3}, // All emails contain example.com
+			description:   "Should find all emails with substring",
+		},
+		{
+			name:          "Similar email",
+			searchQuery:   "john.doe@example.co",
+			expectedCount: 1,
+			expectedIDs:   []int{1}, // Very similar to john.doe@example.com
+			description:   "Should match similar email with 0.9 similarity",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ApplySearch(entities, tt.searchQuery, meta)
+
+			resultSlice, ok := result.([]SearchTestEntityWithSimilarity)
+			if !ok {
+				t.Fatalf("Expected []SearchTestEntityWithSimilarity, got %T", result)
+			}
+
+			if len(resultSlice) != tt.expectedCount {
+				t.Errorf("%s: Expected %d results, got %d", tt.description, tt.expectedCount, len(resultSlice))
+			}
+
+			// Check that the correct entities are returned
+			for i, expectedID := range tt.expectedIDs {
+				if i >= len(resultSlice) {
+					t.Errorf("Expected entity with ID %d not found", expectedID)
+					continue
+				}
+				if resultSlice[i].ID != expectedID {
+					t.Errorf("Expected entity ID %d at position %d, got %d", expectedID, i, resultSlice[i].ID)
+				}
+			}
+		})
+	}
+}
+
+func TestSimilarityMatch(t *testing.T) {
+	tests := []struct {
+		name          string
+		text          string
+		pattern       string
+		minSimilarity float64
+		expected      bool
+	}{
+		{
+			name:          "Exact match",
+			text:          "hello world",
+			pattern:       "hello world",
+			minSimilarity: 1.0,
+			expected:      true,
+		},
+		{
+			name:          "Substring match",
+			text:          "hello world",
+			pattern:       "world",
+			minSimilarity: 0.9,
+			expected:      true,
+		},
+		{
+			name:          "High similarity match",
+			text:          "hello",
+			pattern:       "hallo",
+			minSimilarity: 0.8,
+			expected:      true,
+		},
+		{
+			name:          "Low similarity no match",
+			text:          "hello",
+			pattern:       "world",
+			minSimilarity: 0.8,
+			expected:      false,
+		},
+		{
+			name:          "Similar strings match",
+			text:          "john doe",
+			pattern:       "jon do",
+			minSimilarity: 0.75,
+			expected:      true,
+		},
+		{
+			name:          "Very different strings",
+			text:          "apple",
+			pattern:       "orange",
+			minSimilarity: 0.5,
+			expected:      false,
+		},
+		{
+			name:          "Empty pattern",
+			text:          "hello",
+			pattern:       "",
+			minSimilarity: 0.9,
+			expected:      true,
+		},
+		{
+			name:          "Empty text",
+			text:          "",
+			pattern:       "hello",
+			minSimilarity: 0.9,
+			expected:      false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := similarityMatch(tt.text, tt.pattern, tt.minSimilarity)
+			if result != tt.expected {
+				t.Errorf("similarityMatch(%q, %q, %.2f) = %v, expected %v", tt.text, tt.pattern, tt.minSimilarity, result, tt.expected)
+			}
+		})
+	}
+}
+
