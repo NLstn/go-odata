@@ -393,49 +393,84 @@ func (h *EntityHandler) buildKeySegmentFromEntity(entity reflect.Value) string {
 }
 
 // metadataAdapter adapts metadata.EntityMetadata to response.EntityMetadataProvider
+// It pre-computes and caches converted property metadata to avoid allocations on every request
 type metadataAdapter struct {
 	metadata *metadata.EntityMetadata
+	// Cached converted properties to avoid repeated allocations
+	cachedProperties    []response.PropertyMetadata
+	cachedKeyProperty   *response.PropertyMetadata
+	cachedKeyProperties []response.PropertyMetadata
+	cachedETagProperty  *response.PropertyMetadata
+}
+
+// newMetadataAdapter creates a new metadataAdapter with pre-computed cached properties
+func newMetadataAdapter(metadata *metadata.EntityMetadata) *metadataAdapter {
+	adapter := &metadataAdapter{
+		metadata: metadata,
+	}
+
+	// Pre-compute and cache all properties
+	adapter.cachedProperties = make([]response.PropertyMetadata, len(metadata.Properties))
+	for i, p := range metadata.Properties {
+		adapter.cachedProperties[i] = response.PropertyMetadata{
+			Name:              p.Name,
+			JsonName:          p.JsonName,
+			IsNavigationProp:  p.IsNavigationProp,
+			NavigationTarget:  p.NavigationTarget,
+			NavigationIsArray: p.NavigationIsArray,
+		}
+	}
+
+	// Pre-compute and cache key property
+	if metadata.KeyProperty != nil {
+		adapter.cachedKeyProperty = &response.PropertyMetadata{
+			Name:              metadata.KeyProperty.Name,
+			JsonName:          metadata.KeyProperty.JsonName,
+			IsNavigationProp:  metadata.KeyProperty.IsNavigationProp,
+			NavigationTarget:  metadata.KeyProperty.NavigationTarget,
+			NavigationIsArray: metadata.KeyProperty.NavigationIsArray,
+		}
+	}
+
+	// Pre-compute and cache key properties
+	adapter.cachedKeyProperties = make([]response.PropertyMetadata, len(metadata.KeyProperties))
+	for i, p := range metadata.KeyProperties {
+		adapter.cachedKeyProperties[i] = response.PropertyMetadata{
+			Name:              p.Name,
+			JsonName:          p.JsonName,
+			IsNavigationProp:  p.IsNavigationProp,
+			NavigationTarget:  p.NavigationTarget,
+			NavigationIsArray: p.NavigationIsArray,
+		}
+	}
+
+	// Pre-compute and cache ETag property
+	if metadata.ETagProperty != nil {
+		adapter.cachedETagProperty = &response.PropertyMetadata{
+			Name:              metadata.ETagProperty.Name,
+			JsonName:          metadata.ETagProperty.JsonName,
+			IsNavigationProp:  metadata.ETagProperty.IsNavigationProp,
+			NavigationTarget:  metadata.ETagProperty.NavigationTarget,
+			NavigationIsArray: metadata.ETagProperty.NavigationIsArray,
+		}
+	}
+
+	return adapter
 }
 
 func (a *metadataAdapter) GetProperties() []response.PropertyMetadata {
-	props := make([]response.PropertyMetadata, len(a.metadata.Properties))
-	for i, p := range a.metadata.Properties {
-		props[i] = response.PropertyMetadata{
-			Name:              p.Name,
-			JsonName:          p.JsonName,
-			IsNavigationProp:  p.IsNavigationProp,
-			NavigationTarget:  p.NavigationTarget,
-			NavigationIsArray: p.NavigationIsArray,
-		}
-	}
-	return props
+	// Return cached properties - no allocation needed
+	return a.cachedProperties
 }
 
 func (a *metadataAdapter) GetKeyProperty() *response.PropertyMetadata {
-	if a.metadata.KeyProperty == nil {
-		return nil
-	}
-	return &response.PropertyMetadata{
-		Name:              a.metadata.KeyProperty.Name,
-		JsonName:          a.metadata.KeyProperty.JsonName,
-		IsNavigationProp:  a.metadata.KeyProperty.IsNavigationProp,
-		NavigationTarget:  a.metadata.KeyProperty.NavigationTarget,
-		NavigationIsArray: a.metadata.KeyProperty.NavigationIsArray,
-	}
+	// Return cached key property
+	return a.cachedKeyProperty
 }
 
 func (a *metadataAdapter) GetKeyProperties() []response.PropertyMetadata {
-	props := make([]response.PropertyMetadata, len(a.metadata.KeyProperties))
-	for i, p := range a.metadata.KeyProperties {
-		props[i] = response.PropertyMetadata{
-			Name:              p.Name,
-			JsonName:          p.JsonName,
-			IsNavigationProp:  p.IsNavigationProp,
-			NavigationTarget:  p.NavigationTarget,
-			NavigationIsArray: p.NavigationIsArray,
-		}
-	}
-	return props
+	// Return cached key properties - no allocation needed
+	return a.cachedKeyProperties
 }
 
 func (a *metadataAdapter) GetEntitySetName() string {
@@ -443,16 +478,8 @@ func (a *metadataAdapter) GetEntitySetName() string {
 }
 
 func (a *metadataAdapter) GetETagProperty() *response.PropertyMetadata {
-	if a.metadata.ETagProperty == nil {
-		return nil
-	}
-	return &response.PropertyMetadata{
-		Name:              a.metadata.ETagProperty.Name,
-		JsonName:          a.metadata.ETagProperty.JsonName,
-		IsNavigationProp:  a.metadata.ETagProperty.IsNavigationProp,
-		NavigationTarget:  a.metadata.ETagProperty.NavigationTarget,
-		NavigationIsArray: a.metadata.ETagProperty.NavigationIsArray,
-	}
+	// Return cached ETag property
+	return a.cachedETagProperty
 }
 
 // ValidateODataVersion checks if the OData-MaxVersion header is compatible with OData v4.0
