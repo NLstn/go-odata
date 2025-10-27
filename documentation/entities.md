@@ -119,6 +119,7 @@ GET /OrderItems(OrderID=1,ProductID=5)
 | `nullable=false` | Explicitly marks the field as non-nullable | `odata:"nullable=false"` |
 | `searchable` | Marks field as searchable for `$search` queries | `odata:"searchable"` |
 | `fuzziness=N` | Sets fuzzy matching tolerance for search (1=exact, 2+=fuzzy) | `odata:"searchable,fuzziness=2"` |
+| `similarity=X` | Sets similarity score threshold for search (0.0-1.0, where 0.95=95% similar) | `odata:"searchable,similarity=0.8"` |
 
 ### JSON Tags
 
@@ -189,7 +190,9 @@ type Product struct {
 }
 ```
 
-Configure fuzzy matching tolerance:
+### Fuzzy Matching
+
+Configure fuzzy matching tolerance using the `fuzziness` parameter:
 
 ```go
 type Product struct {
@@ -198,3 +201,42 @@ type Product struct {
     Tags  string `odata:"searchable,fuzziness=3"`  // 2 char differences allowed
 }
 ```
+
+The fuzziness value determines how many character differences are allowed when matching:
+- `fuzziness=1`: Exact substring match (default)
+- `fuzziness=2`: Allows 1 character difference
+- `fuzziness=3`: Allows 2 character differences
+
+### Similarity-Based Matching
+
+Configure similarity-based matching using the `similarity` parameter (value between 0.0 and 1.0):
+
+```go
+type User struct {
+    ID       int    `json:"ID" odata:"key"`
+    Name     string `odata:"searchable,similarity=0.8"`   // Must be at least 80% similar
+    Email    string `odata:"searchable,similarity=0.9"`   // Must be at least 90% similar
+    Username string `odata:"searchable,similarity=0.95"`  // Must be at least 95% similar
+}
+```
+
+The similarity value represents the minimum similarity threshold:
+- `similarity=0.95`: Field must be at least 95% similar to the search term
+- `similarity=0.8`: Field must be at least 80% similar to the search term
+- Similarity is calculated using normalized Levenshtein distance
+
+**Important**: A field cannot have both `fuzziness` and `similarity` defined. You must choose one or the other. An error will be raised at startup if both are specified for the same field.
+
+```go
+// ❌ INVALID - Cannot use both fuzziness and similarity
+type Product struct {
+    Name string `odata:"searchable,fuzziness=2,similarity=0.8"`  // Error!
+}
+
+// ✅ VALID - Use either fuzziness or similarity
+type Product struct {
+    Name  string `odata:"searchable,fuzziness=2"`    // OK
+    Email string `odata:"searchable,similarity=0.9"`  // OK
+}
+```
+

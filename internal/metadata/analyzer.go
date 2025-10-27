@@ -292,13 +292,8 @@ func extractReferentialConstraints(gormTag string) map[string]string {
 // analyzeODataTags processes OData-specific tags on a field
 func analyzeODataTags(property *PropertyMetadata, field reflect.StructField, metadata *EntityMetadata) {
 	if odataTag := field.Tag.Get("odata"); odataTag != "" {
-		// Check if both fuzziness and similarity are defined in the same tag
-		hasFuzziness := strings.Contains(odataTag, "fuzziness=")
+		// Check if similarity is defined in the tag to avoid setting default fuzziness
 		hasSimilarity := strings.Contains(odataTag, "similarity=")
-		if hasFuzziness && hasSimilarity {
-			// This will be caught in validation, but we can note it here
-			// For now, we'll let the validation in AnalyzeEntity handle it
-		}
 		
 		// Parse tag as comma-separated key-value pairs
 		parts := strings.Split(odataTag, ",")
