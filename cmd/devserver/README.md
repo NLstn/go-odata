@@ -10,12 +10,12 @@ The devserver supports two database backends:
 
 SQLite is the default database and requires no additional configuration.
 
-**Run with in-memory SQLite (default):**
+**Run with file-based SQLite (default):**
 ```bash
 go run .
 ```
 
-**Run with file-based SQLite:**
+**Run with custom SQLite file:**
 ```bash
 go run . -db sqlite -dsn /path/to/database.db
 ```
@@ -39,18 +39,18 @@ go run . -db postgres
 
 - `-db` - Database type: `sqlite` (default) or `postgres`
 - `-dsn` - Database connection string (DSN)
-  - For SQLite: file path or `:memory:` (default)
+  - For SQLite: file path (defaults to `/tmp/go-odata-dev.db`)
   - For PostgreSQL: full PostgreSQL connection string
   - If not provided for PostgreSQL, falls back to `DATABASE_URL` environment variable
 
 ## Examples
 
-### Example 1: In-memory SQLite (quickest start)
+### Example 1: File-based SQLite (default)
 ```bash
 go run .
 ```
 
-### Example 2: File-based SQLite
+### Example 2: Custom SQLite file
 ```bash
 go run . -db sqlite -dsn ./devserver.db
 ```

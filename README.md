@@ -54,7 +54,7 @@ type Product struct {
 
 func main() {
     // Initialize database
-    db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+    db, err := gorm.Open(sqlite.Open("test.db"), &gorm.Config{})
     if err != nil {
         log.Fatal(err)
     }

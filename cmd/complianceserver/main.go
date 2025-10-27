@@ -20,7 +20,7 @@ var Db *gorm.DB
 func main() {
 	// Parse command-line flags
 	dbType := flag.String("db", "sqlite", "Database type: sqlite or postgres")
-	dbDSN := flag.String("dsn", "", "Database DSN (connection string). For postgres, use postgresql://... format. For sqlite, use file path or :memory:")
+	dbDSN := flag.String("dsn", "", "Database DSN (connection string). For postgres, use postgresql://... format. For sqlite, use file path")
 	port := flag.String("port", "9090", "Port to listen on")
 	flag.Parse()
 
@@ -29,7 +29,7 @@ func main() {
 
 	switch *dbType {
 	case "sqlite":
-		dsn := ":memory:"
+		dsn := "/tmp/go-odata-compliance.db"
 		if *dbDSN != "" {
 			dsn = *dbDSN
 		}
@@ -38,6 +38,7 @@ func main() {
 		if err != nil {
 			log.Fatal("Failed to connect to SQLite database:", err)
 		}
+
 		fmt.Println("📦 Using SQLite database:", dsn)
 
 	case "postgres":
