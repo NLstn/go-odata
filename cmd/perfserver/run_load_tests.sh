@@ -75,6 +75,14 @@ cleanup() {
     if [ -n "$TMP_SERVER_DIR" ] && [ -d "$TMP_SERVER_DIR" ]; then
         rm -rf "$TMP_SERVER_DIR"
     fi
+    
+    # Clean up temporary SQLite database file
+    if [ "$DB_TYPE" = "sqlite" ] && [ -n "$DB_DSN" ] && [[ "$DB_DSN" == /tmp/* ]]; then
+        if [ -f "$DB_DSN" ]; then
+            echo "Cleaning up temporary SQLite database: $DB_DSN"
+            rm -f "$DB_DSN"
+        fi
+    fi
 }
 
 # Register cleanup function to run on exit
@@ -156,9 +164,10 @@ start_server() {
         fi
         DB_ARGS=( -db postgres -dsn "$DB_DSN" )
     else
-        # sqlite by default; use :memory: unless a DSN was provided
+        # sqlite by default; use file-based DB for load testing (better performance)
         if [ -z "$DB_DSN" ]; then
-            DB_DSN=":memory:"
+            DB_DSN="/tmp/perfserver-loadtest-$$.db"
+            echo "📁 Using file-based SQLite database: $DB_DSN"
         fi
         DB_ARGS=( -db sqlite -dsn "$DB_DSN" )
     fi
@@ -232,6 +241,9 @@ main() {
     echo -e "  Database: ${GREEN}${DB_TYPE}${DB_DSN:+ (dsn provided)}${NC}"
     echo ""
     
+    # Create output directory if it doesn't exist
+    mkdir -p "$OUTPUT_DIR"
+    
     # Start server if not using external server
     if [ $EXTERNAL_SERVER -eq 0 ]; then
         start_server
@@ -246,7 +258,7 @@ main() {
             echo "Error: Cannot connect to server at $SERVER_URL"
             echo "Please ensure the perfserver is running:"
             echo "  cd cmd/perfserver"
-            echo "  go run . -db sqlite -dsn :memory:"
+            echo "  go run ."
             exit 1
         fi
         echo ""
@@ -268,48 +280,52 @@ main() {
     print_header "Test 3: Categories (Simple Collection)"
     run_test "categories" "${SERVER_URL}/Categories"
     
-    # Test 4: Large Entity Collection
-    print_header "Test 4: Products (Large Collection)"
-    run_test "products" "${SERVER_URL}/Products"
+    # Test 4: Products with Pagination (Realistic Query)
+    print_header "Test 4: Products with Top 100 (Realistic Page Size)"
+    run_test "products_top100" "${SERVER_URL}/Products?\$top=100"
     
-    # Test 5: Filtering
-    print_header "Test 5: Filter Query"
-    run_test "filter" "${SERVER_URL}/Products?\$filter=Price%20gt%20500"
+    # Test 5: Products with Pagination (Larger Page)
+    print_header "Test 5: Products with Top 500"
+    run_test "products_top500" "${SERVER_URL}/Products?\$top=500"
     
-    # Test 6: Ordering
-    print_header "Test 6: OrderBy Query"
-    run_test "orderby" "${SERVER_URL}/Products?\$orderby=Price%20desc"
+    # Test 6: Filtering
+    print_header "Test 6: Filter Query with Top"
+    run_test "filter" "${SERVER_URL}/Products?\$filter=Price%20gt%20500&\$top=100"
     
-    # Test 7: Pagination
-    print_header "Test 7: Top and Skip"
+    # Test 7: Ordering
+    print_header "Test 7: OrderBy Query with Top"
+    run_test "orderby" "${SERVER_URL}/Products?\$orderby=Price%20desc&\$top=100"
+    
+    # Test 8: Pagination
+    print_header "Test 8: Top and Skip"
     run_test "pagination" "${SERVER_URL}/Products?\$top=100&\$skip=1000"
     
-    # Test 8: Select
-    print_header "Test 8: Select Specific Fields"
-    run_test "select" "${SERVER_URL}/Products?\$select=ID,Name,Price"
+    # Test 9: Select
+    print_header "Test 9: Select Specific Fields"
+    run_test "select" "${SERVER_URL}/Products?\$select=ID,Name,Price&\$top=100"
     
-    # Test 9: Expand (Relationship)
-    print_header "Test 9: Expand Navigation Property"
-    run_test "expand" "${SERVER_URL}/Products?\$expand=Category"
+    # Test 10: Expand (Relationship)
+    print_header "Test 10: Expand Navigation Property"
+    run_test "expand" "${SERVER_URL}/Products?\$expand=Category&\$top=50"
     
-    # Test 10: Complex Query
-    print_header "Test 10: Complex Query (Filter + OrderBy + Top + Expand)"
+    # Test 11: Complex Query
+    print_header "Test 11: Complex Query (Filter + OrderBy + Top + Expand)"
     run_test "complex" "${SERVER_URL}/Products?\$filter=Price%20gt%20100&\$orderby=Price%20desc&\$top=50&\$expand=Category"
     
-    # Test 11: Count
-    print_header "Test 11: Count with Filter"
+    # Test 12: Count
+    print_header "Test 12: Count with Filter"
     run_test "count" "${SERVER_URL}/Products/\$count?\$filter=Price%20lt%20200"
     
-    # Test 12: Single Entity by Key
-    print_header "Test 12: Single Entity Lookup"
+    # Test 13: Single Entity by Key
+    print_header "Test 13: Single Entity Lookup"
     run_test "single_entity" "${SERVER_URL}/Products(1)"
     
-    # Test 13: Singleton
-    print_header "Test 13: Singleton Access"
+    # Test 14: Singleton
+    print_header "Test 14: Singleton Access"
     run_test "singleton" "${SERVER_URL}/Company"
     
-    # Test 14: Apply/Aggregation
-    print_header "Test 14: Apply with GroupBy and Aggregate"
+    # Test 15: Apply/Aggregation
+    print_header "Test 15: Apply with GroupBy and Aggregate"
     run_test "apply" "${SERVER_URL}/Products?\$apply=groupby((CategoryID),aggregate(Price%20with%20average%20as%20AvgPrice))"
     
     # End timestamp

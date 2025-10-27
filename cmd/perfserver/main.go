@@ -24,7 +24,7 @@ var Db *gorm.DB
 func main() {
 	// Parse command-line flags
 	dbType := flag.String("db", "sqlite", "Database type: sqlite or postgres")
-	dbDSN := flag.String("dsn", "", "Database DSN (connection string). For postgres, use postgresql://... format. For sqlite, use file path or :memory:")
+	dbDSN := flag.String("dsn", "", "Database DSN (connection string). For postgres, use postgresql://... format. For sqlite, use file path")
 	port := flag.String("port", "9091", "Port to listen on")
 	cpuProfile := flag.String("cpuprofile", "", "Write CPU profile to file")
 	traceSQL := flag.Bool("trace-sql", false, "Enable SQL query tracing and optimization analysis")
@@ -90,7 +90,7 @@ func main() {
 
 	switch *dbType {
 	case "sqlite":
-		dsn := ":memory:"
+		dsn := "/tmp/go-odata-perf.db"
 		if *dbDSN != "" {
 			dsn = *dbDSN
 		}
@@ -104,6 +104,7 @@ func main() {
 		if err != nil {
 			log.Fatal("Failed to connect to SQLite database:", err)
 		}
+
 		fmt.Println("📦 Using SQLite database:", dsn)
 
 	case "postgres":

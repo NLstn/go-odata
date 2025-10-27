@@ -8,7 +8,7 @@
             "options": {
                 "cwd": "${workspaceFolder}",
                 "env": {
-                    "DB_ARGS": "-db sqlite -dsn :memory:"
+                    "DB_ARGS": "-db sqlite -dsn /tmp/go-odata-dev.db"
                 }
             },
             "group": "build",
