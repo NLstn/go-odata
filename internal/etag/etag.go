@@ -78,7 +78,7 @@ func generateFromMap(entity interface{}, meta *metadata.EntityMetadata) string {
 	if meta.ETagProperty.JsonName != "" {
 		fieldValue, found = entityMap[meta.ETagProperty.JsonName]
 	}
-	
+
 	// If not found, try FieldName
 	if !found && meta.ETagProperty.FieldName != "" {
 		fieldValue, found = entityMap[meta.ETagProperty.FieldName]

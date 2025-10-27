@@ -63,15 +63,15 @@ func (h *EntityHandler) callAfterDelete(entity interface{}, r *http.Request) err
 // It tries both value and pointer receivers
 func callHook(entity interface{}, methodName string, r *http.Request) error {
 	ctx := r.Context()
-	
+
 	// Get the value and type
 	entityValue := reflect.ValueOf(entity)
-	
+
 	// If entity is a pointer, get the element
 	if entityValue.Kind() == reflect.Ptr {
 		entityValue = entityValue.Elem()
 	}
-	
+
 	// Try to call the method on the value receiver first
 	method := entityValue.MethodByName(methodName)
 	if !method.IsValid() {
@@ -79,26 +79,26 @@ func callHook(entity interface{}, methodName string, r *http.Request) error {
 		ptrValue := entityValue.Addr()
 		method = ptrValue.MethodByName(methodName)
 	}
-	
+
 	if !method.IsValid() {
 		// Method not found (shouldn't happen if metadata.Hooks is correct)
 		return nil
 	}
-	
+
 	// Call the method with context and request
 	args := []reflect.Value{
 		reflect.ValueOf(ctx),
 		reflect.ValueOf(r),
 	}
-	
+
 	results := method.Call(args)
-	
+
 	// Check if the method returned an error
 	if len(results) > 0 {
 		if err, ok := results[0].Interface().(error); ok {
 			return err
 		}
 	}
-	
+
 	return nil
 }

@@ -662,4 +662,3 @@ func TestSimilarityMatch(t *testing.T) {
 		})
 	}
 }
-

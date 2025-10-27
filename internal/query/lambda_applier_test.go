@@ -10,17 +10,17 @@ import (
 
 // TestProduct is a test entity for lambda applier tests
 type TestProduct struct {
-	ID           uint                        `json:"ID" gorm:"primaryKey" odata:"key"`
-	Name         string                      `json:"Name"`
-	Price        float64                     `json:"Price"`
-	Descriptions []TestProductDescription    `json:"Descriptions" gorm:"foreignKey:TestProductID;references:ID"`
+	ID           uint                     `json:"ID" gorm:"primaryKey" odata:"key"`
+	Name         string                   `json:"Name"`
+	Price        float64                  `json:"Price"`
+	Descriptions []TestProductDescription `json:"Descriptions" gorm:"foreignKey:TestProductID;references:ID"`
 }
 
 // TestProductDescription is a test entity for lambda applier tests
 type TestProductDescription struct {
-	TestProductID uint   `json:"TestProductID" gorm:"primaryKey;column:test_product_id"`
-	LanguageKey   string `json:"LanguageKey" gorm:"primaryKey;size:2"`
-	Description   string `json:"Description"`
+	TestProductID uint         `json:"TestProductID" gorm:"primaryKey;column:test_product_id"`
+	LanguageKey   string       `json:"LanguageKey" gorm:"primaryKey;size:2"`
+	Description   string       `json:"Description"`
 	Product       *TestProduct `gorm:"foreignKey:TestProductID;references:ID"`
 }
 

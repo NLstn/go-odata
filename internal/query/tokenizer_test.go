@@ -426,4 +426,3 @@ func TestTokenizerQualifiedTypeNames(t *testing.T) {
 		})
 	}
 }
-

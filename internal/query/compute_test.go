@@ -138,10 +138,10 @@ func TestCompute_MultipleExpressions(t *testing.T) {
 	meta := getTestMetadata(t)
 
 	tests := []struct {
-		name           string
-		compute        string
-		expectErr      bool
-		expectedCount  int
+		name          string
+		compute       string
+		expectErr     bool
+		expectedCount int
 	}{
 		{
 			name:          "two computed properties",
@@ -179,7 +179,7 @@ func TestCompute_MultipleExpressions(t *testing.T) {
 			}
 
 			if len(result.Compute.Expressions) != tt.expectedCount {
-				t.Errorf("Expected %d expressions, got %d", 
+				t.Errorf("Expected %d expressions, got %d",
 					tt.expectedCount, len(result.Compute.Expressions))
 			}
 		})
@@ -438,5 +438,3 @@ func TestCompute_ParseFromQueryOptions(t *testing.T) {
 		})
 	}
 }
-
-

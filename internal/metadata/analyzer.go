@@ -294,7 +294,7 @@ func analyzeODataTags(property *PropertyMetadata, field reflect.StructField, met
 	if odataTag := field.Tag.Get("odata"); odataTag != "" {
 		// Check if similarity is defined in the tag to avoid setting default fuzziness
 		hasSimilarity := strings.Contains(odataTag, "similarity=")
-		
+
 		// Parse tag as comma-separated key-value pairs
 		parts := strings.Split(odataTag, ",")
 		for _, part := range parts {
