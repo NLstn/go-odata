@@ -51,8 +51,9 @@ type PropertyMetadata struct {
 	// Referential constraints for navigation properties
 	ReferentialConstraints map[string]string // Maps dependent property to principal property
 	// Search properties
-	IsSearchable    bool // True if this property should be considered in $search
-	SearchFuzziness int  // Fuzziness level for search (default 1, meaning exact match)
+	IsSearchable     bool    // True if this property should be considered in $search
+	SearchFuzziness  int     // Fuzziness level for search (default 1, meaning exact match)
+	SearchSimilarity float64 // Similarity score for search (0.0 to 1.0, where 0.95 means 95% similar)
 	// Enum properties
 	IsEnum       bool   // True if this property is an enum type
 	EnumTypeName string // Name of the enum type (for metadata generation)
@@ -95,6 +96,17 @@ func AnalyzeEntity(entity interface{}) (*EntityMetadata, error) {
 	// Validate that we have at least one key property
 	if len(metadata.KeyProperties) == 0 {
 		return nil, fmt.Errorf("entity %s must have at least one key property (use `odata:\"key\"` tag or name field 'ID')", metadata.EntityName)
+	}
+
+	// Validate that no field has both fuzziness and similarity defined
+	for _, prop := range metadata.Properties {
+		if prop.SearchFuzziness > 0 && prop.SearchSimilarity > 0 {
+			return nil, fmt.Errorf("property %s cannot have both fuzziness and similarity defined; use one or the other", prop.Name)
+		}
+		// Validate similarity range (0.0 to 1.0) - only check if similarity was set (non-zero)
+		if prop.SearchSimilarity != 0 && (prop.SearchSimilarity < 0.0 || prop.SearchSimilarity > 1.0) {
+			return nil, fmt.Errorf("property %s has invalid similarity value %.2f; must be between 0.0 and 1.0", prop.Name, prop.SearchSimilarity)
+		}
 	}
 
 	// For backwards compatibility, set KeyProperty to first key if only one key exists
@@ -280,11 +292,19 @@ func extractReferentialConstraints(gormTag string) map[string]string {
 // analyzeODataTags processes OData-specific tags on a field
 func analyzeODataTags(property *PropertyMetadata, field reflect.StructField, metadata *EntityMetadata) {
 	if odataTag := field.Tag.Get("odata"); odataTag != "" {
+		// Check if both fuzziness and similarity are defined in the same tag
+		hasFuzziness := strings.Contains(odataTag, "fuzziness=")
+		hasSimilarity := strings.Contains(odataTag, "similarity=")
+		if hasFuzziness && hasSimilarity {
+			// This will be caught in validation, but we can note it here
+			// For now, we'll let the validation in AnalyzeEntity handle it
+		}
+		
 		// Parse tag as comma-separated key-value pairs
 		parts := strings.Split(odataTag, ",")
 		for _, part := range parts {
 			part = strings.TrimSpace(part)
-			processODataTagPart(property, part, metadata)
+			processODataTagPart(property, part, metadata, hasSimilarity)
 		}
 	}
 
@@ -296,7 +316,7 @@ func analyzeODataTags(property *PropertyMetadata, field reflect.StructField, met
 }
 
 // processODataTagPart processes a single OData tag part
-func processODataTagPart(property *PropertyMetadata, part string, metadata *EntityMetadata) {
+func processODataTagPart(property *PropertyMetadata, part string, metadata *EntityMetadata, hasSimilarity bool) {
 	switch {
 	case part == "key":
 		property.IsKey = true
@@ -322,14 +342,20 @@ func processODataTagPart(property *PropertyMetadata, part string, metadata *Enti
 		property.Nullable = &nullable
 	case part == "searchable":
 		property.IsSearchable = true
-		// Default fuzziness is 1 (exact match)
-		if property.SearchFuzziness == 0 {
+		// Default fuzziness is 1 (exact match) only if similarity is not going to be set
+		if property.SearchFuzziness == 0 && !hasSimilarity {
 			property.SearchFuzziness = 1
 		}
 	case strings.HasPrefix(part, "fuzziness="):
 		processIntFacet(part, "fuzziness=", &property.SearchFuzziness)
 		// If fuzziness is set, also mark as searchable
 		if property.SearchFuzziness > 0 {
+			property.IsSearchable = true
+		}
+	case strings.HasPrefix(part, "similarity="):
+		processFloatFacet(part, "similarity=", &property.SearchSimilarity)
+		// If similarity is set, also mark as searchable
+		if property.SearchSimilarity > 0 {
 			property.IsSearchable = true
 		}
 	case strings.HasPrefix(part, "enum="):
@@ -350,6 +376,15 @@ func processODataTagPart(property *PropertyMetadata, part string, metadata *Enti
 func processIntFacet(part, prefix string, target *int) {
 	if val := strings.TrimPrefix(part, prefix); val != "" {
 		if parsed, err := parseInt(val); err == nil {
+			*target = parsed
+		}
+	}
+}
+
+// processFloatFacet processes a float facet from an OData tag
+func processFloatFacet(part, prefix string, target *float64) {
+	if val := strings.TrimPrefix(part, prefix); val != "" {
+		if parsed, err := parseFloat(val); err == nil {
 			*target = parsed
 		}
 	}
@@ -451,6 +486,13 @@ func hasMethod(t reflect.Type, methodName string) bool {
 func parseInt(s string) (int, error) {
 	var result int
 	_, err := fmt.Sscanf(s, "%d", &result)
+	return result, err
+}
+
+// parseFloat parses a string to a float64
+func parseFloat(s string) (float64, error) {
+	var result float64
+	_, err := fmt.Sscanf(s, "%f", &result)
 	return result, err
 }
 
