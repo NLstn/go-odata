@@ -16,8 +16,8 @@ import (
 
 // TestEntity is a test entity with lifecycle hooks
 type TestEntity struct {
-	ID            uint   `json:"ID" gorm:"primaryKey" odata:"key"`
-	Name          string `json:"Name"`
+	ID                 uint   `json:"ID" gorm:"primaryKey" odata:"key"`
+	Name               string `json:"Name"`
 	BeforeCreateCalled bool   `json:"-" gorm:"-"`
 	AfterCreateCalled  bool   `json:"-" gorm:"-"`
 	BeforeUpdateCalled bool   `json:"-" gorm:"-"`

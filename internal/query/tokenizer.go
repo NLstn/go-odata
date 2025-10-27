@@ -80,7 +80,7 @@ func (t *Tokenizer) skipWhitespace() {
 }
 
 // readString reads a quoted string
-// Per OData v4 spec, single quotes within string literals are escaped by doubling them ('')
+// Per OData v4 spec, single quotes within string literals are escaped by doubling them (”)
 func (t *Tokenizer) readString() string {
 	quote := t.ch
 	t.advance() // skip opening quote
@@ -173,13 +173,13 @@ func (t *Tokenizer) isDateLiteral() bool {
 	if t.pos+10 > len(t.input) {
 		return false
 	}
-	
+
 	// Check pattern: DDDD-DD-DD
-	str := t.input[t.pos:t.pos+10]
+	str := t.input[t.pos : t.pos+10]
 	if len(str) != 10 {
 		return false
 	}
-	
+
 	// Check for YYYY-MM-DD format
 	for i, ch := range str {
 		if i == 4 || i == 7 {
@@ -192,20 +192,20 @@ func (t *Tokenizer) isDateLiteral() bool {
 			}
 		}
 	}
-	
+
 	return true
 }
 
 // readDateLiteral reads a date literal (YYYY-MM-DD)
 func (t *Tokenizer) readDateLiteral() string {
 	var result strings.Builder
-	
+
 	// Read YYYY-MM-DD (10 characters)
 	for i := 0; i < 10 && t.ch != 0; i++ {
 		result.WriteRune(t.ch)
 		t.advance()
 	}
-	
+
 	return result.String()
 }
 
@@ -215,13 +215,13 @@ func (t *Tokenizer) isTimeLiteral() bool {
 	if t.pos+8 > len(t.input) {
 		return false
 	}
-	
+
 	// Check pattern: DD:DD:DD (minimum)
 	str := t.input[t.pos:]
 	if len(str) < 8 {
 		return false
 	}
-	
+
 	// Check for HH:MM:SS format
 	for i := 0; i < 8; i++ {
 		ch := str[i]
@@ -235,20 +235,20 @@ func (t *Tokenizer) isTimeLiteral() bool {
 			}
 		}
 	}
-	
+
 	return true
 }
 
 // readTimeLiteral reads a time literal (HH:MM:SS or HH:MM:SS.sss)
 func (t *Tokenizer) readTimeLiteral() string {
 	var result strings.Builder
-	
+
 	// Read HH:MM:SS (8 characters)
 	for i := 0; i < 8 && t.ch != 0; i++ {
 		result.WriteRune(t.ch)
 		t.advance()
 	}
-	
+
 	// Read optional fractional seconds (.sss...)
 	if t.ch == '.' {
 		result.WriteRune(t.ch)
@@ -258,7 +258,7 @@ func (t *Tokenizer) readTimeLiteral() string {
 			t.advance()
 		}
 	}
-	
+
 	return result.String()
 }
 
@@ -308,13 +308,13 @@ func (t *Tokenizer) tokenizeNumber(pos int) *Token {
 		value := t.readDateLiteral()
 		return &Token{Type: TokenDate, Value: value, Pos: pos}
 	}
-	
+
 	// Check for time literal (HH:MM:SS)
 	if unicode.IsDigit(t.ch) && t.isTimeLiteral() {
 		value := t.readTimeLiteral()
 		return &Token{Type: TokenTime, Value: value, Pos: pos}
 	}
-	
+
 	// Otherwise parse as number
 	if unicode.IsDigit(t.ch) || (t.ch == '-' && unicode.IsDigit(t.peek())) {
 		value := t.readNumber()

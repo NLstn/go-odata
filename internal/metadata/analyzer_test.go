@@ -501,8 +501,8 @@ func TestSearchSimilarityValidation(t *testing.T) {
 
 	t.Run("both fuzziness and similarity defined", func(t *testing.T) {
 		type InvalidEntity struct {
-			ID    int    `json:"id" odata:"key"`
-			Name  string `json:"name" odata:"searchable,fuzziness=2,similarity=0.95"`
+			ID   int    `json:"id" odata:"key"`
+			Name string `json:"name" odata:"searchable,fuzziness=2,similarity=0.95"`
 		}
 
 		_, err := AnalyzeEntity(InvalidEntity{})
@@ -574,4 +574,3 @@ func TestSearchSimilarityValidation(t *testing.T) {
 		}
 	})
 }
-

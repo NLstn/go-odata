@@ -887,4 +887,3 @@ func TestSkipTokenPreservesQueryOptions(t *testing.T) {
 		t.Errorf("Expected nextLink to preserve $top, got: %s", nextLink)
 	}
 }
-

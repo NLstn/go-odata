@@ -256,9 +256,9 @@ func TestIsAcceptableFormatWithMetadata(t *testing.T) {
 // TestGetFormatParameter tests the getFormatParameter helper function
 func TestGetFormatParameter(t *testing.T) {
 	tests := []struct {
-		name      string
-		rawQuery  string
-		expected  string
+		name     string
+		rawQuery string
+		expected string
 	}{
 		{
 			name:     "Empty query string",
