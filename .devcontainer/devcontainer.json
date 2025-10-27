@@ -28,20 +28,27 @@
 			},
 			"extensions": [
 				"golang.go",
-				"github.copilot",
-				"eamodio.gitlens"
+				"github.copilot"
 			]
 		}
 	},
-	"postCreateCommand": "go mod download && curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.5.0 && go install github.com/air-verse/air@latest",
+	"postCreateCommand": "bash .devcontainer/setup.sh",
 	"remoteUser": "vscode",
 	"forwardPorts": [
 		8080
 	],
 	"portsAttributes": {
 		"8080": {
-			"label": "OData Dev Server",
-			"onAutoForward": "notify"
+			"label": "Dev Server",
+			"onAutoForward": "ignore"
+		},
+		"9090": {
+			"label": "Compliance Server",
+			"onAutoForward": "ignore"
+		},
+		"9091": {
+			"label": "Perf Server",
+			"onAutoForward": "ignore"
 		}
 	}
 }
