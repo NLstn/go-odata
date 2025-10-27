@@ -2,6 +2,7 @@ package response
 
 import (
 	"encoding/json"
+	"unicode/utf8"
 )
 
 // OrderedMap maintains insertion order of keys
@@ -13,8 +14,16 @@ type OrderedMap struct {
 // NewOrderedMap creates a new OrderedMap
 func NewOrderedMap() *OrderedMap {
 	return &OrderedMap{
-		keys:   make([]string, 0),
-		values: make(map[string]interface{}),
+		keys:   make([]string, 0, 8), // Pre-allocate for typical entity size
+		values: make(map[string]interface{}, 8),
+	}
+}
+
+// NewOrderedMapWithCapacity creates a new OrderedMap with pre-allocated capacity
+func NewOrderedMapWithCapacity(capacity int) *OrderedMap {
+	return &OrderedMap{
+		keys:   make([]string, 0, capacity),
+		values: make(map[string]interface{}, capacity),
 	}
 }
 
@@ -72,18 +81,38 @@ func (om *OrderedMap) ToMap() map[string]interface{} {
 }
 
 // MarshalJSON implements json.Marshaler to maintain field order
+// Optimized version that pre-allocates buffer and avoids unnecessary marshaling
 func (om *OrderedMap) MarshalJSON() ([]byte, error) {
-	buf := []byte("{")
+	if len(om.keys) == 0 {
+		return []byte("{}"), nil
+	}
+
+	// Estimate buffer size: average 50 bytes per field (key + value + formatting)
+	estimatedSize := len(om.keys) * 50
+	buf := make([]byte, 0, estimatedSize)
+	buf = append(buf, '{')
+
 	for i, key := range om.keys {
 		if i > 0 {
 			buf = append(buf, ',')
 		}
-		// Marshal the key
-		keyBytes, err := json.Marshal(key)
-		if err != nil {
-			return nil, err
+
+		// Optimize for simple string keys (no special characters)
+		// This avoids the overhead of json.Marshal for keys
+		if needsEscaping(key) {
+			// Use json.Marshal for keys that need escaping
+			keyBytes, err := json.Marshal(key)
+			if err != nil {
+				return nil, err
+			}
+			buf = append(buf, keyBytes...)
+		} else {
+			// Fast path: write key directly with quotes
+			buf = append(buf, '"')
+			buf = append(buf, key...)
+			buf = append(buf, '"')
 		}
-		buf = append(buf, keyBytes...)
+
 		buf = append(buf, ':')
 
 		// Marshal the value
@@ -93,6 +122,26 @@ func (om *OrderedMap) MarshalJSON() ([]byte, error) {
 		}
 		buf = append(buf, valueBytes...)
 	}
+
 	buf = append(buf, '}')
 	return buf, nil
+}
+
+// needsEscaping checks if a string needs JSON escaping
+// Returns true if the string contains characters that need escaping
+func needsEscaping(s string) bool {
+	for i := 0; i < len(s); {
+		c := s[i]
+		if c < 0x20 || c == '"' || c == '\\' {
+			return true
+		}
+		if c < utf8.RuneSelf {
+			i++
+			continue
+		}
+		// Multi-byte UTF-8 characters are safe
+		_, size := utf8.DecodeRuneInString(s[i:])
+		i += size
+	}
+	return false
 }
