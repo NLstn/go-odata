@@ -66,6 +66,16 @@ type MissingEnumEntity struct {
 	Value MissingEnum `json:"value" odata:"enum=MissingEnum"`
 }
 
+type PrefixedAddress struct {
+	Street string `json:"street"`
+	City   string `json:"city"`
+}
+
+type PrefixedOrder struct {
+	ID              int              `json:"id" odata:"key"`
+	ShippingAddress *PrefixedAddress `json:"shippingAddress,omitempty" gorm:"embedded;embeddedPrefix:shipping_" odata:"nullable"`
+}
+
 func TestAnalyzeEntity(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -262,6 +272,10 @@ func TestEntityMetadataFinders(t *testing.T) {
 	})
 }
 
+<<<<<<< HEAD
+	}
+}
+
 func TestAnalyzeEntityEnumMembers(t *testing.T) {
 	meta, err := AnalyzeEntity(MethodEnumEntity{})
 	if err != nil {
@@ -286,6 +300,51 @@ func TestAnalyzeEntityEnumMembers(t *testing.T) {
 func TestAnalyzeEntityEnumMissingMembers(t *testing.T) {
 	if _, err := AnalyzeEntity(MissingEnumEntity{}); err == nil {
 		t.Fatalf("expected error for enum without registered members")
+	}
+}
+
+func TestResolvePropertyPathForComplexType(t *testing.T) {
+	meta, err := AnalyzeEntity(PrefixedOrder{})
+	if err != nil {
+		t.Fatalf("AnalyzeEntity(PrefixedOrder) returned error: %v", err)
+	}
+
+	complexProp := meta.FindComplexTypeProperty("ShippingAddress")
+	if complexProp == nil {
+		t.Fatal("expected ShippingAddress to be recognized as complex type")
+	}
+	if complexProp.EmbeddedPrefix != "shipping_" {
+		t.Fatalf("expected embedded prefix 'shipping_', got %q", complexProp.EmbeddedPrefix)
+	}
+
+	if nested := complexProp.FindComplexField("City"); nested == nil {
+		t.Fatal("expected to find nested City property by struct name")
+	}
+	if nested := complexProp.FindComplexField("city"); nested == nil {
+		t.Fatal("expected to find nested City property by json name")
+	}
+
+	resolved, prefix, err := meta.ResolvePropertyPath("ShippingAddress/City")
+	if err != nil {
+		t.Fatalf("ResolvePropertyPath returned error: %v", err)
+	}
+	if prefix != "shipping_" {
+		t.Fatalf("expected prefix 'shipping_', got %q", prefix)
+	}
+	if resolved == nil || resolved.Name != "City" {
+		t.Fatalf("expected resolved property 'City', got %+v", resolved)
+	}
+
+	// Support resolving via json names
+	resolved, prefix, err = meta.ResolvePropertyPath("shippingAddress/city")
+	if err != nil {
+		t.Fatalf("ResolvePropertyPath for json names returned error: %v", err)
+	}
+	if prefix != "shipping_" {
+		t.Fatalf("expected prefix 'shipping_' for json path, got %q", prefix)
+	}
+	if resolved == nil || resolved.JsonName != "city" {
+		t.Fatalf("expected resolved json property 'city', got %+v", resolved)
 	}
 }
 

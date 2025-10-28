@@ -46,6 +46,8 @@ type PropertyMetadata struct {
 	NavigationIsArray bool   // True for collection navigation properties
 	IsETag            bool   // True if this property should be used for ETag generation
 	IsComplexType     bool   // True if this property is a complex type (embedded struct)
+	EmbeddedPrefix    string
+	ComplexTypeFields map[string]*PropertyMetadata
 	// Facets
 	MaxLength    int    // Maximum length for string properties
 	Precision    int    // Precision for decimal/numeric properties
@@ -286,7 +288,50 @@ func analyzeNavigationProperty(property *PropertyMetadata, field reflect.StructF
 		} else if strings.Contains(gormTag, "embedded") {
 			// It's a complex type (embedded struct without foreign keys)
 			property.IsComplexType = true
+			property.EmbeddedPrefix = extractEmbeddedPrefix(gormTag)
+			analyzeComplexTypeFields(property, fieldType)
 		}
+	}
+}
+
+// analyzeComplexTypeFields inspects the fields of an embedded complex type and captures their metadata.
+func analyzeComplexTypeFields(property *PropertyMetadata, fieldType reflect.Type) {
+	if property == nil {
+		return
+	}
+
+	structType := dereferenceType(fieldType)
+	if structType.Kind() != reflect.Struct {
+		return
+	}
+
+	if property.ComplexTypeFields == nil {
+		property.ComplexTypeFields = make(map[string]*PropertyMetadata)
+	}
+
+	for i := 0; i < structType.NumField(); i++ {
+		field := structType.Field(i)
+
+		if !field.IsExported() {
+			continue
+		}
+
+		nestedProp := PropertyMetadata{
+			Name:      field.Name,
+			Type:      field.Type,
+			FieldName: field.Name,
+			JsonName:  getJsonName(field),
+			GormTag:   field.Tag.Get("gorm"),
+		}
+
+		analyzeNavigationProperty(&nestedProp, field)
+		if nestedProp.IsComplexType {
+			nestedProp.EmbeddedPrefix = extractEmbeddedPrefix(nestedProp.GormTag)
+			analyzeComplexTypeFields(&nestedProp, field.Type)
+		}
+
+		property.ComplexTypeFields[nestedProp.Name] = &nestedProp
+		property.ComplexTypeFields[nestedProp.JsonName] = &nestedProp
 	}
 }
 
@@ -317,6 +362,18 @@ func extractReferentialConstraints(gormTag string) map[string]string {
 	}
 
 	return constraints
+}
+
+// extractEmbeddedPrefix extracts the embedded prefix from a GORM tag (embeddedPrefix:<value>).
+func extractEmbeddedPrefix(gormTag string) string {
+	parts := strings.Split(gormTag, ";")
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if strings.HasPrefix(part, "embeddedPrefix:") {
+			return strings.TrimPrefix(part, "embeddedPrefix:")
+		}
+	}
+	return ""
 }
 
 // analyzeODataTags processes OData-specific tags on a field
@@ -663,4 +720,70 @@ func (metadata *EntityMetadata) FindComplexTypeProperty(name string) *PropertyMe
 		return prop
 	}
 	return nil
+}
+
+// ResolvePropertyPath resolves a property path (e.g., "ShippingAddress/City") to the corresponding metadata and embedded prefix.
+// It returns the metadata for the final segment and the concatenated embedded prefix used for database columns.
+func (metadata *EntityMetadata) ResolvePropertyPath(path string) (*PropertyMetadata, string, error) {
+	if metadata == nil {
+		return nil, "", fmt.Errorf("entity metadata is nil")
+	}
+
+	trimmedPath := strings.TrimSpace(path)
+	if trimmedPath == "" {
+		return nil, "", fmt.Errorf("property path cannot be empty")
+	}
+
+	segments := strings.Split(trimmedPath, "/")
+	var currentProp *PropertyMetadata
+	var prefixBuilder strings.Builder
+
+	for i, segment := range segments {
+		segment = strings.TrimSpace(segment)
+		if segment == "" {
+			return nil, "", fmt.Errorf("property path '%s' contains an empty segment", trimmedPath)
+		}
+
+		if i == 0 {
+			currentProp = metadata.FindProperty(segment)
+		} else {
+			if currentProp == nil || !currentProp.IsComplexType {
+				return nil, "", fmt.Errorf("property '%s' is not a complex type in path '%s'", segments[i-1], trimmedPath)
+			}
+			prefixBuilder.WriteString(currentProp.EmbeddedPrefix)
+			currentProp = currentProp.FindComplexField(segment)
+		}
+
+		if currentProp == nil {
+			return nil, "", fmt.Errorf("property '%s' not found in path '%s'", segment, trimmedPath)
+		}
+	}
+
+	return currentProp, prefixBuilder.String(), nil
+}
+
+// FindComplexField returns a nested property within a complex type by either struct field name or JSON name.
+func (property *PropertyMetadata) FindComplexField(name string) *PropertyMetadata {
+	if property == nil || !property.IsComplexType || property.ComplexTypeFields == nil {
+		return nil
+	}
+
+	trimmedName := strings.TrimSpace(name)
+	if trimmedName == "" {
+		return nil
+	}
+
+	if nested, ok := property.ComplexTypeFields[trimmedName]; ok {
+		return nested
+	}
+
+	return nil
+}
+
+// dereferenceType unwraps pointer types to obtain the underlying type.
+func dereferenceType(t reflect.Type) reflect.Type {
+	for t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+	return t
 }
