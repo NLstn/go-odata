@@ -366,7 +366,7 @@ func parseFilterTransformation(transStr string, entityMetadata *metadata.EntityM
 	content = strings.TrimSpace(content)
 
 	// Parse the filter expression
-	filter, err := parseFilter(content, entityMetadata)
+	filter, err := parseFilter(content, entityMetadata, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse filter expression: %w", err)
 	}
@@ -467,7 +467,7 @@ func parseComputeExpression(exprStr string, entityMetadata *metadata.EntityMetad
 
 	// Parse the expression as a filter expression
 	// For simplicity, we'll support basic expressions for now
-	expression, err := parseFilter(expressionStr, entityMetadata)
+	expression, err := parseFilter(expressionStr, entityMetadata, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse compute expression: %w", err)
 	}

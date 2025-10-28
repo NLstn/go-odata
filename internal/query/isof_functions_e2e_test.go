@@ -131,7 +131,7 @@ func TestIsOfFunctions_EndToEnd(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			filterExpr, err := parseFilter(tt.filter, meta)
+			filterExpr, err := parseFilter(tt.filter, meta, nil)
 			if (err != nil) != tt.expectErr {
 				t.Fatalf("Expected error: %v, got: %v", tt.expectErr, err)
 			}

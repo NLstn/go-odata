@@ -214,8 +214,11 @@ func ParseQueryOptions(queryParams url.Values, entityMetadata *metadata.EntityMe
 		return nil, err
 	}
 
+	// Extract computed aliases early for use in $orderby and $filter validation
+	computedAliases := extractAllComputedAliases(queryParams)
+
 	// Parse each query option
-	if err := parseFilterOption(queryParams, entityMetadata, options); err != nil {
+	if err := parseFilterOption(queryParams, entityMetadata, options, computedAliases); err != nil {
 		return nil, err
 	}
 
@@ -227,7 +230,7 @@ func ParseQueryOptions(queryParams url.Values, entityMetadata *metadata.EntityMe
 		return nil, err
 	}
 
-	if err := parseOrderByOption(queryParams, entityMetadata, options); err != nil {
+	if err := parseOrderByOption(queryParams, entityMetadata, options, computedAliases); err != nil {
 		return nil, err
 	}
 
@@ -270,9 +273,9 @@ func ParseQueryOptions(queryParams url.Values, entityMetadata *metadata.EntityMe
 }
 
 // parseFilterOption parses the $filter query parameter
-func parseFilterOption(queryParams url.Values, entityMetadata *metadata.EntityMetadata, options *QueryOptions) error {
+func parseFilterOption(queryParams url.Values, entityMetadata *metadata.EntityMetadata, options *QueryOptions, computedAliases map[string]bool) error {
 	if filterStr := queryParams.Get("$filter"); filterStr != "" {
-		filter, err := parseFilter(filterStr, entityMetadata)
+		filter, err := parseFilter(filterStr, entityMetadata, computedAliases)
 		if err != nil {
 			return fmt.Errorf("invalid $filter: %w", err)
 		}
@@ -353,6 +356,29 @@ func extractComputeAliasesFromString(computeStr string) map[string]bool {
 	return aliases
 }
 
+// extractAllComputedAliases extracts all computed property aliases from $compute and $apply query parameters
+func extractAllComputedAliases(queryParams url.Values) map[string]bool {
+	computedAliases := make(map[string]bool)
+
+	// Check for standalone $compute parameter
+	if computeStr := queryParams.Get("$compute"); computeStr != "" {
+		aliases := extractComputeAliasesFromString(computeStr)
+		for alias := range aliases {
+			computedAliases[alias] = true
+		}
+	}
+
+	// Check for compute within $apply
+	if applyStr := queryParams.Get("$apply"); applyStr != "" {
+		aliases := extractComputedAliases(applyStr)
+		for alias := range aliases {
+			computedAliases[alias] = true
+		}
+	}
+
+	return computedAliases
+}
+
 // extractComputedAliases extracts aliases from $compute expressions in $apply
 func extractComputedAliases(applyStr string) map[string]bool {
 	aliases := make(map[string]bool)
@@ -406,9 +432,9 @@ func parseExpandOption(queryParams url.Values, entityMetadata *metadata.EntityMe
 }
 
 // parseOrderByOption parses the $orderby query parameter
-func parseOrderByOption(queryParams url.Values, entityMetadata *metadata.EntityMetadata, options *QueryOptions) error {
+func parseOrderByOption(queryParams url.Values, entityMetadata *metadata.EntityMetadata, options *QueryOptions, computedAliases map[string]bool) error {
 	if orderByStr := queryParams.Get("$orderby"); orderByStr != "" {
-		orderBy, err := parseOrderBy(orderByStr, entityMetadata)
+		orderBy, err := parseOrderBy(orderByStr, entityMetadata, computedAliases)
 		if err != nil {
 			return fmt.Errorf("invalid $orderby: %w", err)
 		}
