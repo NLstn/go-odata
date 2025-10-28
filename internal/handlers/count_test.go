@@ -22,18 +22,24 @@ func TestEntityHandlerCount(t *testing.T) {
 	}
 
 	tests := []struct {
-		name           string
-		url            string
-		expectedStatus int
-		expectedCount  string
-		expectedType   string
+		name             string
+		url              string
+		expectedStatus   int
+		expectedCount    string
+		expectedType     string
+		ensurePlainText  bool
+		maxBodyLength    int
+		forbidJSONPrefix bool
 	}{
 		{
-			name:           "Basic count",
-			url:            "/Products/$count",
-			expectedStatus: http.StatusOK,
-			expectedCount:  "5",
-			expectedType:   "text/plain",
+			name:             "Basic count",
+			url:              "/Products/$count",
+			expectedStatus:   http.StatusOK,
+			expectedCount:    "5",
+			expectedType:     "text/plain",
+			ensurePlainText:  true,
+			maxBodyLength:    10,
+			forbidJSONPrefix: true,
 		},
 		{
 			name:           "Count with filter - Electronics",
@@ -88,10 +94,23 @@ func TestEntityHandlerCount(t *testing.T) {
 			if contentType != tt.expectedType {
 				t.Errorf("Content-Type = %v, want %v", contentType, tt.expectedType)
 			}
+			if tt.ensurePlainText {
+				if contentType == "application/json" || contentType == "application/json;odata.metadata=minimal" {
+					t.Error("Count endpoint should not return JSON content type")
+				}
+			}
 
 			body := w.Body.String()
 			if body != tt.expectedCount {
 				t.Errorf("Body = %v, want %v", body, tt.expectedCount)
+			}
+			if tt.ensurePlainText {
+				if tt.maxBodyLength > 0 && len(body) > tt.maxBodyLength {
+					t.Errorf("Response body length = %d, want <= %d", len(body), tt.maxBodyLength)
+				}
+				if tt.forbidJSONPrefix && (len(body) > 0 && (body[0] == '{' || body[0] == '[')) {
+					t.Errorf("Response appears to be JSON, should be plain text: %s", body)
+				}
 			}
 		})
 	}
@@ -144,51 +163,6 @@ func TestEntityHandlerCountEmptyCollection(t *testing.T) {
 	body := w.Body.String()
 	if body != "0" {
 		t.Errorf("Body = %v, want %v", body, "0")
-	}
-}
-
-// Test that $count endpoint returns plain text, not JSON
-func TestEntityHandlerCountReturnsPlainText(t *testing.T) {
-	handler, db := setupProductHandler(t)
-
-	// Insert test products
-	products := []Product{
-		{ID: 1, Name: "Laptop", Price: 999.99, Category: "Electronics"},
-		{ID: 2, Name: "Mouse", Price: 29.99, Category: "Electronics"},
-		{ID: 3, Name: "Chair", Price: 249.99, Category: "Furniture"},
-	}
-	for _, product := range products {
-		db.Create(&product)
-	}
-
-	req := httptest.NewRequest(http.MethodGet, "/Products/$count", nil)
-	w := httptest.NewRecorder()
-
-	handler.HandleCount(w, req)
-
-	// Verify status is OK
-	if w.Code != http.StatusOK {
-		t.Errorf("Status = %v, want %v", w.Code, http.StatusOK)
-	}
-
-	// Verify Content-Type is text/plain, not JSON
-	contentType := w.Header().Get("Content-Type")
-	if contentType != "text/plain" {
-		t.Errorf("Content-Type = %v, want text/plain", contentType)
-	}
-	if contentType == "application/json" || contentType == "application/json;odata.metadata=minimal" {
-		t.Error("Count endpoint should not return JSON")
-	}
-
-	// Verify body is just a number, not a JSON object
-	body := w.Body.String()
-	if body != "3" {
-		t.Errorf("Body = %v, want 3", body)
-	}
-
-	// Verify it's not a JSON response with a "value" property
-	if len(body) > 10 || body[0] == '{' || body[0] == '[' {
-		t.Errorf("Response appears to be JSON, should be plain text: %s", body)
 	}
 }
 
