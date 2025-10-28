@@ -806,6 +806,31 @@ func buildFunctionSQL(op FilterOperator, columnName string, value interface{}) (
 				columnName, sqlType), nil
 		}
 		return "", nil
+	// Geospatial functions
+	case OpGeoDistance:
+		// geo.distance returns the distance in meters between two points
+		// The value contains the WKT string like "SRID=4326;POINT(0 0)"
+		// For SQLite with SpatiaLite extension, we would use:
+		// ST_Distance(geography_column, ST_GeomFromText(?))
+		// For basic implementation without spatial extensions, we return a placeholder
+		// that applications can override by implementing custom SQL functions
+		if geoStr, ok := value.(string); ok {
+			// Parse the WKT to extract coordinates if needed
+			// For now, we'll generate a function call that can be extended
+			return fmt.Sprintf("ST_Distance(%s, ST_GeomFromText(?, 4326))", columnName), []interface{}{geoStr}
+		}
+		return "", nil
+	case OpGeoLength:
+		// geo.length returns the length of a linestring in meters
+		// For SQLite with SpatiaLite: ST_Length(geography_column)
+		return fmt.Sprintf("ST_Length(%s)", columnName), nil
+	case OpGeoIntersects:
+		// geo.intersects returns true if two geometries intersect
+		// For SQLite with SpatiaLite: ST_Intersects(geography_column, ST_GeomFromText(?))
+		if geoStr, ok := value.(string); ok {
+			return fmt.Sprintf("ST_Intersects(%s, ST_GeomFromText(?, 4326))", columnName), []interface{}{geoStr}
+		}
+		return "", nil
 	default:
 		return "", nil
 	}
