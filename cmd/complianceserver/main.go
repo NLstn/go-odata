@@ -61,8 +61,8 @@ func main() {
 		log.Fatalf("Unsupported database type: %s. Use 'sqlite' or 'postgres'", *dbType)
 	}
 
-	// Auto-migrate the Product, ProductDescription, Category, and CompanyInfo models
-	if err := Db.AutoMigrate(&entities.Category{}, &entities.Product{}, &entities.ProductDescription{}, &entities.CompanyInfo{}); err != nil {
+	// Auto-migrate the Product, ProductDescription, Category, CompanyInfo, and MediaItem models
+	if err := Db.AutoMigrate(&entities.Category{}, &entities.Product{}, &entities.ProductDescription{}, &entities.CompanyInfo{}, &entities.MediaItem{}); err != nil {
 		log.Fatal("Failed to migrate database:", err)
 	}
 
@@ -92,6 +92,11 @@ func main() {
 	// Register the CompanyInfo singleton
 	if err := service.RegisterSingleton(&entities.CompanyInfo{}, "Company"); err != nil {
 		log.Fatal("Failed to register Company singleton:", err)
+	}
+
+	// Register the MediaItem entity for media entity compliance testing
+	if err := service.RegisterEntity(&entities.MediaItem{}); err != nil {
+		log.Fatal("Failed to register MediaItem entity:", err)
 	}
 
 	// Register functions for compliance testing

@@ -202,10 +202,10 @@ test_media_accept_header() {
 
 # Test 10: DELETE media entity
 test_delete_media() {
-    # Try to delete media entity
-    local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE "$SERVER_URL/MediaItems(999999)" 2>&1)
+    # Try to delete media entity (use ID 2 which exists from seeding)
+    local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE "$SERVER_URL/MediaItems(2)" 2>&1)
     
-    # 404 for not found, 204/200 for deleted, 405 for not allowed
+    # Should return 204 No Content on successful deletion
     if [ "$HTTP_CODE" = "204" ] || [ "$HTTP_CODE" = "200" ]; then
         return 0
     fi
@@ -289,7 +289,7 @@ run_test "Stream properties in metadata" test_stream_in_metadata
 echo "  Request: GET with Accept header for media"
 run_test "Accept header for media content" test_media_accept_header
 
-echo "  Request: DELETE MediaItems(999999)"
+echo "  Request: DELETE MediaItems(2)"
 run_test "Delete media entity" test_delete_media
 
 echo "  Request: Check for media link annotations"

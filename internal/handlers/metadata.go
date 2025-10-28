@@ -376,9 +376,15 @@ func (h *MetadataHandler) buildEntityTypes() string {
 
 // buildEntityType builds a single entity type definition
 func (h *MetadataHandler) buildEntityType(entityMeta *metadata.EntityMetadata) string {
-	result := fmt.Sprintf(`      <EntityType Name="%s">
+	// Add HasStream attribute for media entities
+	hasStreamAttr := ""
+	if entityMeta.HasStream {
+		hasStreamAttr = ` HasStream="true"`
+	}
+
+	result := fmt.Sprintf(`      <EntityType Name="%s"%s>
         <Key>
-`, entityMeta.EntityName)
+`, entityMeta.EntityName, hasStreamAttr)
 
 	// Add all key properties (supports composite keys)
 	for _, keyProp := range entityMeta.KeyProperties {
@@ -406,6 +412,21 @@ func (h *MetadataHandler) buildRegularProperties(entityMeta *metadata.EntityMeta
 	for _, prop := range entityMeta.Properties {
 		if prop.IsNavigationProp {
 			continue // Handle navigation properties separately
+		}
+
+		// Skip stream content fields as they are accessed through the stream property
+		if prop.IsStream || strings.HasSuffix(prop.FieldName, "ContentType") || strings.HasSuffix(prop.FieldName, "Content") {
+			// Check if this field is part of a stream property
+			isStreamField := false
+			for _, streamProp := range entityMeta.StreamProperties {
+				if prop.FieldName == streamProp.StreamContentTypeField || prop.FieldName == streamProp.StreamContentField {
+					isStreamField = true
+					break
+				}
+			}
+			if isStreamField {
+				continue
+			}
 		}
 
 		// Determine the EDM type
@@ -448,6 +469,13 @@ func (h *MetadataHandler) buildRegularProperties(entityMeta *metadata.EntityMeta
 		result += fmt.Sprintf(`        <Property %s />
 `, attrs)
 	}
+
+	// Add stream properties
+	for _, streamProp := range entityMeta.StreamProperties {
+		result += fmt.Sprintf(`        <Property Name="%s" Type="Edm.Stream" />
+`, streamProp.Name)
+	}
+
 	return result
 }
 
