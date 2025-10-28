@@ -30,7 +30,7 @@ func SetODataHeader(w http.ResponseWriter, key, value string) {
 // SetODataVersionHeader sets the OData-Version header with the correct version value.
 // This centralizes the version header setting to ensure consistency across all responses.
 func SetODataVersionHeader(w http.ResponseWriter) {
-	SetODataHeader(w, HeaderODataVersion, ODataVersionValue)
+	SetODataHeader(w, HeaderODataVersion, response.ODataVersionValue)
 }
 
 // buildKeyQuery builds a GORM query with WHERE conditions for the entity key(s)
