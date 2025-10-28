@@ -19,24 +19,20 @@ echo ""
 echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part2-url-conventions/odata-v4.0-errata03-os-part2-url-conventions-complete.html#sec_GeospatialFunctions"
 echo ""
 
-# Note: Geospatial functions are optional OData features
-# Many implementations may not support them initially
-
 # Test 1: geo.distance function in filter
 test_geo_distance() {
     # Filter products within 10km of a point (if Location is a geospatial property)
     local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=geo.distance(Location,geography'SRID=4326;POINT(0 0)') lt 10000")
-    
-    # 200 OK = supported, 400/501 = not implemented
+
     if [ "$HTTP_CODE" = "200" ]; then
         return 0
     elif [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "501" ] || [ "$HTTP_CODE" = "404" ]; then
-        echo "  Details: geo.distance not implemented (status: $HTTP_CODE)"
-        return 0  # Pass - not all services must support geo functions
+        echo "  Failure: Service must support geo.distance filters per OData v4 (status: $HTTP_CODE)"
     else
-        echo "  Details: Unexpected status: $HTTP_CODE"
-        return 1
+        echo "  Failure: Unexpected status for geo.distance filter: $HTTP_CODE"
     fi
+
+    return 1
 }
 
 # Test 2: geo.length function in filter
@@ -47,12 +43,12 @@ test_geo_length() {
     if [ "$HTTP_CODE" = "200" ]; then
         return 0
     elif [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "501" ] || [ "$HTTP_CODE" = "404" ]; then
-        echo "  Details: geo.length not implemented (status: $HTTP_CODE)"
-        return 0  # Pass - optional feature
+        echo "  Failure: Service must support geo.length filters per OData v4 (status: $HTTP_CODE)"
     else
-        echo "  Details: Unexpected status: $HTTP_CODE"
-        return 1
+        echo "  Failure: Unexpected status for geo.length filter: $HTTP_CODE"
     fi
+
+    return 1
 }
 
 # Test 3: geo.intersects function in filter
@@ -63,12 +59,12 @@ test_geo_intersects() {
     if [ "$HTTP_CODE" = "200" ]; then
         return 0
     elif [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "501" ] || [ "$HTTP_CODE" = "404" ]; then
-        echo "  Details: geo.intersects not implemented (status: $HTTP_CODE)"
-        return 0  # Pass - optional feature
+        echo "  Failure: Service must support geo.intersects filters per OData v4 (status: $HTTP_CODE)"
     else
-        echo "  Details: Unexpected status: $HTTP_CODE"
-        return 1
+        echo "  Failure: Unexpected status for geo.intersects filter: $HTTP_CODE"
     fi
+
+    return 1
 }
 
 # Test 4: Invalid geo function returns error
@@ -100,12 +96,12 @@ test_geo_literal_format() {
     if [ "$HTTP_CODE" = "200" ]; then
         return 0
     elif [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "501" ] || [ "$HTTP_CODE" = "404" ]; then
-        echo "  Details: Geospatial functions not implemented (status: $HTTP_CODE)"
-        return 0  # Pass - optional feature
+        echo "  Failure: Proper geospatial literals must be accepted (status: $HTTP_CODE)"
     else
-        echo "  Details: Unexpected status: $HTTP_CODE"
-        return 1
+        echo "  Failure: Unexpected status for geospatial literal format: $HTTP_CODE"
     fi
+
+    return 1
 }
 
 # Test 7: geometry vs geography distinction
@@ -116,12 +112,12 @@ test_geometry_vs_geography() {
     if [ "$HTTP_CODE" = "200" ]; then
         return 0
     elif [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "501" ] || [ "$HTTP_CODE" = "404" ]; then
-        echo "  Details: Geometry type not implemented (status: $HTTP_CODE)"
-        return 0  # Pass - optional feature
+        echo "  Failure: Service must handle geometry vs geography distinction (status: $HTTP_CODE)"
     else
-        echo "  Details: Unexpected status: $HTTP_CODE"
-        return 1
+        echo "  Failure: Unexpected status for geometry vs geography filter: $HTTP_CODE"
     fi
+
+    return 1
 }
 
 # Test 8: Combining geo functions with other filters
@@ -132,22 +128,22 @@ test_geo_combined_filter() {
     if [ "$HTTP_CODE" = "200" ]; then
         return 0
     elif [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "501" ] || [ "$HTTP_CODE" = "404" ]; then
-        echo "  Details: Combined geo filter not supported (status: $HTTP_CODE)"
-        return 0  # Pass - optional feature
+        echo "  Failure: Combined geo filter must be supported per OData v4 (status: $HTTP_CODE)"
     else
-        echo "  Details: Unexpected status: $HTTP_CODE"
-        return 1
+        echo "  Failure: Unexpected status for combined geo filter: $HTTP_CODE"
     fi
+
+    return 1
 }
 
 echo "  Request: GET \$filter=geo.distance(Location,...) lt 10000"
-run_test "geo.distance function in filter (optional)" test_geo_distance
+run_test "geo.distance function in filter" test_geo_distance
 
 echo "  Request: GET \$filter=geo.length(Route) gt 1000"
-run_test "geo.length function in filter (optional)" test_geo_length
+run_test "geo.length function in filter" test_geo_length
 
 echo "  Request: GET \$filter=geo.intersects(Area,...)"
-run_test "geo.intersects function in filter (optional)" test_geo_intersects
+run_test "geo.intersects function in filter" test_geo_intersects
 
 echo "  Request: GET \$filter=geo.invalid(Location)"
 run_test "Invalid geo function returns 400 error" test_invalid_geo_function
