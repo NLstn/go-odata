@@ -51,6 +51,12 @@ func GetPropertyFieldName(propertyName string, entityMetadata *metadata.EntityMe
 
 // GetColumnName returns the database column name (snake_case) for a property
 func GetColumnName(propertyName string, entityMetadata *metadata.EntityMetadata) string {
+	// Handle $it - refers to the current instance (OData v4 spec 5.1.1.11.4)
+	// Used in isof() function to check the type of the current entity
+	if propertyName == "$it" {
+		return "$it"
+	}
+
 	if entityMetadata == nil {
 		return toSnakeCase(propertyName)
 	}
