@@ -66,8 +66,17 @@ func (h *EntityHandler) handleGetEntity(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
+	// Invoke BeforeReadEntity hooks to obtain scopes
+	scopes, hookErr := callBeforeReadEntity(h.metadata, r, queryOptions)
+	if hookErr != nil {
+		if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", hookErr.Error()); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	}
+
 	// Fetch the entity
-	result, err := h.fetchEntityByKey(entityKey, queryOptions)
+	result, err := h.fetchEntityByKey(entityKey, queryOptions, scopes)
 	if err != nil {
 		h.handleFetchError(w, err, entityKey)
 		return
@@ -76,11 +85,24 @@ func (h *EntityHandler) handleGetEntity(w http.ResponseWriter, r *http.Request, 
 	// Check If-None-Match header if ETag is configured (before applying select)
 	var currentETag string
 	if h.metadata.ETagProperty != nil {
-		ifNoneMatch := r.Header.Get(HeaderIfNoneMatch)
 		currentETag = etag.Generate(result, h.metadata)
+	}
 
-		// If ETags match, return 304 Not Modified
-		if !etag.NoneMatch(ifNoneMatch, currentETag) {
+	// Invoke AfterReadEntity hooks to allow mutation or override
+	override, hasOverride, afterErr := callAfterReadEntity(h.metadata, r, queryOptions, result)
+	if afterErr != nil {
+		if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", afterErr.Error()); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	}
+	if hasOverride {
+		result = override
+	}
+
+	if h.metadata.ETagProperty != nil {
+		ifNoneMatch := r.Header.Get(HeaderIfNoneMatch)
+		if currentETag != "" && !etag.NoneMatch(ifNoneMatch, currentETag) {
 			w.Header().Set(HeaderETag, currentETag)
 			w.WriteHeader(http.StatusNotModified)
 			return
@@ -88,7 +110,7 @@ func (h *EntityHandler) handleGetEntity(w http.ResponseWriter, r *http.Request, 
 	}
 
 	// Apply $select if specified (after ETag generation)
-	if len(queryOptions.Select) > 0 {
+	if len(queryOptions.Select) > 0 && !hasOverride {
 		result = query.ApplySelectToEntity(result, queryOptions.Select, h.metadata, queryOptions.Expand)
 	}
 
@@ -97,12 +119,16 @@ func (h *EntityHandler) handleGetEntity(w http.ResponseWriter, r *http.Request, 
 }
 
 // fetchEntityByKey fetches an entity by its key with optional expand
-func (h *EntityHandler) fetchEntityByKey(entityKey string, queryOptions *query.QueryOptions) (interface{}, error) {
+func (h *EntityHandler) fetchEntityByKey(entityKey string, queryOptions *query.QueryOptions, scopes []func(*gorm.DB) *gorm.DB) (interface{}, error) {
 	result := reflect.New(h.metadata.EntityType).Interface()
 
 	db, err := h.buildKeyQuery(entityKey)
 	if err != nil {
 		return nil, err
+	}
+
+	if len(scopes) > 0 {
+		db = db.Scopes(scopes...)
 	}
 
 	// Apply expand (preload navigation properties) if specified
@@ -580,6 +606,16 @@ func (h *EntityHandler) HandleEntityRef(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
+	// Invoke BeforeReadEntity hooks for authorization
+	refQueryOptions := &query.QueryOptions{}
+	refScopes, hookErr := callBeforeReadEntity(h.metadata, r, refQueryOptions)
+	if hookErr != nil {
+		if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", hookErr.Error()); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	}
+
 	// Fetch the entity to ensure it exists
 	entity := reflect.New(h.metadata.EntityType).Interface()
 	db, err := h.buildKeyQuery(entityKey)
@@ -588,6 +624,9 @@ func (h *EntityHandler) HandleEntityRef(w http.ResponseWriter, r *http.Request, 
 			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
 		}
 		return
+	}
+	if len(refScopes) > 0 {
+		db = db.Scopes(refScopes...)
 	}
 
 	if err := db.First(entity).Error; err != nil {
@@ -598,6 +637,13 @@ func (h *EntityHandler) HandleEntityRef(w http.ResponseWriter, r *http.Request, 
 			}
 		} else {
 			h.writeDatabaseError(w, err)
+		}
+		return
+	}
+
+	if _, _, afterErr := callAfterReadEntity(h.metadata, r, refQueryOptions, entity); afterErr != nil {
+		if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", afterErr.Error()); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
 		}
 		return
 	}
@@ -648,14 +694,23 @@ func (h *EntityHandler) HandleCollectionRef(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	// Invoke BeforeReadCollection hooks to obtain scopes
+	scopes, hookErr := callBeforeReadCollection(h.metadata, r, queryOptions)
+	if hookErr != nil {
+		if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", hookErr.Error()); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	}
+
 	// Get the total count if $count=true is specified
-	totalCount := h.getTotalCount(queryOptions, w)
+	totalCount := h.getTotalCount(queryOptions, w, scopes)
 	if totalCount == nil && queryOptions.Count {
 		return // Error already written
 	}
 
 	// Fetch the results
-	results, err := h.fetchResults(queryOptions)
+	results, err := h.fetchResults(queryOptions, scopes)
 	if err != nil {
 		h.writeDatabaseError(w, err)
 		return
@@ -666,6 +721,15 @@ func (h *EntityHandler) HandleCollectionRef(w http.ResponseWriter, r *http.Reque
 	if needsTrimming && queryOptions.Top != nil {
 		// Trim the results to $top (we fetched $top + 1 to check for more pages)
 		results = h.trimResults(results, *queryOptions.Top)
+	}
+
+	if override, hasOverride, afterErr := callAfterReadCollection(h.metadata, r, queryOptions, results); afterErr != nil {
+		if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", afterErr.Error()); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	} else if hasOverride {
+		results = override
 	}
 
 	// Build entity IDs for each entity

@@ -73,14 +73,23 @@ func (h *EntityHandler) handleGetCollection(w http.ResponseWriter, r *http.Reque
 		queryOptions = h.applyMaxPageSize(queryOptions, *pref.MaxPageSize)
 	}
 
+	// Invoke BeforeReadCollection hooks to obtain scopes
+	scopes, err := callBeforeReadCollection(h.metadata, r, queryOptions)
+	if err != nil {
+		if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", err.Error()); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	}
+
 	// Get the total count if $count=true is specified
-	totalCount := h.getTotalCount(queryOptions, w)
+	totalCount := h.getTotalCount(queryOptions, w, scopes)
 	if totalCount == nil && queryOptions.Count {
 		return // Error already written
 	}
 
 	// Fetch the results
-	sliceValue, err := h.fetchResults(queryOptions)
+	sliceValue, err := h.fetchResults(queryOptions, scopes)
 	if err != nil {
 		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error()); writeErr != nil {
 			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
@@ -93,6 +102,16 @@ func (h *EntityHandler) handleGetCollection(w http.ResponseWriter, r *http.Reque
 	if needsTrimming && queryOptions.Top != nil {
 		// Trim the results to $top (we fetched $top + 1 to check for more pages)
 		sliceValue = h.trimResults(sliceValue, *queryOptions.Top)
+	}
+
+	// Invoke AfterReadCollection hooks allowing overrides
+	if override, hasOverride, hookErr := callAfterReadCollection(h.metadata, r, queryOptions, sliceValue); hookErr != nil {
+		if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", hookErr.Error()); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	} else if hasOverride {
+		sliceValue = override
 	}
 
 	// Add Preference-Applied header if any preference was applied
@@ -329,8 +348,20 @@ func (h *EntityHandler) handleGetCount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Invoke BeforeReadCollection hooks for count requests
+	scopes, hookErr := callBeforeReadCollection(h.metadata, r, queryOptions)
+	if hookErr != nil {
+		if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", hookErr.Error()); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	}
+
 	var count int64
 	countDB := h.db.Model(reflect.New(h.metadata.EntityType).Interface())
+	if len(scopes) > 0 {
+		countDB = countDB.Scopes(scopes...)
+	}
 
 	// Apply filter to count query if present
 	if queryOptions.Filter != nil {
@@ -365,13 +396,16 @@ func (h *EntityHandler) handleOptionsCount(w http.ResponseWriter) {
 }
 
 // getTotalCount retrieves the total count if requested
-func (h *EntityHandler) getTotalCount(queryOptions *query.QueryOptions, w http.ResponseWriter) *int64 {
+func (h *EntityHandler) getTotalCount(queryOptions *query.QueryOptions, w http.ResponseWriter, scopes []func(*gorm.DB) *gorm.DB) *int64 {
 	if !queryOptions.Count {
 		return nil
 	}
 
 	var count int64
 	countDB := h.db.Model(reflect.New(h.metadata.EntityType).Interface())
+	if len(scopes) > 0 {
+		countDB = countDB.Scopes(scopes...)
+	}
 
 	// Apply filter to count query if present
 	if queryOptions.Filter != nil {
@@ -388,7 +422,7 @@ func (h *EntityHandler) getTotalCount(queryOptions *query.QueryOptions, w http.R
 }
 
 // fetchResults fetches the results from the database
-func (h *EntityHandler) fetchResults(queryOptions *query.QueryOptions) (interface{}, error) {
+func (h *EntityHandler) fetchResults(queryOptions *query.QueryOptions, scopes []func(*gorm.DB) *gorm.DB) (interface{}, error) {
 	// If $top is specified, fetch $top + 1 records to check if there are more results
 	// This avoids an extra database query for pagination
 	modifiedOptions := *queryOptions
@@ -399,6 +433,9 @@ func (h *EntityHandler) fetchResults(queryOptions *query.QueryOptions) (interfac
 
 	// Start with the base database query
 	db := h.db
+	if len(scopes) > 0 {
+		db = db.Scopes(scopes...)
+	}
 
 	// Apply skiptoken filter if present (must be done before other query options)
 	if queryOptions.SkipToken != nil {

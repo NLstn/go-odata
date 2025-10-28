@@ -151,7 +151,16 @@ func (h *EntityHandler) handleNavigationCollectionWithQueryOptions(w http.Respon
 		return
 	}
 
-	// First verify that the parent entity exists
+	// First verify that the parent entity exists and is authorized
+	parentOptions := &query.QueryOptions{}
+	parentScopes, parentHookErr := callBeforeReadEntity(h.metadata, r, parentOptions)
+	if parentHookErr != nil {
+		if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", parentHookErr.Error()); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	}
+
 	parent := reflect.New(h.metadata.EntityType).Interface()
 	db, err := h.buildKeyQuery(entityKey)
 	if err != nil {
@@ -160,8 +169,18 @@ func (h *EntityHandler) handleNavigationCollectionWithQueryOptions(w http.Respon
 		}
 		return
 	}
+	if len(parentScopes) > 0 {
+		db = db.Scopes(parentScopes...)
+	}
 	if err := db.First(parent).Error; err != nil {
 		h.handleFetchError(w, err, entityKey)
+		return
+	}
+
+	if _, _, parentAfterErr := callAfterReadEntity(h.metadata, r, parentOptions, parent); parentAfterErr != nil {
+		if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", parentAfterErr.Error()); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
 		return
 	}
 
@@ -185,6 +204,18 @@ func (h *EntityHandler) handleNavigationCollectionWithQueryOptions(w http.Respon
 			foreignKeyColumnName := toSnakeCase(foreignKeyFieldName)
 			relatedDB = relatedDB.Where(fmt.Sprintf("%s = ?", foreignKeyColumnName), keyFieldValue.Interface())
 		}
+	}
+
+	// Apply BeforeReadCollection hooks for the target entity
+	targetScopes, targetHookErr := callBeforeReadCollection(targetMetadata, r, queryOptions)
+	if targetHookErr != nil {
+		if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", targetHookErr.Error()); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	}
+	if len(targetScopes) > 0 {
+		relatedDB = relatedDB.Scopes(targetScopes...)
 	}
 
 	// Get total count if $count=true
@@ -219,12 +250,14 @@ func (h *EntityHandler) handleNavigationCollectionWithQueryOptions(w http.Respon
 
 	// Calculate next link if pagination is active
 	sliceValue := reflect.ValueOf(resultsSlice).Elem()
+	resultsData := sliceValue.Interface()
 	var nextLink *string
 	if queryOptions.Top != nil && sliceValue.Len() > *queryOptions.Top {
 		// Trim to the requested top count
 		trimmedSlice := reflect.MakeSlice(sliceValue.Type(), *queryOptions.Top, *queryOptions.Top)
 		reflect.Copy(trimmedSlice, sliceValue.Slice(0, *queryOptions.Top))
 		sliceValue = trimmedSlice
+		resultsData = sliceValue.Interface()
 
 		// Build next link
 		baseURL := response.BuildBaseURL(r)
@@ -233,13 +266,22 @@ func (h *EntityHandler) handleNavigationCollectionWithQueryOptions(w http.Respon
 		nextLink = &nextURL
 	}
 
+	if override, hasOverride, afterErr := callAfterReadCollection(targetMetadata, r, queryOptions, resultsData); afterErr != nil {
+		if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", afterErr.Error()); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	} else if hasOverride {
+		resultsData = override
+	}
+
 	// Write response
 	navigationPath := fmt.Sprintf("%s(%s)/%s", h.metadata.EntitySetName, entityKey, navProp.JsonName)
 
 	if isRef {
-		h.writeNavigationCollectionRefFromData(w, r, targetMetadata, sliceValue.Interface(), totalCount, nextLink)
+		h.writeNavigationCollectionRefFromData(w, r, targetMetadata, resultsData, totalCount, nextLink)
 	} else {
-		if err := response.WriteODataCollection(w, r, navigationPath, sliceValue.Interface(), totalCount, nextLink); err != nil {
+		if err := response.WriteODataCollection(w, r, navigationPath, resultsData, totalCount, nextLink); err != nil {
 			fmt.Printf("Error writing navigation property collection: %v\n", err)
 		}
 	}
