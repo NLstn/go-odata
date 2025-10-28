@@ -55,3 +55,22 @@ type EntityHooks interface {
 	// Any error returned will be logged but won't affect the response to the client.
 	AfterDelete(ctx context.Context, r *http.Request) error
 }
+
+// Additional optional read hooks can be implemented on entity types with the following signatures:
+//
+//  // BeforeReadCollection lets you add GORM scopes to the underlying query before it is executed.
+//  func (Product) BeforeReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error)
+//
+//  // AfterReadCollection lets you replace or mutate the collection returned to the client.
+//  func (Product) AfterReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions, results interface{}) (interface{}, error)
+//
+//  // BeforeReadEntity lets you add GORM scopes before reading a single entity.
+//  func (Product) BeforeReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error)
+//
+//  // AfterReadEntity lets you replace or mutate the entity returned to the client.
+//  func (Product) AfterReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions, entity interface{}) (interface{}, error)
+//
+// All read hooks receive the same context, HTTP request, and parsed OData query options that the handler uses.
+// Before* hooks return additional GORM scopes to apply (`nil` means no extra scopes), while After* hooks
+// receive the fetched data and can return a replacement value. In every case, returning a non-nil error aborts
+// the request processing with that error.
