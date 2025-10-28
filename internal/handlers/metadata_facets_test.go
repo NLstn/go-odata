@@ -286,26 +286,55 @@ func TestMetadataWithReferentialConstraintsJSON(t *testing.T) {
 }
 
 func TestEdmTypeMapping(t *testing.T) {
-	tests := []struct {
-		name    string
-		goType  string
-		edmType string
-	}{
-		{"time.Time", "time.Time", "Edm.DateTimeOffset"},
-		{"int", "int", "Edm.Int32"},
-		{"int64", "int64", "Edm.Int64"},
-		{"float64", "float64", "Edm.Double"},
-		{"string", "string", "Edm.String"},
-		{"bool", "bool", "Edm.Boolean"},
+	type TypeMappingEntity struct {
+		ID            int        `json:"id" odata:"key"`
+		CreatedAt     time.Time  `json:"createdAt"`
+		CreatedAtPtr  *time.Time `json:"createdAtPtr"`
+		IntField      int        `json:"intField"`
+		Int64Field    int64      `json:"int64Field"`
+		Float64Field  float64    `json:"float64Field"`
+		StringField   string     `json:"stringField"`
+		BoolField     bool       `json:"boolField"`
+		BinaryContent []byte     `json:"binaryContent"`
 	}
 
-	// Create test entity type for each test case
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// We can't easily test this without creating actual types,
-			// but we can verify through the metadata output
-			// This test is more of a verification that types are correctly mapped
-		})
+	entityMeta, err := metadata.AnalyzeEntity(TypeMappingEntity{})
+	if err != nil {
+		t.Fatalf("Failed to analyze entity: %v", err)
+	}
+
+	expected := map[string]string{
+		"ID":            "Edm.Int32",
+		"CreatedAt":     "Edm.DateTimeOffset",
+		"CreatedAtPtr":  "Edm.DateTimeOffset",
+		"IntField":      "Edm.Int32",
+		"Int64Field":    "Edm.Int64",
+		"Float64Field":  "Edm.Double",
+		"StringField":   "Edm.String",
+		"BoolField":     "Edm.Boolean",
+		"BinaryContent": "Edm.Binary",
+	}
+
+	found := make(map[string]bool)
+
+	for _, prop := range entityMeta.Properties {
+		expectedType, ok := expected[prop.Name]
+		if !ok {
+			continue
+		}
+
+		edmType := getEdmType(prop.Type)
+		if edmType != expectedType {
+			t.Errorf("property %s: expected EDM type %s, got %s", prop.Name, expectedType, edmType)
+		}
+
+		found[prop.Name] = true
+	}
+
+	for name := range expected {
+		if !found[name] {
+			t.Errorf("expected property %s to be analyzed", name)
+		}
 	}
 }
 
