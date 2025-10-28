@@ -2,6 +2,7 @@ package response
 
 import (
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 )
@@ -95,7 +96,7 @@ func TestWriteODataCollectionWithNilData(t *testing.T) {
 	w := httptest.NewRecorder()
 
 	// Write response with nil data
-	err := WriteODataCollection(w, req, "Products", nil, nil, nil)
+	err := WriteODataCollection(w, req, "Products", nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("WriteODataCollection failed: %v", err)
 	}
@@ -130,7 +131,7 @@ func TestWriteODataCollectionWithNavigationWithNilData(t *testing.T) {
 	w := httptest.NewRecorder()
 
 	// Write response with nil data (no metadata provider needed for this test)
-	err := WriteODataCollectionWithNavigation(w, req, "Products", nil, nil, nil, nil, nil, nil)
+	err := WriteODataCollectionWithNavigation(w, req, "Products", nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("WriteODataCollectionWithNavigation failed: %v", err)
 	}
@@ -156,5 +157,56 @@ func TestWriteODataCollectionWithNavigationWithNilData(t *testing.T) {
 
 	if len(arr) != 0 {
 		t.Errorf("Response 'value' should be empty array, got length %d", len(arr))
+	}
+}
+
+func TestWriteODataDeltaResponse(t *testing.T) {
+	req := httptest.NewRequest("GET", "http://example.com/Products", nil)
+	w := httptest.NewRecorder()
+
+	deltaLink := "http://example.com/Products?$deltatoken=abc"
+	entries := []map[string]interface{}{{"ID": 1}}
+
+	if err := WriteODataDeltaResponse(w, req, "Products", entries, &deltaLink); err != nil {
+		t.Fatalf("WriteODataDeltaResponse failed: %v", err)
+	}
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Status = %v, want %v", w.Code, http.StatusOK)
+	}
+
+	var body map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("Failed to decode body: %v", err)
+	}
+
+	if _, ok := body["@odata.context"].(string); !ok {
+		t.Fatalf("expected @odata.context in response")
+	}
+	if body["@odata.deltaLink"] != deltaLink {
+		t.Fatalf("expected delta link %s, got %v", deltaLink, body["@odata.deltaLink"])
+	}
+	value, ok := body["value"].([]interface{})
+	if !ok || len(value) != 1 {
+		t.Fatalf("expected single entry in delta response")
+	}
+}
+
+func TestBuildEntityIDSingleStringKey(t *testing.T) {
+	keyValues := map[string]interface{}{"ID": "ALFKI"}
+	id := BuildEntityID("Customers", keyValues)
+
+	if id != "Customers('ALFKI')" {
+		t.Fatalf("expected Customers('ALFKI'), got %s", id)
+	}
+}
+
+func TestBuildEntityIDCompositeOrdering(t *testing.T) {
+	keyValues := map[string]interface{}{"LanguageKey": "EN", "ProductID": 1}
+	id := BuildEntityID("ProductDescriptions", keyValues)
+
+	expected := "ProductDescriptions(LanguageKey='EN',ProductID=1)"
+	if id != expected {
+		t.Fatalf("expected %s, got %s", expected, id)
 	}
 }

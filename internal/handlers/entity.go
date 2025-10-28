@@ -6,6 +6,7 @@ import (
 
 	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/query"
+	"github.com/nlstn/go-odata/internal/trackchanges"
 	"gorm.io/gorm"
 )
 
@@ -15,6 +16,7 @@ type EntityHandler struct {
 	metadata         *metadata.EntityMetadata
 	entitiesMetadata map[string]*metadata.EntityMetadata
 	namespace        string
+	tracker          *trackchanges.Tracker
 }
 
 // NewEntityHandler creates a new entity handler
@@ -49,6 +51,11 @@ func (h *EntityHandler) namespaceOrDefault() string {
 
 func (h *EntityHandler) qualifiedTypeName(typeName string) string {
 	return fmt.Sprintf("%s.%s", h.namespaceOrDefault(), typeName)
+}
+
+// SetDeltaTracker configures the change tracker used for odata.track-changes support.
+func (h *EntityHandler) SetDeltaTracker(tracker *trackchanges.Tracker) {
+	h.tracker = tracker
 }
 
 // IsSingleton returns true if this handler is for a singleton

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"reflect"
+	"sort"
 	"strings"
 
 	"github.com/nlstn/go-odata/internal/etag"
@@ -28,10 +29,11 @@ func SetODataVersionHeader(w http.ResponseWriter) {
 
 // ODataResponse represents the structure of an OData JSON response
 type ODataResponse struct {
-	Context  string      `json:"@odata.context,omitempty"`
-	Count    *int64      `json:"@odata.count,omitempty"`
-	NextLink *string     `json:"@odata.nextLink,omitempty"`
-	Value    interface{} `json:"value"`
+	Context   string      `json:"@odata.context,omitempty"`
+	Count     *int64      `json:"@odata.count,omitempty"`
+	NextLink  *string     `json:"@odata.nextLink,omitempty"`
+	DeltaLink *string     `json:"@odata.deltaLink,omitempty"`
+	Value     interface{} `json:"value"`
 }
 
 // EntityMetadataProvider is an interface for getting entity metadata
@@ -58,23 +60,32 @@ type PropertyMetadata struct {
 // For composite key: "ProductDescriptions(ProductID=1,LanguageKey='EN')"
 func BuildEntityID(entitySetName string, keyValues map[string]interface{}) string {
 	if len(keyValues) == 1 {
-		// Single key - check if it's named or just a value
 		for _, v := range keyValues {
-			return fmt.Sprintf("%s(%v)", entitySetName, v)
+			return fmt.Sprintf("%s(%s)", entitySetName, formatKeyValueLiteral(v))
 		}
 	}
 
-	// Composite key or named single key
-	var keyParts []string
-	for k, v := range keyValues {
-		// Quote string values
-		if str, ok := v.(string); ok {
-			keyParts = append(keyParts, fmt.Sprintf("%s='%s'", k, str))
-		} else {
-			keyParts = append(keyParts, fmt.Sprintf("%s=%v", k, v))
-		}
+	keys := make([]string, 0, len(keyValues))
+	for k := range keyValues {
+		keys = append(keys, k)
 	}
+	sort.Strings(keys)
+
+	keyParts := make([]string, len(keys))
+	for i, k := range keys {
+		keyParts[i] = fmt.Sprintf("%s=%s", k, formatKeyValueLiteral(keyValues[k]))
+	}
+
 	return fmt.Sprintf("%s(%s)", entitySetName, strings.Join(keyParts, ","))
+}
+
+func formatKeyValueLiteral(value interface{}) string {
+	switch v := value.(type) {
+	case string:
+		return fmt.Sprintf("'%s'", strings.ReplaceAll(v, "'", "''"))
+	default:
+		return fmt.Sprintf("%v", v)
+	}
 }
 
 // ExtractEntityKeys extracts key values from an entity using metadata
@@ -168,7 +179,7 @@ func WriteEntityReferenceCollection(w http.ResponseWriter, r *http.Request, enti
 }
 
 // WriteODataCollection writes an OData collection response
-func WriteODataCollection(w http.ResponseWriter, r *http.Request, entitySetName string, data interface{}, count *int64, nextLink *string) error {
+func WriteODataCollection(w http.ResponseWriter, r *http.Request, entitySetName string, data interface{}, count *int64, nextLink, deltaLink *string) error {
 	// Check if the requested format is supported
 	if !IsAcceptableFormat(r) {
 		return WriteError(w, http.StatusNotAcceptable, "Not Acceptable",
@@ -190,10 +201,11 @@ func WriteODataCollection(w http.ResponseWriter, r *http.Request, entitySetName 
 	}
 
 	response := ODataResponse{
-		Context:  contextURL,
-		Count:    count,
-		NextLink: nextLink,
-		Value:    data,
+		Context:   contextURL,
+		Count:     count,
+		NextLink:  nextLink,
+		DeltaLink: deltaLink,
+		Value:     data,
 	}
 
 	// Set OData-compliant headers with dynamic metadata level
@@ -212,7 +224,7 @@ func WriteODataCollection(w http.ResponseWriter, r *http.Request, entitySetName 
 }
 
 // WriteODataCollectionWithNavigation writes an OData collection response with navigation links
-func WriteODataCollectionWithNavigation(w http.ResponseWriter, r *http.Request, entitySetName string, data interface{}, count *int64, nextLink *string, metadata EntityMetadataProvider, expandedProps []string, fullMetadata *metadata.EntityMetadata) error {
+func WriteODataCollectionWithNavigation(w http.ResponseWriter, r *http.Request, entitySetName string, data interface{}, count *int64, nextLink, deltaLink *string, metadata EntityMetadataProvider, expandedProps []string, fullMetadata *metadata.EntityMetadata) error {
 	// Check if the requested format is supported
 	if !IsAcceptableFormat(r) {
 		return WriteError(w, http.StatusNotAcceptable, "Not Acceptable",
@@ -237,10 +249,11 @@ func WriteODataCollectionWithNavigation(w http.ResponseWriter, r *http.Request, 
 	}
 
 	response := ODataResponse{
-		Context:  contextURL,
-		Count:    count,
-		NextLink: nextLink,
-		Value:    transformedData,
+		Context:   contextURL,
+		Count:     count,
+		NextLink:  nextLink,
+		DeltaLink: deltaLink,
+		Value:     transformedData,
 	}
 
 	// Set OData-compliant headers with dynamic metadata level (already retrieved above)
@@ -253,6 +266,43 @@ func WriteODataCollectionWithNavigation(w http.ResponseWriter, r *http.Request, 
 	}
 
 	// Encode and write the response
+	encoder := json.NewEncoder(w)
+	encoder.SetEscapeHTML(false)
+	return encoder.Encode(response)
+}
+
+// WriteODataDeltaResponse writes an OData delta response containing change tracking entries.
+func WriteODataDeltaResponse(w http.ResponseWriter, r *http.Request, entitySetName string, entries []map[string]interface{}, deltaLink *string) error {
+	if !IsAcceptableFormat(r) {
+		return WriteError(w, http.StatusNotAcceptable, "Not Acceptable",
+			"The requested format is not supported. Only application/json is supported for data responses.")
+	}
+
+	metadataLevel := GetODataMetadataLevel(r)
+
+	if entries == nil {
+		entries = []map[string]interface{}{}
+	}
+
+	response := map[string]interface{}{
+		"value": entries,
+	}
+
+	if metadataLevel != "none" {
+		response["@odata.context"] = buildDeltaContextURL(r, entitySetName)
+	}
+
+	if deltaLink != nil && *deltaLink != "" {
+		response["@odata.deltaLink"] = *deltaLink
+	}
+
+	w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
+	w.WriteHeader(http.StatusOK)
+
+	if r.Method == http.MethodHead {
+		return nil
+	}
+
 	encoder := json.NewEncoder(w)
 	encoder.SetEscapeHTML(false)
 	return encoder.Encode(response)
@@ -884,6 +934,11 @@ func buildContextURL(r *http.Request, entitySetName string) string {
 	return baseURL + "/$metadata#" + entitySetName
 }
 
+func buildDeltaContextURL(r *http.Request, entitySetName string) string {
+	baseURL := buildBaseURL(r)
+	return baseURL + "/$metadata#" + entitySetName + "/$delta"
+}
+
 // getEntityTypeFromSetName derives the entity type name from the entity set name
 // This uses simple pluralization rules - removes trailing 's' or 'es'
 func getEntityTypeFromSetName(entitySetName string) string {
@@ -972,6 +1027,22 @@ func BuildNextLinkWithSkipToken(r *http.Request, skipToken string) string {
 	nextURL.RawQuery = query.Encode()
 
 	return baseURL + nextURL.Path + "?" + nextURL.RawQuery
+}
+
+// BuildDeltaLink builds a delta link URL using the supplied delta token.
+func BuildDeltaLink(r *http.Request, deltaToken string) string {
+	baseURL := buildBaseURL(r)
+
+	deltaURL := *r.URL
+	query := deltaURL.Query()
+	query.Set("$deltatoken", deltaToken)
+	deltaURL.RawQuery = query.Encode()
+
+	if deltaURL.RawQuery != "" {
+		return baseURL + deltaURL.Path + "?" + deltaURL.RawQuery
+	}
+
+	return baseURL + deltaURL.Path
 }
 
 // ODataURLComponents represents the parsed components of an OData URL

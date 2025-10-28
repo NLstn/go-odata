@@ -9,6 +9,7 @@ import (
 
 	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/response"
+	"github.com/nlstn/go-odata/internal/trackchanges"
 	"gorm.io/gorm"
 )
 
@@ -145,6 +146,65 @@ func (h *EntityHandler) handleFetchError(w http.ResponseWriter, err error, entit
 			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
 		}
 	}
+}
+
+func (h *EntityHandler) supportsTrackChanges() bool {
+	return h.tracker != nil && !h.metadata.IsSingleton
+}
+
+func (h *EntityHandler) recordChange(entity interface{}, changeType trackchanges.ChangeType) {
+	if !h.supportsTrackChanges() {
+		return
+	}
+
+	keyValues := h.extractKeyValues(entity)
+	var data map[string]interface{}
+	if changeType != trackchanges.ChangeTypeDeleted {
+		data = h.entityToMap(entity)
+	}
+	h.tracker.RecordChange(h.metadata.EntitySetName, keyValues, data, changeType)
+}
+
+func (h *EntityHandler) extractKeyValues(entity interface{}) map[string]interface{} {
+	keyValues := make(map[string]interface{})
+	entityValue := reflect.ValueOf(entity)
+	if entityValue.Kind() == reflect.Ptr {
+		entityValue = entityValue.Elem()
+	}
+
+	if !entityValue.IsValid() {
+		return keyValues
+	}
+
+	for _, keyProp := range h.metadata.KeyProperties {
+		field := entityValue.FieldByName(keyProp.Name)
+		if field.IsValid() {
+			keyValues[keyProp.JsonName] = field.Interface()
+		}
+	}
+
+	return keyValues
+}
+
+func (h *EntityHandler) entityToMap(entity interface{}) map[string]interface{} {
+	result := make(map[string]interface{})
+	entityValue := reflect.ValueOf(entity)
+	if entityValue.Kind() == reflect.Ptr {
+		entityValue = entityValue.Elem()
+	}
+
+	if !entityValue.IsValid() {
+		return result
+	}
+
+	for _, prop := range h.metadata.Properties {
+		field := entityValue.FieldByName(prop.Name)
+		if field.IsValid() {
+			result[prop.JsonName] = field.Interface()
+		}
+	}
+
+	return result
 }
 
 // buildEntityResponseWithMetadata builds an OData entity response with metadata level support

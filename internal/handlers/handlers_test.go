@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/nlstn/go-odata/internal/metadata"
+	"github.com/nlstn/go-odata/internal/trackchanges"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -33,6 +34,9 @@ func setupTestHandler(t *testing.T) (*EntityHandler, *gorm.DB) {
 	}
 
 	handler := NewEntityHandler(db, entityMeta)
+	tracker := trackchanges.NewTracker()
+	tracker.RegisterEntity(entityMeta.EntitySetName)
+	handler.SetDeltaTracker(tracker)
 	return handler, db
 }
 

@@ -11,6 +11,7 @@ import (
 	"github.com/nlstn/go-odata/internal/preference"
 	"github.com/nlstn/go-odata/internal/query"
 	"github.com/nlstn/go-odata/internal/response"
+	"github.com/nlstn/go-odata/internal/trackchanges"
 	"gorm.io/gorm"
 )
 
@@ -240,6 +241,8 @@ func (h *EntityHandler) handleDeleteEntity(w http.ResponseWriter, r *http.Reques
 		fmt.Printf("AfterDelete hook failed: %v\n", err)
 	}
 
+	h.recordChange(entity, trackchanges.ChangeTypeDeleted)
+
 	// Return 204 No Content according to OData v4 spec
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -281,9 +284,17 @@ func (h *EntityHandler) handlePatchEntity(w http.ResponseWriter, r *http.Request
 	pref := preference.ParsePrefer(r)
 
 	// Fetch and update the entity
-	db, _, err := h.fetchAndUpdateEntity(w, r, entityKey)
+	db, entity, err := h.fetchAndUpdateEntity(w, r, entityKey)
 	if err != nil {
 		return // Error already written
+	}
+
+	if entity != nil {
+		if err := db.First(entity).Error; err == nil {
+			h.recordChange(entity, trackchanges.ChangeTypeUpdated)
+		} else {
+			fmt.Printf("Error refreshing entity for change tracking: %v\n", err)
+		}
 	}
 
 	// Write response based on preference
@@ -437,6 +448,15 @@ func (h *EntityHandler) handlePutEntity(w http.ResponseWriter, r *http.Request, 
 	db, err := h.fetchAndReplaceEntity(w, r, entityKey)
 	if err != nil {
 		return // Error already written
+	}
+
+	if db != nil {
+		replacedEntity := reflect.New(h.metadata.EntityType).Interface()
+		if err := db.First(replacedEntity).Error; err == nil {
+			h.recordChange(replacedEntity, trackchanges.ChangeTypeUpdated)
+		} else {
+			fmt.Printf("Error refreshing entity for change tracking: %v\n", err)
+		}
 	}
 
 	// Write response based on preference

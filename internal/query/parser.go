@@ -10,17 +10,18 @@ import (
 
 // QueryOptions represents parsed OData query options
 type QueryOptions struct {
-	Filter    *FilterExpression
-	Select    []string
-	Expand    []ExpandOption
-	OrderBy   []OrderByItem
-	Top       *int
-	Skip      *int
-	SkipToken *string // Skip token for server-driven paging
-	Count     bool
-	Apply     []ApplyTransformation
-	Search    string                 // Search query string
-	Compute   *ComputeTransformation // Standalone $compute option
+	Filter     *FilterExpression
+	Select     []string
+	Expand     []ExpandOption
+	OrderBy    []OrderByItem
+	Top        *int
+	Skip       *int
+	SkipToken  *string // Skip token for server-driven paging
+	DeltaToken *string
+	Count      bool
+	Apply      []ApplyTransformation
+	Search     string                 // Search query string
+	Compute    *ComputeTransformation // Standalone $compute option
 }
 
 // ExpandOption represents a single $expand clause
@@ -238,6 +239,8 @@ func ParseQueryOptions(queryParams url.Values, entityMetadata *metadata.EntityMe
 		return nil, err
 	}
 
+	parseDeltaTokenOption(queryParams, options)
+
 	if err := parseCountOption(queryParams, options); err != nil {
 		return nil, err
 	}
@@ -444,6 +447,13 @@ func parseSkipTokenOption(queryParams url.Values, options *QueryOptions) error {
 		options.SkipToken = &skipTokenStr
 	}
 	return nil
+}
+
+// parseDeltaTokenOption parses the $deltatoken query parameter
+func parseDeltaTokenOption(queryParams url.Values, options *QueryOptions) {
+	if deltaToken := queryParams.Get("$deltatoken"); deltaToken != "" {
+		options.DeltaToken = &deltaToken
+	}
 }
 
 // parseCountOption parses the $count query parameter

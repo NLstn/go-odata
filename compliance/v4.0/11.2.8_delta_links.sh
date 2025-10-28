@@ -7,82 +7,119 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../test_framework.sh"
 
-# Global variables to store initial response
-INITIAL_RESPONSE=""
-INITIAL_STATUS=""
-INITIAL_BODY=""
-PREFERENCE_APPLIED=""
+INITIAL_TOKEN=""
+CURRENT_TOKEN=""
+CREATED_PRODUCT_ID=""
 
-# Test 1: Request delta with Prefer: odata.track-changes
-test_1() {
-    INITIAL_RESPONSE=$(curl -s -i -H "Prefer: odata.track-changes" "$SERVER_URL/Products" 2>&1)
-    INITIAL_STATUS=$(echo "$INITIAL_RESPONSE" | grep "^HTTP" | tail -1 | awk '{print $2}')
-    INITIAL_BODY=$(echo "$INITIAL_RESPONSE" | sed -n '/^$/,$p' | tail -n +2)
-    PREFERENCE_APPLIED=$(echo "$INITIAL_RESPONSE" | grep -i "^Preference-Applied:" | head -1 | sed 's/Preference-Applied: //i' | tr -d '\r')
-    
-    if [ "$INITIAL_STATUS" = "200" ] || [ "$INITIAL_STATUS" = "501" ]; then
-        return 0
-    fi
-    return 1
-}
+request_initial_delta() {
+    local RESPONSE=$(curl -s -i -H "Prefer: odata.track-changes" "$SERVER_URL/Products" 2>&1)
+    local STATUS=$(echo "$RESPONSE" | grep "^HTTP" | tail -1 | awk '{print $2}')
+    if [ "$STATUS" != "200" ]; then
+        echo "  Details: Expected 200, got $STATUS"
+        return 1
+    }
 
-# Test 2: Preference-Applied header should indicate track-changes support
-test_2() {
-    if [ "$INITIAL_STATUS" = "200" ] || [ "$INITIAL_STATUS" = "501" ]; then
-        return 0
-    fi
-    return 1
-}
+    local PREF_APPLIED=$(echo "$RESPONSE" | grep -i "^Preference-Applied:" | head -1 | sed 's/Preference-Applied: //i' | tr -d '\r')
+    echo "$PREF_APPLIED" | grep -qi "odata.track-changes" || {
+        echo "  Details: Preference-Applied header missing odata.track-changes"
+        return 1
+    }
 
-# Test 3: Delta link should be dereferenceable (if present)
-test_3() {
-    if echo "$INITIAL_BODY" | grep -q '"@odata.deltaLink"'; then
-        local DELTA_LINK=$(echo "$INITIAL_BODY" | grep -o '"@odata.deltaLink":"[^"]*"' | cut -d'"' -f4)
-        if [ -n "$DELTA_LINK" ]; then
-            if echo "$DELTA_LINK" | grep -q "^http"; then
-                check_status "$DELTA_LINK" 200
-            else
-                check_status "${DELTA_LINK#/}" 200
-            fi
-        else
-            return 1
-        fi
+    local BODY=$(echo "$RESPONSE" | sed -n '/^$/,$p' | tail -n +2)
+    local DELTA_LINK=$(echo "$BODY" | grep -o '"@odata.deltaLink":"[^"]*"' | head -1 | cut -d'"' -f4)
+    if [ -z "$DELTA_LINK" ]; then
+        echo "  Details: Delta link not found in initial response"
+        return 1
     fi
+
+    INITIAL_TOKEN=$(echo "$DELTA_LINK" | sed -n 's/.*$deltatoken=\([^&]*\).*/\1/p')
+    if [ -z "$INITIAL_TOKEN" ]; then
+        echo "  Details: Failed to extract delta token"
+        return 1
+    fi
+
+    CURRENT_TOKEN="$INITIAL_TOKEN"
     return 0
 }
 
-# Test 4: Delta response should include context (if delta supported)
-test_4() {
-    if echo "$INITIAL_BODY" | grep -q '"@odata.deltaLink"'; then
-        check_contains "$INITIAL_BODY" '"@odata.context"' "Delta response has @odata.context"
+verify_delta_includes_creation() {
+    local PAYLOAD='{ "Name": "Track Changes Widget", "Price": 42.42, "CategoryID": 1, "Status": 1 }'
+    local CREATE_RESPONSE=$(curl -s -i -H "Content-Type: application/json" -H "X-User-Role: admin" -X POST -d "$PAYLOAD" "$SERVER_URL/Products" 2>&1)
+    local CREATE_STATUS=$(echo "$CREATE_RESPONSE" | grep "^HTTP" | tail -1 | awk '{print $2}')
+    if [ "$CREATE_STATUS" != "201" ]; then
+        echo "  Details: Expected 201 when creating product, got $CREATE_STATUS"
+        return 1
+    }
+
+    local CREATE_BODY=$(echo "$CREATE_RESPONSE" | sed -n '/^$/,$p' | tail -n +2)
+    CREATED_PRODUCT_ID=$(echo "$CREATE_BODY" | grep -o '"ID"[: ]*[0-9]*' | head -1 | sed 's/[^0-9]//g')
+    if [ -z "$CREATED_PRODUCT_ID" ]; then
+        echo "  Details: Failed to parse created product ID"
+        return 1
     fi
+
+    local DELTA_RESPONSE=$(curl -s -i "$SERVER_URL/Products?\$deltatoken=$CURRENT_TOKEN" 2>&1)
+    local DELTA_STATUS=$(echo "$DELTA_RESPONSE" | grep "^HTTP" | tail -1 | awk '{print $2}')
+    if [ "$DELTA_STATUS" != "200" ]; then
+        echo "  Details: Expected 200 for delta request, got $DELTA_STATUS"
+        return 1
+    }
+
+    local DELTA_BODY=$(echo "$DELTA_RESPONSE" | sed -n '/^$/,$p' | tail -n +2)
+    echo "$DELTA_BODY" | grep -q '"Name":"Track Changes Widget"' || {
+        echo "  Details: Delta response missing created entity"
+        return 1
+    }
+
+    local NEXT_LINK=$(echo "$DELTA_BODY" | grep -o '"@odata.deltaLink":"[^"]*"' | head -1 | cut -d'"' -f4)
+    if [ -z "$NEXT_LINK" ]; then
+        echo "  Details: Delta response missing delta link"
+        return 1
+    fi
+
+    CURRENT_TOKEN=$(echo "$NEXT_LINK" | sed -n 's/.*$deltatoken=\([^&]*\).*/\1/p')
+    if [ -z "$CURRENT_TOKEN" ]; then
+        echo "  Details: Failed to extract next delta token"
+        return 1
+    fi
+
     return 0
 }
 
-# Test 5: Delta with $filter
-test_5() {
-    local RESPONSE=$(http_get "$SERVER_URL/Products?\$filter=Price%20gt%2010" "-H" "Prefer: odata.track-changes")
-    local STATUS=$(echo "$RESPONSE" | tail -1)
-    if [ "$STATUS" = "200" ] || [ "$STATUS" = "501" ]; then
-        return 0
+verify_delta_includes_deletion() {
+    if [ -z "$CREATED_PRODUCT_ID" ]; then
+        echo "  Details: Created product ID not set"
+        return 1
     fi
-    return 1
+
+    local DELETE_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -H "X-User-Role: admin" -X DELETE "$SERVER_URL/Products($CREATED_PRODUCT_ID)")
+    if [ "$DELETE_STATUS" != "204" ]; then
+        echo "  Details: Expected 204 when deleting product, got $DELETE_STATUS"
+        return 1
+    fi
+
+    local DELTA_RESPONSE=$(curl -s -i "$SERVER_URL/Products?\$deltatoken=$CURRENT_TOKEN" 2>&1)
+    local DELTA_STATUS=$(echo "$DELTA_RESPONSE" | grep "^HTTP" | tail -1 | awk '{print $2}')
+    if [ "$DELTA_STATUS" != "200" ]; then
+        echo "  Details: Expected 200 for delta deletion request, got $DELTA_STATUS"
+        return 1
+    }
+
+    local DELTA_BODY=$(echo "$DELTA_RESPONSE" | sed -n '/^$/,$p' | tail -n +2)
+    echo "$DELTA_BODY" | grep -q '"@odata.removed"' || {
+        echo "  Details: Delta response missing @odata.removed entry"
+        return 1
+    }
+    echo "$DELTA_BODY" | grep -q "\"ID\":$CREATED_PRODUCT_ID" || {
+        echo "  Details: Removal entry missing correct ID"
+        return 1
+    }
+
+    return 0
 }
 
-# Test 6: Delta token parameter handling
-test_6() {
-    local STATUS=$(http_get "$SERVER_URL/Products?\$deltatoken=test-token" | tail -1)
-    if [ "$STATUS" = "200" ] || [ "$STATUS" = "410" ] || [ "$STATUS" = "400" ] || [ "$STATUS" = "501" ]; then
-        return 0
-    fi
-    return 1
-}
-
-run_test "Request delta with Prefer: odata.track-changes" test_1
-run_test "Preference-Applied header for track-changes" test_2
-run_test "Delta link is dereferenceable" test_3
-run_test "Delta response includes @odata.context" test_4
-run_test "Delta request with \$filter" test_5
-run_test "Request with delta token parameter" test_6
+run_test "Initial delta request applies track-changes preference" request_initial_delta
+run_test "Delta feed includes newly created entity" verify_delta_includes_creation
+run_test "Delta feed reports deleted entity" verify_delta_includes_deletion
 
 print_summary

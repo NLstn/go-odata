@@ -210,6 +210,30 @@ func TestParsePrefer_MaxPageSizeInvalid(t *testing.T) {
 	}
 }
 
+func TestParsePrefer_TrackChanges(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Prefer", "odata.track-changes")
+
+	pref := ParsePrefer(req)
+	if !pref.TrackChangesRequested {
+		t.Fatalf("expected track changes to be requested")
+	}
+
+	pref.ApplyTrackChanges()
+	applied := pref.GetPreferenceApplied()
+	if applied != "odata.track-changes" {
+		t.Fatalf("expected Preference-Applied to include track changes, got %s", applied)
+	}
+}
+
+func TestGetPreferenceApplied_TrackChangesNotApplied(t *testing.T) {
+	pref := &Preference{TrackChangesRequested: true}
+
+	if applied := pref.GetPreferenceApplied(); applied != "" {
+		t.Fatalf("expected empty applied preferences, got %s", applied)
+	}
+}
+
 func TestParsePrefer_MultipleWithMaxPageSize(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set("Prefer", "return=representation, odata.maxpagesize=25")
