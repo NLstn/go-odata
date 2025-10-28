@@ -20,6 +20,18 @@ type InvalidEntity struct {
 	// No key field
 }
 
+type RegisteredEnum int
+
+const (
+	RegisteredEnumFoo RegisteredEnum = 0
+	RegisteredEnumBar RegisteredEnum = 4
+)
+
+type RegisteredEnumEntity struct {
+	ID    int            `json:"id" odata:"key"`
+	Value RegisteredEnum `json:"value" odata:"enum=RegisteredEnum"`
+}
+
 func setupTestDB(t *testing.T) *gorm.DB {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
@@ -137,6 +149,22 @@ func TestServiceRegisterMultipleEntities(t *testing.T) {
 		if _, exists := service.handlers[setName]; !exists {
 			t.Errorf("Handler for %s not found", setName)
 		}
+	}
+}
+
+func TestRegisterEnumType(t *testing.T) {
+	db := setupTestDB(t)
+	service := NewService(db)
+
+	if err := RegisterEnumType(RegisteredEnum(0), map[string]int64{
+		"Foo": int64(RegisteredEnumFoo),
+		"Bar": int64(RegisteredEnumBar),
+	}); err != nil {
+		t.Fatalf("RegisterEnumType failed: %v", err)
+	}
+
+	if err := service.RegisterEntity(&RegisteredEnumEntity{}); err != nil {
+		t.Fatalf("RegisterEntity with registered enum failed: %v", err)
 	}
 }
 

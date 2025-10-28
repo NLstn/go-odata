@@ -41,6 +41,7 @@ type EntityMetadataProvider interface {
 	GetKeyProperties() []PropertyMetadata // Returns all key properties (single or composite)
 	GetEntitySetName() string
 	GetETagProperty() *PropertyMetadata // Returns the ETag property if configured
+	GetNamespace() string
 }
 
 // PropertyMetadata represents metadata about a property
@@ -325,7 +326,7 @@ func processMapEntity(entity reflect.Value, metadata EntityMetadataProvider, exp
 		// Get entity type name from entity set name (remove trailing 's' for simple pluralization)
 		// This is a simplified approach - in a real implementation, we'd get this from metadata
 		entityTypeName := getEntityTypeFromSetName(entitySetName)
-		entityMap["@odata.type"] = "#ODataService." + entityTypeName
+		entityMap["@odata.type"] = "#" + metadata.GetNamespace() + "." + entityTypeName
 	}
 
 	// Add navigation links only for full metadata (per OData v4 spec)
@@ -399,7 +400,7 @@ func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataPro
 	// Add @odata.type annotation for full metadata
 	if metadataLevel == "full" {
 		entityTypeName := getEntityTypeFromSetName(entitySetName)
-		entityMap.Set("@odata.type", "#ODataService."+entityTypeName)
+		entityMap.Set("@odata.type", "#"+metadata.GetNamespace()+"."+entityTypeName)
 	}
 
 	for j := 0; j < entity.NumField(); j++ {

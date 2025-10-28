@@ -6,12 +6,16 @@ package odata
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/nlstn/go-odata/internal/actions"
 	"github.com/nlstn/go-odata/internal/handlers"
 	"github.com/nlstn/go-odata/internal/metadata"
 	"gorm.io/gorm"
 )
+
+// DefaultNamespace is used when no explicit namespace is configured for the service.
+const DefaultNamespace = "ODataService"
 
 // Service represents an OData service that can handle multiple entities.
 type Service struct {
@@ -31,6 +35,8 @@ type Service struct {
 	actions map[string]*actions.ActionDefinition
 	// functions holds registered functions keyed by function name
 	functions map[string]*actions.FunctionDefinition
+	// namespace used for metadata generation
+	namespace string
 }
 
 // NewService creates a new OData service instance with database connection.
@@ -45,7 +51,9 @@ func NewService(db *gorm.DB) *Service {
 		serviceDocumentHandler: handlers.NewServiceDocumentHandler(entities),
 		actions:                make(map[string]*actions.ActionDefinition),
 		functions:              make(map[string]*actions.FunctionDefinition),
+		namespace:              DefaultNamespace,
 	}
+	s.metadataHandler.SetNamespace(DefaultNamespace)
 	// Initialize batch handler with reference to service
 	s.batchHandler = handlers.NewBatchHandler(db, handlersMap, s)
 	return s
@@ -64,6 +72,7 @@ func (s *Service) RegisterEntity(entity interface{}) error {
 
 	// Create and store the handler
 	handler := handlers.NewEntityHandler(s.db, entityMetadata)
+	handler.SetNamespace(s.namespace)
 	handler.SetEntitiesMetadata(s.entities)
 	s.handlers[entityMetadata.EntitySetName] = handler
 
@@ -86,6 +95,7 @@ func (s *Service) RegisterSingleton(entity interface{}, singletonName string) er
 
 	// Create and store the handler (same handler type works for both entities and singletons)
 	handler := handlers.NewEntityHandler(s.db, singletonMetadata)
+	handler.SetNamespace(s.namespace)
 	handler.SetEntitiesMetadata(s.entities)
 	s.handlers[singletonName] = handler
 
@@ -148,5 +158,24 @@ func (s *Service) RegisterFunction(function actions.FunctionDefinition) error {
 
 	s.functions[function.Name] = &function
 	fmt.Printf("Registered function: %s (Bound: %v, EntitySet: %s)\n", function.Name, function.IsBound, function.EntitySet)
+	return nil
+}
+
+// SetNamespace updates the namespace used for metadata generation and @odata.type annotations.
+func (s *Service) SetNamespace(namespace string) error {
+	trimmed := strings.TrimSpace(namespace)
+	if trimmed == "" {
+		return fmt.Errorf("namespace cannot be empty")
+	}
+
+	if trimmed == s.namespace {
+		return nil
+	}
+
+	s.namespace = trimmed
+	s.metadataHandler.SetNamespace(trimmed)
+	for _, handler := range s.handlers {
+		handler.SetNamespace(trimmed)
+	}
 	return nil
 }

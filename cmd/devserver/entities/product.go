@@ -8,7 +8,7 @@ import (
 )
 
 // ProductStatus represents product status as a flags enum
-type ProductStatus int
+type ProductStatus int32
 
 const (
 	// ProductStatusNone represents no status
@@ -22,6 +22,17 @@ const (
 	// ProductStatusFeatured represents that the product is featured
 	ProductStatusFeatured ProductStatus = 8
 )
+
+// EnumMembers returns the enum member mapping for metadata generation.
+func (ProductStatus) EnumMembers() map[string]int {
+	return map[string]int{
+		"None":         int(ProductStatusNone),
+		"InStock":      int(ProductStatusInStock),
+		"OnSale":       int(ProductStatusOnSale),
+		"Discontinued": int(ProductStatusDiscontinued),
+		"Featured":     int(ProductStatusFeatured),
+	}
+}
 
 // Product represents a product entity for the development server with rich metadata
 type Product struct {
@@ -48,11 +59,11 @@ func (p Product) BeforeCreate(ctx context.Context, r *http.Request) error {
 	// Check if the user is an admin
 	// In a real application, you would extract this from authentication tokens/session
 	isAdmin := r.Header.Get("X-User-Role") == "admin"
-	
+
 	if !isAdmin {
 		return fmt.Errorf("only administrators are allowed to create products")
 	}
-	
+
 	return nil
 }
 
@@ -62,11 +73,11 @@ func (p Product) BeforeUpdate(ctx context.Context, r *http.Request) error {
 	// Check if the user is an admin
 	// In a real application, you would extract this from authentication tokens/session
 	isAdmin := r.Header.Get("X-User-Role") == "admin"
-	
+
 	if !isAdmin {
 		return fmt.Errorf("only administrators are allowed to update products")
 	}
-	
+
 	return nil
 }
 

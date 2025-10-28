@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"sort"
 	"strings"
 	"sync"
 
@@ -20,13 +21,50 @@ type MetadataHandler struct {
 	cachedJSON []byte
 	onceXML    sync.Once
 	onceJSON   sync.Once
+	namespace  string
 }
+
+const defaultNamespace = "ODataService"
 
 // NewMetadataHandler creates a new metadata handler
 func NewMetadataHandler(entities map[string]*metadata.EntityMetadata) *MetadataHandler {
 	return &MetadataHandler{
-		entities: entities,
+		entities:  entities,
+		namespace: defaultNamespace,
 	}
+}
+
+// SetNamespace updates the namespace used for metadata generation and clears cached documents.
+func (h *MetadataHandler) SetNamespace(namespace string) {
+	trimmed := strings.TrimSpace(namespace)
+	if trimmed == "" {
+		trimmed = defaultNamespace
+	}
+	if trimmed == h.namespace {
+		return
+	}
+	h.namespace = trimmed
+	h.cachedXML = ""
+	h.cachedJSON = nil
+	h.onceXML = sync.Once{}
+	h.onceJSON = sync.Once{}
+}
+
+func (h *MetadataHandler) namespaceOrDefault() string {
+	if strings.TrimSpace(h.namespace) == "" {
+		return defaultNamespace
+	}
+	return h.namespace
+}
+
+func (h *MetadataHandler) qualifiedTypeName(typeName string) string {
+	return fmt.Sprintf("%s.%s", h.namespaceOrDefault(), typeName)
+}
+
+type enumTypeInfo struct {
+	Members        []metadata.EnumMember
+	IsFlags        bool
+	UnderlyingType string
 }
 
 // HandleMetadata handles the metadata document endpoint
@@ -225,11 +263,12 @@ func (h *MetadataHandler) handleMetadataXML(w http.ResponseWriter, r *http.Reque
 
 // buildMetadataDocument builds the complete metadata XML document
 func (h *MetadataHandler) buildMetadataDocument() string {
+	namespace := h.namespaceOrDefault()
 	metadata := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <edmx:Edmx xmlns:edmx="http://docs.oasis-open.org/odata/ns/edmx" Version="%s">
   <edmx:DataServices>
-    <Schema xmlns="http://docs.oasis-open.org/odata/ns/edm" Namespace="ODataService">
-`, response.ODataVersionValue)
+    <Schema xmlns="http://docs.oasis-open.org/odata/ns/edm" Namespace="%s">
+`, response.ODataVersionValue, namespace)
 
 	// Add enum types
 	metadata += h.buildEnumTypes()
@@ -249,49 +288,81 @@ func (h *MetadataHandler) buildMetadataDocument() string {
 
 // buildEnumTypes builds the enum type definitions
 func (h *MetadataHandler) buildEnumTypes() string {
-	result := ""
-	enumTypes := make(map[string]bool)
+	enumDefinitions := make(map[string]*enumTypeInfo)
 
-	// Collect all unique enum types from all entities
 	for _, entityMeta := range h.entities {
 		for _, prop := range entityMeta.Properties {
-			if prop.IsEnum && prop.EnumTypeName != "" {
-				if !enumTypes[prop.EnumTypeName] {
-					enumTypes[prop.EnumTypeName] = true
-					result += h.buildEnumType(prop.EnumTypeName, prop.IsFlags)
-				}
+			if !prop.IsEnum || prop.EnumTypeName == "" {
+				continue
+			}
+
+			info, exists := enumDefinitions[prop.EnumTypeName]
+			if !exists {
+				info = &enumTypeInfo{}
+				enumDefinitions[prop.EnumTypeName] = info
+			}
+
+			if len(info.Members) == 0 && len(prop.EnumMembers) > 0 {
+				info.Members = append([]metadata.EnumMember(nil), prop.EnumMembers...)
+			}
+			if info.UnderlyingType == "" && prop.EnumUnderlyingType != "" {
+				info.UnderlyingType = prop.EnumUnderlyingType
+			}
+			if prop.IsFlags {
+				info.IsFlags = true
 			}
 		}
 	}
 
-	return result
+	if len(enumDefinitions) == 0 {
+		return ""
+	}
+
+	enumNames := make([]string, 0, len(enumDefinitions))
+	for name := range enumDefinitions {
+		enumNames = append(enumNames, name)
+	}
+	sort.Strings(enumNames)
+
+	var builder strings.Builder
+	for _, name := range enumNames {
+		info := enumDefinitions[name]
+		if info == nil || len(info.Members) == 0 {
+			continue
+		}
+		builder.WriteString(h.buildEnumType(name, info))
+	}
+
+	return builder.String()
 }
 
 // buildEnumType builds a single enum type definition
-func (h *MetadataHandler) buildEnumType(enumTypeName string, isFlags bool) string {
+func (h *MetadataHandler) buildEnumType(enumTypeName string, info *enumTypeInfo) string {
+	if info == nil {
+		return ""
+	}
+
 	flagsAttr := ""
-	if isFlags {
+	if info.IsFlags {
 		flagsAttr = ` IsFlags="true"`
 	}
 
-	result := fmt.Sprintf(`      <EnumType Name="%s" UnderlyingType="Edm.Int32"%s>
-`, enumTypeName, flagsAttr)
-
-	// Add enum members based on the enum type name
-	// In a real implementation, this would use reflection to get actual enum values
-	// For now, we'll add common members for known types
-	if enumTypeName == "ProductStatus" {
-		result += `        <Member Name="None" Value="0" />
-        <Member Name="InStock" Value="1" />
-        <Member Name="OnSale" Value="2" />
-        <Member Name="Discontinued" Value="4" />
-        <Member Name="Featured" Value="8" />
-`
+	underlyingType := "Edm.Int32"
+	if info.UnderlyingType != "" {
+		underlyingType = info.UnderlyingType
 	}
 
-	result += `      </EnumType>
-`
-	return result
+	var builder strings.Builder
+	builder.WriteString(fmt.Sprintf(`      <EnumType Name="%s" UnderlyingType="%s"%s>`, enumTypeName, underlyingType, flagsAttr))
+	builder.WriteString("\n")
+
+	for _, member := range info.Members {
+		builder.WriteString(fmt.Sprintf(`        <Member Name="%s" Value="%d" />`, member.Name, member.Value))
+		builder.WriteString("\n")
+	}
+
+	builder.WriteString("      </EnumType>\n")
+	return builder.String()
 }
 
 // buildEntityTypes builds the entity type definitions
@@ -340,7 +411,7 @@ func (h *MetadataHandler) buildRegularProperties(entityMeta *metadata.EntityMeta
 		// Determine the EDM type
 		var edmType string
 		if prop.IsEnum && prop.EnumTypeName != "" {
-			edmType = fmt.Sprintf("ODataService.%s", prop.EnumTypeName)
+			edmType = h.qualifiedTypeName(prop.EnumTypeName)
 		} else {
 			edmType = getEdmType(prop.Type)
 		}
@@ -388,7 +459,7 @@ func (h *MetadataHandler) buildNavigationProperties(entityMeta *metadata.EntityM
 			continue
 		}
 
-		typeName := fmt.Sprintf("ODataService.%s", prop.NavigationTarget)
+		typeName := h.qualifiedTypeName(prop.NavigationTarget)
 		if prop.NavigationIsArray {
 			typeName = fmt.Sprintf("Collection(%s)", typeName)
 		}
@@ -422,8 +493,8 @@ func (h *MetadataHandler) buildEntityContainer() string {
 	for entitySetName, entityMeta := range h.entities {
 		if entityMeta.IsSingleton {
 			// Output singleton definition
-			result += fmt.Sprintf(`        <Singleton Name="%s" Type="ODataService.%s">
-`, entityMeta.SingletonName, entityMeta.EntityName)
+			result += fmt.Sprintf(`        <Singleton Name="%s" Type="%s">
+`, entityMeta.SingletonName, h.qualifiedTypeName(entityMeta.EntityName))
 
 			// Add navigation property bindings for singleton
 			for _, prop := range entityMeta.Properties {
@@ -438,8 +509,8 @@ func (h *MetadataHandler) buildEntityContainer() string {
 `
 		} else {
 			// Output entity set definition
-			result += fmt.Sprintf(`        <EntitySet Name="%s" EntityType="ODataService.%s">
-`, entitySetName, entityMeta.EntityName)
+			result += fmt.Sprintf(`        <EntitySet Name="%s" EntityType="%s">
+`, entitySetName, h.qualifiedTypeName(entityMeta.EntityName))
 
 			// Add navigation property bindings
 			for _, prop := range entityMeta.Properties {
@@ -483,11 +554,13 @@ func (h *MetadataHandler) handleMetadataJSON(w http.ResponseWriter, r *http.Requ
 // buildMetadataJSON builds the JSON metadata document and returns the raw bytes
 func (h *MetadataHandler) buildMetadataJSON() []byte {
 	// Build CSDL JSON structure
+	namespace := h.namespaceOrDefault()
 	odataService := make(map[string]interface{})
 	csdl := map[string]interface{}{
-		"$Version":     response.ODataVersionValue,
-		"ODataService": odataService,
+		"$Version":         response.ODataVersionValue,
+		"$EntityContainer": fmt.Sprintf("%s.Container", namespace),
 	}
+	csdl[namespace] = odataService
 
 	// Add enum types
 	h.addJSONEnumTypes(odataService)
@@ -514,41 +587,74 @@ func (h *MetadataHandler) buildMetadataJSON() []byte {
 
 // addJSONEnumTypes adds enum type definitions to the JSON service
 func (h *MetadataHandler) addJSONEnumTypes(odataService map[string]interface{}) {
-	enumTypes := make(map[string]bool)
+	enumDefinitions := make(map[string]*enumTypeInfo)
 
-	// Collect all unique enum types from all entities
 	for _, entityMeta := range h.entities {
 		for _, prop := range entityMeta.Properties {
-			if prop.IsEnum && prop.EnumTypeName != "" {
-				if !enumTypes[prop.EnumTypeName] {
-					enumTypes[prop.EnumTypeName] = true
-					enumType := h.buildJSONEnumType(prop.EnumTypeName, prop.IsFlags)
-					odataService[prop.EnumTypeName] = enumType
-				}
+			if !prop.IsEnum || prop.EnumTypeName == "" {
+				continue
+			}
+
+			info, exists := enumDefinitions[prop.EnumTypeName]
+			if !exists {
+				info = &enumTypeInfo{}
+				enumDefinitions[prop.EnumTypeName] = info
+			}
+
+			if len(info.Members) == 0 && len(prop.EnumMembers) > 0 {
+				info.Members = append([]metadata.EnumMember(nil), prop.EnumMembers...)
+			}
+			if info.UnderlyingType == "" && prop.EnumUnderlyingType != "" {
+				info.UnderlyingType = prop.EnumUnderlyingType
+			}
+			if prop.IsFlags {
+				info.IsFlags = true
 			}
 		}
+	}
+
+	if len(enumDefinitions) == 0 {
+		return
+	}
+
+	enumNames := make([]string, 0, len(enumDefinitions))
+	for name := range enumDefinitions {
+		enumNames = append(enumNames, name)
+	}
+	sort.Strings(enumNames)
+
+	for _, name := range enumNames {
+		info := enumDefinitions[name]
+		if info == nil || len(info.Members) == 0 {
+			continue
+		}
+		enumType := h.buildJSONEnumType(info)
+		odataService[name] = enumType
 	}
 }
 
 // buildJSONEnumType builds a JSON enum type definition
-func (h *MetadataHandler) buildJSONEnumType(enumTypeName string, isFlags bool) map[string]interface{} {
-	enumType := map[string]interface{}{
-		"$Kind":           "EnumType",
-		"$UnderlyingType": "Edm.Int32",
+func (h *MetadataHandler) buildJSONEnumType(info *enumTypeInfo) map[string]interface{} {
+	if info == nil {
+		return nil
 	}
 
-	if isFlags {
+	enumType := map[string]interface{}{
+		"$Kind": "EnumType",
+	}
+
+	underlyingType := "Edm.Int32"
+	if info.UnderlyingType != "" {
+		underlyingType = info.UnderlyingType
+	}
+	enumType["$UnderlyingType"] = underlyingType
+
+	if info.IsFlags {
 		enumType["$IsFlags"] = true
 	}
 
-	// Add enum members based on the enum type name
-	// In a real implementation, this would use reflection to get actual enum values
-	if enumTypeName == "ProductStatus" {
-		enumType["None"] = 0
-		enumType["InStock"] = 1
-		enumType["OnSale"] = 2
-		enumType["Discontinued"] = 4
-		enumType["Featured"] = 8
+	for _, member := range info.Members {
+		enumType[member.Name] = member.Value
 	}
 
 	return enumType
@@ -593,7 +699,7 @@ func (h *MetadataHandler) buildJSONPropertyDefinition(prop *metadata.PropertyMet
 
 	// Determine the type
 	if prop.IsEnum && prop.EnumTypeName != "" {
-		propDef["$Type"] = fmt.Sprintf("ODataService.%s", prop.EnumTypeName)
+		propDef["$Type"] = h.qualifiedTypeName(prop.EnumTypeName)
 	} else {
 		propDef["$Type"] = getEdmType(prop.Type)
 	}
@@ -646,9 +752,9 @@ func (h *MetadataHandler) buildJSONNavigationProperty(prop *metadata.PropertyMet
 
 	if prop.NavigationIsArray {
 		navProp["$Collection"] = true
-		navProp["$Type"] = fmt.Sprintf("ODataService.%s", prop.NavigationTarget)
+		navProp["$Type"] = h.qualifiedTypeName(prop.NavigationTarget)
 	} else {
-		navProp["$Type"] = fmt.Sprintf("ODataService.%s", prop.NavigationTarget)
+		navProp["$Type"] = h.qualifiedTypeName(prop.NavigationTarget)
 	}
 
 	// Add referential constraints if present
@@ -676,7 +782,7 @@ func (h *MetadataHandler) buildJSONEntityContainer() map[string]interface{} {
 		if entityMeta.IsSingleton {
 			// Build singleton definition
 			singleton := map[string]interface{}{
-				"$Type": fmt.Sprintf("ODataService.%s", entityMeta.EntityName),
+				"$Type": h.qualifiedTypeName(entityMeta.EntityName),
 			}
 
 			// Add navigation property bindings
@@ -690,7 +796,7 @@ func (h *MetadataHandler) buildJSONEntityContainer() map[string]interface{} {
 			// Build entity set definition
 			entitySet := map[string]interface{}{
 				"$Collection": true,
-				"$Type":       fmt.Sprintf("ODataService.%s", entityMeta.EntityName),
+				"$Type":       h.qualifiedTypeName(entityMeta.EntityName),
 			}
 
 			// Add navigation property bindings
