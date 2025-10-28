@@ -287,7 +287,15 @@ func buildComparisonCondition(filter *FilterExpression, entityMetadata *metadata
 		return buildFunctionComparison(filter, entityMetadata)
 	}
 
-	columnName := GetColumnName(filter.Property, entityMetadata)
+	// Determine if this is a regular entity property or a computed property
+	// If the property doesn't exist in entity metadata, treat it as a computed alias
+	var columnName string
+	if propertyExists(filter.Property, entityMetadata) {
+		columnName = GetColumnName(filter.Property, entityMetadata)
+	} else {
+		// Computed property - use the alias as-is
+		columnName = filter.Property
+	}
 
 	// Check if the value is a function call that needs to be converted to SQL
 	if funcCall, ok := filter.Value.(*FunctionCallExpr); ok {
@@ -1073,15 +1081,24 @@ func buildSimpleFunctionComparison(filter *FilterExpression) (string, []interfac
 // applyOrderBy applies order by clauses to the GORM query
 func applyOrderBy(db *gorm.DB, orderBy []OrderByItem, entityMetadata *metadata.EntityMetadata) *gorm.DB {
 	for _, item := range orderBy {
-		if !propertyExists(item.Property, entityMetadata) {
-			continue // Skip unrecognized properties in $orderby
+		// Check if this is a regular property (in entity metadata)
+		if propertyExists(item.Property, entityMetadata) {
+			// Regular entity property - use column name
+			columnName := GetColumnName(item.Property, entityMetadata)
+			direction := "ASC"
+			if item.Descending {
+				direction = "DESC"
+			}
+			db = db.Order(fmt.Sprintf("%s %s", columnName, direction))
+		} else {
+			// Not in entity metadata - assume it's a computed property alias
+			// Use the alias directly (it's already in the SELECT clause from $compute)
+			direction := "ASC"
+			if item.Descending {
+				direction = "DESC"
+			}
+			db = db.Order(fmt.Sprintf("%s %s", item.Property, direction))
 		}
-		columnName := GetColumnName(item.Property, entityMetadata)
-		direction := "ASC"
-		if item.Descending {
-			direction = "DESC"
-		}
-		db = db.Order(fmt.Sprintf("%s %s", columnName, direction))
 	}
 	return db
 }

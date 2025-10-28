@@ -8,7 +8,7 @@ import (
 )
 
 // parseOrderBy parses the $orderby query option
-func parseOrderBy(orderByStr string, entityMetadata *metadata.EntityMetadata) ([]OrderByItem, error) {
+func parseOrderBy(orderByStr string, entityMetadata *metadata.EntityMetadata, computedAliases map[string]bool) ([]OrderByItem, error) {
 	parts := strings.Split(orderByStr, ",")
 	result := make([]OrderByItem, 0, len(parts))
 
@@ -34,8 +34,8 @@ func parseOrderBy(orderByStr string, entityMetadata *metadata.EntityMetadata) ([
 			}
 		}
 
-		// Validate property exists
-		if !propertyExists(item.Property, entityMetadata) {
+		// Validate property exists (either in entity metadata or as a computed alias)
+		if !propertyExists(item.Property, entityMetadata) && !computedAliases[item.Property] {
 			return nil, fmt.Errorf("property '%s' does not exist", item.Property)
 		}
 

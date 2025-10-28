@@ -52,7 +52,7 @@ func TestHasFunctionWithMetadata(t *testing.T) {
 
 	filterStr := "has(Status, 1)"
 
-	filter, err := parseFilter(filterStr, entityType)
+	filter, err := parseFilter(filterStr, entityType, nil)
 	if err != nil {
 		t.Fatalf("Failed to parse filter: %v", err)
 	}
@@ -144,7 +144,7 @@ func TestHasInfixWithMetadata(t *testing.T) {
 
 	filterStr := "Status has 1"
 
-	filter, err := parseFilter(filterStr, entityType)
+	filter, err := parseFilter(filterStr, entityType, nil)
 	if err != nil {
 		t.Fatalf("Failed to parse filter: %v", err)
 	}
@@ -268,13 +268,13 @@ func TestHasBothSyntaxes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Parse function form
-			funcFilter, err := parseFilter(tt.functionForm, entityType)
+			funcFilter, err := parseFilter(tt.functionForm, entityType, nil)
 			if err != nil {
 				t.Fatalf("Failed to parse function form: %v", err)
 			}
 
 			// Parse infix form
-			infixFilter, err := parseFilter(tt.infixForm, entityType)
+			infixFilter, err := parseFilter(tt.infixForm, entityType, nil)
 			if err != nil {
 				t.Fatalf("Failed to parse infix form: %v", err)
 			}

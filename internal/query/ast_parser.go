@@ -483,6 +483,21 @@ func (p *ASTParser) parseCollection() (ASTNode, error) {
 	return &CollectionExpr{Values: values}, nil
 }
 
+// computedAliasesContext holds computed property aliases for validation during AST conversion
+var computedAliasesContext map[string]bool
+
+// ASTToFilterExpressionWithComputed converts an AST to a FilterExpression with computed alias support
+func ASTToFilterExpressionWithComputed(node ASTNode, entityMetadata *metadata.EntityMetadata, computedAliases map[string]bool) (*FilterExpression, error) {
+	// Store computed aliases in context for use during conversion
+	computedAliasesContext = computedAliases
+	defer func() {
+		// Clear context after conversion
+		computedAliasesContext = nil
+	}()
+
+	return ASTToFilterExpression(node, entityMetadata)
+}
+
 // ASTToFilterExpression converts an AST to a FilterExpression
 func ASTToFilterExpression(node ASTNode, entityMetadata *metadata.EntityMetadata) (*FilterExpression, error) {
 	switch n := node.(type) {
@@ -684,8 +699,8 @@ func convertComparisonExpr(n *ComparisonExpr, entityMetadata *metadata.EntityMet
 func extractPropertyFromComparison(node ASTNode, entityMetadata *metadata.EntityMetadata) (string, error) {
 	if ident, ok := node.(*IdentifierExpr); ok {
 		property := ident.Name
-		// Validate property exists
-		if entityMetadata != nil && !propertyExists(property, entityMetadata) {
+		// Validate property exists (either in entity metadata or as a computed alias)
+		if entityMetadata != nil && !propertyExists(property, entityMetadata) && !computedAliasesContext[property] {
 			return "", fmt.Errorf("property '%s' does not exist", property)
 		}
 		return property, nil
@@ -726,8 +741,8 @@ func convertBinaryArithmeticExpr(binExpr *BinaryExpr, entityMetadata *metadata.E
 	var property string
 	if leftIdent, ok := binExpr.Left.(*IdentifierExpr); ok {
 		property = leftIdent.Name
-		// Validate property exists
-		if entityMetadata != nil && !propertyExists(property, entityMetadata) {
+		// Validate property exists (either in entity metadata or as a computed alias)
+		if entityMetadata != nil && !propertyExists(property, entityMetadata) && !computedAliasesContext[property] {
 			return nil, fmt.Errorf("property '%s' does not exist", property)
 		}
 	} else if leftBinExpr, ok := binExpr.Left.(*BinaryExpr); ok {
@@ -775,8 +790,8 @@ func convertBinaryArithmeticExpr(binExpr *BinaryExpr, entityMetadata *metadata.E
 func extractPropertyFromArithmeticExpr(binExpr *BinaryExpr, entityMetadata *metadata.EntityMetadata) (string, error) {
 	if leftIdent, ok := binExpr.Left.(*IdentifierExpr); ok {
 		property := leftIdent.Name
-		// Validate property exists
-		if entityMetadata != nil && !propertyExists(property, entityMetadata) {
+		// Validate property exists (either in entity metadata or as a computed alias)
+		if entityMetadata != nil && !propertyExists(property, entityMetadata) && !computedAliasesContext[property] {
 			return "", fmt.Errorf("property '%s' does not exist", property)
 		}
 		return property, nil
@@ -889,7 +904,8 @@ func isGeospatialFunction(name string) bool {
 func extractPropertyFromFunctionArg(arg ASTNode, functionName string, entityMetadata *metadata.EntityMetadata) (string, error) {
 	if ident, ok := arg.(*IdentifierExpr); ok {
 		property := ident.Name
-		if entityMetadata != nil && !propertyExists(property, entityMetadata) {
+		// Validate property exists (either in entity metadata or as a computed alias)
+		if entityMetadata != nil && !propertyExists(property, entityMetadata) && !computedAliasesContext[property] {
 			return "", fmt.Errorf("property '%s' does not exist", property)
 		}
 		return property, nil
@@ -988,7 +1004,8 @@ func convertConcatFunction(n *FunctionCallExpr, entityMetadata *metadata.EntityM
 	} else if ident, ok := n.Args[0].(*IdentifierExpr); ok {
 		// First argument is a property
 		property = ident.Name
-		if entityMetadata != nil && !propertyExists(property, entityMetadata) {
+		// Validate property exists (either in entity metadata or as a computed alias)
+		if entityMetadata != nil && !propertyExists(property, entityMetadata) && !computedAliasesContext[property] {
 			return nil, fmt.Errorf("property '%s' does not exist", property)
 		}
 		firstArg = nil // Property is stored in Property field
@@ -1112,7 +1129,8 @@ func convertArithmeticFunction(n *FunctionCallExpr, functionName string, entityM
 	// Check if first argument is a property
 	if ident, ok := n.Args[0].(*IdentifierExpr); ok {
 		property = ident.Name
-		if entityMetadata != nil && !propertyExists(property, entityMetadata) {
+		// Validate property exists (either in entity metadata or as a computed alias)
+		if entityMetadata != nil && !propertyExists(property, entityMetadata) && !computedAliasesContext[property] {
 			return nil, fmt.Errorf("property '%s' does not exist", property)
 		}
 	} else {

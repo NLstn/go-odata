@@ -119,7 +119,7 @@ func TestParseOrderBy(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := parseOrderBy(tt.orderByStr, meta)
+			result, err := parseOrderBy(tt.orderByStr, meta, nil)
 			if tt.expectErr {
 				if err == nil {
 					t.Error("Expected error but got none")

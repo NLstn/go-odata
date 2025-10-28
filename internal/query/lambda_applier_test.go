@@ -117,7 +117,7 @@ func TestLambdaApplier_SimpleAny(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Parse the filter
-			filterExpr, err := parseFilter(tt.filter, entityMetadata)
+			filterExpr, err := parseFilter(tt.filter, entityMetadata, nil)
 			if err != nil {
 				t.Fatalf("Failed to parse filter: %v", err)
 			}
@@ -162,7 +162,7 @@ func TestLambdaApplier_AnyWithContains(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			filterExpr, err := parseFilter(tt.filter, entityMetadata)
+			filterExpr, err := parseFilter(tt.filter, entityMetadata, nil)
 			if err != nil {
 				t.Fatalf("Failed to parse filter: %v", err)
 			}
@@ -208,7 +208,7 @@ func TestLambdaApplier_MultipleAny(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			filterExpr, err := parseFilter(tt.filter, entityMetadata)
+			filterExpr, err := parseFilter(tt.filter, entityMetadata, nil)
 			if err != nil {
 				t.Fatalf("Failed to parse filter: %v", err)
 			}
@@ -254,7 +254,7 @@ func TestLambdaApplier_NotAny(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			filterExpr, err := parseFilter(tt.filter, entityMetadata)
+			filterExpr, err := parseFilter(tt.filter, entityMetadata, nil)
 			if err != nil {
 				t.Fatalf("Failed to parse filter: %v", err)
 			}
@@ -300,7 +300,7 @@ func TestLambdaApplier_CombinedFilters(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			filterExpr, err := parseFilter(tt.filter, entityMetadata)
+			filterExpr, err := parseFilter(tt.filter, entityMetadata, nil)
 			if err != nil {
 				t.Fatalf("Failed to parse filter: %v", err)
 			}
@@ -340,7 +340,7 @@ func TestLambdaApplier_All(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			filterExpr, err := parseFilter(tt.filter, entityMetadata)
+			filterExpr, err := parseFilter(tt.filter, entityMetadata, nil)
 			if err != nil {
 				t.Fatalf("Failed to parse filter: %v", err)
 			}
@@ -383,7 +383,7 @@ func TestLambdaApplier_ComplexPredicates(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			filterExpr, err := parseFilter(tt.filter, entityMetadata)
+			filterExpr, err := parseFilter(tt.filter, entityMetadata, nil)
 			if err != nil {
 				t.Fatalf("Failed to parse filter: %v", err)
 			}
