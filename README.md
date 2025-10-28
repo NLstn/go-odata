@@ -14,6 +14,7 @@ A Go library for building services that expose OData v4 APIs with automatic hand
 - ✅ **Full OData v4 support** - 100% compliant with OData v4 specification
 - 🚀 **Simple API** - Define structs, register entities, and you're done
 - 🔍 **Rich querying** - Supports all OData query options ($filter, $select, $expand, etc.)
+- 🌍 **Geospatial functions** - Query geographic data with geo.distance, geo.length, and geo.intersects
 - 💾 **GORM integration** - Works with any GORM-compatible database
 - 🔒 **Optimistic concurrency** - Built-in ETag support
 - 🧰 **Lifecycle & read hooks** - Inject business logic, tenant filters, and response redaction
@@ -89,6 +90,7 @@ This creates a fully functional OData v4 service accessible at `http://localhost
 - **[Entity Definition](documentation/entities.md)** - Define entities with rich metadata and relationships
 - **[Server Configuration](documentation/server-configuration.md)** - Configure the service, add middleware, and integrate with your application
 - **[Actions and Functions](documentation/actions-and-functions.md)** - Implement custom OData operations
+- **[Geospatial Functions](documentation/geospatial.md)** - Query geographic data with spatial functions
 - **[Advanced Features](documentation/advanced-features.md)** - Singletons, ETags, lifecycle hooks, and read hooks for tenant filtering or redaction
 - **[Testing](documentation/testing.md)** - Unit tests, compliance tests, and performance profiling
 
