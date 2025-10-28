@@ -19,12 +19,16 @@ type EntityMetadata struct {
 	SingletonName string             // Name of the singleton (if IsSingleton is true)
 	// Hooks defines which lifecycle hooks are available on this entity
 	Hooks struct {
-		HasBeforeCreate bool
-		HasAfterCreate  bool
-		HasBeforeUpdate bool
-		HasAfterUpdate  bool
-		HasBeforeDelete bool
-		HasAfterDelete  bool
+		HasBeforeCreate         bool
+		HasAfterCreate          bool
+		HasBeforeUpdate         bool
+		HasAfterUpdate          bool
+		HasBeforeDelete         bool
+		HasAfterDelete          bool
+		HasBeforeReadCollection bool
+		HasAfterReadCollection  bool
+		HasBeforeReadEntity     bool
+		HasAfterReadEntity      bool
 	}
 }
 
@@ -468,6 +472,26 @@ func detectHooks(metadata *EntityMetadata) {
 	// Check AfterDelete
 	if hasMethod(valueType, "AfterDelete") || hasMethod(ptrType, "AfterDelete") {
 		metadata.Hooks.HasAfterDelete = true
+	}
+
+	// Check BeforeReadCollection
+	if hasMethod(valueType, "BeforeReadCollection") || hasMethod(ptrType, "BeforeReadCollection") {
+		metadata.Hooks.HasBeforeReadCollection = true
+	}
+
+	// Check AfterReadCollection
+	if hasMethod(valueType, "AfterReadCollection") || hasMethod(ptrType, "AfterReadCollection") {
+		metadata.Hooks.HasAfterReadCollection = true
+	}
+
+	// Check BeforeReadEntity
+	if hasMethod(valueType, "BeforeReadEntity") || hasMethod(ptrType, "BeforeReadEntity") {
+		metadata.Hooks.HasBeforeReadEntity = true
+	}
+
+	// Check AfterReadEntity
+	if hasMethod(valueType, "AfterReadEntity") || hasMethod(ptrType, "AfterReadEntity") {
+		metadata.Hooks.HasAfterReadEntity = true
 	}
 }
 
