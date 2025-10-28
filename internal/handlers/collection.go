@@ -158,7 +158,7 @@ func (h *EntityHandler) handleGetCollection(w http.ResponseWriter, r *http.Reque
 
 	// Write the OData response with navigation links
 	metadataProvider := newMetadataAdapter(h.metadata, h.namespace)
-	if err := response.WriteODataCollectionWithNavigation(w, r, h.metadata.EntitySetName, sliceValue, totalCount, nextLink, deltaLink, metadataProvider, expandedProps, h.metadata); err != nil {
+	if err := response.WriteODataCollectionWithNavigationAndDelta(w, r, h.metadata.EntitySetName, sliceValue, totalCount, nextLink, deltaLink, metadataProvider, expandedProps, h.metadata); err != nil {
 		// If we can't write the response, log the error but don't try to write another response
 		fmt.Printf("Error writing OData response: %v\n", err)
 	}

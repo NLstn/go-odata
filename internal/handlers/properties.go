@@ -281,7 +281,7 @@ func (h *EntityHandler) handleNavigationCollectionWithQueryOptions(w http.Respon
 	if isRef {
 		h.writeNavigationCollectionRefFromData(w, r, targetMetadata, resultsData, totalCount, nextLink)
 	} else {
-            if err := response.WriteODataCollection(w, r, navigationPath, resultsData, totalCount, nextLink, nil); err != nil {
+		if err := response.WriteODataCollection(w, r, navigationPath, resultsData, totalCount, nextLink); err != nil {
 			fmt.Printf("Error writing navigation property collection: %v\n", err)
 		}
 	}
@@ -1053,7 +1053,7 @@ func (h *EntityHandler) writeNavigationCollection(w http.ResponseWriter, r *http
 	// Build the navigation path according to OData V4 spec: EntitySet(key)/NavigationProperty
 	navigationPath := fmt.Sprintf(ODataEntityKeyFormat, h.metadata.EntitySetName, entityKey)
 	navigationPath = fmt.Sprintf("%s/%s", navigationPath, navProp.JsonName)
-    if err := response.WriteODataCollection(w, r, navigationPath, navData, nil, nil, nil); err != nil {
+	if err := response.WriteODataCollection(w, r, navigationPath, navData, nil, nil); err != nil {
 		fmt.Printf("Error writing navigation property collection: %v\n", err)
 	}
 }
