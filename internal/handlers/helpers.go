@@ -158,7 +158,7 @@ func (h *EntityHandler) buildEntityResponseWithMetadata(navValue reflect.Value, 
 
 	// Add @odata.type for full metadata
 	if metadataLevel == "full" {
-		odataResponse.Set("@odata.type", "#ODataService."+h.metadata.EntityName)
+		odataResponse.Set("@odata.type", "#"+h.qualifiedTypeName(h.metadata.EntityName))
 	}
 
 	navType := navValue.Type()
@@ -224,7 +224,7 @@ func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{
 
 	// Add @odata.type for full metadata
 	if metadataLevel == "full" {
-		odataResponse.Set("@odata.type", "#ODataService."+h.metadata.EntityName)
+		odataResponse.Set("@odata.type", "#"+h.qualifiedTypeName(h.metadata.EntityName))
 	}
 
 	// Handle map[string]interface{} (from $select filtering)
@@ -401,12 +401,14 @@ type metadataAdapter struct {
 	cachedKeyProperty   *response.PropertyMetadata
 	cachedKeyProperties []response.PropertyMetadata
 	cachedETagProperty  *response.PropertyMetadata
+	namespace           string
 }
 
 // newMetadataAdapter creates a new metadataAdapter with pre-computed cached properties
-func newMetadataAdapter(metadata *metadata.EntityMetadata) *metadataAdapter {
+func newMetadataAdapter(metadata *metadata.EntityMetadata, namespace string) *metadataAdapter {
 	adapter := &metadataAdapter{
-		metadata: metadata,
+		metadata:  metadata,
+		namespace: namespace,
 	}
 
 	// Pre-compute and cache all properties
@@ -480,6 +482,13 @@ func (a *metadataAdapter) GetEntitySetName() string {
 func (a *metadataAdapter) GetETagProperty() *response.PropertyMetadata {
 	// Return cached ETag property
 	return a.cachedETagProperty
+}
+
+func (a *metadataAdapter) GetNamespace() string {
+	if strings.TrimSpace(a.namespace) == "" {
+		return defaultNamespace
+	}
+	return a.namespace
 }
 
 // ValidateODataVersion checks if the OData-MaxVersion header is compatible with OData v4.0

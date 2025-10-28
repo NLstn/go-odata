@@ -59,9 +59,12 @@ type PropertyMetadata struct {
 	SearchFuzziness  int     // Fuzziness level for search (default 1, meaning exact match)
 	SearchSimilarity float64 // Similarity score for search (0.0 to 1.0, where 0.95 means 95% similar)
 	// Enum properties
-	IsEnum       bool   // True if this property is an enum type
-	EnumTypeName string // Name of the enum type (for metadata generation)
-	IsFlags      bool   // True if this enum supports flag combinations (bitwise operations)
+	IsEnum             bool         // True if this property is an enum type
+	EnumTypeName       string       // Name of the enum type (for metadata generation)
+	IsFlags            bool         // True if this enum supports flag combinations (bitwise operations)
+	EnumMembers        []EnumMember // Enum members for metadata generation
+	EnumUnderlyingType string       // Underlying EDM type (e.g., Edm.Int32)
+	EnumType           reflect.Type // Underlying Go enum type
 	// Binary properties
 	ContentType string // MIME type for binary properties (e.g., "image/svg+xml"), used when serving /$value
 }
@@ -229,6 +232,25 @@ func analyzeField(field reflect.StructField, metadata *EntityMetadata) (Property
 	// This runs after OData tags so explicit odata:"nullable" takes precedence
 	if err := autoDetectNullability(&property); err != nil {
 		return PropertyMetadata{}, err
+	}
+
+	if property.IsEnum {
+		enumMembers, enumType, err := ResolveEnumMembers(field.Type)
+		if err != nil {
+			return PropertyMetadata{}, fmt.Errorf("error resolving enum members for field %s: %w", field.Name, err)
+		}
+		property.EnumMembers = append([]EnumMember(nil), enumMembers...)
+		property.EnumType = enumType
+
+		if property.EnumTypeName == "" {
+			property.EnumTypeName = enumType.Name()
+		}
+
+		underlyingType, err := DetermineEnumUnderlyingType(enumType)
+		if err != nil {
+			return PropertyMetadata{}, fmt.Errorf("unsupported enum type for field %s: %w", field.Name, err)
+		}
+		property.EnumUnderlyingType = underlyingType
 	}
 
 	return property, nil

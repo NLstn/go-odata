@@ -5,7 +5,7 @@ import (
 )
 
 // ProductStatus represents product status as a flags enum
-type ProductStatus int
+type ProductStatus int32
 
 const (
 	// ProductStatusNone represents no status
@@ -19,6 +19,17 @@ const (
 	// ProductStatusFeatured represents that the product is featured
 	ProductStatusFeatured ProductStatus = 8
 )
+
+// EnumMembers returns the enum member mapping for compliance metadata generation.
+func (ProductStatus) EnumMembers() map[string]int {
+	return map[string]int{
+		"None":         int(ProductStatusNone),
+		"InStock":      int(ProductStatusInStock),
+		"OnSale":       int(ProductStatusOnSale),
+		"Discontinued": int(ProductStatusDiscontinued),
+		"Featured":     int(ProductStatusFeatured),
+	}
+}
 
 // Product represents a product entity for the compliance server
 type Product struct {

@@ -74,6 +74,10 @@ func main() {
 	// Create OData service
 	service := odata.NewService(Db)
 
+	if err := service.SetNamespace("ComplianceService"); err != nil {
+		log.Fatal("Failed to set service namespace:", err)
+	}
+
 	// Register the Category, Product and ProductDescription entities
 	if err := service.RegisterEntity(&entities.Category{}); err != nil {
 		log.Fatal("Failed to register Category entity:", err)

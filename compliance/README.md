@@ -23,7 +23,7 @@ When running all tests (default), both v4.0 and v4.01 tests are executed.
 
 ## Overview
 
-The compliance test suite consists of **85 individual test scripts** with **779 individual test cases** organized by OData v4 specification sections. Each test script validates specific aspects of the OData protocol implementation.
+The compliance test suite consists of **86 individual test scripts** with **781 individual test cases** organized by OData v4 specification sections. Each test script validates specific aspects of the OData protocol implementation.
 
 ### Test Coverage Summary
 
@@ -32,7 +32,7 @@ The compliance test suite consists of **85 individual test scripts** with **779 
 - **12 URL Convention Tests** - Entity Addressing, Canonical URL, Property Access, Collection Operations, Metadata Levels, Delta Links, Lambda Operators, Property $value, Stream Properties, Type Casting, Singleton Operations
 - **24 Query Option Tests** - $filter (with string/date/arithmetic/type/logical/comparison/geo operators), $select, $orderby, $top, $skip, $skiptoken, $count, $expand, $search, $format, $apply (including advanced transformations), $compute, $index, nested expand options, query option combinations, orderby with computed properties
 - **13 Data Modification Tests** - GET, POST, PATCH, PUT, DELETE, HEAD, Conditional Requests, Relationships, Modify Relationships, Deep Insert, Batch (including error handling), Asynchronous, Navigation Property Operations, Action/Function Parameters
-- **8 Data Type Tests** - Primitive data types, Numeric edge cases, Nullable properties, Collection properties, Complex types, Enum types, Temporal types, Type definitions
+- **9 Data Type Tests** - Primitive data types, Numeric edge cases, Nullable properties, Collection properties, Complex types, Enum types (including metadata validation), Temporal types, Type definitions
 - **6 Advanced Tests** - Lambda operators, filter on expanded properties, vocabulary annotations, batch error handling, advanced aggregation transformations
 - **5 String & Internationalization Tests** - String functions, Unicode and internationalization, URL encoding, edge cases
 
@@ -182,6 +182,7 @@ Example report structure:
 - **5.1.4_temporal_data_types.sh** - Tests temporal OData types (Edm.Date, Edm.TimeOfDay, Edm.Duration), cast/isof functions, date/time literals and comparisons
 - **5.2_complex_types.sh** - Tests complex (structured) types, nested properties, filtering, and complex type operations
 - **5.3_enum_types.sh** - Tests enumeration types, enum filtering with numeric/string values, and enum operations
+- **5.3_enum_metadata_members.sh** - Validates enumeration metadata members and namespace configuration for registered enums
 - **5.4_type_definitions.sh** - Tests custom type definitions in metadata and their usage
 
 ### Headers & Response Codes (Section 8.x)

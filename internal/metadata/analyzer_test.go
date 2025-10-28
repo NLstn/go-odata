@@ -40,6 +40,32 @@ type OrderAddress struct {
 	City string `json:"city"`
 }
 
+type MethodEnum int32
+
+const (
+	MethodEnumZero MethodEnum = 0
+	MethodEnumOne  MethodEnum = 1
+)
+
+func (MethodEnum) EnumMembers() map[string]int {
+	return map[string]int{
+		"Zero": int(MethodEnumZero),
+		"One":  int(MethodEnumOne),
+	}
+}
+
+type MethodEnumEntity struct {
+	ID    int        `json:"id" odata:"key"`
+	Value MethodEnum `json:"value" odata:"enum=MethodEnum"`
+}
+
+type MissingEnum int
+
+type MissingEnumEntity struct {
+	ID    int         `json:"id" odata:"key"`
+	Value MissingEnum `json:"value" odata:"enum=MissingEnum"`
+}
+
 func TestAnalyzeEntity(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -234,6 +260,33 @@ func TestEntityMetadataFinders(t *testing.T) {
 			t.Fatal("expected FindProperty to return nil for missing property")
 		}
 	})
+}
+
+func TestAnalyzeEntityEnumMembers(t *testing.T) {
+	meta, err := AnalyzeEntity(MethodEnumEntity{})
+	if err != nil {
+		t.Fatalf("AnalyzeEntity(MethodEnumEntity) error: %v", err)
+	}
+
+	prop := meta.FindProperty("Value")
+	if prop == nil {
+		t.Fatalf("expected to find enum property")
+	}
+	if !prop.IsEnum {
+		t.Fatalf("expected property to be enum")
+	}
+	if len(prop.EnumMembers) != 2 {
+		t.Fatalf("expected 2 enum members, got %d", len(prop.EnumMembers))
+	}
+	if prop.EnumUnderlyingType != "Edm.Int32" {
+		t.Fatalf("expected underlying type Edm.Int32, got %s", prop.EnumUnderlyingType)
+	}
+}
+
+func TestAnalyzeEntityEnumMissingMembers(t *testing.T) {
+	if _, err := AnalyzeEntity(MissingEnumEntity{}); err == nil {
+		t.Fatalf("expected error for enum without registered members")
+	}
 }
 
 func TestPropertyMetadata(t *testing.T) {
