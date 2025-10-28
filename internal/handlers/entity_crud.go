@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"strings"
 
 	"github.com/nlstn/go-odata/internal/etag"
 	"github.com/nlstn/go-odata/internal/preference"
@@ -331,9 +332,23 @@ func (h *EntityHandler) fetchAndUpdateEntity(w http.ResponseWriter, r *http.Requ
 	}
 
 	// Validate that all properties in updateData are valid entity properties
-	if err := h.validatePropertiesExist(updateData, w); err != nil {
+	// Skip validation for @odata.bind annotations
+	if err := h.validatePropertiesExistForUpdate(updateData, w); err != nil {
 		return nil, nil, err
 	}
+
+	// Process @odata.bind annotations to update navigation property relationships
+	// This also adds the foreign key values to updateData
+	if err := h.processODataBindAnnotationsForUpdate(entity, updateData, h.db); err != nil {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid @odata.bind annotation", err.Error()); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return nil, nil, err
+	}
+
+	// Remove @odata.bind annotations from updateData before updating the entity
+	// as they are not actual properties (the foreign keys have been added)
+	h.removeODataBindAnnotations(updateData)
 
 	// Validate data types
 	if err := h.validateDataTypes(updateData); err != nil {
@@ -576,6 +591,44 @@ func (h *EntityHandler) validatePropertiesExist(updateData map[string]interface{
 		}
 	}
 	return nil
+}
+
+// validatePropertiesExistForUpdate validates that all properties in updateData are valid entity properties
+// This version allows @odata.bind annotations for navigation properties
+func (h *EntityHandler) validatePropertiesExistForUpdate(updateData map[string]interface{}, w http.ResponseWriter) error {
+	// Build a map of valid property names (both JSON names and struct field names)
+	validProperties := make(map[string]bool)
+	for _, prop := range h.metadata.Properties {
+		validProperties[prop.JsonName] = true
+		validProperties[prop.Name] = true
+		// Allow @odata.bind annotations for navigation properties
+		if prop.IsNavigationProp {
+			validProperties[prop.JsonName+"@odata.bind"] = true
+			validProperties[prop.Name+"@odata.bind"] = true
+		}
+	}
+
+	// Check each property in updateData
+	for propName := range updateData {
+		if !validProperties[propName] {
+			err := fmt.Errorf("property '%s' does not exist on entity type '%s'", propName, h.metadata.EntityName)
+			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid property", err.Error()); writeErr != nil {
+				fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			}
+			return err
+		}
+	}
+	return nil
+}
+
+// removeODataBindAnnotations removes @odata.bind annotations from the update data
+// as they are not actual entity properties and should not be passed to GORM
+func (h *EntityHandler) removeODataBindAnnotations(updateData map[string]interface{}) {
+	for key := range updateData {
+		if strings.HasSuffix(key, "@odata.bind") {
+			delete(updateData, key)
+		}
+	}
 }
 
 // HandleEntityRef handles GET requests for entity references (e.g., Products(1)/$ref)

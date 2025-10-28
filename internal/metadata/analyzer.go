@@ -273,7 +273,7 @@ func extractReferentialConstraints(gormTag string) map[string]string {
 	constraints := make(map[string]string)
 
 	// Parse foreignKey and references from gorm tag
-	// Format: "foreignKey:UserID;references:ID"
+	// Format: "foreignKey:UserID;references:ID" or just "foreignKey:UserID" (references defaults to "ID")
 	var foreignKey, references string
 
 	parts := strings.Split(gormTag, ";")
@@ -286,7 +286,11 @@ func extractReferentialConstraints(gormTag string) map[string]string {
 		}
 	}
 
-	if foreignKey != "" && references != "" {
+	// If foreignKey is specified but references is not, GORM defaults to "ID"
+	if foreignKey != "" {
+		if references == "" {
+			references = "ID"
+		}
 		constraints[foreignKey] = references
 	}
 

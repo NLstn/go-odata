@@ -143,13 +143,39 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 	// Parse Prefer header
 	pref := preference.ParsePrefer(r)
 
+	// Parse the request body as a map first to detect @odata.bind annotations
+	var requestData map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&requestData); err != nil {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidRequestBody,
+			fmt.Sprintf(ErrDetailFailedToParseJSON, err.Error())); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	}
+
 	// Create a new instance of the entity
 	entity := reflect.New(h.metadata.EntityType).Interface()
 
-	// Parse the request body
-	if err := json.NewDecoder(r.Body).Decode(entity); err != nil {
+	// Convert the map back to JSON and decode into the entity structure
+	// This properly handles all the type conversions
+	jsonData, err := json.Marshal(requestData)
+	if err != nil {
+		if writeErr := response.WriteError(w, http.StatusInternalServerError, "Failed to process request data", err.Error()); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	}
+	if err := json.Unmarshal(jsonData, entity); err != nil {
 		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidRequestBody,
 			fmt.Sprintf(ErrDetailFailedToParseJSON, err.Error())); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	}
+
+	// Process @odata.bind annotations to establish navigation property relationships
+	if err := h.processODataBindAnnotations(entity, requestData, h.db); err != nil {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid @odata.bind annotation", err.Error()); writeErr != nil {
 			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
 		}
 		return
