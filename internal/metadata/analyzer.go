@@ -330,8 +330,15 @@ func analyzeComplexTypeFields(property *PropertyMetadata, fieldType reflect.Type
 			analyzeComplexTypeFields(&nestedProp, field.Type)
 		}
 
-		property.ComplexTypeFields[nestedProp.Name] = &nestedProp
-		property.ComplexTypeFields[nestedProp.JsonName] = &nestedProp
+		propCopy := nestedProp
+		propPtr := &propCopy
+
+		property.ComplexTypeFields[propCopy.Name] = propPtr
+
+		jsonKey := strings.TrimSpace(propCopy.JsonName)
+		if jsonKey != "" && jsonKey != "-" {
+			property.ComplexTypeFields[jsonKey] = propPtr
+		}
 	}
 }
 

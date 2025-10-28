@@ -7,42 +7,72 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../test_framework.sh"
 
-FILTER_ENCODED=$(printf %s "ShippingAddress/City eq 'Seattle'" | jq -sRr @uri)
-REQUEST_URL="${SERVER_URL}/Products?%24filter=${FILTER_ENCODED}"
+echo "======================================"
+echo "OData v4 Compliance Test"
+echo "Section: 5.2.1 Complex Type Filtering"
+echo "======================================"
+echo ""
+echo "Description: Validates that nested complex properties can participate in $filter expressions"
+echo "Spec Reference: https://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part1-protocol/odata-v4.0-errata03-os-part1-protocol-complete.html#sec_ComplexType"
+echo ""
 
-log_test_start "5.2.1" "Complex type filtering by nested property"
+encode_query_option() {
+    local raw_value="$1"
+    if command -v jq >/dev/null 2>&1; then
+        printf %s "$raw_value" | jq -sRr @uri
+    else
+        RAW_VALUE="$raw_value" python - <<'PY'
+import os
+import urllib.parse
+print(urllib.parse.quote(os.environ["RAW_VALUE"], safe=""))
+PY
+    fi
+}
 
-HTTP_CODE=$(http_get "$REQUEST_URL")
-RESPONSE=$(http_get_body "$REQUEST_URL")
+test_filter_nested_complex_property() {
+    local filter_expr="ShippingAddress/City eq 'Seattle'"
+    local encoded_filter=$(encode_query_option "$filter_expr")
+    local request_url="${SERVER_URL}/Products?%24filter=${encoded_filter}"
 
-if [ "$HTTP_CODE" != "200" ]; then
-    log_test_failure "Expected HTTP 200, got $HTTP_CODE" "$RESPONSE"
-    exit 1
-fi
+    local http_code=$(http_get "$request_url")
+    local response=$(http_get_body "$request_url")
 
-RESULT_COUNT=""
-if command -v jq >/dev/null 2>&1; then
-    RESULT_COUNT=$(echo "$RESPONSE" | jq '.value | length')
-else
-    RESULT_COUNT=$(python - <<'PY'
-import json, sys
+    if ! check_status "$http_code" "200"; then
+        echo "  Response: $response"
+        return 1
+    fi
+
+    local result_count=""
+    if command -v jq >/dev/null 2>&1; then
+        result_count=$(echo "$response" | jq '.value | length')
+    else
+        result_count=$(printf '%s' "$response" | python - <<'PY'
+import json
+import sys
 try:
     data = json.load(sys.stdin)
-    print(len(data.get('value', [])))
+    print(len(data.get("value", [])))
 except Exception:
-    print('')
+    print("")
 PY
 )
-fi
+    fi
 
-if [ -z "$RESULT_COUNT" ] || [ "$RESULT_COUNT" = "0" ]; then
-    log_test_failure "Expected at least one product in filtered results" "$RESPONSE"
-    exit 1
-fi
+    if [ -z "$result_count" ] || [ "$result_count" = "0" ]; then
+        echo "  Details: Expected at least one entity to match the filter"
+        echo "  Response: $response"
+        return 1
+    fi
 
-if ! echo "$RESPONSE" | grep -q '"City":"Seattle"'; then
-    log_test_failure "Filtered results do not include expected city" "$RESPONSE"
-    exit 1
-fi
+    if ! echo "$response" | grep -q '"City":"Seattle"'; then
+        echo "  Details: Filtered response missing expected City value"
+        echo "  Response: $response"
+        return 1
+    fi
 
-log_test_success
+    return 0
+}
+
+run_test "Filter by nested complex property" test_filter_nested_complex_property
+
+print_summary
