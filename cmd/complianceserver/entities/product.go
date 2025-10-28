@@ -47,10 +47,32 @@ type Product struct {
 	// Complex type properties
 	ShippingAddress *Address    `json:"ShippingAddress,omitempty" gorm:"embedded;embeddedPrefix:shipping_" odata:"nullable"`
 	Dimensions      *Dimensions `json:"Dimensions,omitempty" gorm:"embedded;embeddedPrefix:dim_" odata:"nullable"`
+	// Stream properties
+	Photo            struct{} `json:"-" gorm:"-" odata:"stream"`             // Photo stream property (logical property, no storage)
+	PhotoContentType string   `json:"-" gorm:"type:varchar(100)"`            // Content type for Photo stream
+	PhotoContent     []byte   `json:"-" gorm:"type:blob"`                    // Photo stream content
 	// Navigation properties
 	Category        *Category            `json:"Category,omitempty" gorm:"foreignKey:CategoryID;references:ID"`
 	Descriptions    []ProductDescription `json:"Descriptions,omitempty" gorm:"foreignKey:ProductID;references:ID"`
 	RelatedProducts []Product            `json:"RelatedProducts,omitempty" gorm:"many2many:product_relations;"`
+}
+
+// GetStreamProperty returns the content of a stream property by name
+func (p *Product) GetStreamProperty(name string) ([]byte, string, bool) {
+	if name == "Photo" {
+		return p.PhotoContent, p.PhotoContentType, true
+	}
+	return nil, "", false
+}
+
+// SetStreamProperty sets the content of a stream property by name
+func (p *Product) SetStreamProperty(name string, content []byte, contentType string) bool {
+	if name == "Photo" {
+		p.PhotoContent = content
+		p.PhotoContentType = contentType
+		return true
+	}
+	return false
 }
 
 // GetSampleProducts returns sample product data for seeding the database

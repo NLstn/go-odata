@@ -8,15 +8,17 @@ import (
 
 // EntityMetadata holds metadata information about an OData entity
 type EntityMetadata struct {
-	EntityType    reflect.Type
-	EntityName    string
-	EntitySetName string
-	Properties    []PropertyMetadata
-	KeyProperties []PropertyMetadata // Support for composite keys
-	KeyProperty   *PropertyMetadata  // Deprecated: Use KeyProperties for single or composite keys, kept for backwards compatibility
-	ETagProperty  *PropertyMetadata  // Property used for ETag generation (optional)
-	IsSingleton   bool               // True if this is a singleton (single instance accessible by name)
-	SingletonName string             // Name of the singleton (if IsSingleton is true)
+	EntityType       reflect.Type
+	EntityName       string
+	EntitySetName    string
+	Properties       []PropertyMetadata
+	KeyProperties    []PropertyMetadata // Support for composite keys
+	KeyProperty      *PropertyMetadata  // Deprecated: Use KeyProperties for single or composite keys, kept for backwards compatibility
+	ETagProperty     *PropertyMetadata  // Property used for ETag generation (optional)
+	IsSingleton      bool               // True if this is a singleton (single instance accessible by name)
+	SingletonName    string             // Name of the singleton (if IsSingleton is true)
+	HasStream        bool               // True if this is a media entity (has a media stream)
+	StreamProperties []PropertyMetadata // Named stream properties on this entity
 	// Hooks defines which lifecycle hooks are available on this entity
 	Hooks struct {
 		HasBeforeCreate         bool
@@ -69,6 +71,10 @@ type PropertyMetadata struct {
 	EnumType           reflect.Type // Underlying Go enum type
 	// Binary properties
 	ContentType string // MIME type for binary properties (e.g., "image/svg+xml"), used when serving /$value
+	// Stream properties
+	IsStream               bool   // True if this is a stream property (Edm.Stream type)
+	StreamContentTypeField string // Name of the field containing the content type for this stream
+	StreamContentField     string // Name of the field containing the binary content for this stream
 }
 
 // AnalyzeEntity extracts metadata from a Go struct for OData usage
@@ -122,6 +128,12 @@ func AnalyzeEntity(entity interface{}) (*EntityMetadata, error) {
 	if len(metadata.KeyProperties) == 1 {
 		metadata.KeyProperty = &metadata.KeyProperties[0]
 	}
+
+	// Detect if this is a media entity (has HasStream() method)
+	detectMediaEntity(metadata, entity)
+
+	// Detect stream properties
+	detectStreamProperties(metadata)
 
 	// Detect available lifecycle hooks
 	detectHooks(metadata)
@@ -523,6 +535,76 @@ func isVowel(r rune) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+// detectMediaEntity checks if the entity implements HasStream() method
+func detectMediaEntity(metadata *EntityMetadata, entity interface{}) {
+	entityType := metadata.EntityType
+
+	// Check for both value and pointer receivers
+	valueType := entityType
+	ptrType := reflect.PointerTo(entityType)
+
+	// Check if HasStream method exists
+	if hasMethod(valueType, "HasStream") || hasMethod(ptrType, "HasStream") {
+		// Call the method to get the actual value
+		val := reflect.ValueOf(entity)
+		if val.Kind() == reflect.Ptr {
+			val = val.Elem()
+		}
+
+		// Try to call HasStream() to get the value
+		method := val.MethodByName("HasStream")
+		if !method.IsValid() {
+			// Try on pointer
+			ptrVal := val.Addr()
+			method = ptrVal.MethodByName("HasStream")
+		}
+
+		if method.IsValid() && method.Type().NumIn() == 0 && method.Type().NumOut() == 1 {
+			result := method.Call(nil)
+			if len(result) > 0 && result[0].Kind() == reflect.Bool {
+				metadata.HasStream = result[0].Bool()
+			}
+		}
+	}
+}
+
+// detectStreamProperties finds properties tagged with odata:"stream"
+func detectStreamProperties(metadata *EntityMetadata) {
+	for i := range metadata.Properties {
+		prop := &metadata.Properties[i]
+
+		// Look up the field in the entity type to get its tags
+		field, found := metadata.EntityType.FieldByName(prop.FieldName)
+		if !found {
+			continue
+		}
+
+		odataTag := field.Tag.Get("odata")
+		if strings.Contains(odataTag, "stream") {
+			prop.IsStream = true
+
+			// Look for associated content type and content fields
+			// Convention: for a stream property "Photo", look for "PhotoContentType" and "PhotoContent"
+			for j := range metadata.Properties {
+				otherProp := &metadata.Properties[j]
+
+				// Check for content type field
+				if otherProp.FieldName == prop.FieldName+"ContentType" {
+					prop.StreamContentTypeField = otherProp.FieldName
+				}
+
+				// Check for content field
+				if otherProp.FieldName == prop.FieldName+"Content" {
+					prop.StreamContentField = otherProp.FieldName
+				}
+			}
+
+			// Add to stream properties list
+			metadata.StreamProperties = append(metadata.StreamProperties, *prop)
+		}
 	}
 }
 

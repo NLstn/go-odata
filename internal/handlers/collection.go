@@ -277,7 +277,14 @@ func (h *EntityHandler) buildDeltaEntries(r *http.Request, events []trackchanges
 
 // handlePostEntity handles POST requests to create new entities in a collection
 func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request) {
-	// Validate Content-Type header
+	// Check if this is a media entity and Content-Type is binary
+	contentType := r.Header.Get("Content-Type")
+	if h.metadata.HasStream && !strings.Contains(contentType, "application/json") {
+		h.handlePostMediaEntity(w, r)
+		return
+	}
+
+	// Validate Content-Type header for JSON
 	if err := validateContentType(w, r); err != nil {
 		return
 	}
@@ -385,6 +392,78 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 		SetODataHeader(w, HeaderODataEntityId, location)
 		w.WriteHeader(http.StatusNoContent)
 	}
+}
+
+// handlePostMediaEntity handles POST requests to create media entities with binary content
+func (h *EntityHandler) handlePostMediaEntity(w http.ResponseWriter, r *http.Request) {
+	// Read binary content from request body
+	content := make([]byte, 0)
+	buf := make([]byte, 4096)
+	for {
+		n, err := r.Body.Read(buf)
+		if n > 0 {
+			content = append(content, buf[:n]...)
+		}
+		if err != nil {
+			break
+		}
+	}
+
+	// Get content type from header
+	contentType := r.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+
+	// Create a new media entity instance
+	entity := reflect.New(h.metadata.EntityType).Interface()
+
+	// Set media content using SetMediaContent and SetMediaContentType methods
+	entityValue := reflect.ValueOf(entity)
+
+	if method := entityValue.MethodByName("SetMediaContent"); method.IsValid() {
+		method.Call([]reflect.Value{reflect.ValueOf(content)})
+	}
+
+	if method := entityValue.MethodByName("SetMediaContentType"); method.IsValid() {
+		method.Call([]reflect.Value{reflect.ValueOf(contentType)})
+	}
+
+	// Call BeforeCreate hook if it exists
+	if err := h.callBeforeCreate(entity, r); err != nil {
+		if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", err.Error()); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	}
+
+	// Create the entity in the database
+	if err := h.db.Create(entity).Error; err != nil {
+		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error()); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	}
+
+	// Call AfterCreate hook if it exists
+	if err := h.callAfterCreate(entity, r); err != nil {
+		// Log the error but don't fail the request since the entity was already created
+		fmt.Printf("AfterCreate hook failed: %v\n", err)
+	}
+
+	h.recordChange(entity, trackchanges.ChangeTypeAdded)
+
+	// Build the Location header
+	location := h.buildEntityLocation(r, entity)
+
+	// Set Location header
+	w.Header().Set("Location", location)
+
+	// Set OData-EntityId header
+	SetODataHeader(w, HeaderODataEntityId, location)
+
+	// Return 201 Created
+	w.WriteHeader(http.StatusCreated)
 }
 
 // validateRequiredProperties validates that all required properties are provided

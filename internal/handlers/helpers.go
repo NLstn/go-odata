@@ -287,6 +287,34 @@ func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{
 		odataResponse.Set("@odata.type", "#"+h.qualifiedTypeName(h.metadata.EntityName))
 	}
 
+	// Add media link annotations for media entities
+	if h.metadata.HasStream && metadataLevel != "none" {
+		if entityID != "" {
+			mediaReadLink := entityID + "/$value"
+			mediaEditLink := entityID + "/$value"
+			odataResponse.Set("@odata.mediaReadLink", mediaReadLink)
+			odataResponse.Set("@odata.mediaEditLink", mediaEditLink)
+
+			// Add media content type if available
+			entityValue := reflect.ValueOf(result)
+			if entityValue.Kind() == reflect.Ptr {
+				entityValue = entityValue.Elem()
+			}
+			if entityValue.Kind() == reflect.Struct && entityValue.CanAddr() {
+				// Try to get content type from the entity
+				if hasMethod := entityValue.Addr().MethodByName("GetMediaContentType"); hasMethod.IsValid() {
+					results := hasMethod.Call(nil)
+					if len(results) > 0 && results[0].Kind() == reflect.String {
+						contentType := results[0].String()
+						if contentType != "" {
+							odataResponse.Set("@odata.mediaContentType", contentType)
+						}
+					}
+				}
+			}
+		}
+	}
+
 	// Handle map[string]interface{} (from $select filtering)
 	if resultValue.Kind() == reflect.Map {
 		// Iterate over map keys in a consistent order

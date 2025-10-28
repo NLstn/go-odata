@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/NLstn/go-odata/complianceserver/entities"
 	"github.com/nlstn/go-odata"
@@ -14,12 +15,12 @@ import (
 // This function drops and recreates all tables to ensure a clean state
 func seedDatabase(db *gorm.DB) error {
 	// Drop all tables (GORM handles the correct order based on foreign keys)
-	if err := db.Migrator().DropTable(&entities.ProductDescription{}, &entities.Product{}, &entities.Category{}, &entities.CompanyInfo{}); err != nil {
+	if err := db.Migrator().DropTable(&entities.ProductDescription{}, &entities.Product{}, &entities.Category{}, &entities.CompanyInfo{}, &entities.MediaItem{}); err != nil {
 		return fmt.Errorf("failed to drop tables: %w", err)
 	}
 
 	// Recreate tables with fresh schema (auto-increment counters are automatically reset)
-	if err := db.AutoMigrate(&entities.Category{}, &entities.Product{}, &entities.ProductDescription{}, &entities.CompanyInfo{}); err != nil {
+	if err := db.AutoMigrate(&entities.Category{}, &entities.Product{}, &entities.ProductDescription{}, &entities.CompanyInfo{}, &entities.MediaItem{}); err != nil {
 		return fmt.Errorf("failed to migrate database: %w", err)
 	}
 
@@ -47,9 +48,42 @@ func seedDatabase(db *gorm.DB) error {
 		return fmt.Errorf("failed to seed company info: %w", err)
 	}
 
-	fmt.Printf("Database seeded with %d categories, %d products, %d descriptions, and company info\n",
-		len(sampleCategories), len(sampleProducts), len(sampleDescriptions))
+	// Seed media items
+	sampleMediaItems := getSampleMediaItems()
+	if err := db.Create(&sampleMediaItems).Error; err != nil {
+		return fmt.Errorf("failed to seed media items: %w", err)
+	}
+
+	fmt.Printf("Database seeded with %d categories, %d products, %d descriptions, %d media items, and company info\n",
+		len(sampleCategories), len(sampleProducts), len(sampleDescriptions), len(sampleMediaItems))
 	return nil
+}
+
+// getSampleMediaItems returns sample media items for seeding
+func getSampleMediaItems() []entities.MediaItem {
+	now := time.Now()
+	size1 := int64(1024)
+	size2 := int64(2048)
+	return []entities.MediaItem{
+		{
+			ID:          1,
+			Name:        "Sample Image",
+			ContentType: "image/png",
+			Size:        &size1,
+			Content:     []byte("fake-png-binary-data"),
+			CreatedAt:   now,
+			ModifiedAt:  now,
+		},
+		{
+			ID:          2,
+			Name:        "Sample Document",
+			ContentType: "application/pdf",
+			Size:        &size2,
+			Content:     []byte("fake-pdf-binary-data"),
+			CreatedAt:   now,
+			ModifiedAt:  now,
+		},
+	}
 }
 
 // registerReseedAction registers an unbound action to reseed the database
