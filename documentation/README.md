@@ -12,7 +12,7 @@ Welcome to the go-odata documentation! This directory contains detailed guides f
 ### Advanced Usage
 
 - **[Actions and Functions](actions-and-functions.md)** - Implement custom OData operations beyond standard CRUD
-- **[Advanced Features](advanced-features.md)** - Use singletons, ETags for concurrency control, and lifecycle hooks
+- **[Advanced Features](advanced-features.md)** - Use singletons, ETags for concurrency control, lifecycle hooks, and read hooks for authorization/redaction
 
 ### Testing & Development
 
@@ -57,7 +57,7 @@ Extend your service with custom operations. Learn about:
 Leverage powerful OData v4 features:
 - **Singletons**: Single-instance entities accessible by name
 - **ETags**: Optimistic concurrency control for safe updates
-- **Lifecycle Hooks**: Execute custom logic at specific points in entity lifecycle
+- **Lifecycle & Read Hooks**: Execute custom logic at specific points in entity lifecycle, add tenant filters, or redact responses before returning data
 
 ### Testing
 Ensure your OData service works correctly:

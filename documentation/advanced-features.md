@@ -7,6 +7,9 @@ This guide covers advanced features of go-odata including singletons, ETags, and
 - [Singletons](#singletons)
 - [ETags (Optimistic Concurrency Control)](#etags-optimistic-concurrency-control)
 - [Lifecycle Hooks](#lifecycle-hooks)
+  - [Read Hooks](#read-hooks)
+  - [Tenant Filtering Example](#tenant-filtering-example)
+  - [Redacting Sensitive Data](#redacting-sensitive-data)
 
 ## Singletons
 
@@ -244,6 +247,10 @@ The library supports the following hooks:
 - `AfterUpdate` - Called after updating an entity
 - `BeforeDelete` - Called before deleting an entity
 - `AfterDelete` - Called after deleting an entity
+- `BeforeReadCollection` - Called before reading a collection (applies additional GORM scopes)
+- `AfterReadCollection` - Called after reading a collection (allows mutating/overriding the result)
+- `BeforeReadEntity` - Called before reading a single entity (applies additional GORM scopes)
+- `AfterReadEntity` - Called after reading a single entity (allows mutating/overriding the result)
 
 ### Implementing Hooks
 
@@ -363,6 +370,96 @@ Client receives:
   }
 }
 ```
+
+### Read Hooks
+
+Read hooks let you shape read behavior without forking handlers:
+
+- **Before hooks** (`BeforeReadCollection` / `BeforeReadEntity`) return additional [GORM scopes](https://gorm.io/docs/scopes.html). Each scope is applied to the underlying query *before* OData options like `$filter`, `$orderby`, `$top`, `$skip`, and `$count` execute. This is the preferred place for authorization filters, tenant scoping, or eager-loading navigation properties.
+- **After hooks** (`AfterReadCollection` / `AfterReadEntity`) receive the fetched results after all query options and pagination have been applied. They can mutate or replace the response payload (e.g., redact fields, append computed properties) before it is sent to the client.
+
+Hook signatures:
+
+```go
+func (Product) BeforeReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error)
+func (Product) AfterReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions, results interface{}) (interface{}, error)
+func (Product) BeforeReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error)
+func (Product) AfterReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions, entity interface{}) (interface{}, error)
+```
+
+Each hook receives the active HTTP request, context, and parsed OData query options. Returning an error aborts the request and surfaces the error to the client.
+Return `(nil, nil)` from an After hook to keep the original response body.
+
+### Tenant Filtering Example
+
+Apply multi-tenant filters centrally by returning scopes from `BeforeReadCollection` and `BeforeReadEntity` hooks:
+
+```go
+// Requires: import "fmt" and "gorm.io/gorm"
+type Product struct {
+    ID        uint   `json:"ID" gorm:"primaryKey" odata:"key"`
+    Name      string `json:"Name"`
+    TenantID  string `json:"TenantID"`
+}
+
+func (Product) tenantScope(tenantID string) func(*gorm.DB) *gorm.DB {
+    return func(db *gorm.DB) *gorm.DB {
+        return db.Where("tenant_id = ?", tenantID)
+    }
+}
+
+func (Product) BeforeReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
+    tenantID := r.Header.Get("X-Tenant-ID")
+    if tenantID == "" {
+        return nil, fmt.Errorf("missing tenant header")
+    }
+    return []func(*gorm.DB) *gorm.DB{Product{}.tenantScope(tenantID)}, nil
+}
+
+func (Product) BeforeReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
+    tenantID := r.Header.Get("X-Tenant-ID")
+    if tenantID == "" {
+        return nil, fmt.Errorf("missing tenant header")
+    }
+    return []func(*gorm.DB) *gorm.DB{Product{}.tenantScope(tenantID)}, nil
+}
+```
+
+By returning scopes instead of mutating the request, the same tenant filter is applied consistently across `$count`, pagination, `$expand`, and navigation reads.
+
+### Redacting Sensitive Data
+
+Use `AfterReadEntity` or `AfterReadCollection` to redact fields just before they leave the service:
+
+```go
+func (Product) AfterReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions, entity interface{}) (interface{}, error) {
+    product, ok := entity.(*Product)
+    if !ok {
+        return entity, nil
+    }
+
+    if !isPrivileged(r) {
+        product.CostPrice = 0
+    }
+    return product, nil
+}
+
+func (Product) AfterReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions, results interface{}) (interface{}, error) {
+    products, ok := results.([]Product)
+    if !ok {
+        return results, nil
+    }
+
+    if !isPrivileged(r) {
+        for i := range products {
+            products[i].CostPrice = 0
+        }
+    }
+    return products, nil
+}
+```
+
+After hooks execute after all database work is complete, so they can safely adjust derived responses or redact sensitive information.
 
 ### Hook Order
 

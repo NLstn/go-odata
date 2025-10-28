@@ -16,6 +16,7 @@ A Go library for building services that expose OData v4 APIs with automatic hand
 - 🔍 **Rich querying** - Supports all OData query options ($filter, $select, $expand, etc.)
 - 💾 **GORM integration** - Works with any GORM-compatible database
 - 🔒 **Optimistic concurrency** - Built-in ETag support
+- 🧰 **Lifecycle & read hooks** - Inject business logic, tenant filters, and response redaction
 - 🎯 **Custom operations** - Easy registration of actions and functions
 - 📊 **Data aggregation** - Supports $apply transformations
 - 🧪 **Fully tested** - 85+ compliance tests ensuring OData v4 adherence
@@ -88,7 +89,7 @@ This creates a fully functional OData v4 service accessible at `http://localhost
 - **[Entity Definition](documentation/entities.md)** - Define entities with rich metadata and relationships
 - **[Server Configuration](documentation/server-configuration.md)** - Configure the service, add middleware, and integrate with your application
 - **[Actions and Functions](documentation/actions-and-functions.md)** - Implement custom OData operations
-- **[Advanced Features](documentation/advanced-features.md)** - Singletons, ETags, and lifecycle hooks
+- **[Advanced Features](documentation/advanced-features.md)** - Singletons, ETags, lifecycle hooks, and read hooks for tenant filtering or redaction
 - **[Testing](documentation/testing.md)** - Unit tests, compliance tests, and performance profiling
 
 ## What You Get
