@@ -76,13 +76,23 @@ func (h *EntityHandler) HandleNavigationPropertyCount(w http.ResponseWriter, r *
 
 // handleGetNavigationProperty handles GET requests for navigation properties
 func (h *EntityHandler) handleGetNavigationProperty(w http.ResponseWriter, r *http.Request, entityKey string, navigationProperty string, isRef bool) {
+	// Parse the navigation property to extract any key (e.g., RelatedProducts(2))
+	navPropName, targetKey := h.parseNavigationPropertyWithKey(navigationProperty)
+
 	// Find and validate the navigation property
-	navProp := h.findNavigationProperty(navigationProperty)
+	navProp := h.findNavigationProperty(navPropName)
 	if navProp == nil {
 		if err := response.WriteError(w, http.StatusNotFound, "Navigation property not found",
-			fmt.Sprintf("'%s' is not a valid navigation property for %s", navigationProperty, h.metadata.EntitySetName)); err != nil {
+			fmt.Sprintf("'%s' is not a valid navigation property for %s", navPropName, h.metadata.EntitySetName)); err != nil {
 			fmt.Printf(LogMsgErrorWritingErrorResponse, err)
 		}
+		return
+	}
+
+	// If a target key is specified for a collection navigation property (e.g., RelatedProducts(2))
+	// this means we're accessing a specific item from the collection
+	if targetKey != "" && navProp.NavigationIsArray {
+		h.handleNavigationCollectionItem(w, r, entityKey, navProp, targetKey, isRef)
 		return
 	}
 
@@ -287,6 +297,98 @@ func (h *EntityHandler) handleNavigationCollectionWithQueryOptions(w http.Respon
 	}
 }
 
+// handleNavigationCollectionItem handles accessing a specific item from a collection navigation property
+// Example: GET Products(1)/RelatedProducts(2) or GET Products(1)/RelatedProducts(2)/$ref
+func (h *EntityHandler) handleNavigationCollectionItem(w http.ResponseWriter, r *http.Request, entityKey string, navProp *metadata.PropertyMetadata, targetKey string, isRef bool) {
+	// Get the target entity metadata
+	targetMetadata, err := h.getTargetMetadata(navProp.NavigationTarget)
+	if err != nil {
+		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgInternalError,
+			fmt.Sprintf("Failed to get target metadata: %v", err)); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	}
+
+	// First verify that the parent entity exists
+	parent := reflect.New(h.metadata.EntityType).Interface()
+	parentDB, err := h.buildKeyQuery(entityKey)
+	if err != nil {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidKey, err.Error()); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	}
+	
+	// Preload the navigation property to verify the relationship
+	parentDB = parentDB.Preload(navProp.Name)
+	if err := parentDB.First(parent).Error; err != nil {
+		h.handleFetchError(w, err, entityKey)
+		return
+	}
+
+	// Extract the navigation property value to verify the relationship exists
+	parentValue := reflect.ValueOf(parent).Elem()
+	navFieldValue := parentValue.FieldByName(navProp.Name)
+	if !navFieldValue.IsValid() {
+		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgInternalError,
+			"Could not access navigation property"); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	}
+
+	// Check if the target key exists in the collection
+	found := false
+	var targetEntity interface{}
+	
+	if navFieldValue.Kind() == reflect.Slice {
+		for i := 0; i < navFieldValue.Len(); i++ {
+			item := navFieldValue.Index(i)
+			// Extract the key from this item
+			if len(targetMetadata.KeyProperties) == 1 {
+				// Single key property
+				keyProp := targetMetadata.KeyProperties[0]
+				itemKeyValue := item.FieldByName(keyProp.Name)
+				if itemKeyValue.IsValid() {
+					// Convert key value to string for comparison
+					itemKeyStr := fmt.Sprintf("%v", itemKeyValue.Interface())
+					if itemKeyStr == targetKey {
+						found = true
+						targetEntity = item.Interface()
+						break
+					}
+				}
+			}
+			// TODO: Handle composite keys if needed
+		}
+	}
+
+	if !found {
+		if writeErr := response.WriteError(w, http.StatusNotFound, "Entity not found",
+			fmt.Sprintf("Entity with key '%s' is not related to the parent entity via '%s'", targetKey, navProp.JsonName)); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	}
+
+	// Write the response
+	if isRef {
+		// Write a single entity reference
+		// WriteEntityReference expects just the entity path (e.g., "Products(2)"), not the full URL
+		entityPath := fmt.Sprintf("%s(%s)", targetMetadata.EntitySetName, targetKey)
+		if err := response.WriteEntityReference(w, r, entityPath); err != nil {
+			fmt.Printf("Error writing entity reference: %v\n", err)
+		}
+	} else {
+		// Write the full entity
+		navigationPath := fmt.Sprintf("%s(%s)/%s(%s)", h.metadata.EntitySetName, entityKey, navProp.JsonName, targetKey)
+		if err := response.WriteODataCollection(w, r, navigationPath, []interface{}{targetEntity}, nil, nil); err != nil {
+			fmt.Printf("Error writing navigation property entity: %v\n", err)
+		}
+	}
+}
+
 // handleGetNavigationPropertyCount handles GET requests for navigation property count
 func (h *EntityHandler) handleGetNavigationPropertyCount(w http.ResponseWriter, r *http.Request, entityKey string, navigationProperty string) {
 	// Find and validate the navigation property
@@ -363,7 +465,9 @@ func (h *EntityHandler) findStructuralProperty(propertyName string) *metadata.Pr
 
 // IsNavigationProperty checks if a property name is a navigation property
 func (h *EntityHandler) IsNavigationProperty(propertyName string) bool {
-	return h.findNavigationProperty(propertyName) != nil
+	// Parse out any key from the property name (e.g., "RelatedProducts(2)" -> "RelatedProducts")
+	navPropName, _ := h.parseNavigationPropertyWithKey(propertyName)
+	return h.findNavigationProperty(navPropName) != nil
 }
 
 // IsStructuralProperty checks if a property name is a structural property
@@ -1243,11 +1347,23 @@ func (h *EntityHandler) writeNavigationCollectionRefFromData(w http.ResponseWrit
 // handlePutNavigationPropertyRef handles PUT requests to update a single-valued navigation property reference
 // Example: PUT Products(1)/Category/$ref with body {"@odata.id":"http://localhost:8080/Categories(2)"}
 func (h *EntityHandler) handlePutNavigationPropertyRef(w http.ResponseWriter, r *http.Request, entityKey string, navigationProperty string) {
+	// Parse the navigation property to extract any key (though PUT shouldn't have a key in the navigation property)
+	navPropName, targetKey := h.parseNavigationPropertyWithKey(navigationProperty)
+	
+	// If a key was provided in the navigation property name for PUT, that's an error
+	if targetKey != "" {
+		if err := response.WriteError(w, http.StatusBadRequest, "Invalid request",
+			"PUT $ref does not support specifying a key in the navigation property. Use PUT /EntitySet(key)/NavigationProperty/$ref"); err != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, err)
+		}
+		return
+	}
+
 	// Find and validate the navigation property
-	navProp := h.findNavigationProperty(navigationProperty)
+	navProp := h.findNavigationProperty(navPropName)
 	if navProp == nil {
 		if err := response.WriteError(w, http.StatusNotFound, "Navigation property not found",
-			fmt.Sprintf("'%s' is not a valid navigation property for %s", navigationProperty, h.metadata.EntitySetName)); err != nil {
+			fmt.Sprintf("'%s' is not a valid navigation property for %s", navPropName, h.metadata.EntitySetName)); err != nil {
 			fmt.Printf(LogMsgErrorWritingErrorResponse, err)
 		}
 		return
@@ -1316,11 +1432,23 @@ func (h *EntityHandler) handlePutNavigationPropertyRef(w http.ResponseWriter, r 
 // handlePostNavigationPropertyRef handles POST requests to add a reference to a collection navigation property
 // Example: POST Products(1)/RelatedProducts/$ref with body {"@odata.id":"http://localhost:8080/Products(2)"}
 func (h *EntityHandler) handlePostNavigationPropertyRef(w http.ResponseWriter, r *http.Request, entityKey string, navigationProperty string) {
+	// Parse the navigation property to extract any key (though POST shouldn't have a key in the navigation property)
+	navPropName, targetKey := h.parseNavigationPropertyWithKey(navigationProperty)
+	
+	// If a key was provided in the navigation property name for POST, that's an error
+	if targetKey != "" {
+		if err := response.WriteError(w, http.StatusBadRequest, "Invalid request",
+			"POST $ref does not support specifying a key in the navigation property. Use POST /EntitySet(key)/NavigationProperty/$ref"); err != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, err)
+		}
+		return
+	}
+
 	// Find and validate the navigation property
-	navProp := h.findNavigationProperty(navigationProperty)
+	navProp := h.findNavigationProperty(navPropName)
 	if navProp == nil {
 		if err := response.WriteError(w, http.StatusNotFound, "Navigation property not found",
-			fmt.Sprintf("'%s' is not a valid navigation property for %s", navigationProperty, h.metadata.EntitySetName)); err != nil {
+			fmt.Sprintf("'%s' is not a valid navigation property for %s", navPropName, h.metadata.EntitySetName)); err != nil {
 			fmt.Printf(LogMsgErrorWritingErrorResponse, err)
 		}
 		return
