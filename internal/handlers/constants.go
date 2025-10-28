@@ -22,16 +22,17 @@ const (
 const (
 	ErrMsgMethodNotAllowed       = "Method not allowed"
 	ErrMsgInvalidQueryOptions    = "Invalid query options"
-	ErrMsgDatabaseError          = "Database error"
-	ErrMsgInvalidRequestBody     = "Invalid request body"
-	ErrMsgInvalidKey             = "Invalid key"
-	ErrMsgEntityNotFound         = "Entity not found"
-	ErrMsgInternalError          = "Internal error"
-	ErrMsgPreconditionFailed     = "Precondition failed"
-	ErrDetailPreconditionFailed  = "The entity has been modified. Please refresh and try again."
-	ErrMsgVersionNotSupported    = "OData version not supported"
-	ErrDetailVersionNotSupported = "This service only supports OData version 4.0 and above. The maximum version specified in the OData-MaxVersion header is below 4.0."
-	ErrMsgValidationFailed       = "Validation failed"
+        ErrMsgDatabaseError          = "Database error"
+        ErrMsgInvalidRequestBody     = "Invalid request body"
+        ErrMsgInvalidKey             = "Invalid key"
+        ErrMsgEntityNotFound         = "Entity not found"
+        ErrMsgInternalError          = "Internal error"
+        ErrMsgPreconditionFailed     = "Precondition failed"
+        ErrDetailPreconditionFailed  = "The entity has been modified. Please refresh and try again."
+        ErrMsgVersionNotSupported    = "OData version not supported"
+        ErrDetailVersionNotSupported = "This service only supports OData version 4.0 and above. The maximum version specified in the OData-MaxVersion header is below 4.0."
+        ErrMsgValidationFailed       = "Validation failed"
+        ErrMsgNotImplemented         = "Not implemented"
 )
 
 // Error detail format constants

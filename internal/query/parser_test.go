@@ -236,6 +236,16 @@ func TestParseQueryOptions(t *testing.T) {
 				}
 			},
 		},
+		{
+			name:      "Delta token",
+			query:     "$deltatoken=abc123",
+			expectErr: false,
+			validate: func(t *testing.T, opts *QueryOptions) {
+				if opts.DeltaToken == nil || *opts.DeltaToken != "abc123" {
+					t.Fatalf("Expected delta token to be parsed")
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {

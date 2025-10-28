@@ -11,6 +11,7 @@ import (
 	"github.com/nlstn/go-odata/internal/actions"
 	"github.com/nlstn/go-odata/internal/handlers"
 	"github.com/nlstn/go-odata/internal/metadata"
+	"github.com/nlstn/go-odata/internal/trackchanges"
 	"gorm.io/gorm"
 )
 
@@ -37,6 +38,8 @@ type Service struct {
 	functions map[string]*actions.FunctionDefinition
 	// namespace used for metadata generation
 	namespace string
+	// deltaTracker tracks entity changes for change tracking requests
+	deltaTracker *trackchanges.Tracker
 }
 
 // NewService creates a new OData service instance with database connection.
@@ -52,6 +55,7 @@ func NewService(db *gorm.DB) *Service {
 		actions:                make(map[string]*actions.ActionDefinition),
 		functions:              make(map[string]*actions.FunctionDefinition),
 		namespace:              DefaultNamespace,
+		deltaTracker:           trackchanges.NewTracker(),
 	}
 	s.metadataHandler.SetNamespace(DefaultNamespace)
 	// Initialize batch handler with reference to service
@@ -74,7 +78,10 @@ func (s *Service) RegisterEntity(entity interface{}) error {
 	handler := handlers.NewEntityHandler(s.db, entityMetadata)
 	handler.SetNamespace(s.namespace)
 	handler.SetEntitiesMetadata(s.entities)
+	handler.SetDeltaTracker(s.deltaTracker)
 	s.handlers[entityMetadata.EntitySetName] = handler
+
+	s.deltaTracker.RegisterEntity(entityMetadata.EntitySetName)
 
 	fmt.Printf("Registered entity: %s (EntitySet: %s)\n", entityMetadata.EntityName, entityMetadata.EntitySetName)
 	return nil

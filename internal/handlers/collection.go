@@ -7,10 +7,12 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/nlstn/go-odata/internal/etag"
 	"github.com/nlstn/go-odata/internal/preference"
 	"github.com/nlstn/go-odata/internal/query"
 	"github.com/nlstn/go-odata/internal/response"
 	"github.com/nlstn/go-odata/internal/skiptoken"
+	"github.com/nlstn/go-odata/internal/trackchanges"
 	"gorm.io/gorm"
 )
 
@@ -49,6 +51,12 @@ func (h *EntityHandler) handleGetCollection(w http.ResponseWriter, r *http.Reque
 		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions, err.Error()); writeErr != nil {
 			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
 		}
+		return
+	}
+
+	// Handle delta requests using $deltatoken
+	if queryOptions.DeltaToken != nil {
+		h.handleDeltaCollection(w, r, *queryOptions.DeltaToken)
 		return
 	}
 
@@ -114,6 +122,29 @@ func (h *EntityHandler) handleGetCollection(w http.ResponseWriter, r *http.Reque
 		sliceValue = override
 	}
 
+	var deltaLink *string
+	if pref.TrackChangesRequested {
+		if !h.supportsTrackChanges() {
+			if writeErr := response.WriteError(w, http.StatusNotImplemented, ErrMsgNotImplemented,
+				"Change tracking is not enabled for this entity set"); writeErr != nil {
+				fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			}
+			return
+		}
+
+		token, err := h.tracker.CurrentToken(h.metadata.EntitySetName)
+		if err != nil {
+			if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgInternalError, err.Error()); writeErr != nil {
+				fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			}
+			return
+		}
+
+		link := response.BuildDeltaLink(r, token)
+		deltaLink = &link
+		pref.ApplyTrackChanges()
+	}
+
 	// Add Preference-Applied header if any preference was applied
 	if applied := pref.GetPreferenceApplied(); applied != "" {
 		w.Header().Set(HeaderPreferenceApplied, applied)
@@ -127,10 +158,104 @@ func (h *EntityHandler) handleGetCollection(w http.ResponseWriter, r *http.Reque
 
 	// Write the OData response with navigation links
 	metadataProvider := newMetadataAdapter(h.metadata, h.namespace)
-	if err := response.WriteODataCollectionWithNavigation(w, r, h.metadata.EntitySetName, sliceValue, totalCount, nextLink, metadataProvider, expandedProps, h.metadata); err != nil {
+	if err := response.WriteODataCollectionWithNavigation(w, r, h.metadata.EntitySetName, sliceValue, totalCount, nextLink, deltaLink, metadataProvider, expandedProps, h.metadata); err != nil {
 		// If we can't write the response, log the error but don't try to write another response
 		fmt.Printf("Error writing OData response: %v\n", err)
 	}
+}
+
+func (h *EntityHandler) handleDeltaCollection(w http.ResponseWriter, r *http.Request, token string) {
+	if !h.supportsTrackChanges() {
+		if writeErr := response.WriteError(w, http.StatusNotImplemented, ErrMsgNotImplemented,
+			"Change tracking is not enabled for this entity set"); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	}
+
+	entitySet, err := h.tracker.EntitySetFromToken(token)
+	if err != nil {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions,
+			"Invalid $deltatoken value"); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	}
+
+	if entitySet != h.metadata.EntitySetName {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions,
+			"Delta token does not match the requested entity set"); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	}
+
+	events, newToken, err := h.tracker.ChangesSince(token)
+	if err != nil {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions, err.Error()); writeErr != nil {
+			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		}
+		return
+	}
+
+	entries := h.buildDeltaEntries(r, events)
+	deltaLink := response.BuildDeltaLink(r, newToken)
+
+	if err := response.WriteODataDeltaResponse(w, r, h.metadata.EntitySetName, entries, &deltaLink); err != nil {
+		fmt.Printf("Error writing delta response: %v\n", err)
+	}
+}
+
+func (h *EntityHandler) buildDeltaEntries(r *http.Request, events []trackchanges.ChangeEvent) []map[string]interface{} {
+	metadataLevel := response.GetODataMetadataLevel(r)
+	includeMetadata := metadataLevel != "none"
+	baseURL := response.BuildBaseURL(r)
+	entityTypeAnnotation := ""
+	if metadataLevel == "full" {
+		entityTypeAnnotation = fmt.Sprintf("#ODataService.%s", h.metadata.EntityName)
+	}
+
+	entries := make([]map[string]interface{}, 0, len(events))
+
+	for _, event := range events {
+		entityID := response.BuildEntityID(h.metadata.EntitySetName, event.KeyValues)
+		resourceID := baseURL + "/" + entityID
+
+		switch event.Type {
+		case trackchanges.ChangeTypeAdded, trackchanges.ChangeTypeUpdated:
+			entry := make(map[string]interface{})
+			for k, v := range event.Data {
+				entry[k] = v
+			}
+			if includeMetadata {
+				entry["@odata.id"] = resourceID
+				if h.metadata.ETagProperty != nil {
+					if etagValue := etag.Generate(event.Data, h.metadata); etagValue != "" {
+						entry["@odata.etag"] = etagValue
+					}
+				}
+				if entityTypeAnnotation != "" {
+					entry["@odata.type"] = entityTypeAnnotation
+				}
+			}
+			entries = append(entries, entry)
+		case trackchanges.ChangeTypeDeleted:
+			entry := make(map[string]interface{})
+			if includeMetadata {
+				entry["@odata.id"] = resourceID
+				if entityTypeAnnotation != "" {
+					entry["@odata.type"] = entityTypeAnnotation
+				}
+			}
+			entry["@odata.removed"] = map[string]string{"reason": "deleted"}
+			for k, v := range event.KeyValues {
+				entry[k] = v
+			}
+			entries = append(entries, entry)
+		}
+	}
+
+	return entries
 }
 
 // handlePostEntity handles POST requests to create new entities in a collection
@@ -214,6 +339,8 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 		// Log the error but don't fail the request since the entity was already created
 		fmt.Printf("AfterCreate hook failed: %v\n", err)
 	}
+
+	h.recordChange(entity, trackchanges.ChangeTypeAdded)
 
 	// Build the Location header with the key(s) of the created entity
 	location := h.buildEntityLocation(r, entity)

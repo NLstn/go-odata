@@ -8,9 +8,12 @@ import (
 
 // Preference represents parsed OData Prefer header preferences
 type Preference struct {
-	ReturnRepresentation bool
-	ReturnMinimal        bool
-	MaxPageSize          *int // odata.maxpagesize preference
+	ReturnRepresentation  bool
+	ReturnMinimal         bool
+	MaxPageSize           *int // odata.maxpagesize preference
+	TrackChangesRequested bool
+
+	trackChangesApplied bool
 }
 
 // ParsePrefer parses the Prefer header from an HTTP request
@@ -46,6 +49,11 @@ func ParsePrefer(r *http.Request) *Preference {
 				if maxPageSize, err := strconv.Atoi(maxPageSizeStr); err == nil && maxPageSize > 0 {
 					pref.MaxPageSize = &maxPageSize
 				}
+				continue
+			}
+
+			if strings.HasPrefix(pLower, "odata.track-changes") {
+				pref.TrackChangesRequested = true
 			}
 		}
 	}
@@ -79,5 +87,15 @@ func (p *Preference) GetPreferenceApplied() string {
 	if p.MaxPageSize != nil {
 		applied = append(applied, "odata.maxpagesize="+strconv.Itoa(*p.MaxPageSize))
 	}
+	if p.trackChangesApplied {
+		applied = append(applied, "odata.track-changes")
+	}
 	return strings.Join(applied, ", ")
+}
+
+// ApplyTrackChanges marks the odata.track-changes preference as applied if it was requested.
+func (p *Preference) ApplyTrackChanges() {
+	if p.TrackChangesRequested {
+		p.trackChangesApplied = true
+	}
 }
