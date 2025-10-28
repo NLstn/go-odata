@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/nlstn/go-odata"
@@ -116,31 +117,39 @@ func TestSelectWithNavigationPropertyAndExpand(t *testing.T) {
 	}
 }
 
-// TestComplexTypeDirectAccess tests that direct access to complex types returns 400
+// TestComplexTypeDirectAccess tests that direct access to complex types returns the serialized complex object
 func TestComplexTypeDirectAccess(t *testing.T) {
 	db := setupTestDBForSelectNav(t)
 	service := setupServiceWithComplexTypes(db, t)
 
 	createProductWithComplexType(db, t)
 
-	// Test: Direct access to complex type should return 400
+	// Test: Direct access to complex type should return the complex object
 	req := httptest.NewRequest(http.MethodGet, "/TestProductWithComplexes(1)/Address", nil)
 	w := httptest.NewRecorder()
 	service.ServeHTTP(w, req)
 
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("Expected status 400 for complex type access, got %d. Body: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected status 200 for complex type access, got %d. Body: %s", w.Code, w.Body.String())
 	}
 
-	// Verify error response structure
-	var errorResp map[string]interface{}
-	if err := json.Unmarshal(w.Body.Bytes(), &errorResp); err != nil {
-		t.Errorf("Error response is not valid JSON: %v", err)
-		return
+	var response map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
 	}
 
-	if _, ok := errorResp["error"]; !ok {
-		t.Error("Error response missing 'error' property")
+	if context, ok := response["@odata.context"].(string); !ok || !strings.Contains(context, "Address") {
+		t.Fatalf("Expected @odata.context to reference Address, got %v", response["@odata.context"])
+	}
+
+	if response["Street"] != "123 Main St" {
+		t.Fatalf("Expected Street '123 Main St', got %v", response["Street"])
+	}
+	if response["City"] != "Seattle" {
+		t.Fatalf("Expected City 'Seattle', got %v", response["City"])
+	}
+	if response["State"] != "WA" {
+		t.Fatalf("Expected State 'WA', got %v", response["State"])
 	}
 }
 

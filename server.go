@@ -170,6 +170,11 @@ func (s *Service) handlePropertyRequest(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
+	propertySegments := components.PropertySegments
+	if len(propertySegments) == 0 && components.NavigationProperty != "" {
+		propertySegments = []string{components.NavigationProperty}
+	}
+
 	// Try navigation property first, then structural property, then complex type
 	if handler.IsNavigationProperty(components.NavigationProperty) {
 		if components.IsValue {
@@ -192,12 +197,15 @@ func (s *Service) handlePropertyRequest(w http.ResponseWriter, r *http.Request, 
 		}
 		handler.HandleStructuralProperty(w, r, keyString, components.NavigationProperty, components.IsValue)
 	} else if handler.IsComplexTypeProperty(components.NavigationProperty) {
-		// Complex type property access is not supported
-		// According to OData spec, accessing complex types directly should return 400/404
-		if writeErr := response.WriteError(w, http.StatusBadRequest, "Unsupported request",
-			fmt.Sprintf("Direct access to complex type property '%s' is not supported. Complex types must be accessed as part of the entity.", components.NavigationProperty)); writeErr != nil {
-			fmt.Printf("Error writing error response: %v\n", writeErr)
+		if components.IsRef {
+			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid request",
+				"$ref is not supported on complex properties"); writeErr != nil {
+				fmt.Printf("Error writing error response: %v\n", writeErr)
+			}
+			return
 		}
+
+		handler.HandleComplexTypeProperty(w, r, keyString, propertySegments, components.IsValue)
 	} else {
 		// Property not found
 		if writeErr := response.WriteError(w, http.StatusNotFound, "Property not found",

@@ -975,16 +975,17 @@ func BuildNextLinkWithSkipToken(r *http.Request, skipToken string) string {
 
 // ODataURLComponents represents the parsed components of an OData URL
 type ODataURLComponents struct {
-	EntitySet          string
-	EntityKey          string            // For single keys: the value, for composite keys: empty (use EntityKeyMap)
-	EntityKeyMap       map[string]string // For composite keys: map of key names to values
-	NavigationProperty string            // For paths like Products(1)/Descriptions
-	PropertyPath       string            // For structural property paths like Products(1)/Name
-	IsCount            bool              // For paths like Products/$count
-	IsValue            bool              // For paths like Products(1)/Name/$value
-	IsRef              bool              // For paths like Products(1)/Descriptions/$ref
-	ActionName         string            // For action invocations like Products(1)/Namespace.ActionName
-	FunctionName       string            // For function invocations like Products(1)/Namespace.FunctionName
+        EntitySet          string
+        EntityKey          string            // For single keys: the value, for composite keys: empty (use EntityKeyMap)
+        EntityKeyMap       map[string]string // For composite keys: map of key names to values
+        NavigationProperty string            // For paths like Products(1)/Descriptions
+        PropertyPath       string            // For structural property paths like Products(1)/Name
+        PropertySegments   []string          // Property path segments excluding $value/$ref/$count
+        IsCount            bool              // For paths like Products/$count
+        IsValue            bool              // For paths like Products(1)/Name/$value
+        IsRef              bool              // For paths like Products(1)/Descriptions/$ref
+        ActionName         string            // For action invocations like Products(1)/Namespace.ActionName
+        FunctionName       string            // For function invocations like Products(1)/Namespace.FunctionName
 	IsAction           bool              // True if this is an action invocation
 	IsFunction         bool              // True if this is a function invocation
 }
@@ -1017,8 +1018,8 @@ func ParseODataURLComponents(path string) (*ODataURLComponents, error) {
 
 	// Extract entity set and key
 	pathParts := strings.Split(u.Path, "/")
-	if len(pathParts) > 0 {
-		entitySet := pathParts[0]
+        if len(pathParts) > 0 {
+                entitySet := pathParts[0]
 
 		// Check for key in parentheses: Products(1) or ProductDescriptions(ProductID=1,LanguageKey='EN')
 		if idx := strings.Index(entitySet, "("); idx != -1 {
@@ -1035,42 +1036,45 @@ func ParseODataURLComponents(path string) (*ODataURLComponents, error) {
 			components.EntitySet = entitySet
 		}
 
-		// Check for $count, $ref, $value or navigation property: Products/$count, Products(1)/$ref, Products(1)/Descriptions
-		if len(pathParts) > 1 {
-			switch pathParts[1] {
-			case "$count":
-				components.IsCount = true
-			case "$ref":
-				components.IsRef = true
-			case "$value":
-				components.IsValue = true
-			default:
-				// Check if this is an action or function (contains dot for namespace)
-				// or is a simple identifier that could be action/function name
-				secondPart := pathParts[1]
+                // Process additional path segments after the entity or entity(key)
+                if len(pathParts) > 1 {
+                        remainingParts := pathParts[1:]
+                        propertySegments := make([]string, 0, len(remainingParts))
 
-				// For now, treat any segment after entity(key) as either:
-				// 1. Navigation property (if it's a known property)
-				// 2. Action/Function (if it contains namespace separator or is registered)
-				// The caller will need to determine which it is based on registered actions/functions
-				components.NavigationProperty = secondPart
+                        firstSegment := remainingParts[0]
+                        switch firstSegment {
+                        case "$count":
+                                components.IsCount = true
+                        case "$ref":
+                                components.IsRef = true
+                        case "$value":
+                                components.IsValue = true
+                        default:
+                                propertySegments = append(propertySegments, firstSegment)
+                                components.NavigationProperty = firstSegment
 
-				// Check for $value, $ref, or $count suffix: Products(1)/Name/$value, Products(1)/Descriptions/$ref, Products(1)/Descriptions/$count
-				if len(pathParts) > 2 {
-					switch pathParts[2] {
-					case "$value":
-						components.IsValue = true
-					case "$ref":
-						components.IsRef = true
-					case "$count":
-						components.IsCount = true
-					}
-				}
-			}
-		}
-	}
+                                for _, segment := range remainingParts[1:] {
+                                        switch segment {
+                                        case "$value":
+                                                components.IsValue = true
+                                        case "$ref":
+                                                components.IsRef = true
+                                        case "$count":
+                                                components.IsCount = true
+                                        default:
+                                                propertySegments = append(propertySegments, segment)
+                                        }
+                                }
+                        }
 
-	return components, nil
+                        if len(propertySegments) > 0 {
+                                components.PropertySegments = propertySegments
+                                components.PropertyPath = strings.Join(propertySegments, "/")
+                        }
+                }
+        }
+
+        return components, nil
 }
 
 // parseKeyPart parses the key portion of an OData URL
