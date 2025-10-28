@@ -272,10 +272,6 @@ func TestEntityMetadataFinders(t *testing.T) {
 	})
 }
 
-<<<<<<< HEAD
-	}
-}
-
 func TestAnalyzeEntityEnumMembers(t *testing.T) {
 	meta, err := AnalyzeEntity(MethodEnumEntity{})
 	if err != nil {
