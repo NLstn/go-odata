@@ -56,7 +56,7 @@ func TestGeoDistanceFunction(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			filter, err := parseFilter(tt.filterStr, meta, nil)
-			
+
 			if tt.expectError {
 				if err == nil {
 					t.Errorf("Expected error but got nil")
@@ -101,7 +101,7 @@ func TestGeoLengthFunction(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			filter, err := parseFilter(tt.filterStr, meta, nil)
-			
+
 			if tt.expectError {
 				if err == nil {
 					t.Errorf("Expected error but got nil")
@@ -146,7 +146,7 @@ func TestGeoIntersectsFunction(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			filter, err := parseFilter(tt.filterStr, meta, nil)
-			
+
 			if tt.expectError {
 				if err == nil {
 					t.Errorf("Expected error but got nil")
@@ -166,7 +166,7 @@ func TestGeoIntersectsFunction(t *testing.T) {
 func TestGeoCombinedWithOtherFilters(t *testing.T) {
 	meta := getTestGeoMetadata(t)
 	filterStr := "Price gt 100 and geo.distance(Location,geography'SRID=4326;POINT(0 0)') lt 10000"
-	
+
 	filter, err := parseFilter(filterStr, meta, nil)
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
@@ -176,7 +176,7 @@ func TestGeoCombinedWithOtherFilters(t *testing.T) {
 		t.Errorf("Expected filter but got nil")
 		return
 	}
-	
+
 	// Verify it's a logical AND
 	if filter.Logical != LogicalAnd {
 		t.Errorf("Expected logical AND, got %v", filter.Logical)
@@ -209,7 +209,7 @@ func TestGeoLiteralParsing(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Unexpected error: %v", err)
 			}
-			
+
 			// The filter should have Left as a function comparison
 			if filter.Left == nil {
 				t.Errorf("Expected Left to be set for function comparison")

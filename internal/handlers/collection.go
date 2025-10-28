@@ -952,7 +952,7 @@ func (h *EntityHandler) validateFilterForComplexTypes(filter *query.FilterExpres
 validateChildren:
 	// When we encounter a lambda operator, mark that its children (the predicate) are inside a lambda
 	isLambda := filter.Operator == query.OpAny || filter.Operator == query.OpAll
-	
+
 	if filter.Left != nil {
 		// If this filter is a lambda, its Left contains the predicate for the related entity
 		if err := h.validateFilterForComplexTypes(filter.Left, insideLambda || isLambda, computedAliases); err != nil {

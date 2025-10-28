@@ -293,8 +293,12 @@ func buildComparisonCondition(filter *FilterExpression, entityMetadata *metadata
 	if propertyExists(filter.Property, entityMetadata) {
 		columnName = GetColumnName(filter.Property, entityMetadata)
 	} else {
-		// Computed property - use the alias as-is
-		columnName = filter.Property
+		// Computed property - sanitize the alias to prevent SQL injection
+		columnName = sanitizeIdentifier(filter.Property)
+		if columnName == "" {
+			// Invalid identifier - return empty condition
+			return "", nil
+		}
 	}
 
 	// Check if the value is a function call that needs to be converted to SQL
@@ -1092,12 +1096,16 @@ func applyOrderBy(db *gorm.DB, orderBy []OrderByItem, entityMetadata *metadata.E
 			db = db.Order(fmt.Sprintf("%s %s", columnName, direction))
 		} else {
 			// Not in entity metadata - assume it's a computed property alias
-			// Use the alias directly (it's already in the SELECT clause from $compute)
+			// Sanitize the alias to prevent SQL injection
+			sanitizedAlias := sanitizeIdentifier(item.Property)
+			if sanitizedAlias == "" {
+				continue // Skip invalid identifiers
+			}
 			direction := "ASC"
 			if item.Descending {
 				direction = "DESC"
 			}
-			db = db.Order(fmt.Sprintf("%s %s", item.Property, direction))
+			db = db.Order(fmt.Sprintf("%s %s", sanitizedAlias, direction))
 		}
 	}
 	return db
@@ -1700,4 +1708,48 @@ func findProperty(propName string, entityMetadata *metadata.EntityMetadata) *met
 		return nil
 	}
 	return entityMetadata.FindProperty(propName)
+}
+
+// sanitizeIdentifier sanitizes a user-provided identifier to prevent SQL injection.
+// It ensures that the identifier contains only safe characters (alphanumeric and underscore).
+// Returns an empty string if the identifier contains invalid characters.
+// Special OData identifiers like "$it" are allowed.
+func sanitizeIdentifier(identifier string) string {
+	if identifier == "" {
+		return ""
+	}
+
+	// Allow special OData reserved identifiers
+	if identifier == "$it" {
+		return identifier
+	}
+
+	// Check each character - only allow alphanumeric, underscore, and must start with letter or underscore
+	for i, ch := range identifier {
+		if i == 0 {
+			// First character must be a letter or underscore
+			if (ch < 'a' || ch > 'z') && (ch < 'A' || ch > 'Z') && ch != '_' {
+				return ""
+			}
+		} else {
+			// Subsequent characters can be alphanumeric or underscore
+			if (ch < 'a' || ch > 'z') && (ch < 'A' || ch > 'Z') && (ch < '0' || ch > '9') && ch != '_' {
+				return ""
+			}
+		}
+	}
+
+	// Check for SQL reserved keywords that could be dangerous
+	upper := strings.ToUpper(identifier)
+	reservedKeywords := []string{
+		"SELECT", "INSERT", "UPDATE", "DELETE", "DROP", "CREATE", "ALTER", "TRUNCATE",
+		"UNION", "JOIN", "WHERE", "FROM", "INTO", "VALUES", "SET", "EXEC", "EXECUTE",
+	}
+	for _, keyword := range reservedKeywords {
+		if upper == keyword {
+			return ""
+		}
+	}
+
+	return identifier
 }
