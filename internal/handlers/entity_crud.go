@@ -571,28 +571,6 @@ func (h *EntityHandler) validateKeyPropertiesNotUpdated(updateData map[string]in
 	return nil
 }
 
-// validatePropertiesExist validates that all properties in updateData are valid entity properties
-func (h *EntityHandler) validatePropertiesExist(updateData map[string]interface{}, w http.ResponseWriter) error {
-	// Build a map of valid property names (both JSON names and struct field names)
-	validProperties := make(map[string]bool)
-	for _, prop := range h.metadata.Properties {
-		validProperties[prop.JsonName] = true
-		validProperties[prop.Name] = true
-	}
-
-	// Check each property in updateData
-	for propName := range updateData {
-		if !validProperties[propName] {
-			err := fmt.Errorf("property '%s' does not exist on entity type '%s'", propName, h.metadata.EntityName)
-			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid property", err.Error()); writeErr != nil {
-				fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
-			}
-			return err
-		}
-	}
-	return nil
-}
-
 // validatePropertiesExistForUpdate validates that all properties in updateData are valid entity properties
 // This version allows @odata.bind annotations for navigation properties
 func (h *EntityHandler) validatePropertiesExistForUpdate(updateData map[string]interface{}, w http.ResponseWriter) error {
