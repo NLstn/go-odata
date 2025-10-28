@@ -28,11 +28,11 @@ test_compute_arithmetic() {
     
     if [ "$HTTP_CODE" = "200" ]; then
         return 0
-    elif [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "501" ]; then
-        echo "  Details: \$compute not implemented (status: $HTTP_CODE)"
-        return 0  # Pass - optional feature
+    elif [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "501" ]; then
+        echo "  Failure: Service rejected \$compute arithmetic request (status: $HTTP_CODE)"
+        return 1
     else
-        echo "  Details: Unexpected status: $HTTP_CODE"
+        echo "  Failure: Unexpected status: $HTTP_CODE"
         return 1
     fi
 }
@@ -44,11 +44,11 @@ test_compute_string_function() {
     
     if [ "$HTTP_CODE" = "200" ]; then
         return 0
-    elif [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "501" ]; then
-        echo "  Details: \$compute with functions not implemented (status: $HTTP_CODE)"
-        return 0  # Pass - optional
+    elif [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "501" ]; then
+        echo "  Failure: Service rejected \$compute string function request (status: $HTTP_CODE)"
+        return 1
     else
-        echo "  Details: Unexpected status: $HTTP_CODE"
+        echo "  Failure: Unexpected status: $HTTP_CODE"
         return 1
     fi
 }
@@ -60,11 +60,11 @@ test_compute_with_select() {
     
     if [ "$HTTP_CODE" = "200" ]; then
         return 0
-    elif [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "501" ]; then
-        echo "  Details: \$compute with \$select not supported (status: $HTTP_CODE)"
-        return 0  # Pass - optional
+    elif [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "501" ]; then
+        echo "  Failure: Service rejected \$compute with \$select (status: $HTTP_CODE)"
+        return 1
     else
-        echo "  Details: Unexpected status: $HTTP_CODE"
+        echo "  Failure: Unexpected status: $HTTP_CODE"
         return 1
     fi
 }
@@ -76,11 +76,11 @@ test_compute_with_filter() {
     
     if [ "$HTTP_CODE" = "200" ]; then
         return 0
-    elif [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "501" ]; then
-        echo "  Details: \$compute with \$filter not supported (status: $HTTP_CODE)"
-        return 0  # Pass - optional
+    elif [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "501" ]; then
+        echo "  Failure: Service rejected \$compute with \$filter (status: $HTTP_CODE)"
+        return 1
     else
-        echo "  Details: Unexpected status: $HTTP_CODE"
+        echo "  Failure: Unexpected status: $HTTP_CODE"
         return 1
     fi
 }
@@ -92,11 +92,11 @@ test_compute_with_orderby() {
     
     if [ "$HTTP_CODE" = "200" ]; then
         return 0
-    elif [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "501" ]; then
-        echo "  Details: \$compute with \$orderby not supported (status: $HTTP_CODE)"
-        return 0  # Pass - optional
+    elif [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "501" ]; then
+        echo "  Failure: Service rejected \$compute with \$orderby (status: $HTTP_CODE)"
+        return 1
     else
-        echo "  Details: Unexpected status: $HTTP_CODE"
+        echo "  Failure: Unexpected status: $HTTP_CODE"
         return 1
     fi
 }
@@ -108,11 +108,11 @@ test_multiple_computed() {
     
     if [ "$HTTP_CODE" = "200" ]; then
         return 0
-    elif [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "501" ]; then
-        echo "  Details: Multiple \$compute not supported (status: $HTTP_CODE)"
-        return 0  # Pass - optional
+    elif [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "501" ]; then
+        echo "  Failure: Service rejected multiple \$compute properties (status: $HTTP_CODE)"
+        return 1
     else
-        echo "  Details: Unexpected status: $HTTP_CODE"
+        echo "  Failure: Unexpected status: $HTTP_CODE"
         return 1
     fi
 }
@@ -124,11 +124,11 @@ test_compute_date_functions() {
     
     if [ "$HTTP_CODE" = "200" ]; then
         return 0
-    elif [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "501" ] || [ "$HTTP_CODE" = "404" ]; then
-        echo "  Details: \$compute with date functions not supported (status: $HTTP_CODE)"
-        return 0  # Pass - optional
+    elif [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "501" ]; then
+        echo "  Failure: Service rejected \$compute with date functions (status: $HTTP_CODE)"
+        return 1
     else
-        echo "  Details: Unexpected status: $HTTP_CODE"
+        echo "  Failure: Unexpected status: $HTTP_CODE"
         return 1
     fi
 }
@@ -138,16 +138,18 @@ test_invalid_compute_syntax() {
     # Invalid syntax should return 400
     local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$compute=InvalidSyntax")
     
-    # Should return 400 if $compute is supported but syntax is invalid
-    # Or 501 if $compute is not supported at all
-    if [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "501" ]; then
+    # Should return 400 when syntax is invalid
+    if [ "$HTTP_CODE" = "400" ]; then
         return 0
     elif [ "$HTTP_CODE" = "200" ]; then
-        echo "  Details: Invalid syntax should fail"
+        echo "  Failure: Invalid syntax accepted"
+        return 1
+    elif [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "501" ]; then
+        echo "  Failure: Service did not recognize \$compute invalid syntax request (status: $HTTP_CODE)"
         return 1
     else
-        echo "  Details: Unexpected status: $HTTP_CODE"
-        return 0  # Pass - implementation-specific
+        echo "  Failure: Unexpected status: $HTTP_CODE"
+        return 1
     fi
 }
 
@@ -158,11 +160,11 @@ test_compute_nested_properties() {
     
     if [ "$HTTP_CODE" = "200" ]; then
         return 0
-    elif [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "501" ] || [ "$HTTP_CODE" = "404" ]; then
-        echo "  Details: \$compute with nested properties not supported (status: $HTTP_CODE)"
-        return 0  # Pass - optional
+    elif [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "501" ]; then
+        echo "  Failure: Service rejected \$compute with nested properties (status: $HTTP_CODE)"
+        return 1
     else
-        echo "  Details: Unexpected status: $HTTP_CODE"
+        echo "  Failure: Unexpected status: $HTTP_CODE"
         return 1
     fi
 }
@@ -174,11 +176,11 @@ test_compute_in_expand() {
     
     if [ "$HTTP_CODE" = "200" ]; then
         return 0
-    elif [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "501" ] || [ "$HTTP_CODE" = "404" ]; then
-        echo "  Details: \$compute in \$expand not supported (status: $HTTP_CODE)"
-        return 0  # Pass - very advanced feature
+    elif [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "501" ]; then
+        echo "  Failure: Service rejected \$compute in \$expand (status: $HTTP_CODE)"
+        return 1
     else
-        echo "  Details: Unexpected status: $HTTP_CODE"
+        echo "  Failure: Unexpected status: $HTTP_CODE"
         return 1
     fi
 }
