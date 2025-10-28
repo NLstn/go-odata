@@ -4,10 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"reflect"
 	"strings"
+	"time"
 
 	"github.com/nlstn/go-odata/internal/actions"
 	"github.com/nlstn/go-odata/internal/handlers"
+	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/response"
 )
 
@@ -398,17 +401,45 @@ func (s *Service) handleActionOrFunction(w http.ResponseWriter, r *http.Request,
 			return
 		}
 
-		// Write the result with dynamic metadata level
-		metadataLevel := response.GetODataMetadataLevel(r)
-		w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
-		w.WriteHeader(http.StatusOK)
-
-		responseMap := map[string]interface{}{
-			"@odata.context": "$metadata#Edm.String",
-			"value":          result,
+		if !response.IsAcceptableFormat(r) {
+			if writeErr := response.WriteError(w, http.StatusNotAcceptable, "Not Acceptable",
+				"The requested format is not supported. Only application/json is supported for data responses."); writeErr != nil {
+				fmt.Printf("Error writing error response: %v\n", writeErr)
+			}
+			return
 		}
 
-		if err := json.NewEncoder(w).Encode(responseMap); err != nil {
+		metadataLevel := response.GetODataMetadataLevel(r)
+		w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
+
+		contextFragment := s.functionContextFragment(functionDef.ReturnType)
+		if contextFragment == "" {
+			contextFragment = "Edm.String"
+		}
+
+		contextURL := ""
+		if metadataLevel != "none" && contextFragment != "" {
+			contextURL = fmt.Sprintf("%s/$metadata#%s", response.BuildBaseURL(r), contextFragment)
+		}
+
+		odataResponse := response.ODataResponse{
+			Context: contextURL,
+			Value:   result,
+		}
+
+		if metadataLevel == "none" {
+			odataResponse.Context = ""
+		}
+
+		w.WriteHeader(http.StatusOK)
+
+		if r.Method == http.MethodHead {
+			return
+		}
+
+		encoder := json.NewEncoder(w)
+		encoder.SetEscapeHTML(false)
+		if err := encoder.Encode(odataResponse); err != nil {
 			fmt.Printf("Error encoding response: %v\n", err)
 		}
 
@@ -418,6 +449,168 @@ func (s *Service) handleActionOrFunction(w http.ResponseWriter, r *http.Request,
 			fmt.Printf("Error writing error response: %v\n", writeErr)
 		}
 	}
+}
+
+// functionContextFragment builds the metadata fragment for a function return type
+func (s *Service) functionContextFragment(returnType reflect.Type) string {
+	if returnType == nil {
+		return ""
+	}
+
+	typ := returnType
+	if typ.Kind() == reflect.Ptr {
+		typ = typ.Elem()
+	}
+
+	isCollection := false
+
+	switch typ.Kind() {
+	case reflect.Slice:
+		if typ.Elem().Kind() != reflect.Uint8 {
+			isCollection = true
+			typ = typ.Elem()
+			if typ.Kind() == reflect.Ptr {
+				typ = typ.Elem()
+			}
+		}
+	case reflect.Array:
+		if typ.Elem().Kind() != reflect.Uint8 {
+			isCollection = true
+			typ = typ.Elem()
+			if typ.Kind() == reflect.Ptr {
+				typ = typ.Elem()
+			}
+		}
+	}
+
+	if edmType, ok := primitiveEdmType(typ); ok {
+		if isCollection {
+			return fmt.Sprintf("Collection(%s)", edmType)
+		}
+		return edmType
+	}
+
+	if entityMeta := s.entityMetadataByType(typ); entityMeta != nil {
+		if isCollection {
+			return entityMeta.EntitySetName
+		}
+		return fmt.Sprintf("%s/$entity", entityMeta.EntitySetName)
+	}
+
+	if typ.Kind() == reflect.Struct {
+		qualifiedName := buildQualifiedComplexTypeName(typ)
+		if qualifiedName == "" {
+			return ""
+		}
+		if isCollection {
+			return fmt.Sprintf("Collection(%s)", qualifiedName)
+		}
+		return qualifiedName
+	}
+
+	if typ.Kind() == reflect.Map || typ.Kind() == reflect.Interface {
+		if isCollection {
+			return "Collection(Edm.Untyped)"
+		}
+		return "Edm.Untyped"
+	}
+
+	return ""
+}
+
+func (s *Service) entityMetadataByType(goType reflect.Type) *metadata.EntityMetadata {
+	if goType == nil {
+		return nil
+	}
+
+	if goType.Kind() == reflect.Ptr {
+		goType = goType.Elem()
+	}
+
+	for _, meta := range s.entities {
+		if meta == nil {
+			continue
+		}
+		entityType := meta.EntityType
+		if entityType.Kind() == reflect.Ptr {
+			entityType = entityType.Elem()
+		}
+		if entityType == goType {
+			return meta
+		}
+	}
+
+	return nil
+}
+
+var (
+	timeType = reflect.TypeOf(time.Time{})
+)
+
+func primitiveEdmType(goType reflect.Type) (string, bool) {
+	if goType == nil {
+		return "", false
+	}
+
+	if goType.Kind() == reflect.Ptr {
+		goType = goType.Elem()
+	}
+
+	if goType == timeType {
+		return "Edm.DateTimeOffset", true
+	}
+
+	if goType.Kind() == reflect.Slice && goType.Elem().Kind() == reflect.Uint8 {
+		return "Edm.Binary", true
+	}
+
+	if goType.Kind() == reflect.Array && goType.Elem().Kind() == reflect.Uint8 {
+		return "Edm.Binary", true
+	}
+
+	if pkgPath := goType.PkgPath(); pkgPath != "" {
+		switch pkgPath + "." + goType.Name() {
+		case "github.com/google/uuid.UUID":
+			return "Edm.Guid", true
+		}
+	}
+
+	switch goType.Kind() {
+	case reflect.String:
+		return "Edm.String", true
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32:
+		return "Edm.Int32", true
+	case reflect.Int64:
+		return "Edm.Int64", true
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32:
+		return "Edm.Int32", true
+	case reflect.Uint64:
+		return "Edm.Int64", true
+	case reflect.Float32:
+		return "Edm.Single", true
+	case reflect.Float64:
+		return "Edm.Double", true
+	case reflect.Bool:
+		return "Edm.Boolean", true
+	}
+
+	return "", false
+}
+
+func buildQualifiedComplexTypeName(goType reflect.Type) string {
+	if goType == nil {
+		return ""
+	}
+
+	if goType.Kind() == reflect.Ptr {
+		goType = goType.Elem()
+	}
+
+	if goType.Name() == "" {
+		return ""
+	}
+
+	return fmt.Sprintf("ODataService.%s", goType.Name())
 }
 
 // Handler returns the Service as an http.Handler.

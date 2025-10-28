@@ -87,8 +87,13 @@ func TestUnboundFunction(t *testing.T) {
 		t.Fatalf("Failed to decode response: %v", err)
 	}
 
-	if _, ok := response["@odata.context"]; !ok {
-		t.Error("Response missing @odata.context")
+	context, ok := response["@odata.context"].(string)
+	if !ok {
+		t.Fatal("Response missing @odata.context")
+	}
+	expectedContext := "http://example.com/$metadata#Edm.Int64"
+	if context != expectedContext {
+		t.Errorf("@odata.context = %q, want %q", context, expectedContext)
 	}
 
 	value, ok := response["value"]
@@ -149,8 +154,146 @@ func TestBoundFunction(t *testing.T) {
 		t.Fatalf("Failed to decode response: %v", err)
 	}
 
-	if _, ok := response["@odata.context"]; !ok {
-		t.Error("Response missing @odata.context")
+	context, ok := response["@odata.context"].(string)
+	if !ok {
+		t.Fatal("Response missing @odata.context")
+	}
+	expectedContext := "http://example.com/$metadata#Edm.Double"
+	if context != expectedContext {
+		t.Errorf("@odata.context = %q, want %q", context, expectedContext)
+	}
+}
+
+// TestFunctionReturningEntityContext verifies context URL for entity return type
+func TestFunctionReturningEntityContext(t *testing.T) {
+	service, db := setupActionFunctionTestService(t)
+
+	err := service.RegisterFunction(odata.FunctionDefinition{
+		Name:       "GetFeaturedProduct",
+		IsBound:    false,
+		Parameters: []odata.ParameterDefinition{},
+		ReturnType: reflect.TypeOf(ActionTestProduct{}),
+		Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) (interface{}, error) {
+			var product ActionTestProduct
+			if err := db.First(&product, 1).Error; err != nil {
+				return nil, err
+			}
+			return product, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("Failed to register function: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/GetFeaturedProduct", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var response map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	context, ok := response["@odata.context"].(string)
+	if !ok {
+		t.Fatal("Response missing @odata.context")
+	}
+	expectedContext := "http://example.com/$metadata#ActionTestProducts/$entity"
+	if context != expectedContext {
+		t.Errorf("@odata.context = %q, want %q", context, expectedContext)
+	}
+
+	if value, ok := response["value"].(map[string]interface{}); !ok || value["ID"] == nil {
+		t.Error("Expected entity object in value")
+	}
+}
+
+// TestFunctionReturningEntityCollectionContext verifies context URL for collection return type
+func TestFunctionReturningEntityCollectionContext(t *testing.T) {
+	service, _ := setupActionFunctionTestService(t)
+
+	err := service.RegisterFunction(odata.FunctionDefinition{
+		Name:       "ListProducts",
+		IsBound:    false,
+		Parameters: []odata.ParameterDefinition{},
+		ReturnType: reflect.TypeOf([]ActionTestProduct{}),
+		Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) (interface{}, error) {
+			return []ActionTestProduct{
+				{ID: 1, Name: "Laptop", Price: 1000.0},
+				{ID: 2, Name: "Mouse", Price: 25.0},
+			}, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("Failed to register function: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/ListProducts", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var response map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	context, ok := response["@odata.context"].(string)
+	if !ok {
+		t.Fatal("Response missing @odata.context")
+	}
+	expectedContext := "http://example.com/$metadata#ActionTestProducts"
+	if context != expectedContext {
+		t.Errorf("@odata.context = %q, want %q", context, expectedContext)
+	}
+
+	if value, ok := response["value"].([]interface{}); !ok || len(value) == 0 {
+		t.Error("Expected collection of entities in value")
+	}
+}
+
+// TestFunctionMetadataNoneOmitsContext ensures metadata=none omits @odata.context
+func TestFunctionMetadataNoneOmitsContext(t *testing.T) {
+	service, _ := setupActionFunctionTestService(t)
+
+	err := service.RegisterFunction(odata.FunctionDefinition{
+		Name:       "GetCountForMetadataNone",
+		IsBound:    false,
+		Parameters: []odata.ParameterDefinition{},
+		ReturnType: reflect.TypeOf(int64(0)),
+		Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) (interface{}, error) {
+			return int64(5), nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("Failed to register function: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/GetCountForMetadataNone?$format=application/json;odata.metadata=none", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var response map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	if _, hasContext := response["@odata.context"]; hasContext {
+		t.Error("@odata.context should be omitted when metadata=none")
 	}
 }
 
