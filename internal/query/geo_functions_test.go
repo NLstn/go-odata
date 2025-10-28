@@ -170,9 +170,11 @@ func TestGeoCombinedWithOtherFilters(t *testing.T) {
 	filter, err := parseFilter(filterStr, meta)
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
+		return
 	}
 	if filter == nil {
 		t.Errorf("Expected filter but got nil")
+		return
 	}
 	
 	// Verify it's a logical AND
