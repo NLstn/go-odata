@@ -857,7 +857,7 @@ func (h *EntityHandler) validateSkipToken(queryOptions *query.QueryOptions) erro
 func (h *EntityHandler) validateComplexTypeUsage(queryOptions *query.QueryOptions) error {
 	// Check filter for complex type usage
 	if queryOptions.Filter != nil {
-		if err := h.validateFilterForComplexTypes(queryOptions.Filter); err != nil {
+		if err := h.validateFilterForComplexTypes(queryOptions.Filter, false); err != nil {
 			return err
 		}
 	}
@@ -880,32 +880,69 @@ func (h *EntityHandler) validateComplexTypeUsage(queryOptions *query.QueryOption
 }
 
 // validateFilterForComplexTypes recursively validates a filter expression for complex type usage
-func (h *EntityHandler) validateFilterForComplexTypes(filter *query.FilterExpression) error {
+// The insideLambda parameter indicates if we're validating properties inside a lambda predicate
+func (h *EntityHandler) validateFilterForComplexTypes(filter *query.FilterExpression, insideLambda bool) error {
 	if filter == nil {
 		return nil
 	}
 
-	if filter.Property != "" && !strings.HasPrefix(filter.Property, "_") {
+	// Skip property validation if we're inside a lambda predicate
+	// Properties inside lambda predicates refer to the related entity, not the current entity
+	if !insideLambda && filter.Property != "" && !strings.HasPrefix(filter.Property, "_") {
+		// Allow $it (current instance reference) - used in isof() per OData v4 spec 5.1.1.11.4
+		// $it can appear when isof() is used with a single argument to check entity type
+		if filter.Property == "$it" {
+			// $it is valid when used with isof operator or when part of a comparison involving isof
+			if filter.Operator != query.OpIsOf && filter.Operator != query.OpEqual && filter.Operator != query.OpNotEqual {
+				return fmt.Errorf("property path '$it' can only be used with isof() function")
+			}
+			// No further validation needed for $it
+			goto validateChildren
+		}
+
+		// Allow lambda operators (any/all) on navigation properties - OData v4 spec 5.1.1.10
+		if filter.Operator == query.OpAny || filter.Operator == query.OpAll {
+			// For lambda operators, the property is the navigation property
+			// The predicate is stored in filter.Left
+			prop, _, err := h.metadata.ResolvePropertyPath(filter.Property)
+			if err != nil {
+				return fmt.Errorf("property path '%s' is not supported", filter.Property)
+			}
+			if !prop.IsNavigationProp {
+				return fmt.Errorf("lambda operator '%s' can only be used with navigation properties", filter.Operator)
+			}
+			// Lambda operators on navigation properties are valid
+			// Note: We don't validate filter.Left here because it refers to properties
+			// of the related entity, not the current entity. The properties in the predicate
+			// will be validated at SQL generation time against the related entity's metadata.
+			goto validateChildren
+		}
+
 		prop, _, err := h.metadata.ResolvePropertyPath(filter.Property)
 		if err != nil {
 			return fmt.Errorf("property path '%s' is not supported", filter.Property)
 		}
 		if prop.IsNavigationProp {
-			return fmt.Errorf("filtering by navigation property '%s' is not supported", filter.Property)
+			return fmt.Errorf("filtering by navigation property '%s' is not supported (use any/all operators)", filter.Property)
 		}
 		if prop.IsComplexType {
 			return fmt.Errorf("filtering by complex type property '%s' is not supported", filter.Property)
 		}
 	}
 
+validateChildren:
+	// When we encounter a lambda operator, mark that its children (the predicate) are inside a lambda
+	isLambda := filter.Operator == query.OpAny || filter.Operator == query.OpAll
+	
 	if filter.Left != nil {
-		if err := h.validateFilterForComplexTypes(filter.Left); err != nil {
+		// If this filter is a lambda, its Left contains the predicate for the related entity
+		if err := h.validateFilterForComplexTypes(filter.Left, insideLambda || isLambda); err != nil {
 			return err
 		}
 	}
 
 	if filter.Right != nil {
-		if err := h.validateFilterForComplexTypes(filter.Right); err != nil {
+		if err := h.validateFilterForComplexTypes(filter.Right, insideLambda); err != nil {
 			return err
 		}
 	}
