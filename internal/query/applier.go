@@ -378,6 +378,14 @@ func buildComparisonCondition(filter *FilterExpression, entityMetadata *metadata
 		}
 		// isof returns 1 (true) or 0 (false), so we compare it with true (1)
 		return fmt.Sprintf("%s = ?", funcSQL), append(funcArgs, true)
+	case OpGeoIntersects:
+		// Handle geo.intersects as a standalone boolean expression
+		funcSQL, funcArgs := buildFunctionSQL(OpGeoIntersects, columnName, filter.Value)
+		if funcSQL == "" {
+			return "", nil
+		}
+		// ST_Intersects returns true/false (1/0), so we can use it directly in WHERE
+		return funcSQL, funcArgs
 	case OpCast:
 		// Cast alone doesn't make sense as a boolean expression
 		// It should always be part of a comparison
