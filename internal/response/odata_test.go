@@ -96,7 +96,7 @@ func TestWriteODataCollectionWithNilData(t *testing.T) {
 	w := httptest.NewRecorder()
 
 	// Write response with nil data
-	err := WriteODataCollection(w, req, "Products", nil, nil, nil, nil)
+	err := WriteODataCollection(w, req, "Products", nil, nil, nil)
 	if err != nil {
 		t.Fatalf("WriteODataCollection failed: %v", err)
 	}
@@ -131,7 +131,7 @@ func TestWriteODataCollectionWithNavigationWithNilData(t *testing.T) {
 	w := httptest.NewRecorder()
 
 	// Write response with nil data (no metadata provider needed for this test)
-	err := WriteODataCollectionWithNavigation(w, req, "Products", nil, nil, nil, nil, nil, nil, nil)
+	err := WriteODataCollectionWithNavigation(w, req, "Products", nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("WriteODataCollectionWithNavigation failed: %v", err)
 	}

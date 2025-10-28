@@ -29,11 +29,10 @@ func SetODataVersionHeader(w http.ResponseWriter) {
 
 // ODataResponse represents the structure of an OData JSON response
 type ODataResponse struct {
-	Context   string      `json:"@odata.context,omitempty"`
-	Count     *int64      `json:"@odata.count,omitempty"`
-	NextLink  *string     `json:"@odata.nextLink,omitempty"`
-	DeltaLink *string     `json:"@odata.deltaLink,omitempty"`
-	Value     interface{} `json:"value"`
+	Context  string      `json:"@odata.context,omitempty"`
+	Count    *int64      `json:"@odata.count,omitempty"`
+	NextLink *string     `json:"@odata.nextLink,omitempty"`
+	Value    interface{} `json:"value"`
 }
 
 // EntityMetadataProvider is an interface for getting entity metadata
@@ -82,7 +81,8 @@ func BuildEntityID(entitySetName string, keyValues map[string]interface{}) strin
 func formatKeyValueLiteral(value interface{}) string {
 	switch v := value.(type) {
 	case string:
-		return fmt.Sprintf("'%s'", strings.ReplaceAll(v, "'", "''"))
+		escaped := strings.ReplaceAll(v, "'", "''")
+		return fmt.Sprintf("'%s'", escaped)
 	default:
 		return fmt.Sprintf("%v", v)
 	}
@@ -179,93 +179,113 @@ func WriteEntityReferenceCollection(w http.ResponseWriter, r *http.Request, enti
 }
 
 // WriteODataCollection writes an OData collection response
-func WriteODataCollection(w http.ResponseWriter, r *http.Request, entitySetName string, data interface{}, count *int64, nextLink, deltaLink *string) error {
-	// Check if the requested format is supported
+func WriteODataCollection(w http.ResponseWriter, r *http.Request, entitySetName string, data interface{}, count *int64, nextLink *string) error {
+	return writeODataCollectionResponse(w, r, entitySetName, data, count, nextLink, nil)
+}
+
+// WriteODataCollectionWithDelta writes an OData collection response that includes a delta link.
+func WriteODataCollectionWithDelta(w http.ResponseWriter, r *http.Request, entitySetName string, data interface{}, count *int64, nextLink, deltaLink *string) error {
+	return writeODataCollectionResponse(w, r, entitySetName, data, count, nextLink, deltaLink)
+}
+
+// WriteODataCollectionWithNavigation writes an OData collection response with navigation links
+func WriteODataCollectionWithNavigation(w http.ResponseWriter, r *http.Request, entitySetName string, data interface{}, count *int64, nextLink *string, metadata EntityMetadataProvider, expandedProps []string, fullMetadata *metadata.EntityMetadata) error {
+	return writeODataCollectionWithNavigationResponse(w, r, entitySetName, data, count, nextLink, nil, metadata, expandedProps, fullMetadata)
+}
+
+// WriteODataCollectionWithNavigationAndDelta writes an OData collection response with navigation links and a delta link.
+func WriteODataCollectionWithNavigationAndDelta(w http.ResponseWriter, r *http.Request, entitySetName string, data interface{}, count *int64, nextLink, deltaLink *string, metadata EntityMetadataProvider, expandedProps []string, fullMetadata *metadata.EntityMetadata) error {
+	return writeODataCollectionWithNavigationResponse(w, r, entitySetName, data, count, nextLink, deltaLink, metadata, expandedProps, fullMetadata)
+}
+
+func writeODataCollectionResponse(w http.ResponseWriter, r *http.Request, entitySetName string, data interface{}, count *int64, nextLink, deltaLink *string) error {
 	if !IsAcceptableFormat(r) {
 		return WriteError(w, http.StatusNotAcceptable, "Not Acceptable",
 			"The requested format is not supported. Only application/json is supported for data responses.")
 	}
 
-	// Get metadata level to determine which fields to include
 	metadataLevel := GetODataMetadataLevel(r)
 
-	// Build the context URL (only for minimal and full metadata)
 	contextURL := ""
 	if metadataLevel != "none" {
 		contextURL = buildContextURL(r, entitySetName)
 	}
 
-	// Ensure empty collections are represented as [] not null per OData v4 spec
 	if data == nil {
 		data = []interface{}{}
 	}
 
-	response := ODataResponse{
-		Context:   contextURL,
-		Count:     count,
-		NextLink:  nextLink,
-		DeltaLink: deltaLink,
-		Value:     data,
+	response := map[string]interface{}{
+		"value": data,
 	}
 
-	// Set OData-compliant headers with dynamic metadata level
+	if contextURL != "" {
+		response["@odata.context"] = contextURL
+	}
+	if count != nil {
+		response["@odata.count"] = *count
+	}
+	if nextLink != nil && *nextLink != "" {
+		response["@odata.nextLink"] = *nextLink
+	}
+	if deltaLink != nil && *deltaLink != "" {
+		response["@odata.deltaLink"] = *deltaLink
+	}
+
 	w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
 	w.WriteHeader(http.StatusOK)
 
-	// For HEAD requests, don't write the body
 	if r.Method == http.MethodHead {
 		return nil
 	}
 
-	// Encode and write the response
 	encoder := json.NewEncoder(w)
 	encoder.SetEscapeHTML(false)
 	return encoder.Encode(response)
 }
 
-// WriteODataCollectionWithNavigation writes an OData collection response with navigation links
-func WriteODataCollectionWithNavigation(w http.ResponseWriter, r *http.Request, entitySetName string, data interface{}, count *int64, nextLink, deltaLink *string, metadata EntityMetadataProvider, expandedProps []string, fullMetadata *metadata.EntityMetadata) error {
-	// Check if the requested format is supported
+func writeODataCollectionWithNavigationResponse(w http.ResponseWriter, r *http.Request, entitySetName string, data interface{}, count *int64, nextLink, deltaLink *string, metadata EntityMetadataProvider, expandedProps []string, fullMetadata *metadata.EntityMetadata) error {
 	if !IsAcceptableFormat(r) {
 		return WriteError(w, http.StatusNotAcceptable, "Not Acceptable",
 			"The requested format is not supported. Only application/json is supported for data responses.")
 	}
 
-	// Get metadata level to determine if we need to add @odata.type and @odata.context
 	metadataLevel := GetODataMetadataLevel(r)
 
-	// Build the context URL (only for minimal and full metadata)
 	contextURL := ""
 	if metadataLevel != "none" {
 		contextURL = buildContextURL(r, entitySetName)
 	}
 
-	// Transform the data to add navigation links and type annotations
 	transformedData := addNavigationLinks(data, metadata, expandedProps, r, entitySetName, metadataLevel, fullMetadata)
-
-	// Ensure empty collections are represented as [] not null per OData v4 spec
 	if transformedData == nil {
 		transformedData = []interface{}{}
 	}
 
-	response := ODataResponse{
-		Context:   contextURL,
-		Count:     count,
-		NextLink:  nextLink,
-		DeltaLink: deltaLink,
-		Value:     transformedData,
+	response := map[string]interface{}{
+		"value": transformedData,
 	}
 
-	// Set OData-compliant headers with dynamic metadata level (already retrieved above)
+	if contextURL != "" {
+		response["@odata.context"] = contextURL
+	}
+	if count != nil {
+		response["@odata.count"] = *count
+	}
+	if nextLink != nil && *nextLink != "" {
+		response["@odata.nextLink"] = *nextLink
+	}
+	if deltaLink != nil && *deltaLink != "" {
+		response["@odata.deltaLink"] = *deltaLink
+	}
+
 	w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
 	w.WriteHeader(http.StatusOK)
 
-	// For HEAD requests, don't write the body
 	if r.Method == http.MethodHead {
 		return nil
 	}
 
-	// Encode and write the response
 	encoder := json.NewEncoder(w)
 	encoder.SetEscapeHTML(false)
 	return encoder.Encode(response)
@@ -291,7 +311,6 @@ func WriteODataDeltaResponse(w http.ResponseWriter, r *http.Request, entitySetNa
 	if metadataLevel != "none" {
 		response["@odata.context"] = buildDeltaContextURL(r, entitySetName)
 	}
-
 	if deltaLink != nil && *deltaLink != "" {
 		response["@odata.deltaLink"] = *deltaLink
 	}
