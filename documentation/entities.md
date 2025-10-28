@@ -9,6 +9,7 @@ This guide covers how to define entities in go-odata using Go structs with appro
 - [Entity with Relationships](#entity-with-relationships)
 - [Composite Keys](#composite-keys)
 - [Supported Tags](#supported-tags)
+- [Read Hooks and Query Options](#read-hooks-and-query-options)
 
 ## Basic Entity
 
@@ -175,6 +176,35 @@ Go types are automatically mapped to EDM types in the OData metadata:
 | `bool` | `Edm.Boolean` |
 | `time.Time` | `Edm.DateTimeOffset` |
 | `[]byte` | `Edm.Binary` |
+
+## Read Hooks and Query Options
+
+Read hooks run alongside the entity metadata you define here. When you implement `BeforeReadCollection` or `BeforeReadEntity`, return one or more [GORM scopes](https://gorm.io/docs/scopes.html). `go-odata` applies those scopes to the base query *before* it executes OData options such as `$filter`, `$orderby`, `$top`, `$skip`, `$expand`, and `$count`.
+
+Best practices:
+
+- **Return scopes, not mutations.** Always return scopes from `BeforeRead*` hooks instead of modifying the `*gorm.DB` manually. This keeps the handler free to compose query options, pagination, `$count`, and `$expand` requests using the same filtered query.
+- **Handle `$count` transparently.** The same scopes are reused when clients request `$count=true`, so tenant filters or soft-delete predicates remain in sync.
+- **Keep After hooks pure.** `AfterReadEntity` and `AfterReadCollection` receive the materialized result *after* pagination and projections. Use them to redact or enrich the payload, but avoid additional database work to keep responses fast.
+
+Example multi-tenant hook that preserves pagination and `$count` alignment:
+
+```go
+// Requires: import "fmt" and "gorm.io/gorm"
+func (Order) BeforeReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
+    tenantID := r.Header.Get("X-Tenant-ID")
+    if tenantID == "" {
+        return nil, fmt.Errorf("missing tenant header")
+    }
+
+    scope := func(db *gorm.DB) *gorm.DB {
+        return db.Where("tenant_id = ?", tenantID)
+    }
+    return []func(*gorm.DB) *gorm.DB{scope}, nil
+}
+```
+
+Because the hook returns a scope, the filtered tenant query feeds directly into `$top/$skip` pagination, navigation property reads, and `$count` calculations without extra code.
 
 ## Configuring Search
 
