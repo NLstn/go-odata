@@ -13,12 +13,12 @@ test_1() {
     if [ "$HTTP_CODE" = "200" ]; then
         local BODY=$(http_get_body "$SERVER_URL/Products?\$apply=aggregate(\$count%20as%20Total)")
         check_json_field "$BODY" "Total"
-    elif [ "$HTTP_CODE" = "501" ]; then
-        # $apply not implemented (optional extension)
-        return 0
-    else
-        return 1
+        return $?
     fi
+
+    echo "  Details: Expected HTTP 200 for compliant $apply aggregate, got $HTTP_CODE"
+    echo "           This indicates a compliance failure for required $apply support."
+    return 1
 }
 
 # Test 2: groupby transformation
@@ -27,11 +27,12 @@ test_2() {
     if [ "$HTTP_CODE" = "200" ]; then
         local BODY=$(http_get_body "$SERVER_URL/Products?\$apply=groupby((CategoryID))")
         check_json_field "$BODY" "CategoryID"
-    elif [ "$HTTP_CODE" = "501" ]; then
-        return 0
-    else
-        return 1
+        return $?
     fi
+
+    echo "  Details: Expected HTTP 200 for compliant groupby transformation, got $HTTP_CODE"
+    echo "           This indicates a compliance failure for required $apply groupby support."
+    return 1
 }
 
 # Test 3: groupby with aggregate
@@ -42,30 +43,36 @@ test_3() {
         if check_json_field "$BODY" "CategoryID" && check_json_field "$BODY" "Count"; then
             return 0
         fi
-        return 1
-    elif [ "$HTTP_CODE" = "501" ]; then
-        return 0
-    else
+        echo "  Details: Response body missing expected fields for compliant groupby/aggregate."
         return 1
     fi
+
+    echo "  Details: Expected HTTP 200 for compliant groupby/aggregate, got $HTTP_CODE"
+    echo "           This indicates a compliance failure for required $apply support."
+    return 1
 }
 
 # Test 4: filter transformation
 test_4() {
     local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$apply=filter(Price%20gt%2010)")
-    if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "501" ]; then
+    if [ "$HTTP_CODE" = "200" ]; then
         return 0
     fi
+
+    echo "  Details: Expected HTTP 200 for compliant filter transformation, got $HTTP_CODE"
+    echo "           This indicates a compliance failure for required $apply support."
     return 1
 }
 
 # Test 5: Invalid $apply expression should return 400
 test_5() {
     local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$apply=invalid(syntax)")
-    if [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "501" ]; then
+    if [ "$HTTP_CODE" = "400" ]; then
         return 0
     fi
-    echo "  Details: Expected HTTP 400 or 501, got $HTTP_CODE"
+
+    echo "  Details: Expected HTTP 400 for invalid $apply expression, got $HTTP_CODE"
+    echo "           This indicates a compliance failure for required error handling."
     return 1
 }
 
