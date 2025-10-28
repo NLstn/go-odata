@@ -13,6 +13,7 @@ Welcome to the go-odata documentation! This directory contains detailed guides f
 
 - **[Actions and Functions](actions-and-functions.md)** - Implement custom OData operations beyond standard CRUD
 - **[Advanced Features](advanced-features.md)** - Use singletons, ETags for concurrency control, lifecycle hooks, and read hooks for authorization/redaction
+- **[Geospatial Functions](geospatial.md)** - Query geographic data with geo.distance, geo.length, and geo.intersects
 
 ### Testing & Development
 
@@ -58,6 +59,7 @@ Leverage powerful OData v4 features:
 - **Singletons**: Single-instance entities accessible by name
 - **ETags**: Optimistic concurrency control for safe updates
 - **Lifecycle & Read Hooks**: Execute custom logic at specific points in entity lifecycle, add tenant filters, or redact responses before returning data
+- **Geospatial Functions**: Query geographic data using geo.distance, geo.length, and geo.intersects
 
 ### Testing
 Ensure your OData service works correctly:
