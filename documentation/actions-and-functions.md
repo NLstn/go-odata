@@ -55,7 +55,7 @@ GET /GetTopProducts?count=3
 **Response:**
 ```json
 {
-  "@odata.context": "$metadata#Edm.String",
+  "@odata.context": "$metadata#Products",
   "value": [
     {"ID": 1, "Name": "Laptop", "Price": 999.99},
     {"ID": 5, "Name": "Smartphone", "Price": 799.99},
@@ -93,7 +93,7 @@ GET /Products(1)/GetTotalPrice?taxRate=0.08
 **Response:**
 ```json
 {
-  "@odata.context": "$metadata#Edm.String",
+  "@odata.context": "$metadata#Edm.Double",
   "value": 1079.99
 }
 ```
