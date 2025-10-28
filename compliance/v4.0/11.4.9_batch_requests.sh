@@ -29,13 +29,19 @@ Accept: application/json
     local HTTP_CODE=$(echo "$RESPONSE" | tail -1)
     BATCH_SUPPORTED="$HTTP_CODE"
     
-    [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "501" ]
+    if [ "$HTTP_CODE" != "200" ]; then
+        echo "  Details: Expected 200 from \\$batch endpoint but received $HTTP_CODE"
+        return 1
+    fi
+
+    return 0
 }
 
 # Test 2: Batch response has multipart/mixed Content-Type
 test_2() {
     if [ "$BATCH_SUPPORTED" != "200" ]; then
-        return 0  # Skip if batch not supported
+        echo "  Details: Cannot validate response headers because \\$batch endpoint returned $BATCH_SUPPORTED"
+        return 1
     fi
     
     local BATCH_BODY="--batch_boundary
@@ -60,7 +66,8 @@ Accept: application/json
 # Test 3: Batch with multiple GET requests
 test_3() {
     if [ "$BATCH_SUPPORTED" != "200" ]; then
-        return 0
+        echo "  Details: Cannot run multi-request batch because \\$batch endpoint returned $BATCH_SUPPORTED"
+        return 1
     fi
     
     local MULTI_BATCH="--batch_boundary
@@ -90,8 +97,14 @@ Accept: application/json
     
     if [ "$HTTP_CODE" = "200" ]; then
         local RESPONSE_COUNT=$(echo "$BODY" | grep -c "HTTP/1.1" || echo "0")
-        [ "$RESPONSE_COUNT" -ge 2 ]
+        if [ "$RESPONSE_COUNT" -lt 2 ]; then
+            echo "  Details: Expected at least 2 responses but found $RESPONSE_COUNT"
+            return 1
+        fi
+
+        return 0
     else
+        echo "  Details: Expected 200 from multi-request batch but received $HTTP_CODE"
         return 1
     fi
 }
@@ -99,7 +112,8 @@ Accept: application/json
 # Test 4: Batch request with changeset
 test_4() {
     if [ "$BATCH_SUPPORTED" != "200" ]; then
-        return 0
+        echo "  Details: Cannot evaluate changesets because \\$batch endpoint returned $BATCH_SUPPORTED"
+        return 1
     fi
     
     local CHANGESET_BATCH="--batch_boundary
@@ -125,13 +139,19 @@ Accept: application/json
         "$SERVER_URL/\$batch" 2>&1)
     local HTTP_CODE=$(echo "$RESPONSE" | tail -1)
     
-    [ "$HTTP_CODE" = "200" ]
+    if [ "$HTTP_CODE" != "200" ]; then
+        echo "  Details: Expected 200 for changeset batch but received $HTTP_CODE"
+        return 1
+    fi
+
+    return 0
 }
 
 # Test 5: Invalid batch request returns 400
 test_5() {
     if [ "$BATCH_SUPPORTED" != "200" ]; then
-        return 0
+        echo "  Details: Cannot validate invalid batch handling because \\$batch endpoint returned $BATCH_SUPPORTED"
+        return 1
     fi
     
     local INVALID_BATCH="--batch_boundary
@@ -144,7 +164,12 @@ INVALID CONTENT
         "$SERVER_URL/\$batch" 2>&1)
     local HTTP_CODE=$(echo "$RESPONSE" | tail -1)
     
-    [ "$HTTP_CODE" = "400" ]
+    if [ "$HTTP_CODE" != "400" ]; then
+        echo "  Details: Expected 400 for invalid batch but received $HTTP_CODE"
+        return 1
+    fi
+
+    return 0
 }
 
 run_test "\$batch endpoint responds" test_1
