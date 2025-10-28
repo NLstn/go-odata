@@ -36,7 +36,7 @@ func TestGeoFunctionSQLGeneration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			filter, err := parseFilter(tt.filterStr, meta)
+			filter, err := parseFilter(tt.filterStr, meta, nil)
 			
 			if tt.expectError {
 				if err == nil {
@@ -91,7 +91,7 @@ func TestInvalidGeoFunction(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := parseFilter(tt.filterStr, meta)
+			_, err := parseFilter(tt.filterStr, meta, nil)
 			
 			if err == nil {
 				t.Errorf("Expected error for invalid function but got nil")
