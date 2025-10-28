@@ -295,6 +295,15 @@ func (p *ASTParser) parseNumberLiteral(value string) ASTNode {
 func (p *ASTParser) parseIdentifierOrFunctionCall(token *Token) (ASTNode, error) {
 	p.advance()
 
+	// Check for geospatial literals: geography'...' or geometry'...'
+	lowerIdent := strings.ToLower(token.Value)
+	if (lowerIdent == "geography" || lowerIdent == "geometry") && p.currentToken().Type == TokenString {
+		geoType := lowerIdent
+		geoValue := p.currentToken().Value
+		p.advance()
+		return &LiteralExpr{Value: geoValue, Type: geoType}, nil
+	}
+
 	// Check for property path with slashes (e.g., Orders/Items or Tags/any)
 	// Use "/" as path separator when followed by an identifier (not in arithmetic context)
 	if p.currentToken().Type == TokenArithmetic && p.currentToken().Value == "/" {
@@ -838,6 +847,11 @@ func convertFunctionCallExpr(n *FunctionCallExpr, entityMetadata *metadata.Entit
 		return convertIsOfFunction(n, entityMetadata)
 	}
 
+	// Handle geospatial functions
+	if isGeospatialFunction(functionName) {
+		return convertGeospatialFunction(n, functionName, entityMetadata)
+	}
+
 	return nil, fmt.Errorf("unsupported function: %s", functionName)
 }
 
@@ -864,6 +878,11 @@ func isTwoArgFunction(name string) bool {
 // isArithmeticFunction checks if a function is an arithmetic function
 func isArithmeticFunction(name string) bool {
 	return name == "add" || name == "sub" || name == "mul" || name == "div" || name == "mod"
+}
+
+// isGeospatialFunction checks if a function is a geospatial function
+func isGeospatialFunction(name string) bool {
+	return name == "geo.distance" || name == "geo.length" || name == "geo.intersects"
 }
 
 // extractPropertyFromFunctionArg extracts property from function argument
@@ -1277,6 +1296,83 @@ func convertIsOfFunction(n *FunctionCallExpr, entityMetadata *metadata.EntityMet
 		Operator: OpIsOf,
 		Value:    typeName,
 	}, nil
+}
+
+// convertGeospatialFunction converts geospatial functions (geo.distance, geo.length, geo.intersects)
+func convertGeospatialFunction(n *FunctionCallExpr, functionName string, entityMetadata *metadata.EntityMetadata) (*FilterExpression, error) {
+	switch functionName {
+	case "geo.distance":
+		// geo.distance(point1, point2) - requires 2 arguments
+		if len(n.Args) != 2 {
+			return nil, fmt.Errorf("function geo.distance requires 2 arguments")
+		}
+
+		// First argument should be a property (the location field)
+		property, err := extractPropertyFromFunctionArg(n.Args[0], "geo.distance", entityMetadata)
+		if err != nil {
+			return nil, err
+		}
+
+		// Second argument should be a geography/geometry literal
+		var geoValue interface{}
+		if lit, ok := n.Args[1].(*LiteralExpr); ok {
+			geoValue = lit.Value
+		} else {
+			return nil, fmt.Errorf("second argument of geo.distance must be a geography or geometry literal")
+		}
+
+		return &FilterExpression{
+			Property: property,
+			Operator: OpGeoDistance,
+			Value:    geoValue,
+		}, nil
+
+	case "geo.length":
+		// geo.length(linestring) - requires 1 argument
+		if len(n.Args) != 1 {
+			return nil, fmt.Errorf("function geo.length requires 1 argument")
+		}
+
+		property, err := extractPropertyFromFunctionArg(n.Args[0], "geo.length", entityMetadata)
+		if err != nil {
+			return nil, err
+		}
+
+		return &FilterExpression{
+			Property: property,
+			Operator: OpGeoLength,
+			Value:    nil,
+		}, nil
+
+	case "geo.intersects":
+		// geo.intersects(geo1, geo2) - requires 2 arguments
+		if len(n.Args) != 2 {
+			return nil, fmt.Errorf("function geo.intersects requires 2 arguments")
+		}
+
+		// First argument should be a property
+		property, err := extractPropertyFromFunctionArg(n.Args[0], "geo.intersects", entityMetadata)
+		if err != nil {
+			return nil, err
+		}
+
+		// Second argument should be a geography/geometry literal
+		var geoValue interface{}
+		if lit, ok := n.Args[1].(*LiteralExpr); ok {
+			geoValue = lit.Value
+		} else {
+			return nil, fmt.Errorf("second argument of geo.intersects must be a geography or geometry literal")
+		}
+
+		return &FilterExpression{
+			Property: property,
+			Operator: OpGeoIntersects,
+			Value:    geoValue,
+		}, nil
+
+	default:
+		return nil, fmt.Errorf("unsupported geospatial function: %s", functionName)
+	}
 }
 
 // convertLambdaExpr converts a lambda expression (any/all) to a filter expression

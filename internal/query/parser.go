@@ -159,6 +159,10 @@ const (
 	// Type conversion functions
 	OpCast FilterOperator = "cast"
 	OpIsOf FilterOperator = "isof"
+	// Geospatial functions
+	OpGeoDistance   FilterOperator = "geo.distance"
+	OpGeoLength     FilterOperator = "geo.length"
+	OpGeoIntersects FilterOperator = "geo.intersects"
 )
 
 // LogicalOperator represents logical operators for combining filters
