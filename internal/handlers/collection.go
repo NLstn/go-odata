@@ -855,15 +855,28 @@ func (h *EntityHandler) validateSkipToken(queryOptions *query.QueryOptions) erro
 
 // validateComplexTypeUsage validates that complex types are not used in unsupported operations
 func (h *EntityHandler) validateComplexTypeUsage(queryOptions *query.QueryOptions) error {
+	// Build a map of computed property aliases
+	computedAliases := make(map[string]bool)
+	if queryOptions.Compute != nil {
+		for _, expr := range queryOptions.Compute.Expressions {
+			computedAliases[expr.Alias] = true
+		}
+	}
+
 	// Check filter for complex type usage
 	if queryOptions.Filter != nil {
-		if err := h.validateFilterForComplexTypes(queryOptions.Filter, false); err != nil {
+		if err := h.validateFilterForComplexTypes(queryOptions.Filter, false, computedAliases); err != nil {
 			return err
 		}
 	}
 
 	// Check orderby for complex type usage
 	for _, orderBy := range queryOptions.OrderBy {
+		// Skip validation for computed properties
+		if computedAliases[orderBy.Property] {
+			continue
+		}
+
 		prop, _, err := h.metadata.ResolvePropertyPath(orderBy.Property)
 		if err != nil {
 			return fmt.Errorf("property path '%s' is not supported", orderBy.Property)
@@ -881,7 +894,8 @@ func (h *EntityHandler) validateComplexTypeUsage(queryOptions *query.QueryOption
 
 // validateFilterForComplexTypes recursively validates a filter expression for complex type usage
 // The insideLambda parameter indicates if we're validating properties inside a lambda predicate
-func (h *EntityHandler) validateFilterForComplexTypes(filter *query.FilterExpression, insideLambda bool) error {
+// The computedAliases parameter contains aliases of computed properties that should be skipped
+func (h *EntityHandler) validateFilterForComplexTypes(filter *query.FilterExpression, insideLambda bool, computedAliases map[string]bool) error {
 	if filter == nil {
 		return nil
 	}
@@ -897,6 +911,11 @@ func (h *EntityHandler) validateFilterForComplexTypes(filter *query.FilterExpres
 				return fmt.Errorf("property path '$it' can only be used with isof() function")
 			}
 			// No further validation needed for $it
+			goto validateChildren
+		}
+
+		// Skip validation for computed properties
+		if computedAliases[filter.Property] {
 			goto validateChildren
 		}
 
@@ -936,13 +955,13 @@ validateChildren:
 	
 	if filter.Left != nil {
 		// If this filter is a lambda, its Left contains the predicate for the related entity
-		if err := h.validateFilterForComplexTypes(filter.Left, insideLambda || isLambda); err != nil {
+		if err := h.validateFilterForComplexTypes(filter.Left, insideLambda || isLambda, computedAliases); err != nil {
 			return err
 		}
 	}
 
 	if filter.Right != nil {
-		if err := h.validateFilterForComplexTypes(filter.Right, insideLambda); err != nil {
+		if err := h.validateFilterForComplexTypes(filter.Right, insideLambda, computedAliases); err != nil {
 			return err
 		}
 	}
