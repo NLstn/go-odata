@@ -25,16 +25,18 @@ echo ""
 test_media_entity() {
     # Try to access a media entity (e.g., an image or document)
     local HTTP_CODE=$(http_get "$SERVER_URL/MediaItems(1)")
-    
+
     if [ "$HTTP_CODE" = "200" ]; then
         return 0
-    elif [ "$HTTP_CODE" = "404" ]; then
-        echo "  Details: Media entities not implemented (status: $HTTP_CODE)"
-        return 0  # Pass - optional feature
+    fi
+
+    if [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "405" ] || [ "$HTTP_CODE" = "501" ]; then
+        echo "  Details: Specification violation - media entity missing (status: $HTTP_CODE)"
     else
         echo "  Details: Unexpected status: $HTTP_CODE"
-        return 1
     fi
+
+    return 1
 }
 
 # Test 2: Request media entity $value (binary content)
@@ -44,13 +46,15 @@ test_media_entity_value() {
     
     if [ "$HTTP_CODE" = "200" ]; then
         return 0
-    elif [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "501" ]; then
-        echo "  Details: Media entity \$value not implemented (status: $HTTP_CODE)"
-        return 0  # Pass - optional feature
+    fi
+
+    if [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "405" ] || [ "$HTTP_CODE" = "501" ]; then
+        echo "  Details: Specification violation - media entity \$value missing (status: $HTTP_CODE)"
     else
         echo "  Details: Unexpected status: $HTTP_CODE"
-        return 1
     fi
+
+    return 1
 }
 
 # Test 3: Request stream property
@@ -60,13 +64,15 @@ test_stream_property() {
     
     if [ "$HTTP_CODE" = "200" ]; then
         return 0
-    elif [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "501" ]; then
-        echo "  Details: Stream properties not implemented (status: $HTTP_CODE)"
-        return 0  # Pass - optional feature
+    fi
+
+    if [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "405" ] || [ "$HTTP_CODE" = "501" ]; then
+        echo "  Details: Specification violation - stream property missing (status: $HTTP_CODE)"
     else
         echo "  Details: Unexpected status: $HTTP_CODE"
-        return 1
     fi
+
+    return 1
 }
 
 # Test 4: Media entity with content type
@@ -79,16 +85,19 @@ test_media_content_type() {
         # Check for appropriate Content-Type (image/*, application/*, etc.)
         if echo "$HEADERS" | grep -qi "Content-Type:"; then
             return 0
-        else
-            echo "  Details: Missing Content-Type header"
-            return 1
         fi
-    elif [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "501" ]; then
-        echo "  Details: Media content not available (status: $HTTP_CODE)"
-        return 0  # Pass - optional feature
-    else
-        return 0  # Pass - implementation-specific
+
+        echo "  Details: Specification violation - missing Content-Type header"
+        return 1
     fi
+
+    if [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "405" ] || [ "$HTTP_CODE" = "501" ]; then
+        echo "  Details: Specification violation - media content unavailable (status: $HTTP_CODE)"
+    else
+        echo "  Details: Unexpected status: $HTTP_CODE"
+    fi
+
+    return 1
 }
 
 # Test 5: POST media entity (upload)
@@ -98,15 +107,17 @@ test_post_media_entity() {
         -H "Content-Type: image/png" \
         -d "fake-binary-data" 2>&1)
     
-    if [ "$HTTP_CODE" = "201" ] || [ "$HTTP_CODE" = "200" ]; then
+    if [ "$HTTP_CODE" = "201" ] || [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "204" ]; then
         return 0
-    elif [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "501" ] || [ "$HTTP_CODE" = "405" ]; then
-        echo "  Details: Media entity creation not supported (status: $HTTP_CODE)"
-        return 0  # Pass - optional feature
+    fi
+
+    if [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "405" ] || [ "$HTTP_CODE" = "501" ]; then
+        echo "  Details: Specification violation - media entity creation unsupported (status: $HTTP_CODE)"
     else
         echo "  Details: Unexpected status: $HTTP_CODE"
-        return 1
     fi
+
+    return 1
 }
 
 # Test 6: PUT to update media entity content
@@ -118,13 +129,15 @@ test_put_media_value() {
     
     if [ "$HTTP_CODE" = "204" ] || [ "$HTTP_CODE" = "200" ]; then
         return 0
-    elif [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "501" ] || [ "$HTTP_CODE" = "405" ]; then
-        echo "  Details: Media entity update not supported (status: $HTTP_CODE)"
-        return 0  # Pass - optional feature
+    fi
+
+    if [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "405" ] || [ "$HTTP_CODE" = "501" ]; then
+        echo "  Details: Specification violation - media entity update unsupported (status: $HTTP_CODE)"
     else
         echo "  Details: Unexpected status: $HTTP_CODE"
-        return 1
     fi
+
+    return 1
 }
 
 # Test 7: Media entity metadata
@@ -134,32 +147,38 @@ test_media_metadata() {
     
     if [ "$HTTP_CODE" = "200" ]; then
         return 0
-    elif [ "$HTTP_CODE" = "404" ]; then
-        echo "  Details: Media entities not available (status: $HTTP_CODE)"
-        return 0  # Pass - optional
+    fi
+
+    if [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "405" ] || [ "$HTTP_CODE" = "501" ]; then
+        echo "  Details: Specification violation - media entity metadata missing (status: $HTTP_CODE)"
     else
         echo "  Details: Unexpected status: $HTTP_CODE"
-        return 1
     fi
+
+    return 1
 }
 
 # Test 8: Stream property in metadata
 test_stream_in_metadata() {
-    local RESPONSE=$(http_get_body "$SERVER_URL/\$metadata")
     local HTTP_CODE=$(http_get "$SERVER_URL/\$metadata")
-    
     if [ "$HTTP_CODE" = "200" ]; then
-        # Check if metadata mentions streams or media types
+        local RESPONSE=$(http_get_body "$SERVER_URL/\$metadata")
+
         if echo "$RESPONSE" | grep -q 'HasStream\|Stream'; then
             return 0
-        else
-            echo "  Details: No stream properties in metadata (optional feature)"
-            return 0  # Pass - optional
         fi
-    else
-        echo "  Details: Status: $HTTP_CODE"
+
+        echo "  Details: Specification violation - metadata missing stream annotations"
         return 1
     fi
+
+    if [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "405" ] || [ "$HTTP_CODE" = "501" ]; then
+        echo "  Details: Specification violation - metadata endpoint unavailable (status: $HTTP_CODE)"
+    else
+        echo "  Details: Status: $HTTP_CODE"
+    fi
+
+    return 1
 }
 
 # Test 9: Accept header for media content
@@ -168,12 +187,17 @@ test_media_accept_header() {
     local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/MediaItems(1)/\$value" \
         -H "Accept: image/png" 2>&1)
     
-    if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "406" ]; then
-        return 0  # All acceptable responses
+    if [ "$HTTP_CODE" = "200" ]; then
+        return 0
+    fi
+
+    if [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "405" ] || [ "$HTTP_CODE" = "501" ]; then
+        echo "  Details: Specification violation - media stream negotiation failed (status: $HTTP_CODE)"
     else
         echo "  Details: Unexpected status: $HTTP_CODE"
-        return 1
     fi
+
+    return 1
 }
 
 # Test 10: DELETE media entity
@@ -182,34 +206,42 @@ test_delete_media() {
     local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE "$SERVER_URL/MediaItems(999999)" 2>&1)
     
     # 404 for not found, 204/200 for deleted, 405 for not allowed
-    if [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "204" ] || [ "$HTTP_CODE" = "405" ]; then
+    if [ "$HTTP_CODE" = "204" ] || [ "$HTTP_CODE" = "200" ]; then
         return 0
+    fi
+
+    if [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "405" ] || [ "$HTTP_CODE" = "501" ]; then
+        echo "  Details: Specification violation - media entity deletion failed (status: $HTTP_CODE)"
     else
         echo "  Details: Unexpected status: $HTTP_CODE"
-        return 1
     fi
+
+    return 1
 }
 
 # Test 11: Media link entry
 test_media_link_entry() {
     # Check for @odata.mediaReadLink or @odata.mediaEditLink in response
-    local RESPONSE=$(http_get_body "$SERVER_URL/MediaItems(1)")
     local HTTP_CODE=$(http_get "$SERVER_URL/MediaItems(1)")
-    
+
     if [ "$HTTP_CODE" = "200" ]; then
+        local RESPONSE=$(http_get_body "$SERVER_URL/MediaItems(1)")
+
         if echo "$RESPONSE" | grep -q '@odata.media'; then
             return 0
-        else
-            echo "  Details: No media link annotations (optional)"
-            return 0
         fi
-    elif [ "$HTTP_CODE" = "404" ]; then
-        echo "  Details: Media entities not available"
-        return 0
-    else
-        echo "  Details: Unexpected status: $HTTP_CODE"
+
+        echo "  Details: Specification violation - missing media link annotations"
         return 1
     fi
+
+    if [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "405" ] || [ "$HTTP_CODE" = "501" ]; then
+        echo "  Details: Specification violation - media entity endpoint unavailable (status: $HTTP_CODE)"
+    else
+        echo "  Details: Unexpected status: $HTTP_CODE"
+    fi
+
+    return 1
 }
 
 # Test 12: Stream property $value
@@ -219,13 +251,15 @@ test_stream_property_value() {
     
     if [ "$HTTP_CODE" = "200" ]; then
         return 0
-    elif [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "501" ]; then
-        echo "  Details: Stream property \$value not available (status: $HTTP_CODE)"
-        return 0  # Pass - optional
+    fi
+
+    if [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "405" ] || [ "$HTTP_CODE" = "501" ]; then
+        echo "  Details: Specification violation - stream property \$value missing (status: $HTTP_CODE)"
     else
         echo "  Details: Unexpected status: $HTTP_CODE"
-        return 1
     fi
+
+    return 1
 }
 
 echo "  Request: GET MediaItems(1)"
