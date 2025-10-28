@@ -58,21 +58,20 @@ test_complex_type_retrieval() {
 
 # Test 2: Access nested property of complex type
 test_complex_nested_property() {
-    # Access nested property like ShippingAddress/City
+    local RESPONSE=$(http_get_body "$SERVER_URL/Products(1)/ShippingAddress/City")
     local HTTP_CODE=$(http_get "$SERVER_URL/Products(1)/ShippingAddress/City")
-    
-    if [ "$HTTP_CODE" = "200" ]; then
-        return 0
-    elif [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "400" ]; then
-        echo "  Details: Nested property access not supported (status: $HTTP_CODE)"
-        return 0  # Pass - this is optional per spec
-    elif [ "$HTTP_CODE" = "500" ]; then
-        echo "  Details: Server error (500) - should return 400/404 for unsupported features"
-        return 1  # Fail - should not crash
-    else
-        echo "  Details: Unexpected status: $HTTP_CODE"
+
+    if [ "$HTTP_CODE" != "200" ]; then
+        echo "  Details: Expected 200 for nested property, got $HTTP_CODE"
         return 1
     fi
+
+    if ! echo "$RESPONSE" | grep -q '"value":"Seattle"'; then
+        echo "  Details: Nested property response missing expected value"
+        return 1
+    fi
+
+    return 0
 }
 
 # Test 3: Filter by nested complex type property
@@ -289,23 +288,25 @@ test_complex_value_access() {
 test_access_complex_type() {
     # Access the complex type property itself
     local HTTP_CODE=$(http_get "$SERVER_URL/Products(1)/ShippingAddress")
-    
+    local RESPONSE=$(http_get_body "$SERVER_URL/Products(1)/ShippingAddress")
+
     # 000 means curl failed - this is a test failure
     if [ "$HTTP_CODE" = "000" ]; then
         echo "  Details: Curl failed (connection error or invalid URL)"
         return 1
     fi
-    
-    # Should either return the complex type (200) or proper error (400/404)
-    if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "400" ]; then
-        return 0
-    elif [ "$HTTP_CODE" = "500" ]; then
-        echo "  Details: Server error (500) - should return 400/404 for unsupported features"
-        return 1
-    else
-        echo "  Details: Unexpected status: $HTTP_CODE"
+
+    if [ "$HTTP_CODE" != "200" ]; then
+        echo "  Details: Expected 200 when accessing complex property, got $HTTP_CODE"
         return 1
     fi
+
+    if ! echo "$RESPONSE" | grep -q '"City":"Seattle"'; then
+        echo "  Details: Complex property response missing expected City value"
+        return 1
+    fi
+
+    return 0
 }
 
 # Test 12: Complex type in metadata
@@ -332,6 +333,47 @@ test_complex_in_metadata() {
         echo "  Details: Status: $HTTP_CODE"
         return 1
     fi
+}
+
+# Test 13: HEAD on complex type property
+test_complex_property_head() {
+    local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -I "$SERVER_URL/Products(1)/ShippingAddress")
+
+    if [ "$HTTP_CODE" = "000" ]; then
+        echo "  Details: Curl failed (connection error or invalid URL)"
+        return 1
+    fi
+
+    if [ "$HTTP_CODE" = "200" ]; then
+        return 0
+    fi
+
+    echo "  Details: Expected 200 for HEAD on complex property, got $HTTP_CODE"
+    return 1
+}
+
+# Test 14: OPTIONS on complex type property
+test_complex_property_options() {
+    local RESPONSE=$(curl -s -D - -o /dev/null -w "%{http_code}" -X OPTIONS "$SERVER_URL/Products(1)/ShippingAddress")
+    local HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+    local HEADERS=$(echo "$RESPONSE" | sed '$d')
+
+    if [ "$HTTP_CODE" = "000" ]; then
+        echo "  Details: Curl failed (connection error or invalid URL)"
+        return 1
+    fi
+
+    if [ "$HTTP_CODE" != "200" ]; then
+        echo "  Details: Expected 200 for OPTIONS on complex property, got $HTTP_CODE"
+        return 1
+    fi
+
+    if ! echo "$HEADERS" | grep -qi 'Allow: GET, HEAD, OPTIONS'; then
+        echo "  Details: OPTIONS response missing Allow: GET, HEAD, OPTIONS"
+        return 1
+    fi
+
+    return 0
 }
 
 echo "  Request: GET Products(1) with complex type"
@@ -366,6 +408,12 @@ run_test "\$value access for complex type (should fail)" test_complex_value_acce
 
 echo "  Request: Access complex type property endpoint"
 run_test "Access complex type property directly" test_access_complex_type
+
+echo "  Request: HEAD Products(1)/ShippingAddress"
+run_test "HEAD on complex type property" test_complex_property_head
+
+echo "  Request: OPTIONS Products(1)/ShippingAddress"
+run_test "OPTIONS on complex type property" test_complex_property_options
 
 echo "  Request: GET \$metadata"
 run_test "Complex type in metadata document" test_complex_in_metadata
