@@ -22,12 +22,13 @@ echo ""
 test_orderby_computed() {
     local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$compute=Price mul 1.1 as TaxedPrice&\$orderby=TaxedPrice")
     
-    # This feature may not be fully implemented in all servers
-    # Accept 200 (success) or 501 (not implemented) or 400 (not supported)
-    if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "501" ] || [ "$HTTP_CODE" = "400" ]; then
+    if [ "$HTTP_CODE" = "200" ]; then
         return 0
+    elif [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "501" ]; then
+        echo "  Failure: Service rejected ordering by computed property (status: $HTTP_CODE)"
+        return 1
     else
-        echo "  Details: Status code: $HTTP_CODE (expected 200, 400, or 501)"
+        echo "  Failure: Unexpected status: $HTTP_CODE"
         return 1
     fi
 }
@@ -36,10 +37,13 @@ test_orderby_computed() {
 test_orderby_multiple_computed() {
     local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$compute=Price mul 0.9 as DiscountPrice,Price mul 1.1 as TaxedPrice&\$orderby=DiscountPrice desc")
     
-    if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "501" ] || [ "$HTTP_CODE" = "400" ]; then
+    if [ "$HTTP_CODE" = "200" ]; then
         return 0
+    elif [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "501" ]; then
+        echo "  Failure: Service rejected ordering by multiple computed properties (status: $HTTP_CODE)"
+        return 1
     else
-        echo "  Details: Status code: $HTTP_CODE"
+        echo "  Failure: Unexpected status: $HTTP_CODE"
         return 1
     fi
 }
@@ -48,10 +52,13 @@ test_orderby_multiple_computed() {
 test_orderby_computed_desc() {
     local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$compute=Price mul 2 as DoublePrice&\$orderby=DoublePrice desc")
     
-    if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "501" ] || [ "$HTTP_CODE" = "400" ]; then
+    if [ "$HTTP_CODE" = "200" ]; then
         return 0
+    elif [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "501" ]; then
+        echo "  Failure: Service rejected ordering by computed property with direction (status: $HTTP_CODE)"
+        return 1
     else
-        echo "  Details: Status code: $HTTP_CODE"
+        echo "  Failure: Unexpected status: $HTTP_CODE"
         return 1
     fi
 }
@@ -60,10 +67,13 @@ test_orderby_computed_desc() {
 test_orderby_mixed() {
     local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$compute=Price mul 1.2 as MarkedUpPrice&\$orderby=CategoryID,MarkedUpPrice desc")
     
-    if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "501" ] || [ "$HTTP_CODE" = "400" ]; then
+    if [ "$HTTP_CODE" = "200" ]; then
         return 0
+    elif [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "501" ]; then
+        echo "  Failure: Service rejected mixed ordering with computed property (status: $HTTP_CODE)"
+        return 1
     else
-        echo "  Details: Status code: $HTTP_CODE"
+        echo "  Failure: Unexpected status: $HTTP_CODE"
         return 1
     fi
 }
@@ -72,10 +82,13 @@ test_orderby_mixed() {
 test_orderby_computed_with_select() {
     local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$compute=Price mul 1.08 as FinalPrice&\$select=Name,FinalPrice&\$orderby=FinalPrice")
     
-    if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "501" ] || [ "$HTTP_CODE" = "400" ]; then
+    if [ "$HTTP_CODE" = "200" ]; then
         return 0
+    elif [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "501" ]; then
+        echo "  Failure: Service rejected ordering by computed property with \$select (status: $HTTP_CODE)"
+        return 1
     else
-        echo "  Details: Status code: $HTTP_CODE"
+        echo "  Failure: Unexpected status: $HTTP_CODE"
         return 1
     fi
 }
@@ -84,10 +97,13 @@ test_orderby_computed_with_select() {
 test_orderby_computed_with_filter() {
     local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$compute=Price mul 0.8 as SalePrice&\$filter=SalePrice gt 50&\$orderby=SalePrice")
     
-    if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "501" ] || [ "$HTTP_CODE" = "400" ]; then
+    if [ "$HTTP_CODE" = "200" ]; then
         return 0
+    elif [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "501" ]; then
+        echo "  Failure: Service rejected ordering by computed property with \$filter (status: $HTTP_CODE)"
+        return 1
     else
-        echo "  Details: Status code: $HTTP_CODE"
+        echo "  Failure: Unexpected status: $HTTP_CODE"
         return 1
     fi
 }
@@ -96,10 +112,13 @@ test_orderby_computed_with_filter() {
 test_orderby_computed_with_top() {
     local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$compute=Price div 2 as HalfPrice&\$orderby=HalfPrice desc&\$top=3")
     
-    if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "501" ] || [ "$HTTP_CODE" = "400" ]; then
+    if [ "$HTTP_CODE" = "200" ]; then
         return 0
+    elif [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "501" ]; then
+        echo "  Failure: Service rejected ordering by computed property with \$top (status: $HTTP_CODE)"
+        return 1
     else
-        echo "  Details: Status code: $HTTP_CODE"
+        echo "  Failure: Unexpected status: $HTTP_CODE"
         return 1
     fi
 }
@@ -108,10 +127,13 @@ test_orderby_computed_with_top() {
 test_orderby_regular_with_compute() {
     local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$compute=Price mul 1.5 as HighPrice&\$orderby=Name")
     
-    if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "501" ] || [ "$HTTP_CODE" = "400" ]; then
+    if [ "$HTTP_CODE" = "200" ]; then
         return 0
+    elif [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "501" ]; then
+        echo "  Failure: Service rejected ordering by regular property when \$compute present (status: $HTTP_CODE)"
+        return 1
     else
-        echo "  Details: Status code: $HTTP_CODE"
+        echo "  Failure: Unexpected status: $HTTP_CODE"
         return 1
     fi
 }
@@ -126,14 +148,14 @@ test_response_includes_computed() {
         if echo "$RESPONSE" | grep -q "DoublePrice"; then
             return 0
         else
-            echo "  Details: Computed property not in response"
+            echo "  Failure: Computed property not present in ordered response"
             return 1
         fi
-    elif [ "$HTTP_CODE" = "501" ] || [ "$HTTP_CODE" = "400" ]; then
-        # Feature not implemented
-        return 0
+    elif [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "501" ]; then
+        echo "  Failure: Service rejected request for computed property ordering (status: $HTTP_CODE)"
+        return 1
     else
-        echo "  Details: Status code: $HTTP_CODE"
+        echo "  Failure: Unexpected status: $HTTP_CODE"
         return 1
     fi
 }
@@ -142,10 +164,13 @@ test_response_includes_computed() {
 test_orderby_computed_not_selected() {
     local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$compute=Price mul 1.3 as MarkedPrice&\$select=Name,Price&\$orderby=MarkedPrice")
     
-    if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "501" ] || [ "$HTTP_CODE" = "400" ]; then
+    if [ "$HTTP_CODE" = "200" ]; then
         return 0
+    elif [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "501" ]; then
+        echo "  Failure: Service rejected ordering by computed property not in \$select (status: $HTTP_CODE)"
+        return 1
     else
-        echo "  Details: Status code: $HTTP_CODE"
+        echo "  Failure: Unexpected status: $HTTP_CODE"
         return 1
     fi
 }
