@@ -28,9 +28,9 @@ test_isof_function() {
     
     if [ "$HTTP_CODE" = "200" ]; then
         return 0
-    elif [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "501" ] || [ "$HTTP_CODE" = "404" ]; then
-        echo "  Details: isof function not implemented (status: $HTTP_CODE)"
-        return 0  # Pass - optional feature
+    elif [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "501" ]; then
+        echo "  Specification violation: isof function must be supported (status: $HTTP_CODE)"
+        return 1
     else
         echo "  Details: Unexpected status: $HTTP_CODE"
         return 1
@@ -44,9 +44,9 @@ test_type_cast_in_path() {
     
     if [ "$HTTP_CODE" = "200" ]; then
         return 0
-    elif [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "400" ]; then
-        echo "  Details: Type cast in path not supported (status: $HTTP_CODE)"
-        return 0  # Pass - optional feature
+    elif [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "501" ]; then
+        echo "  Specification violation: Type cast in path must be supported (status: $HTTP_CODE)"
+        return 1
     else
         echo "  Details: Unexpected status: $HTTP_CODE"
         return 1
@@ -60,9 +60,9 @@ test_type_cast_collection() {
     
     if [ "$HTTP_CODE" = "200" ]; then
         return 0
-    elif [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "400" ]; then
-        echo "  Details: Type cast on collection not supported (status: $HTTP_CODE)"
-        return 0  # Pass - optional feature
+    elif [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "501" ]; then
+        echo "  Specification violation: Type cast on collection must be supported (status: $HTTP_CODE)"
+        return 1
     else
         echo "  Details: Unexpected status: $HTTP_CODE"
         return 1
@@ -77,8 +77,8 @@ test_cast_function() {
     if [ "$HTTP_CODE" = "200" ]; then
         return 0
     elif [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "501" ]; then
-        echo "  Details: cast function not implemented (status: $HTTP_CODE)"
-        return 0  # Pass - optional feature
+        echo "  Specification violation: cast function must be supported (status: $HTTP_CODE)"
+        return 1
     else
         echo "  Details: Unexpected status: $HTTP_CODE"
         return 1
@@ -92,9 +92,9 @@ test_derived_property_access() {
     
     if [ "$HTTP_CODE" = "200" ]; then
         return 0
-    elif [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "400" ]; then
-        echo "  Details: Derived type property access not supported (status: $HTTP_CODE)"
-        return 0  # Pass - optional feature
+    elif [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "501" ]; then
+        echo "  Specification violation: Derived type property access must be supported (status: $HTTP_CODE)"
+        return 1
     else
         echo "  Details: Unexpected status: $HTTP_CODE"
         return 1
@@ -108,9 +108,9 @@ test_isof_with_filter() {
     
     if [ "$HTTP_CODE" = "200" ]; then
         return 0
-    elif [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "404" ]; then
-        echo "  Details: Combined isof filter not supported (status: $HTTP_CODE)"
-        return 0  # Pass - optional feature
+    elif [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "501" ]; then
+        echo "  Specification violation: Combined isof filter must be supported (status: $HTTP_CODE)"
+        return 1
     else
         echo "  Details: Unexpected status: $HTTP_CODE"
         return 1
@@ -121,9 +121,13 @@ test_isof_with_filter() {
 test_polymorphic_query() {
     # Query base type should return both base and derived type instances
     local HTTP_CODE=$(http_get "$SERVER_URL/Products")
-    
-    # Just check that the endpoint works
-    check_status "$HTTP_CODE" "200"
+
+    if [ "$HTTP_CODE" = "200" ]; then
+        return 0
+    else
+        echo "  Specification violation: Polymorphic entity set must be accessible (status: $HTTP_CODE)"
+        return 1
+    fi
 }
 
 # Test 8: Type information in response (@odata.type)
@@ -139,6 +143,9 @@ test_type_annotation() {
             echo "  Details: @odata.type not present (acceptable for minimal metadata)"
             return 0  # Pass - optional in minimal metadata
         fi
+    elif [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "501" ]; then
+        echo "  Specification violation: Entity retrieval must support polymorphic type metadata (status: $HTTP_CODE)"
+        return 1
     else
         echo "  Details: Status: $HTTP_CODE"
         return 1
@@ -158,6 +165,9 @@ test_derived_in_metadata() {
             echo "  Details: No derived types in metadata (optional feature)"
             return 0  # Pass - optional
         fi
+    elif [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "501" ]; then
+        echo "  Specification violation: Metadata document must describe derived types (status: $HTTP_CODE)"
+        return 1
     else
         echo "  Details: Status: $HTTP_CODE"
         return 1
@@ -173,9 +183,9 @@ test_create_derived_type() {
     
     if [ "$HTTP_CODE" = "201" ] || [ "$HTTP_CODE" = "200" ]; then
         return 0
-    elif [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "404" ]; then
-        echo "  Details: Creating derived type not supported (status: $HTTP_CODE)"
-        return 0  # Pass - optional feature
+    elif [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "501" ]; then
+        echo "  Specification violation: Creating derived type entities must be supported (status: $HTTP_CODE)"
+        return 1
     else
         echo "  Details: Unexpected status: $HTTP_CODE"
         return 1
@@ -189,9 +199,9 @@ test_type_cast_navigation() {
     
     if [ "$HTTP_CODE" = "200" ]; then
         return 0
-    elif [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "400" ]; then
-        echo "  Details: Type cast with navigation not supported (status: $HTTP_CODE)"
-        return 0  # Pass - optional feature
+    elif [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "501" ]; then
+        echo "  Specification violation: Type cast with navigation must be supported (status: $HTTP_CODE)"
+        return 1
     else
         echo "  Details: Unexpected status: $HTTP_CODE"
         return 1
@@ -211,7 +221,7 @@ test_invalid_type_cast() {
         return 1
     else
         echo "  Details: Unexpected status: $HTTP_CODE"
-        return 0  # Pass - implementation-specific
+        return 1
     fi
 }
 
