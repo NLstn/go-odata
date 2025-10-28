@@ -20,14 +20,12 @@ echo ""
 
 # Test 1: GET $ref returns reference URL
 test_get_ref() {
-    # Try to get reference - may not be implemented
     local HTTP_CODE=$(http_get "$SERVER_URL/Products(1)/Category/\$ref")
-    
-    # Returns 200 if supported, 404 if not implemented
-    if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "501" ]; then
+
+    if [ "$HTTP_CODE" = "200" ]; then
         return 0
     else
-        echo "  Details: Status $HTTP_CODE"
+        echo "  Details: Expected status 200 for GET $ref but received $HTTP_CODE"
         return 1
     fi
 }
@@ -38,11 +36,10 @@ test_put_ref_single() {
         -H "Content-Type: application/json" \
         -d '{"@odata.id":"'"$SERVER_URL"'/Categories(1)"}' 2>&1)
     
-    # Returns 204 if successful, 404/501 if not implemented
-    if [ "$HTTP_CODE" = "204" ] || [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "501" ]; then
+    if [ "$HTTP_CODE" = "204" ] || [ "$HTTP_CODE" = "200" ]; then
         return 0
     else
-        echo "  Details: Status $HTTP_CODE"
+        echo "  Details: Expected status 204 (or 200 if a representation is returned) for PUT $ref but received $HTTP_CODE"
         return 1
     fi
 }
@@ -53,11 +50,10 @@ test_post_ref_collection() {
         -H "Content-Type: application/json" \
         -d '{"@odata.id":"'"$SERVER_URL"'/Products(2)"}' 2>&1)
     
-    # Returns 204 if successful, 404/501 if not implemented
-    if [ "$HTTP_CODE" = "204" ] || [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "501" ]; then
+    if [ "$HTTP_CODE" = "204" ] || [ "$HTTP_CODE" = "201" ]; then
         return 0
     else
-        echo "  Details: Status $HTTP_CODE"
+        echo "  Details: Expected status 204 (or 201 if a new resource is created) for POST $ref but received $HTTP_CODE"
         return 1
     fi
 }
@@ -66,11 +62,10 @@ test_post_ref_collection() {
 test_delete_ref() {
     local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE "$SERVER_URL/Products(1)/Category/\$ref" 2>&1)
     
-    # Returns 204 if successful, 404/501 if not implemented
-    if [ "$HTTP_CODE" = "204" ] || [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "501" ]; then
+    if [ "$HTTP_CODE" = "204" ]; then
         return 0
     else
-        echo "  Details: Status $HTTP_CODE"
+        echo "  Details: Expected status 204 for DELETE $ref but received $HTTP_CODE"
         return 1
     fi
 }
@@ -81,11 +76,10 @@ test_invalid_ref_url() {
         -H "Content-Type: application/json" \
         -d '{"@odata.id":"invalid-url"}' 2>&1)
     
-    # Should return 400 for invalid URL
-    if [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "501" ]; then
+    if [ "$HTTP_CODE" = "400" ]; then
         return 0
     else
-        echo "  Details: Status $HTTP_CODE"
+        echo "  Details: Expected status 400 for invalid $ref payload but received $HTTP_CODE"
         return 1
     fi
 }
@@ -99,7 +93,7 @@ test_ref_nonexistent_property() {
 }
 
 echo "  Request: GET $SERVER_URL/Products(1)/Category/\$ref"
-run_test "GET \$ref returns reference URL (or 404 if not implemented)" test_get_ref
+run_test "GET \$ref returns reference URL" test_get_ref
 
 echo "  Request: PUT $SERVER_URL/Products(1)/Category/\$ref"
 run_test "PUT \$ref creates/updates single-valued relationship" test_put_ref_single
