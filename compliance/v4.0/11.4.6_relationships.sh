@@ -15,9 +15,8 @@ test_1() {
     
     if [ "$STATUS" = "200" ]; then
         check_contains "$BODY" '"@odata.id"' "Response has @odata.id"
-    elif [ "$STATUS" = "404" ] || [ "$STATUS" = "501" ]; then
-        return 0  # Valid responses
     else
+        echo "  Details: Expected status 200 for GET $ref but received $STATUS"
         return 1
     fi
 }
@@ -30,9 +29,8 @@ test_2() {
     
     if [ "$STATUS" = "200" ]; then
         check_contains "$BODY" '"value"' "Response has value array"
-    elif [ "$STATUS" = "404" ] || [ "$STATUS" = "501" ]; then
-        return 0
     else
+        echo "  Details: Expected status 200 for GET collection $ref but received $STATUS"
         return 1
     fi
 }
@@ -44,7 +42,13 @@ test_3() {
         -d '{"@odata.id":"'$SERVER_URL'/Categories(1)"}' \
         "$SERVER_URL/Products(1)/Category/\$ref" 2>&1)
     local HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-    [ "$HTTP_CODE" = "204" ] || [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "501" ] || [ "$HTTP_CODE" = "404" ]
+
+    if [ "$HTTP_CODE" = "204" ] || [ "$HTTP_CODE" = "200" ]; then
+        return 0
+    else
+        echo "  Details: Expected status 204 (or 200 if a representation is returned) for PUT $ref but received $HTTP_CODE"
+        return 1
+    fi
 }
 
 # Test 4: Add reference to collection with POST
@@ -54,7 +58,13 @@ test_4() {
         -d '{"@odata.id":"'$SERVER_URL'/Products(2)"}' \
         "$SERVER_URL/Products(1)/RelatedProducts/\$ref" 2>&1)
     local HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-    [ "$HTTP_CODE" = "204" ] || [ "$HTTP_CODE" = "201" ] || [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "501" ]
+
+    if [ "$HTTP_CODE" = "204" ] || [ "$HTTP_CODE" = "201" ]; then
+        return 0
+    else
+        echo "  Details: Expected status 204 (or 201 if a new resource is created) for POST $ref but received $HTTP_CODE"
+        return 1
+    fi
 }
 
 # Test 5: Delete entity reference
@@ -62,7 +72,13 @@ test_5() {
     local RESPONSE=$(curl -s -w "\n%{http_code}" -X DELETE \
         "$SERVER_URL/Products(1)/Category/\$ref" 2>&1)
     local HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-    [ "$HTTP_CODE" = "204" ] || [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "501" ]
+
+    if [ "$HTTP_CODE" = "204" ]; then
+        return 0
+    else
+        echo "  Details: Expected status 204 for DELETE $ref but received $HTTP_CODE"
+        return 1
+    fi
 }
 
 # Test 6: Delete specific reference from collection
@@ -70,7 +86,13 @@ test_6() {
     local RESPONSE=$(curl -s -w "\n%{http_code}" -X DELETE \
         "$SERVER_URL/Products(1)/RelatedProducts(2)/\$ref" 2>&1)
     local HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-    [ "$HTTP_CODE" = "204" ] || [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "501" ]
+
+    if [ "$HTTP_CODE" = "204" ]; then
+        return 0
+    else
+        echo "  Details: Expected status 204 for DELETE specific $ref but received $HTTP_CODE"
+        return 1
+    fi
 }
 
 # Test 7: Invalid reference should return 400
@@ -80,7 +102,13 @@ test_7() {
         -d '{"@odata.id":"invalid-reference"}' \
         "$SERVER_URL/Products(1)/Category/\$ref" 2>&1)
     local HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-    [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "501" ]
+
+    if [ "$HTTP_CODE" = "400" ]; then
+        return 0
+    else
+        echo "  Details: Expected status 400 for invalid $ref payload but received $HTTP_CODE"
+        return 1
+    fi
 }
 
 run_test "Read entity reference with \$ref" test_1
