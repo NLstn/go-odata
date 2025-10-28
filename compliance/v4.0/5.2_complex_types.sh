@@ -86,18 +86,12 @@ test_filter_complex_property() {
         return 1
     fi
     
-    if [ "$HTTP_CODE" = "200" ]; then
-        return 0
-    elif [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "404" ]; then
-        echo "  Details: Complex type filtering not supported (status: $HTTP_CODE)"
-        return 0  # Pass - this is optional per spec
-    elif [ "$HTTP_CODE" = "500" ]; then
-        echo "  Details: Server error (500) - should return 400/404 for unsupported features"
-        return 1  # Fail - should not crash
-    else
-        echo "  Details: Unexpected status: $HTTP_CODE"
+    if [ "$HTTP_CODE" != "200" ]; then
+        echo "  Details: Expected 200 for complex type filter, got $HTTP_CODE"
         return 1
     fi
+
+    return 0
 }
 
 # Test 4: Select complex type property

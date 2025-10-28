@@ -21,12 +21,11 @@ func parseSelect(selectStr string) []string {
 
 // propertyExists checks if a property exists in the entity metadata
 func propertyExists(propertyName string, entityMetadata *metadata.EntityMetadata) bool {
-	for _, prop := range entityMetadata.Properties {
-		if prop.JsonName == propertyName || prop.Name == propertyName {
-			return true
-		}
+	if entityMetadata == nil {
+		return false
 	}
-	return false
+	_, _, err := entityMetadata.ResolvePropertyPath(propertyName)
+	return err == nil
 }
 
 // isNavigationProperty checks if a property is a navigation property
@@ -52,25 +51,39 @@ func GetPropertyFieldName(propertyName string, entityMetadata *metadata.EntityMe
 
 // GetColumnName returns the database column name (snake_case) for a property
 func GetColumnName(propertyName string, entityMetadata *metadata.EntityMetadata) string {
-	for _, prop := range entityMetadata.Properties {
-		if prop.JsonName == propertyName || prop.Name == propertyName {
-			// Check if there's a GORM tag specifying the column name
-			if prop.GormTag != "" {
-				// Parse GORM tag for column name
-				parts := strings.Split(prop.GormTag, ";")
-				for _, part := range parts {
-					part = strings.TrimSpace(part)
-					if strings.HasPrefix(part, "column:") {
-						return strings.TrimPrefix(part, "column:")
-					}
-				}
-			}
-			// Use the struct field name and convert to snake_case
-			return toSnakeCase(prop.Name)
+	if entityMetadata == nil {
+		return toSnakeCase(propertyName)
+	}
+
+	prop, prefix, err := entityMetadata.ResolvePropertyPath(propertyName)
+	if err != nil || prop == nil {
+		// Fallback to the last segment when metadata cannot resolve the path
+		if strings.Contains(propertyName, "/") {
+			parts := strings.Split(propertyName, "/")
+			propertyName = parts[len(parts)-1]
+		}
+		return toSnakeCase(propertyName)
+	}
+
+	if column := extractColumnFromGormTag(prop.GormTag); column != "" {
+		return prefix + column
+	}
+
+	return prefix + toSnakeCase(prop.Name)
+}
+
+func extractColumnFromGormTag(gormTag string) string {
+	if gormTag == "" {
+		return ""
+	}
+	parts := strings.Split(gormTag, ";")
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if strings.HasPrefix(part, "column:") {
+			return strings.TrimPrefix(part, "column:")
 		}
 	}
-	// Fallback: convert property name to snake_case
-	return toSnakeCase(propertyName)
+	return ""
 }
 
 // findNavigationProperty finds a navigation property in the entity metadata

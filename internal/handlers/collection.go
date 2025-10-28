@@ -864,7 +864,14 @@ func (h *EntityHandler) validateComplexTypeUsage(queryOptions *query.QueryOption
 
 	// Check orderby for complex type usage
 	for _, orderBy := range queryOptions.OrderBy {
-		if prop := h.metadata.FindProperty(orderBy.Property); prop != nil && prop.IsComplexType {
+		prop, _, err := h.metadata.ResolvePropertyPath(orderBy.Property)
+		if err != nil {
+			return fmt.Errorf("property path '%s' is not supported", orderBy.Property)
+		}
+		if prop.IsNavigationProp {
+			return fmt.Errorf("ordering by navigation property '%s' is not supported", orderBy.Property)
+		}
+		if prop.IsComplexType {
 			return fmt.Errorf("ordering by complex type property '%s' is not supported", orderBy.Property)
 		}
 	}
@@ -878,25 +885,28 @@ func (h *EntityHandler) validateFilterForComplexTypes(filter *query.FilterExpres
 		return nil
 	}
 
-	// Recursively validate nested logical expressions
-	if filter.Logical != "" {
+	if filter.Property != "" && !strings.HasPrefix(filter.Property, "_") {
+		prop, _, err := h.metadata.ResolvePropertyPath(filter.Property)
+		if err != nil {
+			return fmt.Errorf("property path '%s' is not supported", filter.Property)
+		}
+		if prop.IsNavigationProp {
+			return fmt.Errorf("filtering by navigation property '%s' is not supported", filter.Property)
+		}
+		if prop.IsComplexType {
+			return fmt.Errorf("filtering by complex type property '%s' is not supported", filter.Property)
+		}
+	}
+
+	if filter.Left != nil {
 		if err := h.validateFilterForComplexTypes(filter.Left); err != nil {
 			return err
 		}
-		if err := h.validateFilterForComplexTypes(filter.Right); err != nil {
-			return err
-		}
-		return nil
 	}
 
-	// Check if the property being filtered is a complex type
-	if filter.Property != "" {
-		// Handle nested property paths (e.g., "ShippingAddress/City")
-		propertyPath := strings.Split(filter.Property, "/")
-		rootProperty := propertyPath[0]
-
-		if prop := h.metadata.FindProperty(rootProperty); prop != nil && prop.IsComplexType {
-			return fmt.Errorf("filtering by complex type property '%s' is not supported", filter.Property)
+	if filter.Right != nil {
+		if err := h.validateFilterForComplexTypes(filter.Right); err != nil {
+			return err
 		}
 	}
 
