@@ -516,12 +516,23 @@ func (h *EntityHandler) handleOptionsStructuralProperty(w http.ResponseWriter) {
 // fetchComplexPropertyValue fetches a complex property value from an entity without applying select clauses
 func (h *EntityHandler) fetchComplexPropertyValue(w http.ResponseWriter, entityKey string, prop *metadata.PropertyMetadata) (reflect.Value, error) {
 	entity := reflect.New(h.metadata.EntityType).Interface()
-	db, err := h.buildKeyQuery(entityKey)
-	if err != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidKey, err.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+	
+	var db *gorm.DB
+	var err error
+	
+	// Handle singleton case where entityKey is empty
+	if h.metadata.IsSingleton && entityKey == "" {
+		// For singletons, we don't use a key query, just fetch the first (and only) record
+		db = h.db
+	} else {
+		// For regular entities, build the key query
+		db, err = h.buildKeyQuery(entityKey)
+		if err != nil {
+			if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidKey, err.Error()); writeErr != nil {
+				fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			}
+			return reflect.Value{}, err
 		}
-		return reflect.Value{}, err
 	}
 
 	if err := db.First(entity).Error; err != nil {
@@ -878,12 +889,23 @@ func (h *EntityHandler) writePropertyNotFoundError(w http.ResponseWriter, proper
 // fetchPropertyValue fetches a property value from an entity
 func (h *EntityHandler) fetchPropertyValue(w http.ResponseWriter, entityKey string, prop *metadata.PropertyMetadata) (reflect.Value, error) {
 	entity := reflect.New(h.metadata.EntityType).Interface()
-	db, err := h.buildKeyQuery(entityKey)
-	if err != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidKey, err.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+	
+	var db *gorm.DB
+	var err error
+	
+	// Handle singleton case where entityKey is empty
+	if h.metadata.IsSingleton && entityKey == "" {
+		// For singletons, we don't use a key query, just fetch the first (and only) record
+		db = h.db
+	} else {
+		// For regular entities, build the key query
+		db, err = h.buildKeyQuery(entityKey)
+		if err != nil {
+			if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidKey, err.Error()); writeErr != nil {
+				fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			}
+			return reflect.Value{}, err
 		}
-		return reflect.Value{}, err
 	}
 
 	db = h.applyStructuralPropertySelect(db, prop)
@@ -909,8 +931,14 @@ func (h *EntityHandler) fetchPropertyValue(w http.ResponseWriter, entityKey stri
 // handlePropertyFetchError handles errors when fetching a property
 func (h *EntityHandler) handlePropertyFetchError(w http.ResponseWriter, err error, entityKey string) {
 	if err == gorm.ErrRecordNotFound {
-		if writeErr := response.WriteError(w, http.StatusNotFound, ErrMsgEntityNotFound,
-			fmt.Sprintf("Entity with key '%s' not found", entityKey)); writeErr != nil {
+		var errorMessage string
+		if h.metadata.IsSingleton {
+			errorMessage = fmt.Sprintf("Singleton '%s' not found", h.metadata.SingletonName)
+		} else {
+			errorMessage = fmt.Sprintf("Entity with key '%s' not found", entityKey)
+		}
+		
+		if writeErr := response.WriteError(w, http.StatusNotFound, ErrMsgEntityNotFound, errorMessage); writeErr != nil {
 			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
 		}
 	} else {
@@ -1023,9 +1051,19 @@ func (h *EntityHandler) applyStructuralPropertySelect(db *gorm.DB, prop *metadat
 func (h *EntityHandler) fetchParentEntityWithNav(entityKey, navPropertyName string) (interface{}, error) {
 	parent := reflect.New(h.metadata.EntityType).Interface()
 
-	db, err := h.buildKeyQuery(entityKey)
-	if err != nil {
-		return nil, err
+	var db *gorm.DB
+	var err error
+	
+	// Handle singleton case where entityKey is empty
+	if h.metadata.IsSingleton && entityKey == "" {
+		// For singletons, we don't use a key query, just fetch the first (and only) record
+		db = h.db
+	} else {
+		// For regular entities, build the key query
+		db, err = h.buildKeyQuery(entityKey)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	db = db.Preload(navPropertyName)
