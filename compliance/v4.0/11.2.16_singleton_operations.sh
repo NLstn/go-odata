@@ -94,27 +94,35 @@ test_put_singleton() {
 # Test 6: POST to singleton should fail (405 Method Not Allowed)
 test_post_singleton_fails() {
     local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$SERVER_URL/Company" -H "Content-Type: application/json" -d '{"Name":"New Company"}')
-    
-    # Should return 405 Method Not Allowed or 404
-    if [ "$HTTP_CODE" = "405" ] || [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "501" ]; then
+
+    # Only 405 Method Not Allowed is compliant. 501 indicates missing required support.
+    if [ "$HTTP_CODE" = "405" ]; then
         return 0
-    else
-        echo "  Details: Status code: $HTTP_CODE (expected 405, 404, or 501)"
-        return 1
     fi
+
+    if [ "$HTTP_CODE" = "501" ]; then
+        echo "  Details: Status code: 501 indicates singleton POST handling is not implemented and is non-compliant"
+    else
+        echo "  Details: Status code: $HTTP_CODE (expected 405 Method Not Allowed)"
+    fi
+    return 1
 }
 
 # Test 7: DELETE singleton should fail (405 Method Not Allowed)
 test_delete_singleton_fails() {
     local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE "$SERVER_URL/Company")
-    
-    # Should return 405 Method Not Allowed or 404
-    if [ "$HTTP_CODE" = "405" ] || [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "501" ]; then
+
+    # Only 405 Method Not Allowed is compliant. 501 indicates missing required support.
+    if [ "$HTTP_CODE" = "405" ]; then
         return 0
-    else
-        echo "  Details: Status code: $HTTP_CODE (expected 405, 404, or 501)"
-        return 1
     fi
+
+    if [ "$HTTP_CODE" = "501" ]; then
+        echo "  Details: Status code: 501 indicates singleton DELETE handling is not implemented and is non-compliant"
+    else
+        echo "  Details: Status code: $HTTP_CODE (expected 405 Method Not Allowed)"
+    fi
+    return 1
 }
 
 # Test 8: Singleton appears in service document
@@ -144,16 +152,18 @@ test_singleton_in_metadata() {
 
 # Test 10: Singleton property access
 test_singleton_property_access() {
-    # Some implementations may not support direct property access on singletons
-    # Accept 200 (supported) or 404 (not implemented)
     local HTTP_CODE=$(http_get "$SERVER_URL/Company/Name")
-    
-    if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "404" ]; then
+
+    if [ "$HTTP_CODE" = "200" ]; then
         return 0
-    else
-        echo "  Details: Status code: $HTTP_CODE (expected 200 or 404)"
-        return 1
     fi
+
+    if [ "$HTTP_CODE" = "404" ]; then
+        echo "  Details: Status code: 404 indicates singleton property access is not implemented and is non-compliant"
+    else
+        echo "  Details: Status code: $HTTP_CODE (expected 200 OK)"
+    fi
+    return 1
 }
 
 echo "  Request: GET /Company"
