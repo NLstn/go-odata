@@ -119,7 +119,8 @@ func (s *Service) routeRequest(w http.ResponseWriter, r *http.Request, handler *
 	} else if isSingleton {
 		// Singleton request - treat as single entity without key
 		if components.NavigationProperty != "" {
-			// Navigation property on singleton: /Me/Friends
+			// Property access on singleton: /Company/Name or /Company/Navigation
+			// For singletons, pass an empty key to indicate we need to fetch the singleton first
 			s.handlePropertyRequest(w, r, handler, components)
 		} else {
 			// Direct singleton access: /Me
