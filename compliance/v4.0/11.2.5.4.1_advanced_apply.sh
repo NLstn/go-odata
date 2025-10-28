@@ -22,89 +22,169 @@ echo ""
 # Test 1: Basic $apply support (baseline)
 test_apply_baseline() {
     local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Products?\$apply=aggregate(Price%20with%20sum%20as%20Total)")
-    # Should work (200) or not be supported (501/400)
-    [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "501" ] || [ "$HTTP_CODE" = "400" ]
+    if [ "$HTTP_CODE" = "200" ]; then
+        return 0
+    fi
+
+    echo "  Details: Expected HTTP 200 for baseline $apply aggregate, got $HTTP_CODE"
+    echo "           Unsupported responses indicate a compliance failure."
+    return 1
 }
 
 # Test 2: Multiple aggregations in single aggregate
 test_multiple_aggregations() {
     local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Products?\$apply=aggregate(Price%20with%20sum%20as%20TotalPrice,Price%20with%20average%20as%20AvgPrice,Price%20with%20max%20as%20MaxPrice)")
-    # Should support multiple aggregations if $apply is supported
-    [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "501" ] || [ "$HTTP_CODE" = "400" ]
+    if [ "$HTTP_CODE" = "200" ]; then
+        return 0
+    fi
+
+    echo "  Details: Expected HTTP 200 for multiple aggregations in $apply, got $HTTP_CODE"
+    echo "           Unsupported responses indicate a compliance failure."
+    return 1
 }
 
 # Test 3: groupby with multiple properties
 test_groupby_multiple_properties() {
     local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Products?\$apply=groupby((CategoryID,Status))")
-    [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "501" ] || [ "$HTTP_CODE" = "400" ]
+    if [ "$HTTP_CODE" = "200" ]; then
+        return 0
+    fi
+
+    echo "  Details: Expected HTTP 200 for groupby with multiple properties, got $HTTP_CODE"
+    echo "           Unsupported responses indicate a compliance failure."
+    return 1
 }
 
 # Test 4: groupby with aggregate containing multiple aggregation methods
 test_groupby_with_multiple_aggregates() {
     local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Products?\$apply=groupby((CategoryID),aggregate(Price%20with%20sum%20as%20Total,Price%20with%20average%20as%20Average,\$count%20as%20Count))")
-    [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "501" ] || [ "$HTTP_CODE" = "400" ]
+    if [ "$HTTP_CODE" = "200" ]; then
+        return 0
+    fi
+
+    echo "  Details: Expected HTTP 200 for groupby with multiple aggregates, got $HTTP_CODE"
+    echo "           Unsupported responses indicate a compliance failure."
+    return 1
 }
 
 # Test 5: Filter before aggregation
 test_filter_before_aggregate() {
     local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Products?\$apply=filter(Price%20gt%2050)/aggregate(Price%20with%20sum%20as%20Total)")
-    [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "501" ] || [ "$HTTP_CODE" = "400" ]
+    if [ "$HTTP_CODE" = "200" ]; then
+        return 0
+    fi
+
+    echo "  Details: Expected HTTP 200 for filter before aggregate, got $HTTP_CODE"
+    echo "           Unsupported responses indicate a compliance failure."
+    return 1
 }
 
 # Test 6: Filter before groupby
 test_filter_before_groupby() {
     local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Products?\$apply=filter(Price%20gt%2050)/groupby((CategoryID),aggregate(\$count%20as%20Count))")
-    [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "501" ] || [ "$HTTP_CODE" = "400" ]
+    if [ "$HTTP_CODE" = "200" ]; then
+        return 0
+    fi
+
+    echo "  Details: Expected HTTP 200 for filter before groupby, got $HTTP_CODE"
+    echo "           Unsupported responses indicate a compliance failure."
+    return 1
 }
 
 # Test 7: Multiple transformations in sequence
 test_transformation_pipeline() {
     local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Products?\$apply=filter(Price%20gt%2010)/groupby((CategoryID))/filter(\$count%20gt%201)")
-    [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "501" ] || [ "$HTTP_CODE" = "400" ]
+    if [ "$HTTP_CODE" = "200" ]; then
+        return 0
+    fi
+
+    echo "  Details: Expected HTTP 200 for multi-stage transformation pipeline, got $HTTP_CODE"
+    echo "           Unsupported responses indicate a compliance failure."
+    return 1
 }
 
 # Test 8: Aggregate with distinct count
 test_countdistinct() {
     local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Products?\$apply=aggregate(CategoryID%20with%20countdistinct%20as%20UniqueCategories)")
-    # countdistinct may not be implemented - accept 200 or error codes
-    [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "501" ] || [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "500" ]
+    if [ "$HTTP_CODE" = "200" ]; then
+        return 0
+    fi
+
+    echo "  Details: Expected HTTP 200 for countdistinct aggregation, got $HTTP_CODE"
+    echo "           Unsupported responses indicate a compliance failure."
+    return 1
 }
 
 # Test 9: groupby with aggregate and $filter after
 test_groupby_then_filter() {
     local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Products?\$apply=groupby((CategoryID),aggregate(Price%20with%20sum%20as%20Total))/filter(Total%20gt%20100)")
-    [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "501" ] || [ "$HTTP_CODE" = "400" ]
+    if [ "$HTTP_CODE" = "200" ]; then
+        return 0
+    fi
+
+    echo "  Details: Expected HTTP 200 for groupby followed by filter, got $HTTP_CODE"
+    echo "           Unsupported responses indicate a compliance failure."
+    return 1
 }
 
 # Test 10: Aggregate with min and max together
 test_min_max_aggregate() {
     local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Products?\$apply=aggregate(Price%20with%20min%20as%20MinPrice,Price%20with%20max%20as%20MaxPrice)")
-    [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "501" ] || [ "$HTTP_CODE" = "400" ]
+    if [ "$HTTP_CODE" = "200" ]; then
+        return 0
+    fi
+
+    echo "  Details: Expected HTTP 200 for combined min/max aggregation, got $HTTP_CODE"
+    echo "           Unsupported responses indicate a compliance failure."
+    return 1
 }
 
 # Test 11: $apply with $top (limit aggregated results)
 test_apply_with_top() {
     local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Products?\$apply=groupby((CategoryID),aggregate(\$count%20as%20Count))&\$top=2")
-    [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "501" ] || [ "$HTTP_CODE" = "400" ]
+    if [ "$HTTP_CODE" = "200" ]; then
+        return 0
+    fi
+
+    echo "  Details: Expected HTTP 200 for $apply with $top, got $HTTP_CODE"
+    echo "           Unsupported responses indicate a compliance failure."
+    return 1
 }
 
 # Test 12: $apply with $orderby (order aggregated results)
 test_apply_with_orderby() {
     local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Products?\$apply=groupby((CategoryID),aggregate(Price%20with%20sum%20as%20Total))&\$orderby=Total%20desc")
-    [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "501" ] || [ "$HTTP_CODE" = "400" ]
+    if [ "$HTTP_CODE" = "200" ]; then
+        return 0
+    fi
+
+    echo "  Details: Expected HTTP 200 for $apply with $orderby, got $HTTP_CODE"
+    echo "           Unsupported responses indicate a compliance failure."
+    return 1
 }
 
 # Test 13: Complex pipeline with filter/groupby/aggregate/filter
 test_complex_pipeline() {
     local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Products?\$apply=filter(Status%20eq%201)/groupby((CategoryID),aggregate(Price%20with%20average%20as%20AvgPrice))/filter(AvgPrice%20gt%2050)")
-    [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "501" ] || [ "$HTTP_CODE" = "400" ]
+    if [ "$HTTP_CODE" = "200" ]; then
+        return 0
+    fi
+
+    echo "  Details: Expected HTTP 200 for complex transformation pipeline, got $HTTP_CODE"
+    echo "           Unsupported responses indicate a compliance failure."
+    return 1
 }
 
 # Test 14: Invalid aggregation method
 test_invalid_aggregation_method() {
     local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Products?\$apply=aggregate(Price%20with%20invalid%20as%20Result)")
-    # Should return 400 for invalid method
-    [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "501" ]
+    if [ "$HTTP_CODE" = "400" ]; then
+        return 0
+    fi
+
+    echo "  Details: Expected HTTP 400 for invalid aggregation method, got $HTTP_CODE"
+    echo "           Unsupported responses indicate a compliance failure."
+    return 1
 }
 
 # Test 15: $apply response format validation
@@ -113,42 +193,77 @@ test_apply_response_format() {
     local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Products?\$apply=groupby((CategoryID),aggregate(\$count%20as%20Count))")
     
     if [ "$HTTP_CODE" = "200" ]; then
-        # Should have valid JSON with value array
-        echo "$RESPONSE" | grep -q "\"value\""
-    else
-        # Not supported is acceptable
-        return 0
+        if echo "$RESPONSE" | grep -q "\"value\""; then
+            return 0
+        fi
+
+        echo "  Details: Response body missing required 'value' array for $apply response."
+        return 1
     fi
+
+    echo "  Details: Expected HTTP 200 for $apply response format validation, got $HTTP_CODE"
+    echo "           Unsupported responses indicate a compliance failure."
+    return 1
 }
 
 # Test 16: Empty groupby (aggregate without grouping)
 test_empty_groupby() {
     local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Products?\$apply=groupby((),aggregate(Price%20with%20sum%20as%20Total))")
-    [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "501" ] || [ "$HTTP_CODE" = "400" ]
+    if [ "$HTTP_CODE" = "200" ]; then
+        return 0
+    fi
+
+    echo "  Details: Expected HTTP 200 for aggregate without grouping, got $HTTP_CODE"
+    echo "           Unsupported responses indicate a compliance failure."
+    return 1
 }
 
 # Test 17: Aggregate on navigation property (if supported)
 test_aggregate_navigation() {
     local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Orders?\$apply=groupby((CustomerID),aggregate(\$count%20as%20OrderCount))")
-    [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "501" ] || [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "404" ]
+    if [ "$HTTP_CODE" = "200" ]; then
+        return 0
+    fi
+
+    echo "  Details: Expected HTTP 200 for $apply on navigation property, got $HTTP_CODE"
+    echo "           Unsupported responses indicate a compliance failure."
+    return 1
 }
 
 # Test 18: Average aggregation
 test_average_aggregation() {
     local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Products?\$apply=aggregate(Price%20with%20average%20as%20AvgPrice)")
-    [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "501" ] || [ "$HTTP_CODE" = "400" ]
+    if [ "$HTTP_CODE" = "200" ]; then
+        return 0
+    fi
+
+    echo "  Details: Expected HTTP 200 for average aggregation, got $HTTP_CODE"
+    echo "           Unsupported responses indicate a compliance failure."
+    return 1
 }
 
 # Test 19: $apply with $count (total count of aggregated results)
 test_apply_with_count() {
     local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Products?\$apply=groupby((CategoryID))&\$count=true")
-    [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "501" ] || [ "$HTTP_CODE" = "400" ]
+    if [ "$HTTP_CODE" = "200" ]; then
+        return 0
+    fi
+
+    echo "  Details: Expected HTTP 200 for $apply with $count, got $HTTP_CODE"
+    echo "           Unsupported responses indicate a compliance failure."
+    return 1
 }
 
 # Test 20: Nested filter expressions in $apply
 test_nested_filter_in_apply() {
     local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Products?\$apply=filter(Price%20gt%2010%20and%20CategoryID%20eq%201)/aggregate(\$count%20as%20Total)")
-    [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "501" ] || [ "$HTTP_CODE" = "400" ]
+    if [ "$HTTP_CODE" = "200" ]; then
+        return 0
+    fi
+
+    echo "  Details: Expected HTTP 200 for nested filter in $apply, got $HTTP_CODE"
+    echo "           Unsupported responses indicate a compliance failure."
+    return 1
 }
 
 echo "  Request: Basic \$apply with aggregate"
@@ -200,7 +315,7 @@ echo "  Request: groupby with empty grouping set"
 run_test "Empty groupby (aggregate all)" test_empty_groupby
 
 echo "  Request: Aggregate on navigation property"
-run_test "Aggregate with navigation property (optional)" test_aggregate_navigation
+run_test "Aggregate with navigation property (unsupported is a compliance failure)" test_aggregate_navigation
 
 echo "  Request: Average aggregation method"
 run_test "Average aggregation method" test_average_aggregation
