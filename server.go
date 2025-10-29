@@ -116,6 +116,25 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate type cast if present and add to request context
+	if components.TypeCast != "" {
+		// Extract the type name from the type cast (Namespace.TypeName -> TypeName)
+		parts := strings.Split(components.TypeCast, ".")
+		if len(parts) < 2 {
+			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid type cast",
+				fmt.Sprintf("Type cast '%s' is not in the correct format (Namespace.TypeName)", components.TypeCast)); writeErr != nil {
+				fmt.Printf("Error writing error response: %v\n", writeErr)
+			}
+			return
+		}
+
+		// Add type cast to request context for handlers to use
+		typeName := parts[len(parts)-1]
+		ctx := r.Context()
+		ctx = handlers.WithTypeCast(ctx, typeName)
+		r = r.WithContext(ctx)
+	}
+
 	// Route to appropriate handler method
 	s.routeRequest(w, r, handler, components)
 }

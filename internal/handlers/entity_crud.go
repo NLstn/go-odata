@@ -84,6 +84,18 @@ func (h *EntityHandler) handleGetEntity(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
+	// Check type cast from context - if specified, verify entity matches
+	if typeCast := GetTypeCast(r.Context()); typeCast != "" {
+		if !h.entityMatchesType(result, typeCast) {
+			// Entity exists but doesn't match the type cast
+			if writeErr := response.WriteError(w, http.StatusNotFound, "Entity not found",
+				fmt.Sprintf("Entity with key '%s' is not of type '%s'", entityKey, typeCast)); writeErr != nil {
+				fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			}
+			return
+		}
+	}
+
 	// Check If-None-Match header if ETag is configured (before applying select)
 	var currentETag string
 	if h.metadata.ETagProperty != nil {
