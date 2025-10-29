@@ -1,15 +1,17 @@
-package odata
+package metadata
 
 import (
 	"fmt"
 	"reflect"
 	"time"
-
-	"github.com/nlstn/go-odata/internal/metadata"
 )
 
-// functionContextFragment builds the metadata fragment for a function return type
-func (s *Service) functionContextFragment(returnType reflect.Type) string {
+var (
+	timeType = reflect.TypeOf(time.Time{})
+)
+
+// FunctionContextFragment builds the metadata fragment for a function return type.
+func FunctionContextFragment(returnType reflect.Type, entities map[string]*EntityMetadata) string {
 	if returnType == nil {
 		return ""
 	}
@@ -47,7 +49,7 @@ func (s *Service) functionContextFragment(returnType reflect.Type) string {
 		return edmType
 	}
 
-	if entityMeta := s.entityMetadataByType(typ); entityMeta != nil {
+	if entityMeta := entityMetadataByType(typ, entities); entityMeta != nil {
 		if isCollection {
 			return entityMeta.EntitySetName
 		}
@@ -75,7 +77,7 @@ func (s *Service) functionContextFragment(returnType reflect.Type) string {
 	return ""
 }
 
-func (s *Service) entityMetadataByType(goType reflect.Type) *metadata.EntityMetadata {
+func entityMetadataByType(goType reflect.Type, entities map[string]*EntityMetadata) *EntityMetadata {
 	if goType == nil {
 		return nil
 	}
@@ -84,7 +86,7 @@ func (s *Service) entityMetadataByType(goType reflect.Type) *metadata.EntityMeta
 		goType = goType.Elem()
 	}
 
-	for _, meta := range s.entities {
+	for _, meta := range entities {
 		if meta == nil {
 			continue
 		}
@@ -99,10 +101,6 @@ func (s *Service) entityMetadataByType(goType reflect.Type) *metadata.EntityMeta
 
 	return nil
 }
-
-var (
-	timeType = reflect.TypeOf(time.Time{})
-)
 
 func primitiveEdmType(goType reflect.Type) (string, bool) {
 	if goType == nil {
