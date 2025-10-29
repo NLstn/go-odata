@@ -9,6 +9,7 @@ This guide covers how to configure and integrate the go-odata service into your 
 - [Service as Handler](#service-as-handler)
 - [Custom Path Mounting](#custom-path-mounting)
 - [Adding Middleware](#adding-middleware)
+- [Popular Router Integrations](#popular-router-integrations)
 - [Multiple Handlers](#multiple-handlers)
 - [Development Servers](#development-servers)
 
@@ -223,6 +224,85 @@ mux.Handle("/", chain(
     authMiddleware,
 ))
 ```
+
+## Popular Router Integrations
+
+Use go-odata with popular routing frameworks by adapting the `Service` (which implements `http.Handler`) to the router's handler signature.
+
+### Chi (`chi.Router`)
+
+```go
+import (
+    "net/http"
+
+    "github.com/go-chi/chi/v5"
+    "github.com/nlstn/go-odata"
+)
+
+func configureChiRouter(service *odata.Service) http.Handler {
+    r := chi.NewRouter()
+
+    // Register shared middleware first; it will run before the OData handler.
+    r.Use(loggingMiddleware, authMiddleware)
+
+    // Mount at a sub-route so Chi preserves the request context chain.
+    r.Mount("/odata", service)
+
+    return r
+}
+```
+
+**Middleware ordering:** Chi executes router-level middleware in the order you call `Use` before delegating to mounted handlers, so register request-scoped middleware (tracing, auth) before `Mount`. Handler-specific middleware can be applied with `chi.Chain` if you need logic that runs only for the OData routes. Because Chi relies on `context.Context`, any values stored in the request context are preserved automatically when the service handles the request.
+
+### Gin (`gin.Engine`)
+
+```go
+import (
+    "net/http"
+
+    "github.com/gin-gonic/gin"
+    "github.com/nlstn/go-odata"
+)
+
+func configureGinEngine(service *odata.Service) *gin.Engine {
+    router := gin.New()
+
+    // Register global middleware before wrapping the OData handler.
+    router.Use(gin.Logger(), gin.Recovery())
+
+    // gin.WrapH adapts http.Handler to gin.HandlerFunc.
+    router.Any("/odata/*path", gin.WrapH(http.StripPrefix("/odata", service)))
+
+    return router
+}
+```
+
+**Middleware ordering:** Gin executes handlers and middleware in the order registered. Call `router.Use(...)` before `router.Any` so global middleware runs first. Because `gin.WrapH` passes the underlying `*http.Request` through to go-odata, request-scoped context values and cancellations remain available within the service.
+
+### Echo (`echo.Echo`)
+
+```go
+import (
+    "net/http"
+
+    "github.com/labstack/echo/v4"
+    "github.com/nlstn/go-odata"
+)
+
+func configureEchoServer(service *odata.Service) *echo.Echo {
+    e := echo.New()
+
+    // Global middleware should be added before wrapping the handler.
+    e.Use(requestIDMiddleware, loggingMiddleware)
+
+    // echo.WrapHandler converts http.Handler to echo.HandlerFunc.
+    e.Any("/odata/*", echo.WrapHandler(http.StripPrefix("/odata", service)))
+
+    return e
+}
+```
+
+**Middleware ordering:** Echo middleware wraps handlers in the order they are registered; add `e.Use` calls before `e.Any` so they execute before go-odata. Echo stores route-scoped data on `echo.Context`, but the wrapped handler still receives the original `*http.Request`, so ensure any context values you expect are attached to `c.Request().Context()` before invoking go-odata. For per-route middleware, wrap the handler with `e.Group("/odata")` and call `group.Use(...)` before registering the route.
 
 ## Multiple Handlers
 

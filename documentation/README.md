@@ -8,7 +8,7 @@ Welcome to the go-odata documentation! This directory contains detailed guides f
 
 - **[Entity Definition](entities.md)** - Learn how to define entities with Go structs, including tags, relationships, and metadata
 - **[End-to-End Tutorial](tutorial.md)** - Build a Products/Orders/Customers sample backend with migrations, seeding, and custom logic
-- **[Server Configuration](server-configuration.md)** - Set up your OData service, configure middleware, and integrate with your application
+- **[Server Configuration](server-configuration.md)** - Set up your OData service, configure middleware, and integrate with routers like Chi, Gin, and Echo
 
 ### Advanced Usage
 
@@ -43,6 +43,7 @@ Set up and configure your OData service. Topics include:
 - Using the service as an HTTP handler
 - Mounting at custom paths
 - Adding middleware (auth, logging, CORS)
+- Integrating with Chi, Gin, and Echo routers
 - Combining with other HTTP handlers
 - Database configuration
 - Production considerations
