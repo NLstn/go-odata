@@ -67,13 +67,13 @@ test_unbound_function_parameters() {
 # Test 4: Bound function on entity
 test_bound_function() {
     # Test a bound function on an entity (GetTotalPrice on Products)
-    local HTTP_CODE=$(http_get "$SERVER_URL/Products(1)/GetTotalPrice(quantity=2)")
+    # GetTotalPrice expects taxRate parameter (not quantity)
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products(1)/GetTotalPrice(taxRate=0.08)")
     
     if [ "$HTTP_CODE" = "200" ]; then
         return 0
-    elif [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "501" ] || [ "$HTTP_CODE" = "400" ]; then
-        # 400 may indicate parameter issues or function not properly configured
-        skip_test "Bound function on entity" "Bound functions not fully implemented or parameter mismatch"
+    elif [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "501" ]; then
+        skip_test "Bound function on entity" "Bound functions not implemented"
         return 0
     else
         echo "  Details: Bound function invocation (got $HTTP_CODE)"
