@@ -341,7 +341,7 @@ func (s *Service) handleActionOrFunction(w http.ResponseWriter, r *http.Request,
 	switch r.Method {
 	case http.MethodPost:
 		// Handle action
-		actionDef, exists := s.actions[name]
+		actionCandidates, exists := s.actions[name]
 		if !exists {
 			if writeErr := response.WriteError(w, http.StatusNotFound, "Action not found",
 				fmt.Sprintf("Action '%s' is not registered", name)); writeErr != nil {
@@ -350,25 +350,8 @@ func (s *Service) handleActionOrFunction(w http.ResponseWriter, r *http.Request,
 			return
 		}
 
-		// Verify binding matches
-		if isBound != actionDef.IsBound {
-			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid action binding",
-				fmt.Sprintf("Action '%s' binding mismatch", name)); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
-			}
-			return
-		}
-
-		if isBound && actionDef.EntitySet != entitySet {
-			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid entity set",
-				fmt.Sprintf("Action '%s' is not bound to entity set '%s'", name, entitySet)); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
-			}
-			return
-		}
-
-		// Parse parameters from request body
-		params, err := actions.ParseActionParameters(r, actionDef.Parameters)
+		// Resolve the appropriate overload
+		actionDef, params, err := actions.ResolveActionOverload(r, actionCandidates, isBound, entitySet)
 		if err != nil {
 			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid parameters", err.Error()); writeErr != nil {
 				fmt.Printf("Error writing error response: %v\n", writeErr)
@@ -413,7 +396,7 @@ func (s *Service) handleActionOrFunction(w http.ResponseWriter, r *http.Request,
 
 	case http.MethodGet:
 		// Handle function
-		functionDef, exists := s.functions[name]
+		functionCandidates, exists := s.functions[name]
 		if !exists {
 			if writeErr := response.WriteError(w, http.StatusNotFound, "Function not found",
 				fmt.Sprintf("Function '%s' is not registered", name)); writeErr != nil {
@@ -422,25 +405,8 @@ func (s *Service) handleActionOrFunction(w http.ResponseWriter, r *http.Request,
 			return
 		}
 
-		// Verify binding matches
-		if isBound != functionDef.IsBound {
-			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid function binding",
-				fmt.Sprintf("Function '%s' binding mismatch", name)); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
-			}
-			return
-		}
-
-		if isBound && functionDef.EntitySet != entitySet {
-			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid entity set",
-				fmt.Sprintf("Function '%s' is not bound to entity set '%s'", name, entitySet)); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
-			}
-			return
-		}
-
-		// Parse parameters from query string
-		params, err := actions.ParseFunctionParameters(r, functionDef.Parameters)
+		// Resolve the appropriate overload
+		functionDef, params, err := actions.ResolveFunctionOverload(r, functionCandidates, isBound, entitySet)
 		if err != nil {
 			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid parameters", err.Error()); writeErr != nil {
 				fmt.Printf("Error writing error response: %v\n", writeErr)
