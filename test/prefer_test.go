@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
+	"time"
 
 	odata "github.com/nlstn/go-odata"
 
@@ -417,7 +419,9 @@ func TestPreferHeader_ODataVersionAlwaysPresent(t *testing.T) {
 			service.ServeHTTP(w, req)
 		})
 	}
-} // Test multiple preferences in header (comma-separated)
+}
+
+// Test multiple preferences in header (comma-separated)
 func TestPreferHeader_MultiplePreferences(t *testing.T) {
 	service, _ := setupPreferTestService(t)
 
@@ -467,5 +471,114 @@ func TestPreferHeader_RespondAsyncOnlyDoesNotSetPreferenceApplied(t *testing.T) 
 
 	if preferenceApplied := w.Header().Get("Preference-Applied"); preferenceApplied != "" {
 		t.Fatalf("Preference-Applied should be empty when async preference is not honored, got %q", preferenceApplied)
+	}
+}
+
+func TestGetEntities_RespondAsyncIntegration(t *testing.T) {
+	service, db := setupPreferTestService(t)
+	enableAsyncProcessing(t, service, time.Second)
+
+	sample := PreferTestProduct{Name: "Async Widget", Price: 42.0}
+	if err := db.Create(&sample).Error; err != nil {
+		t.Fatalf("failed to seed product: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/PreferTestProducts", nil)
+	req.Header.Set("Prefer", "respond-async")
+
+	rec := httptest.NewRecorder()
+	service.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("expected 202 for async request, got %d", rec.Code)
+	}
+
+	if got := rec.Header().Get("Preference-Applied"); got != "respond-async" {
+		t.Fatalf("expected Preference-Applied respond-async, got %q", got)
+	}
+
+	if got := rec.Header().Get("Retry-After"); got != "1" {
+		t.Fatalf("expected Retry-After header of 1, got %q", got)
+	}
+
+	location := rec.Header().Get("Location")
+	if location == "" {
+		t.Fatal("expected monitor Location header")
+	}
+
+	expected := httptest.NewRecorder()
+	service.ServeHTTP(expected, httptest.NewRequest(http.MethodGet, "/PreferTestProducts", nil))
+
+	monitorRec := waitForMonitorCompletion(t, service, location)
+
+	if monitorRec.Code != expected.Code {
+		t.Fatalf("monitor status %d, want %d", monitorRec.Code, expected.Code)
+	}
+
+	var expectedBody map[string]any
+	if err := json.NewDecoder(expected.Body).Decode(&expectedBody); err != nil {
+		t.Fatalf("failed to decode expected body: %v", err)
+	}
+
+	var actualBody map[string]any
+	if err := json.NewDecoder(monitorRec.Body).Decode(&actualBody); err != nil {
+		t.Fatalf("failed to decode monitor body: %v", err)
+	}
+
+	if !reflect.DeepEqual(actualBody, expectedBody) {
+		t.Fatalf("monitor response mismatch: got %v, want %v", actualBody, expectedBody)
+	}
+}
+
+func TestPostEntity_RespondAsyncHonorsRepresentationPreference(t *testing.T) {
+	service, _ := setupPreferTestService(t)
+	enableAsyncProcessing(t, service, time.Second)
+
+	payload := map[string]any{
+		"name":  "Async Keyboard",
+		"price": 88.0,
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("failed to marshal payload: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/PreferTestProducts", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Prefer", "return=representation, respond-async")
+
+	rec := httptest.NewRecorder()
+	service.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("expected 202 for async POST, got %d", rec.Code)
+	}
+
+	if got := rec.Header().Get("Preference-Applied"); got != "respond-async" {
+		t.Fatalf("expected Preference-Applied respond-async, got %q", got)
+	}
+
+	location := rec.Header().Get("Location")
+	if location == "" {
+		t.Fatal("expected monitor Location header")
+	}
+
+	monitorRec := waitForMonitorCompletion(t, service, location)
+
+	if monitorRec.Code != http.StatusCreated {
+		t.Fatalf("monitor returned %d, want %d", monitorRec.Code, http.StatusCreated)
+	}
+
+	if got := monitorRec.Header().Get("Preference-Applied"); got != "return=representation" {
+		t.Fatalf("final response preference mismatch: got %q", got)
+	}
+
+	var response map[string]any
+	if err := json.NewDecoder(monitorRec.Body).Decode(&response); err != nil {
+		t.Fatalf("failed to decode monitor body: %v", err)
+	}
+
+	if response["name"] != "Async Keyboard" {
+		t.Fatalf("unexpected entity name %v", response["name"])
 	}
 }

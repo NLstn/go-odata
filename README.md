@@ -141,6 +141,36 @@ All standard OData v4 query options are supported:
 
 See the [OData v4 specification](https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html) for complete protocol details.
 
+## Asynchronous Processing (`Prefer: respond-async`)
+
+Long-running requests can be offloaded to background workers when clients send
+`Prefer: respond-async`. Enable the behaviour explicitly on your service:
+
+```go
+service.EnableAsyncProcessing(odata.AsyncConfig{
+    MonitorPathPrefix:    "/$async/jobs/", // default when empty
+    DefaultRetryInterval: 5 * time.Second,  // Retry-After header while pending
+    MaxQueueSize:         8,                // Optional worker limit
+    JobRetention:         15 * time.Minute, // How long to keep completed jobs
+})
+```
+
+With async processing enabled:
+
+- Initial responses return `202 Accepted` with `Preference-Applied: respond-async`,
+  a `Location` header of the form `/{prefix}{jobID}`, and (when configured) a
+  numeric `Retry-After` header.
+- Polling the monitor URL with `GET` or `HEAD` returns 202 while the job is
+  pending and replays the stored status, headers, and body once the job
+  completes.
+- Sending `DELETE` to the monitor URL cancels running work when possible and
+  removes completed jobs.
+
+The development server (`cmd/devserver`) enables async processing by default
+using the standard `/$async/jobs/` prefix and advertises the monitor endpoint in
+its startup banner. Compliance tests assume that path when validating async
+behaviour.
+
 ## Example Responses
 
 ### Service Document (`GET /`)

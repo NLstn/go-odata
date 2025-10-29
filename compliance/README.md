@@ -1076,6 +1076,10 @@ SERVER_PID=$!
 # Wait for server to start
 sleep 5
 
+# The devserver enables asynchronous processing by default. Poll
+# long-running requests at http://localhost:8080/$async/jobs/{jobID} when
+# compliance tests request Prefer: respond-async.
+
 # Run tests
 cd ../../compliance/v4
 ./run_compliance_tests.sh

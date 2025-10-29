@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/NLstn/go-odata/devserver/entities"
 	"github.com/nlstn/go-odata"
@@ -107,6 +108,12 @@ func main() {
 	// Register reseed action for testing
 	registerReseedAction(service, Db)
 
+	service.EnableAsyncProcessing(odata.AsyncConfig{
+		MonitorPathPrefix:    "/$async/jobs/",
+		DefaultRetryInterval: 3 * time.Second,
+		JobRetention:         5 * time.Minute,
+	})
+
 	entities.SetDBGetter(func() *gorm.DB {
 		return Db
 	})
@@ -133,6 +140,7 @@ func main() {
 	fmt.Println("  Users:                http://localhost:8080/Users")
 	fmt.Println("  Single User:          http://localhost:8080/Users(1)")
 	fmt.Println("  Company (Singleton):  http://localhost:8080/Company")
+	fmt.Println("  Async Monitor:        http://localhost:8080/$async/jobs/{jobID}")
 	fmt.Println()
 	fmt.Println("OData Actions and Functions:")
 	fmt.Println("  Unbound Functions:")
