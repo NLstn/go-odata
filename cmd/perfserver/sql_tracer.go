@@ -15,11 +15,11 @@ import (
 
 // Pre-compiled regex patterns for query normalization (compiled once, reused for all queries)
 var (
-	whitespaceRegex = regexp.MustCompile(`\s+`)
-	stringLitRegex  = regexp.MustCompile(`'[^']*'`)
-	numericLitRegex = regexp.MustCompile(`\b\d+\b`)
-	inClauseRegex   = regexp.MustCompile(`IN\s*\([^)]+\)`)
-	fromTableRegex  = regexp.MustCompile(`FROM\s+["']?(\w+)["']?`)
+	whitespaceRegex  = regexp.MustCompile(`\s+`)
+	stringLitRegex   = regexp.MustCompile(`'[^']*'`)
+	numericLitRegex  = regexp.MustCompile(`\b\d+\b`)
+	inClauseRegex    = regexp.MustCompile(`IN\s*\([^)]+\)`)
+	fromTableRegex   = regexp.MustCompile(`FROM\s+["']?(\w+)["']?`)
 	updateTableRegex = regexp.MustCompile(`UPDATE\s+["']?(\w+)["']?`)
 	insertTableRegex = regexp.MustCompile(`INSERT INTO\s+["']?(\w+)["']?`)
 )

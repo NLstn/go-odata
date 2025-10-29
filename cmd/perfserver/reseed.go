@@ -43,7 +43,7 @@ func seedDatabase(db *gorm.DB, extensive bool) error {
 	} else {
 		sampleProducts = entities.GetSampleProducts()
 	}
-	
+
 	// Insert products in batches of 100
 	batchSize := 100
 	for i := 0; i < len(sampleProducts); i += batchSize {
@@ -64,7 +64,7 @@ func seedDatabase(db *gorm.DB, extensive bool) error {
 	} else {
 		sampleDescriptions = entities.GetSampleProductDescriptions()
 	}
-	
+
 	// Insert descriptions in batches of 100
 	for i := 0; i < len(sampleDescriptions); i += batchSize {
 		end := i + batchSize
@@ -125,12 +125,12 @@ func generateExtensiveCategories() []entities.Category {
 // generateExtensiveProducts creates a large number of products for performance testing
 func generateExtensiveProducts(categories []entities.Category) []entities.Product {
 	products := make([]entities.Product, 0, 10000)
-	
+
 	productPrefixes := []string{
 		"Premium", "Deluxe", "Standard", "Basic", "Pro", "Elite", "Ultra",
 		"Advanced", "Professional", "Classic", "Modern", "Vintage", "Limited Edition",
 	}
-	
+
 	productTypes := []string{
 		"Widget", "Gadget", "Device", "Tool", "Instrument", "Equipment", "Apparatus",
 		"Machine", "Unit", "System", "Kit", "Set", "Package", "Bundle",
@@ -158,19 +158,19 @@ func generateExtensiveProducts(categories []entities.Category) []entities.Produc
 	for i := 0; i < 10000; i++ {
 		productID := uint(i + 1)
 		categoryID := categories[rng.Intn(len(categories))].ID
-		
+
 		prefix := productPrefixes[i%len(productPrefixes)]
 		productType := productTypes[(i/len(productPrefixes))%len(productTypes)]
 		name := fmt.Sprintf("%s %s %d", prefix, productType, i+1)
-		
+
 		price := float64(rng.Intn(99900)+100) / 100.0 // Price between 1.00 and 1000.00
 		status := statuses[rng.Intn(len(statuses))]
-		
+
 		city := cities[rng.Intn(len(cities))]
 		state := states[rng.Intn(len(states))]
-		
+
 		createdAt := time.Now().AddDate(0, 0, -rng.Intn(365)) // Random date within last year
-		
+
 		products = append(products, entities.Product{
 			ID:         productID,
 			Name:       name,
@@ -187,9 +187,9 @@ func generateExtensiveProducts(categories []entities.Category) []entities.Produc
 				Country:    "USA",
 			},
 			Dimensions: &entities.Dimensions{
-				Length: float64(rng.Intn(100)+1),
-				Width:  float64(rng.Intn(100)+1),
-				Height: float64(rng.Intn(100)+1),
+				Length: float64(rng.Intn(100) + 1),
+				Width:  float64(rng.Intn(100) + 1),
+				Height: float64(rng.Intn(100) + 1),
 				Unit:   "cm",
 			},
 		})
@@ -201,7 +201,7 @@ func generateExtensiveProducts(categories []entities.Category) []entities.Produc
 // generateExtensiveProductDescriptions creates product descriptions for performance testing
 func generateExtensiveProductDescriptions(products []entities.Product) []entities.ProductDescription {
 	descriptions := make([]entities.ProductDescription, 0, len(products)*3)
-	
+
 	languages := []string{"EN", "ES", "FR"}
 
 	for _, product := range products {
@@ -215,7 +215,7 @@ func generateExtensiveProductDescriptions(products []entities.Product) []entitie
 			case "FR":
 				description = fmt.Sprintf("Ceci est un %s de haute qualité avec d'excellentes caractéristiques et performances.", product.Name)
 			}
-			
+
 			descriptions = append(descriptions, entities.ProductDescription{
 				ProductID:   product.ID,
 				LanguageKey: lang,

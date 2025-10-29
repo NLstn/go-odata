@@ -147,7 +147,7 @@ func (s *Service) RegisterAction(action actions.ActionDefinition) error {
 
 	// Add to the list of overloads
 	s.actions[action.Name] = append(s.actions[action.Name], &action)
-	fmt.Printf("Registered action: %s (Bound: %v, EntitySet: %s, Parameters: %d)\n", 
+	fmt.Printf("Registered action: %s (Bound: %v, EntitySet: %s, Parameters: %d)\n",
 		action.Name, action.IsBound, action.EntitySet, len(action.Parameters))
 	return nil
 }
@@ -183,7 +183,7 @@ func (s *Service) RegisterFunction(function actions.FunctionDefinition) error {
 
 	// Add to the list of overloads
 	s.functions[function.Name] = append(s.functions[function.Name], &function)
-	fmt.Printf("Registered function: %s (Bound: %v, EntitySet: %s, Parameters: %d)\n", 
+	fmt.Printf("Registered function: %s (Bound: %v, EntitySet: %s, Parameters: %d)\n",
 		function.Name, function.IsBound, function.EntitySet, len(function.Parameters))
 	return nil
 }

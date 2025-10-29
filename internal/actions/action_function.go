@@ -347,19 +347,19 @@ func parametersMatch(p1, p2 []ParameterDefinition) bool {
 	if len(p1) != len(p2) {
 		return false
 	}
-	
+
 	// Create maps for comparison (order shouldn't matter for signature matching)
 	params1 := make(map[string]reflect.Type)
 	for _, p := range p1 {
 		params1[p.Name] = p.Type
 	}
-	
+
 	for _, p := range p2 {
 		if t, exists := params1[p.Name]; !exists || t != p.Type {
 			return false
 		}
 	}
-	
+
 	return true
 }
 

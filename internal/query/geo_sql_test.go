@@ -37,19 +37,19 @@ func TestGeoFunctionSQLGeneration(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			filter, err := parseFilter(tt.filterStr, meta, nil)
-			
+
 			if tt.expectError {
 				if err == nil {
 					t.Errorf("Expected error but got nil")
 				}
 				return
 			}
-			
+
 			if err != nil {
 				t.Errorf("Unexpected error: %v", err)
 				return
 			}
-			
+
 			if filter == nil {
 				t.Errorf("Expected filter but got nil")
 				return
@@ -57,7 +57,7 @@ func TestGeoFunctionSQLGeneration(t *testing.T) {
 
 			// Build the SQL condition
 			sql, args := buildFilterCondition(filter, meta)
-			
+
 			if sql == "" {
 				t.Errorf("Expected SQL but got empty string")
 				return
@@ -92,7 +92,7 @@ func TestInvalidGeoFunction(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := parseFilter(tt.filterStr, meta, nil)
-			
+
 			if err == nil {
 				t.Errorf("Expected error for invalid function but got nil")
 			}

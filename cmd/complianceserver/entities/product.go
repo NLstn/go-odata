@@ -48,9 +48,9 @@ type Product struct {
 	ShippingAddress *Address    `json:"ShippingAddress,omitempty" gorm:"embedded;embeddedPrefix:shipping_" odata:"nullable"`
 	Dimensions      *Dimensions `json:"Dimensions,omitempty" gorm:"embedded;embeddedPrefix:dim_" odata:"nullable"`
 	// Stream properties
-	Photo            struct{} `json:"-" gorm:"-" odata:"stream"`             // Photo stream property (logical property, no storage)
-	PhotoContentType string   `json:"-" gorm:"type:varchar(100)"`            // Content type for Photo stream
-	PhotoContent     []byte   `json:"-" gorm:"type:blob"`                    // Photo stream content
+	Photo            struct{} `json:"-" gorm:"-" odata:"stream"`  // Photo stream property (logical property, no storage)
+	PhotoContentType string   `json:"-" gorm:"type:varchar(100)"` // Content type for Photo stream
+	PhotoContent     []byte   `json:"-" gorm:"type:blob"`         // Photo stream content
 	// Navigation properties
 	Category        *Category            `json:"Category,omitempty" gorm:"foreignKey:CategoryID;references:ID"`
 	Descriptions    []ProductDescription `json:"Descriptions,omitempty" gorm:"foreignKey:ProductID;references:ID"`
