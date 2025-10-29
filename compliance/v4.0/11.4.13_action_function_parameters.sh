@@ -20,13 +20,13 @@ echo ""
 
 # Test 1: Unbound function with valid parameters
 test_function_valid_params() {
-    local HTTP_CODE=$(http_get "$SERVER_URL/GetTopProducts?count=3")
+    local HTTP_CODE=$(http_get "$SERVER_URL/FindProducts(name='Laptop',maxPrice=1000)")
     check_status "$HTTP_CODE" "200"
 }
 
 # Test 2: Unbound function without required parameter should fail
 test_function_missing_required_param() {
-    local HTTP_CODE=$(http_get "$SERVER_URL/GetTopProducts")
+    local HTTP_CODE=$(http_get "$SERVER_URL/FindProducts(name='Laptop')")
     
     # Should return 400 Bad Request for missing required parameter
     if [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "404" ]; then
@@ -112,7 +112,7 @@ test_unbound_action() {
 
 # Test 9: Function returns proper response structure
 test_function_response_structure() {
-    local RESPONSE=$(http_get_body "$SERVER_URL/GetTopProducts?count=3")
+    local RESPONSE=$(http_get_body "$SERVER_URL/GetTopProducts()?count=3")
     
     # Should have @odata.context
     if echo "$RESPONSE" | grep -q '@odata.context'; then
@@ -126,7 +126,7 @@ test_function_response_structure() {
 # Test 10: Function with numeric parameter validation
 test_function_numeric_param() {
     # Test with valid numeric parameter
-    local HTTP_CODE=$(http_get "$SERVER_URL/GetTopProducts?count=5")
+    local HTTP_CODE=$(http_get "$SERVER_URL/GetTopProducts()?count=5")
     check_status "$HTTP_CODE" "200"
 }
 
@@ -151,10 +151,10 @@ test_function_decimal_param() {
     check_status "$HTTP_CODE" "200"
 }
 
-echo "  Request: GET /GetTopProducts?count=3"
+echo "  Request: GET /FindProducts(name='Laptop',maxPrice=1000)"
 run_test "Unbound function with valid parameters" test_function_valid_params
 
-echo "  Request: GET /GetTopProducts (no params)"
+echo "  Request: GET /FindProducts(name='Laptop')"
 run_test "Function without required parameter fails" test_function_missing_required_param
 
 echo "  Request: GET /Products(1)/GetTotalPrice?taxRate=0.08"
@@ -175,10 +175,10 @@ run_test "Action with invalid parameter type fails" test_action_invalid_param_ty
 echo "  Request: POST /ResetAllPrices"
 run_test "Unbound action executes successfully" test_unbound_action
 
-echo "  Request: GET /GetTopProducts?count=3 (check structure)"
+echo "  Request: GET /GetTopProducts()?count=3 (check structure)"
 run_test "Function returns proper response structure" test_function_response_structure
 
-echo "  Request: GET /GetTopProducts?count=5"
+echo "  Request: GET /GetTopProducts()?count=5"
 run_test "Function with numeric parameter validation" test_function_numeric_param
 
 echo "  Request: POST /Products(1)/IncreasePrice (check headers)"
