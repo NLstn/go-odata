@@ -337,3 +337,45 @@ func TestRouter_BoundActionInvocation(t *testing.T) {
 		t.Fatalf("expected bound action to invoke action handler")
 	}
 }
+
+func TestRouter_FunctionCompositionAfterNavigation(t *testing.T) {
+	// Set up entity handler with navigation property
+	handler := newStubEntityHandler()
+	handler.navigationProps["Products"] = true
+
+	// Create a target handler for the navigated entity set
+	targetHandler := newStubEntityHandler()
+
+	invoked := false
+	r := &Router{
+		resolveHandler: func(entitySet string) (EntityHandler, bool) {
+			if entitySet == "Categories" {
+				return handler, true
+			}
+			if entitySet == "Products" {
+				return targetHandler, true
+			}
+			return nil, false
+		},
+		handleServiceDocument: func(http.ResponseWriter, *http.Request) {},
+		handleMetadata:        func(http.ResponseWriter, *http.Request) {},
+		handleBatch:           func(http.ResponseWriter, *http.Request) {},
+		actions:               make(map[string][]*actions.ActionDefinition),
+		functions:             map[string][]*actions.FunctionDefinition{"GetAveragePrice": nil},
+		actionInvoker: func(_ http.ResponseWriter, _ *http.Request, name, key string, isBound bool, entitySet string) {
+			invoked = true
+			if name != "GetAveragePrice" || key != "" || !isBound || entitySet != "Products" {
+				t.Fatalf("unexpected invocation parameters: name=%s key=%s bound=%v set=%s", name, key, isBound, entitySet)
+			}
+		},
+	}
+
+	// Test function composition: Categories(1)/Products/GetAveragePrice()
+	req := httptest.NewRequest(http.MethodGet, "/Categories(1)/Products/GetAveragePrice()", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if !invoked {
+		t.Fatalf("expected function composition to invoke function on target entity set")
+	}
+}
