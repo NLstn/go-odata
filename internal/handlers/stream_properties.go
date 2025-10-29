@@ -6,7 +6,9 @@ import (
 	"net/http"
 	"reflect"
 
+	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/response"
+	"gorm.io/gorm"
 )
 
 // HandleStreamProperty handles GET, PUT, and OPTIONS requests for stream properties (e.g., Products(1)/Photo)
@@ -49,6 +51,9 @@ func (h *EntityHandler) handleGetStreamProperty(w http.ResponseWriter, r *http.R
 		}
 		return
 	}
+
+	// Apply SELECT clause to fetch only the stream content fields and keys
+	db = h.applyStreamPropertySelect(db, prop)
 
 	if err := db.First(entity).Error; err != nil {
 		h.handlePropertyFetchError(w, err, entityKey)
@@ -164,6 +169,9 @@ func (h *EntityHandler) handlePutStreamProperty(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	// Apply SELECT clause to fetch only the stream content fields and keys
+	db = h.applyStreamPropertySelect(db, prop)
+
 	if err := db.First(entity).Error; err != nil {
 		h.handlePropertyFetchError(w, err, entityKey)
 		return
@@ -220,4 +228,33 @@ func (h *EntityHandler) handleOptionsStreamProperty(w http.ResponseWriter, isVal
 		w.Header().Set("Allow", "GET, HEAD, OPTIONS")
 	}
 	w.WriteHeader(http.StatusOK)
+}
+
+// applyStreamPropertySelect applies SELECT clause to fetch only the stream content fields and key columns
+func (h *EntityHandler) applyStreamPropertySelect(db *gorm.DB, prop *metadata.PropertyMetadata) *gorm.DB {
+	// Build select columns list: stream content fields + all key properties
+	// Use struct field names - GORM will handle column name conversion
+	selectColumns := make([]string, 0)
+
+	// Add stream content field if present
+	if prop.StreamContentField != "" {
+		selectColumns = append(selectColumns, prop.StreamContentField)
+	}
+
+	// Add stream content type field if present
+	if prop.StreamContentTypeField != "" {
+		selectColumns = append(selectColumns, prop.StreamContentTypeField)
+	}
+
+	// Add all key properties
+	for _, keyProp := range h.metadata.KeyProperties {
+		selectColumns = append(selectColumns, keyProp.Name)
+	}
+
+	// If no select columns found, don't apply SELECT (shouldn't happen but safe fallback)
+	if len(selectColumns) == 0 {
+		return db
+	}
+
+	return db.Select(selectColumns)
 }

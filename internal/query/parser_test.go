@@ -296,6 +296,11 @@ func TestParseQueryOptions(t *testing.T) {
 			query:     "$apply=filter(Price gt 100)&$apply=groupby((Category))",
 			expectErr: true,
 		},
+		{
+			name:      "Duplicate $index parameters should fail",
+			query:     "$index&$index",
+			expectErr: true,
+		},
 	}
 
 	for _, tt := range tests {
