@@ -8,17 +8,19 @@ import (
 
 // EntityMetadata holds metadata information about an OData entity
 type EntityMetadata struct {
-	EntityType       reflect.Type
-	EntityName       string
-	EntitySetName    string
-	Properties       []PropertyMetadata
-	KeyProperties    []PropertyMetadata // Support for composite keys
-	KeyProperty      *PropertyMetadata  // Deprecated: Use KeyProperties for single or composite keys, kept for backwards compatibility
-	ETagProperty     *PropertyMetadata  // Property used for ETag generation (optional)
-	IsSingleton      bool               // True if this is a singleton (single instance accessible by name)
-	SingletonName    string             // Name of the singleton (if IsSingleton is true)
-	HasStream        bool               // True if this is a media entity (has a media stream)
-	StreamProperties []PropertyMetadata // Named stream properties on this entity
+	EntityType    reflect.Type
+	EntityName    string
+	EntitySetName string
+	Properties    []PropertyMetadata
+	KeyProperties []PropertyMetadata // Support for composite keys
+	KeyProperty   *PropertyMetadata  // Deprecated: Use KeyProperties for single or composite keys, kept for backwards compatibility
+	ETagProperty  *PropertyMetadata  // Property used for ETag generation (optional)
+	IsSingleton   bool               // True if this is a singleton (single instance accessible by name)
+	SingletonName string             // Name of the singleton (if IsSingleton is true)
+	HasStream     bool               // True if this is a media entity (has a media stream)
+	// ChangeTrackingEnabled indicates whether $deltatoken and change tracking responses are enabled for this entity set
+	ChangeTrackingEnabled bool
+	StreamProperties      []PropertyMetadata // Named stream properties on this entity
 	// Hooks defines which lifecycle hooks are available on this entity
 	Hooks struct {
 		HasBeforeCreate         bool

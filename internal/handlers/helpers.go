@@ -149,7 +149,10 @@ func (h *EntityHandler) handleFetchError(w http.ResponseWriter, err error, entit
 }
 
 func (h *EntityHandler) supportsTrackChanges() bool {
-	return h.tracker != nil && !h.metadata.IsSingleton
+	if h.metadata == nil {
+		return false
+	}
+	return h.tracker != nil && h.metadata.ChangeTrackingEnabled && !h.metadata.IsSingleton
 }
 
 func (h *EntityHandler) recordChange(entity interface{}, changeType trackchanges.ChangeType) {

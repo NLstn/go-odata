@@ -59,6 +59,27 @@ func (h *EntityHandler) SetDeltaTracker(tracker *trackchanges.Tracker) {
 	h.tracker = tracker
 }
 
+// EnableChangeTracking turns on change tracking for this entity handler.
+// It registers the entity set with the configured tracker so that delta tokens can be issued.
+func (h *EntityHandler) EnableChangeTracking() error {
+	if h.metadata == nil {
+		return fmt.Errorf("entity metadata is not initialized")
+	}
+	if h.metadata.IsSingleton {
+		return fmt.Errorf("change tracking is not supported for singleton '%s'", h.metadata.EntitySetName)
+	}
+	if h.tracker == nil {
+		return fmt.Errorf("change tracker is not configured for entity set '%s'", h.metadata.EntitySetName)
+	}
+	if h.metadata.ChangeTrackingEnabled {
+		return nil
+	}
+
+	h.metadata.ChangeTrackingEnabled = true
+	h.tracker.RegisterEntity(h.metadata.EntitySetName)
+	return nil
+}
+
 // IsSingleton returns true if this handler is for a singleton
 func (h *EntityHandler) IsSingleton() bool {
 	return h.metadata.IsSingleton

@@ -237,6 +237,39 @@ Per OData v4 specification, ETags are included in:
 
 Lifecycle hooks allow you to execute custom logic at specific points in the entity lifecycle.
 
+## Change Tracking and Delta Tokens
+
+OData delta responses allow clients to synchronize changes efficiently, but they are optional in the specification. The library
+now requires an explicit opt-in per entity set before emitting delta links or processing `$deltatoken` requests.
+
+1. Register your entity as usual:
+
+```go
+if err := service.RegisterEntity(&Product{}); err != nil {
+    log.Fatalf("register product: %v", err)
+}
+```
+
+2. Enable change tracking for that entity set:
+
+```go
+if err := service.EnableChangeTracking("Products"); err != nil {
+    log.Fatalf("enable change tracking: %v", err)
+}
+```
+
+When enabled, the entity handler records inserts, updates, and deletions so that collection requests with the `Prefer:
+odata.track-changes` header include an `@odata.deltaLink`. Subsequent requests using the returned `$deltatoken` yield only the
+changes since the previous checkpoint.
+
+**Important notes:**
+
+- Change tracking is disabled by default for every entity set.
+- Singletons do not support change tracking. Attempting to enable it returns an error.
+- If a client supplies `$deltatoken` for an entity set without change tracking enabled, the service returns `501 Not
+  Implemented` with an explanatory error message.
+- The change tracker keeps an in-memory history per entity set. Restarting the process clears the tracked history.
+
 ### Available Hooks
 
 The library supports the following hooks:

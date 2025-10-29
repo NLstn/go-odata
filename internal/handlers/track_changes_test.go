@@ -19,6 +19,10 @@ import (
 func TestHandleCollectionTrackChanges(t *testing.T) {
 	handler, db := setupTestHandler(t)
 
+	if err := handler.EnableChangeTracking(); err != nil {
+		t.Fatalf("failed to enable change tracking: %v", err)
+	}
+
 	if err := db.Create(&TestEntity{ID: 1, Name: "Initial"}).Error; err != nil {
 		t.Fatalf("failed to seed data: %v", err)
 	}
@@ -174,6 +178,10 @@ func setupTrackChangesHandlerWithETag(t *testing.T) (*EntityHandler, *gorm.DB, *
 	tracker := trackchanges.NewTracker()
 	tracker.RegisterEntity(entityMeta.EntitySetName)
 	handler.SetDeltaTracker(tracker)
+
+	if err := handler.EnableChangeTracking(); err != nil {
+		t.Fatalf("failed to enable change tracking: %v", err)
+	}
 
 	return handler, db, entityMeta
 }
