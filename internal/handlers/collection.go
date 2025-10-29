@@ -26,10 +26,8 @@ func (h *EntityHandler) HandleCollection(w http.ResponseWriter, r *http.Request)
 	case http.MethodOptions:
 		h.handleOptionsCollection(w)
 	default:
-		if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
-			fmt.Sprintf("Method %s is not supported for entity collections", r.Method)); err != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, err)
-		}
+		WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+			fmt.Sprintf("Method %s is not supported for entity collections", r.Method))
 	}
 }
 
@@ -186,35 +184,27 @@ func (h *EntityHandler) handleGetCollection(w http.ResponseWriter, r *http.Reque
 
 func (h *EntityHandler) handleDeltaCollection(w http.ResponseWriter, r *http.Request, token string) {
 	if !h.supportsTrackChanges() {
-		if writeErr := response.WriteError(w, http.StatusNotImplemented, ErrMsgNotImplemented,
-			"Change tracking is not enabled for this entity set"); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
-		}
+		WriteError(w, http.StatusNotImplemented, ErrMsgNotImplemented,
+			"Change tracking is not enabled for this entity set")
 		return
 	}
 
 	entitySet, err := h.tracker.EntitySetFromToken(token)
 	if err != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions,
-			"Invalid $deltatoken value"); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
-		}
+		WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions,
+			"Invalid $deltatoken value")
 		return
 	}
 
 	if entitySet != h.metadata.EntitySetName {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions,
-			"Delta token does not match the requested entity set"); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
-		}
+		WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions,
+			"Delta token does not match the requested entity set")
 		return
 	}
 
 	events, newToken, err := h.tracker.ChangesSince(token)
 	if err != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions, err.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
-		}
+		WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions, err.Error())
 		return
 	}
 
@@ -298,10 +288,8 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 	// Parse the request body as a map first to detect @odata.bind annotations
 	var requestData map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&requestData); err != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidRequestBody,
-			fmt.Sprintf(ErrDetailFailedToParseJSON, err.Error())); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
-		}
+		WriteError(w, http.StatusBadRequest, ErrMsgInvalidRequestBody,
+			fmt.Sprintf(ErrDetailFailedToParseJSON, err.Error()))
 		return
 	}
 
@@ -312,24 +300,18 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 	// This properly handles all the type conversions
 	jsonData, err := json.Marshal(requestData)
 	if err != nil {
-		if writeErr := response.WriteError(w, http.StatusInternalServerError, "Failed to process request data", err.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
-		}
+		WriteError(w, http.StatusInternalServerError, "Failed to process request data", err.Error())
 		return
 	}
 	if err := json.Unmarshal(jsonData, entity); err != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidRequestBody,
-			fmt.Sprintf(ErrDetailFailedToParseJSON, err.Error())); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
-		}
+		WriteError(w, http.StatusBadRequest, ErrMsgInvalidRequestBody,
+			fmt.Sprintf(ErrDetailFailedToParseJSON, err.Error()))
 		return
 	}
 
 	// Process @odata.bind annotations to establish navigation property relationships
 	if err := h.processODataBindAnnotations(entity, requestData, h.db); err != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid @odata.bind annotation", err.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
-		}
+		WriteError(w, http.StatusBadRequest, "Invalid @odata.bind annotation", err.Error())
 		return
 	}
 
@@ -339,25 +321,19 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 
 	// Validate required properties
 	if err := h.validateRequiredProperties(entity); err != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, "Missing required properties", err.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
-		}
+		WriteError(w, http.StatusBadRequest, "Missing required properties", err.Error())
 		return
 	}
 
 	// Call BeforeCreate hook if it exists
 	if err := h.callBeforeCreate(entity, r); err != nil {
-		if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", err.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
-		}
+		WriteError(w, http.StatusForbidden, "Authorization failed", err.Error())
 		return
 	}
 
 	// Create the entity in the database
 	if err := h.db.Create(entity).Error; err != nil {
-		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
-		}
+		WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error())
 		return
 	}
 
@@ -582,10 +558,8 @@ func (h *EntityHandler) HandleCount(w http.ResponseWriter, r *http.Request) {
 	case http.MethodOptions:
 		h.handleOptionsCount(w)
 	default:
-		if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
-			fmt.Sprintf("Method %s is not supported for $count", r.Method)); err != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, err)
-		}
+		WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+			fmt.Sprintf("Method %s is not supported for $count", r.Method))
 	}
 }
 
@@ -594,18 +568,14 @@ func (h *EntityHandler) handleGetCount(w http.ResponseWriter, r *http.Request) {
 	// Parse query options (primarily for $filter support)
 	queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata)
 	if err != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions, err.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
-		}
+		WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions, err.Error())
 		return
 	}
 
 	// Invoke BeforeReadCollection hooks for count requests
 	scopes, hookErr := callBeforeReadCollection(h.metadata, r, queryOptions)
 	if hookErr != nil {
-		if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", hookErr.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
-		}
+		WriteError(w, http.StatusForbidden, "Authorization failed", hookErr.Error())
 		return
 	}
 
@@ -621,9 +591,7 @@ func (h *EntityHandler) handleGetCount(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := countDB.Count(&count).Error; err != nil {
-		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
-		}
+		WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error())
 		return
 	}
 
@@ -665,9 +633,7 @@ func (h *EntityHandler) getTotalCount(queryOptions *query.QueryOptions, w http.R
 	}
 
 	if err := countDB.Count(&count).Error; err != nil {
-		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
-		}
+		WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error())
 		return nil
 	}
 	return &count
