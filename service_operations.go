@@ -11,13 +11,6 @@ import (
 	"github.com/nlstn/go-odata/internal/response"
 )
 
-// isActionOrFunction checks if a name corresponds to a registered action or function
-func (s *Service) isActionOrFunction(name string) bool {
-	_, isAction := s.actions[name]
-	_, isFunction := s.functions[name]
-	return isAction || isFunction
-}
-
 // handleActionOrFunction handles action or function invocation
 func (s *Service) handleActionOrFunction(w http.ResponseWriter, r *http.Request, name string, key string, isBound bool, entitySet string) {
 	// Check if it's an action (POST) or function (GET)

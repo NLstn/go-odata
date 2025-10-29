@@ -11,6 +11,7 @@ import (
 	"github.com/nlstn/go-odata/internal/actions"
 	"github.com/nlstn/go-odata/internal/handlers"
 	"github.com/nlstn/go-odata/internal/metadata"
+	servrouter "github.com/nlstn/go-odata/internal/service/router"
 	"github.com/nlstn/go-odata/internal/trackchanges"
 	"gorm.io/gorm"
 )
@@ -40,6 +41,8 @@ type Service struct {
 	namespace string
 	// deltaTracker tracks entity changes for change tracking requests
 	deltaTracker *trackchanges.Tracker
+	// router handles HTTP routing for the service
+	router *servrouter.Router
 }
 
 // NewService creates a new OData service instance with database connection.
@@ -60,6 +63,21 @@ func NewService(db *gorm.DB) *Service {
 	s.metadataHandler.SetNamespace(DefaultNamespace)
 	// Initialize batch handler with reference to service
 	s.batchHandler = handlers.NewBatchHandler(db, handlersMap, s)
+	s.router = servrouter.NewRouter(
+		func(name string) (servrouter.EntityHandler, bool) {
+			handler, ok := s.handlers[name]
+			if !ok {
+				return nil, false
+			}
+			return handler, true
+		},
+		s.serviceDocumentHandler.HandleServiceDocument,
+		s.metadataHandler.HandleMetadata,
+		s.batchHandler.HandleBatch,
+		s.actions,
+		s.functions,
+		s.handleActionOrFunction,
+	)
 	return s
 }
 
