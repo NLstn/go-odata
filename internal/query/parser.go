@@ -189,12 +189,18 @@ var validQueryOptions = map[string]bool{
 }
 
 // validateQueryOptions validates that all query parameters starting with $ are valid OData query options
+// and that no system query option appears more than once
 func validateQueryOptions(queryParams url.Values) error {
-	for key := range queryParams {
+	for key, values := range queryParams {
 		// Only validate parameters that start with $
 		if strings.HasPrefix(key, "$") {
 			if !validQueryOptions[key] {
 				return fmt.Errorf("unknown query option: '%s'", key)
+			}
+			// Check for duplicate query parameters
+			// According to OData spec, system query options should not appear more than once
+			if len(values) > 1 {
+				return fmt.Errorf("query option '%s' must not appear more than once", key)
 			}
 		}
 	}
