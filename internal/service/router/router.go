@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/nlstn/go-odata/internal/actions"
+	"github.com/nlstn/go-odata/internal/async"
 	"github.com/nlstn/go-odata/internal/handlers"
 	"github.com/nlstn/go-odata/internal/response"
 )
@@ -47,6 +48,9 @@ type Router struct {
 	actions               map[string][]*actions.ActionDefinition
 	functions             map[string][]*actions.FunctionDefinition
 	actionInvoker         ActionInvoker
+
+	asyncManager       *async.Manager
+	asyncMonitorPrefix string
 }
 
 // NewRouter creates a new Router instance.
@@ -80,6 +84,10 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			handlers.ErrDetailVersionNotSupported); err != nil {
 			fmt.Printf("Error writing error response: %v\n", err)
 		}
+		return
+	}
+
+	if r.tryServeAsyncMonitor(w, req) {
 		return
 	}
 
@@ -172,6 +180,73 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	r.routeRequest(w, req, handler, components)
+}
+
+// SetAsyncMonitor configures the router to delegate monitor requests to the async manager.
+func (r *Router) SetAsyncMonitor(prefix string, manager *async.Manager) {
+	if prefix != "" {
+		if !strings.HasPrefix(prefix, "/") {
+			prefix = "/" + prefix
+		}
+		if !strings.HasSuffix(prefix, "/") {
+			prefix += "/"
+		}
+	}
+
+	r.asyncMonitorPrefix = prefix
+	r.asyncManager = manager
+}
+
+func (r *Router) tryServeAsyncMonitor(w http.ResponseWriter, req *http.Request) bool {
+	if r.asyncManager == nil || r.asyncMonitorPrefix == "" || req == nil || req.URL == nil {
+		return false
+	}
+
+	path := req.URL.Path
+	if !strings.HasPrefix(path, r.asyncMonitorPrefix) {
+		return false
+	}
+
+	suffix := strings.TrimPrefix(path, r.asyncMonitorPrefix)
+	if suffix == "" {
+		http.NotFound(w, req)
+		return true
+	}
+	if strings.Contains(suffix, "/") {
+		http.NotFound(w, req)
+		return true
+	}
+	if !isValidAsyncJobID(suffix) {
+		http.Error(w, "invalid async job identifier", http.StatusBadRequest)
+		return true
+	}
+
+	r.asyncManager.ServeMonitor(w, req)
+	return true
+}
+
+func isValidAsyncJobID(id string) bool {
+	if id == "" {
+		return false
+	}
+	for _, ch := range id {
+		switch {
+		case ch >= '0' && ch <= '9':
+			continue
+		case ch >= 'a' && ch <= 'z':
+			continue
+		case ch >= 'A' && ch <= 'Z':
+			continue
+		case ch == '-' || ch == '_':
+			continue
+		default:
+			if ch > 127 {
+				return false
+			}
+			return false
+		}
+	}
+	return true
 }
 
 func (r *Router) routeRequest(w http.ResponseWriter, req *http.Request, handler EntityHandler, components *response.ODataURLComponents) {
@@ -267,13 +342,13 @@ func (r *Router) handlePropertyRequest(w http.ResponseWriter, req *http.Request,
 	if len(propertySegments) > 1 {
 		firstSegment := propertySegments[0]
 		lastSegment := propertySegments[len(propertySegments)-1]
-		
+
 		// Extract operation name from last segment (remove parameters)
 		lastOperationName := lastSegment
 		if idx := strings.Index(lastSegment, "("); idx != -1 {
 			lastOperationName = lastSegment[:idx]
 		}
-		
+
 		// Check if first segment is a navigation property and last segment is an operation
 		if handler.IsNavigationProperty(firstSegment) && r.isActionOrFunction(lastOperationName) {
 			// This is function composition: navigate first, then invoke operation
@@ -286,7 +361,7 @@ func (r *Router) handlePropertyRequest(w http.ResponseWriter, req *http.Request,
 				}
 				return
 			}
-			
+
 			// Update request URL to point to the navigated collection with the operation
 			// e.g., change Categories(1)/Products/GetAveragePrice() to Products/GetAveragePrice()
 			// but we need to ensure the operation is bound to the navigated collection
@@ -392,6 +467,6 @@ func (r *Router) getNavigationTargetEntitySet(navigationProperty string) string 
 		_ = targetHandler // We found it
 		return navigationProperty
 	}
-	
+
 	return ""
 }

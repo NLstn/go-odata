@@ -10,6 +10,7 @@ This guide covers advanced features of go-odata including singletons, ETags, and
   - [Read Hooks](#read-hooks)
   - [Tenant Filtering Example](#tenant-filtering-example)
   - [Redacting Sensitive Data](#redacting-sensitive-data)
+- [Asynchronous Processing](#asynchronous-processing)
 
 ## Singletons
 
@@ -516,3 +517,14 @@ For a single operation, hooks execute in this order:
 1. BeforeDelete
 2. Database DELETE
 3. AfterDelete
+
+## Asynchronous Processing
+
+`go-odata` can run long-running requests asynchronously when clients send `Prefer: respond-async`. Enable it with `Service.EnableAsyncProcessing` and provide a monitor prefix (defaults to `/$async/jobs/`). Once enabled, the router reserves the monitor path and exposes the following behaviour:
+
+- **Status monitors** live at `/{prefix}{jobID}` (for example, `/$async/jobs/6f92b3...`). Job IDs are limited to ASCII alphanumeric characters plus `_` and `-`. Requests that omit the job ID, add extra path segments, or include disallowed characters return `404 Not Found` or `400 Bad Request` before the async manager is invoked.
+- **Polling** a pending job with `GET` or `HEAD` returns `202 Accepted` with `Preference-Applied: respond-async` and, when configured, a `Retry-After` header. The 202 response never includes a body.
+- **Completion** replays the stored response exactly: the original status code, headers (including any `Preference-Applied` values set by the handler), and body are forwarded once the job finishes.
+- **Cancellation** is available via `DELETE` on the monitor URI. The router calls the async manager’s cancellation hook and returns `204 No Content`, even if the worker finishes later.
+
+These guarantees let clients reliably poll job status without conflicting with regular entity routing.
