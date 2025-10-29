@@ -42,9 +42,18 @@ Each test script:
 - Is executable and can be run independently
 - Makes HTTP requests to a running OData service
 - Validates responses against OData v4 specification requirements
-- Prints clear pass/fail results with descriptions
+- Prints clear pass/fail/skip results with descriptions
+- Can mark tests as skipped when features are not yet implemented
 - Cleans up any test data it creates (non-destructive)
-- Returns exit code 0 on success, 1 on failure
+- Returns exit code 0 on success (including when tests are skipped), 1 on failure
+
+### Test Status Types
+
+- **PASS** (✓): Test passed successfully
+- **FAIL** (✗): Test failed
+- **SKIP** (⊘): Test skipped because the corresponding OData feature is not yet implemented
+
+Skipped tests help track which parts of the OData v4 spec are not yet implemented without causing the test suite to fail.
 
 ## Running Tests
 
@@ -205,9 +214,10 @@ The master script generates a markdown report (`compliance-report.md`) with:
 
 - Overall pass/fail status
 - Test script counts (how many test files passed/failed)
-- Individual test counts (how many individual tests passed/failed)
+- Individual test counts (how many individual tests passed/failed/skipped)
 - Detailed results for each test section sorted by OData specification section number
-- Breakdown of passing vs failing individual tests
+- Breakdown of passing vs failing vs skipped individual tests
+- Information about skipped tests indicating incomplete spec coverage
 
 Example report structure:
 ```markdown
@@ -219,14 +229,15 @@ Example report structure:
 | Metric | Count |
 |--------|-------|
 | Passing | 134 |
-| Failing | 16 |
+| Failing | 14 |
+| Skipped | 2 |
 | Total | 150 |
 
 ## Test Results
 
-| Test Section | Status | Passed | Failed | Total | Details |
-|-------------|--------|--------|--------|-------|---------|
-| 8.1.1_header_content_type | ✅ PASS | 5 | 0 | 5 | Tests that... |
+| Test Section | Status | Passed | Failed | Skipped | Total | Details |
+|-------------|--------|--------|--------|---------|-------|---------|
+| 8.1.1_header_content_type | ✅ PASS | 5 | 0 | 0 | 5 | Tests that... |
 ...
 ```
 
@@ -473,6 +484,7 @@ print_summary
 **Test Execution:**
 
 - `run_test "description" test_function` - Execute a test and track results
+- `skip_test "description" "reason"` - Mark a test as skipped (for unimplemented features)
 - `print_summary` - Print final summary and exit (REQUIRED at end of script)
 
 **Cleanup:**
@@ -535,6 +547,22 @@ test_filter_query() {
 }
 
 run_test "Filter query returns filtered results" test_filter_query
+```
+
+**Example 4: Skipping a test for unimplemented features**
+```bash
+# Skip a test when the corresponding OData feature is not yet implemented
+skip_test "Delta token support" "Delta token feature is not yet implemented in go-odata"
+
+# Skip with default reason (defaults to "Feature not yet implemented")
+skip_test "Stream property support"
+
+# You can also skip tests conditionally based on feature detection
+if ! feature_is_implemented "batch_requests"; then
+    skip_test "Batch request processing" "Batch request feature pending implementation"
+else
+    run_test "Batch request creates multiple entities" test_batch_create
+fi
 ```
 
 #### Common Pitfalls for AI Agents (AVOID THESE)
@@ -706,12 +734,16 @@ test_json_content() {
 #### Test Execution
 
 - `run_test "description" test_function` - Run a test and track results
+- `skip_test "description" ["reason"]` - Mark a test as skipped (optional reason defaults to "Feature not yet implemented")
 - `register_cleanup` - Register cleanup function to run on exit
 
 Example:
 ```bash
 run_test "Service returns 200 OK" test_status_code
 run_test "Response contains Name field" test_json_content
+
+# Skip a test for an unimplemented feature
+skip_test "Delta token support" "Delta tokens are not yet implemented"
 ```
 
 ### Standardized Output Format
@@ -719,17 +751,17 @@ run_test "Response contains Name field" test_json_content
 The test framework automatically outputs results in a standardized, machine-parsable format:
 
 ```
-COMPLIANCE_TEST_RESULT:PASSED=X:FAILED=Y:TOTAL=Z
+COMPLIANCE_TEST_RESULT:PASSED=X:FAILED=Y:SKIPPED=Z:TOTAL=W
 ```
 
 **DO NOT** manually print this line or manipulate test counters - the framework handles everything automatically.
 
 ### Exit Codes
 
-- Exit `0`: All tests passed
+- Exit `0`: All tests passed (skipped tests do not cause failure)
 - Exit `1`: One or more tests failed
 
-The framework handles exit codes automatically based on test results.
+The framework handles exit codes automatically based on test results. Skipped tests are tracked separately and do not cause the suite to fail.
 
 ### Debugging Test Failures
 
