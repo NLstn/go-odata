@@ -157,7 +157,7 @@ export DEBUG
 
 echo ""
 echo "╔════════════════════════════════════════════════════════╗"
-echo "║     OData v4 Compliance Test Suite                    ║"
+echo "║     OData v4 Compliance Test Suite                     ║"
 echo "╚════════════════════════════════════════════════════════╝"
 echo ""
 echo "Server URL: $SERVER_URL"
