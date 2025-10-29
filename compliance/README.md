@@ -381,9 +381,6 @@ Example report structure:
 ### Asynchronous Processing (Section 13.x)
 - **13.1_asynchronous_processing.sh** - Tests asynchronous request processing features including the Prefer: respond-async header, status monitor URLs, and proper async response patterns
 
-### Conditional Operations (Section 11.5.x)
-- **11.5.1_conditional_requests.sh** - Tests conditional requests with ETags (If-Match, If-None-Match)
-
 ### Annotations (Section 11.6 & 14.x)
 - **11.6_annotations.sh** - Tests instance annotations, @odata control information, and custom annotations in responses
 - **14.1_vocabulary_annotations.sh** - Tests vocabulary annotations including Core vocabulary (Description, LongDescription), Computed/Immutable annotations, instance annotations (@odata.type, @odata.id, @odata.etag), and optional vocabularies (Capabilities, Measures, Validation)
