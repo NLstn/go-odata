@@ -218,14 +218,14 @@ test_empty_groupby() {
     return 1
 }
 
-# Test 17: Aggregate on navigation property (if supported)
+# Test 17: Aggregate on another entity set  
 test_aggregate_navigation() {
-    local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Orders?\$apply=groupby((CustomerID),aggregate(\$count%20as%20OrderCount))")
+    local HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/Categories?\$apply=groupby((Name),aggregate(\$count%20as%20ProductCount))")
     if [ "$HTTP_CODE" = "200" ]; then
         return 0
     fi
 
-    echo "  Details: Expected HTTP 200 for $apply on navigation property, got $HTTP_CODE"
+    echo "  Details: Expected HTTP 200 for $apply on different entity set, got $HTTP_CODE"
     echo "           Unsupported responses indicate a compliance failure."
     return 1
 }
@@ -314,8 +314,8 @@ run_test "\$apply response has valid JSON structure" test_apply_response_format
 echo "  Request: groupby with empty grouping set"
 run_test "Empty groupby (aggregate all)" test_empty_groupby
 
-echo "  Request: Aggregate on navigation property"
-run_test "Aggregate with navigation property (unsupported is a compliance failure)" test_aggregate_navigation
+echo "  Request: Aggregate on different entity set"
+run_test "Aggregate on another entity set (unsupported is a compliance failure)" test_aggregate_navigation
 
 echo "  Request: Average aggregation method"
 run_test "Average aggregation method" test_average_aggregation

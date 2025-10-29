@@ -113,7 +113,23 @@ func ApplyQueryOptions(db *gorm.DB, options *QueryOptions, entityMetadata *metad
 
 	// Apply transformations (if present, they take precedence over other query options)
 	if len(options.Apply) > 0 {
-		return applyTransformations(db, options.Apply, entityMetadata)
+		db = applyTransformations(db, options.Apply, entityMetadata)
+
+		// After applying transformations, still apply orderby, top, and skip
+		// These are standalone query options that work with $apply
+		if len(options.OrderBy) > 0 {
+			db = applyOrderBy(db, options.OrderBy, entityMetadata)
+		}
+
+		if options.Skip != nil {
+			db = db.Offset(*options.Skip)
+		}
+
+		if options.Top != nil {
+			db = db.Limit(*options.Top)
+		}
+
+		return db
 	}
 
 	// Apply standalone compute transformation (before select)
@@ -231,6 +247,18 @@ func applyFilter(db *gorm.DB, filter *FilterExpression, entityMetadata *metadata
 	return db.Where(query, args...)
 }
 
+// applyHavingFilter applies a HAVING clause filter for post-aggregation filtering
+// This is used when a filter transformation comes after a groupby/aggregate in $apply
+func applyHavingFilter(db *gorm.DB, filter *FilterExpression, entityMetadata *metadata.EntityMetadata) *gorm.DB {
+	if filter == nil {
+		return db
+	}
+
+	// Build the condition using the same logic as WHERE, but apply as HAVING
+	query, args := buildFilterCondition(filter, entityMetadata)
+	return db.Having(query, args...)
+}
+
 // buildFilterCondition builds a WHERE condition string and arguments for a filter expression
 func buildFilterCondition(filter *FilterExpression, entityMetadata *metadata.EntityMetadata) (string, []interface{}) {
 	if filter == nil {
@@ -294,10 +322,23 @@ func buildComparisonCondition(filter *FilterExpression, entityMetadata *metadata
 		columnName = GetColumnName(filter.Property, entityMetadata)
 	} else {
 		// Computed property - sanitize the alias to prevent SQL injection
-		columnName = sanitizeIdentifier(filter.Property)
-		if columnName == "" {
+		rawName := sanitizeIdentifier(filter.Property)
+		if rawName == "" {
 			// Invalid identifier - return empty condition
 			return "", nil
+		}
+		// Handle special OData identifiers
+		if rawName == "$it" {
+			// $it refers to the current instance, don't quote
+			columnName = rawName
+		} else if rawName == "$count" {
+			// $count is a computed column alias, must be quoted to avoid being treated as SQL placeholder
+			columnName = "`" + rawName + "`"
+		} else if len(rawName) > 0 && rawName[0] == '$' {
+			// Quote other identifiers that start with $ to avoid conflicts with SQL placeholders
+			columnName = "`" + rawName + "`"
+		} else {
+			columnName = rawName
 		}
 	}
 
@@ -1330,14 +1371,26 @@ func applyTransformations(db *gorm.DB, transformations []ApplyTransformation, en
 		db = db.Model(modelInstance)
 	}
 
+	// Track whether we've encountered a groupby/aggregate transformation
+	// to determine whether to use WHERE or HAVING for subsequent filters
+	hasGrouping := false
+
 	for _, transformation := range transformations {
 		switch transformation.Type {
 		case ApplyTypeGroupBy:
 			db = applyGroupBy(db, transformation.GroupBy, entityMetadata)
+			hasGrouping = true
 		case ApplyTypeAggregate:
 			db = applyAggregate(db, transformation.Aggregate, entityMetadata)
+			hasGrouping = true
 		case ApplyTypeFilter:
-			db = applyFilter(db, transformation.Filter, entityMetadata)
+			if hasGrouping {
+				// After groupby/aggregate, use HAVING clause
+				db = applyHavingFilter(db, transformation.Filter, entityMetadata)
+			} else {
+				// Before groupby/aggregate, use WHERE clause
+				db = applyFilter(db, transformation.Filter, entityMetadata)
+			}
 		case ApplyTypeCompute:
 			db = applyCompute(db, transformation.Compute, entityMetadata)
 		}
@@ -1382,6 +1435,9 @@ func applyGroupBy(db *gorm.DB, groupBy *GroupByTransformation, entityMetadata *m
 				}
 			}
 		}
+	} else {
+		// No nested transformations - add $count virtual property
+		selectColumns = append(selectColumns, "COUNT(*) as `$count`")
 	}
 
 	// Apply GROUP BY and SELECT
@@ -1422,7 +1478,7 @@ func applyAggregate(db *gorm.DB, aggregate *AggregateTransformation, entityMetad
 func buildAggregateSQL(aggExpr AggregateExpression, entityMetadata *metadata.EntityMetadata) string {
 	// Handle $count special case
 	if aggExpr.Property == "$count" {
-		return fmt.Sprintf("COUNT(*) as %s", aggExpr.Alias)
+		return fmt.Sprintf("COUNT(*) as `%s`", aggExpr.Alias)
 	}
 
 	// Find the property metadata
@@ -1432,6 +1488,9 @@ func buildAggregateSQL(aggExpr AggregateExpression, entityMetadata *metadata.Ent
 	}
 
 	// Build the aggregate SQL based on method
+	// Get the database column name (snake_case)
+	columnName := GetColumnName(aggExpr.Property, entityMetadata)
+
 	var sqlFunc string
 	switch aggExpr.Method {
 	case AggregationSum:
@@ -1445,12 +1504,12 @@ func buildAggregateSQL(aggExpr AggregateExpression, entityMetadata *metadata.Ent
 	case AggregationCount:
 		sqlFunc = "COUNT"
 	case AggregationCountDistinct:
-		return fmt.Sprintf("COUNT(DISTINCT %s) as %s", prop.Name, aggExpr.Alias)
+		return fmt.Sprintf("COUNT(DISTINCT %s) as `%s`", columnName, aggExpr.Alias)
 	default:
 		return ""
 	}
 
-	return fmt.Sprintf("%s(%s) as %s", sqlFunc, prop.Name, aggExpr.Alias)
+	return fmt.Sprintf("%s(%s) as `%s`", sqlFunc, columnName, aggExpr.Alias)
 }
 
 // applyCompute applies a compute transformation to the GORM query
@@ -1720,7 +1779,27 @@ func sanitizeIdentifier(identifier string) string {
 	}
 
 	// Allow special OData reserved identifiers
-	if identifier == "$it" {
+	if identifier == "$it" || identifier == "$count" {
+		return identifier
+	}
+
+	// Allow OData identifiers starting with $
+	if len(identifier) > 1 && identifier[0] == '$' {
+		// Ensure the rest is alphanumeric/underscore
+		for i, ch := range identifier[1:] {
+			if i == 0 {
+				// Second character must be a letter or underscore
+				if (ch < 'a' || ch > 'z') && (ch < 'A' || ch > 'Z') && ch != '_' {
+					return ""
+				}
+			} else {
+				// Subsequent characters can be alphanumeric or underscore
+				if (ch < 'a' || ch > 'z') && (ch < 'A' || ch > 'Z') && (ch < '0' || ch > '9') && ch != '_' {
+					return ""
+				}
+			}
+		}
+		// Valid $ identifier
 		return identifier
 	}
 

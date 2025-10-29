@@ -853,6 +853,43 @@ func (h *EntityHandler) validateSkipToken(queryOptions *query.QueryOptions) erro
 	return nil
 }
 
+// extractAliasesFromApplyTransformation extracts computed aliases from an apply transformation
+func extractAliasesFromApplyTransformation(trans *query.ApplyTransformation, aliases map[string]bool) {
+	if trans == nil {
+		return
+	}
+
+	switch trans.Type {
+	case query.ApplyTypeGroupBy:
+		// groupby creates a virtual $count property
+		if trans.GroupBy != nil {
+			aliases["$count"] = true
+			// Also extract aliases from nested aggregate transformations
+			for i := range trans.GroupBy.Transform {
+				extractAliasesFromApplyTransformation(&trans.GroupBy.Transform[i], aliases)
+			}
+		}
+	case query.ApplyTypeAggregate:
+		// Extract aliases from aggregate expressions
+		if trans.Aggregate != nil {
+			for _, expr := range trans.Aggregate.Expressions {
+				if expr.Alias != "" {
+					aliases[expr.Alias] = true
+				}
+			}
+		}
+	case query.ApplyTypeCompute:
+		// Extract aliases from compute expressions
+		if trans.Compute != nil {
+			for _, expr := range trans.Compute.Expressions {
+				if expr.Alias != "" {
+					aliases[expr.Alias] = true
+				}
+			}
+		}
+	}
+}
+
 // validateComplexTypeUsage validates that complex types are not used in unsupported operations
 func (h *EntityHandler) validateComplexTypeUsage(queryOptions *query.QueryOptions) error {
 	// Build a map of computed property aliases
@@ -861,6 +898,11 @@ func (h *EntityHandler) validateComplexTypeUsage(queryOptions *query.QueryOption
 		for _, expr := range queryOptions.Compute.Expressions {
 			computedAliases[expr.Alias] = true
 		}
+	}
+
+	// Extract aliases from $apply transformations
+	for i := range queryOptions.Apply {
+		extractAliasesFromApplyTransformation(&queryOptions.Apply[i], computedAliases)
 	}
 
 	// Check filter for complex type usage

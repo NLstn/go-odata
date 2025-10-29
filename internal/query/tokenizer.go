@@ -159,6 +159,12 @@ func (t *Tokenizer) readNumber() string {
 func (t *Tokenizer) readIdentifier() string {
 	var result strings.Builder
 
+	// Allow $ at the beginning for special properties like $count
+	if t.ch == '$' {
+		result.WriteRune(t.ch)
+		t.advance()
+	}
+
 	for t.ch != 0 && (unicode.IsLetter(t.ch) || unicode.IsDigit(t.ch) || t.ch == '_' || t.ch == '.') {
 		result.WriteRune(t.ch)
 		t.advance()
@@ -348,7 +354,8 @@ func (t *Tokenizer) tokenizeSpecialChar(pos int) *Token {
 
 // tokenizeIdentifierOrKeyword tokenizes identifiers and keywords
 func (t *Tokenizer) tokenizeIdentifierOrKeyword(pos int) *Token {
-	if !unicode.IsLetter(t.ch) && t.ch != '_' {
+	// Allow identifiers starting with letters or $ (for special properties like $count)
+	if !unicode.IsLetter(t.ch) && t.ch != '$' {
 		return nil
 	}
 
