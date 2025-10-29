@@ -198,6 +198,9 @@ Parameters: []odata.ParameterDefinition{
     {Name: "price", Type: reflect.TypeOf(float64(0)), Required: true},     // float64
     {Name: "active", Type: reflect.TypeOf(false), Required: true},         // bool
     {Name: "filter", Type: reflect.TypeOf(""), Required: false},           // optional string
+    {Name: "addresses", Type: reflect.TypeOf([]Address{}), Required: false}, // slice of structs
+    {Name: "options", Type: reflect.TypeOf(map[string]interface{}{}), Required: false}, // map
+    {Name: "shipping", Type: reflect.TypeOf(&Address{}), Required: false}, // pointer to struct
 }
 ```
 
@@ -206,6 +209,93 @@ Supported types:
 - `int`, `int32`, `int64` - Integer values
 - `float32`, `float64` - Decimal values
 - `bool` - Boolean values (`true`/`false`)
+- Structs (and pointers to structs) - JSON objects map directly to Go structs
+- Slices and arrays - JSON arrays are converted to the Go slice/array element type
+- Maps - JSON objects are decoded into Go map keys/values
+
+### Composite Parameters
+
+Complex parameter payloads are decoded using reflection, so you can accept nested JSON objects and arrays without manual parsing.
+
+#### Actions
+
+When invoking an action, include JSON in the request body matching the target Go types:
+
+```http
+POST /Orders/Process
+Content-Type: application/json
+
+{
+  "order": {
+    "address": {
+      "street": "Main St",
+      "tags": ["primary", "billing"],
+      "metadata": {"zone": "north"}
+    },
+    "lines": [
+      {"sku": "A-100", "quantity": 2},
+      {"sku": "B-200", "quantity": 1}
+    ]
+  },
+  "notify": true
+}
+```
+
+```go
+type OrderLine struct {
+    SKU      string `json:"sku"`
+    Quantity int    `json:"quantity"`
+}
+
+type OrderInput struct {
+    Address Address     `json:"address"`
+    Lines   []OrderLine `json:"lines"`
+}
+
+service.RegisterAction(odata.ActionDefinition{
+    Name: "Process",
+    EntitySet: "Orders",
+    Parameters: []odata.ParameterDefinition{
+        {Name: "order", Type: reflect.TypeOf(OrderInput{}), Required: true},
+        {Name: "notify", Type: reflect.TypeOf(false), Required: false},
+    },
+    Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) error {
+        input := params["order"].(OrderInput)
+        // Use input.Address and input.Lines directly
+        return nil
+    },
+})
+```
+
+#### Functions
+
+Functions support JSON fragments for composite parameters supplied in the URL query string or function-call syntax:
+
+```go
+service.RegisterFunction(odata.FunctionDefinition{
+    Name: "EstimateShipping",
+    Parameters: []odata.ParameterDefinition{
+        {Name: "addresses", Type: reflect.TypeOf([]Address{}), Required: true},
+        {Name: "options", Type: reflect.TypeOf(map[string]interface{}{}), Required: false},
+    },
+    ReturnType: reflect.TypeOf(float64(0)),
+    Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) (interface{}, error) {
+        addresses := params["addresses"].([]Address)
+        options, _ := params["options"].(map[string]interface{})
+        return calculate(addresses, options), nil
+    },
+})
+```
+
+```bash
+# Query string JSON fragments (URL encoded)
+GET /EstimateShipping?addresses=%5B%7B%22street%22%3A%22Main%22%7D%5D&options=%7B%22priority%22%3Atrue%7D
+
+# Function call syntax with encoded JSON object
+GET /EstimateShipping(options=%7B%22priority%22%3Atrue%7D)
+```
+
+The framework instantiates zero values for each parameter definition, unmarshals JSON into the correct Go types, and validates assignability—including pointer targets—before invoking your handler.
 
 ## Best Practices
 
