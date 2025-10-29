@@ -39,21 +39,17 @@ func main() {
 		WriteQueryLogHeader()
 	}
 
-	// Start CPU profiling if requested
+	// Start CPU profiling if requested (declared early so signal handler can access it)
+	var cpuProfileFile *os.File
 	if *cpuProfile != "" {
 		f, err := os.Create(*cpuProfile)
 		if err != nil {
 			log.Fatal("Could not create CPU profile: ", err)
 		}
-		defer func() {
-			if err := f.Close(); err != nil {
-				log.Printf("Error closing CPU profile file: %v", err)
-			}
-		}()
+		cpuProfileFile = f
 		if err := pprof.StartCPUProfile(f); err != nil {
 			log.Fatal("Could not start CPU profile: ", err)
 		}
-		defer pprof.StopCPUProfile()
 		fmt.Printf("📊 CPU profiling enabled, writing to: %s\n", *cpuProfile)
 	}
 
@@ -65,9 +61,12 @@ func main() {
 		fmt.Println("\n⏸️  Received interrupt signal, shutting down...")
 
 		// Stop CPU profiling if enabled
-		if *cpuProfile != "" {
+		if cpuProfileFile != nil {
 			pprof.StopCPUProfile()
-			fmt.Println("CPU profile written to:", *cpuProfile)
+			if err := cpuProfileFile.Close(); err != nil {
+				log.Printf("Error closing CPU profile file: %v", err)
+			}
+			fmt.Println("✅ CPU profile written to:", *cpuProfile)
 		}
 
 		// Print SQL trace summary if enabled
@@ -220,6 +219,15 @@ func main() {
 
 	if err := http.ListenAndServe(":"+*port, mux); err != nil {
 		log.Fatal("Server failed:", err)
+	}
+
+	// Stop CPU profiling when server exits normally
+	if cpuProfileFile != nil {
+		pprof.StopCPUProfile()
+		if err := cpuProfileFile.Close(); err != nil {
+			log.Printf("Error closing CPU profile file: %v", err)
+		}
+		fmt.Println("✅ CPU profile written to:", *cpuProfile)
 	}
 
 	// Print SQL summary when server exits normally

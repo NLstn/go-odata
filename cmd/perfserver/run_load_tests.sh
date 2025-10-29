@@ -46,28 +46,62 @@ cleanup() {
         echo "Stopping performance server (PID: $SERVER_PID)..."
         # Send SIGINT (Ctrl+C) instead of SIGKILL to allow graceful shutdown
         kill -INT $SERVER_PID 2>/dev/null || true
-        # Wait a bit for graceful shutdown
-        sleep 3
-        # Force kill if still running
-        kill -9 $SERVER_PID 2>/dev/null || true
+        
+        # Wait longer for graceful shutdown (especially important for profiling)
+        # The server needs time to flush CPU profile and SQL trace data
+        echo "Waiting for server to flush profiling data..."
+        sleep 5
+        
+        # Check if process is still running
+        if kill -0 $SERVER_PID 2>/dev/null; then
+            echo "Server still running, waiting a bit more..."
+            sleep 3
+        fi
+        
+        # Force kill if still running after 8 seconds total
+        if kill -0 $SERVER_PID 2>/dev/null; then
+            echo "Force killing server..."
+            kill -9 $SERVER_PID 2>/dev/null || true
+        fi
+        
         wait $SERVER_PID 2>/dev/null || true
         echo "Server stopped."
         
+        # Give filesystem a moment to sync
+        sleep 1
+        
         # Copy profiling/tracing files to output directory if they exist
-        if [ $ENABLE_CPU_PROFILE -eq 1 ] && [ -f "/tmp/perfserver-cpu.prof" ]; then
-            echo "Copying CPU profile to output directory..."
-            cp /tmp/perfserver-cpu.prof "$OUTPUT_DIR/cpu.prof"
-            echo -e "${GREEN}✓ CPU profile saved to: $OUTPUT_DIR/cpu.prof${NC}"
-            echo ""
-            echo "Analyze with:"
-            echo "  go tool pprof $OUTPUT_DIR/cpu.prof"
-            echo "  go tool pprof -http=:8080 $OUTPUT_DIR/cpu.prof"
+        if [ $ENABLE_CPU_PROFILE -eq 1 ]; then
+            if [ -f "/tmp/perfserver-cpu.prof" ]; then
+                # Check if file has content
+                if [ -s "/tmp/perfserver-cpu.prof" ]; then
+                    echo "Copying CPU profile to output directory..."
+                    cp /tmp/perfserver-cpu.prof "$OUTPUT_DIR/cpu.prof"
+                    echo -e "${GREEN}✓ CPU profile saved to: $OUTPUT_DIR/cpu.prof${NC}"
+                    echo ""
+                    echo "Analyze with:"
+                    echo "  go tool pprof $OUTPUT_DIR/cpu.prof"
+                    echo "  go tool pprof -http=:8080 $OUTPUT_DIR/cpu.prof"
+                else
+                    echo -e "${YELLOW}⚠ CPU profile file is empty. Server may have been killed too quickly.${NC}"
+                fi
+            else
+                echo -e "${YELLOW}⚠ CPU profile file not found at /tmp/perfserver-cpu.prof${NC}"
+            fi
         fi
         
-        if [ $ENABLE_SQL_TRACE -eq 1 ] && [ -f "/tmp/perfserver-sql-trace.txt" ]; then
-            echo "Copying SQL trace to output directory..."
-            cp /tmp/perfserver-sql-trace.txt "$OUTPUT_DIR/sql-trace.txt"
-            echo -e "${GREEN}✓ SQL trace saved to: $OUTPUT_DIR/sql-trace.txt${NC}"
+        if [ $ENABLE_SQL_TRACE -eq 1 ]; then
+            if [ -f "/tmp/perfserver-sql-trace.txt" ]; then
+                if [ -s "/tmp/perfserver-sql-trace.txt" ]; then
+                    echo "Copying SQL trace to output directory..."
+                    cp /tmp/perfserver-sql-trace.txt "$OUTPUT_DIR/sql-trace.txt"
+                    echo -e "${GREEN}✓ SQL trace saved to: $OUTPUT_DIR/sql-trace.txt${NC}"
+                else
+                    echo -e "${YELLOW}⚠ SQL trace file is empty.${NC}"
+                fi
+            else
+                echo -e "${YELLOW}⚠ SQL trace file not found at /tmp/perfserver-sql-trace.txt${NC}"
+            fi
         fi
     fi
     
