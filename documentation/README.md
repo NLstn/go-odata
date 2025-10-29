@@ -7,6 +7,7 @@ Welcome to the go-odata documentation! This directory contains detailed guides f
 ### Getting Started
 
 - **[Entity Definition](entities.md)** - Learn how to define entities with Go structs, including tags, relationships, and metadata
+- **[End-to-End Tutorial](tutorial.md)** - Build a Products/Orders/Customers sample backend with migrations, seeding, and custom logic
 - **[Server Configuration](server-configuration.md)** - Set up your OData service, configure middleware, and integrate with your application
 
 ### Advanced Usage

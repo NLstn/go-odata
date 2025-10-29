@@ -88,6 +88,7 @@ This creates a fully functional OData v4 service accessible at `http://localhost
 ## Documentation
 
 - **[Entity Definition](documentation/entities.md)** - Define entities with rich metadata and relationships
+- **[End-to-End Tutorial](documentation/tutorial.md)** - Build a multi-entity Products/Orders/Customers backend with hooks and custom operations
 - **[Server Configuration](documentation/server-configuration.md)** - Configure the service, add middleware, and integrate with your application
 - **[Actions and Functions](documentation/actions-and-functions.md)** - Implement custom OData operations
 - **[Geospatial Functions](documentation/geospatial.md)** - Query geographic data with spatial functions
