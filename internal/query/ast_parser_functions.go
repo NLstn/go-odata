@@ -254,13 +254,20 @@ func convertConcatFunction(n *FunctionCallExpr, entityMetadata *metadata.EntityM
 		return nil, fmt.Errorf("second argument of concat must be a literal, property, or function")
 	}
 
+	// Store both arguments in Value as a slice for special handling
+	var value interface{}
+	if firstArg != nil {
+		// First argument is a literal or function, store both arguments
+		value = []interface{}{firstArg, secondArg}
+	} else {
+		// First argument is a property (stored in Property field), store only second argument
+		value = secondArg
+	}
+
 	return &FilterExpression{
 		Property: property,
 		Operator: OpConcat,
-		Value: map[string]interface{}{
-			"first":  firstArg,
-			"second": secondArg,
-		},
+		Value:    value,
 	}, nil
 }
 
