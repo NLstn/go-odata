@@ -23,11 +23,9 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Validate OData version before processing any request
 	if !handlers.ValidateODataVersion(r) {
-		if err := response.WriteError(w, http.StatusNotAcceptable,
+		handlers.WriteError(w, http.StatusNotAcceptable,
 			handlers.ErrMsgVersionNotSupported,
-			handlers.ErrDetailVersionNotSupported); err != nil {
-			fmt.Printf("Error writing error response: %v\n", err)
-		}
+			handlers.ErrDetailVersionNotSupported)
 		return
 	}
 
@@ -81,18 +79,14 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		if s.isActionOrFunction(pathWithoutParams) {
 			// Actions/functions don't support these methods
-			if writeErr := response.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
-				fmt.Sprintf("Method %s is not allowed for actions or functions", r.Method)); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
-			}
+			handlers.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
+				fmt.Sprintf("Method %s is not allowed for actions or functions", r.Method))
 			return
 		}
 		// Also check without parentheses
 		if s.isActionOrFunction(path) {
-			if writeErr := response.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
-				fmt.Sprintf("Method %s is not allowed for actions or functions", r.Method)); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
-			}
+			handlers.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
+				fmt.Sprintf("Method %s is not allowed for actions or functions", r.Method))
 			return
 		}
 	}
@@ -100,19 +94,15 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Parse the OData URL to extract entity set, key, and navigation property
 	components, err := response.ParseODataURLComponents(path)
 	if err != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid URL", err.Error()); writeErr != nil {
-			fmt.Printf("Error writing error response: %v\n", writeErr)
-		}
+		handlers.WriteError(w, http.StatusBadRequest, "Invalid URL", err.Error())
 		return
 	}
 
 	// Find the handler for the entity set
 	handler, exists := s.handlers[components.EntitySet]
 	if !exists {
-		if writeErr := response.WriteError(w, http.StatusNotFound, "Entity set not found",
-			fmt.Sprintf("Entity set '%s' is not registered", components.EntitySet)); writeErr != nil {
-			fmt.Printf("Error writing error response: %v\n", writeErr)
-		}
+		handlers.WriteError(w, http.StatusNotFound, "Entity set not found",
+			fmt.Sprintf("Entity set '%s' is not registered", components.EntitySet))
 		return
 	}
 
@@ -121,10 +111,8 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// Extract the type name from the type cast (Namespace.TypeName -> TypeName)
 		parts := strings.Split(components.TypeCast, ".")
 		if len(parts) < 2 {
-			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid type cast",
-				fmt.Sprintf("Type cast '%s' is not in the correct format (Namespace.TypeName)", components.TypeCast)); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
-			}
+			handlers.WriteError(w, http.StatusBadRequest, "Invalid type cast",
+				fmt.Sprintf("Type cast '%s' is not in the correct format (Namespace.TypeName)", components.TypeCast))
 			return
 		}
 
@@ -157,10 +145,8 @@ func (s *Service) routeRequest(w http.ResponseWriter, r *http.Request, handler *
 			handler.HandleCount(w, r)
 		} else {
 			// Invalid: count on entity without navigation property (Products(1)/$count)
-			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid request",
-				"$count is not supported on individual entities. Use $count on collections or navigation properties."); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
-			}
+			handlers.WriteError(w, http.StatusBadRequest, "Invalid request",
+				"$count is not supported on individual entities. Use $count on collections or navigation properties.")
 		}
 	} else if components.IsRef {
 		// $ref request: Products/$ref or Products(1)/$ref
@@ -189,10 +175,8 @@ func (s *Service) routeRequest(w http.ResponseWriter, r *http.Request, handler *
 		// Check for invalid operations on collections
 		if components.IsValue {
 			// $value is not supported on collections
-			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid request",
-				"$value is not supported on entity collections. Use $value on individual properties: EntitySet(key)/PropertyName/$value"); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
-			}
+			handlers.WriteError(w, http.StatusBadRequest, "Invalid request",
+				"$value is not supported on entity collections. Use $value on individual properties: EntitySet(key)/PropertyName/$value")
 			return
 		}
 		// Check if this is a bound action/function on the collection
@@ -209,10 +193,8 @@ func (s *Service) routeRequest(w http.ResponseWriter, r *http.Request, handler *
 		}
 		if components.NavigationProperty != "" {
 			// Navigation property or action/function not found on collection
-			if writeErr := response.WriteError(w, http.StatusNotFound, "Property or operation not found",
-				fmt.Sprintf("'%s' is not a valid property, action, or function for %s", components.NavigationProperty, components.EntitySet)); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
-			}
+			handlers.WriteError(w, http.StatusNotFound, "Property or operation not found",
+				fmt.Sprintf("'%s' is not a valid property, action, or function for %s", components.NavigationProperty, components.EntitySet))
 		} else {
 			// Collection request
 			handler.HandleCollection(w, r)
@@ -260,10 +242,8 @@ func (s *Service) handlePropertyRequest(w http.ResponseWriter, r *http.Request, 
 	if handler.IsNavigationProperty(components.NavigationProperty) {
 		if components.IsValue {
 			// /$value is not supported on navigation properties
-			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid request",
-				"$value is not supported on navigation properties"); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
-			}
+			handlers.WriteError(w, http.StatusBadRequest, "Invalid request",
+				"$value is not supported on navigation properties")
 			return
 		}
 		handler.HandleNavigationProperty(w, r, keyString, components.NavigationProperty, components.IsRef)
@@ -280,29 +260,23 @@ func (s *Service) handlePropertyRequest(w http.ResponseWriter, r *http.Request, 
 	} else if handler.IsStructuralProperty(components.NavigationProperty) {
 		if components.IsRef {
 			// /$ref is not supported on structural properties
-			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid request",
-				"$ref is not supported on structural properties"); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
-			}
+			handlers.WriteError(w, http.StatusBadRequest, "Invalid request",
+				"$ref is not supported on structural properties")
 			return
 		}
 		handler.HandleStructuralProperty(w, r, keyString, components.NavigationProperty, components.IsValue)
 	} else if handler.IsComplexTypeProperty(components.NavigationProperty) {
 		if components.IsRef {
-			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid request",
-				"$ref is not supported on complex properties"); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
-			}
+			handlers.WriteError(w, http.StatusBadRequest, "Invalid request",
+				"$ref is not supported on complex properties")
 			return
 		}
 
 		handler.HandleComplexTypeProperty(w, r, keyString, propertySegments, components.IsValue)
 	} else {
 		// Property not found
-		if writeErr := response.WriteError(w, http.StatusNotFound, "Property not found",
-			fmt.Sprintf("'%s' is not a valid property for %s", components.NavigationProperty, components.EntitySet)); writeErr != nil {
-			fmt.Printf("Error writing error response: %v\n", writeErr)
-		}
+		handlers.WriteError(w, http.StatusNotFound, "Property not found",
+			fmt.Sprintf("'%s' is not a valid property for %s", components.NavigationProperty, components.EntitySet))
 	}
 }
 
@@ -359,19 +333,15 @@ func (s *Service) handleActionOrFunction(w http.ResponseWriter, r *http.Request,
 		// Handle action
 		actionCandidates, exists := s.actions[name]
 		if !exists {
-			if writeErr := response.WriteError(w, http.StatusNotFound, "Action not found",
-				fmt.Sprintf("Action '%s' is not registered", name)); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
-			}
+			handlers.WriteError(w, http.StatusNotFound, "Action not found",
+				fmt.Sprintf("Action '%s' is not registered", name))
 			return
 		}
 
 		// Resolve the appropriate overload
 		actionDef, params, err := actions.ResolveActionOverload(r, actionCandidates, isBound, entitySet)
 		if err != nil {
-			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid parameters", err.Error()); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
-			}
+			handlers.WriteError(w, http.StatusBadRequest, "Invalid parameters", err.Error())
 			return
 		}
 
@@ -386,16 +356,12 @@ func (s *Service) handleActionOrFunction(w http.ResponseWriter, r *http.Request,
 				if err != nil {
 					// Check if it's a "not found" error
 					if handlers.IsNotFoundError(err) {
-						if writeErr := response.WriteError(w, http.StatusNotFound, "Entity not found",
-							fmt.Sprintf("Entity with key '%s' not found", key)); writeErr != nil {
-							fmt.Printf("Error writing error response: %v\n", writeErr)
-						}
+						handlers.WriteError(w, http.StatusNotFound, "Entity not found",
+							fmt.Sprintf("Entity with key '%s' not found", key))
 						return
 					}
 					// Other database errors
-					if writeErr := response.WriteError(w, http.StatusInternalServerError, "Database error", err.Error()); writeErr != nil {
-						fmt.Printf("Error writing error response: %v\n", writeErr)
-					}
+					handlers.WriteError(w, http.StatusInternalServerError, "Database error", err.Error())
 					return
 				}
 				ctx = entity
@@ -404,9 +370,7 @@ func (s *Service) handleActionOrFunction(w http.ResponseWriter, r *http.Request,
 
 		// Invoke the action handler
 		if err := actionDef.Handler(w, r, ctx, params); err != nil {
-			if writeErr := response.WriteError(w, http.StatusInternalServerError, "Action failed", err.Error()); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
-			}
+			handlers.WriteError(w, http.StatusInternalServerError, "Action failed", err.Error())
 			return
 		}
 
@@ -414,19 +378,15 @@ func (s *Service) handleActionOrFunction(w http.ResponseWriter, r *http.Request,
 		// Handle function
 		functionCandidates, exists := s.functions[name]
 		if !exists {
-			if writeErr := response.WriteError(w, http.StatusNotFound, "Function not found",
-				fmt.Sprintf("Function '%s' is not registered", name)); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
-			}
+			handlers.WriteError(w, http.StatusNotFound, "Function not found",
+				fmt.Sprintf("Function '%s' is not registered", name))
 			return
 		}
 
 		// Resolve the appropriate overload
 		functionDef, params, err := actions.ResolveFunctionOverload(r, functionCandidates, isBound, entitySet)
 		if err != nil {
-			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid parameters", err.Error()); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
-			}
+			handlers.WriteError(w, http.StatusBadRequest, "Invalid parameters", err.Error())
 			return
 		}
 
@@ -441,16 +401,12 @@ func (s *Service) handleActionOrFunction(w http.ResponseWriter, r *http.Request,
 				if err != nil {
 					// Check if it's a "not found" error
 					if handlers.IsNotFoundError(err) {
-						if writeErr := response.WriteError(w, http.StatusNotFound, "Entity not found",
-							fmt.Sprintf("Entity with key '%s' not found", key)); writeErr != nil {
-							fmt.Printf("Error writing error response: %v\n", writeErr)
-						}
+						handlers.WriteError(w, http.StatusNotFound, "Entity not found",
+							fmt.Sprintf("Entity with key '%s' not found", key))
 						return
 					}
 					// Other database errors
-					if writeErr := response.WriteError(w, http.StatusInternalServerError, "Database error", err.Error()); writeErr != nil {
-						fmt.Printf("Error writing error response: %v\n", writeErr)
-					}
+					handlers.WriteError(w, http.StatusInternalServerError, "Database error", err.Error())
 					return
 				}
 				ctx = entity
@@ -460,17 +416,13 @@ func (s *Service) handleActionOrFunction(w http.ResponseWriter, r *http.Request,
 		// Invoke the function handler
 		result, err := functionDef.Handler(w, r, ctx, params)
 		if err != nil {
-			if writeErr := response.WriteError(w, http.StatusInternalServerError, "Function failed", err.Error()); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
-			}
+			handlers.WriteError(w, http.StatusInternalServerError, "Function failed", err.Error())
 			return
 		}
 
 		if !response.IsAcceptableFormat(r) {
-			if writeErr := response.WriteError(w, http.StatusNotAcceptable, "Not Acceptable",
-				"The requested format is not supported. Only application/json is supported for data responses."); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
-			}
+			handlers.WriteError(w, http.StatusNotAcceptable, "Not Acceptable",
+				"The requested format is not supported. Only application/json is supported for data responses.")
 			return
 		}
 
@@ -509,10 +461,8 @@ func (s *Service) handleActionOrFunction(w http.ResponseWriter, r *http.Request,
 		}
 
 	default:
-		if writeErr := response.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
-			fmt.Sprintf("Method %s is not allowed for actions or functions", r.Method)); writeErr != nil {
-			fmt.Printf("Error writing error response: %v\n", writeErr)
-		}
+		handlers.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
+			fmt.Sprintf("Method %s is not allowed for actions or functions", r.Method))
 	}
 }
 
