@@ -36,8 +36,7 @@ func (s *Service) tryHandleAsync(w http.ResponseWriter, r *http.Request) bool {
 	}
 
 	if s.asyncMonitorPrefix != "" && strings.HasPrefix(r.URL.Path, s.asyncMonitorPrefix) {
-		s.asyncManager.ServeMonitor(w, r)
-		return true
+		return false
 	}
 
 	pref := preference.ParsePrefer(r)

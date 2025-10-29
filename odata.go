@@ -91,6 +91,7 @@ func NewService(db *gorm.DB) *Service {
 		s.functions,
 		s.handleActionOrFunction,
 	)
+	s.router.SetAsyncMonitor(s.asyncMonitorPrefix, s.asyncManager)
 	return s
 }
 
@@ -127,6 +128,10 @@ func (s *Service) EnableAsyncProcessing(cfg AsyncConfig) {
 	s.asyncMonitorPrefix = normalized.MonitorPathPrefix
 	cfgCopy := normalized
 	s.asyncConfig = &cfgCopy
+
+	if s.router != nil {
+		s.router.SetAsyncMonitor(s.asyncMonitorPrefix, s.asyncManager)
+	}
 
 	if normalized.MaxQueueSize > 0 {
 		s.asyncQueue = make(chan struct{}, normalized.MaxQueueSize)

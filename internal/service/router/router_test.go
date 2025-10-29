@@ -1,11 +1,14 @@
 package router
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/nlstn/go-odata/internal/actions"
+	"github.com/nlstn/go-odata/internal/async"
 )
 
 type stubEntityHandler struct {
@@ -126,6 +129,133 @@ func newTestRouter(handler EntityHandler, actionDefs map[string][]*actions.Actio
 		functionDefs,
 		invoker,
 	)
+}
+
+func TestRouter_AsyncMonitorGETFlow(t *testing.T) {
+	mgr := async.NewManager(0)
+	t.Cleanup(mgr.Close)
+
+	router := newTestRouter(nil, nil, nil, func(http.ResponseWriter, *http.Request, string, string, bool, string) {})
+	router.SetAsyncMonitor("/$async/jobs", mgr)
+
+	release := make(chan struct{})
+	handler := func(ctx context.Context) (*async.StoredResponse, error) {
+		<-release
+		return &async.StoredResponse{
+			StatusCode: http.StatusCreated,
+			Header: http.Header{
+				"Content-Type":       []string{"application/json"},
+				"Preference-Applied": []string{"return=representation"},
+			},
+			Body: []byte(`{"status":"ok"}`),
+		}, nil
+	}
+
+	job, err := mgr.StartJob(context.Background(), handler)
+	if err != nil {
+		t.Fatalf("failed to start job: %v", err)
+	}
+	job.SetMonitorURL("/$async/jobs/" + job.ID)
+	job.SetRetryAfter(2 * time.Second)
+
+	pendingReq := httptest.NewRequest(http.MethodGet, job.MonitorURL(), nil)
+	pendingRec := httptest.NewRecorder()
+	router.ServeHTTP(pendingRec, pendingReq)
+
+	if pendingRec.Code != http.StatusAccepted {
+		t.Fatalf("expected 202 for pending job, got %d", pendingRec.Code)
+	}
+	if got := pendingRec.Header().Get("Preference-Applied"); got != "respond-async" {
+		t.Fatalf("expected pending monitor to apply respond-async, got %q", got)
+	}
+	if got := pendingRec.Header().Get("Retry-After"); got != "2" {
+		t.Fatalf("expected Retry-After header of 2, got %q", got)
+	}
+	if body := pendingRec.Body.Len(); body != 0 {
+		t.Fatalf("expected no body for 202 monitor response, got %d bytes", body)
+	}
+
+	close(release)
+	job.Wait()
+
+	completeReq := httptest.NewRequest(http.MethodGet, job.MonitorURL(), nil)
+	completeRec := httptest.NewRecorder()
+	router.ServeHTTP(completeRec, completeReq)
+
+	if completeRec.Code != http.StatusCreated {
+		t.Fatalf("expected final status code 201, got %d", completeRec.Code)
+	}
+	if got := completeRec.Header().Get("Preference-Applied"); got != "return=representation" {
+		t.Fatalf("expected Preference-Applied header from stored response, got %q", got)
+	}
+	if got := completeRec.Header().Get("Retry-After"); got != "" {
+		t.Fatalf("expected Retry-After to be cleared after completion, got %q", got)
+	}
+	if body := completeRec.Body.String(); body != `{"status":"ok"}` {
+		t.Fatalf("unexpected response body %q", body)
+	}
+}
+
+func TestRouter_AsyncMonitorDELETE(t *testing.T) {
+	mgr := async.NewManager(0)
+	t.Cleanup(mgr.Close)
+
+	router := newTestRouter(nil, nil, nil, func(http.ResponseWriter, *http.Request, string, string, bool, string) {})
+	router.SetAsyncMonitor("/$async/jobs", mgr)
+
+	handler := func(ctx context.Context) (*async.StoredResponse, error) {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+
+	job, err := mgr.StartJob(context.Background(), handler)
+	if err != nil {
+		t.Fatalf("failed to start job: %v", err)
+	}
+	job.SetMonitorURL("/$async/jobs/" + job.ID)
+
+	deleteReq := httptest.NewRequest(http.MethodDelete, job.MonitorURL(), nil)
+	deleteRec := httptest.NewRecorder()
+	router.ServeHTTP(deleteRec, deleteReq)
+
+	if deleteRec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204 from delete, got %d", deleteRec.Code)
+	}
+	if deleteRec.Body.Len() != 0 {
+		t.Fatalf("expected no body for DELETE monitor response, got %q", deleteRec.Body.String())
+	}
+
+	job.Wait()
+}
+
+func TestRouter_AsyncMonitorInvalidPaths(t *testing.T) {
+	mgr := async.NewManager(0)
+	t.Cleanup(mgr.Close)
+
+	router := newTestRouter(nil, nil, nil, func(http.ResponseWriter, *http.Request, string, string, bool, string) {})
+	router.SetAsyncMonitor("/$async/jobs", mgr)
+
+	cases := []struct {
+		name       string
+		target     string
+		wantStatus int
+	}{
+		{name: "missing id", target: "/$async/jobs/", wantStatus: http.StatusNotFound},
+		{name: "nested path", target: "/$async/jobs/foo/bar", wantStatus: http.StatusNotFound},
+		{name: "invalid chars", target: "/$async/jobs/has*star", wantStatus: http.StatusBadRequest},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tc.target, nil)
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+
+			if rec.Code != tc.wantStatus {
+				t.Fatalf("expected status %d, got %d", tc.wantStatus, rec.Code)
+			}
+		})
+	}
 }
 
 func TestRouter_ServiceDocument(t *testing.T) {
