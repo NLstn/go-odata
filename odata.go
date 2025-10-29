@@ -32,10 +32,10 @@ type Service struct {
 	serviceDocumentHandler *handlers.ServiceDocumentHandler
 	// batchHandler handles batch requests
 	batchHandler *handlers.BatchHandler
-	// actions holds registered actions keyed by action name
-	actions map[string]*actions.ActionDefinition
-	// functions holds registered functions keyed by function name
-	functions map[string]*actions.FunctionDefinition
+	// actions holds registered actions keyed by action name (supports overloads)
+	actions map[string][]*actions.ActionDefinition
+	// functions holds registered functions keyed by function name (supports overloads)
+	functions map[string][]*actions.FunctionDefinition
 	// namespace used for metadata generation
 	namespace string
 	// deltaTracker tracks entity changes for change tracking requests
@@ -52,8 +52,8 @@ func NewService(db *gorm.DB) *Service {
 		handlers:               handlersMap,
 		metadataHandler:        handlers.NewMetadataHandler(entities),
 		serviceDocumentHandler: handlers.NewServiceDocumentHandler(entities),
-		actions:                make(map[string]*actions.ActionDefinition),
-		functions:              make(map[string]*actions.FunctionDefinition),
+		actions:                make(map[string][]*actions.ActionDefinition),
+		functions:              make(map[string][]*actions.FunctionDefinition),
 		namespace:              DefaultNamespace,
 		deltaTracker:           trackchanges.NewTracker(),
 	}
@@ -137,8 +137,18 @@ func (s *Service) RegisterAction(action actions.ActionDefinition) error {
 		}
 	}
 
-	s.actions[action.Name] = &action
-	fmt.Printf("Registered action: %s (Bound: %v, EntitySet: %s)\n", action.Name, action.IsBound, action.EntitySet)
+	// Check for duplicate overloads (same name, binding, entity set, and parameters)
+	existingActions := s.actions[action.Name]
+	for _, existing := range existingActions {
+		if actions.ActionSignaturesMatch(existing, &action) {
+			return fmt.Errorf("action '%s' with this signature is already registered", action.Name)
+		}
+	}
+
+	// Add to the list of overloads
+	s.actions[action.Name] = append(s.actions[action.Name], &action)
+	fmt.Printf("Registered action: %s (Bound: %v, EntitySet: %s, Parameters: %d)\n", 
+		action.Name, action.IsBound, action.EntitySet, len(action.Parameters))
 	return nil
 }
 
@@ -163,8 +173,18 @@ func (s *Service) RegisterFunction(function actions.FunctionDefinition) error {
 		}
 	}
 
-	s.functions[function.Name] = &function
-	fmt.Printf("Registered function: %s (Bound: %v, EntitySet: %s)\n", function.Name, function.IsBound, function.EntitySet)
+	// Check for duplicate overloads (same name, binding, entity set, and parameters)
+	existingFunctions := s.functions[function.Name]
+	for _, existing := range existingFunctions {
+		if actions.FunctionSignaturesMatch(existing, &function) {
+			return fmt.Errorf("function '%s' with this signature is already registered", function.Name)
+		}
+	}
+
+	// Add to the list of overloads
+	s.functions[function.Name] = append(s.functions[function.Name], &function)
+	fmt.Printf("Registered function: %s (Bound: %v, EntitySet: %s, Parameters: %d)\n", 
+		function.Name, function.IsBound, function.EntitySet, len(function.Parameters))
 	return nil
 }
 

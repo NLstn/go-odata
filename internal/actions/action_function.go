@@ -311,3 +311,235 @@ func validateParameterType(paramName string, value interface{}, expectedType ref
 
 	return nil
 }
+
+// ActionSignaturesMatch checks if two action definitions have the same signature
+// Two actions have the same signature if they have the same name, binding, entity set, and parameters
+func ActionSignaturesMatch(a1, a2 *ActionDefinition) bool {
+	if a1.Name != a2.Name {
+		return false
+	}
+	if a1.IsBound != a2.IsBound {
+		return false
+	}
+	if a1.EntitySet != a2.EntitySet {
+		return false
+	}
+	return parametersMatch(a1.Parameters, a2.Parameters)
+}
+
+// FunctionSignaturesMatch checks if two function definitions have the same signature
+// Two functions have the same signature if they have the same name, binding, entity set, and parameters
+func FunctionSignaturesMatch(f1, f2 *FunctionDefinition) bool {
+	if f1.Name != f2.Name {
+		return false
+	}
+	if f1.IsBound != f2.IsBound {
+		return false
+	}
+	if f1.EntitySet != f2.EntitySet {
+		return false
+	}
+	return parametersMatch(f1.Parameters, f2.Parameters)
+}
+
+// parametersMatch checks if two parameter lists are identical
+func parametersMatch(p1, p2 []ParameterDefinition) bool {
+	if len(p1) != len(p2) {
+		return false
+	}
+	
+	// Create maps for comparison (order shouldn't matter for signature matching)
+	params1 := make(map[string]reflect.Type)
+	for _, p := range p1 {
+		params1[p.Name] = p.Type
+	}
+	
+	for _, p := range p2 {
+		if t, exists := params1[p.Name]; !exists || t != p.Type {
+			return false
+		}
+	}
+	
+	return true
+}
+
+// ResolveActionOverload resolves the appropriate action overload based on the request parameters
+func ResolveActionOverload(r *http.Request, candidates []*ActionDefinition, isBound bool, entitySet string) (*ActionDefinition, map[string]interface{}, error) {
+	if len(candidates) == 0 {
+		return nil, nil, fmt.Errorf("no action candidates found")
+	}
+
+	// Filter by binding and entity set first
+	var filtered []*ActionDefinition
+	for _, candidate := range candidates {
+		if candidate.IsBound == isBound {
+			if !isBound || candidate.EntitySet == entitySet {
+				filtered = append(filtered, candidate)
+			}
+		}
+	}
+
+	if len(filtered) == 0 {
+		return nil, nil, fmt.Errorf("no matching action found for binding context")
+	}
+
+	// If only one candidate after filtering, try to parse with its parameters
+	if len(filtered) == 1 {
+		params, err := ParseActionParameters(r, filtered[0].Parameters)
+		if err != nil {
+			return nil, nil, err
+		}
+		return filtered[0], params, nil
+	}
+
+	// Multiple candidates - try to find the best match based on provided parameters
+	// Parse the request body to get parameter names
+	var bodyParams map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&bodyParams); err != nil {
+		return nil, nil, fmt.Errorf("failed to parse request body: %w", err)
+	}
+
+	// Try to find an exact match based on parameter names
+	for _, candidate := range filtered {
+		if parameterNamesMatch(candidate.Parameters, bodyParams) {
+			// Validate and convert parameters
+			params := make(map[string]interface{})
+			allMatch := true
+			for _, paramDef := range candidate.Parameters {
+				value, exists := bodyParams[paramDef.Name]
+				if !exists {
+					if paramDef.Required {
+						allMatch = false
+						break
+					}
+					continue
+				}
+
+				// Validate parameter type
+				if err := validateParameterType(paramDef.Name, value, paramDef.Type); err != nil {
+					allMatch = false
+					break
+				}
+
+				params[paramDef.Name] = value
+			}
+
+			if allMatch {
+				return candidate, params, nil
+			}
+		}
+	}
+
+	return nil, nil, fmt.Errorf("no matching action overload found for provided parameters")
+}
+
+// ResolveFunctionOverload resolves the appropriate function overload based on the request parameters
+func ResolveFunctionOverload(r *http.Request, candidates []*FunctionDefinition, isBound bool, entitySet string) (*FunctionDefinition, map[string]interface{}, error) {
+	if len(candidates) == 0 {
+		return nil, nil, fmt.Errorf("no function candidates found")
+	}
+
+	// Filter by binding and entity set first
+	var filtered []*FunctionDefinition
+	for _, candidate := range candidates {
+		if candidate.IsBound == isBound {
+			if !isBound || candidate.EntitySet == entitySet {
+				filtered = append(filtered, candidate)
+			}
+		}
+	}
+
+	if len(filtered) == 0 {
+		return nil, nil, fmt.Errorf("no matching function found for binding context")
+	}
+
+	// Parse parameters from the URL to get parameter names and values
+	pathParams, err := parseFunctionPathParameters(r.URL.Path)
+	if err != nil {
+		return nil, nil, err
+	}
+	query := r.URL.Query()
+
+	// Combine path and query parameters to get all provided parameter names
+	providedParams := make(map[string]string)
+	for k, v := range pathParams {
+		providedParams[k] = v
+	}
+	for k := range query {
+		if _, exists := providedParams[k]; !exists {
+			providedParams[k] = query.Get(k)
+		}
+	}
+
+	// If only one candidate after filtering and parameter count matches, use it
+	if len(filtered) == 1 {
+		params, err := ParseFunctionParameters(r, filtered[0].Parameters)
+		if err != nil {
+			return nil, nil, err
+		}
+		return filtered[0], params, nil
+	}
+
+	// Multiple candidates - try to find the best match based on provided parameters
+	for _, candidate := range filtered {
+		if functionParameterNamesMatch(candidate.Parameters, providedParams) {
+			params, err := ParseFunctionParameters(r, candidate.Parameters)
+			if err != nil {
+				continue // Try next candidate if this one fails
+			}
+			return candidate, params, nil
+		}
+	}
+
+	return nil, nil, fmt.Errorf("no matching function overload found for provided parameters")
+}
+
+// parameterNamesMatch checks if the provided parameters match the expected parameter definitions
+func parameterNamesMatch(paramDefs []ParameterDefinition, providedParams map[string]interface{}) bool {
+	// Check that all required parameters are provided
+	for _, paramDef := range paramDefs {
+		if paramDef.Required {
+			if _, exists := providedParams[paramDef.Name]; !exists {
+				return false
+			}
+		}
+	}
+
+	// Check that no extra parameters are provided
+	definedParams := make(map[string]bool)
+	for _, paramDef := range paramDefs {
+		definedParams[paramDef.Name] = true
+	}
+	for paramName := range providedParams {
+		if !definedParams[paramName] {
+			return false
+		}
+	}
+
+	return true
+}
+
+// functionParameterNamesMatch checks if the provided parameters match the expected parameter definitions for functions
+func functionParameterNamesMatch(paramDefs []ParameterDefinition, providedParams map[string]string) bool {
+	// Check that all required parameters are provided
+	for _, paramDef := range paramDefs {
+		if paramDef.Required {
+			if _, exists := providedParams[paramDef.Name]; !exists {
+				return false
+			}
+		}
+	}
+
+	// Check that no extra parameters are provided
+	definedParams := make(map[string]bool)
+	for _, paramDef := range paramDefs {
+		definedParams[paramDef.Name] = true
+	}
+	for paramName := range providedParams {
+		if !definedParams[paramName] {
+			return false
+		}
+	}
+
+	return true
+}
