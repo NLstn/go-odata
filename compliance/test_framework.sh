@@ -8,6 +8,7 @@
 TOTAL=0
 PASSED=0
 FAILED=0
+SKIPPED=0
 
 # Color codes
 RED='\033[0;31m'
@@ -157,6 +158,28 @@ run_test() {
         echo -e "${RED}✗ FAIL${NC}: $description"
         return 1
     fi
+}
+
+# Function to skip a test and track it as skipped
+# Usage: skip_test "Test description" "Reason for skipping"
+skip_test() {
+    local description="$1"
+    local reason="${2:-Feature not yet implemented}"
+    
+    # Automatically reseed before first test when running individual scripts
+    if [ $FIRST_TEST -eq 1 ]; then
+        FIRST_TEST=0
+        reseed_database
+        echo ""
+    fi
+    
+    TOTAL=$((TOTAL + 1))
+    SKIPPED=$((SKIPPED + 1))
+    echo ""
+    echo "Test $TOTAL: $description"
+    echo -e "${YELLOW}⊘ SKIP${NC}: $description"
+    echo "  Reason: $reason"
+    return 0
 }
 
 # Function to URL encode a string (spaces and special characters)
@@ -388,7 +411,7 @@ check_json_field() {
 print_summary() {
     echo ""
     echo "======================================"
-    echo "COMPLIANCE_TEST_RESULT:PASSED=$PASSED:FAILED=$FAILED:TOTAL=$TOTAL"
+    echo "COMPLIANCE_TEST_RESULT:PASSED=$PASSED:FAILED=$FAILED:SKIPPED=$SKIPPED:TOTAL=$TOTAL"
     echo "======================================"
     
     if [ $FAILED -eq 0 ]; then
