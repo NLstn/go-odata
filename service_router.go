@@ -217,7 +217,13 @@ func (s *Service) routeRequest(w http.ResponseWriter, r *http.Request, handler *
 	} else {
 		// Individual entity request
 		keyString := s.getKeyString(components)
-		handler.HandleEntity(w, r, keyString)
+
+		// Check if this is a media entity $value request (e.g., MediaItems(1)/$value)
+		if components.IsValue {
+			handler.HandleMediaEntityValue(w, r, keyString)
+		} else {
+			handler.HandleEntity(w, r, keyString)
+		}
 	}
 }
 
@@ -245,7 +251,7 @@ func (s *Service) handlePropertyRequest(w http.ResponseWriter, r *http.Request, 
 		propertySegments = []string{components.NavigationProperty}
 	}
 
-	// Try navigation property first, then structural property, then complex type
+	// Try navigation property first, then stream property, then structural property, then complex type
 	if handler.IsNavigationProperty(components.NavigationProperty) {
 		if components.IsValue {
 			// /$value is not supported on navigation properties
@@ -256,6 +262,16 @@ func (s *Service) handlePropertyRequest(w http.ResponseWriter, r *http.Request, 
 			return
 		}
 		handler.HandleNavigationProperty(w, r, keyString, components.NavigationProperty, components.IsRef)
+	} else if handler.IsStreamProperty(components.NavigationProperty) {
+		if components.IsRef {
+			// /$ref is not supported on stream properties
+			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid request",
+				"$ref is not supported on stream properties"); writeErr != nil {
+				fmt.Printf("Error writing error response: %v\n", writeErr)
+			}
+			return
+		}
+		handler.HandleStreamProperty(w, r, keyString, components.NavigationProperty, components.IsValue)
 	} else if handler.IsStructuralProperty(components.NavigationProperty) {
 		if components.IsRef {
 			// /$ref is not supported on structural properties
