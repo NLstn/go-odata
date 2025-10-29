@@ -89,6 +89,10 @@ func main() {
 		log.Fatal("Failed to register ProductDescription entity:", err)
 	}
 
+	if err := service.EnableChangeTracking("Products"); err != nil {
+		log.Fatal("Failed to enable change tracking for Products:", err)
+	}
+
 	// Register the CompanyInfo singleton
 	if err := service.RegisterSingleton(&entities.CompanyInfo{}, "Company"); err != nil {
 		log.Fatal("Failed to register Company singleton:", err)

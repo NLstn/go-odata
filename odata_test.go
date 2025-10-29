@@ -109,6 +109,52 @@ func TestServiceRegisterEntity(t *testing.T) {
 	}
 }
 
+func TestEnableChangeTracking(t *testing.T) {
+	db := setupTestDB(t)
+	service := NewService(db)
+
+	if err := service.RegisterEntity(Product{}); err != nil {
+		t.Fatalf("RegisterEntity() error = %v", err)
+	}
+
+	metadata := service.entities["Products"]
+	if metadata == nil {
+		t.Fatalf("expected metadata for Products to be registered")
+	}
+	if metadata.ChangeTrackingEnabled {
+		t.Fatalf("expected change tracking to be disabled by default")
+	}
+
+	if err := service.EnableChangeTracking("Products"); err != nil {
+		t.Fatalf("EnableChangeTracking returned error: %v", err)
+	}
+
+	if !metadata.ChangeTrackingEnabled {
+		t.Fatalf("expected change tracking to be enabled after calling EnableChangeTracking")
+	}
+
+	// Ensure idempotent
+	if err := service.EnableChangeTracking("Products"); err != nil {
+		t.Fatalf("EnableChangeTracking should be idempotent, got error: %v", err)
+	}
+
+	if err := service.EnableChangeTracking("Unknown"); err == nil {
+		t.Fatalf("expected error when enabling change tracking for unknown entity set")
+	}
+
+	type singletonEntity struct {
+		ID int `json:"id" odata:"key"`
+	}
+
+	if err := service.RegisterSingleton(&singletonEntity{}, "Singleton"); err != nil {
+		t.Fatalf("RegisterSingleton error: %v", err)
+	}
+
+	if err := service.EnableChangeTracking("Singleton"); err == nil {
+		t.Fatalf("expected error enabling change tracking for singleton entity")
+	}
+}
+
 func TestServiceRegisterMultipleEntities(t *testing.T) {
 	db := setupTestDB(t)
 	service := NewService(db)

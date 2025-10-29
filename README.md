@@ -74,6 +74,11 @@ func main() {
     if err := service.RegisterEntity(&Product{}); err != nil {
         log.Fatal(err)
     }
+
+    // Enable change tracking for Products if you need $deltatoken responses
+    if err := service.EnableChangeTracking("Products"); err != nil {
+        log.Fatal(err)
+    }
     
     // Create HTTP mux and register the OData service as a handler
     mux := http.NewServeMux()
@@ -124,6 +129,7 @@ All standard OData v4 query options are supported:
 - `$count` - Include total count
 - `$search` - Full-text search
 - `$apply` - Data aggregation
+- `$deltatoken` - Change tracking (enable per entity with `EnableChangeTracking`)
 
 **Additional Features:**
 - Property access: `GET /Products(1)/Name`

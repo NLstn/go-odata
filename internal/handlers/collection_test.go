@@ -108,9 +108,8 @@ func TestHandleCollectionAppliesPagination(t *testing.T) {
 	}
 }
 
-func TestHandleCollectionDeltaTokenWithoutTracker(t *testing.T) {
+func TestHandleCollectionDeltaTokenWithoutChangeTracking(t *testing.T) {
 	handler, db := setupTestHandler(t)
-	handler.SetDeltaTracker(nil)
 
 	if err := db.Create(&TestEntity{ID: 1, Name: "Entity"}).Error; err != nil {
 		t.Fatalf("failed to seed data: %v", err)

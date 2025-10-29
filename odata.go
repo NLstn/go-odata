@@ -99,9 +99,26 @@ func (s *Service) RegisterEntity(entity interface{}) error {
 	handler.SetDeltaTracker(s.deltaTracker)
 	s.handlers[entityMetadata.EntitySetName] = handler
 
-	s.deltaTracker.RegisterEntity(entityMetadata.EntitySetName)
-
 	fmt.Printf("Registered entity: %s (EntitySet: %s)\n", entityMetadata.EntityName, entityMetadata.EntitySetName)
+	return nil
+}
+
+// EnableChangeTracking enables OData change tracking for the specified entity set.
+// When enabled, the service will issue delta tokens and record entity changes.
+func (s *Service) EnableChangeTracking(entitySetName string) error {
+	handler, exists := s.handlers[entitySetName]
+	if !exists {
+		return fmt.Errorf("entity set '%s' is not registered", entitySetName)
+	}
+
+	if handler == nil {
+		return fmt.Errorf("entity handler for '%s' is not initialized", entitySetName)
+	}
+
+	if err := handler.EnableChangeTracking(); err != nil {
+		return err
+	}
+
 	return nil
 }
 
