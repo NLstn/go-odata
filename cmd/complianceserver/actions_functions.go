@@ -62,7 +62,7 @@ func registerFunctions(service *odata.Service, db *gorm.DB) {
 		Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) (interface{}, error) {
 			count := params["count"].(int64)
 			category := params["category"].(string)
-			
+
 			var products []entities.Product
 			if err := db.Joins("JOIN categories ON categories.id = products.category_id").
 				Where("categories.name = ?", category).
@@ -559,23 +559,23 @@ func registerActions(service *odata.Service, db *gorm.DB) {
 		fmt.Printf("Failed to register Process (one param) action: %v\n", err)
 	}
 
-	// Overloaded action: Process - with percentage and category parameters
+	// Overloaded action: Process - with percentage and minPrice parameters
 	if err := service.RegisterAction(odata.ActionDefinition{
 		Name:    "Process",
 		IsBound: false,
 		Parameters: []odata.ParameterDefinition{
 			{Name: "percentage", Type: reflect.TypeOf(float64(0)), Required: true},
-			{Name: "category", Type: reflect.TypeOf(""), Required: true},
+			{Name: "minPrice", Type: reflect.TypeOf(float64(0)), Required: true},
 		},
 		ReturnType: nil,
 		Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) error {
 			percentage := params["percentage"].(float64)
-			category := params["category"].(string)
+			minPrice := params["minPrice"].(float64)
 			multiplier := 1.0 - (percentage / 100.0)
 
+			// Apply discount to products with price >= minPrice
 			if err := db.Model(&entities.Product{}).
-				Joins("JOIN categories ON categories.id = products.category_id").
-				Where("categories.name = ?", category).
+				Where("price >= ?", minPrice).
 				Update("price", gorm.Expr("price * ?", multiplier)).Error; err != nil {
 				return err
 			}

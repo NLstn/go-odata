@@ -86,10 +86,14 @@ test_action_overload_param_count() {
     echo "  Testing action overload with different parameter counts..."
     
     # Call action with one parameter
-    local HTTP_CODE1=$(http_post "$SERVER_URL/Process" '{"percentage": 10.0}')
+    local HTTP_CODE1=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$SERVER_URL/Process" \
+        -H "Content-Type: application/json" \
+        -d '{"percentage": 10.0}' 2>&1)
     
     # Call action with two parameters (different overload)
-    local HTTP_CODE2=$(http_post "$SERVER_URL/Process" '{"percentage": 10.0, "category": "Electronics"}')
+    local HTTP_CODE2=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$SERVER_URL/Process" \
+        -H "Content-Type: application/json" \
+        -d '{"percentage": 10.0, "minPrice": 100.0}' 2>&1)
     
     if [ "$HTTP_CODE1" = "204" ] || [ "$HTTP_CODE1" = "200" ]; then
         if [ "$HTTP_CODE2" = "204" ] || [ "$HTTP_CODE2" = "200" ]; then
@@ -192,4 +196,4 @@ run_test "Test 6: Verify duplicate overload validation" test_reject_duplicate_ov
 run_test "Test 7: Function overload with additional parameter" test_function_overload_additional_param
 run_test "Test 8: Bound function overload with different parameter counts" test_bound_function_param_overload
 
-# The framework will automatically print the summary and exit
+print_summary
