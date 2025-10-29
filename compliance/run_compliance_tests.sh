@@ -41,6 +41,7 @@ usage() {
     echo "  --version VERSION    Run tests for specific OData version: 4.0 | 4.01 | all (default: all)"
     echo "  -v, --verbose        Show detailed test output"
     echo "  -f, --failures-only  Only show output for failing tests"
+    echo "  --debug              Enable debug mode - prints full HTTP request/response for each test"
     echo "  --external-server    Use an external server (don't start/stop the compliance server)"
     echo ""
     echo "Examples:"
@@ -52,6 +53,7 @@ usage() {
     echo "  $0 header           # Run all tests containing 'header'"
     echo "  $0 -f               # Run all tests, show only failures"
     echo "  $0 -v 10.1          # Run specific test with full verbose output"
+    echo "  $0 --debug 8.1.1    # Run test with debug output (full HTTP details)"
     echo "  $0 --external-server # Use already running server"
     echo "  $0 -s http://localhost:9090 -o report.md"
     echo ""
@@ -97,6 +99,7 @@ PATTERN=""
 SKIP_REPORT=0
 EXTERNAL_SERVER=0
 ODATA_VERSION="all"
+DEBUG=0
 while [[ $# -gt 0 ]]; do
     case $1 in
         -h|--help)
@@ -130,6 +133,10 @@ while [[ $# -gt 0 ]]; do
             FAILURES_ONLY=1
             shift
             ;;
+        --debug)
+            DEBUG=1
+            shift
+            ;;
         --external-server)
             EXTERNAL_SERVER=1
             shift
@@ -144,6 +151,8 @@ done
 
 # Export SERVER_URL for child scripts
 export SERVER_URL
+# Export DEBUG for child scripts
+export DEBUG
 
 echo ""
 echo "╔════════════════════════════════════════════════════════╗"
@@ -154,6 +163,9 @@ echo "Server URL: $SERVER_URL"
 echo "Database:   $DB_TYPE${DB_DSN:+ (dsn provided)}"
 echo "Version:    $ODATA_VERSION"
 echo "Report File: $REPORT_FILE"
+if [ $DEBUG -eq 1 ]; then
+    echo "Debug Mode: ENABLED (full HTTP request/response details will be shown)"
+fi
 echo ""
 
 # Start compliance server if not using external server
