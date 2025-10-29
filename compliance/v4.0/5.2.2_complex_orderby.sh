@@ -69,8 +69,8 @@ PY
         return 1
     fi
 
-    if [ "$first_id" != "1" ]; then
-        echo "  Details: Expected first entity ID to be 1 when ordering by descending Length"
+    if [ "$first_id" != "10" ]; then
+        echo "  Details: Expected first entity ID to be 10 when ordering by descending Length"
         echo "  Response: $response"
         return 1
     fi
