@@ -7,6 +7,7 @@ import (
 
 	"github.com/nlstn/go-odata/internal/metadata"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // ShouldUseMapResults returns true if the query options require map results instead of entity results
@@ -1130,11 +1131,11 @@ func applyOrderBy(db *gorm.DB, orderBy []OrderByItem, entityMetadata *metadata.E
 		if propertyExists(item.Property, entityMetadata) {
 			// Regular entity property - use column name
 			columnName := GetColumnName(item.Property, entityMetadata)
-			direction := "ASC"
-			if item.Descending {
-				direction = "DESC"
-			}
-			db = db.Order(fmt.Sprintf("%s %s", columnName, direction))
+			// Use GORM clause.OrderByColumn to safely construct ORDER BY
+			db = db.Order(clause.OrderByColumn{
+				Column: clause.Column{Name: columnName},
+				Desc:   item.Descending,
+			})
 		} else {
 			// Not in entity metadata - assume it's a computed property alias
 			// Sanitize the alias to prevent SQL injection
@@ -1142,11 +1143,10 @@ func applyOrderBy(db *gorm.DB, orderBy []OrderByItem, entityMetadata *metadata.E
 			if sanitizedAlias == "" {
 				continue // Skip invalid identifiers
 			}
-			direction := "ASC"
-			if item.Descending {
-				direction = "DESC"
-			}
-			db = db.Order(fmt.Sprintf("%s %s", sanitizedAlias, direction))
+			db = db.Order(clause.OrderByColumn{
+				Column: clause.Column{Name: sanitizedAlias},
+				Desc:   item.Descending,
+			})
 		}
 	}
 	return db
