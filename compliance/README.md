@@ -141,6 +141,64 @@ Or:
 ./run_compliance_tests.sh -v
 ```
 
+### Debug Mode
+
+Enable debug mode to see complete HTTP request and response details for every test case. This is extremely useful for:
+- Troubleshooting test failures
+- Understanding the actual communication between client and server
+- Analyzing response formats and headers
+- Debugging integration issues
+
+**Using the --debug flag:**
+```bash
+./run_compliance_tests.sh --debug 8.1.1        # Debug a specific test
+./run_compliance_tests.sh --debug filter       # Debug all filter tests
+./run_compliance_tests.sh --debug --version 4.0 query  # Debug 4.0 query tests
+```
+
+**Using the DEBUG environment variable:**
+```bash
+DEBUG=1 ./run_compliance_tests.sh 10.1_json_format
+DEBUG=1 ./v4.0/10.1_json_format.sh             # Debug a single test script directly
+```
+
+**Debug output includes:**
+- HTTP method (GET, POST, PATCH, PUT, DELETE)
+- Full URL with query parameters
+- Request headers (when applicable)
+- Request body (when applicable, formatted as JSON if valid)
+- HTTP status code
+- Response body (formatted as JSON if valid, otherwise raw)
+
+**Example debug output:**
+```
+╔══════════════════════════════════════════════════════╗
+║ DEBUG: HTTP Request
+╚══════════════════════════════════════════════════════╝
+
+Method: GET
+URL: http://localhost:9090/Products?$filter=Price gt 100
+
+╔══════════════════════════════════════════════════════╗
+║ DEBUG: HTTP Response
+╚══════════════════════════════════════════════════════╝
+
+Status Code: 200
+Body:
+{
+    "@odata.context": "http://localhost:9090/$metadata#Products",
+    "value": [
+        {
+            "ID": 1,
+            "Name": "Laptop",
+            "Price": 999.99
+        }
+    ]
+}
+```
+
+**Note:** Debug mode works automatically with tests that use the framework's HTTP helper functions (`http_get`, `http_post`, `http_patch`, `http_put`, `http_delete`, `http_get_body`). Tests using raw `curl` commands won't show debug output.
+
 ## Test Report
 
 The master script generates a markdown report (`compliance-report.md`) with:
@@ -325,6 +383,219 @@ The master test runner generates a markdown report with:
 
 All new compliance tests **MUST** use the standardized test framework (`test_framework.sh`) to ensure consistent reporting and integration with the master test runner.
 
+### Guide for Coding Agents (AI Contributors)
+
+**Important:** This section provides specific guidance for AI coding agents and automated contributors on how to write compliance tests that integrate properly with the test framework.
+
+#### Core Principles for AI Agents
+
+1. **Always use the test framework** - Source `test_framework.sh` at the start of every test script
+2. **Use framework HTTP functions** - Never use raw `curl` directly; use `http_get`, `http_post`, etc. for automatic debug logging
+3. **Follow the exact template structure** - Consistency is critical for automation
+4. **Return proper exit codes** - Let the framework handle this via `print_summary()`
+5. **Don't manually track counters** - The framework manages PASSED, FAILED, and TOTAL automatically
+6. **Clean up test data** - Always implement and register a cleanup function
+
+#### Required Script Structure for AI Agents
+
+Every compliance test script MUST follow this exact structure:
+
+```bash
+#!/bin/bash
+
+# OData v4 Compliance Test: <Section Number> <Title>
+# <Brief description of what this test validates>
+# Spec: <URL to OData v4 specification section>
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/../test_framework.sh"
+
+echo "======================================"
+echo "OData v4 Compliance Test"
+echo "Section: <Section Number> <Title>"
+echo "======================================"
+echo ""
+echo "Description: <Detailed multi-line description>"
+echo ""
+echo "Spec Reference: <URL>"
+echo ""
+
+# [Optional] Define cleanup function if you create test data
+CREATED_IDS=()
+
+cleanup() {
+    for id in "${CREATED_IDS[@]}"; do
+        curl -s -X DELETE "$SERVER_URL/EntitySet($id)" > /dev/null 2>&1
+    done
+}
+
+# [Optional] Register cleanup if you defined it
+register_cleanup
+
+# Define test functions (one per test case)
+test_something() {
+    # Test implementation
+    # Return 0 for success, 1 for failure
+    local HTTP_CODE=$(http_get "$SERVER_URL/EntitySet")
+    check_status "$HTTP_CODE" "200"
+}
+
+test_another_thing() {
+    local RESPONSE=$(http_get_body "$SERVER_URL/EntitySet(1)")
+    check_contains "$RESPONSE" "expectedValue"
+}
+
+# Run tests using run_test function
+run_test "Description of what test 1 validates" test_something
+run_test "Description of what test 2 validates" test_another_thing
+
+# REQUIRED: Call print_summary at the end
+print_summary
+```
+
+#### Framework Functions for AI Agents
+
+**HTTP Request Functions (ALWAYS use these instead of raw curl):**
+
+- `http_get URL [headers...]` - GET request, returns HTTP status code only
+- `http_get_body URL [headers...]` - GET request, returns response body
+- `http_post URL data [headers...]` - POST request with data
+- `http_patch URL data [headers...]` - PATCH request with data
+- `http_put URL data [headers...]` - PUT request with data
+- `http_delete URL [headers...]` - DELETE request
+
+**Validation Functions:**
+
+- `check_status actual expected` - Verify HTTP status code matches expected
+- `check_contains "$response" "substring"` - Verify response contains substring
+- `check_json_field "$response" "fieldName"` - Verify JSON response has field
+
+**Test Execution:**
+
+- `run_test "description" test_function` - Execute a test and track results
+- `print_summary` - Print final summary and exit (REQUIRED at end of script)
+
+**Cleanup:**
+
+- `register_cleanup` - Register the `cleanup()` function to run on exit
+
+#### AI Agent Examples
+
+**Example 1: Simple GET request test**
+```bash
+test_get_entity() {
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products(1)")
+    check_status "$HTTP_CODE" "200"
+}
+
+run_test "GET request returns 200 OK" test_get_entity
+```
+
+**Example 2: POST request with validation**
+```bash
+test_create_entity() {
+    local RESPONSE=$(http_post "$SERVER_URL/Products" \
+        '{"Name":"Test Product","Price":99.99}' \
+        -H "Content-Type: application/json")
+    local HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+    
+    if check_status "$HTTP_CODE" "201"; then
+        # Extract ID for cleanup
+        local BODY=$(echo "$RESPONSE" | sed '$d')
+        local ID=$(echo "$BODY" | grep -oP '"ID":\s*\K\d+')
+        CREATED_IDS+=("$ID")
+        return 0
+    fi
+    return 1
+}
+
+cleanup() {
+    for id in "${CREATED_IDS[@]}"; do
+        http_delete "$SERVER_URL/Products($id)" > /dev/null 2>&1
+    done
+}
+
+register_cleanup
+run_test "POST creates new entity" test_create_entity
+```
+
+**Example 3: Testing with query options**
+```bash
+test_filter_query() {
+    local RESPONSE=$(http_get_body "$SERVER_URL/Products?\$filter=Price gt 100")
+    
+    # Check response contains expected field
+    if check_json_field "$RESPONSE" "value"; then
+        # Additional validation
+        if echo "$RESPONSE" | grep -q '"Price"'; then
+            return 0
+        fi
+    fi
+    return 1
+}
+
+run_test "Filter query returns filtered results" test_filter_query
+```
+
+#### Common Pitfalls for AI Agents (AVOID THESE)
+
+❌ **DON'T use raw curl:**
+```bash
+# WRONG - bypasses debug logging and framework
+curl -s "$SERVER_URL/Products"
+```
+
+✅ **DO use framework functions:**
+```bash
+# CORRECT - enables debug logging
+http_get "$SERVER_URL/Products"
+```
+
+❌ **DON'T manually manage counters:**
+```bash
+# WRONG
+PASSED=0
+FAILED=0
+if [ condition ]; then
+    PASSED=$((PASSED + 1))
+fi
+```
+
+✅ **DO use run_test:**
+```bash
+# CORRECT
+run_test "Test description" test_function
+```
+
+❌ **DON'T manually print summary:**
+```bash
+# WRONG
+echo "Summary: $PASSED/$TOTAL tests passed"
+exit $FAILED
+```
+
+✅ **DO call print_summary:**
+```bash
+# CORRECT
+print_summary  # Handles everything automatically
+```
+
+#### Debugging Your Tests as an AI Agent
+
+When your test fails, use debug mode to see the actual HTTP traffic:
+
+```bash
+DEBUG=1 ./v4.0/your_test.sh
+```
+
+This will show:
+- Exact request URLs and methods
+- Request headers and bodies
+- Response status codes
+- Response bodies (formatted)
+
+Use this information to understand why a test is failing and adjust your test logic accordingly.
+
 #### Quick Start
 
 1. Create a new shell script in the appropriate version directory following the naming pattern: `{section}_{test_name}.sh`
@@ -459,6 +730,168 @@ COMPLIANCE_TEST_RESULT:PASSED=X:FAILED=Y:TOTAL=Z
 - Exit `1`: One or more tests failed
 
 The framework handles exit codes automatically based on test results.
+
+### Debugging Test Failures
+
+When a test fails, follow these steps to diagnose and fix the issue:
+
+#### Step 1: Enable Debug Mode
+
+Run the failing test with debug mode enabled to see full HTTP request/response details:
+
+```bash
+# Using the test runner
+./run_compliance_tests.sh --debug test_name
+
+# Or directly with environment variable
+DEBUG=1 ./v4.0/test_name.sh
+```
+
+#### Step 2: Analyze the Debug Output
+
+The debug output shows:
+- **Request details**: Method, URL, headers, body
+- **Response details**: Status code, body (formatted JSON when applicable)
+
+Look for:
+- Incorrect URLs or query parameters
+- Missing or wrong headers
+- Unexpected status codes
+- Malformed request/response bodies
+- Missing or incorrect JSON fields
+
+**Example debug output analysis:**
+
+```
+╔══════════════════════════════════════════════════════╗
+║ DEBUG: HTTP Request
+╚══════════════════════════════════════════════════════╝
+
+Method: GET
+URL: http://localhost:9090/Products?$filter=Price gt 100
+                                    ^^^^^^^^
+                                    Check: Is the filter syntax correct?
+
+╔══════════════════════════════════════════════════════╗
+║ DEBUG: HTTP Response
+╚══════════════════════════════════════════════════════╝
+
+Status Code: 400
+             ^^^
+             Expected: 200, Got: 400 (Bad Request)
+Body:
+{
+    "error": {
+        "code": "BadRequest",
+        "message": "Invalid filter syntax"
+                    ^^^^^^^^^^^^^^^^^^^^^^
+                    Root cause identified!
+    }
+}
+```
+
+#### Step 3: Check Common Issues
+
+**URL encoding problems:**
+- Query parameters with spaces should be properly encoded
+- The framework handles basic URL encoding, but complex queries may need attention
+
+**Status code mismatches:**
+- Verify the expected status code is correct per OData spec
+- Check if the server implementation differs from spec (may need spec reference)
+
+**JSON validation:**
+- Use `jq` or `python -m json.tool` to validate JSON structure
+- Check for required OData fields: `@odata.context`, `value`, etc.
+
+**Test data dependencies:**
+- Ensure test data exists (use seeded data or create it in the test)
+- Check if test data was cleaned up by a previous test
+
+#### Step 4: Test Locally with Manual Requests
+
+Start the compliance server manually and test with curl:
+
+```bash
+# Terminal 1: Start server
+cd cmd/complianceserver
+go run .
+
+# Terminal 2: Test manually
+curl -i http://localhost:9090/Products
+curl -i "http://localhost:9090/Products?\$filter=Price gt 100"
+curl -i -X POST http://localhost:9090/Products \
+  -H "Content-Type: application/json" \
+  -d '{"Name":"Test","Price":99.99}'
+```
+
+#### Step 5: Verify Test Logic
+
+Check your test function logic:
+
+```bash
+test_example() {
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products")
+    
+    # Add temporary debug output
+    echo "  DEBUG: Got status code: $HTTP_CODE"
+    
+    check_status "$HTTP_CODE" "200"
+}
+```
+
+#### Step 6: Common Test Patterns
+
+**Pattern 1: Test a GET request**
+```bash
+test_get_entity() {
+    local RESPONSE=$(http_get_body "$SERVER_URL/Products(1)")
+    check_json_field "$RESPONSE" "Name"
+}
+```
+
+**Pattern 2: Test status code only**
+```bash
+test_status() {
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products")
+    check_status "$HTTP_CODE" "200"
+}
+```
+
+**Pattern 3: Test with POST and cleanup**
+```bash
+CREATED_IDS=()
+
+test_create() {
+    local RESPONSE=$(http_post "$SERVER_URL/Products" \
+        '{"Name":"Test","Price":99.99}' \
+        -H "Content-Type: application/json")
+    local HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+    
+    if [ "$HTTP_CODE" = "201" ]; then
+        local ID=$(echo "$RESPONSE" | sed '$d' | grep -oP '"ID":\s*\K\d+')
+        CREATED_IDS+=("$ID")
+        return 0
+    fi
+    return 1
+}
+
+cleanup() {
+    for id in "${CREATED_IDS[@]}"; do
+        http_delete "$SERVER_URL/Products($id)" > /dev/null 2>&1
+    done
+}
+
+register_cleanup
+```
+
+#### Step 7: Validate Against OData Spec
+
+Always cross-reference with the OData specification:
+- [OData v4.01 Part 1: Protocol](https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html)
+- [OData v4.01 Part 2: URL Conventions](https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part2-url-conventions.html)
+
+Ensure your test expectations match the spec requirements.
 
 ### Example Test
 

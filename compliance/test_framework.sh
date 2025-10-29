@@ -19,9 +19,86 @@ NC='\033[0m' # No Color
 # Server URL (can be overridden by environment variable)
 SERVER_URL="${SERVER_URL:-http://localhost:9090}"
 
+# Debug mode (can be enabled via DEBUG environment variable or --debug flag)
+DEBUG="${DEBUG:-0}"
+
 # Note: Database reseeding is handled centrally by run_compliance_tests.sh
 # before each test script runs when running the full suite.
 # For individual test runs, call reseed_database() at the start of your test script.
+
+# Function to print debug information for HTTP requests/responses
+# Usage: debug_log_request METHOD URL [HEADERS...] [BODY]
+debug_log_request() {
+    if [ "$DEBUG" != "1" ]; then
+        return
+    fi
+    
+    echo -e "${BLUE}╔══════════════════════════════════════════════════════╗${NC}"
+    echo -e "${BLUE}║ DEBUG: HTTP Request${NC}"
+    echo -e "${BLUE}╚══════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    
+    local method="$1"
+    local url="$2"
+    shift 2
+    
+    echo -e "${YELLOW}Method:${NC} $method"
+    echo -e "${YELLOW}URL:${NC} $url"
+    
+    # Parse headers and body from remaining arguments
+    local headers=""
+    local body=""
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -H|--header)
+                headers="${headers}  $2\n"
+                shift 2
+                ;;
+            -d|--data)
+                body="$2"
+                shift 2
+                ;;
+            *)
+                shift
+                ;;
+        esac
+    done
+    
+    if [ -n "$headers" ]; then
+        echo -e "${YELLOW}Headers:${NC}"
+        echo -e "$headers"
+    fi
+    
+    if [ -n "$body" ]; then
+        echo -e "${YELLOW}Body:${NC}"
+        echo "$body" | python3 -m json.tool 2>/dev/null || echo "$body"
+    fi
+    echo ""
+}
+
+# Function to print debug information for HTTP responses
+# Usage: debug_log_response STATUS_CODE BODY
+debug_log_response() {
+    if [ "$DEBUG" != "1" ]; then
+        return
+    fi
+    
+    local status_code="$1"
+    local body="$2"
+    
+    echo -e "${BLUE}╔══════════════════════════════════════════════════════╗${NC}"
+    echo -e "${BLUE}║ DEBUG: HTTP Response${NC}"
+    echo -e "${BLUE}╚══════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo -e "${YELLOW}Status Code:${NC} $status_code"
+    
+    if [ -n "$body" ]; then
+        echo -e "${YELLOW}Body:${NC}"
+        # Try to pretty-print JSON, fall back to raw output if not JSON
+        echo "$body" | python3 -m json.tool 2>/dev/null || echo "$body"
+    fi
+    echo ""
+}
 
 # Function to reseed the database to default state
 # Call this at the beginning of a test script if running it individually
@@ -94,7 +171,20 @@ http_get() {
         query=$(url_encode "$query")
         url="${base}?${query}"
     fi
-    curl -g -s -o /dev/null -w "%{http_code}" "$@" "$url"
+    
+    # Log request in debug mode
+    debug_log_request "GET" "$url" "$@"
+    
+    # Execute the request and capture both status and body for debug logging
+    local response=$(curl -g -s -w "\n%{http_code}" "$@" "$url")
+    local http_code=$(echo "$response" | tail -1)
+    local body=$(echo "$response" | sed '$d')
+    
+    # Log response in debug mode
+    debug_log_response "$http_code" "$body"
+    
+    # Return just the status code
+    echo "$http_code"
 }
 
 # Function to make HTTP request and return response body
@@ -110,7 +200,20 @@ http_get_body() {
         query=$(url_encode "$query")
         url="${base}?${query}"
     fi
-    curl -g -s "$@" "$url"
+    
+    # Log request in debug mode
+    debug_log_request "GET" "$url" "$@"
+    
+    # Execute the request and capture both status and body
+    local response=$(curl -g -s -w "\n%{http_code}" "$@" "$url")
+    local http_code=$(echo "$response" | tail -1)
+    local body=$(echo "$response" | sed '$d')
+    
+    # Log response in debug mode
+    debug_log_response "$http_code" "$body"
+    
+    # Return just the body
+    echo "$body"
 }
 
 # Function to make HTTP POST request
@@ -126,7 +229,20 @@ http_post() {
         query=$(url_encode "$query")
         url="${base}?${query}"
     fi
-    curl -g -s -X POST -d "$data" "$@" "$url"
+    
+    # Log request in debug mode
+    debug_log_request "POST" "$url" "$@" -d "$data"
+    
+    # Execute the request and capture both status and body
+    local response=$(curl -g -s -w "\n%{http_code}" -X POST -d "$data" "$@" "$url")
+    local http_code=$(echo "$response" | tail -1)
+    local body=$(echo "$response" | sed '$d')
+    
+    # Log response in debug mode
+    debug_log_response "$http_code" "$body"
+    
+    # Return full response (for backward compatibility)
+    echo "$response"
 }
 
 # Function to make HTTP PATCH request
@@ -142,7 +258,20 @@ http_patch() {
         query=$(url_encode "$query")
         url="${base}?${query}"
     fi
-    curl -g -s -X PATCH -d "$data" "$@" "$url"
+    
+    # Log request in debug mode
+    debug_log_request "PATCH" "$url" "$@" -d "$data"
+    
+    # Execute the request and capture both status and body
+    local response=$(curl -g -s -w "\n%{http_code}" -X PATCH -d "$data" "$@" "$url")
+    local http_code=$(echo "$response" | tail -1)
+    local body=$(echo "$response" | sed '$d')
+    
+    # Log response in debug mode
+    debug_log_response "$http_code" "$body"
+    
+    # Return full response (for backward compatibility)
+    echo "$response"
 }
 
 # Function to make HTTP PUT request
@@ -158,7 +287,20 @@ http_put() {
         query=$(url_encode "$query")
         url="${base}?${query}"
     fi
-    curl -g -s -X PUT -d "$data" "$@" "$url"
+    
+    # Log request in debug mode
+    debug_log_request "PUT" "$url" "$@" -d "$data"
+    
+    # Execute the request and capture both status and body
+    local response=$(curl -g -s -w "\n%{http_code}" -X PUT -d "$data" "$@" "$url")
+    local http_code=$(echo "$response" | tail -1)
+    local body=$(echo "$response" | sed '$d')
+    
+    # Log response in debug mode
+    debug_log_response "$http_code" "$body"
+    
+    # Return full response (for backward compatibility)
+    echo "$response"
 }
 
 # Function to make HTTP DELETE request
@@ -173,7 +315,20 @@ http_delete() {
         query=$(url_encode "$query")
         url="${base}?${query}"
     fi
-    curl -g -s -X DELETE "$@" "$url"
+    
+    # Log request in debug mode
+    debug_log_request "DELETE" "$url" "$@"
+    
+    # Execute the request and capture both status and body
+    local response=$(curl -g -s -w "\n%{http_code}" -X DELETE "$@" "$url")
+    local http_code=$(echo "$response" | tail -1)
+    local body=$(echo "$response" | sed '$d')
+    
+    # Log response in debug mode
+    debug_log_response "$http_code" "$body"
+    
+    # Return full response (for backward compatibility)
+    echo "$response"
 }
 
 # Function to check if response contains expected value
