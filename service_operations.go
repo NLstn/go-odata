@@ -12,64 +12,96 @@ import (
 	"github.com/nlstn/go-odata/internal/response"
 )
 
+type invocationError struct {
+	status  int
+	message string
+	detail  string
+}
+
+type overloadResolver[T any] func(*http.Request, []T, bool, string) (T, map[string]interface{}, error)
+
+func resolveInvocation[T any](r *http.Request, name string, ctxType string, definitions map[string][]T,
+	resolver overloadResolver[T], isBound bool, entitySet string) (T, map[string]interface{}, *invocationError) {
+	var zero T
+
+	defs, exists := definitions[name]
+	if !exists {
+		return zero, nil, &invocationError{
+			status:  http.StatusNotFound,
+			message: fmt.Sprintf("%s not found", ctxType),
+			detail:  fmt.Sprintf("%s '%s' is not registered", ctxType, name),
+		}
+	}
+
+	def, params, err := resolver(r, defs, isBound, entitySet)
+	if err != nil {
+		errStr := err.Error()
+		lowerCtx := strings.ToLower(ctxType)
+		errorMsg := fmt.Sprintf("Invalid %s invocation", lowerCtx)
+		if containsAny(errStr, "parameter", "required", "type", "missing") {
+			errorMsg = "Invalid parameters"
+		}
+
+		return zero, nil, &invocationError{
+			status:  http.StatusBadRequest,
+			message: errorMsg,
+			detail:  errStr,
+		}
+	}
+
+	return def, params, nil
+}
+
+func loadBoundContext(handler *handlers.EntityHandler, key string) (interface{}, *invocationError) {
+	if handler == nil || key == "" {
+		return nil, nil
+	}
+
+	entity, err := handler.FetchEntity(key)
+	if err != nil {
+		if handlers.IsNotFoundError(err) {
+			return nil, &invocationError{
+				status:  http.StatusNotFound,
+				message: "Entity not found",
+				detail:  fmt.Sprintf("Entity with key '%s' not found", key),
+			}
+		}
+
+		return nil, &invocationError{
+			status:  http.StatusInternalServerError,
+			message: "Database error",
+			detail:  err.Error(),
+		}
+	}
+
+	return entity, nil
+}
+
 // handleActionOrFunction handles action or function invocation
 func (s *Service) handleActionOrFunction(w http.ResponseWriter, r *http.Request, name string, key string, isBound bool, entitySet string) {
 	// Check if it's an action (POST) or function (GET)
 	switch r.Method {
 	case http.MethodPost:
-		// Handle action
-		actionDefs, exists := s.actions[name]
-		if !exists {
-			if writeErr := response.WriteError(w, http.StatusNotFound, "Action not found",
-				fmt.Sprintf("Action '%s' is not registered", name)); writeErr != nil {
+		actionDef, params, invErr := resolveInvocation(r, name, "Action", s.actions, actions.ResolveActionOverload, isBound, entitySet)
+		if invErr != nil {
+			if writeErr := response.WriteError(w, invErr.status, invErr.message, invErr.detail); writeErr != nil {
 				fmt.Printf("Error writing error response: %v\n", writeErr)
 			}
 			return
 		}
 
-		// Resolve the appropriate action overload
-		actionDef, params, err := actions.ResolveActionOverload(r, actionDefs, isBound, entitySet)
-		if err != nil {
-			// Determine error message based on error content
-			errorMsg := "Invalid action invocation"
-			errStr := err.Error()
-			if containsAny(errStr, "parameter", "required", "type", "missing") {
-				errorMsg = "Invalid parameters"
-			}
-			if writeErr := response.WriteError(w, http.StatusBadRequest, errorMsg, errStr); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
-			}
-			return
-		}
-
-		// Get entity context for bound actions
 		var ctx interface{}
-		if isBound && key != "" {
-			// Fetch the entity from database to verify it exists
-			handler := s.handlers[entitySet]
-			if handler != nil {
-				// Try to fetch the entity to ensure it exists
-				entity, err := handler.FetchEntity(key)
-				if err != nil {
-					// Check if it's a "not found" error
-					if handlers.IsNotFoundError(err) {
-						if writeErr := response.WriteError(w, http.StatusNotFound, "Entity not found",
-							fmt.Sprintf("Entity with key '%s' not found", key)); writeErr != nil {
-							fmt.Printf("Error writing error response: %v\n", writeErr)
-						}
-						return
-					}
-					// Other database errors
-					if writeErr := response.WriteError(w, http.StatusInternalServerError, "Database error", err.Error()); writeErr != nil {
-						fmt.Printf("Error writing error response: %v\n", writeErr)
-					}
-					return
+		if isBound {
+			var ctxErr *invocationError
+			ctx, ctxErr = loadBoundContext(s.handlers[entitySet], key)
+			if ctxErr != nil {
+				if writeErr := response.WriteError(w, ctxErr.status, ctxErr.message, ctxErr.detail); writeErr != nil {
+					fmt.Printf("Error writing error response: %v\n", writeErr)
 				}
-				ctx = entity
+				return
 			}
 		}
 
-		// Invoke the action handler
 		if err := actionDef.Handler(w, r, ctx, params); err != nil {
 			if writeErr := response.WriteError(w, http.StatusInternalServerError, "Action failed", err.Error()); writeErr != nil {
 				fmt.Printf("Error writing error response: %v\n", writeErr)
@@ -78,59 +110,26 @@ func (s *Service) handleActionOrFunction(w http.ResponseWriter, r *http.Request,
 		}
 
 	case http.MethodGet:
-		// Handle function
-		functionDefs, exists := s.functions[name]
-		if !exists {
-			if writeErr := response.WriteError(w, http.StatusNotFound, "Function not found",
-				fmt.Sprintf("Function '%s' is not registered", name)); writeErr != nil {
+		functionDef, params, invErr := resolveInvocation(r, name, "Function", s.functions, actions.ResolveFunctionOverload, isBound, entitySet)
+		if invErr != nil {
+			if writeErr := response.WriteError(w, invErr.status, invErr.message, invErr.detail); writeErr != nil {
 				fmt.Printf("Error writing error response: %v\n", writeErr)
 			}
 			return
 		}
 
-		// Resolve the appropriate function overload
-		functionDef, params, err := actions.ResolveFunctionOverload(r, functionDefs, isBound, entitySet)
-		if err != nil {
-			// Determine error message based on error content
-			errorMsg := "Invalid function invocation"
-			errStr := err.Error()
-			if containsAny(errStr, "parameter", "required", "type", "missing") {
-				errorMsg = "Invalid parameters"
-			}
-			if writeErr := response.WriteError(w, http.StatusBadRequest, errorMsg, errStr); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
-			}
-			return
-		}
-
-		// Get entity context for bound functions
 		var ctx interface{}
-		if isBound && key != "" {
-			// Fetch the entity from database to verify it exists
-			handler := s.handlers[entitySet]
-			if handler != nil {
-				// Try to fetch the entity to ensure it exists
-				entity, err := handler.FetchEntity(key)
-				if err != nil {
-					// Check if it's a "not found" error
-					if handlers.IsNotFoundError(err) {
-						if writeErr := response.WriteError(w, http.StatusNotFound, "Entity not found",
-							fmt.Sprintf("Entity with key '%s' not found", key)); writeErr != nil {
-							fmt.Printf("Error writing error response: %v\n", writeErr)
-						}
-						return
-					}
-					// Other database errors
-					if writeErr := response.WriteError(w, http.StatusInternalServerError, "Database error", err.Error()); writeErr != nil {
-						fmt.Printf("Error writing error response: %v\n", writeErr)
-					}
-					return
+		if isBound {
+			var ctxErr *invocationError
+			ctx, ctxErr = loadBoundContext(s.handlers[entitySet], key)
+			if ctxErr != nil {
+				if writeErr := response.WriteError(w, ctxErr.status, ctxErr.message, ctxErr.detail); writeErr != nil {
+					fmt.Printf("Error writing error response: %v\n", writeErr)
 				}
-				ctx = entity
+				return
 			}
 		}
 
-		// Invoke the function handler
 		result, err := functionDef.Handler(w, r, ctx, params)
 		if err != nil {
 			if writeErr := response.WriteError(w, http.StatusInternalServerError, "Function failed", err.Error()); writeErr != nil {
