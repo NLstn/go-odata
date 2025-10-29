@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -76,7 +77,12 @@ func setupRelationTestDB(t *testing.T) *gorm.DB {
 func TestExpandBasic(t *testing.T) {
 	db := setupRelationTestDB(t)
 	authorMeta, _ := metadata.AnalyzeEntity(&Author{})
+	bookMeta, _ := metadata.AnalyzeEntity(&Book{})
 	handler := NewEntityHandler(db, authorMeta)
+	handler.SetEntitiesMetadata(map[string]*metadata.EntityMetadata{
+		authorMeta.EntitySetName: authorMeta,
+		bookMeta.EntitySetName:   bookMeta,
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "/Authors?$expand=Books", nil)
 	w := httptest.NewRecorder()
@@ -198,6 +204,58 @@ func TestExpandWithNestedSkip(t *testing.T) {
 	// Should skip the first book, leaving 1
 	if len(books) != 1 {
 		t.Errorf("Expected 1 book after skipping 1, got %d", len(books))
+	}
+}
+
+func TestNavigationCollectionAppliesFilterAndPagination(t *testing.T) {
+	db := setupRelationTestDB(t)
+	authorMeta, _ := metadata.AnalyzeEntity(&Author{})
+	bookMeta, _ := metadata.AnalyzeEntity(&Book{})
+	handler := NewEntityHandler(db, authorMeta)
+	handler.SetEntitiesMetadata(map[string]*metadata.EntityMetadata{
+		authorMeta.EntitySetName: authorMeta,
+		bookMeta.EntitySetName:   bookMeta,
+	})
+
+	navProp := handler.findNavigationProperty("Books")
+	if navProp == nil {
+		t.Fatal("Books navigation property not found")
+	}
+
+	query := url.Values{}
+	query.Set("$filter", "Title ne 'Harry Potter and the Philosopher''s Stone'")
+	query.Set("$orderby", "ID")
+	query.Set("$top", "1")
+	req := httptest.NewRequest(http.MethodGet, "/Authors(1)/Books?"+query.Encode(), nil)
+	w := httptest.NewRecorder()
+
+	handler.handleNavigationCollectionWithQueryOptions(w, req, "1", navProp, false)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var responseBody map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &responseBody); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	values, ok := responseBody["value"].([]interface{})
+	if !ok {
+		t.Fatalf("expected value array in navigation response")
+	}
+
+	if len(values) != 1 {
+		t.Fatalf("expected exactly one book after filter and pagination, got %d", len(values))
+	}
+
+	book, ok := values[0].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected book entry to be an object")
+	}
+
+	if title := book["Title"]; title != "Harry Potter and the Chamber of Secrets" {
+		t.Fatalf("expected second Harry Potter book, got %v", title)
 	}
 }
 

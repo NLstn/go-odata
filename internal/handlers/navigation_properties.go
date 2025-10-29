@@ -152,15 +152,6 @@ func (h *EntityHandler) handleNavigationCollectionWithQueryOptions(w http.Respon
 		return
 	}
 
-	// Parse query options using the target entity's metadata
-	queryOptions, err := query.ParseQueryOptions(r.URL.Query(), targetMetadata)
-	if err != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions, err.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
-		}
-		return
-	}
-
 	// First verify that the parent entity exists and is authorized
 	parentOptions := &query.QueryOptions{}
 	parentScopes, parentHookErr := callBeforeReadEntity(h.metadata, r, parentOptions)
@@ -216,85 +207,114 @@ func (h *EntityHandler) handleNavigationCollectionWithQueryOptions(w http.Respon
 		}
 	}
 
-	// Apply BeforeReadCollection hooks for the target entity
-	targetScopes, targetHookErr := callBeforeReadCollection(targetMetadata, r, queryOptions)
-	if targetHookErr != nil {
-		if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", targetHookErr.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
-		}
-		return
-	}
-	if len(targetScopes) > 0 {
-		relatedDB = relatedDB.Scopes(targetScopes...)
-	}
-
-	// Get total count if $count=true
-	var totalCount *int64
-	if queryOptions.Count {
-		var count int64
-		countDB := relatedDB
-		// Apply filter to count query if present
-		if queryOptions.Filter != nil {
-			countDB = query.ApplyFilterOnly(countDB, queryOptions.Filter, targetMetadata)
-		}
-		if err := countDB.Count(&count).Error; err != nil {
-			if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error()); writeErr != nil {
-				fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
-			}
-			return
-		}
-		totalCount = &count
-	}
-
-	// Apply query options to the database query
-	relatedDB = query.ApplyQueryOptions(relatedDB, queryOptions, targetMetadata)
-
-	// Fetch the results
-	resultsSlice := reflect.New(reflect.SliceOf(targetMetadata.EntityType)).Interface()
-	if err := relatedDB.Find(resultsSlice).Error; err != nil {
-		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
-		}
-		return
-	}
-
-	// Calculate next link if pagination is active
-	sliceValue := reflect.ValueOf(resultsSlice).Elem()
-	resultsData := sliceValue.Interface()
-	var nextLink *string
-	if queryOptions.Top != nil && sliceValue.Len() > *queryOptions.Top {
-		// Trim to the requested top count
-		trimmedSlice := reflect.MakeSlice(sliceValue.Type(), *queryOptions.Top, *queryOptions.Top)
-		reflect.Copy(trimmedSlice, sliceValue.Slice(0, *queryOptions.Top))
-		sliceValue = trimmedSlice
-		resultsData = sliceValue.Interface()
-
-		// Build next link
-		baseURL := response.BuildBaseURL(r)
-		navigationPath := fmt.Sprintf("%s(%s)/%s", h.metadata.EntitySetName, entityKey, navProp.JsonName)
-		nextURL := buildNextLink(baseURL, navigationPath, queryOptions)
-		nextLink = &nextURL
-	}
-
-	if override, hasOverride, afterErr := callAfterReadCollection(targetMetadata, r, queryOptions, resultsData); afterErr != nil {
-		if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", afterErr.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
-		}
-		return
-	} else if hasOverride {
-		resultsData = override
-	}
-
-	// Write response
 	navigationPath := fmt.Sprintf("%s(%s)/%s", h.metadata.EntitySetName, entityKey, navProp.JsonName)
 
-	if isRef {
-		h.writeNavigationCollectionRefFromData(w, r, targetMetadata, resultsData, totalCount, nextLink)
-	} else {
-		if err := response.WriteODataCollection(w, r, navigationPath, resultsData, totalCount, nextLink); err != nil {
-			fmt.Printf("Error writing navigation property collection: %v\n", err)
-		}
-	}
+	h.executeCollectionQuery(w, &collectionExecutionContext{
+		Metadata: targetMetadata,
+
+		ParseQueryOptions: func() (*query.QueryOptions, error) {
+			return query.ParseQueryOptions(r.URL.Query(), targetMetadata)
+		},
+
+		BeforeRead: func(queryOptions *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
+			return callBeforeReadCollection(targetMetadata, r, queryOptions)
+		},
+
+		CountFunc: func(queryOptions *query.QueryOptions, scopes []func(*gorm.DB) *gorm.DB) (*int64, error) {
+			if !queryOptions.Count {
+				return nil, nil
+			}
+
+			countDB := relatedDB
+			if len(scopes) > 0 {
+				countDB = countDB.Scopes(scopes...)
+			}
+
+			if queryOptions.Filter != nil {
+				countDB = query.ApplyFilterOnly(countDB, queryOptions.Filter, targetMetadata)
+			}
+
+			var count int64
+			if err := countDB.Count(&count).Error; err != nil {
+				return nil, err
+			}
+
+			return &count, nil
+		},
+
+		FetchFunc: func(queryOptions *query.QueryOptions, scopes []func(*gorm.DB) *gorm.DB) (interface{}, error) {
+			modifiedOptions := *queryOptions
+			if queryOptions.Top != nil {
+				topPlusOne := *queryOptions.Top + 1
+				modifiedOptions.Top = &topPlusOne
+			}
+
+			db := relatedDB
+			if len(scopes) > 0 {
+				db = db.Scopes(scopes...)
+			}
+
+			db = query.ApplyQueryOptions(db, &modifiedOptions, targetMetadata)
+
+			if query.ShouldUseMapResults(queryOptions) {
+				var mapResults []map[string]interface{}
+				if err := db.Find(&mapResults).Error; err != nil {
+					return nil, err
+				}
+				return mapResults, nil
+			}
+
+			resultsSlice := reflect.New(reflect.SliceOf(targetMetadata.EntityType)).Interface()
+			if err := db.Find(resultsSlice).Error; err != nil {
+				return nil, err
+			}
+
+			results := reflect.ValueOf(resultsSlice).Elem().Interface()
+
+			if queryOptions.Search != "" {
+				results = query.ApplySearch(results, queryOptions.Search, targetMetadata)
+			}
+
+			if len(queryOptions.Select) > 0 {
+				results = query.ApplySelect(results, queryOptions.Select, targetMetadata, queryOptions.Expand)
+			}
+
+			return results, nil
+		},
+
+		NextLinkFunc: func(queryOptions *query.QueryOptions, results interface{}) (*string, interface{}, error) {
+			if queryOptions.Top == nil {
+				return nil, results, nil
+			}
+
+			value := reflect.ValueOf(results)
+			if value.Kind() == reflect.Slice && value.Len() > *queryOptions.Top {
+				trimmed := h.trimResults(results, *queryOptions.Top)
+				baseURL := response.BuildBaseURL(r)
+				nextURL := buildNextLink(baseURL, navigationPath, queryOptions)
+				return &nextURL, trimmed, nil
+			}
+
+			return nil, results, nil
+		},
+
+		AfterRead: func(queryOptions *query.QueryOptions, results interface{}) (interface{}, bool, error) {
+			return callAfterReadCollection(targetMetadata, r, queryOptions, results)
+		},
+
+		WriteResponse: func(queryOptions *query.QueryOptions, results interface{}, totalCount *int64, nextLink *string) error {
+			if isRef {
+				h.writeNavigationCollectionRefFromData(w, r, targetMetadata, results, totalCount, nextLink)
+				return nil
+			}
+
+			if err := response.WriteODataCollection(w, r, navigationPath, results, totalCount, nextLink); err != nil {
+				fmt.Printf("Error writing navigation property collection: %v\n", err)
+			}
+
+			return nil
+		},
+	})
 }
 
 // handleNavigationCollectionItem handles accessing a specific item from a collection navigation property
