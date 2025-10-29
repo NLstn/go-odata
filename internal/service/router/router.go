@@ -262,6 +262,39 @@ func (r *Router) handlePropertyRequest(w http.ResponseWriter, req *http.Request,
 		propertySegments = []string{components.NavigationProperty}
 	}
 
+	// Check for function composition after navigation property
+	// e.g., Categories(1)/Products/GetAveragePrice()
+	if len(propertySegments) > 1 {
+		firstSegment := propertySegments[0]
+		lastSegment := propertySegments[len(propertySegments)-1]
+		
+		// Extract operation name from last segment (remove parameters)
+		lastOperationName := lastSegment
+		if idx := strings.Index(lastSegment, "("); idx != -1 {
+			lastOperationName = lastSegment[:idx]
+		}
+		
+		// Check if first segment is a navigation property and last segment is an operation
+		if handler.IsNavigationProperty(firstSegment) && r.isActionOrFunction(lastOperationName) {
+			// This is function composition: navigate first, then invoke operation
+			// We need to get the target entity set for the navigation property
+			targetEntitySet := r.getNavigationTargetEntitySet(handler, firstSegment)
+			if targetEntitySet == "" {
+				if writeErr := response.WriteError(w, http.StatusInternalServerError, "Internal error",
+					fmt.Sprintf("Could not determine target entity set for navigation property '%s'", firstSegment)); writeErr != nil {
+					fmt.Printf("Error writing error response: %v\n", writeErr)
+				}
+				return
+			}
+			
+			// Update request URL to point to the navigated collection with the operation
+			// e.g., change Categories(1)/Products/GetAveragePrice() to Products/GetAveragePrice()
+			// but we need to ensure the operation is bound to the navigated collection
+			r.actionInvoker(w, req, lastOperationName, "", true, targetEntitySet)
+			return
+		}
+	}
+
 	if handler.IsNavigationProperty(components.NavigationProperty) {
 		if components.IsValue {
 			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid request",
@@ -349,4 +382,23 @@ func (r *Router) isActionOrFunction(name string) bool {
 		return true
 	}
 	return false
+}
+
+// getNavigationTargetEntitySet returns the target entity set name for a navigation property
+func (r *Router) getNavigationTargetEntitySet(handler EntityHandler, navigationProperty string) string {
+	// The handler should have metadata about navigation properties
+	// For now, we'll use a simple approach: fetch an entity and check the navigation target
+	// This is a temporary solution - ideally we'd have metadata access in the router
+	
+	// Try to fetch entity metadata through reflection or handler interface
+	// Since we don't have direct access to metadata here, we need a different approach
+	
+	// Look up the handler for the navigation target by trying common patterns
+	// Navigation property names often match entity set names (e.g., Products -> Products)
+	if targetHandler, exists := r.resolveHandler(navigationProperty); exists {
+		_ = targetHandler // We found it
+		return navigationProperty
+	}
+	
+	return ""
 }
