@@ -12,8 +12,10 @@ type Preference struct {
 	ReturnMinimal         bool
 	MaxPageSize           *int // odata.maxpagesize preference
 	TrackChangesRequested bool
+	RespondAsyncRequested bool
 
 	trackChangesApplied bool
+	respondAsyncApplied bool
 }
 
 // ParsePrefer parses the Prefer header from an HTTP request
@@ -40,6 +42,8 @@ func ParsePrefer(r *http.Request) *Preference {
 			pref.ReturnRepresentation = true
 		case "return=minimal":
 			pref.ReturnMinimal = true
+		case "respond-async":
+			pref.RespondAsyncRequested = true
 		default:
 			// Check for odata.maxpagesize preference
 			if strings.HasPrefix(pLower, "odata.maxpagesize=") {
@@ -90,6 +94,9 @@ func (p *Preference) GetPreferenceApplied() string {
 	if p.trackChangesApplied {
 		applied = append(applied, "odata.track-changes")
 	}
+	if p.respondAsyncApplied {
+		applied = append(applied, "respond-async")
+	}
 	return strings.Join(applied, ", ")
 }
 
@@ -98,4 +105,38 @@ func (p *Preference) ApplyTrackChanges() {
 	if p.TrackChangesRequested {
 		p.trackChangesApplied = true
 	}
+}
+
+// ApplyRespondAsync marks the respond-async preference as applied if it was requested.
+func (p *Preference) ApplyRespondAsync() {
+	if p.RespondAsyncRequested {
+		p.respondAsyncApplied = true
+	}
+}
+
+// RespondAsyncApplied returns true if the respond-async preference was applied.
+func (p *Preference) RespondAsyncApplied() bool {
+	return p.respondAsyncApplied
+}
+
+// SanitizeForAsyncDispatch rebuilds a Prefer header without the respond-async token.
+func SanitizeForAsyncDispatch(preferHeader string) string {
+	if preferHeader == "" {
+		return ""
+	}
+
+	tokens := strings.Split(preferHeader, ",")
+	sanitized := make([]string, 0, len(tokens))
+	for _, token := range tokens {
+		trimmed := strings.TrimSpace(token)
+		if trimmed == "" {
+			continue
+		}
+		if strings.EqualFold(trimmed, "respond-async") {
+			continue
+		}
+		sanitized = append(sanitized, trimmed)
+	}
+
+	return strings.Join(sanitized, ", ")
 }
