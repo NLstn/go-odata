@@ -33,17 +33,18 @@ debug_log_request() {
         return
     fi
     
-    echo -e "${BLUE}╔══════════════════════════════════════════════════════╗${NC}"
-    echo -e "${BLUE}║ DEBUG: HTTP Request${NC}"
-    echo -e "${BLUE}╚══════════════════════════════════════════════════════╝${NC}"
-    echo ""
+    echo "" >&2
+    echo -e "${BLUE}╔══════════════════════════════════════════════════════╗${NC}" >&2
+    echo -e "${BLUE}║ DEBUG: HTTP Request                                  ║${NC}" >&2
+    echo -e "${BLUE}╚══════════════════════════════════════════════════════╝${NC}" >&2
+    echo "" >&2
     
     local method="$1"
     local url="$2"
     shift 2
     
-    echo -e "${YELLOW}Method:${NC} $method"
-    echo -e "${YELLOW}URL:${NC} $url"
+    echo -e "${YELLOW}Method:${NC} $method" >&2
+    echo -e "${YELLOW}URL:${NC} $url" >&2
     
     # Parse headers and body from remaining arguments
     local headers=""
@@ -65,15 +66,19 @@ debug_log_request() {
     done
     
     if [ -n "$headers" ]; then
-        echo -e "${YELLOW}Headers:${NC}"
-        echo -e "$headers"
+        echo -e "${YELLOW}Headers:${NC}" >&2
+        echo -e "$headers" >&2
     fi
     
     if [ -n "$body" ]; then
-        echo -e "${YELLOW}Body:${NC}"
-        echo "$body" | python3 -m json.tool 2>/dev/null || echo "$body"
+        echo -e "${YELLOW}Body:${NC}" >&2
+        if echo "$body" | python3 -m json.tool >/dev/null 2>&1; then
+            echo "$body" | python3 -m json.tool >&2
+        else
+            echo "$body" >&2
+        fi
     fi
-    echo ""
+    echo "" >&2
 }
 
 # Function to print debug information for HTTP responses
@@ -86,18 +91,23 @@ debug_log_response() {
     local status_code="$1"
     local body="$2"
     
-    echo -e "${BLUE}╔══════════════════════════════════════════════════════╗${NC}"
-    echo -e "${BLUE}║ DEBUG: HTTP Response${NC}"
-    echo -e "${BLUE}╚══════════════════════════════════════════════════════╝${NC}"
-    echo ""
-    echo -e "${YELLOW}Status Code:${NC} $status_code"
+    echo "" >&2
+    echo -e "${BLUE}╔══════════════════════════════════════════════════════╗${NC}" >&2
+    echo -e "${BLUE}║ DEBUG: HTTP Response                                 ║${NC}" >&2
+    echo -e "${BLUE}╚══════════════════════════════════════════════════════╝${NC}" >&2
+    echo "" >&2
+    echo -e "${YELLOW}Status Code:${NC} $status_code" >&2
     
     if [ -n "$body" ]; then
-        echo -e "${YELLOW}Body:${NC}"
+        echo -e "${YELLOW}Body:${NC}" >&2
         # Try to pretty-print JSON, fall back to raw output if not JSON
-        echo "$body" | python3 -m json.tool 2>/dev/null || echo "$body"
+        if echo "$body" | python3 -m json.tool >/dev/null 2>&1; then
+            echo "$body" | python3 -m json.tool >&2
+        else
+            echo "$body" >&2
+        fi
     fi
-    echo ""
+    echo "" >&2
 }
 
 # Function to reseed the database to default state
