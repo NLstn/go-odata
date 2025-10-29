@@ -246,6 +246,56 @@ func TestParseQueryOptions(t *testing.T) {
 				}
 			},
 		},
+		{
+			name:      "Duplicate $filter parameters should fail",
+			query:     "$filter=Price gt 100&$filter=Name eq 'test'",
+			expectErr: true,
+		},
+		{
+			name:      "Duplicate $top parameters should fail",
+			query:     "$top=10&$top=5",
+			expectErr: true,
+		},
+		{
+			name:      "Duplicate $skip parameters should fail",
+			query:     "$skip=5&$skip=10",
+			expectErr: true,
+		},
+		{
+			name:      "Duplicate $select parameters should fail",
+			query:     "$select=Name&$select=Price",
+			expectErr: true,
+		},
+		{
+			name:      "Duplicate $orderby parameters should fail",
+			query:     "$orderby=Name&$orderby=Price",
+			expectErr: true,
+		},
+		{
+			name:      "Duplicate $count parameters should fail",
+			query:     "$count=true&$count=false",
+			expectErr: true,
+		},
+		{
+			name:      "Duplicate $expand parameters should fail",
+			query:     "$expand=Category&$expand=Supplier",
+			expectErr: true,
+		},
+		{
+			name:      "Duplicate $search parameters should fail",
+			query:     "$search=laptop&$search=computer",
+			expectErr: true,
+		},
+		{
+			name:      "Duplicate $compute parameters should fail",
+			query:     "$compute=Price mul 1.1 as Total&$compute=Price mul 0.9 as Discount",
+			expectErr: true,
+		},
+		{
+			name:      "Duplicate $apply parameters should fail",
+			query:     "$apply=filter(Price gt 100)&$apply=groupby((Category))",
+			expectErr: true,
+		},
 	}
 
 	for _, tt := range tests {
