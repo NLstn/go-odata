@@ -3,7 +3,6 @@ package handlers
 import (
 	"fmt"
 	"net/http"
-	"reflect"
 
 	"github.com/nlstn/go-odata/internal/query"
 )
@@ -56,18 +55,9 @@ func (h *EntityHandler) handleGetCount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var count int64
-	countDB := h.db.Model(reflect.New(h.metadata.EntityType).Interface())
-	if len(scopes) > 0 {
-		countDB = countDB.Scopes(scopes...)
-	}
-
-	if queryOptions.Filter != nil {
-		countDB = query.ApplyFilterOnly(countDB, queryOptions.Filter, h.metadata)
-	}
-
-	if err := countDB.Count(&count).Error; err != nil {
-		WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error())
+	count, countErr := h.countEntities(queryOptions, scopes)
+	if countErr != nil {
+		WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, countErr.Error())
 		return
 	}
 
@@ -78,8 +68,8 @@ func (h *EntityHandler) handleGetCount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := fmt.Fprintf(w, "%d", count); err != nil {
-		fmt.Printf("Error writing count response: %v\n", err)
+	if _, writeErr := fmt.Fprintf(w, "%d", count); writeErr != nil {
+		fmt.Printf("Error writing count response: %v\n", writeErr)
 	}
 }
 

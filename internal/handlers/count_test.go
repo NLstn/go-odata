@@ -1,9 +1,15 @@
 package handlers
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strconv"
+	"strings"
 	"testing"
+
+	"github.com/nlstn/go-odata/internal/query"
 )
 
 func TestEntityHandlerCount(t *testing.T) {
@@ -80,6 +86,27 @@ func TestEntityHandlerCount(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			helperReq := httptest.NewRequest(http.MethodGet, tt.url, nil)
+			queryOptions, err := query.ParseQueryOptions(helperReq.URL.Query(), handler.metadata)
+			if err != nil {
+				t.Fatalf("failed to parse query options: %v", err)
+			}
+
+			scopes, hookErr := callBeforeReadCollection(handler.metadata, helperReq, queryOptions)
+			if hookErr != nil {
+				t.Fatalf("before read hook failed: %v", hookErr)
+			}
+
+			helperCount, err := handler.countEntities(queryOptions, scopes)
+			if err != nil {
+				t.Fatalf("countEntities returned error: %v", err)
+			}
+
+			helperCountStr := strconv.FormatInt(helperCount, 10)
+			if helperCountStr != tt.expectedCount {
+				t.Fatalf("countEntities = %s, want %s", helperCountStr, tt.expectedCount)
+			}
+
 			req := httptest.NewRequest(http.MethodGet, tt.url, nil)
 			w := httptest.NewRecorder()
 
@@ -104,6 +131,9 @@ func TestEntityHandlerCount(t *testing.T) {
 			if body != tt.expectedCount {
 				t.Errorf("Body = %v, want %v", body, tt.expectedCount)
 			}
+			if body != helperCountStr {
+				t.Errorf("Body = %v, want helper count %v", body, helperCountStr)
+			}
 			if tt.ensurePlainText {
 				if tt.maxBodyLength > 0 && len(body) > tt.maxBodyLength {
 					t.Errorf("Response body length = %d, want <= %d", len(body), tt.maxBodyLength)
@@ -111,6 +141,127 @@ func TestEntityHandlerCount(t *testing.T) {
 				if tt.forbidJSONPrefix && (len(body) > 0 && (body[0] == '{' || body[0] == '[')) {
 					t.Errorf("Response appears to be JSON, should be plain text: %s", body)
 				}
+			}
+		})
+	}
+}
+
+func TestCountConsistencyAcrossEndpoints(t *testing.T) {
+	handler, db := setupProductHandler(t)
+
+	products := []Product{
+		{ID: 1, Name: "Laptop", Price: 999.99, Category: "Electronics"},
+		{ID: 2, Name: "Mouse", Price: 29.99, Category: "Electronics"},
+		{ID: 3, Name: "Keyboard", Price: 149.99, Category: "Electronics"},
+		{ID: 4, Name: "Chair", Price: 249.99, Category: "Furniture"},
+		{ID: 5, Name: "Desk", Price: 399.99, Category: "Furniture"},
+	}
+	for _, product := range products {
+		db.Create(&product)
+	}
+
+	tests := []struct {
+		name     string
+		filter   string
+		expected int64
+	}{
+		{
+			name:     "All products",
+			expected: 5,
+		},
+		{
+			name:     "Electronics only",
+			filter:   "Category eq 'Electronics'",
+			expected: 3,
+		},
+		{
+			name:     "Furniture only",
+			filter:   "Category eq 'Furniture'",
+			expected: 2,
+		},
+		{
+			name:     "Price less than 200",
+			filter:   "Price lt 200",
+			expected: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			values := url.Values{}
+			if tt.filter != "" {
+				values.Set("$filter", tt.filter)
+			}
+
+			countURL := "/Products/$count"
+			if raw := values.Encode(); raw != "" {
+				countURL += "?" + raw
+			}
+
+			helperReq := httptest.NewRequest(http.MethodGet, countURL, nil)
+			queryOptions, err := query.ParseQueryOptions(helperReq.URL.Query(), handler.metadata)
+			if err != nil {
+				t.Fatalf("failed to parse query options: %v", err)
+			}
+
+			scopes, hookErr := callBeforeReadCollection(handler.metadata, helperReq, queryOptions)
+			if hookErr != nil {
+				t.Fatalf("before read hook failed: %v", hookErr)
+			}
+
+			helperCount, err := handler.countEntities(queryOptions, scopes)
+			if err != nil {
+				t.Fatalf("countEntities returned error: %v", err)
+			}
+			if helperCount != tt.expected {
+				t.Fatalf("countEntities = %d, want %d", helperCount, tt.expected)
+			}
+
+			reqCount := httptest.NewRequest(http.MethodGet, countURL, nil)
+			wCount := httptest.NewRecorder()
+			handler.HandleCount(wCount, reqCount)
+
+			if wCount.Code != http.StatusOK {
+				t.Fatalf("$count status = %d, want %d", wCount.Code, http.StatusOK)
+			}
+
+			countBody := strings.TrimSpace(wCount.Body.String())
+			expectedBody := strconv.FormatInt(tt.expected, 10)
+			if countBody != expectedBody {
+				t.Fatalf("$count body = %s, want %s", countBody, expectedBody)
+			}
+
+			collectionValues := url.Values{}
+			if tt.filter != "" {
+				collectionValues.Set("$filter", tt.filter)
+			}
+			collectionValues.Set("$count", "true")
+
+			collectionURL := "/Products"
+			if raw := collectionValues.Encode(); raw != "" {
+				collectionURL += "?" + raw
+			}
+
+			reqCollection := httptest.NewRequest(http.MethodGet, collectionURL, nil)
+			wCollection := httptest.NewRecorder()
+			handler.HandleCollection(wCollection, reqCollection)
+
+			if wCollection.Code != http.StatusOK {
+				t.Fatalf("collection status = %d, want %d", wCollection.Code, http.StatusOK)
+			}
+
+			var payload map[string]interface{}
+			if err := json.Unmarshal(wCollection.Body.Bytes(), &payload); err != nil {
+				t.Fatalf("failed to decode response: %v", err)
+			}
+
+			countValue, ok := payload["@odata.count"].(float64)
+			if !ok {
+				t.Fatalf("expected @odata.count in response, got %v", payload["@odata.count"])
+			}
+
+			if int64(countValue) != tt.expected {
+				t.Fatalf("@odata.count = %d, want %d", int64(countValue), tt.expected)
 			}
 		})
 	}

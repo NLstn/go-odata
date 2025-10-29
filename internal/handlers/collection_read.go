@@ -94,17 +94,8 @@ func (h *EntityHandler) collectionCountFunc() func(*query.QueryOptions, []func(*
 			return nil, nil
 		}
 
-		countDB := h.db.Model(reflect.New(h.metadata.EntityType).Interface())
-		if len(scopes) > 0 {
-			countDB = countDB.Scopes(scopes...)
-		}
-
-		if queryOptions.Filter != nil {
-			countDB = query.ApplyFilterOnly(countDB, queryOptions.Filter, h.metadata)
-		}
-
-		var count int64
-		if err := countDB.Count(&count).Error; err != nil {
+		count, err := h.countEntities(queryOptions, scopes)
+		if err != nil {
 			return nil, err
 		}
 
@@ -489,17 +480,8 @@ func (h *EntityHandler) getTotalCount(queryOptions *query.QueryOptions, w http.R
 		return nil
 	}
 
-	var count int64
-	countDB := h.db.Model(reflect.New(h.metadata.EntityType).Interface())
-	if len(scopes) > 0 {
-		countDB = countDB.Scopes(scopes...)
-	}
-
-	if queryOptions.Filter != nil {
-		countDB = query.ApplyFilterOnly(countDB, queryOptions.Filter, h.metadata)
-	}
-
-	if err := countDB.Count(&count).Error; err != nil {
+	count, err := h.countEntities(queryOptions, scopes)
+	if err != nil {
 		WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error())
 		return nil
 	}
