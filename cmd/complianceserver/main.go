@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/NLstn/go-odata/complianceserver/entities"
 	"github.com/nlstn/go-odata"
+	"github.com/nlstn/go-odata/cmd/complianceserver/entities"
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"

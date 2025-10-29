@@ -40,6 +40,21 @@ func (h *EntityHandler) IsComplexTypeProperty(propertyName string) bool {
 	return h.findComplexTypeProperty(propertyName) != nil
 }
 
+// findStreamProperty finds a stream property by name in the entity metadata
+func (h *EntityHandler) findStreamProperty(propertyName string) *metadata.PropertyMetadata {
+	for i := range h.metadata.StreamProperties {
+		if h.metadata.StreamProperties[i].Name == propertyName {
+			return &h.metadata.StreamProperties[i]
+		}
+	}
+	return nil
+}
+
+// IsStreamProperty checks if a property name is a stream property
+func (h *EntityHandler) IsStreamProperty(propertyName string) bool {
+	return h.findStreamProperty(propertyName) != nil
+}
+
 // writeMethodNotAllowedError writes a method not allowed error for a specific context
 func (h *EntityHandler) writeMethodNotAllowedError(w http.ResponseWriter, method, context string) {
 	if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,

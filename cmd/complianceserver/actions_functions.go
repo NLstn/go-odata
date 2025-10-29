@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"reflect"
 
-	"github.com/NLstn/go-odata/complianceserver/entities"
 	"github.com/nlstn/go-odata"
+	"github.com/nlstn/go-odata/cmd/complianceserver/entities"
 	"gorm.io/gorm"
 )
 

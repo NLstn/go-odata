@@ -1,4 +1,4 @@
-module github.com/NLstn/go-odata/complianceserver
+module github.com/nlstn/go-odata/cmd/complianceserver
 
 go 1.24
 
