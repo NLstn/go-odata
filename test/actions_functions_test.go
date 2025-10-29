@@ -613,7 +613,7 @@ func TestActionWithParameters(t *testing.T) {
 		},
 		ReturnType: nil,
 		Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) error {
-			productID := int(params["productId"].(float64))
+			productID := int(params["productId"].(int64))
 			price := params["price"].(float64)
 
 			if err := db.Model(&ActionTestProduct{}).Where("id = ?", productID).Update("price", price).Error; err != nil {

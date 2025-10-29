@@ -4,9 +4,21 @@ import (
 	"bytes"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"reflect"
 	"testing"
 )
+
+type sampleAddress struct {
+	Street   string            `json:"street"`
+	Tags     []string          `json:"tags"`
+	Metadata map[string]string `json:"metadata"`
+}
+
+type sampleOrder struct {
+	Address sampleAddress `json:"address"`
+	Counts  []int         `json:"counts"`
+}
 
 func TestParseActionParameters_ValidTypes(t *testing.T) {
 	tests := []struct {
@@ -31,7 +43,7 @@ func TestParseActionParameters_ValidTypes(t *testing.T) {
 			paramDefs: []ParameterDefinition{
 				{Name: "count", Type: reflect.TypeOf(int64(0)), Required: true},
 			},
-			wantParams: map[string]interface{}{"count": float64(5)},
+			wantParams: map[string]interface{}{"count": int64(5)},
 			wantErr:    false,
 		},
 		{
@@ -63,7 +75,7 @@ func TestParseActionParameters_ValidTypes(t *testing.T) {
 			},
 			wantParams: map[string]interface{}{
 				"name":   "test",
-				"count":  float64(5),
+				"count":  int64(5),
 				"price":  10.5,
 				"active": true,
 			},
@@ -126,7 +138,7 @@ func TestParseActionParameters_InvalidTypes(t *testing.T) {
 			paramDefs: []ParameterDefinition{
 				{Name: "price", Type: reflect.TypeOf(float64(0)), Required: true},
 			},
-			wantErr: "parameter 'price' must be a number",
+			wantErr: "parameter 'price' has invalid value: json: cannot unmarshal string into Go value of type float64",
 		},
 		{
 			name: "string instead of int",
@@ -134,7 +146,7 @@ func TestParseActionParameters_InvalidTypes(t *testing.T) {
 			paramDefs: []ParameterDefinition{
 				{Name: "count", Type: reflect.TypeOf(int64(0)), Required: true},
 			},
-			wantErr: "parameter 'count' must be an integer",
+			wantErr: "parameter 'count' has invalid value: json: cannot unmarshal string into Go value of type int64",
 		},
 		{
 			name: "number instead of string",
@@ -142,7 +154,7 @@ func TestParseActionParameters_InvalidTypes(t *testing.T) {
 			paramDefs: []ParameterDefinition{
 				{Name: "name", Type: reflect.TypeOf(""), Required: true},
 			},
-			wantErr: "parameter 'name' must be a string",
+			wantErr: "parameter 'name' has invalid value: json: cannot unmarshal number into Go value of type string",
 		},
 		{
 			name: "string instead of bool",
@@ -150,7 +162,7 @@ func TestParseActionParameters_InvalidTypes(t *testing.T) {
 			paramDefs: []ParameterDefinition{
 				{Name: "active", Type: reflect.TypeOf(true), Required: true},
 			},
-			wantErr: "parameter 'active' must be a boolean",
+			wantErr: "parameter 'active' has invalid value: json: cannot unmarshal string into Go value of type bool",
 		},
 		{
 			name: "float instead of int (non-whole number)",
@@ -158,7 +170,7 @@ func TestParseActionParameters_InvalidTypes(t *testing.T) {
 			paramDefs: []ParameterDefinition{
 				{Name: "count", Type: reflect.TypeOf(int64(0)), Required: true},
 			},
-			wantErr: "parameter 'count' must be an integer",
+			wantErr: "parameter 'count' has invalid value: json: cannot unmarshal number 5.5 into Go value of type int64",
 		},
 	}
 
@@ -217,6 +229,78 @@ func TestParseActionParameters_InvalidJSON(t *testing.T) {
 
 	if err == nil {
 		t.Error("ParseActionParameters() expected error for invalid JSON")
+	}
+}
+
+func TestParseActionParameters_ComplexTypes(t *testing.T) {
+	body := `{
+                "order": {
+                        "address": {
+                                "street": "Main St",
+                                "tags": ["primary", "billing"],
+                                "metadata": {"zone": "north"}
+                        },
+                        "counts": [1, 2, 3]
+                },
+                "labels": ["priority", "express"],
+                "shipping": {
+                        "street": "Second St",
+                        "tags": ["shipping"],
+                        "metadata": {"zone": "south"}
+                }
+        }`
+
+	paramDefs := []ParameterDefinition{
+		{Name: "order", Type: reflect.TypeOf(sampleOrder{}), Required: true},
+		{Name: "labels", Type: reflect.TypeOf([]string{}), Required: true},
+		{Name: "shipping", Type: reflect.TypeOf(&sampleAddress{}), Required: false},
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/test", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	params, err := ParseActionParameters(req, paramDefs)
+	if err != nil {
+		t.Fatalf("ParseActionParameters() unexpected error: %v", err)
+	}
+
+	expectedOrder := sampleOrder{
+		Address: sampleAddress{
+			Street: "Main St",
+			Tags:   []string{"primary", "billing"},
+			Metadata: map[string]string{
+				"zone": "north",
+			},
+		},
+		Counts: []int{1, 2, 3},
+	}
+
+	if got, ok := params["order"].(sampleOrder); !ok || !reflect.DeepEqual(got, expectedOrder) {
+		t.Fatalf("ParseActionParameters() order = %#v, want %#v", params["order"], expectedOrder)
+	}
+
+	expectedLabels := []string{"priority", "express"}
+	if got, ok := params["labels"].([]string); !ok || !reflect.DeepEqual(got, expectedLabels) {
+		t.Fatalf("ParseActionParameters() labels = %#v, want %#v", params["labels"], expectedLabels)
+	}
+
+	if shippingVal, ok := params["shipping"]; ok {
+		shippingPtr, ok := shippingVal.(*sampleAddress)
+		if !ok {
+			t.Fatalf("ParseActionParameters() shipping type = %T, want *sampleAddress", shippingVal)
+		}
+		expectedShipping := &sampleAddress{
+			Street: "Second St",
+			Tags:   []string{"shipping"},
+			Metadata: map[string]string{
+				"zone": "south",
+			},
+		}
+		if !reflect.DeepEqual(shippingPtr, expectedShipping) {
+			t.Fatalf("ParseActionParameters() shipping = %#v, want %#v", shippingPtr, expectedShipping)
+		}
+	} else {
+		t.Fatal("ParseActionParameters() expected shipping parameter to be present")
 	}
 }
 
@@ -325,7 +409,7 @@ func TestParseFunctionParameters_InvalidTypes(t *testing.T) {
 			paramDefs: []ParameterDefinition{
 				{Name: "count", Type: reflect.TypeOf(int64(0)), Required: true},
 			},
-			wantErr: "parameter 'count' must be an integer",
+			wantErr: "parameter 'count' has invalid value: expected integer value",
 		},
 		{
 			name: "invalid float parameter",
@@ -333,7 +417,7 @@ func TestParseFunctionParameters_InvalidTypes(t *testing.T) {
 			paramDefs: []ParameterDefinition{
 				{Name: "rate", Type: reflect.TypeOf(float64(0)), Required: true},
 			},
-			wantErr: "parameter 'rate' must be a number",
+			wantErr: "parameter 'rate' has invalid value: expected numeric value",
 		},
 		{
 			name: "invalid bool parameter",
@@ -341,7 +425,7 @@ func TestParseFunctionParameters_InvalidTypes(t *testing.T) {
 			paramDefs: []ParameterDefinition{
 				{Name: "active", Type: reflect.TypeOf(true), Required: true},
 			},
-			wantErr: "parameter 'active' must be a boolean",
+			wantErr: "parameter 'active' has invalid value: expected boolean value",
 		},
 	}
 
@@ -361,6 +445,67 @@ func TestParseFunctionParameters_InvalidTypes(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestParseFunctionParameters_ComplexTypes(t *testing.T) {
+	t.Run("array query parameter", func(t *testing.T) {
+		addressesLiteral := `[{"street":"First","tags":["primary"],"metadata":{"zone":"north"}},{"street":"Second","tags":[],"metadata":{"zone":"south"}}]`
+		req := httptest.NewRequest(http.MethodGet, "/test?addresses="+url.QueryEscape(addressesLiteral), nil)
+
+		paramDefs := []ParameterDefinition{
+			{Name: "addresses", Type: reflect.TypeOf([]sampleAddress{}), Required: true},
+		}
+
+		params, err := ParseFunctionParameters(req, paramDefs)
+		if err != nil {
+			t.Fatalf("ParseFunctionParameters() unexpected error: %v", err)
+		}
+
+		want := []sampleAddress{
+			{
+				Street:   "First",
+				Tags:     []string{"primary"},
+				Metadata: map[string]string{"zone": "north"},
+			},
+			{
+				Street:   "Second",
+				Tags:     []string{},
+				Metadata: map[string]string{"zone": "south"},
+			},
+		}
+
+		if got, ok := params["addresses"].([]sampleAddress); !ok || !reflect.DeepEqual(got, want) {
+			t.Fatalf("ParseFunctionParameters() addresses = %#v, want %#v", params["addresses"], want)
+		}
+	})
+
+	t.Run("object path parameter", func(t *testing.T) {
+		filterLiteral := `{"address":{"street":"Warehouse","tags":["dock"],"metadata":{"zone":"west"}},"counts":[5,6]}`
+		escaped := url.PathEscape(filterLiteral)
+		req := httptest.NewRequest(http.MethodGet, "/DoSomething(filter="+escaped+")", nil)
+
+		paramDefs := []ParameterDefinition{
+			{Name: "filter", Type: reflect.TypeOf(sampleOrder{}), Required: true},
+		}
+
+		params, err := ParseFunctionParameters(req, paramDefs)
+		if err != nil {
+			t.Fatalf("ParseFunctionParameters() unexpected error: %v", err)
+		}
+
+		want := sampleOrder{
+			Address: sampleAddress{
+				Street:   "Warehouse",
+				Tags:     []string{"dock"},
+				Metadata: map[string]string{"zone": "west"},
+			},
+			Counts: []int{5, 6},
+		}
+
+		if got, ok := params["filter"].(sampleOrder); !ok || !reflect.DeepEqual(got, want) {
+			t.Fatalf("ParseFunctionParameters() filter = %#v, want %#v", params["filter"], want)
+		}
+	})
 }
 
 func TestParseFunctionParameters_MissingRequired(t *testing.T) {

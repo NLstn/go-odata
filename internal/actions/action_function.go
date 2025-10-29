@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"reflect"
+	"strconv"
 	"strings"
 )
 
@@ -53,20 +55,25 @@ func ParseActionParameters(r *http.Request, paramDefs []ParameterDefinition) (ma
 		return params, nil
 	}
 
-	// Parse JSON body
-	var bodyParams map[string]interface{}
+	// Parse JSON body using RawMessage so we can convert into the expected types later
+	var bodyParams map[string]json.RawMessage
 	if err := json.NewDecoder(r.Body).Decode(&bodyParams); err != nil {
 		return nil, fmt.Errorf("failed to parse request body: %w", err)
 	}
 
 	// Validate and convert parameters
 	for _, paramDef := range paramDefs {
-		value, exists := bodyParams[paramDef.Name]
+		rawValue, exists := bodyParams[paramDef.Name]
 		if !exists {
 			if paramDef.Required {
 				return nil, fmt.Errorf("required parameter '%s' is missing", paramDef.Name)
 			}
 			continue
+		}
+
+		value, err := decodeJSONToType(rawValue, paramDef.Type)
+		if err != nil {
+			return nil, fmt.Errorf("parameter '%s' has invalid value: %w", paramDef.Name, err)
 		}
 
 		// Validate parameter type
@@ -109,8 +116,10 @@ func ParseFunctionParameters(r *http.Request, paramDefs []ParameterDefinition) (
 			value = pathValue
 			found = true
 		} else {
-			value = query.Get(paramDef.Name)
-			found = value != ""
+			if values, ok := query[paramDef.Name]; ok && len(values) > 0 {
+				value = values[0]
+				found = true
+			}
 		}
 
 		if !found {
@@ -120,44 +129,142 @@ func ParseFunctionParameters(r *http.Request, paramDefs []ParameterDefinition) (
 			continue
 		}
 
-		// Convert string value to appropriate type
-		var converted interface{}
-		switch paramDef.Type.Kind() {
-		case reflect.String:
-			// Remove quotes if present
-			if len(value) >= 2 && value[0] == '\'' && value[len(value)-1] == '\'' {
-				value = value[1 : len(value)-1]
-			}
-			converted = value
-		case reflect.Int, reflect.Int32, reflect.Int64:
-			var intVal int64
-			if _, err := fmt.Sscanf(value, "%d", &intVal); err != nil {
-				return nil, fmt.Errorf("parameter '%s' must be an integer", paramDef.Name)
-			}
-			converted = intVal
-		case reflect.Float32, reflect.Float64:
-			var floatVal float64
-			if _, err := fmt.Sscanf(value, "%f", &floatVal); err != nil {
-				return nil, fmt.Errorf("parameter '%s' must be a number", paramDef.Name)
-			}
-			converted = floatVal
-		case reflect.Bool:
-			switch value {
-			case "true":
-				converted = true
-			case "false":
-				converted = false
-			default:
-				return nil, fmt.Errorf("parameter '%s' must be a boolean", paramDef.Name)
-			}
-		default:
-			converted = value
+		converted, err := convertStringToType(value, paramDef.Type)
+		if err != nil {
+			return nil, fmt.Errorf("parameter '%s' has invalid value: %w", paramDef.Name, err)
+		}
+
+		if err := validateParameterType(paramDef.Name, converted, paramDef.Type); err != nil {
+			return nil, err
 		}
 
 		params[paramDef.Name] = converted
 	}
 
 	return params, nil
+}
+
+// decodeJSONToType converts a JSON raw message into the expected Go type using reflection.
+func decodeJSONToType(raw []byte, expectedType reflect.Type) (interface{}, error) {
+	if expectedType == nil {
+		var v interface{}
+		if err := json.Unmarshal(raw, &v); err != nil {
+			return nil, err
+		}
+		return v, nil
+	}
+
+	// Create a pointer to the expected type (or pointer to pointer for pointer types)
+	target := reflect.New(expectedType)
+	if err := json.Unmarshal(raw, target.Interface()); err != nil {
+		return nil, err
+	}
+
+	return target.Elem().Interface(), nil
+}
+
+// convertStringToType converts a string representation of a parameter to the expected type.
+func convertStringToType(raw string, expectedType reflect.Type) (interface{}, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		// Handle empty strings explicitly for string parameters
+		baseType := expectedType
+		if expectedType != nil && expectedType.Kind() == reflect.Ptr {
+			baseType = expectedType.Elem()
+		}
+		if baseType != nil && baseType.Kind() == reflect.String {
+			data, err := json.Marshal("")
+			if err != nil {
+				return nil, err
+			}
+			return decodeJSONToType(data, expectedType)
+		}
+	}
+
+	if expectedType == nil {
+		return trimmed, nil
+	}
+
+	baseType := expectedType
+	if expectedType.Kind() == reflect.Ptr {
+		baseType = expectedType.Elem()
+	}
+
+	lowerTrimmed := strings.ToLower(trimmed)
+	if lowerTrimmed == "null" {
+		return decodeJSONToType([]byte("null"), expectedType)
+	}
+
+	if baseType.Kind() == reflect.Struct || baseType.Kind() == reflect.Slice || baseType.Kind() == reflect.Map || strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[") {
+		return decodeJSONToType([]byte(trimmed), expectedType)
+	}
+
+	if baseType.Kind() == reflect.String {
+		str, err := parseStringLiteral(trimmed)
+		if err != nil {
+			return nil, err
+		}
+		data, err := json.Marshal(str)
+		if err != nil {
+			return nil, err
+		}
+		return decodeJSONToType(data, expectedType)
+	}
+
+	switch baseType.Kind() {
+	case reflect.Bool:
+		switch lowerTrimmed {
+		case "true", "false":
+			return decodeJSONToType([]byte(lowerTrimmed), expectedType)
+		default:
+			return nil, fmt.Errorf("expected boolean value")
+		}
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+		reflect.Float32, reflect.Float64:
+		// Ensure the value is a valid numeric literal by attempting to parse first
+		if baseType.Kind() == reflect.Float32 || baseType.Kind() == reflect.Float64 {
+			if _, err := strconv.ParseFloat(trimmed, 64); err != nil {
+				return nil, fmt.Errorf("expected numeric value")
+			}
+		} else if baseType.Kind() == reflect.Uint || baseType.Kind() == reflect.Uint8 || baseType.Kind() == reflect.Uint16 ||
+			baseType.Kind() == reflect.Uint32 || baseType.Kind() == reflect.Uint64 {
+			if _, err := strconv.ParseUint(trimmed, 10, 64); err != nil {
+				return nil, fmt.Errorf("expected unsigned integer value")
+			}
+		} else {
+			if _, err := strconv.ParseInt(trimmed, 10, 64); err != nil {
+				return nil, fmt.Errorf("expected integer value")
+			}
+		}
+		return decodeJSONToType([]byte(trimmed), expectedType)
+	}
+
+	// Fallback: treat as JSON string literal for other cases
+	data, err := json.Marshal(trimmed)
+	if err != nil {
+		return nil, err
+	}
+	return decodeJSONToType(data, expectedType)
+}
+
+// parseStringLiteral handles OData-style quoted strings using single quotes as well as JSON strings.
+func parseStringLiteral(value string) (string, error) {
+	if len(value) >= 2 {
+		if value[0] == '\'' && value[len(value)-1] == '\'' {
+			inner := value[1 : len(value)-1]
+			inner = strings.ReplaceAll(inner, "''", "'")
+			return inner, nil
+		}
+		if value[0] == '"' && value[len(value)-1] == '"' {
+			unquoted, err := strconv.Unquote(value)
+			if err != nil {
+				return "", err
+			}
+			return unquoted, nil
+		}
+	}
+	return value, nil
 }
 
 // parseFunctionPathParameters extracts function parameters from the URL path
@@ -209,6 +316,9 @@ func parseFunctionPathParameters(path string) (map[string]string, error) {
 
 		paramName := strings.TrimSpace(parts[0])
 		paramValue := strings.TrimSpace(parts[1])
+		if unescaped, err := url.PathUnescape(paramValue); err == nil {
+			paramValue = unescaped
+		}
 
 		params[paramName] = paramValue
 	}
@@ -222,6 +332,9 @@ func splitParameterPairs(input string) ([]string, error) {
 	var current strings.Builder
 	inQuote := false
 	quoteChar := rune(0)
+	braceDepth := 0
+	bracketDepth := 0
+	parenDepth := 0
 
 	for i, ch := range input {
 		switch {
@@ -233,7 +346,33 @@ func splitParameterPairs(input string) ([]string, error) {
 			inQuote = false
 			quoteChar = 0
 			current.WriteRune(ch)
-		case ch == ',' && !inQuote:
+		case (ch == '{' || ch == '[' || ch == '(') && !inQuote:
+			switch ch {
+			case '{':
+				braceDepth++
+			case '[':
+				bracketDepth++
+			case '(':
+				parenDepth++
+			}
+			current.WriteRune(ch)
+		case (ch == '}' || ch == ']' || ch == ')') && !inQuote:
+			switch ch {
+			case '}':
+				if braceDepth > 0 {
+					braceDepth--
+				}
+			case ']':
+				if bracketDepth > 0 {
+					bracketDepth--
+				}
+			case ')':
+				if parenDepth > 0 {
+					parenDepth--
+				}
+			}
+			current.WriteRune(ch)
+		case ch == ',' && !inQuote && braceDepth == 0 && bracketDepth == 0 && parenDepth == 0:
 			pairs = append(pairs, current.String())
 			current.Reset()
 		default:
@@ -260,11 +399,8 @@ func validateParameterType(paramName string, value interface{}, expectedType ref
 		return nil // null values are allowed
 	}
 
-	// Get the actual type of the value
 	actualValue := reflect.ValueOf(value)
 	actualKind := actualValue.Kind()
-
-	// Get the expected kind
 	expectedKind := expectedType.Kind()
 
 	// JSON unmarshaling converts numbers to float64
@@ -303,10 +439,17 @@ func validateParameterType(paramName string, value interface{}, expectedType ref
 		}
 
 	default:
-		// For other types, try to check if they are assignable
-		if !actualValue.Type().AssignableTo(expectedType) {
-			return fmt.Errorf("parameter '%s' has invalid type", paramName)
+		actualType := actualValue.Type()
+		if actualType.AssignableTo(expectedType) {
+			return nil
 		}
+		if expectedKind == reflect.Ptr && actualType.AssignableTo(expectedType.Elem()) {
+			return nil
+		}
+		if actualKind == reflect.Ptr && actualValue.Elem().IsValid() && actualValue.Elem().Type().AssignableTo(expectedType) {
+			return nil
+		}
+		return fmt.Errorf("parameter '%s' has invalid type", paramName)
 	}
 
 	return nil
