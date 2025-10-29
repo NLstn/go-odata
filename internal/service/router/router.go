@@ -278,7 +278,7 @@ func (r *Router) handlePropertyRequest(w http.ResponseWriter, req *http.Request,
 		if handler.IsNavigationProperty(firstSegment) && r.isActionOrFunction(lastOperationName) {
 			// This is function composition: navigate first, then invoke operation
 			// We need to get the target entity set for the navigation property
-			targetEntitySet := r.getNavigationTargetEntitySet(handler, firstSegment)
+			targetEntitySet := r.getNavigationTargetEntitySet(firstSegment)
 			if targetEntitySet == "" {
 				if writeErr := response.WriteError(w, http.StatusInternalServerError, "Internal error",
 					fmt.Sprintf("Could not determine target entity set for navigation property '%s'", firstSegment)); writeErr != nil {
@@ -385,14 +385,7 @@ func (r *Router) isActionOrFunction(name string) bool {
 }
 
 // getNavigationTargetEntitySet returns the target entity set name for a navigation property
-func (r *Router) getNavigationTargetEntitySet(handler EntityHandler, navigationProperty string) string {
-	// The handler should have metadata about navigation properties
-	// For now, we'll use a simple approach: fetch an entity and check the navigation target
-	// This is a temporary solution - ideally we'd have metadata access in the router
-	
-	// Try to fetch entity metadata through reflection or handler interface
-	// Since we don't have direct access to metadata here, we need a different approach
-	
+func (r *Router) getNavigationTargetEntitySet(navigationProperty string) string {
 	// Look up the handler for the navigation target by trying common patterns
 	// Navigation property names often match entity set names (e.g., Products -> Products)
 	if targetHandler, exists := r.resolveHandler(navigationProperty); exists {
