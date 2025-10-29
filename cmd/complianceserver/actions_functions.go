@@ -13,29 +13,68 @@ import (
 
 // registerFunctions registers OData functions for compliance testing
 func registerFunctions(service *odata.Service, db *gorm.DB) {
-	// Unbound function: GetTopProducts - returns top N most expensive products
+	// Unbound function: GetTopProducts - overload with no parameters
+	if err := service.RegisterFunction(odata.FunctionDefinition{
+		Name:       "GetTopProducts",
+		IsBound:    false,
+		Parameters: []odata.ParameterDefinition{},
+		ReturnType: reflect.TypeOf([]entities.Product{}),
+		Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) (interface{}, error) {
+			var products []entities.Product
+			if err := db.Order("price DESC").Limit(10).Find(&products).Error; err != nil {
+				return nil, err
+			}
+			return products, nil
+		},
+	}); err != nil {
+		fmt.Printf("Failed to register GetTopProducts (no params) function: %v\n", err)
+	}
+
+	// Unbound function: GetTopProducts - overload with count parameter
 	if err := service.RegisterFunction(odata.FunctionDefinition{
 		Name:    "GetTopProducts",
 		IsBound: false,
 		Parameters: []odata.ParameterDefinition{
-			{Name: "count", Type: reflect.TypeOf(int64(0)), Required: false}, // Optional parameter with default
+			{Name: "count", Type: reflect.TypeOf(int64(0)), Required: true},
 		},
 		ReturnType: reflect.TypeOf([]entities.Product{}),
 		Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) (interface{}, error) {
-			count := int64(10) // Default value
-			if c, ok := params["count"].(int64); ok {
-				count = c
-			}
-
+			count := params["count"].(int64)
 			var products []entities.Product
 			if err := db.Order("price DESC").Limit(int(count)).Find(&products).Error; err != nil {
 				return nil, err
 			}
-
 			return products, nil
 		},
 	}); err != nil {
-		fmt.Printf("Failed to register GetTopProducts function: %v\n", err)
+		fmt.Printf("Failed to register GetTopProducts (with count) function: %v\n", err)
+	}
+
+	// Unbound function: GetTopProducts - overload with count and category parameters
+	if err := service.RegisterFunction(odata.FunctionDefinition{
+		Name:    "GetTopProducts",
+		IsBound: false,
+		Parameters: []odata.ParameterDefinition{
+			{Name: "count", Type: reflect.TypeOf(int64(0)), Required: true},
+			{Name: "category", Type: reflect.TypeOf(""), Required: true},
+		},
+		ReturnType: reflect.TypeOf([]entities.Product{}),
+		Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) (interface{}, error) {
+			count := params["count"].(int64)
+			category := params["category"].(string)
+			
+			var products []entities.Product
+			if err := db.Joins("JOIN categories ON categories.id = products.category_id").
+				Where("categories.name = ?", category).
+				Order("products.price DESC").
+				Limit(int(count)).
+				Find(&products).Error; err != nil {
+				return nil, err
+			}
+			return products, nil
+		},
+	}); err != nil {
+		fmt.Printf("Failed to register GetTopProducts (with count and category) function: %v\n", err)
 	}
 
 	// Bound function: GetTotalPrice - calculates total price with tax
@@ -160,6 +199,129 @@ func registerFunctions(service *odata.Service, db *gorm.DB) {
 		},
 	}); err != nil {
 		fmt.Printf("Failed to register GetAveragePrice function: %v\n", err)
+	}
+
+	// Overloaded function: Calculate - with one parameter
+	if err := service.RegisterFunction(odata.FunctionDefinition{
+		Name:    "Calculate",
+		IsBound: false,
+		Parameters: []odata.ParameterDefinition{
+			{Name: "value", Type: reflect.TypeOf(int64(0)), Required: true},
+		},
+		ReturnType: reflect.TypeOf(int64(0)),
+		Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) (interface{}, error) {
+			value := params["value"].(int64)
+			return value * 2, nil
+		},
+	}); err != nil {
+		fmt.Printf("Failed to register Calculate (one param) function: %v\n", err)
+	}
+
+	// Overloaded function: Calculate - with two parameters
+	if err := service.RegisterFunction(odata.FunctionDefinition{
+		Name:    "Calculate",
+		IsBound: false,
+		Parameters: []odata.ParameterDefinition{
+			{Name: "a", Type: reflect.TypeOf(int64(0)), Required: true},
+			{Name: "b", Type: reflect.TypeOf(int64(0)), Required: true},
+		},
+		ReturnType: reflect.TypeOf(int64(0)),
+		Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) (interface{}, error) {
+			a := params["a"].(int64)
+			b := params["b"].(int64)
+			return a + b, nil
+		},
+	}); err != nil {
+		fmt.Printf("Failed to register Calculate (two params) function: %v\n", err)
+	}
+
+	// Overloaded function: Convert - with string parameter
+	if err := service.RegisterFunction(odata.FunctionDefinition{
+		Name:    "Convert",
+		IsBound: false,
+		Parameters: []odata.ParameterDefinition{
+			{Name: "input", Type: reflect.TypeOf(""), Required: true},
+		},
+		ReturnType: reflect.TypeOf(""),
+		Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) (interface{}, error) {
+			input := params["input"].(string)
+			return "String: " + input, nil
+		},
+	}); err != nil {
+		fmt.Printf("Failed to register Convert (string) function: %v\n", err)
+	}
+
+	// Overloaded function: Convert - with number parameter
+	if err := service.RegisterFunction(odata.FunctionDefinition{
+		Name:    "Convert",
+		IsBound: false,
+		Parameters: []odata.ParameterDefinition{
+			{Name: "number", Type: reflect.TypeOf(int64(0)), Required: true},
+		},
+		ReturnType: reflect.TypeOf(""),
+		Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) (interface{}, error) {
+			number := params["number"].(int64)
+			return fmt.Sprintf("Number: %d", number), nil
+		},
+	}); err != nil {
+		fmt.Printf("Failed to register Convert (number) function: %v\n", err)
+	}
+
+	// Bound function: CalculatePrice - with discount parameter
+	if err := service.RegisterFunction(odata.FunctionDefinition{
+		Name:      "CalculatePrice",
+		IsBound:   true,
+		EntitySet: "Products",
+		Parameters: []odata.ParameterDefinition{
+			{Name: "discount", Type: reflect.TypeOf(float64(0)), Required: true},
+		},
+		ReturnType: reflect.TypeOf(float64(0)),
+		Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) (interface{}, error) {
+			product := ctx.(*entities.Product)
+			discount := params["discount"].(float64)
+			return product.Price * (1.0 - discount/100.0), nil
+		},
+	}); err != nil {
+		fmt.Printf("Failed to register CalculatePrice (one param) function: %v\n", err)
+	}
+
+	// Bound function: CalculatePrice - with discount and tax parameters
+	if err := service.RegisterFunction(odata.FunctionDefinition{
+		Name:      "CalculatePrice",
+		IsBound:   true,
+		EntitySet: "Products",
+		Parameters: []odata.ParameterDefinition{
+			{Name: "discount", Type: reflect.TypeOf(float64(0)), Required: true},
+			{Name: "tax", Type: reflect.TypeOf(float64(0)), Required: true},
+		},
+		ReturnType: reflect.TypeOf(float64(0)),
+		Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) (interface{}, error) {
+			product := ctx.(*entities.Product)
+			discount := params["discount"].(float64)
+			tax := params["tax"].(float64)
+			discountedPrice := product.Price * (1.0 - discount/100.0)
+			return discountedPrice * (1.0 + tax/100.0), nil
+		},
+	}); err != nil {
+		fmt.Printf("Failed to register CalculatePrice (two params) function: %v\n", err)
+	}
+
+	// Bound function: GetInfo for Products
+	if err := service.RegisterFunction(odata.FunctionDefinition{
+		Name:      "GetInfo",
+		IsBound:   true,
+		EntitySet: "Products",
+		Parameters: []odata.ParameterDefinition{
+			{Name: "format", Type: reflect.TypeOf(""), Required: true},
+		},
+		ReturnType: reflect.TypeOf(""),
+		Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) (interface{}, error) {
+			product := ctx.(*entities.Product)
+			format := params["format"].(string)
+			return fmt.Sprintf("Product: %s (Price: %.2f) in %s format", product.Name, product.Price, format), nil
+		},
+	}); err != nil {
+		fmt.Printf("Failed to register GetInfo (Products) function: %v\n", err)
 	}
 }
 
@@ -371,5 +533,57 @@ func registerActions(service *odata.Service, db *gorm.DB) {
 		},
 	}); err != nil {
 		fmt.Printf("Failed to register MarkAllAsReviewed action: %v\n", err)
+	}
+
+	// Overloaded action: Process - with percentage parameter only
+	if err := service.RegisterAction(odata.ActionDefinition{
+		Name:    "Process",
+		IsBound: false,
+		Parameters: []odata.ParameterDefinition{
+			{Name: "percentage", Type: reflect.TypeOf(float64(0)), Required: true},
+		},
+		ReturnType: nil,
+		Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) error {
+			percentage := params["percentage"].(float64)
+			multiplier := 1.0 - (percentage / 100.0)
+
+			if err := db.Model(&entities.Product{}).Where("1 = 1").
+				Update("price", gorm.Expr("price * ?", multiplier)).Error; err != nil {
+				return err
+			}
+
+			w.WriteHeader(http.StatusNoContent)
+			return nil
+		},
+	}); err != nil {
+		fmt.Printf("Failed to register Process (one param) action: %v\n", err)
+	}
+
+	// Overloaded action: Process - with percentage and category parameters
+	if err := service.RegisterAction(odata.ActionDefinition{
+		Name:    "Process",
+		IsBound: false,
+		Parameters: []odata.ParameterDefinition{
+			{Name: "percentage", Type: reflect.TypeOf(float64(0)), Required: true},
+			{Name: "category", Type: reflect.TypeOf(""), Required: true},
+		},
+		ReturnType: nil,
+		Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) error {
+			percentage := params["percentage"].(float64)
+			category := params["category"].(string)
+			multiplier := 1.0 - (percentage / 100.0)
+
+			if err := db.Model(&entities.Product{}).
+				Joins("JOIN categories ON categories.id = products.category_id").
+				Where("categories.name = ?", category).
+				Update("price", gorm.Expr("price * ?", multiplier)).Error; err != nil {
+				return err
+			}
+
+			w.WriteHeader(http.StatusNoContent)
+			return nil
+		},
+	}); err != nil {
+		fmt.Printf("Failed to register Process (two params) action: %v\n", err)
 	}
 }
