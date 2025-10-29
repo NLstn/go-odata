@@ -5,6 +5,7 @@ This guide covers how to configure and integrate the go-odata service into your 
 ## Table of Contents
 
 - [Basic Setup](#basic-setup)
+- [Customizing the Metadata Namespace](#customizing-the-metadata-namespace)
 - [Service as Handler](#service-as-handler)
 - [Custom Path Mounting](#custom-path-mounting)
 - [Adding Middleware](#adding-middleware)
@@ -57,6 +58,23 @@ func main() {
     log.Println("Starting OData service on :8080")
     log.Fatal(http.ListenAndServe(":8080", mux))
 }
+```
+
+## Customizing the Metadata Namespace
+
+By default the service uses the `ODataService` namespace when generating metadata documents and `@odata.type` annotations. You can call `SetNamespace` before registering any entities to align the namespace with client expectations. As implemented in `odata.go`, the metadata handler and entity handlers reuse the namespace you configure, so a single call keeps every response consistent.
+
+```go
+// Initialize OData service
+service := odata.NewService(db)
+
+// Set a custom namespace before registering entities
+if err := service.SetNamespace("Contoso.Sales"); err != nil {
+    log.Fatal(err)
+}
+
+// Register entities after the namespace is set
+service.RegisterEntity(&Product{})
 ```
 
 ## Service as Handler
