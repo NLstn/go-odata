@@ -72,7 +72,7 @@ func TestUnboundFunction(t *testing.T) {
 	}
 
 	// Test function invocation
-	req := httptest.NewRequest(http.MethodGet, "/GetProductCount", nil)
+	req := httptest.NewRequest(http.MethodGet, "/GetProductCount()", nil)
 	w := httptest.NewRecorder()
 
 	service.ServeHTTP(w, req)
@@ -185,7 +185,7 @@ func TestFunctionReturningEntityContext(t *testing.T) {
 		t.Fatalf("Failed to register function: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/GetFeaturedProduct", nil)
+	req := httptest.NewRequest(http.MethodGet, "/GetFeaturedProduct()", nil)
 	w := httptest.NewRecorder()
 
 	service.ServeHTTP(w, req)
@@ -233,7 +233,7 @@ func TestFunctionReturningEntityCollectionContext(t *testing.T) {
 		t.Fatalf("Failed to register function: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/ListProducts", nil)
+	req := httptest.NewRequest(http.MethodGet, "/ListProducts()", nil)
 	w := httptest.NewRecorder()
 
 	service.ServeHTTP(w, req)
@@ -278,7 +278,7 @@ func TestFunctionMetadataNoneOmitsContext(t *testing.T) {
 		t.Fatalf("Failed to register function: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/GetCountForMetadataNone?$format=application/json;odata.metadata=none", nil)
+	req := httptest.NewRequest(http.MethodGet, "/GetCountForMetadataNone()?$format=application/json;odata.metadata=none", nil)
 	w := httptest.NewRecorder()
 
 	service.ServeHTTP(w, req)
@@ -532,7 +532,7 @@ func TestFunctionUnsupportedMethod(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			req := httptest.NewRequest(tc.method, "/TestFunction", nil)
+			req := httptest.NewRequest(tc.method, "/TestFunction()", nil)
 			w := httptest.NewRecorder()
 
 			service.ServeHTTP(w, req)
@@ -572,7 +572,7 @@ func TestFunctionWithParameters(t *testing.T) {
 	}
 
 	// Test function invocation
-	req := httptest.NewRequest(http.MethodGet, "/AddNumbers?a=5&b=3", nil)
+	req := httptest.NewRequest(http.MethodGet, "/AddNumbers()?a=5&b=3", nil)
 	w := httptest.NewRecorder()
 
 	service.ServeHTTP(w, req)
@@ -700,7 +700,7 @@ func TestMissingRequiredParameter(t *testing.T) {
 	}
 
 	// Try to invoke without the required parameter
-	req := httptest.NewRequest(http.MethodGet, "/TestRequiredParam", nil)
+	req := httptest.NewRequest(http.MethodGet, "/TestRequiredParam()", nil)
 	w := httptest.NewRecorder()
 
 	service.ServeHTTP(w, req)
@@ -937,7 +937,7 @@ func TestFunctionParameterTypeValidation(t *testing.T) {
 	}
 
 	// Try to invoke with wrong parameter type
-	req := httptest.NewRequest(http.MethodGet, "/TestTypedFunction?rate=invalid", nil)
+	req := httptest.NewRequest(http.MethodGet, "/TestTypedFunction()?rate=invalid", nil)
 	w := httptest.NewRecorder()
 
 	service.ServeHTTP(w, req)

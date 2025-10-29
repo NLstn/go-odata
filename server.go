@@ -52,9 +52,49 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if this is an unbound action or function (no entity set in path)
-	if s.isActionOrFunction(path) {
-		s.handleActionOrFunction(w, r, path, "", false, "")
-		return
+	// Functions MUST have parameters in parentheses: GetTopProducts() or GetTopProducts(count=5)
+	// Actions do NOT use parentheses (they use POST)
+	switch r.Method {
+	case http.MethodGet:
+		// For GET (functions), require parentheses
+		if strings.Contains(path, "(") && strings.Contains(path, ")") {
+			pathWithoutParams := path
+			if idx := strings.Index(path, "("); idx != -1 {
+				pathWithoutParams = path[:idx]
+			}
+			if s.isActionOrFunction(pathWithoutParams) {
+				s.handleActionOrFunction(w, r, pathWithoutParams, "", false, "")
+				return
+			}
+		}
+	case http.MethodPost:
+		// For POST (actions), no parentheses required
+		if s.isActionOrFunction(path) {
+			s.handleActionOrFunction(w, r, path, "", false, "")
+			return
+		}
+	case http.MethodPut, http.MethodPatch, http.MethodDelete:
+		// Check if this looks like an action/function call (has parentheses or matches registered name)
+		pathWithoutParams := path
+		if idx := strings.Index(path, "("); idx != -1 {
+			pathWithoutParams = path[:idx]
+		}
+		if s.isActionOrFunction(pathWithoutParams) {
+			// Actions/functions don't support these methods
+			if writeErr := response.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
+				fmt.Sprintf("Method %s is not allowed for actions or functions", r.Method)); writeErr != nil {
+				fmt.Printf("Error writing error response: %v\n", writeErr)
+			}
+			return
+		}
+		// Also check without parentheses
+		if s.isActionOrFunction(path) {
+			if writeErr := response.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
+				fmt.Sprintf("Method %s is not allowed for actions or functions", r.Method)); writeErr != nil {
+				fmt.Printf("Error writing error response: %v\n", writeErr)
+			}
+			return
+		}
 	}
 
 	// Parse the OData URL to extract entity set, key, and navigation property
@@ -135,10 +175,19 @@ func (s *Service) routeRequest(w http.ResponseWriter, r *http.Request, handler *
 			}
 			return
 		}
-		// Check if this is an unbound action/function on the collection
-		if components.NavigationProperty != "" && s.isActionOrFunction(components.NavigationProperty) {
-			s.handleActionOrFunction(w, r, components.NavigationProperty, "", false, components.EntitySet)
-		} else if components.NavigationProperty != "" {
+		// Check if this is a bound action/function on the collection
+		if components.NavigationProperty != "" {
+			// Strip parentheses from operation name for lookup
+			operationName := components.NavigationProperty
+			if idx := strings.Index(operationName, "("); idx != -1 {
+				operationName = operationName[:idx]
+			}
+			if s.isActionOrFunction(operationName) {
+				s.handleActionOrFunction(w, r, operationName, "", true, components.EntitySet)
+				return
+			}
+		}
+		if components.NavigationProperty != "" {
 			// Navigation property or action/function not found on collection
 			if writeErr := response.WriteError(w, http.StatusNotFound, "Property or operation not found",
 				fmt.Sprintf("'%s' is not a valid property, action, or function for %s", components.NavigationProperty, components.EntitySet)); writeErr != nil {
@@ -164,9 +213,15 @@ func (s *Service) handlePropertyRequest(w http.ResponseWriter, r *http.Request, 
 	// Check if this is an action or function invocation (bound to entity)
 	propertyOrAction := components.NavigationProperty
 
+	// Strip parentheses from operation name for lookup
+	operationName := propertyOrAction
+	if idx := strings.Index(operationName, "("); idx != -1 {
+		operationName = operationName[:idx]
+	}
+
 	// Try action/function first (bound operations)
-	if s.isActionOrFunction(propertyOrAction) {
-		s.handleActionOrFunction(w, r, propertyOrAction, keyString, true, components.EntitySet)
+	if s.isActionOrFunction(operationName) {
+		s.handleActionOrFunction(w, r, operationName, keyString, true, components.EntitySet)
 		return
 	}
 

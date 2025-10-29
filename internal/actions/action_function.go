@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"strings"
 )
 
 // ParameterDefinition defines a parameter for an action or function
@@ -79,7 +80,7 @@ func ParseActionParameters(r *http.Request, paramDefs []ParameterDefinition) (ma
 	return params, nil
 }
 
-// ParseFunctionParameters parses function parameters from URL query string
+// ParseFunctionParameters parses function parameters from URL query string or path
 func ParseFunctionParameters(r *http.Request, paramDefs []ParameterDefinition) (map[string]interface{}, error) {
 	params := make(map[string]interface{})
 
@@ -87,12 +88,32 @@ func ParseFunctionParameters(r *http.Request, paramDefs []ParameterDefinition) (
 		return params, nil
 	}
 
+	// First, try to parse parameters from the URL path (OData function call syntax)
+	// e.g., /FunctionName(param1=value1,param2=value2)
+	pathParams, err := parseFunctionPathParameters(r.URL.Path)
+	if err != nil {
+		return nil, err
+	}
+
+	// Then, get parameters from query string (alternative syntax)
+	// e.g., /FunctionName?param1=value1&param2=value2
 	query := r.URL.Query()
 
 	// Validate and convert parameters
 	for _, paramDef := range paramDefs {
-		value := query.Get(paramDef.Name)
-		if value == "" {
+		var value string
+		var found bool
+
+		// Try path parameters first, then query string
+		if pathValue, ok := pathParams[paramDef.Name]; ok {
+			value = pathValue
+			found = true
+		} else {
+			value = query.Get(paramDef.Name)
+			found = value != ""
+		}
+
+		if !found {
 			if paramDef.Required {
 				return nil, fmt.Errorf("required parameter '%s' is missing", paramDef.Name)
 			}
@@ -103,6 +124,10 @@ func ParseFunctionParameters(r *http.Request, paramDefs []ParameterDefinition) (
 		var converted interface{}
 		switch paramDef.Type.Kind() {
 		case reflect.String:
+			// Remove quotes if present
+			if len(value) >= 2 && value[0] == '\'' && value[len(value)-1] == '\'' {
+				value = value[1 : len(value)-1]
+			}
 			converted = value
 		case reflect.Int, reflect.Int32, reflect.Int64:
 			var intVal int64
@@ -133,6 +158,100 @@ func ParseFunctionParameters(r *http.Request, paramDefs []ParameterDefinition) (
 	}
 
 	return params, nil
+}
+
+// parseFunctionPathParameters extracts function parameters from the URL path
+// e.g., /FunctionName(param1=value1,param2=value2) -> map[param1:value1 param2:value2]
+// For bound functions on entities, the path might be /EntitySet(key)/FunctionName(params)
+// We need to find the LAST occurrence of parentheses (after the last /)
+func parseFunctionPathParameters(path string) (map[string]string, error) {
+	params := make(map[string]string)
+
+	// Find the last path segment (after the last /)
+	lastSlash := strings.LastIndex(path, "/")
+	var lastSegment string
+	if lastSlash != -1 {
+		lastSegment = path[lastSlash+1:]
+	} else {
+		lastSegment = path
+	}
+
+	// Find the opening parenthesis in the last segment
+	startIdx := strings.Index(lastSegment, "(")
+	if startIdx == -1 {
+		return params, nil // No parameters in path
+	}
+
+	// Find the closing parenthesis in the last segment
+	endIdx := strings.LastIndex(lastSegment, ")")
+	if endIdx == -1 || endIdx < startIdx {
+		return nil, fmt.Errorf("malformed function call: missing closing parenthesis")
+	}
+
+	// Extract parameter string from the last segment
+	paramStr := lastSegment[startIdx+1 : endIdx]
+	if paramStr == "" {
+		return params, nil // Empty parameters: FunctionName()
+	}
+
+	// Split by comma, but be careful of quoted values
+	pairs, err := splitParameterPairs(paramStr)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, pair := range pairs {
+		// Split by '='
+		parts := strings.SplitN(pair, "=", 2)
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("invalid parameter pair: %s", pair)
+		}
+
+		paramName := strings.TrimSpace(parts[0])
+		paramValue := strings.TrimSpace(parts[1])
+
+		params[paramName] = paramValue
+	}
+
+	return params, nil
+}
+
+// splitParameterPairs splits parameter pairs by comma, respecting quoted values
+func splitParameterPairs(input string) ([]string, error) {
+	var pairs []string
+	var current strings.Builder
+	inQuote := false
+	quoteChar := rune(0)
+
+	for i, ch := range input {
+		switch {
+		case (ch == '\'' || ch == '"') && !inQuote:
+			inQuote = true
+			quoteChar = ch
+			current.WriteRune(ch)
+		case ch == quoteChar && inQuote:
+			inQuote = false
+			quoteChar = 0
+			current.WriteRune(ch)
+		case ch == ',' && !inQuote:
+			pairs = append(pairs, current.String())
+			current.Reset()
+		default:
+			current.WriteRune(ch)
+		}
+
+		// Check for unclosed quote at end
+		if i == len(input)-1 && inQuote {
+			return nil, fmt.Errorf("unclosed quote in function parameters")
+		}
+	}
+
+	// Add the last pair
+	if current.Len() > 0 {
+		pairs = append(pairs, current.String())
+	}
+
+	return pairs, nil
 }
 
 // validateParameterType validates that a parameter value matches the expected type
