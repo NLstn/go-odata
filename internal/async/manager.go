@@ -317,6 +317,14 @@ func formatRetryAfter(d time.Duration) string {
 	return strconv.FormatInt(seconds, 10)
 }
 
+// jobSnapshot holds a read-only view of a job's state.
+type jobSnapshot struct {
+	status     JobStatus
+	retryAfter *time.Duration
+	response   *StoredResponse
+	err        string
+}
+
 // ServeMonitor handles HTTP requests for job status monitoring.
 func (m *Manager) ServeMonitor(w http.ResponseWriter, r *http.Request) {
 	id := extractJobID(r)
@@ -327,11 +335,19 @@ func (m *Manager) ServeMonitor(w http.ResponseWriter, r *http.Request) {
 
 	m.mu.Lock()
 	job, ok := m.jobs[id]
-	m.mu.Unlock()
 	if !ok {
+		m.mu.Unlock()
 		http.NotFound(w, r)
 		return
 	}
+	// Create snapshot while holding lock to avoid data races
+	snapshot := jobSnapshot{
+		status:     job.Status,
+		retryAfter: job.retryAfter,
+		response:   job.Response,
+		err:        job.Error,
+	}
+	m.mu.Unlock()
 
 	switch r.Method {
 	case http.MethodDelete:
@@ -339,11 +355,11 @@ func (m *Manager) ServeMonitor(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
-		if job.Status == JobCanceled {
+		if snapshot.status == JobCanceled {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
-		if job.Status == JobCompleted || job.Status == JobFailed {
+		if snapshot.status == JobCompleted || snapshot.status == JobFailed {
 			m.mu.Lock()
 			delete(m.jobs, id)
 			m.mu.Unlock()
@@ -357,23 +373,23 @@ func (m *Manager) ServeMonitor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	switch job.Status {
+	switch snapshot.status {
 	case JobPending, JobRunning:
 		w.Header().Set("Preference-Applied", "respond-async")
-		if job.retryAfter != nil {
-			w.Header().Set("Retry-After", formatRetryAfter(*job.retryAfter))
+		if snapshot.retryAfter != nil {
+			w.Header().Set("Retry-After", formatRetryAfter(*snapshot.retryAfter))
 		}
 		w.WriteHeader(http.StatusAccepted)
 	case JobCompleted:
-		writeStoredResponse(w, job.Response, r.Method != http.MethodHead)
+		writeStoredResponse(w, snapshot.response, r.Method != http.MethodHead)
 	case JobFailed:
-		if job.Response != nil {
-			writeStoredResponse(w, job.Response, r.Method != http.MethodHead)
+		if snapshot.response != nil {
+			writeStoredResponse(w, snapshot.response, r.Method != http.MethodHead)
 			return
 		}
 		w.WriteHeader(http.StatusInternalServerError)
-		if job.Error != "" && r.Method != http.MethodHead {
-			writeBytes(w, []byte(job.Error))
+		if snapshot.err != "" && r.Method != http.MethodHead {
+			writeBytes(w, []byte(snapshot.err))
 		}
 	case JobCanceled:
 		w.WriteHeader(http.StatusNoContent)

@@ -101,7 +101,9 @@ func (s *Service) tryHandleAsync(w http.ResponseWriter, r *http.Request) bool {
 		return true
 	}
 
-	restoreRequestBody(r, body)
+	// Don't restore body on original request - the async worker clones the request
+	// and restores the body on the clone. Restoring here would race with r.Clone()
+	// in the worker goroutine.
 
 	if s.asyncMonitorPrefix != "" {
 		job.SetMonitorURL(s.asyncMonitorPrefix + job.ID)
