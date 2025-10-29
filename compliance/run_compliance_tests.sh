@@ -21,6 +21,7 @@ declare -a TEST_SCRIPTS
 declare -a TEST_NAMES
 declare -a TEST_RESULTS
 declare -a TEST_PASSED
+declare -a TEST_SKIPPED
 declare -a TEST_TOTAL
 
 # Variable to track if we started the server
@@ -356,22 +357,24 @@ for script in $SCRIPTS; do
     fi
     
     # Extract test counts from standardized output format
-    # Format: COMPLIANCE_TEST_RESULT:PASSED=X:FAILED=Y:TOTAL=Z
+    # Format: COMPLIANCE_TEST_RESULT:PASSED=X:FAILED=Y:SKIPPED=Z:TOTAL=W
     RESULT_LINE=$(echo "$OUTPUT" | grep "COMPLIANCE_TEST_RESULT:")
     
     if [ -n "$RESULT_LINE" ]; then
         PASSED=$(echo "$RESULT_LINE" | grep -oP 'PASSED=\K\d+' || echo "0")
         FAILED=$(echo "$RESULT_LINE" | grep -oP 'FAILED=\K\d+' || echo "0")
+        SKIPPED=$(echo "$RESULT_LINE" | grep -oP 'SKIPPED=\K\d+' || echo "0")
         TOTAL=$(echo "$RESULT_LINE" | grep -oP 'TOTAL=\K\d+' || echo "0")
         
         TEST_PASSED[$TEST_INDEX]=${PASSED:-0}
+        TEST_SKIPPED[$TEST_INDEX]=${SKIPPED:-0}
         TEST_TOTAL[$TEST_INDEX]=${TOTAL:-0}
     else
         # ERROR: Test script does not use the standardized test framework
         echo ""
         echo -e "${RED}ERROR${NC}: Test script '$TEST_NAME' does not output the required COMPLIANCE_TEST_RESULT line"
         echo "  All compliance tests MUST use the test framework and call print_summary() at the end"
-        echo "  Expected format: COMPLIANCE_TEST_RESULT:PASSED=X:FAILED=Y:TOTAL=Z"
+        echo "  Expected format: COMPLIANCE_TEST_RESULT:PASSED=X:FAILED=Y:SKIPPED=Z:TOTAL=W"
         echo ""
         echo "  To fix this test:"
         echo "    1. Source the test framework at the top: source \"\$(dirname \"\$0\")/test_framework.sh\""
@@ -381,6 +384,7 @@ for script in $SCRIPTS; do
         
         # Mark this test as failed with 0 tests run
         TEST_PASSED[$TEST_INDEX]=0
+        TEST_SKIPPED[$TEST_INDEX]=0
         TEST_TOTAL[$TEST_INDEX]=0
         TEST_RESULTS[$TEST_INDEX]="FAIL"
     fi
@@ -392,15 +396,18 @@ done
 TOTAL_PASSED=0
 TOTAL_TESTS=0
 TOTAL_FAILED=0
+TOTAL_SKIPPED=0
 SCRIPTS_PASSED=0
 SCRIPTS_TOTAL=${#TEST_SCRIPTS[@]}
 
 for i in "${!TEST_SCRIPTS[@]}"; do
     PASSED_VAL=${TEST_PASSED[$i]:-0}
+    SKIPPED_VAL=${TEST_SKIPPED[$i]:-0}
     TOTAL_VAL=${TEST_TOTAL[$i]:-0}
     TOTAL_PASSED=$((TOTAL_PASSED + PASSED_VAL))
+    TOTAL_SKIPPED=$((TOTAL_SKIPPED + SKIPPED_VAL))
     TOTAL_TESTS=$((TOTAL_TESTS + TOTAL_VAL))
-    TOTAL_FAILED=$((TOTAL_FAILED + TOTAL_VAL - PASSED_VAL))
+    TOTAL_FAILED=$((TOTAL_FAILED + TOTAL_VAL - PASSED_VAL - SKIPPED_VAL))
     if [ "${TEST_RESULTS[$i]}" = "PASS" ]; then
         SCRIPTS_PASSED=$((SCRIPTS_PASSED + 1))
     fi
@@ -431,6 +438,7 @@ echo "Individual Tests:"
 echo "  - Total: $TOTAL_TESTS"
 echo "  - Passing: $TOTAL_PASSED"
 echo "  - Failing: $TOTAL_FAILED"
+echo "  - Skipped: $TOTAL_SKIPPED"
 if [ $TOTAL_TESTS -gt 0 ]; then
     echo "  - Pass Rate: $PERCENTAGE%"
 fi
@@ -478,12 +486,13 @@ cat > "$REPORT_FILE" << EOF
 |--------|-------|
 | Passing | $TOTAL_PASSED |
 | Failing | $TOTAL_FAILED |
+| Skipped | $TOTAL_SKIPPED |
 | Total | $TOTAL_TESTS |
 
 ## Test Results
 
-| Test Section | Status | Passed | Failed | Total | Details |
-|-------------|--------|--------|--------|-------|---------|
+| Test Section | Status | Passed | Failed | Skipped | Total | Details |
+|-------------|--------|--------|--------|---------|-------|---------|
 EOF
 
 # Create a temporary file for sorting
@@ -494,8 +503,9 @@ for i in "${!TEST_SCRIPTS[@]}"; do
     TEST_NAME="${TEST_NAMES[$i]}"
     STATUS="${TEST_RESULTS[$i]}"
     PASSED="${TEST_PASSED[$i]}"
+    SKIPPED="${TEST_SKIPPED[$i]}"
     TOTAL="${TEST_TOTAL[$i]}"
-    FAILED=$((TOTAL - PASSED))
+    FAILED=$((TOTAL - PASSED - SKIPPED))
     
     if [ "$STATUS" = "PASS" ]; then
         STATUS_EMOJI="✅"
@@ -506,13 +516,13 @@ for i in "${!TEST_SCRIPTS[@]}"; do
     # Extract description from test script
     DESCRIPTION=$(grep -A1 "^# OData v4 Compliance Test:" "${TEST_SCRIPTS[$i]}" | tail -1 | sed 's/^# //')
     
-    echo "$TEST_NAME|$STATUS_EMOJI $STATUS|$PASSED|$FAILED|$TOTAL|$DESCRIPTION" >> "$TEMP_REPORT"
+    echo "$TEST_NAME|$STATUS_EMOJI $STATUS|$PASSED|$FAILED|$SKIPPED|$TOTAL|$DESCRIPTION" >> "$TEMP_REPORT"
 done
 
 # Sort by section number (numeric sort on the first field before underscore)
 # Then format and append to report
-sort -t'.' -k1,1n -k2,2n "$TEMP_REPORT" | while IFS='|' read -r name status passed failed total desc; do
-    echo "| $name | $status | $passed | $failed | $total | $desc |" >> "$REPORT_FILE"
+sort -t'.' -k1,1n -k2,2n "$TEMP_REPORT" | while IFS='|' read -r name status passed failed skipped total desc; do
+    echo "| $name | $status | $passed | $failed | $skipped | $total | $desc |" >> "$REPORT_FILE"
 done
 
 # Clean up temp file
@@ -520,6 +530,12 @@ rm -f "$TEMP_REPORT"
 
 # Add footer to report
 cat >> "$REPORT_FILE" << EOF
+
+## Skipped Tests
+
+Skipped tests indicate features from the OData v4 specification that are not yet fully implemented. These tests are marked as skipped to clearly indicate incomplete spec coverage and do not cause the compliance suite to fail.
+
+**Note:** Tests with skipped count greater than 0 indicate areas where implementation is incomplete or pending.
 
 ## Test Categories
 
