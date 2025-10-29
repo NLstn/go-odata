@@ -71,7 +71,9 @@ func main() {
     service := odata.NewService(db)
     
     // Register entity
-    service.RegisterEntity(&Product{})
+    if err := service.RegisterEntity(&Product{}); err != nil {
+        log.Fatal(err)
+    }
     
     // Create HTTP mux and register the OData service as a handler
     mux := http.NewServeMux()
@@ -83,7 +85,8 @@ func main() {
 }
 ```
 
-This creates a fully functional OData v4 service accessible at `http://localhost:8080`.
+This creates a fully functional OData v4 service accessible at `http://localhost:8080`. Make sure to surface registration
+errors—invalid struct tags or duplicate entity names will cause `RegisterEntity` to fail and should be addressed immediately.
 
 ## Documentation
 

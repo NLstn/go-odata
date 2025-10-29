@@ -29,8 +29,14 @@ type Product struct {
 
 ```go
 service := odata.NewService(db)
-service.RegisterEntity(&Product{})
+if err := service.RegisterEntity(&Product{}); err != nil {
+    // Surface registration errors like invalid tags or duplicate entity set names.
+    return err
+}
 ```
+
+Always bubble up registration errors—problems such as malformed tags or duplicate entity names are detected during
+`RegisterEntity` and should be fixed before serving requests.
 
 ## Entity with Rich Metadata
 
