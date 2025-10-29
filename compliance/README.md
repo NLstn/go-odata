@@ -23,17 +23,20 @@ When running all tests (default), both v4.0 and v4.01 tests are executed.
 
 ## Overview
 
-The compliance test suite consists of **86 individual test scripts** with **781 individual test cases** organized by OData v4 specification sections. Each test script validates specific aspects of the OData protocol implementation.
+The compliance test suite consists of **106 individual test scripts** with **967 individual test cases** organized by OData v4 specification sections. Each test script validates specific aspects of the OData protocol implementation.
 
 ### Test Coverage Summary
 
-- **14 Header & Format Tests** - HTTP headers, status codes, JSON format, caching, ETags, OData-EntityId, error response consistency
+- **3 Specification Foundation Tests** - Introduction & Overview, Conformance Requirements, Extensibility
+- **19 Header & Format Tests** - HTTP request/response headers, status codes, JSON format, caching, ETags, OData-EntityId, error response consistency, Content-Type, Accept, Prefer
 - **3 Metadata Tests** - Service Document, Metadata Document, Operations
-- **12 URL Convention Tests** - Entity Addressing, Canonical URL, Property Access, Collection Operations, Metadata Levels, Delta Links, Lambda Operators, Property $value, Stream Properties, Type Casting, Singleton Operations
+- **13 URL Convention Tests** - Resource Path, Entity Addressing, Canonical URL, Property Access, Collection Operations, Metadata Levels, Delta Links, Lambda Operators, Property $value, Stream Properties, Type Casting, Singleton Operations
 - **24 Query Option Tests** - $filter (with string/date/arithmetic/type/logical/comparison/geo operators), $select, $orderby, $top, $skip, $skiptoken, $count, $expand, $search, $format, $apply (including advanced transformations), $compute, $index, nested expand options, query option combinations, orderby with computed properties
-- **13 Data Modification Tests** - GET, POST, PATCH, PUT, DELETE, HEAD, Conditional Requests, Relationships, Modify Relationships, Deep Insert, Batch (including error handling), Asynchronous, Navigation Property Operations, Action/Function Parameters
-- **9 Data Type Tests** - Primitive data types, Numeric edge cases, Nullable properties, Collection properties, Complex types, Enum types (including metadata validation), Temporal types, Type definitions
-- **6 Advanced Tests** - Lambda operators, filter on expanded properties, vocabulary annotations, batch error handling, advanced aggregation transformations
+- **14 Data Modification Tests** - GET, POST, PATCH, PUT, DELETE, HEAD, Conditional Requests, Relationships, Modify Relationships, Deep Insert, Batch (including error handling), Asynchronous (including async processing), Navigation Property Operations, Action/Function Parameters
+- **10 Data Type Tests** - Primitive data types, Numeric edge cases, Nullable properties, Collection properties, Complex types, Enum types (including metadata validation), Temporal types, Type definitions, Navigation Properties
+- **12 CSDL Tests** - EDMX elements, DataServices, Reference, Include, IncludeAnnotations, Nominal types, Structured types, Primitive types, Built-in abstract types, Navigation properties, Annotations
+- **2 Operations Tests** - Actions and Functions (bound and unbound operations), operation parameter validation
+- **6 Advanced Tests** - Lambda operators, filter on expanded properties, vocabulary annotations, batch error handling, advanced aggregation transformations, asynchronous request processing
 - **5 String & Internationalization Tests** - String functions, Unicode and internationalization, URL encoding, edge cases
 
 ## Test Structure
@@ -243,6 +246,24 @@ Example report structure:
 
 ## Available Tests
 
+### Specification Foundation (Sections 1.x, 2.x, 6.x)
+- **1.1_introduction.sh** - Tests basic service requirements from the OData v4 introduction section, including service availability and protocol version support
+- **2.1_conformance.sh** - Tests service conformance to OData v4 specification requirements including proper response formats, required headers, metadata availability, and protocol compliance (MUST requirements)
+- **6.1_extensibility.sh** - Tests OData v4 extensibility features including support for instance annotations, custom annotations, and proper handling of unknown elements
+
+### CSDL Schema (Sections 3.x, 4.x)
+- **3.1_edmx_element.sh** - Tests Element edmx:Edmx in metadata
+- **3.2_dataservices_element.sh** - Tests Element edmx:DataServices in metadata
+- **3.3_reference_element.sh** - Tests Element edmx:Reference in metadata
+- **3.4_include_element.sh** - Tests Element edmx:Include in metadata
+- **3.5_includeannotations_element.sh** - Tests Element edmx:IncludeAnnotations in metadata
+- **4.1_nominal_types.sh** - Tests nominal types in CSDL
+- **4.2_structured_types.sh** - Tests structured types (entity types, complex types) in CSDL
+- **4.3_navigation_properties.sh** - Tests navigation property definitions and relationships in metadata, including relationship types, multiplicity, and partner properties
+- **4.4_primitive_types.sh** - Tests primitive types in CSDL
+- **4.5_builtin_abstract_types.sh** - Tests built-in abstract types
+- **4.6_annotations.sh** - Tests annotations in CSDL
+
 ### Primitive Types (Section 5.x)
 - **5.1.1_primitive_data_types.sh** - Tests handling of OData primitive data types (String, Int32, Decimal, Boolean, DateTime, etc.)
 - **5.1.1.1_numeric_edge_cases.sh** - Tests numeric edge cases including division by zero, precision, large numbers, boundary values, and special numeric conditions
@@ -256,10 +277,14 @@ Example report structure:
 
 ### Headers & Response Codes (Section 8.x)
 - **8.1.1_header_content_type.sh** - Validates Content-Type headers for different response types
+- **8.1.2_request_headers.sh** - Tests proper handling of OData request headers including Accept, Content-Type, OData-MaxVersion, OData-Version, and other standard HTTP request headers
+- **8.1.3_response_headers.sh** - Tests that OData services return proper response headers including Content-Type, OData-Version, and other required or recommended headers
 - **8.1.5_response_status_codes.sh** - Tests correct HTTP status codes for various operations (200, 201, 204, 400, 404, etc.)
 - **8.2.1_cache_control_header.sh** - Tests Cache-Control header handling for HTTP caching
 - **8.2.2_header_if_match.sh** - Tests If-Match and If-None-Match headers for optimistic concurrency control with ETags
 - **8.2.3_header_odata_entityid.sh** - Tests OData-EntityId response header for entity operations
+- **8.2.4_header_content_id.sh** - Tests Content-ID header usage in batch requests for referencing entities
+- **8.2.5_header_location.sh** - Tests that Location header is properly set for resource creation
 - **8.2.6_header_odata_version.sh** - Tests OData-Version header and version negotiation
 - **8.2.7_header_accept.sh** - Tests Accept header content negotiation and media type handling
 - **8.2.8_header_prefer.sh** - Tests Prefer header (return=minimal, return=representation, odata.maxpagesize)
@@ -278,7 +303,8 @@ Example report structure:
 ### JSON Format (Section 10.x)
 - **10.1_json_format.sh** - Tests JSON format requirements (value property, @odata.context, valid structure, etc.)
 
-### URL Conventions (Section 11.2.x)
+### URL Conventions (Section 11.1.x, 11.2.x)
+- **11.1_resource_path.sh** - Tests resource path conventions for addressing OData resources including entity sets, entities, properties, navigation paths, and system resources
 - **11.2.1_addressing_entities.sh** - Tests entity addressing (entity sets, single entities, properties, $value)
 - **11.2.2_canonical_url.sh** - Tests canonical URL representation in @odata.id and dereferenceability
 - **11.2.3_property_access.sh** - Tests accessing individual properties and property $value
@@ -290,6 +316,8 @@ Example report structure:
 - **11.2.11_property_value.sh** - Tests accessing raw property values using $value path segment
 - **11.2.12_stream_properties.sh** - Tests media entities, stream properties, and $value access for binary content (optional feature)
 - **11.2.13_type_casting.sh** - Tests derived types, type casting in URLs, isof/cast functions, and polymorphic queries (optional feature)
+- **11.2.14_url_encoding.sh** - Tests proper handling of URL encoding in resource paths and query parameters
+- **11.2.15_entity_references.sh** - Tests $ref for working with entity references
 - **11.2.16_singleton_operations.sh** - Tests singleton entity operations (GET, PATCH, PUT) and proper error responses for invalid operations
 
 ### Query Options - Search (Section 11.2.4.x)
@@ -326,6 +354,7 @@ Example report structure:
 ### Data Modification (Section 11.4.x)
 - **11.4.1_requesting_entities.sh** - Tests various methods to request individual entities (GET, HEAD, conditional)
 - **11.4.2_create_entity.sh** - Tests entity creation (POST) with proper headers and status codes
+- **11.4.2.1_odata_bind.sh** - Tests @odata.bind for linking entities during creation
 - **11.4.3_update_entity.sh** - Tests entity updates (PATCH) including partial updates and error cases
 - **11.4.4_delete_entity.sh** - Tests entity deletion (DELETE) and verification
 - **11.4.5_upsert.sh** - Tests upsert operations (PUT) for creating or replacing entities
@@ -337,7 +366,20 @@ Example report structure:
 - **11.4.9.1_batch_error_handling.sh** - Tests batch error handling including changeset atomicity, malformed requests, invalid methods, error response formats, and request order preservation
 - **11.4.10_asynchronous_requests.sh** - Tests asynchronous request processing with Prefer: respond-async header
 - **11.4.11_head_requests.sh** - Tests HEAD requests for entities and collections, validates headers without body
+- **11.4.12_returning_results.sh** - Tests Prefer: return=representation and return=minimal headers
 - **11.4.13_action_function_parameters.sh** - Tests parameter validation for actions and functions including required parameters and type validation
+- **11.4.14_null_value_handling.sh** - Tests proper handling of null values in requests and responses
+- **11.4.15_data_validation.sh** - Tests data validation for entity creation and updates
+
+### Conditional Operations (Section 11.5.x)
+- **11.5.1_conditional_requests.sh** - Tests conditional requests with ETags (If-Match, If-None-Match)
+
+### Operations (Section 12.x)
+- **12.1_operations.sh** - Tests OData operations (actions and functions) including bound and unbound operations, parameter passing, and proper invocation syntax
+- **12.2_function_action_overloading.sh** - Tests function and action overloading (OData v4.01 feature)
+
+### Asynchronous Processing (Section 13.x)
+- **13.1_asynchronous_processing.sh** - Tests asynchronous request processing features including the Prefer: respond-async header, status monitor URLs, and proper async response patterns
 
 ### Conditional Operations (Section 11.5.x)
 - **11.5.1_conditional_requests.sh** - Tests conditional requests with ETags (If-Match, If-None-Match)
