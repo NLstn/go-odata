@@ -41,144 +41,147 @@ func (h *EntityHandler) handleOptionsCollection(w http.ResponseWriter) {
 
 // handleGetCollection handles GET requests for entity collections
 func (h *EntityHandler) handleGetCollection(w http.ResponseWriter, r *http.Request) {
-
-	// Parse Prefer header for server-side preferences
 	pref := preference.ParsePrefer(r)
 
-	// Parse query options
-	queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata)
-	if err != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions, err.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
-		}
-		return
-	}
+	h.executeCollectionQuery(w, &collectionExecutionContext{
+		Metadata: h.metadata,
 
-	// Handle delta requests using $deltatoken
-	if queryOptions.DeltaToken != nil {
-		h.handleDeltaCollection(w, r, *queryOptions.DeltaToken)
-		return
-	}
-
-	// Validate skiptoken if present
-	if err := h.validateSkipToken(queryOptions); err != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid $skiptoken", err.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
-		}
-		return
-	}
-
-	// Validate query options for complex types
-	if err := h.validateComplexTypeUsage(queryOptions); err != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, "Unsupported query option", err.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
-		}
-		return
-	}
-
-	// Apply odata.maxpagesize preference if specified
-	if pref.MaxPageSize != nil {
-		queryOptions = h.applyMaxPageSize(queryOptions, *pref.MaxPageSize)
-	}
-
-	// Invoke BeforeReadCollection hooks to obtain scopes
-	scopes, err := callBeforeReadCollection(h.metadata, r, queryOptions)
-	if err != nil {
-		if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", err.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
-		}
-		return
-	}
-
-	// Add type cast filtering scope if specified
-	if typeCast := GetTypeCast(r.Context()); typeCast != "" {
-		// Extract just the type name (last part after dot) for comparison
-		typeParts := strings.Split(typeCast, ".")
-		simpleTypeName := typeCast
-		if len(typeParts) > 0 {
-			simpleTypeName = typeParts[len(typeParts)-1]
-		}
-
-		typeCastScope := func(db *gorm.DB) *gorm.DB {
-			// Filter by ProductType field (GORM will convert to product_type column)
-			// Match both fully qualified and simple type names
-			return db.Where("product_type = ? OR product_type = ?", typeCast, simpleTypeName)
-		}
-		scopes = append(scopes, typeCastScope)
-	}
-
-	// Get the total count if $count=true is specified
-	totalCount := h.getTotalCount(queryOptions, w, scopes)
-	if totalCount == nil && queryOptions.Count {
-		return // Error already written
-	}
-
-	// Fetch the results
-	sliceValue, err := h.fetchResults(queryOptions, scopes)
-	if err != nil {
-		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
-		}
-		return
-	}
-
-	// Calculate next link if pagination is active and trim results if needed
-	nextLink, needsTrimming := h.calculateNextLink(queryOptions, sliceValue, r)
-	if needsTrimming && queryOptions.Top != nil {
-		// Trim the results to $top (we fetched $top + 1 to check for more pages)
-		sliceValue = h.trimResults(sliceValue, *queryOptions.Top)
-	}
-
-	// Invoke AfterReadCollection hooks allowing overrides
-	if override, hasOverride, hookErr := callAfterReadCollection(h.metadata, r, queryOptions, sliceValue); hookErr != nil {
-		if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", hookErr.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
-		}
-		return
-	} else if hasOverride {
-		sliceValue = override
-	}
-
-	var deltaLink *string
-	if pref.TrackChangesRequested {
-		if !h.supportsTrackChanges() {
-			if writeErr := response.WriteError(w, http.StatusNotImplemented, ErrMsgNotImplemented,
-				"Change tracking is not enabled for this entity set"); writeErr != nil {
-				fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		ParseQueryOptions: func() (*query.QueryOptions, error) {
+			queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata)
+			if err != nil {
+				return nil, err
 			}
-			return
-		}
 
-		token, err := h.tracker.CurrentToken(h.metadata.EntitySetName)
-		if err != nil {
-			if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgInternalError, err.Error()); writeErr != nil {
-				fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			if queryOptions.DeltaToken != nil {
+				h.handleDeltaCollection(w, r, *queryOptions.DeltaToken)
+				return nil, errRequestHandled
 			}
-			return
-		}
 
-		link := response.BuildDeltaLink(r, token)
-		deltaLink = &link
-		pref.ApplyTrackChanges()
-	}
+			if err := h.validateSkipToken(queryOptions); err != nil {
+				return nil, &collectionRequestError{
+					StatusCode: http.StatusBadRequest,
+					ErrorCode:  "Invalid $skiptoken",
+					Message:    err.Error(),
+				}
+			}
 
-	// Add Preference-Applied header if any preference was applied
-	if applied := pref.GetPreferenceApplied(); applied != "" {
-		w.Header().Set(HeaderPreferenceApplied, applied)
-	}
+			if err := h.validateComplexTypeUsage(queryOptions); err != nil {
+				return nil, &collectionRequestError{
+					StatusCode: http.StatusBadRequest,
+					ErrorCode:  "Unsupported query option",
+					Message:    err.Error(),
+				}
+			}
 
-	// Get list of expanded properties
-	expandedProps := make([]string, len(queryOptions.Expand))
-	for i, exp := range queryOptions.Expand {
-		expandedProps[i] = exp.NavigationProperty
-	}
+			if pref.MaxPageSize != nil {
+				queryOptions = h.applyMaxPageSize(queryOptions, *pref.MaxPageSize)
+			}
 
-	// Write the OData response with navigation links
-	metadataProvider := newMetadataAdapter(h.metadata, h.namespace)
-	if err := response.WriteODataCollectionWithNavigationAndDelta(w, r, h.metadata.EntitySetName, sliceValue, totalCount, nextLink, deltaLink, metadataProvider, expandedProps, h.metadata); err != nil {
-		// If we can't write the response, log the error but don't try to write another response
-		fmt.Printf("Error writing OData response: %v\n", err)
-	}
+			return queryOptions, nil
+		},
+
+		BeforeRead: func(queryOptions *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
+			scopes, err := callBeforeReadCollection(h.metadata, r, queryOptions)
+			if err != nil {
+				return nil, err
+			}
+
+			if typeCast := GetTypeCast(r.Context()); typeCast != "" {
+				typeParts := strings.Split(typeCast, ".")
+				simpleTypeName := typeCast
+				if len(typeParts) > 0 {
+					simpleTypeName = typeParts[len(typeParts)-1]
+				}
+
+				typeCastScope := func(db *gorm.DB) *gorm.DB {
+					return db.Where("product_type = ? OR product_type = ?", typeCast, simpleTypeName)
+				}
+				scopes = append(scopes, typeCastScope)
+			}
+
+			return scopes, nil
+		},
+
+		CountFunc: func(queryOptions *query.QueryOptions, scopes []func(*gorm.DB) *gorm.DB) (*int64, error) {
+			if !queryOptions.Count {
+				return nil, nil
+			}
+
+			countDB := h.db.Model(reflect.New(h.metadata.EntityType).Interface())
+			if len(scopes) > 0 {
+				countDB = countDB.Scopes(scopes...)
+			}
+
+			if queryOptions.Filter != nil {
+				countDB = query.ApplyFilterOnly(countDB, queryOptions.Filter, h.metadata)
+			}
+
+			var count int64
+			if err := countDB.Count(&count).Error; err != nil {
+				return nil, err
+			}
+
+			return &count, nil
+		},
+
+		FetchFunc: func(queryOptions *query.QueryOptions, scopes []func(*gorm.DB) *gorm.DB) (interface{}, error) {
+			return h.fetchResults(queryOptions, scopes)
+		},
+
+		NextLinkFunc: func(queryOptions *query.QueryOptions, results interface{}) (*string, interface{}, error) {
+			nextLink, needsTrim := h.calculateNextLink(queryOptions, results, r)
+			if needsTrim && queryOptions.Top != nil {
+				results = h.trimResults(results, *queryOptions.Top)
+			}
+			return nextLink, results, nil
+		},
+
+		AfterRead: func(queryOptions *query.QueryOptions, results interface{}) (interface{}, bool, error) {
+			return callAfterReadCollection(h.metadata, r, queryOptions, results)
+		},
+
+		WriteResponse: func(queryOptions *query.QueryOptions, results interface{}, totalCount *int64, nextLink *string) error {
+			var deltaLink *string
+			if pref.TrackChangesRequested {
+				if !h.supportsTrackChanges() {
+					return &collectionRequestError{
+						StatusCode: http.StatusNotImplemented,
+						ErrorCode:  ErrMsgNotImplemented,
+						Message:    "Change tracking is not enabled for this entity set",
+					}
+				}
+
+				token, err := h.tracker.CurrentToken(h.metadata.EntitySetName)
+				if err != nil {
+					return &collectionRequestError{
+						StatusCode: http.StatusInternalServerError,
+						ErrorCode:  ErrMsgInternalError,
+						Message:    err.Error(),
+					}
+				}
+
+				link := response.BuildDeltaLink(r, token)
+				deltaLink = &link
+				pref.ApplyTrackChanges()
+			}
+
+			if applied := pref.GetPreferenceApplied(); applied != "" {
+				w.Header().Set(HeaderPreferenceApplied, applied)
+			}
+
+			expandedProps := make([]string, len(queryOptions.Expand))
+			for i, exp := range queryOptions.Expand {
+				expandedProps[i] = exp.NavigationProperty
+			}
+
+			metadataProvider := newMetadataAdapter(h.metadata, h.namespace)
+			if err := response.WriteODataCollectionWithNavigationAndDelta(w, r, h.metadata.EntitySetName, results, totalCount, nextLink, deltaLink, metadataProvider, expandedProps, h.metadata); err != nil {
+				fmt.Printf("Error writing OData response: %v\n", err)
+			}
+
+			return nil
+		},
+	})
 }
 
 func (h *EntityHandler) handleDeltaCollection(w http.ResponseWriter, r *http.Request, token string) {
