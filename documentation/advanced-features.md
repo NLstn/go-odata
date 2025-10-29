@@ -256,6 +256,10 @@ The library supports the following hooks:
 
 Define hooks by implementing the corresponding interface:
 
+> **Why the extra parameters?** Every hook receives the request context and the active `*http.Request` so that you can check
+> cancellation, deadlines, authentication headers, or other per-request metadata before deciding how to handle the entity.
+> Returning a non-`nil` error from any hook aborts the pipeline immediately and propagates the error back to the client.
+
 ```go
 type Product struct {
     ID        uint      `json:"ID" gorm:"primaryKey" odata:"key"`
@@ -266,7 +270,7 @@ type Product struct {
 }
 
 // BeforeCreate hook
-func (p *Product) BeforeCreate() error {
+func (p *Product) BeforeCreate(ctx context.Context, r *http.Request) error {
     p.CreatedAt = time.Now()
     if p.Price < 0 {
         return fmt.Errorf("price cannot be negative")
@@ -275,7 +279,7 @@ func (p *Product) BeforeCreate() error {
 }
 
 // BeforeUpdate hook
-func (p *Product) BeforeUpdate() error {
+func (p *Product) BeforeUpdate(ctx context.Context, r *http.Request) error {
     p.UpdatedAt = time.Now()
     if p.Price < 0 {
         return fmt.Errorf("price cannot be negative")
@@ -284,7 +288,7 @@ func (p *Product) BeforeUpdate() error {
 }
 
 // AfterCreate hook
-func (p *Product) AfterCreate() error {
+func (p *Product) AfterCreate(ctx context.Context, r *http.Request) error {
     log.Printf("Product created: %s (ID: %d)", p.Name, p.ID)
     return nil
 }
@@ -294,7 +298,7 @@ func (p *Product) AfterCreate() error {
 
 **Validation:**
 ```go
-func (p *Product) BeforeCreate() error {
+func (p *Product) BeforeCreate(_ context.Context, _ *http.Request) error {
     if p.Price < 0 {
         return fmt.Errorf("price cannot be negative")
     }
@@ -307,13 +311,13 @@ func (p *Product) BeforeCreate() error {
 
 **Timestamps:**
 ```go
-func (p *Product) BeforeCreate() error {
+func (p *Product) BeforeCreate(_ context.Context, _ *http.Request) error {
     p.CreatedAt = time.Now()
     p.UpdatedAt = time.Now()
     return nil
 }
 
-func (p *Product) BeforeUpdate() error {
+func (p *Product) BeforeUpdate(_ context.Context, _ *http.Request) error {
     p.UpdatedAt = time.Now()
     return nil
 }
@@ -321,7 +325,7 @@ func (p *Product) BeforeUpdate() error {
 
 **Audit Logging:**
 ```go
-func (p *Product) AfterUpdate() error {
+func (p *Product) AfterUpdate(ctx context.Context, r *http.Request) error {
     auditLog := AuditLog{
         EntityType: "Product",
         EntityID:   p.ID,
@@ -334,7 +338,7 @@ func (p *Product) AfterUpdate() error {
 
 **Business Logic:**
 ```go
-func (o *Order) BeforeCreate() error {
+func (o *Order) BeforeCreate(ctx context.Context, r *http.Request) error {
     // Calculate total from items
     var total float64
     for _, item := range o.Items {
@@ -353,7 +357,7 @@ If a hook returns an error:
 - Database changes are rolled back (for operations in transactions)
 
 ```go
-func (p *Product) BeforeCreate() error {
+func (p *Product) BeforeCreate(_ context.Context, _ *http.Request) error {
     if p.Price > 100000 {
         return fmt.Errorf("price exceeds maximum allowed value")
     }
