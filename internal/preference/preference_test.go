@@ -70,6 +70,25 @@ func TestParsePrefer_MultiplePreferences(t *testing.T) {
 	if !pref.ReturnRepresentation {
 		t.Error("ReturnRepresentation should be true")
 	}
+	if !pref.RespondAsyncRequested {
+		t.Error("RespondAsyncRequested should be true when respond-async is present")
+	}
+}
+
+func TestParsePrefer_RespondAsyncCaseInsensitive(t *testing.T) {
+	headers := []string{"RESPOND-ASYNC", "Respond-Async", "ReSpOnD-AsYnC"}
+	for _, header := range headers {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.Header.Set("Prefer", header)
+
+		pref := ParsePrefer(req)
+		if !pref.RespondAsyncRequested {
+			t.Fatalf("expected RespondAsyncRequested to be true for header %s", header)
+		}
+		if pref.RespondAsyncApplied() {
+			t.Fatalf("RespondAsync should not be applied automatically for header %s", header)
+		}
+	}
 }
 
 func TestParsePrefer_WithSpaces(t *testing.T) {
@@ -269,5 +288,73 @@ func TestGetPreferenceApplied_MultiplePreferences(t *testing.T) {
 	applied := pref.GetPreferenceApplied()
 	if applied != "return=representation, odata.maxpagesize=100" {
 		t.Errorf("Expected 'return=representation, odata.maxpagesize=100', got '%s'", applied)
+	}
+}
+
+func TestGetPreferenceApplied_RespondAsyncRequestedButNotApplied(t *testing.T) {
+	pref := &Preference{RespondAsyncRequested: true}
+
+	if pref.GetPreferenceApplied() != "" {
+		t.Fatalf("expected no applied preferences when async is not applied")
+	}
+}
+
+func TestGetPreferenceApplied_RespondAsyncApplied(t *testing.T) {
+	pref := &Preference{RespondAsyncRequested: true}
+	pref.ApplyRespondAsync()
+
+	if !pref.RespondAsyncApplied() {
+		t.Fatalf("expected respond-async to be marked as applied")
+	}
+
+	if applied := pref.GetPreferenceApplied(); applied != "respond-async" {
+		t.Fatalf("expected Preference-Applied to be respond-async, got %s", applied)
+	}
+}
+
+func TestGetPreferenceApplied_RespondAsyncWithOtherPreferences(t *testing.T) {
+	maxPageSize := 10
+	pref := &Preference{
+		ReturnRepresentation:  true,
+		MaxPageSize:           &maxPageSize,
+		RespondAsyncRequested: true,
+	}
+	pref.ApplyRespondAsync()
+
+	applied := pref.GetPreferenceApplied()
+	expected := "return=representation, odata.maxpagesize=10, respond-async"
+	if applied != expected {
+		t.Fatalf("expected '%s', got '%s'", expected, applied)
+	}
+}
+
+func TestApplyRespondAsyncWithoutRequest(t *testing.T) {
+	pref := &Preference{}
+	pref.ApplyRespondAsync()
+
+	if pref.RespondAsyncApplied() {
+		t.Fatalf("respond-async should not be applied when not requested")
+	}
+}
+
+func TestSanitizeForAsyncDispatch(t *testing.T) {
+	sanitized := SanitizeForAsyncDispatch("return=minimal, respond-async, odata.maxpagesize=10")
+	expected := "return=minimal, odata.maxpagesize=10"
+	if sanitized != expected {
+		t.Fatalf("expected sanitized header '%s', got '%s'", expected, sanitized)
+	}
+}
+
+func TestSanitizeForAsyncDispatch_OnlyRespondAsync(t *testing.T) {
+	sanitized := SanitizeForAsyncDispatch("respond-async")
+	if sanitized != "" {
+		t.Fatalf("expected empty sanitized header, got '%s'", sanitized)
+	}
+}
+
+func TestSanitizeForAsyncDispatch_MultipleRespondAsyncTokens(t *testing.T) {
+	sanitized := SanitizeForAsyncDispatch("respond-async, return=minimal, RESPOND-ASYNC")
+	if sanitized != "return=minimal" {
+		t.Fatalf("expected sanitized header 'return=minimal', got '%s'", sanitized)
 	}
 }

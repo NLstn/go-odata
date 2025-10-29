@@ -444,3 +444,28 @@ func TestPreferHeader_MultiplePreferences(t *testing.T) {
 		t.Errorf("Preference-Applied = %v, want return=minimal", preferenceApplied)
 	}
 }
+
+func TestPreferHeader_RespondAsyncOnlyDoesNotSetPreferenceApplied(t *testing.T) {
+	service, _ := setupPreferTestService(t)
+
+	newProduct := map[string]interface{}{
+		"name":  "AsyncOnly",
+		"price": 15.00,
+	}
+	body, _ := json.Marshal(newProduct)
+
+	req := httptest.NewRequest(http.MethodPost, "/PreferTestProducts", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Prefer", "respond-async")
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("Status = %v, want %v", w.Code, http.StatusCreated)
+	}
+
+	if preferenceApplied := w.Header().Get("Preference-Applied"); preferenceApplied != "" {
+		t.Fatalf("Preference-Applied should be empty when async preference is not honored, got %q", preferenceApplied)
+	}
+}
