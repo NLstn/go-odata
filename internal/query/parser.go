@@ -379,27 +379,43 @@ func extractAllComputedAliases(queryParams url.Values) map[string]bool {
 	return computedAliases
 }
 
-// extractComputedAliases extracts aliases from $compute expressions in $apply
+// extractComputedAliases extracts aliases from $compute and aggregate expressions in $apply
 func extractComputedAliases(applyStr string) map[string]bool {
 	aliases := make(map[string]bool)
 
-	// Look for compute(...) in the apply string
+	// Extract from compute(...) transformations
 	// Format: compute(expression as alias, ...)
-	computeStart := strings.Index(applyStr, "compute(")
-	if computeStart == -1 {
-		return aliases
+	extractAliasesFromString(applyStr, "compute(", aliases)
+
+	// Extract from aggregate(...) transformations
+	// Format: aggregate(prop with sum as alias, ...)
+	extractAliasesFromAggregate(applyStr, aliases)
+
+	// groupby creates a virtual $count property
+	if strings.Contains(applyStr, "groupby(") {
+		aliases["$count"] = true
+	}
+
+	return aliases
+}
+
+// extractAliasesFromString extracts aliases from a specific transformation type in the apply string
+func extractAliasesFromString(applyStr, transformPrefix string, aliases map[string]bool) {
+	start := strings.Index(applyStr, transformPrefix)
+	if start == -1 {
+		return
 	}
 
 	// Find the matching closing parenthesis
 	depth := 0
-	start := computeStart + 8 // Skip "compute("
-	for i := start; i < len(applyStr); i++ {
+	contentStart := start + len(transformPrefix)
+	for i := contentStart; i < len(applyStr); i++ {
 		if applyStr[i] == '(' {
 			depth++
 		} else if applyStr[i] == ')' {
 			if depth == 0 {
-				// Extract the content between compute( and )
-				content := applyStr[start:i]
+				// Extract the content
+				content := applyStr[contentStart:i]
 				// Split by comma and extract aliases
 				expressions := splitComputeExpressions(content)
 				for _, expr := range expressions {
@@ -415,8 +431,53 @@ func extractComputedAliases(applyStr string) map[string]bool {
 			depth--
 		}
 	}
+}
 
-	return aliases
+// extractAliasesFromAggregate extracts aliases from aggregate transformations
+func extractAliasesFromAggregate(applyStr string, aliases map[string]bool) {
+	// Look for aggregate(...) in the apply string
+	// Can appear standalone or within groupby
+	// Format: aggregate(prop with method as alias, ...)
+
+	idx := 0
+	for {
+		aggregateStart := strings.Index(applyStr[idx:], "aggregate(")
+		if aggregateStart == -1 {
+			break
+		}
+
+		aggregateStart += idx
+		depth := 0
+		start := aggregateStart + 10 // Skip "aggregate("
+		for i := start; i < len(applyStr); i++ {
+			if applyStr[i] == '(' {
+				depth++
+			} else if applyStr[i] == ')' {
+				if depth == 0 {
+					// Extract the content between aggregate( and )
+					content := applyStr[start:i]
+					// Split by comma and extract aliases
+					// Format: "prop with sum as Total" or "$count as Count"
+					expressions := splitComputeExpressions(content)
+					for _, expr := range expressions {
+						// Each expression has format: "prop with method as alias" or "$count as alias"
+						asIdx := strings.Index(expr, " as ")
+						if asIdx != -1 {
+							alias := strings.TrimSpace(expr[asIdx+4:])
+							aliases[alias] = true
+						}
+					}
+					idx = i + 1
+					break
+				}
+				depth--
+			}
+		}
+
+		if idx >= len(applyStr) {
+			break
+		}
+	}
 }
 
 // parseExpandOption parses the $expand query parameter

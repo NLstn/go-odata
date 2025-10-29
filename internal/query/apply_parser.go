@@ -37,17 +37,24 @@ func parseApply(applyStr string, entityMetadata *metadata.EntityMetadata) ([]App
 	transformationStrs := splitApplyTransformations(applyStr)
 	transformations := make([]ApplyTransformation, 0, len(transformationStrs))
 
+	// Track computed aliases as we parse through transformations
+	// This allows subsequent filter/orderby transformations to reference computed properties
+	computedAliases := make(map[string]bool)
+
 	for _, transStr := range transformationStrs {
 		transStr = strings.TrimSpace(transStr)
 		if transStr == "" {
 			continue
 		}
 
-		transformation, err := parseApplyTransformation(transStr, entityMetadata)
+		transformation, err := parseApplyTransformationWithAliases(transStr, entityMetadata, computedAliases)
 		if err != nil {
 			return nil, err
 		}
 		transformations = append(transformations, *transformation)
+
+		// Extract aliases from this transformation for use in subsequent transformations
+		extractAliasesFromTransformation(transformation, computedAliases)
 	}
 
 	if len(transformations) == 0 {
@@ -96,6 +103,11 @@ func splitApplyTransformations(applyStr string) []string {
 
 // parseApplyTransformation parses a single transformation
 func parseApplyTransformation(transStr string, entityMetadata *metadata.EntityMetadata) (*ApplyTransformation, error) {
+	return parseApplyTransformationWithAliases(transStr, entityMetadata, nil)
+}
+
+// parseApplyTransformationWithAliases parses a single transformation with computed aliases support
+func parseApplyTransformationWithAliases(transStr string, entityMetadata *metadata.EntityMetadata, computedAliases map[string]bool) (*ApplyTransformation, error) {
 	transStr = strings.TrimSpace(transStr)
 
 	// Determine transformation type
@@ -104,12 +116,49 @@ func parseApplyTransformation(transStr string, entityMetadata *metadata.EntityMe
 	} else if strings.HasPrefix(transStr, "aggregate(") {
 		return parseAggregate(transStr, entityMetadata)
 	} else if strings.HasPrefix(transStr, "filter(") {
-		return parseFilterTransformation(transStr, entityMetadata)
+		return parseFilterTransformation(transStr, entityMetadata, computedAliases)
 	} else if strings.HasPrefix(transStr, "compute(") {
 		return parseCompute(transStr, entityMetadata)
 	}
 
 	return nil, fmt.Errorf("unknown transformation: %s", transStr)
+}
+
+// extractAliasesFromTransformation extracts computed aliases from a transformation
+func extractAliasesFromTransformation(trans *ApplyTransformation, aliases map[string]bool) {
+	if trans == nil {
+		return
+	}
+
+	switch trans.Type {
+	case ApplyTypeGroupBy:
+		// groupby creates a virtual $count property that can be used in subsequent filters
+		if trans.GroupBy != nil {
+			aliases["$count"] = true
+			// Also extract aliases from nested aggregate transformations
+			for _, nestedTrans := range trans.GroupBy.Transform {
+				extractAliasesFromTransformation(&nestedTrans, aliases)
+			}
+		}
+	case ApplyTypeAggregate:
+		// Extract aliases from aggregate expressions
+		if trans.Aggregate != nil {
+			for _, expr := range trans.Aggregate.Expressions {
+				if expr.Alias != "" {
+					aliases[expr.Alias] = true
+				}
+			}
+		}
+	case ApplyTypeCompute:
+		// Extract aliases from compute expressions
+		if trans.Compute != nil {
+			for _, expr := range trans.Compute.Expressions {
+				if expr.Alias != "" {
+					aliases[expr.Alias] = true
+				}
+			}
+		}
+	}
 }
 
 // parseGroupBy parses a groupby transformation
@@ -353,7 +402,7 @@ func parseAggregationMethod(methodStr string) (AggregationMethod, error) {
 
 // parseFilterTransformation parses a filter transformation within apply
 // Format: filter(expression)
-func parseFilterTransformation(transStr string, entityMetadata *metadata.EntityMetadata) (*ApplyTransformation, error) {
+func parseFilterTransformation(transStr string, entityMetadata *metadata.EntityMetadata, computedAliases map[string]bool) (*ApplyTransformation, error) {
 	if !strings.HasPrefix(transStr, "filter(") {
 		return nil, fmt.Errorf("invalid filter format")
 	}
@@ -365,8 +414,8 @@ func parseFilterTransformation(transStr string, entityMetadata *metadata.EntityM
 	content = content[:len(content)-1] // Remove final )
 	content = strings.TrimSpace(content)
 
-	// Parse the filter expression
-	filter, err := parseFilter(content, entityMetadata, nil)
+	// Parse the filter expression with computed aliases support
+	filter, err := parseFilter(content, entityMetadata, computedAliases)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse filter expression: %w", err)
 	}
