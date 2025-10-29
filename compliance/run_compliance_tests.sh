@@ -99,7 +99,12 @@ PATTERN=""
 SKIP_REPORT=0
 EXTERNAL_SERVER=0
 ODATA_VERSION="all"
-DEBUG=0
+# Check if DEBUG is already set via environment variable
+if [ -n "$DEBUG" ] && [ "$DEBUG" = "1" ]; then
+    DEBUG=1
+else
+    DEBUG=0
+fi
 while [[ $# -gt 0 ]]; do
     case $1 in
         -h|--help)
