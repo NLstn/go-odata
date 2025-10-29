@@ -454,14 +454,20 @@ func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataPro
 	// Add @odata.id for full and minimal metadata levels
 	// Per OData v4 spec section 4.5.1, @odata.id MUST be included in responses
 	// except when odata.metadata=none
-	keySegment := BuildKeySegmentFromEntity(entity, metadata)
-	if keySegment != "" {
-		entityID := fmt.Sprintf("%s/%s(%s)", baseURL, entitySetName, keySegment)
-
-		switch metadataLevel {
-		case "full", "minimal":
-			// Always include @odata.id in full and minimal metadata
-			entityMap.Set("@odata.id", entityID)
+	switch metadataLevel {
+	case "full", "minimal":
+		keySegment := BuildKeySegmentFromEntity(entity, metadata)
+		if keySegment != "" {
+			// Build entity ID using string concatenation to avoid fmt.Sprintf overhead
+			var entityID strings.Builder
+			entityID.Grow(len(baseURL) + len(entitySetName) + len(keySegment) + 3)
+			entityID.WriteString(baseURL)
+			entityID.WriteByte('/')
+			entityID.WriteString(entitySetName)
+			entityID.WriteByte('(')
+			entityID.WriteString(keySegment)
+			entityID.WriteByte(')')
+			entityMap.Set("@odata.id", entityID.String())
 		}
 		// For "none" metadata level, never include @odata.id
 	}
@@ -469,24 +475,34 @@ func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataPro
 	// Add @odata.type annotation for full metadata
 	if metadataLevel == "full" {
 		entityTypeName := getEntityTypeFromSetName(entitySetName)
-		entityMap.Set("@odata.type", "#"+metadata.GetNamespace()+"."+entityTypeName)
+		namespace := metadata.GetNamespace()
+		// Build type string using string concatenation to avoid allocations
+		var typeStr strings.Builder
+		typeStr.Grow(1 + len(namespace) + 1 + len(entityTypeName))
+		typeStr.WriteByte('#')
+		typeStr.WriteString(namespace)
+		typeStr.WriteByte('.')
+		typeStr.WriteString(entityTypeName)
+		entityMap.Set("@odata.type", typeStr.String())
 	}
 
+	// Use cached field information to avoid repeated struct tag parsing
+	fieldInfos := getFieldInfos(entityType)
 	for j := 0; j < entity.NumField(); j++ {
-		field := entityType.Field(j)
-		if !field.IsExported() {
+		info := fieldInfos[j]
+		if !info.IsExported {
 			continue
 		}
 
+		field := entityType.Field(j)
 		fieldValue := entity.Field(j)
-		jsonName := getJsonFieldName(field)
-		propMeta := findPropertyMetadata(field.Name, metadata)
+		propMeta := getCachedPropertyMetadata(field.Name, metadata)
 
 		if propMeta != nil && propMeta.IsNavigationProp {
-			processNavigationPropertyOrderedWithMetadata(entityMap, entity, propMeta, fieldValue, jsonName, expandedProps, baseURL, entitySetName, metadata, metadataLevel)
+			processNavigationPropertyOrderedWithMetadata(entityMap, entity, propMeta, fieldValue, info.JsonName, expandedProps, baseURL, entitySetName, metadata, metadataLevel)
 		} else {
 			// Regular property - include its value
-			entityMap.Set(jsonName, fieldValue.Interface())
+			entityMap.Set(info.JsonName, fieldValue.Interface())
 		}
 	}
 
@@ -501,17 +517,6 @@ func isPropertyExpanded(prop PropertyMetadata, expandedProps []string) bool {
 		}
 	}
 	return false
-}
-
-// findPropertyMetadata finds the metadata for a property by its field name
-func findPropertyMetadata(fieldName string, metadata EntityMetadataProvider) *PropertyMetadata {
-	props := metadata.GetProperties()
-	for i := range props {
-		if props[i].Name == fieldName {
-			return &props[i]
-		}
-	}
-	return nil
 }
 
 // processNavigationPropertyOrderedWithMetadata handles navigation properties with metadata level support
@@ -599,22 +604,6 @@ func buildKeySegmentFromMap(entityMap map[string]interface{}, metadata EntityMet
 	}
 
 	return strings.Join(parts, ",")
-}
-
-// getJsonFieldName extracts the JSON field name from struct tags
-func getJsonFieldName(field reflect.StructField) string {
-	jsonTag := field.Tag.Get("json")
-	if jsonTag == "" {
-		return field.Name
-	}
-
-	// Handle json:",omitempty" or json:"fieldname,omitempty"
-	parts := strings.Split(jsonTag, ",")
-	if len(parts) > 0 && parts[0] != "" {
-		return parts[0]
-	}
-
-	return field.Name
 }
 
 // ODataErrorDetail represents an additional error detail in an OData error response
