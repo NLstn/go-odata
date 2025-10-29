@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/nlstn/go-odata/internal/actions"
 	"github.com/nlstn/go-odata/internal/handlers"
@@ -23,7 +24,7 @@ func (s *Service) handleActionOrFunction(w http.ResponseWriter, r *http.Request,
 	switch r.Method {
 	case http.MethodPost:
 		// Handle action
-		actionDef, exists := s.actions[name]
+		actionDefs, exists := s.actions[name]
 		if !exists {
 			if writeErr := response.WriteError(w, http.StatusNotFound, "Action not found",
 				fmt.Sprintf("Action '%s' is not registered", name)); writeErr != nil {
@@ -32,27 +33,16 @@ func (s *Service) handleActionOrFunction(w http.ResponseWriter, r *http.Request,
 			return
 		}
 
-		// Verify binding matches
-		if isBound != actionDef.IsBound {
-			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid action binding",
-				fmt.Sprintf("Action '%s' binding mismatch", name)); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
-			}
-			return
-		}
-
-		if isBound && actionDef.EntitySet != entitySet {
-			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid entity set",
-				fmt.Sprintf("Action '%s' is not bound to entity set '%s'", name, entitySet)); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
-			}
-			return
-		}
-
-		// Parse parameters from request body
-		params, err := actions.ParseActionParameters(r, actionDef.Parameters)
+		// Resolve the appropriate action overload
+		actionDef, params, err := actions.ResolveActionOverload(r, actionDefs, isBound, entitySet)
 		if err != nil {
-			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid parameters", err.Error()); writeErr != nil {
+			// Determine error message based on error content
+			errorMsg := "Invalid action invocation"
+			errStr := err.Error()
+			if containsAny(errStr, "parameter", "required", "type", "missing") {
+				errorMsg = "Invalid parameters"
+			}
+			if writeErr := response.WriteError(w, http.StatusBadRequest, errorMsg, errStr); writeErr != nil {
 				fmt.Printf("Error writing error response: %v\n", writeErr)
 			}
 			return
@@ -95,7 +85,7 @@ func (s *Service) handleActionOrFunction(w http.ResponseWriter, r *http.Request,
 
 	case http.MethodGet:
 		// Handle function
-		functionDef, exists := s.functions[name]
+		functionDefs, exists := s.functions[name]
 		if !exists {
 			if writeErr := response.WriteError(w, http.StatusNotFound, "Function not found",
 				fmt.Sprintf("Function '%s' is not registered", name)); writeErr != nil {
@@ -104,27 +94,16 @@ func (s *Service) handleActionOrFunction(w http.ResponseWriter, r *http.Request,
 			return
 		}
 
-		// Verify binding matches
-		if isBound != functionDef.IsBound {
-			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid function binding",
-				fmt.Sprintf("Function '%s' binding mismatch", name)); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
-			}
-			return
-		}
-
-		if isBound && functionDef.EntitySet != entitySet {
-			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid entity set",
-				fmt.Sprintf("Function '%s' is not bound to entity set '%s'", name, entitySet)); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
-			}
-			return
-		}
-
-		// Parse parameters from query string
-		params, err := actions.ParseFunctionParameters(r, functionDef.Parameters)
+		// Resolve the appropriate function overload
+		functionDef, params, err := actions.ResolveFunctionOverload(r, functionDefs, isBound, entitySet)
 		if err != nil {
-			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid parameters", err.Error()); writeErr != nil {
+			// Determine error message based on error content
+			errorMsg := "Invalid function invocation"
+			errStr := err.Error()
+			if containsAny(errStr, "parameter", "required", "type", "missing") {
+				errorMsg = "Invalid parameters"
+			}
+			if writeErr := response.WriteError(w, http.StatusBadRequest, errorMsg, errStr); writeErr != nil {
 				fmt.Printf("Error writing error response: %v\n", writeErr)
 			}
 			return
@@ -214,4 +193,14 @@ func (s *Service) handleActionOrFunction(w http.ResponseWriter, r *http.Request,
 			fmt.Printf("Error writing error response: %v\n", writeErr)
 		}
 	}
+}
+
+// containsAny checks if a string contains any of the given substrings
+func containsAny(s string, substrings ...string) bool {
+	for _, substr := range substrings {
+		if strings.Contains(s, substr) {
+			return true
+		}
+	}
+	return false
 }

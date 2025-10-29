@@ -16,35 +16,35 @@ import (
 
 // BindTestCategory represents a category entity
 type BindTestCategory struct {
-	ID       int                `json:"ID" gorm:"primaryKey;autoIncrement" odata:"key"`
-	Name     string             `json:"Name" odata:"required"`
-	Products []BindTestProduct  `json:"Products,omitempty" gorm:"foreignKey:CategoryID"`
+	ID       int               `json:"ID" gorm:"primaryKey;autoIncrement" odata:"key"`
+	Name     string            `json:"Name" odata:"required"`
+	Products []BindTestProduct `json:"Products,omitempty" gorm:"foreignKey:CategoryID"`
 }
 
 // BindTestProduct represents a product with a single-valued navigation to category
 type BindTestProduct struct {
-	ID          int               `json:"ID" gorm:"primaryKey;autoIncrement" odata:"key"`
-	Name        string            `json:"Name" odata:"required"`
-	Price       float64           `json:"Price"`
-	CategoryID  *int              `json:"CategoryID,omitempty"`
-	Category    *BindTestCategory `json:"Category,omitempty" gorm:"foreignKey:CategoryID"`
+	ID         int               `json:"ID" gorm:"primaryKey;autoIncrement" odata:"key"`
+	Name       string            `json:"Name" odata:"required"`
+	Price      float64           `json:"Price"`
+	CategoryID *int              `json:"CategoryID,omitempty"`
+	Category   *BindTestCategory `json:"Category,omitempty" gorm:"foreignKey:CategoryID"`
 }
 
 // BindTestOrder represents an order with collection-valued navigation
 type BindTestOrder struct {
-	ID         int                      `json:"ID" gorm:"primaryKey;autoIncrement" odata:"key"`
-	OrderDate  string                   `json:"OrderDate" odata:"required"`
-	TotalPrice float64                  `json:"TotalPrice"`
-	Items      []BindTestOrderItem      `json:"Items,omitempty" gorm:"foreignKey:OrderID"`
+	ID         int                 `json:"ID" gorm:"primaryKey;autoIncrement" odata:"key"`
+	OrderDate  string              `json:"OrderDate" odata:"required"`
+	TotalPrice float64             `json:"TotalPrice"`
+	Items      []BindTestOrderItem `json:"Items,omitempty" gorm:"foreignKey:OrderID"`
 }
 
 // BindTestOrderItem represents an order item
 type BindTestOrderItem struct {
-	ID        int             `json:"ID" gorm:"primaryKey;autoIncrement" odata:"key"`
-	OrderID   *int            `json:"OrderID,omitempty"`
-	ProductID int             `json:"ProductID" odata:"required"`
-	Quantity  int             `json:"Quantity" odata:"required"`
-	Order     *BindTestOrder  `json:"Order,omitempty" gorm:"foreignKey:OrderID"`
+	ID        int              `json:"ID" gorm:"primaryKey;autoIncrement" odata:"key"`
+	OrderID   *int             `json:"OrderID,omitempty"`
+	ProductID int              `json:"ProductID" odata:"required"`
+	Quantity  int              `json:"Quantity" odata:"required"`
+	Order     *BindTestOrder   `json:"Order,omitempty" gorm:"foreignKey:OrderID"`
 	Product   *BindTestProduct `json:"Product,omitempty" gorm:"foreignKey:ProductID"`
 }
 
@@ -96,9 +96,9 @@ func TestPostWithODataBind_SingleValuedRelativeURL(t *testing.T) {
 
 	// Create a new product with category binding using relative URL
 	newProduct := map[string]interface{}{
-		"Name":                 "Tablet",
-		"Price":                399.99,
-		"Category@odata.bind":  "BindTestCategories(1)",
+		"Name":                "Tablet",
+		"Price":               399.99,
+		"Category@odata.bind": "BindTestCategories(1)",
 	}
 
 	body, _ := json.Marshal(newProduct)
@@ -138,9 +138,9 @@ func TestPostWithODataBind_SingleValuedAbsoluteURL(t *testing.T) {
 
 	// Create a new product with category binding using absolute URL
 	newProduct := map[string]interface{}{
-		"Name":                 "Smartphone",
-		"Price":                699.99,
-		"Category@odata.bind":  "http://localhost:8080/BindTestCategories(2)",
+		"Name":                "Smartphone",
+		"Price":               699.99,
+		"Category@odata.bind": "http://localhost:8080/BindTestCategories(2)",
 	}
 
 	body, _ := json.Marshal(newProduct)
@@ -174,9 +174,9 @@ func TestPostWithODataBind_InvalidEntityReference(t *testing.T) {
 
 	// Try to create a product with a non-existent category
 	newProduct := map[string]interface{}{
-		"Name":                 "Invalid Product",
-		"Price":                99.99,
-		"Category@odata.bind":  "BindTestCategories(999)",
+		"Name":                "Invalid Product",
+		"Price":               99.99,
+		"Category@odata.bind": "BindTestCategories(999)",
 	}
 
 	body, _ := json.Marshal(newProduct)
@@ -197,9 +197,9 @@ func TestPostWithODataBind_WrongEntitySet(t *testing.T) {
 
 	// Try to create a product with a binding to wrong entity set
 	newProduct := map[string]interface{}{
-		"Name":                 "Wrong Binding",
-		"Price":                99.99,
-		"Category@odata.bind":  "BindTestProducts(1)", // Should be BindTestCategories
+		"Name":                "Wrong Binding",
+		"Price":               99.99,
+		"Category@odata.bind": "BindTestProducts(1)", // Should be BindTestCategories
 	}
 
 	body, _ := json.Marshal(newProduct)
@@ -356,8 +356,8 @@ func TestODataBind_NonExistentNavigationProperty(t *testing.T) {
 	service, _ := setupBindTestService(t)
 
 	newProduct := map[string]interface{}{
-		"Name":                      "Test Product",
-		"Price":                     99.99,
+		"Name":                       "Test Product",
+		"Price":                      99.99,
 		"NonExistentProp@odata.bind": "BindTestCategories(1)",
 	}
 

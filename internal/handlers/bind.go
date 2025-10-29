@@ -21,8 +21,9 @@ import (
 // - Section 11.4.3: Binding collection-valued navigation properties
 //
 // Examples:
-//   Single-valued: "Category@odata.bind": "Categories(1)" or "http://host/Categories(1)"
-//   Collection-valued: "Orders@odata.bind": ["Orders(1)", "Orders(2)"]
+//
+//	Single-valued: "Category@odata.bind": "Categories(1)" or "http://host/Categories(1)"
+//	Collection-valued: "Orders@odata.bind": ["Orders(1)", "Orders(2)"]
 func (h *EntityHandler) processODataBindAnnotations(entity interface{}, requestData map[string]interface{}, db *gorm.DB) error {
 	entityValue := reflect.ValueOf(entity)
 	if entityValue.Kind() == reflect.Ptr {
@@ -138,7 +139,7 @@ func (h *EntityHandler) bindSingleNavigationProperty(entityValue reflect.Value, 
 		// Build a query to fetch the target entity to get its key value(s)
 		targetHandler := NewEntityHandler(db, targetMetadata)
 		targetHandler.SetEntitiesMetadata(h.entitiesMetadata)
-		
+
 		targetDB, err := targetHandler.buildKeyQuery(entityKey)
 		if err != nil {
 			return fmt.Errorf("invalid entity key '%s': %w", entityKey, err)
@@ -205,7 +206,7 @@ func (h *EntityHandler) bindSingleNavigationProperty(entityValue reflect.Value, 
 // and returns the foreign key values that should be added to updateData
 func (h *EntityHandler) bindSingleNavigationPropertyForUpdate(entityValue reflect.Value, navProp *metadata.PropertyMetadata, value interface{}, db *gorm.DB) (map[string]interface{}, error) {
 	foreignKeyValues := make(map[string]interface{})
-	
+
 	// Value should be a string containing the entity reference
 	refURL, ok := value.(string)
 	if !ok {
@@ -234,7 +235,7 @@ func (h *EntityHandler) bindSingleNavigationPropertyForUpdate(entityValue reflec
 		// Build a query to fetch the target entity to get its key value(s)
 		targetHandler := NewEntityHandler(db, targetMetadata)
 		targetHandler.SetEntitiesMetadata(h.entitiesMetadata)
-		
+
 		targetDB, err := targetHandler.buildKeyQuery(entityKey)
 		if err != nil {
 			return nil, fmt.Errorf("invalid entity key '%s': %w", entityKey, err)
@@ -315,7 +316,7 @@ func (h *EntityHandler) bindSingleNavigationPropertyForUpdate(entityValue reflec
 // bindCollectionNavigationProperty binds a collection-valued navigation property
 func (h *EntityHandler) bindCollectionNavigationProperty(entityValue reflect.Value, navProp *metadata.PropertyMetadata, value interface{}, db *gorm.DB) error {
 	_ = entityValue // Reserved for future implementation of collection-valued navigation properties
-	
+
 	// Value should be an array of strings containing entity references
 	refArray, ok := value.([]interface{})
 	if !ok {
