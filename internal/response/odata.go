@@ -1066,19 +1066,20 @@ func BuildDeltaLink(r *http.Request, deltaToken string) string {
 
 // ODataURLComponents represents the parsed components of an OData URL
 type ODataURLComponents struct {
-        EntitySet          string
-        EntityKey          string            // For single keys: the value, for composite keys: empty (use EntityKeyMap)
-        EntityKeyMap       map[string]string // For composite keys: map of key names to values
-        NavigationProperty string            // For paths like Products(1)/Descriptions
-        PropertyPath       string            // For structural property paths like Products(1)/Name
-        PropertySegments   []string          // Property path segments excluding $value/$ref/$count
-        IsCount            bool              // For paths like Products/$count
-        IsValue            bool              // For paths like Products(1)/Name/$value
-        IsRef              bool              // For paths like Products(1)/Descriptions/$ref
-        ActionName         string            // For action invocations like Products(1)/Namespace.ActionName
-        FunctionName       string            // For function invocations like Products(1)/Namespace.FunctionName
+	EntitySet          string
+	EntityKey          string            // For single keys: the value, for composite keys: empty (use EntityKeyMap)
+	EntityKeyMap       map[string]string // For composite keys: map of key names to values
+	NavigationProperty string            // For paths like Products(1)/Descriptions
+	PropertyPath       string            // For structural property paths like Products(1)/Name
+	PropertySegments   []string          // Property path segments excluding $value/$ref/$count
+	IsCount            bool              // For paths like Products/$count
+	IsValue            bool              // For paths like Products(1)/Name/$value
+	IsRef              bool              // For paths like Products(1)/Descriptions/$ref
+	ActionName         string            // For action invocations like Products(1)/Namespace.ActionName
+	FunctionName       string            // For function invocations like Products(1)/Namespace.FunctionName
 	IsAction           bool              // True if this is an action invocation
 	IsFunction         bool              // True if this is a function invocation
+	TypeCast           string            // For type cast segments like Products(1)/Namespace.SpecialProduct
 }
 
 // ParseODataURL parses an OData URL and extracts components (exported for use in main package)
@@ -1109,8 +1110,8 @@ func ParseODataURLComponents(path string) (*ODataURLComponents, error) {
 
 	// Extract entity set and key
 	pathParts := strings.Split(u.Path, "/")
-        if len(pathParts) > 0 {
-                entitySet := pathParts[0]
+	if len(pathParts) > 0 {
+		entitySet := pathParts[0]
 
 		// Check for key in parentheses: Products(1) or ProductDescriptions(ProductID=1,LanguageKey='EN')
 		if idx := strings.Index(entitySet, "("); idx != -1 {
@@ -1127,45 +1128,59 @@ func ParseODataURLComponents(path string) (*ODataURLComponents, error) {
 			components.EntitySet = entitySet
 		}
 
-                // Process additional path segments after the entity or entity(key)
-                if len(pathParts) > 1 {
-                        remainingParts := pathParts[1:]
-                        propertySegments := make([]string, 0, len(remainingParts))
+		// Process additional path segments after the entity or entity(key)
+		if len(pathParts) > 1 {
+			remainingParts := pathParts[1:]
+			propertySegments := make([]string, 0, len(remainingParts))
 
-                        firstSegment := remainingParts[0]
-                        switch firstSegment {
-                        case "$count":
-                                components.IsCount = true
-                        case "$ref":
-                                components.IsRef = true
-                        case "$value":
-                                components.IsValue = true
-                        default:
-                                propertySegments = append(propertySegments, firstSegment)
-                                components.NavigationProperty = firstSegment
+			firstSegment := remainingParts[0]
 
-                                for _, segment := range remainingParts[1:] {
-                                        switch segment {
-                                        case "$value":
-                                                components.IsValue = true
-                                        case "$ref":
-                                                components.IsRef = true
-                                        case "$count":
-                                                components.IsCount = true
-                                        default:
-                                                propertySegments = append(propertySegments, segment)
-                                        }
-                                }
-                        }
+			// Check if first segment is a type cast (Namespace.TypeName)
+			if isTypeCastSegment(firstSegment) {
+				components.TypeCast = firstSegment
+				// If type cast exists, skip it and process remaining segments
+				if len(remainingParts) > 1 {
+					remainingParts = remainingParts[1:]
+					firstSegment = remainingParts[0]
+				} else {
+					// Type cast is the last segment
+					return components, nil
+				}
+			}
 
-                        if len(propertySegments) > 0 {
-                                components.PropertySegments = propertySegments
-                                components.PropertyPath = strings.Join(propertySegments, "/")
-                        }
-                }
-        }
+			switch firstSegment {
+			case "$count":
+				components.IsCount = true
+			case "$ref":
+				components.IsRef = true
+			case "$value":
+				components.IsValue = true
+			default:
+				propertySegments = append(propertySegments, firstSegment)
+				components.NavigationProperty = firstSegment
 
-        return components, nil
+				for _, segment := range remainingParts[1:] {
+					switch segment {
+					case "$value":
+						components.IsValue = true
+					case "$ref":
+						components.IsRef = true
+					case "$count":
+						components.IsCount = true
+					default:
+						propertySegments = append(propertySegments, segment)
+					}
+				}
+			}
+
+			if len(propertySegments) > 0 {
+				components.PropertySegments = propertySegments
+				components.PropertyPath = strings.Join(propertySegments, "/")
+			}
+		}
+	}
+
+	return components, nil
 }
 
 // parseKeyPart parses the key portion of an OData URL
@@ -1250,4 +1265,45 @@ func splitKeyPairs(input string) ([]string, error) {
 	}
 
 	return pairs, nil
+}
+
+// isTypeCastSegment checks if a path segment is a type cast (Namespace.TypeName format)
+// Type cast segments must contain a dot and the part after the dot should be a valid type name
+func isTypeCastSegment(segment string) bool {
+	// Type cast segments must contain exactly one dot
+	// Format: Namespace.TypeName or FullyQualifiedNamespace.TypeName
+	if !strings.Contains(segment, ".") {
+		return false
+	}
+
+	// Should not be a system segment (starting with $)
+	if strings.HasPrefix(segment, "$") {
+		return false
+	}
+
+	// Should not contain parentheses (which would indicate a function or action)
+	if strings.Contains(segment, "(") || strings.Contains(segment, ")") {
+		return false
+	}
+
+	// Split by dot - should have at least 2 parts (namespace and type name)
+	parts := strings.Split(segment, ".")
+	if len(parts) < 2 {
+		return false
+	}
+
+	// The last part should look like a type name (starts with uppercase letter)
+	// This is a heuristic but works for most OData services
+	typeName := parts[len(parts)-1]
+	if len(typeName) == 0 {
+		return false
+	}
+
+	// Check if first character is uppercase (type names should be PascalCase)
+	firstChar := rune(typeName[0])
+	if firstChar < 'A' || firstChar > 'Z' {
+		return false
+	}
+
+	return true
 }

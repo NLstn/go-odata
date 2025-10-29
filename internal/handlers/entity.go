@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/nlstn/go-odata/internal/metadata"
@@ -74,4 +75,51 @@ func (h *EntityHandler) FetchEntity(entityKey string) (interface{}, error) {
 // IsNotFoundError checks if an error is a "not found" error
 func IsNotFoundError(err error) bool {
 	return err == gorm.ErrRecordNotFound
+}
+
+// entityMatchesType checks if an entity matches a given type name
+// This uses reflection to check if the entity has a "ProductType" field matching the type name
+func (h *EntityHandler) entityMatchesType(entity interface{}, typeName string) bool {
+	// Use reflection to check for a ProductType or similar discriminator field
+	v := reflect.ValueOf(entity)
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+
+	if v.Kind() != reflect.Struct {
+		return false
+	}
+
+	// Look for common discriminator field names
+	discriminatorFields := []string{"ProductType", "Type", "EntityType", "@odata.type"}
+
+	for _, fieldName := range discriminatorFields {
+		field := v.FieldByName(fieldName)
+		if field.IsValid() && field.Kind() == reflect.String {
+			fieldValue := field.String()
+			// Match if the type name matches exactly or if it matches without namespace prefix
+			if fieldValue == typeName {
+				return true
+			}
+			// Also allow matching just the type name part (after the last dot)
+			parts := strings.Split(typeName, ".")
+			if len(parts) > 0 && fieldValue == parts[len(parts)-1] {
+				return true
+			}
+		}
+	}
+
+	// If no discriminator field found, check if the type name matches the entity name
+	// This allows base types to match their own name
+	if h.metadata.EntityName == typeName {
+		return true
+	}
+
+	// Also check without namespace prefix
+	parts := strings.Split(typeName, ".")
+	if len(parts) > 0 && h.metadata.EntityName == parts[len(parts)-1] {
+		return true
+	}
+
+	return false
 }

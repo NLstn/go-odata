@@ -234,3 +234,95 @@ func TestParseODataURLComponentsRef(t *testing.T) {
 		})
 	}
 }
+
+func TestParseODataURLComponentsTypeCast(t *testing.T) {
+	tests := []struct {
+		name            string
+		path            string
+		expectEntitySet string
+		expectTypeCast  string
+		expectHasKey    bool
+		expectKey       string
+		expectNavProp   string
+	}{
+		{
+			name:            "Type cast on collection",
+			path:            "Products/Namespace.SpecialProduct",
+			expectEntitySet: "Products",
+			expectTypeCast:  "Namespace.SpecialProduct",
+			expectHasKey:    false,
+		},
+		{
+			name:            "Type cast on single entity",
+			path:            "Products(1)/Namespace.SpecialProduct",
+			expectEntitySet: "Products",
+			expectTypeCast:  "Namespace.SpecialProduct",
+			expectHasKey:    true,
+			expectKey:       "1",
+		},
+		{
+			name:            "Type cast with property access",
+			path:            "Products(1)/Namespace.SpecialProduct/SpecialProperty",
+			expectEntitySet: "Products",
+			expectTypeCast:  "Namespace.SpecialProduct",
+			expectHasKey:    true,
+			expectKey:       "1",
+			expectNavProp:   "SpecialProperty",
+		},
+		{
+			name:            "Type cast with navigation property",
+			path:            "Products(1)/Namespace.SpecialProduct/Category",
+			expectEntitySet: "Products",
+			expectTypeCast:  "Namespace.SpecialProduct",
+			expectHasKey:    true,
+			expectKey:       "1",
+			expectNavProp:   "Category",
+		},
+		{
+			name:            "Type cast with fully qualified namespace",
+			path:            "Products/ComplianceService.SpecialProduct",
+			expectEntitySet: "Products",
+			expectTypeCast:  "ComplianceService.SpecialProduct",
+			expectHasKey:    false,
+		},
+		{
+			name:            "No type cast - regular path",
+			path:            "Products(1)/Category",
+			expectEntitySet: "Products",
+			expectTypeCast:  "",
+			expectHasKey:    true,
+			expectKey:       "1",
+			expectNavProp:   "Category",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			components, err := ParseODataURLComponents(tt.path)
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+
+			if components.EntitySet != tt.expectEntitySet {
+				t.Errorf("Expected entity set %s, got %s", tt.expectEntitySet, components.EntitySet)
+			}
+
+			if components.TypeCast != tt.expectTypeCast {
+				t.Errorf("Expected TypeCast %s, got %s", tt.expectTypeCast, components.TypeCast)
+			}
+
+			hasKey := components.EntityKey != "" || len(components.EntityKeyMap) > 0
+			if hasKey != tt.expectHasKey {
+				t.Errorf("Expected HasKey %v, got %v", tt.expectHasKey, hasKey)
+			}
+
+			if tt.expectKey != "" && components.EntityKey != tt.expectKey {
+				t.Errorf("Expected EntityKey %s, got %s", tt.expectKey, components.EntityKey)
+			}
+
+			if components.NavigationProperty != tt.expectNavProp {
+				t.Errorf("Expected NavigationProperty %s, got %s", tt.expectNavProp, components.NavigationProperty)
+			}
+		})
+	}
+}

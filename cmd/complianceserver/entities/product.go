@@ -33,14 +33,17 @@ func (ProductStatus) EnumMembers() map[string]int {
 
 // Product represents a product entity for the compliance server
 type Product struct {
-	ID          uint          `json:"ID" gorm:"primaryKey" odata:"key"`
-	Name        string        `json:"Name" gorm:"not null" odata:"required,maxlength=100,searchable"`
-	Description *string       `json:"Description" odata:"nullable,maxlength=500"` // Nullable description field
-	Price       float64       `json:"Price" gorm:"not null" odata:"required,precision=10,scale=2"`
-	CategoryID  *uint         `json:"CategoryID" odata:"nullable"` // Foreign key for Category navigation property
-	Status      ProductStatus `json:"Status" gorm:"not null" odata:"enum=ProductStatus,flags"`
-	Version     int           `json:"Version" gorm:"default:1" odata:"etag"` // Version field used for optimistic concurrency control via ETag
-	CreatedAt   time.Time     `json:"CreatedAt" gorm:"not null"`
+	ID              uint          `json:"ID" gorm:"primaryKey" odata:"key"`
+	Name            string        `json:"Name" gorm:"not null" odata:"required,maxlength=100,searchable"`
+	Description     *string       `json:"Description" odata:"nullable,maxlength=500"` // Nullable description field
+	Price           float64       `json:"Price" gorm:"not null" odata:"required,precision=10,scale=2"`
+	CategoryID      *uint         `json:"CategoryID" odata:"nullable"` // Foreign key for Category navigation property
+	Status          ProductStatus `json:"Status" gorm:"not null" odata:"enum=ProductStatus,flags"`
+	Version         int           `json:"Version" gorm:"default:1" odata:"etag"` // Version field used for optimistic concurrency control via ETag
+	CreatedAt       time.Time     `json:"CreatedAt" gorm:"not null"`
+	ProductType     string        `json:"ProductType,omitempty" gorm:"default:'Product'" odata:"maxlength=50"` // Discriminator for type inheritance
+	SpecialProperty *string       `json:"SpecialProperty,omitempty" odata:"nullable,maxlength=200"`            // Property for SpecialProduct derived type
+	SpecialFeature  *string       `json:"SpecialFeature,omitempty" odata:"nullable,maxlength=100"`             // Property for SpecialProduct derived type
 	// Complex type properties
 	ShippingAddress *Address    `json:"ShippingAddress,omitempty" gorm:"embedded;embeddedPrefix:shipping_" odata:"nullable"`
 	Dimensions      *Dimensions `json:"Dimensions,omitempty" gorm:"embedded;embeddedPrefix:dim_" odata:"nullable"`
@@ -57,14 +60,19 @@ func GetSampleProducts() []Product {
 	categoryFurniture := uint(3)
 
 	return []Product{
+		// Special Product at ID 1 - used by type casting tests
+		// Kept as "Laptop" name for backward compatibility with primitive type tests
 		{
-			ID:         1,
-			Name:       "Laptop",
-			Price:      999.99,
-			CategoryID: &categoryElectronics,
-			Status:     ProductStatusInStock | ProductStatusFeatured, // In stock and featured
-			Version:    1,
-			CreatedAt:  time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC),
+			ID:              1,
+			Name:            "Laptop",
+			Price:           999.99,
+			CategoryID:      &categoryElectronics,
+			Status:          ProductStatusInStock | ProductStatusFeatured,
+			Version:         1,
+			CreatedAt:       time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC),
+			ProductType:     "SpecialProduct",
+			SpecialProperty: stringPtr("Extended warranty included"),
+			SpecialFeature:  stringPtr("Premium support"),
 			ShippingAddress: &Address{
 				Street:     "123 Tech Way",
 				City:       "Seattle",
@@ -80,13 +88,14 @@ func GetSampleProducts() []Product {
 			},
 		},
 		{
-			ID:         2,
-			Name:       "Wireless Mouse",
-			Price:      29.99,
-			CategoryID: &categoryElectronics,
-			Status:     ProductStatusInStock | ProductStatusOnSale, // In stock and on sale
-			Version:    1,
-			CreatedAt:  time.Date(2024, 3, 20, 14, 45, 0, 0, time.UTC),
+			ID:          2,
+			Name:        "Wireless Mouse",
+			Price:       29.99,
+			CategoryID:  &categoryElectronics,
+			Status:      ProductStatusInStock | ProductStatusOnSale, // In stock and on sale
+			Version:     1,
+			CreatedAt:   time.Date(2024, 3, 20, 14, 45, 0, 0, time.UTC),
+			ProductType: "Product",
 			ShippingAddress: &Address{
 				Street:     "456 Innovation Blvd",
 				City:       "San Francisco",
@@ -102,13 +111,14 @@ func GetSampleProducts() []Product {
 			},
 		},
 		{
-			ID:         3,
-			Name:       "Coffee Mug",
-			Price:      15.50,
-			CategoryID: &categoryKitchen,
-			Status:     ProductStatusInStock, // Only in stock
-			Version:    1,
-			CreatedAt:  time.Date(2023, 11, 5, 9, 15, 0, 0, time.UTC),
+			ID:          3,
+			Name:        "Coffee Mug",
+			Price:       15.50,
+			CategoryID:  &categoryKitchen,
+			Status:      ProductStatusInStock, // Only in stock
+			Version:     1,
+			CreatedAt:   time.Date(2023, 11, 5, 9, 15, 0, 0, time.UTC),
+			ProductType: "Product",
 			ShippingAddress: &Address{
 				Street:     "789 Home St",
 				City:       "Portland",
@@ -124,25 +134,27 @@ func GetSampleProducts() []Product {
 			},
 		},
 		{
-			ID:         4,
-			Name:       "Office Chair",
-			Price:      249.99,
-			CategoryID: &categoryFurniture,
-			Status:     ProductStatusDiscontinued, // Discontinued
-			Version:    1,
-			CreatedAt:  time.Date(2023, 8, 12, 16, 20, 0, 0, time.UTC),
+			ID:          4,
+			Name:        "Office Chair",
+			Price:       249.99,
+			CategoryID:  &categoryFurniture,
+			Status:      ProductStatusDiscontinued, // Discontinued
+			Version:     1,
+			CreatedAt:   time.Date(2023, 8, 12, 16, 20, 0, 0, time.UTC),
+			ProductType: "Product",
 			// No shipping address or dimensions (testing null complex types)
 			ShippingAddress: nil,
 			Dimensions:      nil,
 		},
 		{
-			ID:         5,
-			Name:       "Smartphone",
-			Price:      799.99,
-			CategoryID: &categoryElectronics,
-			Status:     ProductStatusInStock | ProductStatusOnSale | ProductStatusFeatured, // In stock, on sale, and featured
-			Version:    1,
-			CreatedAt:  time.Date(2024, 6, 28, 11, 0, 0, 0, time.UTC),
+			ID:          5,
+			Name:        "Smartphone",
+			Price:       799.99,
+			CategoryID:  &categoryElectronics,
+			Status:      ProductStatusInStock | ProductStatusOnSale | ProductStatusFeatured, // In stock, on sale, and featured
+			Version:     1,
+			CreatedAt:   time.Date(2024, 6, 28, 11, 0, 0, 0, time.UTC),
+			ProductType: "Product",
 			ShippingAddress: &Address{
 				Street:     "321 Mobile Ave",
 				City:       "Austin",
@@ -154,6 +166,57 @@ func GetSampleProducts() []Product {
 				Length: 15.0,
 				Width:  7.5,
 				Height: 0.8,
+				Unit:   "cm",
+			},
+		},
+		// Special Products (derived type)
+		{
+			ID:              10,
+			Name:            "Premium Laptop Pro",
+			Price:           1999.99,
+			CategoryID:      &categoryElectronics,
+			Status:          ProductStatusInStock | ProductStatusFeatured,
+			Version:         1,
+			CreatedAt:       time.Date(2024, 7, 1, 10, 0, 0, 0, time.UTC),
+			ProductType:     "SpecialProduct",
+			SpecialProperty: stringPtr("Extended 5-year warranty"),
+			SpecialFeature:  stringPtr("Premium support package"),
+			ShippingAddress: &Address{
+				Street:     "999 Premium Way",
+				City:       "New York",
+				State:      "NY",
+				PostalCode: "10001",
+				Country:    "USA",
+			},
+			Dimensions: &Dimensions{
+				Length: 40.0,
+				Width:  28.0,
+				Height: 2.0,
+				Unit:   "cm",
+			},
+		},
+		{
+			ID:              11,
+			Name:            "Gaming Mouse Ultra",
+			Price:           149.99,
+			CategoryID:      &categoryElectronics,
+			Status:          ProductStatusInStock | ProductStatusOnSale,
+			Version:         1,
+			CreatedAt:       time.Date(2024, 7, 15, 14, 30, 0, 0, time.UTC),
+			ProductType:     "SpecialProduct",
+			SpecialProperty: stringPtr("RGB lighting with 16 million colors"),
+			SpecialFeature:  stringPtr("Customizable DPI settings"),
+			ShippingAddress: &Address{
+				Street:     "888 Gaming Blvd",
+				City:       "Los Angeles",
+				State:      "CA",
+				PostalCode: "90001",
+				Country:    "USA",
+			},
+			Dimensions: &Dimensions{
+				Length: 12.5,
+				Width:  7.5,
+				Height: 4.5,
 				Unit:   "cm",
 			},
 		},

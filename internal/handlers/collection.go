@@ -90,6 +90,23 @@ func (h *EntityHandler) handleGetCollection(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	// Add type cast filtering scope if specified
+	if typeCast := GetTypeCast(r.Context()); typeCast != "" {
+		// Extract just the type name (last part after dot) for comparison
+		typeParts := strings.Split(typeCast, ".")
+		simpleTypeName := typeCast
+		if len(typeParts) > 0 {
+			simpleTypeName = typeParts[len(typeParts)-1]
+		}
+
+		typeCastScope := func(db *gorm.DB) *gorm.DB {
+			// Filter by ProductType field (GORM will convert to product_type column)
+			// Match both fully qualified and simple type names
+			return db.Where("product_type = ? OR product_type = ?", typeCast, simpleTypeName)
+		}
+		scopes = append(scopes, typeCastScope)
+	}
+
 	// Get the total count if $count=true is specified
 	totalCount := h.getTotalCount(queryOptions, w, scopes)
 	if totalCount == nil && queryOptions.Count {
