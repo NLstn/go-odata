@@ -8,6 +8,7 @@ import (
 
 	"github.com/nlstn/go-odata/internal/actions"
 	"github.com/nlstn/go-odata/internal/handlers"
+	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/response"
 )
 
@@ -156,7 +157,7 @@ func (s *Service) handleActionOrFunction(w http.ResponseWriter, r *http.Request,
 		metadataLevel := response.GetODataMetadataLevel(r)
 		w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
 
-		contextFragment := s.functionContextFragment(functionDef.ReturnType)
+		contextFragment := metadata.FunctionContextFragment(functionDef.ReturnType, s.entities)
 		if contextFragment == "" {
 			contextFragment = "Edm.String"
 		}
