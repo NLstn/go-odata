@@ -205,8 +205,8 @@ func applySelect(db *gorm.DB, selectedProperties []string, entityMetadata *metad
 		propName = strings.TrimSpace(propName)
 		// Find the property in metadata
 		for _, prop := range entityMetadata.Properties {
-			// Skip navigation properties and complex types - they are handled separately
-			if (prop.JsonName == propName || prop.Name == propName) && !prop.IsNavigationProp && !prop.IsComplexType {
+			// Skip navigation properties, complex types, and stream properties - they are handled separately
+			if (prop.JsonName == propName || prop.Name == propName) && !prop.IsNavigationProp && !prop.IsComplexType && !prop.IsStream {
 				// Use struct field name - GORM will handle column name conversion
 				columns = append(columns, prop.Name)
 				selectedPropMap[prop.Name] = true
@@ -1529,10 +1529,21 @@ func applyCompute(db *gorm.DB, compute *ComputeTransformation, entityMetadata *m
 	// We need to select all original columns plus computed columns
 	selectColumns := make([]string, 0)
 
+	// Build a set of field names to skip (stream auxiliary fields)
+	streamAuxFields := make(map[string]bool)
+	for _, streamProp := range entityMetadata.StreamProperties {
+		if streamProp.StreamContentTypeField != "" {
+			streamAuxFields[streamProp.StreamContentTypeField] = true
+		}
+		if streamProp.StreamContentField != "" {
+			streamAuxFields[streamProp.StreamContentField] = true
+		}
+	}
+
 	// Add all original entity properties
 	for _, prop := range entityMetadata.Properties {
-		// Skip navigation properties and complex types - they are handled separately
-		if !prop.IsNavigationProp && !prop.IsComplexType {
+		// Skip navigation properties, complex types, stream properties, and stream auxiliary fields
+		if !prop.IsNavigationProp && !prop.IsComplexType && !prop.IsStream && !streamAuxFields[prop.FieldName] {
 			// Use snake_case column name for SQL, but alias as JsonName for the result
 			columnName := toSnakeCase(prop.Name)
 			selectColumns = append(selectColumns, fmt.Sprintf("%s as %s", columnName, prop.JsonName))
