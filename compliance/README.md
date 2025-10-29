@@ -557,8 +557,9 @@ skip_test "Delta token support" "Delta token feature is not yet implemented in g
 # Skip with default reason (defaults to "Feature not yet implemented")
 skip_test "Stream property support"
 
-# You can also skip tests conditionally based on feature detection
-if ! feature_is_implemented "batch_requests"; then
+# You can also conditionally skip tests based on your own checks
+# For example, check if a feature flag or capability is available
+if [ -z "$BATCH_REQUESTS_ENABLED" ]; then
     skip_test "Batch request processing" "Batch request feature pending implementation"
 else
     run_test "Batch request creates multiple entities" test_batch_create
@@ -753,6 +754,12 @@ The test framework automatically outputs results in a standardized, machine-pars
 ```
 COMPLIANCE_TEST_RESULT:PASSED=X:FAILED=Y:SKIPPED=Z:TOTAL=W
 ```
+
+Where:
+- **X** = Number of tests that passed
+- **Y** = Number of tests that failed
+- **Z** = Number of tests that were skipped
+- **W** = Total number of tests (W = X + Y + Z)
 
 **DO NOT** manually print this line or manipulate test counters - the framework handles everything automatically.
 
