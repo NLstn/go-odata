@@ -6,9 +6,12 @@ package odata
 
 import (
 	"fmt"
+	"net/http"
 	"strings"
+	"time"
 
 	"github.com/nlstn/go-odata/internal/actions"
+	"github.com/nlstn/go-odata/internal/async"
 	"github.com/nlstn/go-odata/internal/handlers"
 	"github.com/nlstn/go-odata/internal/metadata"
 	servrouter "github.com/nlstn/go-odata/internal/service/router"
@@ -43,6 +46,14 @@ type Service struct {
 	deltaTracker *trackchanges.Tracker
 	// router handles HTTP routing for the service
 	router *servrouter.Router
+	// asyncManager manages asynchronous requests when enabled
+	asyncManager *async.Manager
+	// asyncConfig stores the configuration for async processing
+	asyncConfig *AsyncConfig
+	// asyncQueue limits concurrent async jobs when configured
+	asyncQueue chan struct{}
+	// asyncMonitorPrefix is the normalized monitor path prefix
+	asyncMonitorPrefix string
 }
 
 // NewService creates a new OData service instance with database connection.
@@ -62,7 +73,9 @@ func NewService(db *gorm.DB) *Service {
 	}
 	s.metadataHandler.SetNamespace(DefaultNamespace)
 	// Initialize batch handler with reference to service
-	s.batchHandler = handlers.NewBatchHandler(db, handlersMap, s)
+	s.batchHandler = handlers.NewBatchHandler(db, handlersMap, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.serveHTTP(w, r, false)
+	}))
 	s.router = servrouter.NewRouter(
 		func(name string) (servrouter.EntityHandler, bool) {
 			handler, ok := s.handlers[name]
@@ -79,6 +92,47 @@ func NewService(db *gorm.DB) *Service {
 		s.handleActionOrFunction,
 	)
 	return s
+}
+
+// AsyncConfig controls asynchronous request processing behaviour for a Service.
+type AsyncConfig struct {
+	// MonitorPathPrefix is the URL path prefix where async job monitors are exposed.
+	MonitorPathPrefix string
+	// DefaultRetryInterval configures the Retry-After header returned for pending jobs.
+	DefaultRetryInterval time.Duration
+	// MaxQueueSize limits concurrently executing async jobs. Zero disables the limit.
+	MaxQueueSize int
+	// JobRetention controls how long completed jobs are retained for polling clients.
+	JobRetention time.Duration
+}
+
+// EnableAsyncProcessing configures asynchronous request handling for the service.
+func (s *Service) EnableAsyncProcessing(cfg AsyncConfig) {
+	normalized := cfg
+	if normalized.MonitorPathPrefix == "" {
+		normalized.MonitorPathPrefix = "/$async/jobs/"
+	}
+	if !strings.HasPrefix(normalized.MonitorPathPrefix, "/") {
+		normalized.MonitorPathPrefix = "/" + normalized.MonitorPathPrefix
+	}
+	if !strings.HasSuffix(normalized.MonitorPathPrefix, "/") {
+		normalized.MonitorPathPrefix += "/"
+	}
+
+	if s.asyncManager != nil {
+		s.asyncManager.Close()
+	}
+
+	s.asyncManager = async.NewManager(normalized.JobRetention)
+	s.asyncMonitorPrefix = normalized.MonitorPathPrefix
+	cfgCopy := normalized
+	s.asyncConfig = &cfgCopy
+
+	if normalized.MaxQueueSize > 0 {
+		s.asyncQueue = make(chan struct{}, normalized.MaxQueueSize)
+	} else {
+		s.asyncQueue = nil
+	}
 }
 
 // RegisterEntity registers an entity type with the OData service.
