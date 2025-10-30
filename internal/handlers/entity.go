@@ -98,10 +98,21 @@ func IsNotFoundError(err error) bool {
 	return err == gorm.ErrRecordNotFound
 }
 
-// entityMatchesType checks if an entity matches a given type name
-// This uses reflection to check if the entity has a "ProductType" field matching the type name
+// entityMatchesType checks if an entity matches a given type name.
+// It supports both struct instances and map-based results (used for $select/$expand projections).
 func (h *EntityHandler) entityMatchesType(entity interface{}, typeName string) bool {
-	// Use reflection to check for a ProductType or similar discriminator field
+	typeCandidates := uniqueStrings(h.typeNameCandidates(typeName))
+	if len(typeCandidates) == 0 {
+		return false
+	}
+
+	if entityMap, ok := entity.(map[string]interface{}); ok {
+		if h.mapEntityMatchesType(entityMap, typeCandidates) {
+			return true
+		}
+		return h.entityNameMatches(typeCandidates)
+	}
+
 	v := reflect.ValueOf(entity)
 	if v.Kind() == reflect.Ptr {
 		v = v.Elem()
@@ -111,36 +122,247 @@ func (h *EntityHandler) entityMatchesType(entity interface{}, typeName string) b
 		return false
 	}
 
-	// Look for common discriminator field names
-	discriminatorFields := []string{"ProductType", "Type", "EntityType", "@odata.type"}
+	if h.structEntityMatchesType(v, typeCandidates) {
+		return true
+	}
 
-	for _, fieldName := range discriminatorFields {
+	return h.entityNameMatches(typeCandidates)
+}
+
+func (h *EntityHandler) structEntityMatchesType(v reflect.Value, typeCandidates []string) bool {
+	for _, fieldName := range h.discriminatorFieldNames() {
 		field := v.FieldByName(fieldName)
-		if field.IsValid() && field.Kind() == reflect.String {
-			fieldValue := field.String()
-			// Match if the type name matches exactly or if it matches without namespace prefix
-			if fieldValue == typeName {
-				return true
-			}
-			// Also allow matching just the type name part (after the last dot)
-			parts := strings.Split(typeName, ".")
-			if len(parts) > 0 && fieldValue == parts[len(parts)-1] {
+		if !field.IsValid() || field.Kind() != reflect.String {
+			continue
+		}
+
+		if typeNameMatches(field.String(), typeCandidates) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (h *EntityHandler) mapEntityMatchesType(entity map[string]interface{}, typeCandidates []string) bool {
+	for _, key := range h.mapDiscriminatorKeys() {
+		value, ok := entity[key]
+		if !ok {
+			continue
+		}
+
+		if strVal, ok := value.(string); ok {
+			if typeNameMatches(strVal, typeCandidates) {
 				return true
 			}
 		}
 	}
 
-	// If no discriminator field found, check if the type name matches the entity name
-	// This allows base types to match their own name
-	if h.metadata.EntityName == typeName {
-		return true
+	return false
+}
+
+func (h *EntityHandler) entityNameMatches(typeCandidates []string) bool {
+	entityName := h.metadata.EntityName
+	if entityName == "" {
+		return false
 	}
 
-	// Also check without namespace prefix
-	parts := strings.Split(typeName, ".")
-	if len(parts) > 0 && h.metadata.EntityName == parts[len(parts)-1] {
-		return true
+	qualified := h.qualifiedTypeName(entityName)
+
+	for _, candidate := range typeCandidates {
+		if candidate == entityName || candidate == qualified {
+			return true
+		}
 	}
 
 	return false
+}
+
+func (h *EntityHandler) typeNameCandidates(typeName string) []string {
+	trimmed := strings.TrimSpace(typeName)
+	if trimmed == "" {
+		return nil
+	}
+
+	candidates := []string{trimmed}
+
+	if strings.Contains(trimmed, ".") {
+		parts := strings.Split(trimmed, ".")
+		if len(parts) > 0 {
+			simple := parts[len(parts)-1]
+			if simple != "" {
+				candidates = append(candidates, simple)
+			}
+		}
+	} else {
+		qualified := h.qualifiedTypeName(trimmed)
+		if qualified != "" && qualified != trimmed {
+			candidates = append(candidates, qualified)
+		}
+	}
+
+	return candidates
+}
+
+func (h *EntityHandler) discriminatorFieldNames() []string {
+	var names []string
+
+	if prop := h.typeDiscriminatorProperty(); prop != nil {
+		if prop.FieldName != "" {
+			names = append(names, prop.FieldName)
+		}
+		if prop.Name != "" && !strings.EqualFold(prop.Name, prop.FieldName) {
+			names = append(names, prop.Name)
+		}
+	}
+
+	names = append(names, "ProductType", "Type", "EntityType")
+
+	return uniqueStrings(names)
+}
+
+func (h *EntityHandler) mapDiscriminatorKeys() []string {
+	var keys []string
+
+	if prop := h.typeDiscriminatorProperty(); prop != nil {
+		if prop.JsonName != "" && prop.JsonName != "-" {
+			keys = append(keys, prop.JsonName)
+		}
+		if prop.FieldName != "" {
+			keys = append(keys, prop.FieldName)
+		}
+		if prop.Name != "" && !strings.EqualFold(prop.Name, prop.FieldName) {
+			keys = append(keys, prop.Name)
+		}
+	}
+
+	keys = append(keys, "ProductType", "Type", "EntityType", "@odata.type")
+
+	return uniqueStrings(keys)
+}
+
+func (h *EntityHandler) typeDiscriminatorProperty() *metadata.PropertyMetadata {
+	if h.metadata == nil {
+		return nil
+	}
+
+	candidates := h.discriminatorPropertyNames()
+	for _, candidate := range candidates {
+		for i := range h.metadata.Properties {
+			prop := &h.metadata.Properties[i]
+			if prop.Type.Kind() != reflect.String {
+				continue
+			}
+
+			if strings.EqualFold(prop.FieldName, candidate) || strings.EqualFold(prop.Name, candidate) ||
+				strings.EqualFold(prop.JsonName, candidate) {
+				return prop
+			}
+		}
+	}
+
+	return nil
+}
+
+func (h *EntityHandler) discriminatorPropertyNames() []string {
+	var names []string
+
+	if h.metadata != nil {
+		entityName := strings.TrimSpace(h.metadata.EntityName)
+		if entityName != "" {
+			names = append(names, entityName+"Type")
+		}
+	}
+
+	names = append(names, "ProductType", "Type", "EntityType")
+
+	return uniqueStrings(names)
+}
+
+func (h *EntityHandler) typeDiscriminatorColumn() string {
+	prop := h.typeDiscriminatorProperty()
+	if prop == nil {
+		return ""
+	}
+
+	if column := parseGORMColumn(prop.GormTag); column != "" {
+		return column
+	}
+
+	name := strings.TrimSpace(prop.JsonName)
+	if name == "" || name == "-" {
+		name = prop.FieldName
+	}
+	if name == "" {
+		name = prop.Name
+	}
+	if name == "" {
+		return ""
+	}
+
+	return toSnakeCase(name)
+}
+
+func parseGORMColumn(tag string) string {
+	tag = strings.TrimSpace(tag)
+	if tag == "" {
+		return ""
+	}
+
+	parts := strings.Split(tag, ";")
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if strings.HasPrefix(part, "column:") {
+			column := strings.TrimSpace(strings.TrimPrefix(part, "column:"))
+			if column != "" {
+				return column
+			}
+		}
+	}
+
+	return ""
+}
+
+func typeNameMatches(value string, typeCandidates []string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return false
+	}
+
+	for _, candidate := range typeCandidates {
+		if value == candidate {
+			return true
+		}
+	}
+
+	if idx := strings.LastIndex(value, "."); idx != -1 && idx < len(value)-1 {
+		simple := value[idx+1:]
+		for _, candidate := range typeCandidates {
+			if candidate == simple {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+func uniqueStrings(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	result := make([]string, 0, len(values))
+
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		lower := strings.ToLower(trimmed)
+		if _, exists := seen[lower]; exists {
+			continue
+		}
+		seen[lower] = struct{}{}
+		result = append(result, trimmed)
+	}
+
+	return result
 }

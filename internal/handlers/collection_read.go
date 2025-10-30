@@ -11,6 +11,7 @@ import (
 	"github.com/nlstn/go-odata/internal/response"
 	"github.com/nlstn/go-odata/internal/skiptoken"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 func (h *EntityHandler) handleGetCollection(w http.ResponseWriter, r *http.Request) {
@@ -21,7 +22,7 @@ func (h *EntityHandler) handleGetCollection(w http.ResponseWriter, r *http.Reque
 		ParseQueryOptions: h.parseCollectionQueryOptions(w, r, pref),
 		BeforeRead:        h.beforeReadCollection(r),
 		CountFunc:         h.collectionCountFunc(),
-		FetchFunc:         h.fetchResults,
+		FetchFunc:         h.fetchResultsWithTypeCast(r),
 		NextLinkFunc:      h.collectionNextLinkFunc(r),
 		AfterRead:         h.afterReadCollection(r),
 		WriteResponse:     h.collectionResponseWriter(w, r, pref),
@@ -72,16 +73,9 @@ func (h *EntityHandler) beforeReadCollection(r *http.Request) func(*query.QueryO
 		}
 
 		if typeCast := GetTypeCast(r.Context()); typeCast != "" {
-			typeParts := strings.Split(typeCast, ".")
-			simpleTypeName := typeCast
-			if len(typeParts) > 0 {
-				simpleTypeName = typeParts[len(typeParts)-1]
+			if scope := h.buildTypeCastScope(typeCast); scope != nil {
+				scopes = append(scopes, scope)
 			}
-
-			typeCastScope := func(db *gorm.DB) *gorm.DB {
-				return db.Where("product_type = ? OR product_type = ?", typeCast, simpleTypeName)
-			}
-			scopes = append(scopes, typeCastScope)
 		}
 
 		return scopes, nil
@@ -208,6 +202,71 @@ func (h *EntityHandler) trimResults(sliceValue interface{}, maxLen int) interfac
 	}
 
 	return v.Slice(0, maxLen).Interface()
+}
+
+func (h *EntityHandler) fetchResultsWithTypeCast(r *http.Request) func(*query.QueryOptions, []func(*gorm.DB) *gorm.DB) (interface{}, error) {
+	return func(queryOptions *query.QueryOptions, scopes []func(*gorm.DB) *gorm.DB) (interface{}, error) {
+		results, err := h.fetchResults(queryOptions, scopes)
+		if err != nil {
+			return nil, err
+		}
+
+		if typeCast := GetTypeCast(r.Context()); typeCast != "" {
+			results = h.filterCollectionByType(results, typeCast)
+		}
+
+		return results, nil
+	}
+}
+
+func (h *EntityHandler) filterCollectionByType(results interface{}, typeCast string) interface{} {
+	if typeCast == "" {
+		return results
+	}
+
+	v := reflect.ValueOf(results)
+	if v.Kind() != reflect.Slice {
+		return results
+	}
+
+	filtered := reflect.MakeSlice(v.Type(), 0, v.Len())
+	for i := 0; i < v.Len(); i++ {
+		item := v.Index(i)
+		if h.entityMatchesType(item.Interface(), typeCast) {
+			filtered = reflect.Append(filtered, item)
+		}
+	}
+
+	return filtered.Interface()
+}
+
+func (h *EntityHandler) buildTypeCastScope(typeCast string) func(*gorm.DB) *gorm.DB {
+	if typeCast == "" {
+		return nil
+	}
+
+	columnName := h.typeDiscriminatorColumn()
+	if columnName == "" {
+		return nil
+	}
+
+	typeNames := uniqueStrings(h.typeNameCandidates(typeCast))
+	if len(typeNames) == 0 {
+		typeNames = []string{typeCast}
+	}
+
+	values := make([]interface{}, 0, len(typeNames))
+	for _, name := range typeNames {
+		values = append(values, name)
+	}
+
+	if len(values) == 0 {
+		return nil
+	}
+
+	return func(db *gorm.DB) *gorm.DB {
+		return db.Where(clause.IN{Column: clause.Column{Name: columnName}, Values: values})
+	}
 }
 
 func (h *EntityHandler) applyMaxPageSize(queryOptions *query.QueryOptions, maxPageSize int) *query.QueryOptions {
