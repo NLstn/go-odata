@@ -108,7 +108,7 @@ type AsyncConfig struct {
 }
 
 // EnableAsyncProcessing configures asynchronous request handling for the service.
-func (s *Service) EnableAsyncProcessing(cfg AsyncConfig) {
+func (s *Service) EnableAsyncProcessing(cfg AsyncConfig) error {
 	normalized := cfg
 	if normalized.MonitorPathPrefix == "" {
 		normalized.MonitorPathPrefix = "/$async/jobs/"
@@ -122,9 +122,15 @@ func (s *Service) EnableAsyncProcessing(cfg AsyncConfig) {
 
 	if s.asyncManager != nil {
 		s.asyncManager.Close()
+		s.asyncManager = nil
 	}
 
-	s.asyncManager = async.NewManager(normalized.JobRetention)
+	mgr, err := async.NewManager(s.db, normalized.JobRetention)
+	if err != nil {
+		return fmt.Errorf("failed to configure async processing: %w", err)
+	}
+
+	s.asyncManager = mgr
 	s.asyncMonitorPrefix = normalized.MonitorPathPrefix
 	cfgCopy := normalized
 	s.asyncConfig = &cfgCopy
@@ -138,6 +144,8 @@ func (s *Service) EnableAsyncProcessing(cfg AsyncConfig) {
 	} else {
 		s.asyncQueue = nil
 	}
+
+	return nil
 }
 
 // RegisterEntity registers an entity type with the OData service.

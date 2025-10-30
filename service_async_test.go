@@ -31,11 +31,13 @@ func TestServiceRespondAsyncFlow(t *testing.T) {
 		t.Fatalf("failed to register entity: %v", err)
 	}
 
-	svc.EnableAsyncProcessing(AsyncConfig{
+	if err := svc.EnableAsyncProcessing(AsyncConfig{
 		MonitorPathPrefix:    "/$async/jobs",
 		DefaultRetryInterval: 3 * time.Second,
 		JobRetention:         time.Minute,
-	})
+	}); err != nil {
+		t.Fatalf("failed to enable async processing: %v", err)
+	}
 	if svc.asyncManager != nil {
 		t.Cleanup(svc.asyncManager.Close)
 	}

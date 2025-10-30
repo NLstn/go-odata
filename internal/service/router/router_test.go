@@ -2,14 +2,33 @@ package router
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/nlstn/go-odata/internal/actions"
 	"github.com/nlstn/go-odata/internal/async"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
+
+func newTestAsyncManager(t *testing.T) *async.Manager {
+	t.Helper()
+	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", strings.ReplaceAll(t.Name(), "/", "_"))
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("failed to open database: %v", err)
+	}
+	mgr, err := async.NewManager(db, 0)
+	if err != nil {
+		t.Fatalf("failed to create async manager: %v", err)
+	}
+	t.Cleanup(mgr.Close)
+	return mgr
+}
 
 type stubEntityHandler struct {
 	isSingleton     bool
@@ -132,8 +151,7 @@ func newTestRouter(handler EntityHandler, actionDefs map[string][]*actions.Actio
 }
 
 func TestRouter_AsyncMonitorGETFlow(t *testing.T) {
-	mgr := async.NewManager(0)
-	t.Cleanup(mgr.Close)
+	mgr := newTestAsyncManager(t)
 
 	router := newTestRouter(nil, nil, nil, func(http.ResponseWriter, *http.Request, string, string, bool, string) {})
 	router.SetAsyncMonitor("/$async/jobs", mgr)
@@ -155,8 +173,12 @@ func TestRouter_AsyncMonitorGETFlow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to start job: %v", err)
 	}
-	job.SetMonitorURL("/$async/jobs/" + job.ID)
-	job.SetRetryAfter(2 * time.Second)
+	if err := job.SetMonitorURL("/$async/jobs/" + job.ID); err != nil {
+		t.Fatalf("failed to set monitor URL: %v", err)
+	}
+	if err := job.SetRetryAfter(2 * time.Second); err != nil {
+		t.Fatalf("failed to set retry-after: %v", err)
+	}
 
 	pendingReq := httptest.NewRequest(http.MethodGet, job.MonitorURL(), nil)
 	pendingRec := httptest.NewRecorder()
@@ -197,8 +219,7 @@ func TestRouter_AsyncMonitorGETFlow(t *testing.T) {
 }
 
 func TestRouter_AsyncMonitorDELETE(t *testing.T) {
-	mgr := async.NewManager(0)
-	t.Cleanup(mgr.Close)
+	mgr := newTestAsyncManager(t)
 
 	router := newTestRouter(nil, nil, nil, func(http.ResponseWriter, *http.Request, string, string, bool, string) {})
 	router.SetAsyncMonitor("/$async/jobs", mgr)
@@ -212,7 +233,9 @@ func TestRouter_AsyncMonitorDELETE(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to start job: %v", err)
 	}
-	job.SetMonitorURL("/$async/jobs/" + job.ID)
+	if err := job.SetMonitorURL("/$async/jobs/" + job.ID); err != nil {
+		t.Fatalf("failed to set monitor URL: %v", err)
+	}
 
 	deleteReq := httptest.NewRequest(http.MethodDelete, job.MonitorURL(), nil)
 	deleteRec := httptest.NewRecorder()
@@ -229,8 +252,7 @@ func TestRouter_AsyncMonitorDELETE(t *testing.T) {
 }
 
 func TestRouter_AsyncMonitorInvalidPaths(t *testing.T) {
-	mgr := async.NewManager(0)
-	t.Cleanup(mgr.Close)
+	mgr := newTestAsyncManager(t)
 
 	router := newTestRouter(nil, nil, nil, func(http.ResponseWriter, *http.Request, string, string, bool, string) {})
 	router.SetAsyncMonitor("/$async/jobs", mgr)

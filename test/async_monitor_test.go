@@ -103,7 +103,11 @@ func TestAsyncMonitorDeleteRemovesCompletedJob(t *testing.T) {
 	}
 
 	followUp := issueMonitorRequest(t, service, http.MethodGet, location)
-	if followUp.Code != http.StatusNotFound {
-		t.Fatalf("expected monitor to be removed, got status %d", followUp.Code)
+	if followUp.Code != monitorRec.Code {
+		t.Fatalf("expected persisted monitor status %d, got %d", monitorRec.Code, followUp.Code)
+	}
+
+	if !bytes.Equal(followUp.Body.Bytes(), monitorRec.Body.Bytes()) {
+		t.Fatalf("expected persisted monitor body %q, got %q", monitorRec.Body.String(), followUp.Body.String())
 	}
 }

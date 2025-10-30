@@ -108,11 +108,13 @@ func main() {
 	// Register reseed action for testing
 	registerReseedAction(service, Db)
 
-	service.EnableAsyncProcessing(odata.AsyncConfig{
+	if err := service.EnableAsyncProcessing(odata.AsyncConfig{
 		MonitorPathPrefix:    "/$async/jobs/",
 		DefaultRetryInterval: 3 * time.Second,
 		JobRetention:         5 * time.Minute,
-	})
+	}); err != nil {
+		log.Fatal("Failed to enable async processing:", err)
+	}
 
 	entities.SetDBGetter(func() *gorm.DB {
 		return Db
