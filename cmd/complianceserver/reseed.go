@@ -101,6 +101,17 @@ func registerReseedAction(service *odata.Service, db *gorm.DB) {
 				return err
 			}
 
+			// Re-enable async processing to recreate the _odata_async_jobs table
+			// that was dropped during seedDatabase
+			if err := service.EnableAsyncProcessing(odata.AsyncConfig{
+				MonitorPathPrefix:    "/$async/jobs/",
+				DefaultRetryInterval: 2 * time.Second,
+				JobRetention:         5 * time.Minute,
+			}); err != nil {
+				http.Error(w, fmt.Sprintf("failed to re-enable async processing: %v", err), http.StatusInternalServerError)
+				return err
+			}
+
 			// Return success response
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
