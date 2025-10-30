@@ -11,11 +11,13 @@ import (
 
 func enableAsyncProcessing(t *testing.T, service *odata.Service, retry time.Duration) {
 	t.Helper()
-	service.EnableAsyncProcessing(odata.AsyncConfig{
+	if err := service.EnableAsyncProcessing(odata.AsyncConfig{
 		MonitorPathPrefix:    "/$async/jobs/",
 		DefaultRetryInterval: retry,
 		JobRetention:         0,
-	})
+	}); err != nil {
+		t.Fatalf("failed to enable async processing: %v", err)
+	}
 }
 
 func waitForMonitorCompletion(t *testing.T, service *odata.Service, location string) *httptest.ResponseRecorder {

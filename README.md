@@ -147,12 +147,14 @@ Long-running requests can be offloaded to background workers when clients send
 `Prefer: respond-async`. Enable the behaviour explicitly on your service:
 
 ```go
-service.EnableAsyncProcessing(odata.AsyncConfig{
+if err := service.EnableAsyncProcessing(odata.AsyncConfig{
     MonitorPathPrefix:    "/$async/jobs/", // default when empty
     DefaultRetryInterval: 5 * time.Second,  // Retry-After header while pending
     MaxQueueSize:         8,                // Optional worker limit
     JobRetention:         15 * time.Minute, // How long to keep completed jobs
-})
+}); err != nil {
+    log.Fatalf("enable async processing: %v", err)
+}
 ```
 
 With async processing enabled:
@@ -165,6 +167,10 @@ With async processing enabled:
   completes.
 - Sending `DELETE` to the monitor URL cancels running work when possible and
   removes completed jobs.
+- Job metadata is persisted in the reserved `_odata_async_jobs` table. The table
+  keeps monitor state isolated from application models and allows a fresh
+  `async.Manager` to serve completed job results until the retention TTL deletes
+  the row.
 
 The development server (`cmd/devserver`) enables async processing by default
 using the standard `/$async/jobs/` prefix and advertises the monitor endpoint in

@@ -114,11 +114,13 @@ func main() {
 	registerReseedAction(service, Db)
 
 	// Enable asynchronous processing for compliance testing
-	service.EnableAsyncProcessing(odata.AsyncConfig{
+	if err := service.EnableAsyncProcessing(odata.AsyncConfig{
 		MonitorPathPrefix:    "/$async/jobs/",
 		DefaultRetryInterval: 2 * time.Second,
 		JobRetention:         5 * time.Minute,
-	})
+	}); err != nil {
+		log.Fatal("Failed to enable async processing:", err)
+	}
 
 	// Create HTTP mux and register the OData service
 	mux := http.NewServeMux()

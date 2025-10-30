@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"log"
 	"math"
 	"net/http"
 	"path"
@@ -12,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"gorm.io/gorm"
 )
 
 // JobStatus represents the lifecycle state of an asynchronous job.
@@ -50,8 +53,9 @@ type Job struct {
 	monitorURL string
 	retryAfter *time.Duration
 
-	cancel context.CancelFunc
-	done   chan struct{}
+	cancel  context.CancelFunc
+	done    chan struct{}
+	manager *Manager
 }
 
 // WithMonitorURL sets the URL clients should poll for job status.
@@ -81,14 +85,24 @@ type Manager struct {
 	ttl           time.Duration
 	cleanupTicker *time.Ticker
 	stopCleanup   chan struct{}
+	db            *gorm.DB
 }
 
 // NewManager constructs a Manager with the supplied TTL for completed jobs.
-func NewManager(ttl time.Duration) *Manager {
+func NewManager(db *gorm.DB, ttl time.Duration) (*Manager, error) {
+	if db == nil {
+		return nil, errors.New("async: database handle is required")
+	}
+
+	if err := db.AutoMigrate(&JobRecord{}); err != nil {
+		return nil, err
+	}
+
 	m := &Manager{
 		jobs:        make(map[string]*Job),
 		ttl:         ttl,
 		stopCleanup: make(chan struct{}),
+		db:          db,
 	}
 
 	if ttl > 0 {
@@ -110,7 +124,7 @@ func NewManager(ttl time.Duration) *Manager {
 		}()
 	}
 
-	return m
+	return m, nil
 }
 
 // Close stops the manager's background cleanup.
@@ -144,6 +158,7 @@ func (m *Manager) StartJob(ctx context.Context, handler Handler, opts ...JobOpti
 		CreatedAt: now,
 		UpdatedAt: now,
 		done:      make(chan struct{}),
+		manager:   m,
 	}
 
 	for _, opt := range opts {
@@ -152,6 +167,19 @@ func (m *Manager) StartJob(ctx context.Context, handler Handler, opts ...JobOpti
 
 	jobCtx, cancel := context.WithCancel(ctx)
 	job.cancel = cancel
+
+	record := &JobRecord{
+		ID:                job.ID,
+		Status:            job.Status,
+		CreatedAt:         job.CreatedAt,
+		UpdatedAt:         job.UpdatedAt,
+		MonitorURL:        job.monitorURL,
+		RetryAfterSeconds: durationToSeconds(job.retryAfter),
+	}
+
+	if err := m.db.Create(record).Error; err != nil {
+		return nil, err
+	}
 
 	m.mu.Lock()
 	m.jobs[job.ID] = job
@@ -162,7 +190,7 @@ func (m *Manager) StartJob(ctx context.Context, handler Handler, opts ...JobOpti
 	return job, nil
 }
 
-// GetJob retrieves a job by ID.
+// GetJob retrieves an active job by ID.
 func (m *Manager) GetJob(id string) (*Job, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -218,28 +246,64 @@ func (m *Manager) run(job *Job, ctx context.Context, handler Handler) {
 }
 
 func (m *Manager) updateStatus(job *Job, status JobStatus) {
+	now := time.Now()
+
 	m.mu.Lock()
 	job.Status = status
-	now := time.Now()
 	job.UpdatedAt = now
 	m.mu.Unlock()
+
+	if err := m.db.Model(&JobRecord{}).
+		Where("id = ?", job.ID).
+		Updates(map[string]interface{}{
+			"status":     status,
+			"updated_at": now,
+		}).Error; err != nil {
+		log.Printf("async: failed to persist status for job %s: %v", job.ID, err)
+	}
 }
 
 func (m *Manager) finish(job *Job, status JobStatus, resp *StoredResponse, err error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	job.Status = status
 	now := time.Now()
-	job.UpdatedAt = now
-	job.CompletedAt = &now
-
-	if resp != nil {
-		job.Response = cloneStoredResponse(resp)
+	cloned := cloneStoredResponse(resp)
+	var errText string
+	if err != nil {
+		errText = err.Error()
 	}
 
-	if err != nil {
-		job.Error = err.Error()
+	statusValue, headers, body, serErr := storedResponseToRecord(cloned)
+	if serErr != nil {
+		log.Printf("async: failed to serialize response for job %s: %v", job.ID, serErr)
+		statusValue, headers, body = nil, nil, nil
+	}
+
+	m.mu.Lock()
+	job.Status = status
+	job.UpdatedAt = now
+	job.CompletedAt = &now
+	job.Response = cloned
+	job.Error = errText
+	delete(m.jobs, job.ID)
+	m.mu.Unlock()
+
+	updates := map[string]interface{}{
+		"status":           status,
+		"updated_at":       now,
+		"completed_at":     &now,
+		"error_text":       errText,
+		"response_headers": headers,
+		"response_body":    body,
+	}
+	if statusValue != nil {
+		updates["response_status"] = *statusValue
+	} else {
+		updates["response_status"] = nil
+	}
+
+	if err := m.db.Model(&JobRecord{}).
+		Where("id = ?", job.ID).
+		Updates(updates).Error; err != nil {
+		log.Printf("async: failed to persist completion for job %s: %v", job.ID, err)
 	}
 }
 
@@ -276,6 +340,11 @@ func (m *Manager) cleanupExpired() {
 	}
 
 	cutoff := time.Now().Add(-m.ttl)
+
+	if err := m.db.Where("completed_at IS NOT NULL AND completed_at < ?", cutoff).
+		Delete(&JobRecord{}).Error; err != nil {
+		log.Printf("async: failed to delete expired jobs: %v", err)
+	}
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -333,21 +402,28 @@ func (m *Manager) ServeMonitor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	m.mu.Lock()
-	job, ok := m.jobs[id]
-	if !ok {
-		m.mu.Unlock()
-		http.NotFound(w, r)
+	var record JobRecord
+	db := m.db
+	if r != nil {
+		db = db.WithContext(r.Context())
+	}
+
+	if err := db.First(&record, "id = ?", id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			http.NotFound(w, r)
+			return
+		}
+		log.Printf("async: failed to load job %s: %v", id, err)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	// Create snapshot while holding lock to avoid data races
-	snapshot := jobSnapshot{
-		status:     job.Status,
-		retryAfter: job.retryAfter,
-		response:   job.Response,
-		err:        job.Error,
+
+	snapshot, err := recordToSnapshot(&record)
+	if err != nil {
+		log.Printf("async: failed to deserialize job %s: %v", id, err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
-	m.mu.Unlock()
 
 	switch r.Method {
 	case http.MethodDelete:
@@ -367,7 +443,7 @@ func (m *Manager) ServeMonitor(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	case http.MethodGet, http.MethodHead, "":
-		// continue below
+		// continue
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
@@ -461,17 +537,93 @@ func (j *Job) RetryAfter() (time.Duration, bool) {
 
 // SetRetryAfter updates the retry-after duration for the job. A non-positive
 // duration clears the setting.
-func (j *Job) SetRetryAfter(d time.Duration) {
+func (j *Job) SetRetryAfter(d time.Duration) error {
+	if j == nil {
+		return nil
+	}
+
+	var seconds *int
+	if j.manager != nil {
+		j.manager.mu.Lock()
+	}
 	if d <= 0 {
 		j.retryAfter = nil
-		return
+	} else {
+		dCopy := d
+		j.retryAfter = &dCopy
 	}
-	j.retryAfter = &d
+	seconds = durationToSeconds(j.retryAfter)
+	if j.manager != nil {
+		j.manager.mu.Unlock()
+	}
+
+	if j.manager == nil || j.manager.db == nil {
+		return nil
+	}
+
+	return j.manager.db.Model(&JobRecord{}).
+		Where("id = ?", j.ID).
+		Update("retry_after_seconds", seconds).Error
 }
 
 // SetMonitorURL updates the monitoring URL for the job.
-func (j *Job) SetMonitorURL(url string) {
+func (j *Job) SetMonitorURL(url string) error {
+	if j == nil {
+		return nil
+	}
+
+	if j.manager != nil {
+		j.manager.mu.Lock()
+	}
 	j.monitorURL = url
+	if j.manager != nil {
+		j.manager.mu.Unlock()
+	}
+
+	if j.manager == nil || j.manager.db == nil {
+		return nil
+	}
+
+	return j.manager.db.Model(&JobRecord{}).
+		Where("id = ?", j.ID).
+		Update("monitor_url", url).Error
+}
+
+func durationToSeconds(d *time.Duration) *int {
+	if d == nil {
+		return nil
+	}
+	seconds := int(math.Ceil(d.Seconds()))
+	if seconds <= 0 {
+		zero := 0
+		return &zero
+	}
+	return &seconds
+}
+
+func secondsToDuration(seconds *int) *time.Duration {
+	if seconds == nil {
+		return nil
+	}
+	d := time.Duration(*seconds) * time.Second
+	return &d
+}
+
+func recordToSnapshot(record *JobRecord) (jobSnapshot, error) {
+	retry := secondsToDuration(record.RetryAfterSeconds)
+	resp, err := storedResponseFromRecord(record.ResponseStatus, record.ResponseHeaders, record.ResponseBody)
+	if err != nil {
+		return jobSnapshot{}, err
+	}
+	snapshot := jobSnapshot{
+		status:   record.Status,
+		response: resp,
+		err:      record.ErrorText,
+	}
+	if retry != nil {
+		snapshot.retryAfter = retry
+	}
+	return snapshot, nil
 }
 
 // ErrorMessage returns the stored error for the job.

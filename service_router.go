@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -106,7 +107,9 @@ func (s *Service) tryHandleAsync(w http.ResponseWriter, r *http.Request) bool {
 	// in the worker goroutine.
 
 	if s.asyncMonitorPrefix != "" {
-		job.SetMonitorURL(s.asyncMonitorPrefix + job.ID)
+		if err := job.SetMonitorURL(s.asyncMonitorPrefix + job.ID); err != nil {
+			log.Printf("odata: failed to persist async monitor URL for job %s: %v", job.ID, err)
+		}
 	}
 
 	async.WriteInitialResponse(w, job)

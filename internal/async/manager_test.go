@@ -2,15 +2,41 @@ package async
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
+
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
-func TestManagerLifecycle(t *testing.T) {
-	mgr := NewManager(0)
+func newTestDB(t *testing.T) *gorm.DB {
+	t.Helper()
+	dsn := fmt.Sprintf("file:%s-%d?mode=memory&cache=shared", strings.ReplaceAll(t.Name(), "/", "_"), time.Now().UnixNano())
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("failed to open database: %v", err)
+	}
+	return db
+}
+
+func newTestManager(t *testing.T, ttl time.Duration) (*Manager, *gorm.DB) {
+	t.Helper()
+	db := newTestDB(t)
+	mgr, err := NewManager(db, ttl)
+	if err != nil {
+		t.Fatalf("failed to create async manager: %v", err)
+	}
 	t.Cleanup(mgr.Close)
+	return mgr, db
+}
+
+func TestManagerLifecycle(t *testing.T) {
+	mgr, _ := newTestManager(t, 0)
 
 	started := make(chan struct{})
 	finish := make(chan struct{})
@@ -35,7 +61,9 @@ func TestManagerLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("StartJob error: %v", err)
 	}
-	job.SetMonitorURL("/async/jobs/" + job.ID)
+	if err := job.SetMonitorURL("/async/jobs/" + job.ID); err != nil {
+		t.Fatalf("SetMonitorURL error: %v", err)
+	}
 
 	initial := httptest.NewRecorder()
 	WriteInitialResponse(initial, job)
@@ -93,8 +121,7 @@ func TestManagerLifecycle(t *testing.T) {
 }
 
 func TestManagerCancellation(t *testing.T) {
-	mgr := NewManager(0)
-	t.Cleanup(mgr.Close)
+	mgr, _ := newTestManager(t, 0)
 
 	release := make(chan struct{})
 	handler := func(ctx context.Context) (*StoredResponse, error) {
@@ -110,7 +137,9 @@ func TestManagerCancellation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("StartJob error: %v", err)
 	}
-	job.SetMonitorURL("/async/jobs/" + job.ID)
+	if err := job.SetMonitorURL("/async/jobs/" + job.ID); err != nil {
+		t.Fatalf("SetMonitorURL error: %v", err)
+	}
 
 	cancelReq := httptest.NewRequest(http.MethodDelete, job.MonitorURL(), nil)
 	cancelRec := httptest.NewRecorder()
@@ -135,8 +164,7 @@ func TestManagerCancellation(t *testing.T) {
 
 func TestManagerCleanupRemovesOldJobs(t *testing.T) {
 	ttl := 10 * time.Millisecond
-	mgr := NewManager(ttl)
-	t.Cleanup(mgr.Close)
+	mgr, db := newTestManager(t, ttl)
 
 	job, err := mgr.StartJob(context.Background(), func(ctx context.Context) (*StoredResponse, error) {
 		return &StoredResponse{StatusCode: http.StatusOK}, nil
@@ -144,17 +172,72 @@ func TestManagerCleanupRemovesOldJobs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("StartJob error: %v", err)
 	}
-	job.SetMonitorURL("/async/jobs/" + job.ID)
+	if err := job.SetMonitorURL("/async/jobs/" + job.ID); err != nil {
+		t.Fatalf("SetMonitorURL error: %v", err)
+	}
 
 	job.Wait()
-	if _, ok := mgr.GetJob(job.ID); !ok {
-		t.Fatalf("expected job to be retained immediately after completion")
+	if _, ok := mgr.GetJob(job.ID); ok {
+		t.Fatalf("expected job to be removed from active set after completion")
 	}
 
 	time.Sleep(3 * ttl)
 	mgr.cleanupExpired()
 
 	if _, ok := mgr.GetJob(job.ID); ok {
-		t.Fatalf("expected job to be cleaned up after TTL")
+		t.Fatalf("expected job to remain absent from active set after cleanup")
+	}
+
+	var record JobRecord
+	err = db.First(&record, "id = ?", job.ID).Error
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("expected job row to be deleted, got error %v", err)
+	}
+}
+
+func TestManagerPersistenceAcrossInstances(t *testing.T) {
+	mgr1, db := newTestManager(t, 0)
+
+	release := make(chan struct{})
+	handler := func(ctx context.Context) (*StoredResponse, error) {
+		<-release
+		hdr := http.Header{}
+		hdr.Set("X-Async-Result", "done")
+		return &StoredResponse{
+			StatusCode: http.StatusCreated,
+			Header:     hdr,
+			Body:       []byte(`{"status":"ok"}`),
+		}, nil
+	}
+
+	job, err := mgr1.StartJob(context.Background(), handler)
+	if err != nil {
+		t.Fatalf("StartJob error: %v", err)
+	}
+	if err := job.SetMonitorURL("/async/jobs/" + job.ID); err != nil {
+		t.Fatalf("SetMonitorURL error: %v", err)
+	}
+
+	close(release)
+	job.Wait()
+
+	mgr2, err := NewManager(db, 0)
+	if err != nil {
+		t.Fatalf("failed to create second manager: %v", err)
+	}
+	t.Cleanup(mgr2.Close)
+
+	req := httptest.NewRequest(http.MethodGet, "/async/jobs/"+job.ID, nil)
+	rec := httptest.NewRecorder()
+	mgr2.ServeMonitor(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected persisted monitor response 201, got %d", rec.Code)
+	}
+	if got := rec.Header().Get("X-Async-Result"); got != "done" {
+		t.Fatalf("expected persisted header, got %q", got)
+	}
+	if body := rec.Body.String(); body != `{"status":"ok"}` {
+		t.Fatalf("expected persisted body, got %q", body)
 	}
 }
