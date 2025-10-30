@@ -229,8 +229,10 @@ test_multiple_preferences() {
     
     local HTTP_CODE=$(echo "$RESPONSE" | grep "HTTP/" | tail -1 | awk '{print $2}')
     
-    # Should honor return=minimal
-    if ! check_status "$HTTP_CODE" "204"; then
+    # Should return either 204 (sync with return=minimal) or 202 (async processing)
+    # The server can choose to honor respond-async which takes precedence
+    if [ "$HTTP_CODE" != "204" ] && [ "$HTTP_CODE" != "202" ]; then
+        echo "  Details: Status code: $HTTP_CODE (expected 204 or 202)"
         return 1
     fi
     
