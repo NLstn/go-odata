@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/nlstn/go-odata"
 	"github.com/nlstn/go-odata/cmd/complianceserver/entities"
@@ -112,6 +113,13 @@ func main() {
 	// Register reseed action for compliance testing
 	registerReseedAction(service, Db)
 
+	// Enable asynchronous processing for compliance testing
+	service.EnableAsyncProcessing(odata.AsyncConfig{
+		MonitorPathPrefix:    "/$async/jobs/",
+		DefaultRetryInterval: 2 * time.Second,
+		JobRetention:         5 * time.Minute,
+	})
+
 	// Create HTTP mux and register the OData service
 	mux := http.NewServeMux()
 	mux.Handle("/", service)
@@ -126,9 +134,14 @@ func main() {
 	fmt.Printf("  Products:             http://localhost:%s/Products\n", *port)
 	fmt.Printf("  ProductDescriptions:  http://localhost:%s/ProductDescriptions\n", *port)
 	fmt.Printf("  Company (Singleton):  http://localhost:%s/Company\n", *port)
+	fmt.Printf("  Async Monitor:        http://localhost:%s/$async/jobs/{jobID}\n", *port)
 	fmt.Println()
 	fmt.Println("Compliance Testing:")
 	fmt.Printf("  POST http://localhost:%s/Reseed  (Resets database to default state)\n", *port)
+	fmt.Println()
+	fmt.Println("Asynchronous Processing:")
+	fmt.Println("  Use 'Prefer: respond-async' header to enable async processing")
+	fmt.Println("  Status monitors available at /$async/jobs/{jobID}")
 	fmt.Println()
 
 	if err := http.ListenAndServe(":"+*port, mux); err != nil {
