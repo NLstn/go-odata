@@ -1,8 +1,10 @@
 package actions
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -537,19 +539,30 @@ func ResolveActionOverload(r *http.Request, candidates []*ActionDefinition, isBo
 
 	// Multiple candidates - try to find the best match based on provided parameters
 	// Parse the request body to get parameter names
-	var bodyParams map[string]interface{}
-	if err := json.NewDecoder(r.Body).Decode(&bodyParams); err != nil {
+	bodyBytes, err := io.ReadAll(r.Body)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to read request body: %w", err)
+	}
+	r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+
+	var bodyParams map[string]json.RawMessage
+	if err := json.NewDecoder(bytes.NewReader(bodyBytes)).Decode(&bodyParams); err != nil {
 		return nil, nil, fmt.Errorf("failed to parse request body: %w", err)
+	}
+
+	providedParams := make(map[string]interface{}, len(bodyParams))
+	for name := range bodyParams {
+		providedParams[name] = struct{}{}
 	}
 
 	// Try to find an exact match based on parameter names
 	for _, candidate := range filtered {
-		if parameterNamesMatch(candidate.Parameters, bodyParams) {
+		if parameterNamesMatch(candidate.Parameters, providedParams) {
 			// Validate and convert parameters
 			params := make(map[string]interface{})
 			allMatch := true
 			for _, paramDef := range candidate.Parameters {
-				value, exists := bodyParams[paramDef.Name]
+				rawValue, exists := bodyParams[paramDef.Name]
 				if !exists {
 					if paramDef.Required {
 						allMatch = false
@@ -558,7 +571,12 @@ func ResolveActionOverload(r *http.Request, candidates []*ActionDefinition, isBo
 					continue
 				}
 
-				// Validate parameter type
+				value, err := decodeJSONToType(rawValue, paramDef.Type)
+				if err != nil {
+					allMatch = false
+					break
+				}
+
 				if err := validateParameterType(paramDef.Name, value, paramDef.Type); err != nil {
 					allMatch = false
 					break
