@@ -359,6 +359,7 @@ Example report structure:
 - **11.4.4_delete_entity.sh** - Tests entity deletion (DELETE) and verification
 - **11.4.5_upsert.sh** - Tests upsert operations (PUT) for creating or replacing entities
 - **11.4.6_relationships.sh** - Tests relationship management with $ref (optional feature)
+- **11.4.6.2_relationships_id_query.sh** - Validates using the $id query option with $ref for collection and single-valued relationships, including error handling for invalid inputs
 - **11.4.6.1_navigation_property_operations.sh** - Tests operations on navigation properties including accessing, filtering, and query options
 - **11.4.7_deep_insert.sh** - Tests creating entities with related entities in a single POST request (deep insert)
 - **11.4.8_modify_relationships.sh** - Tests modifying relationships using $ref endpoints (PUT, POST, DELETE on $ref)
