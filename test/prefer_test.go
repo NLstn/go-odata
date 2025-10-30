@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
@@ -24,7 +26,12 @@ type PreferTestProduct struct {
 }
 
 func setupPreferTestService(t *testing.T) (*odata.Service, *gorm.DB) {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	// Use a file-based SQLite database for async tests to ensure
+	// data is shared across goroutines (async workers)
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "prefer_test.db")
+
+	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("Failed to connect to database: %v", err)
 	}
@@ -37,6 +44,11 @@ func setupPreferTestService(t *testing.T) (*odata.Service, *gorm.DB) {
 	if err := service.RegisterEntity(PreferTestProduct{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
 	}
+
+	// Cleanup the database file when test completes
+	t.Cleanup(func() {
+		os.Remove(dbPath)
+	})
 
 	return service, db
 }
