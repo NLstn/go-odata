@@ -152,6 +152,11 @@ while [[ $# -gt 0 ]]; do
             ;;
         -j|--parallel)
             PARALLEL_JOBS="$2"
+            # Validate that it's a positive integer
+            if ! [[ "$PARALLEL_JOBS" =~ ^[0-9]+$ ]] || [ "$PARALLEL_JOBS" -lt 1 ]; then
+                echo "Error: --parallel/-j requires a positive integer (got: '$PARALLEL_JOBS')"
+                exit 1
+            fi
             shift 2
             ;;
         *)
@@ -318,19 +323,7 @@ echo ""
 echo "═════════════════════════════════════════════════════════"
 echo ""
 
-# Function to run a single test and save output
-# Note: This function is designed to be run in a subshell (with &)
-run_single_test() {
-    local script="$1"
-    local output_file="$2"
-    
-    # Run the test and capture output and exit code
-    bash "$script" > "$output_file" 2>&1
-    local exit_code=$?
-    
-    # Save exit code to a separate file
-    echo "$exit_code" > "${output_file}.exit"
-}
+
 
 # Choose parallel or sequential execution
 if [ "$PARALLEL_JOBS" -gt 0 ]; then
@@ -373,7 +366,7 @@ if [ "$PARALLEL_JOBS" -gt 0 ]; then
         
         # Run test in background (inline to ensure proper job tracking)
         # Use timeout to prevent tests from hanging indefinitely (60 seconds per test)
-        (timeout 60 bash "$script" > "$OUTPUT_FILE" 2>&1; echo $? > "${OUTPUT_FILE}.exit") &
+        (timeout 60 bash "$script" > "$OUTPUT_FILE" 2>&1; EXIT=$?; echo $EXIT > "${OUTPUT_FILE}.exit"; exit $EXIT) &
         JOB_PID=$!
         JOB_PIDS+=($JOB_PID)
         
@@ -389,9 +382,8 @@ if [ "$PARALLEL_JOBS" -gt 0 ]; then
     done
     
     # Wait for all remaining jobs to complete
-    for pid in "${JOB_PIDS[@]}"; do
-        wait $pid 2>/dev/null
-    done
+    # Note: Some PIDs may have already been reaped by wait -n, so errors are suppressed
+    wait 2>/dev/null || true
     
     echo ""
     echo "All tests completed. Processing results..."
