@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"reflect"
@@ -13,6 +14,8 @@ import (
 	"github.com/nlstn/go-odata/internal/trackchanges"
 	"gorm.io/gorm"
 )
+
+var errETagMismatch = errors.New("etag mismatch")
 
 // handleDeleteEntity handles DELETE requests for individual entities
 func (h *EntityHandler) handleDeleteEntity(w http.ResponseWriter, r *http.Request, entityKey string) {
@@ -116,7 +119,7 @@ func (h *EntityHandler) fetchAndUpdateEntity(w http.ResponseWriter, r *http.Requ
 				ErrDetailPreconditionFailed); writeErr != nil {
 				fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
 			}
-			return nil, nil, err
+			return nil, nil, errETagMismatch
 		}
 	}
 
@@ -278,7 +281,7 @@ func (h *EntityHandler) fetchAndReplaceEntity(w http.ResponseWriter, r *http.Req
 				ErrDetailPreconditionFailed); writeErr != nil {
 				fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
 			}
-			return nil, err
+			return nil, errETagMismatch
 		}
 	}
 
