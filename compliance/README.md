@@ -95,6 +95,16 @@ Run all tests (both 4.0 and 4.01):
 ./run_compliance_tests.sh --version all   # or just omit the flag
 ```
 
+### Run Tests in Parallel
+
+Speed up test execution by running tests in parallel:
+```bash
+./run_compliance_tests.sh -j 4            # Run with 4 parallel jobs
+./run_compliance_tests.sh --parallel 8    # Run with 8 parallel jobs
+```
+
+**Note**: Parallel execution may cause some test failures due to race conditions when multiple tests reseed the database or modify data simultaneously. For reliable results, use sequential execution (default). Parallel mode is best for development and quick feedback.
+
 ### Run Specific Tests
 
 Run tests matching a pattern (server auto-starts):
@@ -103,6 +113,7 @@ Run tests matching a pattern (server auto-starts):
 ./run_compliance_tests.sh 8.1.1          # Specific section
 ./run_compliance_tests.sh query          # All query option tests
 ./run_compliance_tests.sh --version 4.0 filter  # Only 4.0 filter tests
+./run_compliance_tests.sh -j 4 header    # Run header tests with 4 parallel jobs
 ```
 
 Run a single test directly (requires server to be running):
@@ -1081,8 +1092,9 @@ Potential improvements to the test framework:
 - Performance/load testing capabilities
 - Automated comparison with reference implementations
 - Support for testing with different database backends
-- Parallel test execution
+- ~~Parallel test execution~~ ✓ Implemented (use `-j N` or `--parallel N`)
 - Test coverage metrics
+- Improved parallel execution with better test isolation to reduce race conditions
 
 Additional OData features to test:
 - Derived types and type casting (expanded coverage)

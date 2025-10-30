@@ -8,6 +8,7 @@ SERVER_URL="${SERVER_URL:-http://localhost:9090}"
 REPORT_FILE="${REPORT_FILE:-compliance-report.md}"
 DB_TYPE="sqlite"           # sqlite | postgres
 DB_DSN=""                  # Optional; for postgres defaults if empty
+PARALLEL_JOBS=0            # Number of parallel jobs (0 = sequential)
 
 # Colors for output
 RED='\033[0;31m'
@@ -27,6 +28,7 @@ declare -a TEST_TOTAL
 # Variable to track if we started the server
 SERVER_PID=""
 TMP_SERVER_DIR=""
+TMP_OUTPUT_DIR=""
 CLEANUP_DONE=0
 
 # Function to print usage
@@ -44,6 +46,7 @@ usage() {
     echo "  -f, --failures-only  Only show output for failing tests"
     echo "  --debug              Enable debug mode - prints full HTTP request/response for each test"
     echo "  --external-server    Use an external server (don't start/stop the compliance server)"
+    echo "  -j, --parallel N     Run tests in parallel with N concurrent jobs (default: sequential)"
     echo ""
     echo "Examples:"
     echo "  $0                   # Run all tests (auto-starts compliance server)"
@@ -57,6 +60,8 @@ usage() {
     echo "  $0 --debug 8.1.1    # Run test with debug output (full HTTP details)"
     echo "  $0 --external-server # Use already running server"
     echo "  $0 -s http://localhost:9090 -o report.md"
+    echo "  $0 -j 4             # Run tests with 4 parallel jobs"
+    echo "  $0 --parallel 8     # Run tests with 8 parallel jobs"
     echo ""
     echo "Note: The script automatically starts and stops the compliance server."
     echo "      Use --external-server if you want to manage the server yourself."
@@ -88,6 +93,8 @@ cleanup() {
     if [ -n "$TMP_SERVER_DIR" ] && [ -d "$TMP_SERVER_DIR" ]; then
         rm -rf "$TMP_SERVER_DIR"
     fi
+    
+    # Note: TMP_OUTPUT_DIR is cleaned up after processing results, not here
 }
 
 # Register cleanup function to run on exit
@@ -143,6 +150,10 @@ while [[ $# -gt 0 ]]; do
             EXTERNAL_SERVER=1
             shift
             ;;
+        -j|--parallel)
+            PARALLEL_JOBS="$2"
+            shift 2
+            ;;
         *)
             PATTERN="$1"
             SKIP_REPORT=1  # Don't generate report for individual tests
@@ -165,6 +176,9 @@ echo "Server URL: $SERVER_URL"
 echo "Database:   $DB_TYPE${DB_DSN:+ (dsn provided)}"
 echo "Version:    $ODATA_VERSION"
 echo "Report File: $REPORT_FILE"
+if [ $PARALLEL_JOBS -gt 0 ]; then
+    echo "Parallel Jobs: $PARALLEL_JOBS"
+fi
 if [ $DEBUG -eq 1 ]; then
     echo "Debug Mode: ENABLED (full HTTP request/response details will be shown)"
 fi
@@ -304,93 +318,264 @@ echo ""
 echo "═════════════════════════════════════════════════════════"
 echo ""
 
-# Run each test script
-TEST_INDEX=0
-for script in $SCRIPTS; do
-    TEST_NAME=$(basename "$script" .sh)
-    TEST_SCRIPTS[$TEST_INDEX]="$script"
-    TEST_NAMES[$TEST_INDEX]="$TEST_NAME"
+# Function to run a single test and save output
+# Note: This function is designed to be run in a subshell (with &)
+run_single_test() {
+    local script="$1"
+    local output_file="$2"
     
-    # Determine OData version based on directory
-    if [[ "$script" == */v4.01/* ]]; then
-        VERSION_PREFIX="V4.01"
-    else
-        VERSION_PREFIX="V4"
-    fi
+    # Run the test and capture output and exit code
+    bash "$script" > "$output_file" 2>&1
+    local exit_code=$?
     
-    # Capture output
-    OUTPUT=$(bash "$script" 2>&1)
-    EXIT_CODE=$?
+    # Save exit code to a separate file
+    echo "$exit_code" > "${output_file}.exit"
+}
+
+# Choose parallel or sequential execution
+if [ "$PARALLEL_JOBS" -gt 0 ]; then
+    echo "Running tests in parallel with $PARALLEL_JOBS concurrent jobs..."
+    echo ""
     
-    # Determine pass/fail
-    if [ $EXIT_CODE -eq 0 ]; then
-        TEST_RESULTS[$TEST_INDEX]="PASS"
-        RESULT_MSG="${GREEN}✓ PASSED${NC}"
-    else
-        TEST_RESULTS[$TEST_INDEX]="FAIL"
-        RESULT_MSG="${RED}✗ FAILED${NC}"
-    fi
+    # Create temporary directory for test outputs
+    TMP_OUTPUT_DIR=$(mktemp -d)
     
-    # Decide whether to show output based on flags
-    SHOW_OUTPUT=0
-    if [ $FAILURES_ONLY -eq 1 ]; then
-        # Only show output for failing tests
-        if [ $EXIT_CODE -ne 0 ]; then
+    # Build array of scripts to run
+    SCRIPT_ARRAY=()
+    for script in $SCRIPTS; do
+        SCRIPT_ARRAY+=("$script")
+    done
+    
+    # Launch tests in parallel with job control
+    RUNNING_JOBS=0
+    TEST_INDEX=0
+    declare -a JOB_PIDS
+    
+    for script in "${SCRIPT_ARRAY[@]}"; do
+        TEST_NAME=$(basename "$script" .sh)
+        TEST_SCRIPTS[$TEST_INDEX]="$script"
+        TEST_NAMES[$TEST_INDEX]="$TEST_NAME"
+        
+        # Determine OData version based on directory
+        if [[ "$script" == */v4.01/* ]]; then
+            VERSION_PREFIX="V4.01"
+        else
+            VERSION_PREFIX="V4"
+        fi
+        
+        # Create output file for this test
+        OUTPUT_FILE="$TMP_OUTPUT_DIR/test_${TEST_INDEX}.out"
+        
+        # Show that we're starting the test
+        if [ $FAILURES_ONLY -eq 0 ]; then
+            echo -e "${BLUE}Starting: [$VERSION_PREFIX] $TEST_NAME${NC}"
+        fi
+        
+        # Run test in background (inline to ensure proper job tracking)
+        # Use timeout to prevent tests from hanging indefinitely (60 seconds per test)
+        (timeout 60 bash "$script" > "$OUTPUT_FILE" 2>&1; echo $? > "${OUTPUT_FILE}.exit") &
+        JOB_PID=$!
+        JOB_PIDS+=($JOB_PID)
+        
+        RUNNING_JOBS=$((RUNNING_JOBS + 1))
+        
+        # If we've reached the parallel job limit, wait for one to complete
+        if [ $RUNNING_JOBS -ge $PARALLEL_JOBS ]; then
+            wait -n  # Wait for any one background job to complete
+            RUNNING_JOBS=$((RUNNING_JOBS - 1))
+        fi
+        
+        TEST_INDEX=$((TEST_INDEX + 1))
+    done
+    
+    # Wait for all remaining jobs to complete
+    for pid in "${JOB_PIDS[@]}"; do
+        wait $pid 2>/dev/null
+    done
+    
+    echo ""
+    echo "All tests completed. Processing results..."
+    echo ""
+    
+    # Process results from output files
+    for i in "${!TEST_SCRIPTS[@]}"; do
+        script="${TEST_SCRIPTS[$i]}"
+        TEST_NAME="${TEST_NAMES[$i]}"
+        OUTPUT_FILE="$TMP_OUTPUT_DIR/test_${i}.out"
+        
+        # Determine OData version based on directory
+        if [[ "$script" == */v4.01/* ]]; then
+            VERSION_PREFIX="V4.01"
+        else
+            VERSION_PREFIX="V4"
+        fi
+        
+        # Read output and exit code
+        if [ -f "$OUTPUT_FILE" ]; then
+            OUTPUT=$(cat "$OUTPUT_FILE")
+            EXIT_CODE=$(cat "${OUTPUT_FILE}.exit" 2>/dev/null || echo "1")
+        else
+            OUTPUT="Error: Test output file not found"
+            EXIT_CODE=1
+        fi
+        
+        # Determine pass/fail
+        if [ "$EXIT_CODE" = "0" ]; then
+            TEST_RESULTS[$i]="PASS"
+            RESULT_MSG="${GREEN}✓ PASSED${NC}"
+        else
+            TEST_RESULTS[$i]="FAIL"
+            RESULT_MSG="${RED}✗ FAILED${NC}"
+        fi
+        
+        # Decide whether to show output based on flags
+        SHOW_OUTPUT=0
+        if [ $FAILURES_ONLY -eq 1 ]; then
+            # Only show output for failing tests
+            if [ "$EXIT_CODE" != "0" ]; then
+                SHOW_OUTPUT=1
+            fi
+        else
+            # Always show for normal runs
             SHOW_OUTPUT=1
         fi
-    else
-        # Always show for normal runs
-        SHOW_OUTPUT=1
-    fi
-    
-    if [ $SHOW_OUTPUT -eq 1 ]; then
-        echo -e "${BLUE}Running: [$VERSION_PREFIX] $TEST_NAME${NC}"
         
-        if [ $VERBOSE -eq 1 ] || [ $SKIP_REPORT -eq 1 ]; then
-            # Show full output for verbose mode OR when running individual tests
-            echo "─────────────────────────────────────────────────────────"
-            echo "$OUTPUT"
+        if [ $SHOW_OUTPUT -eq 1 ]; then
+            echo -e "${BLUE}[$VERSION_PREFIX] $TEST_NAME${NC}"
+            
+            if [ $VERBOSE -eq 1 ] || [ $SKIP_REPORT -eq 1 ]; then
+                # Show full output for verbose mode OR when running individual tests
+                echo "─────────────────────────────────────────────────────────"
+                echo "$OUTPUT"
+            fi
+            
+            echo -e "$RESULT_MSG"
+            echo ""
         fi
         
-        echo -e "$RESULT_MSG"
-        echo ""
-    fi
-    
-    # Extract test counts from standardized output format
-    # Format: COMPLIANCE_TEST_RESULT:PASSED=X:FAILED=Y:SKIPPED=Z:TOTAL=W
-    RESULT_LINE=$(echo "$OUTPUT" | grep "COMPLIANCE_TEST_RESULT:")
-    
-    if [ -n "$RESULT_LINE" ]; then
-        PASSED=$(echo "$RESULT_LINE" | grep -oP 'PASSED=\K\d+' || echo "0")
-        FAILED=$(echo "$RESULT_LINE" | grep -oP 'FAILED=\K\d+' || echo "0")
-        SKIPPED=$(echo "$RESULT_LINE" | grep -oP 'SKIPPED=\K\d+' || echo "0")
-        TOTAL=$(echo "$RESULT_LINE" | grep -oP 'TOTAL=\K\d+' || echo "0")
+        # Extract test counts from standardized output format
+        RESULT_LINE=$(echo "$OUTPUT" | grep "COMPLIANCE_TEST_RESULT:")
         
-        TEST_PASSED[$TEST_INDEX]=${PASSED:-0}
-        TEST_SKIPPED[$TEST_INDEX]=${SKIPPED:-0}
-        TEST_TOTAL[$TEST_INDEX]=${TOTAL:-0}
-    else
-        # ERROR: Test script does not use the standardized test framework
-        echo ""
-        echo -e "${RED}ERROR${NC}: Test script '$TEST_NAME' does not output the required COMPLIANCE_TEST_RESULT line"
-        echo "  All compliance tests MUST use the test framework and call print_summary() at the end"
-        echo "  Expected format: COMPLIANCE_TEST_RESULT:PASSED=X:FAILED=Y:SKIPPED=Z:TOTAL=W"
-        echo ""
-        echo "  To fix this test:"
-        echo "    1. Source the test framework at the top: source \"\$(dirname \"\$0\")/test_framework.sh\""
-        echo "    2. Use the test_result() function for each test"
-        echo "    3. Call print_summary() at the end instead of custom summary output"
-        echo ""
-        
-        # Mark this test as failed with 0 tests run
-        TEST_PASSED[$TEST_INDEX]=0
-        TEST_SKIPPED[$TEST_INDEX]=0
-        TEST_TOTAL[$TEST_INDEX]=0
-        TEST_RESULTS[$TEST_INDEX]="FAIL"
-    fi
+        if [ -n "$RESULT_LINE" ]; then
+            PASSED=$(echo "$RESULT_LINE" | grep -oP 'PASSED=\K\d+' || echo "0")
+            FAILED=$(echo "$RESULT_LINE" | grep -oP 'FAILED=\K\d+' || echo "0")
+            SKIPPED=$(echo "$RESULT_LINE" | grep -oP 'SKIPPED=\K\d+' || echo "0")
+            TOTAL=$(echo "$RESULT_LINE" | grep -oP 'TOTAL=\K\d+' || echo "0")
+            
+            TEST_PASSED[$i]=${PASSED:-0}
+            TEST_SKIPPED[$i]=${SKIPPED:-0}
+            TEST_TOTAL[$i]=${TOTAL:-0}
+        else
+            # ERROR: Test script does not use the standardized test framework
+            if [ $SHOW_OUTPUT -eq 1 ]; then
+                echo ""
+                echo -e "${RED}ERROR${NC}: Test script '$TEST_NAME' does not output the required COMPLIANCE_TEST_RESULT line"
+                echo "  All compliance tests MUST use the test framework and call print_summary() at the end"
+                echo "  Expected format: COMPLIANCE_TEST_RESULT:PASSED=X:FAILED=Y:SKIPPED=Z:TOTAL=W"
+                echo ""
+            fi
+            
+            # Mark this test as failed with 0 tests run
+            TEST_PASSED[$i]=0
+            TEST_SKIPPED[$i]=0
+            TEST_TOTAL[$i]=0
+            TEST_RESULTS[$i]="FAIL"
+        fi
+    done
     
-    TEST_INDEX=$((TEST_INDEX + 1))
-done
+    # Clean up temporary output directory after processing results
+    if [ -n "$TMP_OUTPUT_DIR" ] && [ -d "$TMP_OUTPUT_DIR" ]; then
+        rm -rf "$TMP_OUTPUT_DIR"
+    fi
+else
+    # Sequential execution (original behavior)
+    TEST_INDEX=0
+    for script in $SCRIPTS; do
+        TEST_NAME=$(basename "$script" .sh)
+        TEST_SCRIPTS[$TEST_INDEX]="$script"
+        TEST_NAMES[$TEST_INDEX]="$TEST_NAME"
+        
+        # Determine OData version based on directory
+        if [[ "$script" == */v4.01/* ]]; then
+            VERSION_PREFIX="V4.01"
+        else
+            VERSION_PREFIX="V4"
+        fi
+        
+        # Capture output
+        OUTPUT=$(bash "$script" 2>&1)
+        EXIT_CODE=$?
+        
+        # Determine pass/fail
+        if [ $EXIT_CODE -eq 0 ]; then
+            TEST_RESULTS[$TEST_INDEX]="PASS"
+            RESULT_MSG="${GREEN}✓ PASSED${NC}"
+        else
+            TEST_RESULTS[$TEST_INDEX]="FAIL"
+            RESULT_MSG="${RED}✗ FAILED${NC}"
+        fi
+        
+        # Decide whether to show output based on flags
+        SHOW_OUTPUT=0
+        if [ $FAILURES_ONLY -eq 1 ]; then
+            # Only show output for failing tests
+            if [ $EXIT_CODE -ne 0 ]; then
+                SHOW_OUTPUT=1
+            fi
+        else
+            # Always show for normal runs
+            SHOW_OUTPUT=1
+        fi
+        
+        if [ $SHOW_OUTPUT -eq 1 ]; then
+            echo -e "${BLUE}Running: [$VERSION_PREFIX] $TEST_NAME${NC}"
+            
+            if [ $VERBOSE -eq 1 ] || [ $SKIP_REPORT -eq 1 ]; then
+                # Show full output for verbose mode OR when running individual tests
+                echo "─────────────────────────────────────────────────────────"
+                echo "$OUTPUT"
+            fi
+            
+            echo -e "$RESULT_MSG"
+            echo ""
+        fi
+        
+        # Extract test counts from standardized output format
+        # Format: COMPLIANCE_TEST_RESULT:PASSED=X:FAILED=Y:SKIPPED=Z:TOTAL=W
+        RESULT_LINE=$(echo "$OUTPUT" | grep "COMPLIANCE_TEST_RESULT:")
+        
+        if [ -n "$RESULT_LINE" ]; then
+            PASSED=$(echo "$RESULT_LINE" | grep -oP 'PASSED=\K\d+' || echo "0")
+            FAILED=$(echo "$RESULT_LINE" | grep -oP 'FAILED=\K\d+' || echo "0")
+            SKIPPED=$(echo "$RESULT_LINE" | grep -oP 'SKIPPED=\K\d+' || echo "0")
+            TOTAL=$(echo "$RESULT_LINE" | grep -oP 'TOTAL=\K\d+' || echo "0")
+            
+            TEST_PASSED[$TEST_INDEX]=${PASSED:-0}
+            TEST_SKIPPED[$TEST_INDEX]=${SKIPPED:-0}
+            TEST_TOTAL[$TEST_INDEX]=${TOTAL:-0}
+        else
+            # ERROR: Test script does not use the standardized test framework
+            echo ""
+            echo -e "${RED}ERROR${NC}: Test script '$TEST_NAME' does not output the required COMPLIANCE_TEST_RESULT line"
+            echo "  All compliance tests MUST use the test framework and call print_summary() at the end"
+            echo "  Expected format: COMPLIANCE_TEST_RESULT:PASSED=X:FAILED=Y:SKIPPED=Z:TOTAL=W"
+            echo ""
+            echo "  To fix this test:"
+            echo "    1. Source the test framework at the top: source \"\$(dirname \"\$0\")/test_framework.sh\""
+            echo "    2. Use the test_result() function for each test"
+            echo "    3. Call print_summary() at the end instead of custom summary output"
+            echo ""
+            
+            # Mark this test as failed with 0 tests run
+            TEST_PASSED[$TEST_INDEX]=0
+            TEST_SKIPPED[$TEST_INDEX]=0
+            TEST_TOTAL[$TEST_INDEX]=0
+            TEST_RESULTS[$TEST_INDEX]="FAIL"
+        fi
+        
+        TEST_INDEX=$((TEST_INDEX + 1))
+    done
+fi
 
 # Calculate overall statistics
 TOTAL_PASSED=0
