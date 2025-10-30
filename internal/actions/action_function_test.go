@@ -562,3 +562,75 @@ func TestValidateParameterType_NumericFlexibility(t *testing.T) {
 		t.Errorf("validateParameterType() should accept float for float, got %v", err)
 	}
 }
+
+func TestResolveActionOverload_TypedParameters(t *testing.T) {
+	countAction := &ActionDefinition{
+		Name:    "Process",
+		IsBound: false,
+		Parameters: []ParameterDefinition{
+			{Name: "count", Type: reflect.TypeOf(int(0)), Required: true},
+		},
+	}
+
+	orderAction := &ActionDefinition{
+		Name:    "Process",
+		IsBound: false,
+		Parameters: []ParameterDefinition{
+			{Name: "order", Type: reflect.TypeOf(sampleOrder{}), Required: true},
+		},
+	}
+
+	candidates := []*ActionDefinition{countAction, orderAction}
+
+	t.Run("selects integer overload", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/Process", bytes.NewBufferString(`{"count": 7}`))
+		req.Header.Set("Content-Type", "application/json")
+
+		selected, params, err := ResolveActionOverload(req, candidates, false, "")
+		if err != nil {
+			t.Fatalf("ResolveActionOverload() unexpected error: %v", err)
+		}
+
+		if selected != countAction {
+			t.Fatalf("ResolveActionOverload() selected = %#v, want countAction", selected)
+		}
+
+		value, ok := params["count"].(int)
+		if !ok {
+			t.Fatalf("ResolveActionOverload() count type = %T, want int", params["count"])
+		}
+
+		if value != 7 {
+			t.Fatalf("ResolveActionOverload() count = %d, want 7", value)
+		}
+	})
+
+	t.Run("selects struct overload", func(t *testing.T) {
+		body := `{"order": {"address": {"street": "Main"}, "counts": [1,2]}}`
+		req := httptest.NewRequest(http.MethodPost, "/Process", bytes.NewBufferString(body))
+		req.Header.Set("Content-Type", "application/json")
+
+		selected, params, err := ResolveActionOverload(req, candidates, false, "")
+		if err != nil {
+			t.Fatalf("ResolveActionOverload() unexpected error: %v", err)
+		}
+
+		if selected != orderAction {
+			t.Fatalf("ResolveActionOverload() selected = %#v, want orderAction", selected)
+		}
+
+		orderParam, ok := params["order"].(sampleOrder)
+		if !ok {
+			t.Fatalf("ResolveActionOverload() order type = %T, want sampleOrder", params["order"])
+		}
+
+		expected := sampleOrder{
+			Address: sampleAddress{Street: "Main"},
+			Counts:  []int{1, 2},
+		}
+
+		if !reflect.DeepEqual(orderParam, expected) {
+			t.Fatalf("ResolveActionOverload() order = %#v, want %#v", orderParam, expected)
+		}
+	})
+}
