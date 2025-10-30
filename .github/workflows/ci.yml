@@ -98,4 +98,4 @@ jobs:
 
     - name: Run compliance tests (SQLite)
       run: |
-        ./compliance/run_compliance_tests.sh --db sqlite --dsn ":memory:" -o compliance-report-sqlite.md
+        ./compliance/run_compliance_tests.sh --db sqlite --dsn "/tmp/go-odata-compliance-ci.db" -o compliance-report-sqlite.md
