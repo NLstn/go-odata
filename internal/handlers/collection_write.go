@@ -52,7 +52,7 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 
 	h.clearAutoIncrementKeys(entity)
 
-	if err := h.validateRequiredProperties(entity); err != nil {
+	if err := h.validateRequiredProperties(requestData); err != nil {
 		WriteError(w, http.StatusBadRequest, "Missing required properties", err.Error())
 		return
 	}
@@ -145,24 +145,16 @@ func (h *EntityHandler) handlePostMediaEntity(w http.ResponseWriter, r *http.Req
 	w.WriteHeader(http.StatusCreated)
 }
 
-func (h *EntityHandler) validateRequiredProperties(entity interface{}) error {
-	entityValue := reflect.ValueOf(entity)
-	if entityValue.Kind() == reflect.Ptr {
-		entityValue = entityValue.Elem()
-	}
-
+func (h *EntityHandler) validateRequiredProperties(requestData map[string]interface{}) error {
 	var missingFields []string
 	for _, prop := range h.metadata.Properties {
 		if !prop.IsRequired || prop.IsKey {
 			continue
 		}
 
-		fieldValue := entityValue.FieldByName(prop.Name)
-		if !fieldValue.IsValid() {
-			continue
-		}
-
-		if fieldValue.IsZero() {
+		// Check if the field exists in the JSON request data
+		// This distinguishes between "field not provided" vs "field provided with zero value"
+		if _, exists := requestData[prop.JsonName]; !exists {
 			missingFields = append(missingFields, prop.JsonName)
 		}
 	}
