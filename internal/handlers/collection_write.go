@@ -57,6 +57,11 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	if err := h.validateRequiredFieldsNotNull(requestData); err != nil {
+		WriteError(w, http.StatusBadRequest, "Invalid null value", err.Error())
+		return
+	}
+
 	if err := h.callBeforeCreate(entity, r); err != nil {
 		WriteError(w, http.StatusForbidden, "Authorization failed", err.Error())
 		return
