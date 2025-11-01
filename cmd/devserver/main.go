@@ -120,8 +120,14 @@ func main() {
 		return Db
 	})
 
+	cockpit, err := newMigrationCockpit(Db)
+	if err != nil {
+		log.Fatal("Failed to configure migration cockpit:", err)
+	}
+
 	// Create HTTP mux and register the OData service
 	mux := http.NewServeMux()
+	cockpit.registerRoutes(mux)
 	mux.Handle("/", service)
 
 	// Wrap the mux with the authentication middleware
@@ -143,6 +149,7 @@ func main() {
 	fmt.Println("  Single User:          http://localhost:8080/Users(1)")
 	fmt.Println("  Company (Singleton):  http://localhost:8080/Company")
 	fmt.Println("  Async Monitor:        http://localhost:8080/$async/jobs/{jobID}")
+	fmt.Println("  Migration Cockpit:    http://localhost:8080/migration-cockpit")
 	fmt.Println()
 	fmt.Println("OData Actions and Functions:")
 	fmt.Println("  Unbound Functions:")
