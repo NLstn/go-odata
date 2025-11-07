@@ -1,6 +1,6 @@
 module github.com/NLstn/go-odata/perfserver
 
-go 1.24.7
+go 1.24
 
 replace github.com/nlstn/go-odata => ../../
 

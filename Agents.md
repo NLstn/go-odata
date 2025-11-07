@@ -123,7 +123,7 @@ The `compliance/` directory contains executable shell scripts that validate the 
 
 ### Requirements
 
-- Go 1.21 or later
+- Go 1.24 or later
 - GORM-compatible database driver
 - MIT License
 
