@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/nlstn/go-odata/internal/preference"
@@ -46,7 +45,7 @@ func (h *EntityHandler) collectionResponseWriter(w http.ResponseWriter, r *http.
 
 		metadataProvider := newMetadataAdapter(h.metadata, h.namespace)
 		if err := response.WriteODataCollectionWithNavigationAndDelta(w, r, h.metadata.EntitySetName, results, totalCount, nextLink, deltaLink, metadataProvider, expandedProps, h.metadata); err != nil {
-			fmt.Printf("Error writing OData response: %v\n", err)
+			h.logger.Error("Error writing OData response", "error", err)
 		}
 
 		return nil

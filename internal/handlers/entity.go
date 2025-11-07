@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"log/slog"
 	"reflect"
 	"strings"
 
@@ -18,15 +19,28 @@ type EntityHandler struct {
 	entitiesMetadata map[string]*metadata.EntityMetadata
 	namespace        string
 	tracker          *trackchanges.Tracker
+	logger           *slog.Logger
 }
 
 // NewEntityHandler creates a new entity handler
-func NewEntityHandler(db *gorm.DB, entityMetadata *metadata.EntityMetadata) *EntityHandler {
+func NewEntityHandler(db *gorm.DB, entityMetadata *metadata.EntityMetadata, logger *slog.Logger) *EntityHandler {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	return &EntityHandler{
 		db:        db,
 		metadata:  entityMetadata,
 		namespace: defaultNamespace,
+		logger:    logger,
 	}
+}
+
+// SetLogger sets the logger for the handler.
+func (h *EntityHandler) SetLogger(logger *slog.Logger) {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	h.logger = logger
 }
 
 // SetEntitiesMetadata sets the entities metadata registry for navigation property handling

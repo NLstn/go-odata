@@ -139,11 +139,11 @@ func (h *EntityHandler) handleFetchError(w http.ResponseWriter, err error, entit
 		target := fmt.Sprintf(ODataEntityKeyFormat, h.metadata.EntitySetName, entityKey)
 		if writeErr := response.WriteErrorWithTarget(w, http.StatusNotFound, ErrMsgEntityNotFound,
 			target, fmt.Sprintf(EntityKeyNotExistFmt, entityKey)); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 	} else {
 		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 	}
 }

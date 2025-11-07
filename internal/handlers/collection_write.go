@@ -73,7 +73,7 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 	}
 
 	if err := h.callAfterCreate(entity, r); err != nil {
-		fmt.Printf("AfterCreate hook failed: %v\n", err)
+		h.logger.Error("AfterCreate hook failed", "error", err)
 	}
 
 	h.recordChange(entity, trackchanges.ChangeTypeAdded)
@@ -126,20 +126,20 @@ func (h *EntityHandler) handlePostMediaEntity(w http.ResponseWriter, r *http.Req
 
 	if err := h.callBeforeCreate(entity, r); err != nil {
 		if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", err.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return
 	}
 
 	if err := h.db.Create(entity).Error; err != nil {
 		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return
 	}
 
 	if err := h.callAfterCreate(entity, r); err != nil {
-		fmt.Printf("AfterCreate hook failed: %v\n", err)
+		h.logger.Error("AfterCreate hook failed", "error", err)
 	}
 
 	h.recordChange(entity, trackchanges.ChangeTypeAdded)

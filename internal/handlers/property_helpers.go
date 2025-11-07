@@ -59,7 +59,7 @@ func (h *EntityHandler) IsStreamProperty(propertyName string) bool {
 func (h *EntityHandler) writeMethodNotAllowedError(w http.ResponseWriter, method, context string) {
 	if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
 		fmt.Sprintf("Method %s is not supported for %s", method, context)); err != nil {
-		fmt.Printf(LogMsgErrorWritingErrorResponse, err)
+		h.logger.Error("Error writing error response", "error", err)
 	}
 }
 
@@ -67,6 +67,6 @@ func (h *EntityHandler) writeMethodNotAllowedError(w http.ResponseWriter, method
 func (h *EntityHandler) writePropertyNotFoundError(w http.ResponseWriter, propertyName string) {
 	if err := response.WriteError(w, http.StatusNotFound, "Property not found",
 		fmt.Sprintf("'%s' is not a valid property for %s", propertyName, h.metadata.EntitySetName)); err != nil {
-		fmt.Printf(LogMsgErrorWritingErrorResponse, err)
+		h.logger.Error("Error writing error response", "error", err)
 	}
 }

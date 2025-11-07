@@ -151,7 +151,7 @@ func TestServiceDocumentAcceptHeader(t *testing.T) {
 	entityMeta, _ := metadata.AnalyzeEntity(TestEntity{})
 	entities["TestEntities"] = entityMeta
 
-	handler := NewServiceDocumentHandler(entities)
+	handler := NewServiceDocumentHandler(entities, nil)
 
 	tests := []struct {
 		name         string

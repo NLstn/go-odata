@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"reflect"
 	"strings"
@@ -122,7 +123,7 @@ func validateContentType(w http.ResponseWriter, r *http.Request) error {
 	if contentType == "" {
 		if writeErr := response.WriteError(w, http.StatusUnsupportedMediaType, "Unsupported Media Type",
 			"Content-Type header is required for this operation"); writeErr != nil {
-			fmt.Printf("Error writing error response: %v\n", writeErr)
+			slog.Default().Error("Error writing error response", "error", writeErr)
 		}
 		return fmt.Errorf("missing Content-Type header")
 	}
@@ -157,7 +158,7 @@ func validateContentType(w http.ResponseWriter, r *http.Request) error {
 	if !isValid {
 		if writeErr := response.WriteError(w, http.StatusUnsupportedMediaType, "Unsupported Media Type",
 			fmt.Sprintf("Content-Type '%s' is not supported. Only application/json is supported for data modifications.", contentType)); writeErr != nil {
-			fmt.Printf("Error writing error response: %v\n", writeErr)
+			slog.Default().Error("Error writing error response", "error", writeErr)
 		}
 		return fmt.Errorf("unsupported Content-Type: %s", contentType)
 	}

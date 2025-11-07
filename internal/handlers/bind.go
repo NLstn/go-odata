@@ -137,7 +137,7 @@ func (h *EntityHandler) bindSingleNavigationProperty(entityValue reflect.Value, 
 	// If we have referential constraints (foreign key), set the foreign key value directly
 	if len(navProp.ReferentialConstraints) > 0 {
 		// Build a query to fetch the target entity to get its key value(s)
-		targetHandler := NewEntityHandler(db, targetMetadata)
+		targetHandler := NewEntityHandler(db, targetMetadata, h.logger)
 		targetHandler.SetEntitiesMetadata(h.entitiesMetadata)
 
 		targetDB, err := targetHandler.buildKeyQuery(entityKey)
@@ -233,7 +233,7 @@ func (h *EntityHandler) bindSingleNavigationPropertyForUpdate(entityValue reflec
 	// If we have referential constraints (foreign key), set the foreign key value directly
 	if len(navProp.ReferentialConstraints) > 0 {
 		// Build a query to fetch the target entity to get its key value(s)
-		targetHandler := NewEntityHandler(db, targetMetadata)
+		targetHandler := NewEntityHandler(db, targetMetadata, h.logger)
 		targetHandler.SetEntitiesMetadata(h.entitiesMetadata)
 
 		targetDB, err := targetHandler.buildKeyQuery(entityKey)
@@ -352,7 +352,7 @@ func (h *EntityHandler) bindCollectionNavigationProperty(entityValue reflect.Val
 	}
 
 	// Fetch all referenced entities
-	targetHandler := NewEntityHandler(db, targetMetadata)
+	targetHandler := NewEntityHandler(db, targetMetadata, h.logger)
 	targetHandler.SetEntitiesMetadata(h.entitiesMetadata)
 
 	// Pre-allocate slice for target entities

@@ -85,7 +85,7 @@ func (s *Service) handleActionOrFunction(w http.ResponseWriter, r *http.Request,
 		actionDef, params, invErr := resolveInvocation(r, name, "Action", s.actions, actions.ResolveActionOverload, isBound, entitySet)
 		if invErr != nil {
 			if writeErr := response.WriteError(w, invErr.status, invErr.message, invErr.detail); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
+				s.logger.Error("Error writing error response", "error", writeErr)
 			}
 			return
 		}
@@ -96,7 +96,7 @@ func (s *Service) handleActionOrFunction(w http.ResponseWriter, r *http.Request,
 			ctx, ctxErr = loadBoundContext(s.handlers[entitySet], key)
 			if ctxErr != nil {
 				if writeErr := response.WriteError(w, ctxErr.status, ctxErr.message, ctxErr.detail); writeErr != nil {
-					fmt.Printf("Error writing error response: %v\n", writeErr)
+					s.logger.Error("Error writing error response", "error", writeErr)
 				}
 				return
 			}
@@ -104,7 +104,7 @@ func (s *Service) handleActionOrFunction(w http.ResponseWriter, r *http.Request,
 
 		if err := actionDef.Handler(w, r, ctx, params); err != nil {
 			if writeErr := response.WriteError(w, http.StatusInternalServerError, "Action failed", err.Error()); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
+				s.logger.Error("Error writing error response", "error", writeErr)
 			}
 			return
 		}
@@ -113,7 +113,7 @@ func (s *Service) handleActionOrFunction(w http.ResponseWriter, r *http.Request,
 		functionDef, params, invErr := resolveInvocation(r, name, "Function", s.functions, actions.ResolveFunctionOverload, isBound, entitySet)
 		if invErr != nil {
 			if writeErr := response.WriteError(w, invErr.status, invErr.message, invErr.detail); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
+				s.logger.Error("Error writing error response", "error", writeErr)
 			}
 			return
 		}
@@ -124,7 +124,7 @@ func (s *Service) handleActionOrFunction(w http.ResponseWriter, r *http.Request,
 			ctx, ctxErr = loadBoundContext(s.handlers[entitySet], key)
 			if ctxErr != nil {
 				if writeErr := response.WriteError(w, ctxErr.status, ctxErr.message, ctxErr.detail); writeErr != nil {
-					fmt.Printf("Error writing error response: %v\n", writeErr)
+					s.logger.Error("Error writing error response", "error", writeErr)
 				}
 				return
 			}
@@ -133,7 +133,7 @@ func (s *Service) handleActionOrFunction(w http.ResponseWriter, r *http.Request,
 		result, err := functionDef.Handler(w, r, ctx, params)
 		if err != nil {
 			if writeErr := response.WriteError(w, http.StatusInternalServerError, "Function failed", err.Error()); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
+				s.logger.Error("Error writing error response", "error", writeErr)
 			}
 			return
 		}
@@ -141,7 +141,7 @@ func (s *Service) handleActionOrFunction(w http.ResponseWriter, r *http.Request,
 		if !response.IsAcceptableFormat(r) {
 			if writeErr := response.WriteError(w, http.StatusNotAcceptable, "Not Acceptable",
 				"The requested format is not supported. Only application/json is supported for data responses."); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
+				s.logger.Error("Error writing error response", "error", writeErr)
 			}
 			return
 		}
@@ -177,13 +177,13 @@ func (s *Service) handleActionOrFunction(w http.ResponseWriter, r *http.Request,
 		encoder := json.NewEncoder(w)
 		encoder.SetEscapeHTML(false)
 		if err := encoder.Encode(odataResponse); err != nil {
-			fmt.Printf("Error encoding response: %v\n", err)
+			s.logger.Error("Error encoding response", "error", err)
 		}
 
 	default:
 		if writeErr := response.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
 			fmt.Sprintf("Method %s is not allowed for actions or functions", r.Method)); writeErr != nil {
-			fmt.Printf("Error writing error response: %v\n", writeErr)
+			s.logger.Error("Error writing error response", "error", writeErr)
 		}
 	}
 }

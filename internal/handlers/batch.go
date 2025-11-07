@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"log/slog"
 	"mime"
 	"mime/multipart"
 	"net/http"
@@ -24,6 +25,7 @@ type BatchHandler struct {
 	db       *gorm.DB
 	handlers map[string]*EntityHandler
 	service  http.Handler
+	logger   *slog.Logger
 }
 
 // NewBatchHandler creates a new batch handler
@@ -32,7 +34,16 @@ func NewBatchHandler(db *gorm.DB, handlers map[string]*EntityHandler, service ht
 		db:       db,
 		handlers: handlers,
 		service:  service,
+		logger:   slog.Default(),
 	}
+}
+
+// SetLogger sets the logger for the batch handler.
+func (h *BatchHandler) SetLogger(logger *slog.Logger) {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	h.logger = logger
 }
 
 // batchRequest represents a single request within a batch
@@ -55,7 +66,7 @@ func (h *BatchHandler) HandleBatch(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		if err := response.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
 			"Only POST method is supported for $batch requests"); err != nil {
-			fmt.Printf("Error writing error response: %v\n", err)
+			h.logger.Error("Error writing error response", "error", err)
 		}
 		return
 	}
@@ -66,7 +77,7 @@ func (h *BatchHandler) HandleBatch(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if err := response.WriteError(w, http.StatusBadRequest, "Invalid Content-Type",
 			fmt.Sprintf("Failed to parse Content-Type header: %v", err)); err != nil {
-			fmt.Printf("Error writing error response: %v\n", err)
+			h.logger.Error("Error writing error response", "error", err)
 		}
 		return
 	}
@@ -74,7 +85,7 @@ func (h *BatchHandler) HandleBatch(w http.ResponseWriter, r *http.Request) {
 	if !strings.HasPrefix(mediaType, "multipart/") {
 		if err := response.WriteError(w, http.StatusBadRequest, "Invalid Content-Type",
 			"$batch requests must use multipart/mixed Content-Type"); err != nil {
-			fmt.Printf("Error writing error response: %v\n", err)
+			h.logger.Error("Error writing error response", "error", err)
 		}
 		return
 	}
@@ -83,7 +94,7 @@ func (h *BatchHandler) HandleBatch(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		if err := response.WriteError(w, http.StatusBadRequest, "Missing boundary",
 			"Content-Type must include boundary parameter"); err != nil {
-			fmt.Printf("Error writing error response: %v\n", err)
+			h.logger.Error("Error writing error response", "error", err)
 		}
 		return
 	}
@@ -100,7 +111,7 @@ func (h *BatchHandler) HandleBatch(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			if err := response.WriteError(w, http.StatusBadRequest, "Invalid batch request",
 				fmt.Sprintf("Failed to read batch part: %v", err)); err != nil {
-				fmt.Printf("Error writing error response: %v\n", err)
+				h.logger.Error("Error writing error response", "error", err)
 			}
 			return
 		}
@@ -272,7 +283,7 @@ func (h *BatchHandler) executeRequestInTransaction(req *batchRequest, tx *gorm.D
 	// Create temporary handlers that use the transaction
 	txHandlers := make(map[string]*EntityHandler)
 	for name, handler := range h.handlers {
-		txHandlers[name] = NewEntityHandler(tx, handler.metadata)
+		txHandlers[name] = NewEntityHandler(tx, handler.metadata, handler.logger)
 	}
 
 	// Create a service handler for the transaction
@@ -350,25 +361,25 @@ func (h *BatchHandler) writeBatchResponse(w http.ResponseWriter, responses []bat
 	// Write each response as a multipart part
 	for _, resp := range responses {
 		if _, err := fmt.Fprintf(w, "--%s\r\n", boundary); err != nil {
-			fmt.Printf("Error writing boundary: %v\n", err)
+			h.logger.Error("Error writing boundary", "error", err)
 			return
 		}
 		if _, err := fmt.Fprintf(w, "Content-Type: application/http\r\n"); err != nil {
-			fmt.Printf("Error writing content type: %v\n", err)
+			h.logger.Error("Error writing content type", "error", err)
 			return
 		}
 		if _, err := fmt.Fprintf(w, "Content-Transfer-Encoding: binary\r\n"); err != nil {
-			fmt.Printf("Error writing encoding: %v\n", err)
+			h.logger.Error("Error writing encoding", "error", err)
 			return
 		}
 		if _, err := fmt.Fprintf(w, "\r\n"); err != nil {
-			fmt.Printf("Error writing newline: %v\n", err)
+			h.logger.Error("Error writing newline", "error", err)
 			return
 		}
 
 		// Write status line
 		if _, err := fmt.Fprintf(w, "HTTP/1.1 %d %s\r\n", resp.StatusCode, http.StatusText(resp.StatusCode)); err != nil {
-			fmt.Printf("Error writing status line: %v\n", err)
+			h.logger.Error("Error writing status line", "error", err)
 			return
 		}
 
@@ -376,31 +387,31 @@ func (h *BatchHandler) writeBatchResponse(w http.ResponseWriter, responses []bat
 		for key, values := range resp.Headers {
 			for _, value := range values {
 				if _, err := fmt.Fprintf(w, "%s: %s\r\n", key, value); err != nil {
-					fmt.Printf("Error writing header: %v\n", err)
+					h.logger.Error("Error writing header", "error", err)
 					return
 				}
 			}
 		}
 
 		if _, err := fmt.Fprintf(w, "\r\n"); err != nil {
-			fmt.Printf("Error writing newline: %v\n", err)
+			h.logger.Error("Error writing newline", "error", err)
 			return
 		}
 
 		// Write body
 		if _, err := w.Write(resp.Body); err != nil {
-			fmt.Printf("Error writing body: %v\n", err)
+			h.logger.Error("Error writing body", "error", err)
 			return
 		}
 		if _, err := fmt.Fprintf(w, "\r\n"); err != nil {
-			fmt.Printf("Error writing newline: %v\n", err)
+			h.logger.Error("Error writing newline", "error", err)
 			return
 		}
 	}
 
 	// Write final boundary
 	if _, err := fmt.Fprintf(w, "--%s--\r\n", boundary); err != nil {
-		fmt.Printf("Error writing final boundary: %v\n", err)
+		h.logger.Error("Error writing final boundary", "error", err)
 	}
 }
 

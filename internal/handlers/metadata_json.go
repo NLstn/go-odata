@@ -25,7 +25,7 @@ func (h *MetadataHandler) handleMetadataJSON(w http.ResponseWriter, r *http.Requ
 	})
 
 	if _, err := w.Write(h.cachedJSON); err != nil {
-		fmt.Printf("Error writing JSON metadata response: %v\n", err)
+		h.logger.Error("Error writing JSON metadata response", "error", err)
 	}
 }
 
@@ -49,7 +49,7 @@ func (h *MetadataHandler) buildMetadataJSON(model metadataModel) []byte {
 
 	jsonBytes, err := json.MarshalIndent(csdl, "", "  ")
 	if err != nil {
-		fmt.Printf("Error marshaling JSON metadata: %v\n", err)
+		h.logger.Error("Error marshaling JSON metadata", "error", err)
 		return []byte("{}")
 	}
 

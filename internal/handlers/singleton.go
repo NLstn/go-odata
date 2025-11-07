@@ -26,7 +26,7 @@ func (h *EntityHandler) HandleSingleton(w http.ResponseWriter, r *http.Request) 
 	default:
 		if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
 			fmt.Sprintf("Method %s is not supported for singleton", r.Method)); err != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, err)
+			h.logger.Error("Error writing error response", "error", err)
 		}
 	}
 }
@@ -43,13 +43,13 @@ func (h *EntityHandler) handleGetSingleton(w http.ResponseWriter, r *http.Reques
 			// If no record exists for the singleton, return 404
 			if writeErr := response.WriteError(w, http.StatusNotFound, ErrMsgEntityNotFound,
 				fmt.Sprintf("Singleton '%s' not found", h.metadata.SingletonName)); writeErr != nil {
-				fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+				h.logger.Error("Error writing error response", "error", writeErr)
 			}
 			return
 		}
 		// Other database errors
 		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return
 	}
@@ -69,13 +69,13 @@ func (h *EntityHandler) handlePatchSingleton(w http.ResponseWriter, r *http.Requ
 			// If no record exists, return 404
 			if writeErr := response.WriteError(w, http.StatusNotFound, ErrMsgEntityNotFound,
 				fmt.Sprintf("Singleton '%s' not found", h.metadata.SingletonName)); writeErr != nil {
-				fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+				h.logger.Error("Error writing error response", "error", writeErr)
 			}
 			return
 		}
 		// Other database errors
 		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return
 	}
@@ -88,7 +88,7 @@ func (h *EntityHandler) handlePatchSingleton(w http.ResponseWriter, r *http.Requ
 		if !etag.Match(ifMatch, currentETag) {
 			if writeErr := response.WriteError(w, http.StatusPreconditionFailed, ErrMsgPreconditionFailed,
 				ErrDetailPreconditionFailed); writeErr != nil {
-				fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+				h.logger.Error("Error writing error response", "error", writeErr)
 			}
 			return
 		}
@@ -99,7 +99,7 @@ func (h *EntityHandler) handlePatchSingleton(w http.ResponseWriter, r *http.Requ
 	if err := json.NewDecoder(r.Body).Decode(&updateData); err != nil {
 		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidRequestBody,
 			fmt.Sprintf(ErrDetailFailedToParseJSON, err.Error())); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return
 	}
@@ -132,13 +132,13 @@ func (h *EntityHandler) handlePutSingleton(w http.ResponseWriter, r *http.Reques
 			// If no record exists, return 404
 			if writeErr := response.WriteError(w, http.StatusNotFound, ErrMsgEntityNotFound,
 				fmt.Sprintf("Singleton '%s' not found", h.metadata.SingletonName)); writeErr != nil {
-				fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+				h.logger.Error("Error writing error response", "error", writeErr)
 			}
 			return
 		}
 		// Other database errors
 		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return
 	}
@@ -151,7 +151,7 @@ func (h *EntityHandler) handlePutSingleton(w http.ResponseWriter, r *http.Reques
 		if !etag.Match(ifMatch, currentETag) {
 			if writeErr := response.WriteError(w, http.StatusPreconditionFailed, ErrMsgPreconditionFailed,
 				ErrDetailPreconditionFailed); writeErr != nil {
-				fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+				h.logger.Error("Error writing error response", "error", writeErr)
 			}
 			return
 		}
@@ -162,7 +162,7 @@ func (h *EntityHandler) handlePutSingleton(w http.ResponseWriter, r *http.Reques
 	if err := json.NewDecoder(r.Body).Decode(newEntity); err != nil {
 		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidRequestBody,
 			fmt.Sprintf(ErrDetailFailedToParseJSON, err.Error())); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return
 	}

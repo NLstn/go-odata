@@ -15,7 +15,7 @@ func (h *EntityHandler) HandleMediaEntityValue(w http.ResponseWriter, r *http.Re
 	if !h.metadata.HasStream {
 		if err := response.WriteError(w, http.StatusBadRequest, "Not a media entity",
 			fmt.Sprintf("%s is not a media entity. Only media entities support /$value access", h.metadata.EntitySetName)); err != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, err)
+			h.logger.Error("Error writing error response", "error", err)
 		}
 		return
 	}
@@ -30,7 +30,7 @@ func (h *EntityHandler) HandleMediaEntityValue(w http.ResponseWriter, r *http.Re
 	default:
 		if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
 			fmt.Sprintf("Method %s is not supported for media entity $value", r.Method)); err != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, err)
+			h.logger.Error("Error writing error response", "error", err)
 		}
 	}
 }
@@ -42,7 +42,7 @@ func (h *EntityHandler) handleGetMediaEntityValue(w http.ResponseWriter, r *http
 	db, err := h.buildKeyQuery(entityKey)
 	if err != nil {
 		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidKey, err.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return
 	}
@@ -51,12 +51,12 @@ func (h *EntityHandler) handleGetMediaEntityValue(w http.ResponseWriter, r *http
 		if err == gorm.ErrRecordNotFound {
 			if writeErr := response.WriteError(w, http.StatusNotFound, ErrMsgEntityNotFound,
 				fmt.Sprintf("Entity with key %s not found", entityKey)); writeErr != nil {
-				fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+				h.logger.Error("Error writing error response", "error", writeErr)
 			}
 		} else {
 			if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgInternalError,
 				fmt.Sprintf("Database error: %v", err)); writeErr != nil {
-				fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+				h.logger.Error("Error writing error response", "error", writeErr)
 			}
 		}
 		return
@@ -90,7 +90,7 @@ func (h *EntityHandler) handleGetMediaEntityValue(w http.ResponseWriter, r *http
 	w.WriteHeader(http.StatusOK)
 	if r.Method != http.MethodHead {
 		if _, err := w.Write(content); err != nil {
-			fmt.Printf("Error writing media content: %v\n", err)
+			h.logger.Error("Error writing media content", "error", err)
 		}
 	}
 }
@@ -121,7 +121,7 @@ func (h *EntityHandler) handlePutMediaEntityValue(w http.ResponseWriter, r *http
 	db, err := h.buildKeyQuery(entityKey)
 	if err != nil {
 		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidKey, err.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return
 	}
@@ -130,12 +130,12 @@ func (h *EntityHandler) handlePutMediaEntityValue(w http.ResponseWriter, r *http
 		if err == gorm.ErrRecordNotFound {
 			if writeErr := response.WriteError(w, http.StatusNotFound, ErrMsgEntityNotFound,
 				fmt.Sprintf("Entity with key %s not found", entityKey)); writeErr != nil {
-				fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+				h.logger.Error("Error writing error response", "error", writeErr)
 			}
 		} else {
 			if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgInternalError,
 				fmt.Sprintf("Database error: %v", err)); writeErr != nil {
-				fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+				h.logger.Error("Error writing error response", "error", writeErr)
 			}
 		}
 		return
@@ -156,7 +156,7 @@ func (h *EntityHandler) handlePutMediaEntityValue(w http.ResponseWriter, r *http
 	if err := h.db.Save(entity).Error; err != nil {
 		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgInternalError,
 			fmt.Sprintf("Failed to update media entity: %v", err)); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return
 	}

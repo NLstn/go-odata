@@ -142,7 +142,7 @@ func TestMetadataHandlerHead(t *testing.T) {
 // TestServiceDocumentHandlerHead tests HEAD request on service document
 func TestServiceDocumentHandlerHead(t *testing.T) {
 	entities := make(map[string]*metadata.EntityMetadata)
-	handler := NewServiceDocumentHandler(entities)
+	handler := NewServiceDocumentHandler(entities, nil)
 
 	req := httptest.NewRequest(http.MethodHead, "/", nil)
 	w := httptest.NewRecorder()
@@ -286,7 +286,7 @@ func TestMetadataAndServiceDocumentOptionsIncludeHead(t *testing.T) {
 				handler := NewMetadataHandler(entities)
 				handler.HandleMetadata(w, req)
 			} else {
-				handler := NewServiceDocumentHandler(entities)
+				handler := NewServiceDocumentHandler(entities, nil)
 				handler.HandleServiceDocument(w, req)
 			}
 

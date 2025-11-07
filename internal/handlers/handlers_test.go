@@ -33,7 +33,7 @@ func setupTestHandler(t *testing.T) (*EntityHandler, *gorm.DB) {
 		t.Fatalf("Failed to analyze entity: %v", err)
 	}
 
-	handler := NewEntityHandler(db, entityMeta)
+	handler := NewEntityHandler(db, entityMeta, nil)
 	tracker := trackchanges.NewTracker()
 	tracker.RegisterEntity(entityMeta.EntitySetName)
 	handler.SetDeltaTracker(tracker)
@@ -395,7 +395,7 @@ func TestServiceDocumentHandler(t *testing.T) {
 	entityMeta, _ := metadata.AnalyzeEntity(TestEntity{})
 	entities["TestEntities"] = entityMeta
 
-	handler := NewServiceDocumentHandler(entities)
+	handler := NewServiceDocumentHandler(entities, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()
@@ -423,7 +423,7 @@ func TestServiceDocumentHandler(t *testing.T) {
 
 func TestServiceDocumentHandlerEmpty(t *testing.T) {
 	entities := make(map[string]*metadata.EntityMetadata)
-	handler := NewServiceDocumentHandler(entities)
+	handler := NewServiceDocumentHandler(entities, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()
@@ -451,7 +451,7 @@ func TestServiceDocumentHandlerEmpty(t *testing.T) {
 
 func TestServiceDocumentHandlerMethodNotAllowed(t *testing.T) {
 	entities := make(map[string]*metadata.EntityMetadata)
-	handler := NewServiceDocumentHandler(entities)
+	handler := NewServiceDocumentHandler(entities, nil)
 
 	methods := []string{http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodPatch}
 
@@ -510,7 +510,7 @@ func setupProductHandler(t *testing.T) (*EntityHandler, *gorm.DB) {
 		t.Fatalf("Failed to analyze entity: %v", err)
 	}
 
-	handler := NewEntityHandler(db, entityMeta)
+	handler := NewEntityHandler(db, entityMeta, nil)
 	return handler, db
 }
 
@@ -1217,7 +1217,7 @@ func TestEntityHandlerCountOptions(t *testing.T) {
 // TestServiceDocumentHandlerOptions tests OPTIONS request on service document
 func TestServiceDocumentHandlerOptions(t *testing.T) {
 	entities := make(map[string]*metadata.EntityMetadata)
-	handler := NewServiceDocumentHandler(entities)
+	handler := NewServiceDocumentHandler(entities, nil)
 
 	req := httptest.NewRequest(http.MethodOptions, "/", nil)
 	w := httptest.NewRecorder()

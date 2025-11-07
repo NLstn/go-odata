@@ -69,7 +69,7 @@ func (h *EntityHandler) handleGetCount(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if _, writeErr := fmt.Fprintf(w, "%d", count); writeErr != nil {
-		fmt.Printf("Error writing count response: %v\n", writeErr)
+		h.logger.Error("Error writing count response", "error", writeErr)
 	}
 }
 

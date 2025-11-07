@@ -174,7 +174,7 @@ func setupTrackChangesHandlerWithETag(t *testing.T) (*EntityHandler, *gorm.DB, *
 		t.Fatalf("failed to analyze entity: %v", err)
 	}
 
-	handler := NewEntityHandler(db, entityMeta)
+	handler := NewEntityHandler(db, entityMeta, nil)
 	tracker := trackchanges.NewTracker()
 	tracker.RegisterEntity(entityMeta.EntitySetName)
 	handler.SetDeltaTracker(tracker)

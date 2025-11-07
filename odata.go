@@ -6,6 +6,7 @@ package odata
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -54,22 +55,26 @@ type Service struct {
 	asyncQueue chan struct{}
 	// asyncMonitorPrefix is the normalized monitor path prefix
 	asyncMonitorPrefix string
+	// logger is used for structured logging throughout the service
+	logger *slog.Logger
 }
 
 // NewService creates a new OData service instance with database connection.
 func NewService(db *gorm.DB) *Service {
 	entities := make(map[string]*metadata.EntityMetadata)
 	handlersMap := make(map[string]*handlers.EntityHandler)
+	logger := slog.Default()
 	s := &Service{
 		db:                     db,
 		entities:               entities,
 		handlers:               handlersMap,
 		metadataHandler:        handlers.NewMetadataHandler(entities),
-		serviceDocumentHandler: handlers.NewServiceDocumentHandler(entities),
+		serviceDocumentHandler: handlers.NewServiceDocumentHandler(entities, logger),
 		actions:                make(map[string][]*actions.ActionDefinition),
 		functions:              make(map[string][]*actions.FunctionDefinition),
 		namespace:              DefaultNamespace,
 		deltaTracker:           trackchanges.NewTracker(),
+		logger:                 logger,
 	}
 	s.metadataHandler.SetNamespace(DefaultNamespace)
 	// Initialize batch handler with reference to service
@@ -90,9 +95,25 @@ func NewService(db *gorm.DB) *Service {
 		s.actions,
 		s.functions,
 		s.handleActionOrFunction,
+		logger,
 	)
 	s.router.SetAsyncMonitor(s.asyncMonitorPrefix, s.asyncManager)
 	return s
+}
+
+// SetLogger sets a custom logger for the service.
+// If not called, slog.Default() is used.
+func (s *Service) SetLogger(logger *slog.Logger) {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	s.logger = logger
+	s.router.SetLogger(logger)
+	s.serviceDocumentHandler.SetLogger(logger)
+	// Update logger for all existing handlers
+	for _, handler := range s.handlers {
+		handler.SetLogger(logger)
+	}
 }
 
 // AsyncConfig controls asynchronous request processing behaviour for a Service.
@@ -160,13 +181,15 @@ func (s *Service) RegisterEntity(entity interface{}) error {
 	s.entities[entityMetadata.EntitySetName] = entityMetadata
 
 	// Create and store the handler
-	handler := handlers.NewEntityHandler(s.db, entityMetadata)
+	handler := handlers.NewEntityHandler(s.db, entityMetadata, s.logger)
 	handler.SetNamespace(s.namespace)
 	handler.SetEntitiesMetadata(s.entities)
 	handler.SetDeltaTracker(s.deltaTracker)
 	s.handlers[entityMetadata.EntitySetName] = handler
 
-	fmt.Printf("Registered entity: %s (EntitySet: %s)\n", entityMetadata.EntityName, entityMetadata.EntitySetName)
+	s.logger.Info("Registered entity",
+		"entity", entityMetadata.EntityName,
+		"entitySet", entityMetadata.EntitySetName)
 	return nil
 }
 
@@ -203,12 +226,14 @@ func (s *Service) RegisterSingleton(entity interface{}, singletonName string) er
 	s.entities[singletonName] = singletonMetadata
 
 	// Create and store the handler (same handler type works for both entities and singletons)
-	handler := handlers.NewEntityHandler(s.db, singletonMetadata)
+	handler := handlers.NewEntityHandler(s.db, singletonMetadata, s.logger)
 	handler.SetNamespace(s.namespace)
 	handler.SetEntitiesMetadata(s.entities)
 	s.handlers[singletonName] = handler
 
-	fmt.Printf("Registered singleton: %s (Singleton: %s)\n", singletonMetadata.EntityName, singletonName)
+	s.logger.Info("Registered singleton",
+		"entity", singletonMetadata.EntityName,
+		"singleton", singletonName)
 	return nil
 }
 
@@ -249,8 +274,11 @@ func (s *Service) RegisterAction(action actions.ActionDefinition) error {
 
 	// Add to the list of overloads
 	s.actions[action.Name] = append(s.actions[action.Name], &action)
-	fmt.Printf("Registered action: %s (Bound: %v, EntitySet: %s, Parameters: %d)\n",
-		action.Name, action.IsBound, action.EntitySet, len(action.Parameters))
+	s.logger.Info("Registered action",
+		"name", action.Name,
+		"bound", action.IsBound,
+		"entitySet", action.EntitySet,
+		"parameters", len(action.Parameters))
 	return nil
 }
 
@@ -285,8 +313,11 @@ func (s *Service) RegisterFunction(function actions.FunctionDefinition) error {
 
 	// Add to the list of overloads
 	s.functions[function.Name] = append(s.functions[function.Name], &function)
-	fmt.Printf("Registered function: %s (Bound: %v, EntitySet: %s, Parameters: %d)\n",
-		function.Name, function.IsBound, function.EntitySet, len(function.Parameters))
+	s.logger.Info("Registered function",
+		"name", function.Name,
+		"bound", function.IsBound,
+		"entitySet", function.EntitySet,
+		"parameters", len(function.Parameters))
 	return nil
 }
 
