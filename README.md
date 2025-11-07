@@ -214,12 +214,23 @@ behaviour.
 {
   "@odata.context": "http://localhost:8080/$metadata#Products/$entity",
   "ID": 1,
-  "Name": "Laptop", 
+  "Name": "Laptop",
   "Description": "High-performance laptop",
   "Price": 999.99,
   "Category": "Electronics"
 }
 ```
+
+## Versioning and Changelog
+
+This project follows [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html).
+Patch releases deliver backward-compatible fixes, minor releases add new
+backward-compatible functionality, and major releases are reserved for breaking
+changes. Planned release tags will start with `v0.1.0` and continue with the
+`vMAJOR.MINOR.PATCH` pattern.
+
+See the [CHANGELOG](CHANGELOG.md) for a curated list of notable updates and the
+release plan so downstream integrations can assess compatibility expectations.
 
 ## Requirements
 
