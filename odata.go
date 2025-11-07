@@ -187,7 +187,7 @@ func (s *Service) RegisterEntity(entity interface{}) error {
 	handler.SetDeltaTracker(s.deltaTracker)
 	s.handlers[entityMetadata.EntitySetName] = handler
 
-	s.logger.Info("Registered entity",
+	s.logger.Debug("Registered entity",
 		"entity", entityMetadata.EntityName,
 		"entitySet", entityMetadata.EntitySetName)
 	return nil
@@ -231,7 +231,7 @@ func (s *Service) RegisterSingleton(entity interface{}, singletonName string) er
 	handler.SetEntitiesMetadata(s.entities)
 	s.handlers[singletonName] = handler
 
-	s.logger.Info("Registered singleton",
+	s.logger.Debug("Registered singleton",
 		"entity", singletonMetadata.EntityName,
 		"singleton", singletonName)
 	return nil
@@ -274,7 +274,7 @@ func (s *Service) RegisterAction(action actions.ActionDefinition) error {
 
 	// Add to the list of overloads
 	s.actions[action.Name] = append(s.actions[action.Name], &action)
-	s.logger.Info("Registered action",
+	s.logger.Debug("Registered action",
 		"name", action.Name,
 		"bound", action.IsBound,
 		"entitySet", action.EntitySet,
@@ -313,7 +313,7 @@ func (s *Service) RegisterFunction(function actions.FunctionDefinition) error {
 
 	// Add to the list of overloads
 	s.functions[function.Name] = append(s.functions[function.Name], &function)
-	s.logger.Info("Registered function",
+	s.logger.Debug("Registered function",
 		"name", function.Name,
 		"bound", function.IsBound,
 		"entitySet", function.EntitySet,
