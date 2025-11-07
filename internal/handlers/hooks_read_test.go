@@ -126,7 +126,7 @@ func setupReadHookHandler(t *testing.T) *EntityHandler {
 	}
 	childMeta.EntitySetName = "ReadHookChildren"
 
-	handler := NewEntityHandler(db, entityMeta)
+	handler := NewEntityHandler(db, entityMeta, nil)
 	handler.SetEntitiesMetadata(map[string]*metadata.EntityMetadata{
 		childMeta.EntityName:    childMeta,
 		childMeta.EntitySetName: childMeta,

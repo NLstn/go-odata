@@ -42,7 +42,7 @@ func (h *EntityHandler) handleGetComplexTypeProperty(w http.ResponseWriter, r *h
 	if len(propertySegments) == 1 && isValue {
 		if err := response.WriteError(w, http.StatusBadRequest, "Invalid request",
 			"$value is not supported on complex properties"); err != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, err)
+			h.logger.Error("Error writing error response", "error", err)
 		}
 		return
 	}
@@ -118,7 +118,7 @@ func (h *EntityHandler) fetchComplexPropertyValue(w http.ResponseWriter, entityK
 		db, err = h.buildKeyQuery(entityKey)
 		if err != nil {
 			if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidKey, err.Error()); writeErr != nil {
-				fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+				h.logger.Error("Error writing error response", "error", writeErr)
 			}
 			return reflect.Value{}, err
 		}
@@ -134,7 +134,7 @@ func (h *EntityHandler) fetchComplexPropertyValue(w http.ResponseWriter, entityK
 	if !fieldValue.IsValid() {
 		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgInternalError,
 			"Could not access complex property"); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return reflect.Value{}, fmt.Errorf("invalid field")
 	}
@@ -154,7 +154,7 @@ func (h *EntityHandler) writeComplexSegmentNullError(w http.ResponseWriter, cont
 	path := strings.Join(contextSegments, "/")
 	if err := response.WriteError(w, http.StatusNotFound, "Property not found",
 		fmt.Sprintf("Complex property path '%s' is null", path)); err != nil {
-		fmt.Printf(LogMsgErrorWritingErrorResponse, err)
+		h.logger.Error("Error writing error response", "error", err)
 	}
 }
 
@@ -164,7 +164,7 @@ func (h *EntityHandler) writeResolvedComplexValue(w http.ResponseWriter, r *http
 		if isValue {
 			if err := response.WriteError(w, http.StatusBadRequest, "Invalid request",
 				"$value is not supported on complex properties"); err != nil {
-				fmt.Printf(LogMsgErrorWritingErrorResponse, err)
+				h.logger.Error("Error writing error response", "error", err)
 			}
 			return
 		}
@@ -226,7 +226,7 @@ func (h *EntityHandler) writeComplexValueResponse(w http.ResponseWriter, r *http
 	}
 
 	if err := json.NewEncoder(w).Encode(responseMap); err != nil {
-		fmt.Printf("Error writing complex property response: %v\n", err)
+		h.logger.Error("Error writing complex property response", "error", err)
 	}
 }
 
@@ -263,7 +263,7 @@ func (h *EntityHandler) writePrimitiveComplexPropertyResponse(w http.ResponseWri
 	}
 
 	if err := json.NewEncoder(w).Encode(responseBody); err != nil {
-		fmt.Printf("Error writing complex primitive property response: %v\n", err)
+		h.logger.Error("Error writing complex primitive property response", "error", err)
 	}
 }
 
@@ -293,7 +293,7 @@ func (h *EntityHandler) writeRawPrimitiveValue(w http.ResponseWriter, r *http.Re
 	}
 
 	if _, err := fmt.Fprintf(w, "%v", value.Interface()); err != nil {
-		fmt.Printf("Error writing raw primitive value: %v\n", err)
+		h.logger.Error("Error writing raw primitive value", "error", err)
 	}
 }
 

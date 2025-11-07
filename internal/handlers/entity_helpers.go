@@ -44,7 +44,7 @@ func (h *EntityHandler) writeEntityResponseWithETag(w http.ResponseWriter, r *ht
 	if !response.IsAcceptableFormat(r) {
 		if err := response.WriteError(w, http.StatusNotAcceptable, "Not Acceptable",
 			"The requested format is not supported. Only application/json is supported for data responses."); err != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, err)
+			h.logger.Error("Error writing error response", "error", err)
 		}
 		return
 	}
@@ -80,14 +80,14 @@ func (h *EntityHandler) writeEntityResponseWithETag(w http.ResponseWriter, r *ht
 	}
 
 	if err := json.NewEncoder(w).Encode(odataResponse); err != nil {
-		fmt.Printf(LogMsgErrorWritingEntityResponse, err)
+		h.logger.Error("Error writing entity response", "error", err)
 	}
 }
 
 // writeInvalidQueryError writes an invalid query error response
 func (h *EntityHandler) writeInvalidQueryError(w http.ResponseWriter, err error) {
 	if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions, err.Error()); writeErr != nil {
-		fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		h.logger.Error("Error writing error response", "error", writeErr)
 	}
 }
 
@@ -98,7 +98,7 @@ func (h *EntityHandler) fetchAndVerifyEntity(entityKey string, w http.ResponseWr
 	db, err := h.buildKeyQuery(entityKey)
 	if err != nil {
 		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidKey, err.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return nil, err
 	}
@@ -114,6 +114,6 @@ func (h *EntityHandler) fetchAndVerifyEntity(entityKey string, w http.ResponseWr
 // writeDatabaseError writes a database error response
 func (h *EntityHandler) writeDatabaseError(w http.ResponseWriter, err error) {
 	if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error()); writeErr != nil {
-		fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		h.logger.Error("Error writing error response", "error", writeErr)
 	}
 }

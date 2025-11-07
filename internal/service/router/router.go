@@ -2,6 +2,7 @@ package router
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -48,6 +49,7 @@ type Router struct {
 	actions               map[string][]*actions.ActionDefinition
 	functions             map[string][]*actions.FunctionDefinition
 	actionInvoker         ActionInvoker
+	logger                *slog.Logger
 
 	asyncManager       *async.Manager
 	asyncMonitorPrefix string
@@ -62,7 +64,11 @@ func NewRouter(
 	actions map[string][]*actions.ActionDefinition,
 	functions map[string][]*actions.FunctionDefinition,
 	actionInvoker ActionInvoker,
+	logger *slog.Logger,
 ) *Router {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	return &Router{
 		resolveHandler:        resolver,
 		handleServiceDocument: serviceDocumentHandler,
@@ -71,7 +77,16 @@ func NewRouter(
 		actions:               actions,
 		functions:             functions,
 		actionInvoker:         actionInvoker,
+		logger:                logger,
 	}
+}
+
+// SetLogger sets the logger for the router.
+func (r *Router) SetLogger(logger *slog.Logger) {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	r.logger = logger
 }
 
 // ServeHTTP implements http.Handler interface.
@@ -82,7 +97,7 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		if err := response.WriteError(w, http.StatusNotAcceptable,
 			handlers.ErrMsgVersionNotSupported,
 			handlers.ErrDetailVersionNotSupported); err != nil {
-			fmt.Printf("Error writing error response: %v\n", err)
+			r.logger.Error("Error writing error response", "error", err)
 		}
 		return
 	}
@@ -133,14 +148,14 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		if r.isActionOrFunction(pathWithoutParams) {
 			if writeErr := response.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
 				fmt.Sprintf("Method %s is not allowed for actions or functions", req.Method)); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
+				r.logger.Error("Error writing error response", "error", writeErr)
 			}
 			return
 		}
 		if r.isActionOrFunction(path) {
 			if writeErr := response.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
 				fmt.Sprintf("Method %s is not allowed for actions or functions", req.Method)); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
+				r.logger.Error("Error writing error response", "error", writeErr)
 			}
 			return
 		}
@@ -149,7 +164,7 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	components, err := response.ParseODataURLComponents(path)
 	if err != nil {
 		if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid URL", err.Error()); writeErr != nil {
-			fmt.Printf("Error writing error response: %v\n", writeErr)
+			r.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return
 	}
@@ -158,7 +173,7 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	if !exists {
 		if writeErr := response.WriteError(w, http.StatusNotFound, "Entity set not found",
 			fmt.Sprintf("Entity set '%s' is not registered", components.EntitySet)); writeErr != nil {
-			fmt.Printf("Error writing error response: %v\n", writeErr)
+			r.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return
 	}
@@ -168,7 +183,7 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		if len(parts) < 2 {
 			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid type cast",
 				fmt.Sprintf("Type cast '%s' is not in the correct format (Namespace.TypeName)", components.TypeCast)); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
+				r.logger.Error("Error writing error response", "error", writeErr)
 			}
 			return
 		}
@@ -262,7 +277,7 @@ func (r *Router) routeRequest(w http.ResponseWriter, req *http.Request, handler 
 		} else {
 			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid request",
 				"$count is not supported on individual entities. Use $count on collections or navigation properties."); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
+				r.logger.Error("Error writing error response", "error", writeErr)
 			}
 		}
 	} else if components.IsRef {
@@ -284,7 +299,7 @@ func (r *Router) routeRequest(w http.ResponseWriter, req *http.Request, handler 
 		if components.IsValue {
 			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid request",
 				"$value is not supported on entity collections. Use $value on individual properties: EntitySet(key)/PropertyName/$value"); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
+				r.logger.Error("Error writing error response", "error", writeErr)
 			}
 			return
 		}
@@ -301,7 +316,7 @@ func (r *Router) routeRequest(w http.ResponseWriter, req *http.Request, handler 
 		if components.NavigationProperty != "" {
 			if writeErr := response.WriteError(w, http.StatusNotFound, "Property or operation not found",
 				fmt.Sprintf("'%s' is not a valid property, action, or function for %s", components.NavigationProperty, components.EntitySet)); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
+				r.logger.Error("Error writing error response", "error", writeErr)
 			}
 		} else {
 			handler.HandleCollection(w, req)
@@ -357,7 +372,7 @@ func (r *Router) handlePropertyRequest(w http.ResponseWriter, req *http.Request,
 			if targetEntitySet == "" {
 				if writeErr := response.WriteError(w, http.StatusInternalServerError, "Internal error",
 					fmt.Sprintf("Could not determine target entity set for navigation property '%s'", firstSegment)); writeErr != nil {
-					fmt.Printf("Error writing error response: %v\n", writeErr)
+					r.logger.Error("Error writing error response", "error", writeErr)
 				}
 				return
 			}
@@ -374,7 +389,7 @@ func (r *Router) handlePropertyRequest(w http.ResponseWriter, req *http.Request,
 		if components.IsValue {
 			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid request",
 				"$value is not supported on navigation properties"); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
+				r.logger.Error("Error writing error response", "error", writeErr)
 			}
 			return
 		}
@@ -383,7 +398,7 @@ func (r *Router) handlePropertyRequest(w http.ResponseWriter, req *http.Request,
 		if components.IsRef {
 			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid request",
 				"$ref is not supported on stream properties"); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
+				r.logger.Error("Error writing error response", "error", writeErr)
 			}
 			return
 		}
@@ -392,7 +407,7 @@ func (r *Router) handlePropertyRequest(w http.ResponseWriter, req *http.Request,
 		if components.IsRef {
 			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid request",
 				"$ref is not supported on structural properties"); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
+				r.logger.Error("Error writing error response", "error", writeErr)
 			}
 			return
 		}
@@ -401,7 +416,7 @@ func (r *Router) handlePropertyRequest(w http.ResponseWriter, req *http.Request,
 		if components.IsRef {
 			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid request",
 				"$ref is not supported on complex properties"); writeErr != nil {
-				fmt.Printf("Error writing error response: %v\n", writeErr)
+				r.logger.Error("Error writing error response", "error", writeErr)
 			}
 			return
 		}
@@ -409,7 +424,7 @@ func (r *Router) handlePropertyRequest(w http.ResponseWriter, req *http.Request,
 	} else {
 		if writeErr := response.WriteError(w, http.StatusNotFound, "Property not found",
 			fmt.Sprintf("'%s' is not a valid property for %s", components.NavigationProperty, components.EntitySet)); writeErr != nil {
-			fmt.Printf("Error writing error response: %v\n", writeErr)
+			r.logger.Error("Error writing error response", "error", writeErr)
 		}
 	}
 }

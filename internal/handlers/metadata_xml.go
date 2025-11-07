@@ -25,7 +25,7 @@ func (h *MetadataHandler) handleMetadataXML(w http.ResponseWriter, r *http.Reque
 	})
 
 	if _, err := w.Write([]byte(h.cachedXML)); err != nil {
-		fmt.Printf("Error writing metadata response: %v\n", err)
+		h.logger.Error("Error writing metadata response", "error", err)
 	}
 }
 

@@ -287,7 +287,7 @@ func (h *EntityHandler) handleNavigationCollectionWithQueryOptions(w http.Respon
 			}
 
 			if err := response.WriteODataCollection(w, r, navigationPath, results, totalCount, nextLink); err != nil {
-				fmt.Printf("Error writing navigation property collection: %v\n", err)
+				h.logger.Error("Error writing navigation property collection", "error", err)
 			}
 
 			return nil
@@ -368,13 +368,13 @@ func (h *EntityHandler) handleNavigationCollectionItem(w http.ResponseWriter, r 
 		// WriteEntityReference expects just the entity path (e.g., "Products(2)"), not the full URL
 		entityPath := fmt.Sprintf("%s(%s)", targetMetadata.EntitySetName, targetKey)
 		if err := response.WriteEntityReference(w, r, entityPath); err != nil {
-			fmt.Printf("Error writing entity reference: %v\n", err)
+			h.logger.Error("Error writing entity reference", "error", err)
 		}
 	} else {
 		// Write the full entity
 		navigationPath := fmt.Sprintf("%s(%s)/%s(%s)", h.metadata.EntitySetName, entityKey, navProp.JsonName, targetKey)
 		if err := response.WriteODataCollection(w, r, navigationPath, []interface{}{targetEntity}, nil, nil); err != nil {
-			fmt.Printf("Error writing navigation property entity: %v\n", err)
+			h.logger.Error("Error writing navigation property entity", "error", err)
 		}
 	}
 }
@@ -427,7 +427,7 @@ func (h *EntityHandler) handleGetNavigationPropertyCount(w http.ResponseWriter, 
 	}
 
 	if _, err := fmt.Fprintf(w, "%d", count); err != nil {
-		fmt.Printf("Error writing count response: %v\n", err)
+		h.logger.Error("Error writing count response", "error", err)
 	}
 }
 
@@ -482,7 +482,7 @@ func (h *EntityHandler) writeNavigationCollection(w http.ResponseWriter, r *http
 	navigationPath := fmt.Sprintf(ODataEntityKeyFormat, h.metadata.EntitySetName, entityKey)
 	navigationPath = fmt.Sprintf("%s/%s", navigationPath, navProp.JsonName)
 	if err := response.WriteODataCollection(w, r, navigationPath, navData, nil, nil); err != nil {
-		fmt.Printf("Error writing navigation property collection: %v\n", err)
+		h.logger.Error("Error writing navigation property collection", "error", err)
 	}
 }
 
@@ -522,7 +522,7 @@ func (h *EntityHandler) writeSingleNavigationEntity(w http.ResponseWriter, r *ht
 	}
 
 	if err := json.NewEncoder(w).Encode(odataResponse); err != nil {
-		fmt.Printf("Error writing navigation property response: %v\n", err)
+		h.logger.Error("Error writing navigation property response", "error", err)
 	}
 }
 
@@ -557,7 +557,7 @@ func (h *EntityHandler) writeNavigationCollectionRef(w http.ResponseWriter, r *h
 	}
 
 	if err := response.WriteEntityReferenceCollection(w, r, entityIDs, nil, nil); err != nil {
-		fmt.Printf("Error writing entity reference collection: %v\n", err)
+		h.logger.Error("Error writing entity reference collection", "error", err)
 	}
 }
 
@@ -592,7 +592,7 @@ func (h *EntityHandler) writeSingleNavigationRef(w http.ResponseWriter, r *http.
 	entityID := response.BuildEntityID(targetMetadata.EntitySetName, keyValues)
 
 	if err := response.WriteEntityReference(w, r, entityID); err != nil {
-		fmt.Printf("Error writing entity reference: %v\n", err)
+		h.logger.Error("Error writing entity reference", "error", err)
 	}
 }
 
@@ -660,7 +660,7 @@ func (h *EntityHandler) writeNavigationCollectionRefFromData(w http.ResponseWrit
 	}
 
 	if err := response.WriteEntityReferenceCollection(w, r, entityIDs, count, nextLink); err != nil {
-		fmt.Printf("Error writing entity reference collection: %v\n", err)
+		h.logger.Error("Error writing entity reference collection", "error", err)
 	}
 }
 

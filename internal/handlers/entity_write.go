@@ -33,7 +33,7 @@ func (h *EntityHandler) handleDeleteEntity(w http.ResponseWriter, r *http.Reques
 		if !etag.Match(ifMatch, currentETag) {
 			if writeErr := response.WriteError(w, http.StatusPreconditionFailed, ErrMsgPreconditionFailed,
 				ErrDetailPreconditionFailed); writeErr != nil {
-				fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+				h.logger.Error("Error writing error response", "error", writeErr)
 			}
 			return
 		}
@@ -42,7 +42,7 @@ func (h *EntityHandler) handleDeleteEntity(w http.ResponseWriter, r *http.Reques
 	// Call BeforeDelete hook if it exists
 	if err := h.callBeforeDelete(entity, r); err != nil {
 		if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", err.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return
 	}
@@ -56,7 +56,7 @@ func (h *EntityHandler) handleDeleteEntity(w http.ResponseWriter, r *http.Reques
 	// Call AfterDelete hook if it exists
 	if err := h.callAfterDelete(entity, r); err != nil {
 		// Log the error but don't fail the request since the entity was already deleted
-		fmt.Printf("AfterDelete hook failed: %v\n", err)
+		h.logger.Error("AfterDelete hook failed", "error", err)
 	}
 
 	h.recordChange(entity, trackchanges.ChangeTypeDeleted)
@@ -84,7 +84,7 @@ func (h *EntityHandler) handlePatchEntity(w http.ResponseWriter, r *http.Request
 		if err := db.First(entity).Error; err == nil {
 			h.recordChange(entity, trackchanges.ChangeTypeUpdated)
 		} else {
-			fmt.Printf("Error refreshing entity for change tracking: %v\n", err)
+			h.logger.Error("Error refreshing entity for change tracking", "error", err)
 		}
 	}
 
@@ -99,7 +99,7 @@ func (h *EntityHandler) fetchAndUpdateEntity(w http.ResponseWriter, r *http.Requ
 	db, err := h.buildKeyQuery(entityKey)
 	if err != nil {
 		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidKey, err.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return nil, nil, err
 	}
@@ -117,7 +117,7 @@ func (h *EntityHandler) fetchAndUpdateEntity(w http.ResponseWriter, r *http.Requ
 		if !etag.Match(ifMatch, currentETag) {
 			if writeErr := response.WriteError(w, http.StatusPreconditionFailed, ErrMsgPreconditionFailed,
 				ErrDetailPreconditionFailed); writeErr != nil {
-				fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+				h.logger.Error("Error writing error response", "error", writeErr)
 			}
 			return nil, nil, errETagMismatch
 		}
@@ -143,7 +143,7 @@ func (h *EntityHandler) fetchAndUpdateEntity(w http.ResponseWriter, r *http.Requ
 	// This also adds the foreign key values to updateData
 	if err := h.processODataBindAnnotationsForUpdate(entity, updateData, h.db); err != nil {
 		if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid @odata.bind annotation", err.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return nil, nil, err
 	}
@@ -155,7 +155,7 @@ func (h *EntityHandler) fetchAndUpdateEntity(w http.ResponseWriter, r *http.Requ
 	// Validate data types
 	if err := h.validateDataTypes(updateData); err != nil {
 		if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid data type", err.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return nil, nil, err
 	}
@@ -163,7 +163,7 @@ func (h *EntityHandler) fetchAndUpdateEntity(w http.ResponseWriter, r *http.Requ
 	// Validate that required fields are not being set to null
 	if err := h.validateRequiredFieldsNotNull(updateData); err != nil {
 		if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid value for required property", err.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return nil, nil, err
 	}
@@ -171,7 +171,7 @@ func (h *EntityHandler) fetchAndUpdateEntity(w http.ResponseWriter, r *http.Requ
 	// Call BeforeUpdate hook if it exists
 	if err := h.callBeforeUpdate(entity, r); err != nil {
 		if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", err.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return nil, nil, err
 	}
@@ -184,7 +184,7 @@ func (h *EntityHandler) fetchAndUpdateEntity(w http.ResponseWriter, r *http.Requ
 	// Call AfterUpdate hook if it exists
 	if err := h.callAfterUpdate(entity, r); err != nil {
 		// Log the error but don't fail the request since the entity was already updated
-		fmt.Printf("AfterUpdate hook failed: %v\n", err)
+		h.logger.Error("AfterUpdate hook failed", "error", err)
 	}
 
 	return db, entity, nil
@@ -246,7 +246,7 @@ func (h *EntityHandler) handlePutEntity(w http.ResponseWriter, r *http.Request, 
 		if err := db.First(replacedEntity).Error; err == nil {
 			h.recordChange(replacedEntity, trackchanges.ChangeTypeUpdated)
 		} else {
-			fmt.Printf("Error refreshing entity for change tracking: %v\n", err)
+			h.logger.Error("Error refreshing entity for change tracking", "error", err)
 		}
 	}
 
@@ -261,7 +261,7 @@ func (h *EntityHandler) fetchAndReplaceEntity(w http.ResponseWriter, r *http.Req
 	db, err := h.buildKeyQuery(entityKey)
 	if err != nil {
 		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidKey, err.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return nil, err
 	}
@@ -279,7 +279,7 @@ func (h *EntityHandler) fetchAndReplaceEntity(w http.ResponseWriter, r *http.Req
 		if !etag.Match(ifMatch, currentETag) {
 			if writeErr := response.WriteError(w, http.StatusPreconditionFailed, ErrMsgPreconditionFailed,
 				ErrDetailPreconditionFailed); writeErr != nil {
-				fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+				h.logger.Error("Error writing error response", "error", writeErr)
 			}
 			return nil, errETagMismatch
 		}
@@ -290,14 +290,14 @@ func (h *EntityHandler) fetchAndReplaceEntity(w http.ResponseWriter, r *http.Req
 	if err := json.NewDecoder(r.Body).Decode(replacementEntity); err != nil {
 		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidRequestBody,
 			fmt.Sprintf(ErrDetailFailedToParseJSON, err.Error())); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return nil, err
 	}
 
 	if err := h.preserveKeyProperties(entity, replacementEntity); err != nil {
 		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgInternalError, err.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return nil, err
 	}
@@ -305,7 +305,7 @@ func (h *EntityHandler) fetchAndReplaceEntity(w http.ResponseWriter, r *http.Req
 	// Call BeforeUpdate hook if it exists (PUT is also an update operation)
 	if err := h.callBeforeUpdate(entity, r); err != nil {
 		if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", err.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return nil, err
 	}
@@ -318,7 +318,7 @@ func (h *EntityHandler) fetchAndReplaceEntity(w http.ResponseWriter, r *http.Req
 	// Call AfterUpdate hook if it exists
 	if err := h.callAfterUpdate(entity, r); err != nil {
 		// Log the error but don't fail the request since the entity was already updated
-		fmt.Printf("AfterUpdate hook failed: %v\n", err)
+		h.logger.Error("AfterUpdate hook failed", "error", err)
 	}
 
 	return db, nil
@@ -353,7 +353,7 @@ func (h *EntityHandler) parsePatchRequestBody(r *http.Request, w http.ResponseWr
 	if err := json.NewDecoder(r.Body).Decode(&updateData); err != nil {
 		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidRequestBody,
 			fmt.Sprintf(ErrDetailFailedToParseJSON, err.Error())); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return nil, err
 	}
@@ -366,7 +366,7 @@ func (h *EntityHandler) validateKeyPropertiesNotUpdated(updateData map[string]in
 		if _, exists := updateData[keyProp.JsonName]; exists {
 			err := fmt.Errorf("key property '%s' cannot be modified", keyProp.JsonName)
 			if writeErr := response.WriteError(w, http.StatusBadRequest, "Cannot update key property", err.Error()); writeErr != nil {
-				fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+				h.logger.Error("Error writing error response", "error", writeErr)
 			}
 			return err
 		}
@@ -374,7 +374,7 @@ func (h *EntityHandler) validateKeyPropertiesNotUpdated(updateData map[string]in
 		if _, exists := updateData[keyProp.Name]; exists {
 			err := fmt.Errorf("key property '%s' cannot be modified", keyProp.Name)
 			if writeErr := response.WriteError(w, http.StatusBadRequest, "Cannot update key property", err.Error()); writeErr != nil {
-				fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+				h.logger.Error("Error writing error response", "error", writeErr)
 			}
 			return err
 		}
@@ -402,7 +402,7 @@ func (h *EntityHandler) validatePropertiesExistForUpdate(updateData map[string]i
 		if !validProperties[propName] {
 			err := fmt.Errorf("property '%s' does not exist on entity type '%s'", propName, h.metadata.EntityName)
 			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid property", err.Error()); writeErr != nil {
-				fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+				h.logger.Error("Error writing error response", "error", writeErr)
 			}
 			return err
 		}

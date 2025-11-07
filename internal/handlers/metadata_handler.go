@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"reflect"
 	"strings"
@@ -20,6 +21,7 @@ type MetadataHandler struct {
 	onceXML    sync.Once
 	onceJSON   sync.Once
 	namespace  string
+	logger     *slog.Logger
 }
 
 const defaultNamespace = "ODataService"
@@ -29,7 +31,16 @@ func NewMetadataHandler(entities map[string]*metadata.EntityMetadata) *MetadataH
 	return &MetadataHandler{
 		entities:  entities,
 		namespace: defaultNamespace,
+		logger:    slog.Default(),
 	}
+}
+
+// SetLogger sets the logger for the metadata handler.
+func (h *MetadataHandler) SetLogger(logger *slog.Logger) {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	h.logger = logger
 }
 
 // SetNamespace updates the namespace used for metadata generation and clears cached documents.
@@ -65,7 +76,7 @@ func (h *MetadataHandler) HandleMetadata(w http.ResponseWriter, r *http.Request)
 	default:
 		if err := response.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
 			fmt.Sprintf("Method %s is not supported for metadata document", r.Method)); err != nil {
-			fmt.Printf("Error writing error response: %v\n", err)
+			h.logger.Error("Error writing error response", "error", err)
 		}
 	}
 }

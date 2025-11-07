@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 
 	"github.com/nlstn/go-odata/internal/metadata"
@@ -115,13 +114,13 @@ func (h *EntityHandler) handleCollectionError(w http.ResponseWriter, err error, 
 		}
 
 		if writeErr := response.WriteError(w, status, code, reqErr.Message); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return false
 	}
 
 	if writeErr := response.WriteError(w, defaultStatus, defaultCode, err.Error()); writeErr != nil {
-		fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+		h.logger.Error("Error writing error response", "error", writeErr)
 	}
 	return false
 }

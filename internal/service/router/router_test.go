@@ -147,6 +147,7 @@ func newTestRouter(handler EntityHandler, actionDefs map[string][]*actions.Actio
 		actionDefs,
 		functionDefs,
 		invoker,
+		nil,
 	)
 }
 
@@ -290,6 +291,7 @@ func TestRouter_ServiceDocument(t *testing.T) {
 		nil,
 		nil,
 		func(http.ResponseWriter, *http.Request, string, string, bool, string) {},
+		nil,
 	)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -311,6 +313,7 @@ func TestRouter_Metadata(t *testing.T) {
 		nil,
 		nil,
 		func(http.ResponseWriter, *http.Request, string, string, bool, string) {},
+		nil,
 	)
 
 	req := httptest.NewRequest(http.MethodGet, "/$metadata", nil)
@@ -332,6 +335,7 @@ func TestRouter_Batch(t *testing.T) {
 		nil,
 		nil,
 		func(http.ResponseWriter, *http.Request, string, string, bool, string) {},
+		nil,
 	)
 
 	req := httptest.NewRequest(http.MethodPost, "/$batch", nil)

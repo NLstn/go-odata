@@ -80,7 +80,7 @@ func setupIssueTestHandler(t *testing.T) (*EntityHandler, *gorm.DB) {
 		t.Fatalf("Failed to analyze entity: %v", err)
 	}
 
-	handler := NewEntityHandler(db, entityMeta)
+	handler := NewEntityHandler(db, entityMeta, nil)
 	return handler, db
 }
 

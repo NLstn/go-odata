@@ -39,7 +39,7 @@ func (h *EntityHandler) handleDeltaCollection(w http.ResponseWriter, r *http.Req
 	deltaLink := response.BuildDeltaLink(r, newToken)
 
 	if err := response.WriteODataDeltaResponse(w, r, h.metadata.EntitySetName, entries, &deltaLink); err != nil {
-		fmt.Printf("Error writing delta response: %v\n", err)
+		h.logger.Error("Error writing delta response", "error", err)
 	}
 }
 

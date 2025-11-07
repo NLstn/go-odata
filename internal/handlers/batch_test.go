@@ -37,7 +37,7 @@ func setupBatchTestHandler(t *testing.T) (*BatchHandler, *gorm.DB, http.Handler)
 	}
 
 	handlers := make(map[string]*EntityHandler)
-	entityHandler := NewEntityHandler(db, entityMeta)
+	entityHandler := NewEntityHandler(db, entityMeta, nil)
 	handlers["BatchTestProducts"] = entityHandler
 
 	// Create a simple service handler for testing

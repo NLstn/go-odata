@@ -23,7 +23,7 @@ func (h *EntityHandler) HandleStreamProperty(w http.ResponseWriter, r *http.Requ
 		} else {
 			if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
 				"PUT is only supported on stream properties with /$value"); err != nil {
-				fmt.Printf(LogMsgErrorWritingErrorResponse, err)
+				h.logger.Error("Error writing error response", "error", err)
 			}
 		}
 	case http.MethodOptions:
@@ -47,7 +47,7 @@ func (h *EntityHandler) handleGetStreamProperty(w http.ResponseWriter, r *http.R
 	db, err := h.buildKeyQuery(entityKey)
 	if err != nil {
 		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidKey, err.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return
 	}
@@ -102,7 +102,7 @@ func (h *EntityHandler) handleGetStreamProperty(w http.ResponseWriter, r *http.R
 		w.WriteHeader(http.StatusOK)
 		if r.Method != http.MethodHead {
 			if _, err := w.Write(content); err != nil {
-				fmt.Printf("Error writing stream content: %v\n", err)
+				h.logger.Error("Error writing stream content", "error", err)
 			}
 		}
 	} else {
@@ -125,7 +125,7 @@ func (h *EntityHandler) handleGetStreamProperty(w http.ResponseWriter, r *http.R
 		w.WriteHeader(http.StatusOK)
 		if r.Method != http.MethodHead {
 			if err := json.NewEncoder(w).Encode(streamInfo); err != nil {
-				fmt.Printf("Error writing stream metadata: %v\n", err)
+				h.logger.Error("Error writing stream metadata", "error", err)
 			}
 		}
 	}
@@ -164,7 +164,7 @@ func (h *EntityHandler) handlePutStreamProperty(w http.ResponseWriter, r *http.R
 	db, err := h.buildKeyQuery(entityKey)
 	if err != nil {
 		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidKey, err.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return
 	}
@@ -188,7 +188,7 @@ func (h *EntityHandler) handlePutStreamProperty(w http.ResponseWriter, r *http.R
 		if len(results) > 0 && results[0].Kind() == reflect.Bool && !results[0].Bool() {
 			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid stream property",
 				fmt.Sprintf("Failed to set stream property '%s'", propertyName)); writeErr != nil {
-				fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+				h.logger.Error("Error writing error response", "error", writeErr)
 			}
 			return
 		}
@@ -212,7 +212,7 @@ func (h *EntityHandler) handlePutStreamProperty(w http.ResponseWriter, r *http.R
 	if err := h.db.Save(entity).Error; err != nil {
 		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgInternalError,
 			fmt.Sprintf("Failed to update stream property: %v", err)); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return
 	}

@@ -27,7 +27,7 @@ func (h *EntityHandler) HandleEntity(w http.ResponseWriter, r *http.Request, ent
 	default:
 		if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
 			fmt.Sprintf("Method %s is not supported for individual entities", r.Method)); err != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, err)
+			h.logger.Error("Error writing error response", "error", err)
 		}
 	}
 }
@@ -46,14 +46,14 @@ func (h *EntityHandler) handleGetEntity(w http.ResponseWriter, r *http.Request, 
 	if queryOptions.Top != nil {
 		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions,
 			"$top query option is not applicable to individual entities"); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return
 	}
 	if queryOptions.Skip != nil {
 		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions,
 			"$skip query option is not applicable to individual entities"); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return
 	}
@@ -62,7 +62,7 @@ func (h *EntityHandler) handleGetEntity(w http.ResponseWriter, r *http.Request, 
 	scopes, hookErr := callBeforeReadEntity(h.metadata, r, queryOptions)
 	if hookErr != nil {
 		if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", hookErr.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return
 	}
@@ -80,7 +80,7 @@ func (h *EntityHandler) handleGetEntity(w http.ResponseWriter, r *http.Request, 
 			// Entity exists but doesn't match the type cast
 			if writeErr := response.WriteError(w, http.StatusNotFound, "Entity not found",
 				fmt.Sprintf("Entity with key '%s' is not of type '%s'", entityKey, typeCast)); writeErr != nil {
-				fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+				h.logger.Error("Error writing error response", "error", writeErr)
 			}
 			return
 		}
@@ -96,7 +96,7 @@ func (h *EntityHandler) handleGetEntity(w http.ResponseWriter, r *http.Request, 
 	override, hasOverride, afterErr := callAfterReadEntity(h.metadata, r, queryOptions, result)
 	if afterErr != nil {
 		if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", afterErr.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return
 	}
@@ -127,7 +127,7 @@ func (h *EntityHandler) HandleEntityRef(w http.ResponseWriter, r *http.Request, 
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
 			fmt.Sprintf("Method %s is not supported for entity references", r.Method)); err != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, err)
+			h.logger.Error("Error writing error response", "error", err)
 		}
 		return
 	}
@@ -138,14 +138,14 @@ func (h *EntityHandler) HandleEntityRef(w http.ResponseWriter, r *http.Request, 
 	if queryParams.Get("$expand") != "" {
 		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions,
 			"$expand is not supported with $ref"); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return
 	}
 	if queryParams.Get("$select") != "" {
 		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions,
 			"$select is not supported with $ref"); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return
 	}
@@ -155,7 +155,7 @@ func (h *EntityHandler) HandleEntityRef(w http.ResponseWriter, r *http.Request, 
 	refScopes, hookErr := callBeforeReadEntity(h.metadata, r, refQueryOptions)
 	if hookErr != nil {
 		if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", hookErr.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return
 	}
@@ -165,7 +165,7 @@ func (h *EntityHandler) HandleEntityRef(w http.ResponseWriter, r *http.Request, 
 	db, err := h.buildKeyQuery(entityKey)
 	if err != nil {
 		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidKey, err.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return
 	}
@@ -177,7 +177,7 @@ func (h *EntityHandler) HandleEntityRef(w http.ResponseWriter, r *http.Request, 
 		if err == gorm.ErrRecordNotFound {
 			if writeErr := response.WriteError(w, http.StatusNotFound, ErrMsgEntityNotFound,
 				fmt.Sprintf("Entity with key '%s' not found", entityKey)); writeErr != nil {
-				fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+				h.logger.Error("Error writing error response", "error", writeErr)
 			}
 		} else {
 			h.writeDatabaseError(w, err)
@@ -187,7 +187,7 @@ func (h *EntityHandler) HandleEntityRef(w http.ResponseWriter, r *http.Request, 
 
 	if _, _, afterErr := callAfterReadEntity(h.metadata, r, refQueryOptions, entity); afterErr != nil {
 		if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", afterErr.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return
 	}
@@ -197,7 +197,7 @@ func (h *EntityHandler) HandleEntityRef(w http.ResponseWriter, r *http.Request, 
 	entityID := response.BuildEntityID(h.metadata.EntitySetName, keyValues)
 
 	if err := response.WriteEntityReference(w, r, entityID); err != nil {
-		fmt.Printf("Error writing entity reference: %v\n", err)
+		h.logger.Error("Error writing entity reference", "error", err)
 	}
 }
 
@@ -206,7 +206,7 @@ func (h *EntityHandler) HandleCollectionRef(w http.ResponseWriter, r *http.Reque
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
 			fmt.Sprintf("Method %s is not supported for collection references", r.Method)); err != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, err)
+			h.logger.Error("Error writing error response", "error", err)
 		}
 		return
 	}
@@ -217,14 +217,14 @@ func (h *EntityHandler) HandleCollectionRef(w http.ResponseWriter, r *http.Reque
 	if queryParams.Get("$expand") != "" {
 		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions,
 			"$expand is not supported with $ref"); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return
 	}
 	if queryParams.Get("$select") != "" {
 		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions,
 			"$select is not supported with $ref"); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return
 	}
@@ -233,7 +233,7 @@ func (h *EntityHandler) HandleCollectionRef(w http.ResponseWriter, r *http.Reque
 	queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata)
 	if err != nil {
 		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions, err.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return
 	}
@@ -242,7 +242,7 @@ func (h *EntityHandler) HandleCollectionRef(w http.ResponseWriter, r *http.Reque
 	scopes, hookErr := callBeforeReadCollection(h.metadata, r, queryOptions)
 	if hookErr != nil {
 		if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", hookErr.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return
 	}
@@ -269,7 +269,7 @@ func (h *EntityHandler) HandleCollectionRef(w http.ResponseWriter, r *http.Reque
 
 	if override, hasOverride, afterErr := callAfterReadCollection(h.metadata, r, queryOptions, results); afterErr != nil {
 		if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", afterErr.Error()); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return
 	} else if hasOverride {
@@ -289,6 +289,6 @@ func (h *EntityHandler) HandleCollectionRef(w http.ResponseWriter, r *http.Reque
 	}
 
 	if err := response.WriteEntityReferenceCollection(w, r, entityIDs, totalCount, nextLink); err != nil {
-		fmt.Printf("Error writing entity reference collection: %v\n", err)
+		h.logger.Error("Error writing entity reference collection", "error", err)
 	}
 }

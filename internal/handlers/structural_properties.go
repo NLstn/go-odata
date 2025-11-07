@@ -69,7 +69,7 @@ func (h *EntityHandler) fetchPropertyValue(w http.ResponseWriter, entityKey stri
 		db, err = h.buildKeyQuery(entityKey)
 		if err != nil {
 			if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidKey, err.Error()); writeErr != nil {
-				fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+				h.logger.Error("Error writing error response", "error", writeErr)
 			}
 			return reflect.Value{}, err
 		}
@@ -87,7 +87,7 @@ func (h *EntityHandler) fetchPropertyValue(w http.ResponseWriter, entityKey stri
 	if !fieldValue.IsValid() {
 		if err := response.WriteError(w, http.StatusInternalServerError, ErrMsgInternalError,
 			"Could not access property"); err != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, err)
+			h.logger.Error("Error writing error response", "error", err)
 		}
 		return reflect.Value{}, fmt.Errorf("invalid field")
 	}
@@ -106,7 +106,7 @@ func (h *EntityHandler) handlePropertyFetchError(w http.ResponseWriter, err erro
 		}
 
 		if writeErr := response.WriteError(w, http.StatusNotFound, ErrMsgEntityNotFound, errorMessage); writeErr != nil {
-			fmt.Printf(LogMsgErrorWritingErrorResponse, writeErr)
+			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 	} else {
 		h.writeDatabaseError(w, err)
@@ -138,7 +138,7 @@ func (h *EntityHandler) writePropertyResponse(w http.ResponseWriter, r *http.Req
 	}
 
 	if err := json.NewEncoder(w).Encode(odataResponse); err != nil {
-		fmt.Printf("Error writing property response: %v\n", err)
+		h.logger.Error("Error writing property response", "error", err)
 	}
 }
 
@@ -166,7 +166,7 @@ func (h *EntityHandler) writeRawPropertyValue(w http.ResponseWriter, r *http.Req
 		// Write raw binary data
 		if byteData, ok := valueInterface.([]byte); ok {
 			if _, err := w.Write(byteData); err != nil {
-				fmt.Printf("Error writing binary value: %v\n", err)
+				h.logger.Error("Error writing binary value", "error", err)
 			}
 		}
 		return
@@ -196,7 +196,7 @@ func (h *EntityHandler) writeRawPropertyValue(w http.ResponseWriter, r *http.Req
 
 	// Write the raw value
 	if _, err := fmt.Fprintf(w, "%v", valueInterface); err != nil {
-		fmt.Printf("Error writing raw value: %v\n", err)
+		h.logger.Error("Error writing raw value", "error", err)
 	}
 }
 
