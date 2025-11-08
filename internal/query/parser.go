@@ -10,18 +10,20 @@ import (
 
 // QueryOptions represents parsed OData query options
 type QueryOptions struct {
-	Filter     *FilterExpression
-	Select     []string
-	Expand     []ExpandOption
-	OrderBy    []OrderByItem
-	Top        *int
-	Skip       *int
-	SkipToken  *string // Skip token for server-driven paging
-	DeltaToken *string
-	Count      bool
-	Apply      []ApplyTransformation
-	Search     string                 // Search query string
-	Compute    *ComputeTransformation // Standalone $compute option
+	Filter        *FilterExpression
+	Select        []string
+	Expand        []ExpandOption
+	OrderBy       []OrderByItem
+	Top           *int
+	Skip          *int
+	SkipToken     *string // Skip token for server-driven paging
+	DeltaToken    *string
+	Count         bool
+	Apply         []ApplyTransformation
+	Search        string                 // Search query string
+	Compute       *ComputeTransformation // Standalone $compute option
+	Index         bool                   // $index query option - adds @odata.index annotations
+	SchemaVersion *string                // $schemaversion query option - for metadata versioning
 }
 
 // ExpandOption represents a single $expand clause
@@ -267,6 +269,14 @@ func ParseQueryOptions(queryParams url.Values, entityMetadata *metadata.EntityMe
 	}
 
 	if err := parseComputeOption(queryParams, entityMetadata, options); err != nil {
+		return nil, err
+	}
+
+	if err := parseIndexOption(queryParams, options); err != nil {
+		return nil, err
+	}
+
+	if err := parseSchemaVersionOption(queryParams, options); err != nil {
 		return nil, err
 	}
 
@@ -593,6 +603,34 @@ func parseComputeOption(queryParams url.Values, entityMetadata *metadata.EntityM
 		}
 
 		options.Compute = computeTransformation.Compute
+	}
+	return nil
+}
+
+// parseIndexOption parses the $index query parameter
+func parseIndexOption(queryParams url.Values, options *QueryOptions) error {
+	// $index is a boolean flag - it doesn't accept a value
+	// Check if the parameter exists (even with empty value)
+	if _, exists := queryParams["$index"]; exists {
+		// If it has a non-empty value, reject it
+		if val := queryParams.Get("$index"); val != "" {
+			return fmt.Errorf("invalid $index: must not have a value")
+		}
+		options.Index = true
+	}
+	return nil
+}
+
+// parseSchemaVersionOption parses the $schemaversion query parameter
+func parseSchemaVersionOption(queryParams url.Values, options *QueryOptions) error {
+	// Check if the parameter exists
+	if _, exists := queryParams["$schemaversion"]; exists {
+		schemaVersion := queryParams.Get("$schemaversion")
+		schemaVersion = strings.TrimSpace(schemaVersion)
+		if schemaVersion == "" {
+			return fmt.Errorf("invalid $schemaversion: schema version cannot be empty")
+		}
+		options.SchemaVersion = &schemaVersion
 	}
 	return nil
 }
