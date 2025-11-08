@@ -263,13 +263,31 @@ When enabled, the entity handler records inserts, updates, and deletions so that
 odata.track-changes` header include an `@odata.deltaLink`. Subsequent requests using the returned `$deltatoken` yield only the
 changes since the previous checkpoint.
 
+By default the tracker caches change history in memory. For long-lived deployments you can opt into persistence so that delta
+tokens continue to work after a process restart:
+
+```go
+service, err := odata.NewServiceWithConfig(db, odata.ServiceConfig{
+    PersistentChangeTracking: true,
+})
+if err != nil {
+    log.Fatalf("configure service: %v", err)
+}
+```
+
+The persistent tracker stores events inside the reserved `_odata_change_log` table and reloads them during service startup.
+Make sure your migrations or provisioning scripts allow the library to create and manage that table.
+
 **Important notes:**
 
 - Change tracking is disabled by default for every entity set.
 - Singletons do not support change tracking. Attempting to enable it returns an error.
 - If a client supplies `$deltatoken` for an entity set without change tracking enabled, the service returns `501 Not
   Implemented` with an explanatory error message.
-- The change tracker keeps an in-memory history per entity set. Restarting the process clears the tracked history.
+- In-memory tracking (the default) loses history on restart. Enable `PersistentChangeTracking` to preserve delta tokens across
+  restarts.
+- When persistence is enabled, plan for database retention—`_odata_change_log` grows with each change event and should be
+  purged according to your data lifecycle requirements.
 
 ### Available Hooks
 

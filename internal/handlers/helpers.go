@@ -165,7 +165,11 @@ func (h *EntityHandler) recordChange(entity interface{}, changeType trackchanges
 	if changeType != trackchanges.ChangeTypeDeleted {
 		data = h.entityToMap(entity)
 	}
-	h.tracker.RecordChange(h.metadata.EntitySetName, keyValues, data, changeType)
+	if _, err := h.tracker.RecordChange(h.metadata.EntitySetName, keyValues, data, changeType); err != nil {
+		if h.logger != nil {
+			h.logger.Error("failed to record change event", "entitySet", h.metadata.EntitySetName, "err", err)
+		}
+	}
 }
 
 func (h *EntityHandler) extractKeyValues(entity interface{}) map[string]interface{} {
