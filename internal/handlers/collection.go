@@ -55,7 +55,7 @@ func (h *EntityHandler) handleGetCount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	count, countErr := h.countEntities(queryOptions, scopes)
+	count, countErr := h.countEntities(r.Context(), queryOptions, scopes)
 	if countErr != nil {
 		WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, countErr.Error())
 		return

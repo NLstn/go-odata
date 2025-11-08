@@ -14,6 +14,7 @@ import (
 )
 
 func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	contentType := r.Header.Get("Content-Type")
 	if h.metadata.HasStream && !strings.Contains(contentType, "application/json") {
 		h.handlePostMediaEntity(w, r)
@@ -47,8 +48,8 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 	}
 
 	var changeEvents []changeEvent
-	if err := h.db.Transaction(func(tx *gorm.DB) error {
-		pendingBindings, err := h.processODataBindAnnotations(entity, requestData, tx)
+	if err := h.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		pendingBindings, err := h.processODataBindAnnotations(ctx, entity, requestData, tx)
 		if err != nil {
 			WriteError(w, http.StatusBadRequest, "Invalid @odata.bind annotation", err.Error())
 			return newTransactionHandledError(err)
@@ -77,7 +78,7 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 		}
 
 		// Apply pending collection-valued navigation property bindings after entity is saved
-		if err := h.applyPendingCollectionBindings(tx, entity, pendingBindings); err != nil {
+		if err := h.applyPendingCollectionBindings(ctx, tx, entity, pendingBindings); err != nil {
 			WriteError(w, http.StatusInternalServerError, "Failed to bind navigation properties", err.Error())
 			return newTransactionHandledError(err)
 		}
@@ -117,6 +118,7 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *EntityHandler) handlePostMediaEntity(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	content := make([]byte, 0)
 	buf := make([]byte, 4096)
 	for {
@@ -147,7 +149,7 @@ func (h *EntityHandler) handlePostMediaEntity(w http.ResponseWriter, r *http.Req
 	}
 
 	var changeEvents []changeEvent
-	if err := h.db.Transaction(func(tx *gorm.DB) error {
+	if err := h.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := h.callBeforeCreate(entity, r); err != nil {
 			if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", err.Error()); writeErr != nil {
 				h.logger.Error("Error writing error response", "error", writeErr)

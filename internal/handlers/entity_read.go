@@ -34,6 +34,7 @@ func (h *EntityHandler) HandleEntity(w http.ResponseWriter, r *http.Request, ent
 
 // handleGetEntity handles GET requests for individual entities
 func (h *EntityHandler) handleGetEntity(w http.ResponseWriter, r *http.Request, entityKey string) {
+	ctx := r.Context()
 	// Parse query options for $expand and $select
 	queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata)
 	if err != nil {
@@ -68,14 +69,14 @@ func (h *EntityHandler) handleGetEntity(w http.ResponseWriter, r *http.Request, 
 	}
 
 	// Fetch the entity
-	result, err := h.fetchEntityByKey(entityKey, queryOptions, scopes)
+	result, err := h.fetchEntityByKey(ctx, entityKey, queryOptions, scopes)
 	if err != nil {
 		h.handleFetchError(w, err, entityKey)
 		return
 	}
 
 	// Check type cast from context - if specified, verify entity matches
-	if typeCast := GetTypeCast(r.Context()); typeCast != "" {
+	if typeCast := GetTypeCast(ctx); typeCast != "" {
 		if !h.entityMatchesType(result, typeCast) {
 			// Entity exists but doesn't match the type cast
 			if writeErr := response.WriteError(w, http.StatusNotFound, "Entity not found",
@@ -124,6 +125,7 @@ func (h *EntityHandler) handleGetEntity(w http.ResponseWriter, r *http.Request, 
 
 // HandleEntityRef handles GET requests for entity references (e.g., Products(1)/$ref)
 func (h *EntityHandler) HandleEntityRef(w http.ResponseWriter, r *http.Request, entityKey string) {
+	ctx := r.Context()
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
 			fmt.Sprintf("Method %s is not supported for entity references", r.Method)); err != nil {
@@ -162,7 +164,7 @@ func (h *EntityHandler) HandleEntityRef(w http.ResponseWriter, r *http.Request, 
 
 	// Fetch the entity to ensure it exists
 	entity := reflect.New(h.metadata.EntityType).Interface()
-	db, err := h.buildKeyQuery(h.db, entityKey)
+	db, err := h.buildKeyQuery(h.db.WithContext(ctx), entityKey)
 	if err != nil {
 		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidKey, err.Error()); writeErr != nil {
 			h.logger.Error("Error writing error response", "error", writeErr)
@@ -203,6 +205,7 @@ func (h *EntityHandler) HandleEntityRef(w http.ResponseWriter, r *http.Request, 
 
 // HandleCollectionRef handles GET requests for collection references (e.g., Products/$ref)
 func (h *EntityHandler) HandleCollectionRef(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
 			fmt.Sprintf("Method %s is not supported for collection references", r.Method)); err != nil {
@@ -248,13 +251,13 @@ func (h *EntityHandler) HandleCollectionRef(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Get the total count if $count=true is specified
-	totalCount := h.getTotalCount(queryOptions, w, scopes)
+	totalCount := h.getTotalCount(ctx, queryOptions, w, scopes)
 	if totalCount == nil && queryOptions.Count {
 		return // Error already written
 	}
 
 	// Fetch the results
-	results, err := h.fetchResults(queryOptions, scopes)
+	results, err := h.fetchResults(ctx, queryOptions, scopes)
 	if err != nil {
 		h.writeDatabaseError(w, err)
 		return

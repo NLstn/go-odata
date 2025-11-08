@@ -19,12 +19,13 @@ var errETagMismatch = errors.New("etag mismatch")
 
 // handleDeleteEntity handles DELETE requests for individual entities
 func (h *EntityHandler) handleDeleteEntity(w http.ResponseWriter, r *http.Request, entityKey string) {
+	ctx := r.Context()
 	var (
 		entity       interface{}
 		changeEvents []changeEvent
 	)
 
-	if err := h.db.Transaction(func(tx *gorm.DB) error {
+	if err := h.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		fetched, err := h.fetchAndVerifyEntity(tx, entityKey, w)
 		if err != nil {
 			return newTransactionHandledError(err)
@@ -91,7 +92,8 @@ func (h *EntityHandler) handlePatchEntity(w http.ResponseWriter, r *http.Request
 		changeEvents []changeEvent
 	)
 
-	if err := h.db.Transaction(func(tx *gorm.DB) error {
+	ctx := r.Context()
+	if err := h.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		entity = reflect.New(h.metadata.EntityType).Interface()
 
 		db, err := h.buildKeyQuery(tx, entityKey)
@@ -133,7 +135,7 @@ func (h *EntityHandler) handlePatchEntity(w http.ResponseWriter, r *http.Request
 			return newTransactionHandledError(err)
 		}
 
-		pendingBindings, err := h.processODataBindAnnotationsForUpdate(entity, updateData, tx)
+		pendingBindings, err := h.processODataBindAnnotationsForUpdate(ctx, entity, updateData, tx)
 		if err != nil {
 			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid @odata.bind annotation", err.Error()); writeErr != nil {
 				h.logger.Error("Error writing error response", "error", writeErr)
@@ -169,7 +171,7 @@ func (h *EntityHandler) handlePatchEntity(w http.ResponseWriter, r *http.Request
 			return newTransactionHandledError(err)
 		}
 
-		if err := h.applyPendingCollectionBindings(tx, entity, pendingBindings); err != nil {
+		if err := h.applyPendingCollectionBindings(ctx, tx, entity, pendingBindings); err != nil {
 			if writeErr := response.WriteError(w, http.StatusInternalServerError, "Failed to bind navigation properties", err.Error()); writeErr != nil {
 				h.logger.Error("Error writing error response", "error", writeErr)
 			}
@@ -199,7 +201,7 @@ func (h *EntityHandler) handlePatchEntity(w http.ResponseWriter, r *http.Request
 		h.recordChange(event.entity, event.changeType)
 	}
 
-	db, err := h.buildKeyQuery(h.db, entityKey)
+	db, err := h.buildKeyQuery(h.db.WithContext(ctx), entityKey)
 	if err != nil {
 		h.writeDatabaseError(w, err)
 		return
@@ -255,7 +257,8 @@ func (h *EntityHandler) handlePutEntity(w http.ResponseWriter, r *http.Request, 
 
 	var changeEvents []changeEvent
 
-	if err := h.db.Transaction(func(tx *gorm.DB) error {
+	ctx := r.Context()
+	if err := h.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		entity := reflect.New(h.metadata.EntityType).Interface()
 
 		db, err := h.buildKeyQuery(tx, entityKey)
@@ -335,7 +338,7 @@ func (h *EntityHandler) handlePutEntity(w http.ResponseWriter, r *http.Request, 
 		h.recordChange(event.entity, event.changeType)
 	}
 
-	db, err := h.buildKeyQuery(h.db, entityKey)
+	db, err := h.buildKeyQuery(h.db.WithContext(ctx), entityKey)
 	if err != nil {
 		h.writeDatabaseError(w, err)
 		return

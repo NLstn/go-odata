@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -97,7 +98,7 @@ func TestEntityHandlerCount(t *testing.T) {
 				t.Fatalf("before read hook failed: %v", hookErr)
 			}
 
-			helperCount, err := handler.countEntities(queryOptions, scopes)
+			helperCount, err := handler.countEntities(context.Background(), queryOptions, scopes)
 			if err != nil {
 				t.Fatalf("countEntities returned error: %v", err)
 			}
@@ -209,7 +210,7 @@ func TestCountConsistencyAcrossEndpoints(t *testing.T) {
 				t.Fatalf("before read hook failed: %v", hookErr)
 			}
 
-			helperCount, err := handler.countEntities(queryOptions, scopes)
+			helperCount, err := handler.countEntities(context.Background(), queryOptions, scopes)
 			if err != nil {
 				t.Fatalf("countEntities returned error: %v", err)
 			}
