@@ -351,8 +351,49 @@ func (h *EntityHandler) handleNavigationCollectionItem(w http.ResponseWriter, r 
 						break
 					}
 				}
+			} else {
+				// Composite key: parse the target key string and compare all key values
+				// Format: key1=value1,key2=value2
+				targetKeyMap, err := h.parseCompositeKeyString(targetKey)
+				if err != nil {
+					// If parsing fails, the key format is invalid
+					continue
+				}
+
+				// Check if all key values match
+				allMatch := true
+				for _, keyProp := range targetMetadata.KeyProperties {
+					itemKeyValue := item.FieldByName(keyProp.Name)
+					if !itemKeyValue.IsValid() {
+						allMatch = false
+						break
+					}
+
+					// Get the expected value from the target key map
+					expectedValue, ok := targetKeyMap[keyProp.JsonName]
+					if !ok {
+						// Try with the field name if JsonName not found
+						expectedValue, ok = targetKeyMap[keyProp.Name]
+						if !ok {
+							allMatch = false
+							break
+						}
+					}
+
+					// Convert item key value to string for comparison
+					itemKeyStr := fmt.Sprintf("%v", itemKeyValue.Interface())
+					if itemKeyStr != expectedValue {
+						allMatch = false
+						break
+					}
+				}
+
+				if allMatch {
+					found = true
+					targetEntity = item.Interface()
+					break
+				}
 			}
-			// TODO: Handle composite keys if needed
 		}
 	}
 
@@ -1138,4 +1179,34 @@ func (h *EntityHandler) buildTargetKeyQuery(keyString string, targetMetadata *me
 	}
 
 	return db, nil
+}
+
+// parseCompositeKeyString parses a composite key string into a map of key names to values
+// Example: "ProductID=1,LanguageKey='EN'" -> map[string]string{"ProductID": "1", "LanguageKey": "EN"}
+func (h *EntityHandler) parseCompositeKeyString(keyString string) (map[string]string, error) {
+	keyMap := make(map[string]string)
+
+	// Check if this looks like a composite key
+	if !strings.Contains(keyString, "=") {
+		return nil, fmt.Errorf("not a composite key format")
+	}
+
+	// Parse composite key format: key1=value1,key2=value2
+	keyPairs := strings.Split(keyString, ",")
+	for _, pair := range keyPairs {
+		parts := strings.SplitN(pair, "=", 2)
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("invalid composite key format: %s", keyString)
+		}
+
+		keyName := strings.TrimSpace(parts[0])
+		keyValue := strings.TrimSpace(parts[1])
+
+		// Remove quotes if present
+		keyValue = strings.Trim(keyValue, "'\"")
+
+		keyMap[keyName] = keyValue
+	}
+
+	return keyMap, nil
 }

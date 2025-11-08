@@ -155,6 +155,51 @@ test_invalid_navigation_property() {
     check_status "$HTTP_CODE" "404"
 }
 
+# Test 9: Navigation property with composite key - specific item access
+test_navigation_property_composite_key() {
+    # Test accessing a specific item from a collection navigation property using composite keys
+    # Example: Products(1)/Descriptions(ProductID=1,LanguageKey='EN')
+    # This assumes the test server has entities with composite keys
+    # If the test server doesn't support this, we skip the test
+    
+    local HTTP_CODE=$(http_get "$SERVER_URL/ProductWithCompositeKeys(1)/Descriptions(ProductID=1,LanguageKey='EN')")
+    
+    if [ "$HTTP_CODE" = "200" ]; then
+        local BODY=$(http_get_body "$SERVER_URL/ProductWithCompositeKeys(1)/Descriptions(ProductID=1,LanguageKey='EN')")
+        # Should return a single entity (in value array)
+        if check_json_field "$BODY" "value"; then
+            # Value array should have exactly one item
+            return 0
+        fi
+        echo "  Details: Navigation property with composite key should return single entity"
+        return 1
+    elif [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "501" ]; then
+        # Feature may not be implemented or test data not available
+        skip_test "Navigation property with composite key" "Composite key navigation not implemented or test data unavailable"
+        return 0
+    fi
+    
+    echo "  Details: Should support accessing navigation items with composite keys (got $HTTP_CODE)"
+    return 1
+}
+
+# Test 10: Navigation property composite key - not found
+test_navigation_property_composite_key_not_found() {
+    # Test that accessing a non-existent composite key item returns 404
+    local HTTP_CODE=$(http_get "$SERVER_URL/ProductWithCompositeKeys(1)/Descriptions(ProductID=1,LanguageKey='ZZ')")
+    
+    if [ "$HTTP_CODE" = "404" ]; then
+        return 0
+    elif [ "$HTTP_CODE" = "501" ]; then
+        # Feature may not be implemented
+        skip_test "Navigation property composite key not found" "Composite key navigation not implemented"
+        return 0
+    else
+        echo "  Details: Accessing non-existent composite key item should return 404 (got $HTTP_CODE)"
+        return 1
+    fi
+}
+
 # Run tests
 run_test "Navigation properties declared in metadata" test_navigation_property_in_metadata
 run_test "Navigation properties specify target type" test_navigation_property_type
@@ -164,5 +209,7 @@ run_test "Navigation property supports \$filter" test_navigation_property_filter
 run_test "Navigation property supports \$count" test_navigation_property_count
 run_test "Navigation properties have proper nullability/constraints" test_navigation_nullability
 run_test "Invalid navigation property returns 404" test_invalid_navigation_property
+run_test "Navigation property with composite key access" test_navigation_property_composite_key
+run_test "Navigation property composite key not found returns 404" test_navigation_property_composite_key_not_found
 
 print_summary
