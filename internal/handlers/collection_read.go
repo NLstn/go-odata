@@ -167,7 +167,7 @@ func (h *EntityHandler) calculateNextLink(queryOptions *query.QueryOptions, slic
 	resultCount := reflect.ValueOf(sliceValue).Len()
 
 	if resultCount > *queryOptions.Top {
-		nextURL := h.buildNextLinkWithSkipToken(queryOptions, sliceValue, r)
+		nextURL := buildNextLinkWithSkipToken(h.metadata, queryOptions, sliceValue, r)
 		if nextURL != nil {
 			return nextURL, true
 		}
@@ -274,46 +274,6 @@ func (h *EntityHandler) applyMaxPageSize(queryOptions *query.QueryOptions, maxPa
 		queryOptions.Top = &maxPageSize
 	}
 	return queryOptions
-}
-
-func (h *EntityHandler) buildNextLinkWithSkipToken(queryOptions *query.QueryOptions, sliceValue interface{}, r *http.Request) *string {
-	v := reflect.ValueOf(sliceValue)
-	if v.Kind() != reflect.Slice || v.Len() == 0 {
-		return nil
-	}
-
-	lastIndex := *queryOptions.Top - 1
-	if lastIndex < 0 || lastIndex >= v.Len() {
-		return nil
-	}
-
-	lastEntity := v.Index(lastIndex).Interface()
-
-	keyProps := make([]string, len(h.metadata.KeyProperties))
-	for i, kp := range h.metadata.KeyProperties {
-		keyProps[i] = kp.JsonName
-	}
-
-	orderByProps := make([]string, len(queryOptions.OrderBy))
-	for i, ob := range queryOptions.OrderBy {
-		orderByProps[i] = ob.Property
-		if ob.Descending {
-			orderByProps[i] += " desc"
-		}
-	}
-
-	token, err := skiptoken.ExtractFromEntity(lastEntity, keyProps, orderByProps)
-	if err != nil {
-		return nil
-	}
-
-	encoded, err := skiptoken.Encode(token)
-	if err != nil {
-		return nil
-	}
-
-	nextURL := response.BuildNextLinkWithSkipToken(r, encoded)
-	return &nextURL
 }
 
 func (h *EntityHandler) applySkipTokenFilter(db *gorm.DB, queryOptions *query.QueryOptions) *gorm.DB {

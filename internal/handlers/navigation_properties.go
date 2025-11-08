@@ -268,9 +268,19 @@ func (h *EntityHandler) handleNavigationCollectionWithQueryOptions(w http.Respon
 			value := reflect.ValueOf(results)
 			if value.Kind() == reflect.Slice && value.Len() > *queryOptions.Top {
 				trimmed := h.trimResults(results, *queryOptions.Top)
-				baseURL := response.BuildBaseURL(r)
-				nextURL := buildNextLink(baseURL, navigationPath, queryOptions)
-				return &nextURL, trimmed, nil
+
+				// Navigation properties rely on deterministic ordering for stable $skiptoken generation.
+				if nextURL := buildNextLinkWithSkipToken(targetMetadata, queryOptions, results, r); nextURL != nil {
+					return nextURL, trimmed, nil
+				}
+
+				currentSkip := 0
+				if queryOptions.Skip != nil {
+					currentSkip = *queryOptions.Skip
+				}
+				nextSkip := currentSkip + *queryOptions.Top
+				fallbackURL := response.BuildNextLink(r, nextSkip)
+				return &fallbackURL, trimmed, nil
 			}
 
 			return nil, results, nil
@@ -668,21 +678,6 @@ func hasQueryOptions(r *http.Request) bool {
 		}
 	}
 	return false
-}
-
-// buildNextLink builds a next link URL for pagination
-func buildNextLink(baseURL, path string, options *query.QueryOptions) string {
-	// Simple implementation - in production this should handle skiptoken properly
-	if options.Skip == nil {
-		skip := 0
-		options.Skip = &skip
-	}
-	if options.Top == nil {
-		top := 20
-		options.Top = &top
-	}
-	nextSkip := *options.Skip + *options.Top
-	return fmt.Sprintf("%s/%s?$skip=%d&$top=%d", baseURL, path, nextSkip, *options.Top)
 }
 
 // writeNavigationCollectionRefFromData writes entity references for a navigation collection from data

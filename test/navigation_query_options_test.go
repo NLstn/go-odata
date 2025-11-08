@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/nlstn/go-odata"
@@ -172,6 +173,19 @@ func TestNavigationPropertyQueryOptions(t *testing.T) {
 				values := response["value"].([]interface{})
 				if len(values) != 2 {
 					t.Errorf("Expected 2 descriptions, got %d", len(values))
+				}
+
+				nextLink, ok := response["@odata.nextLink"].(string)
+				if !ok {
+					t.Fatalf("Expected @odata.nextLink in response, got %v", response["@odata.nextLink"])
+				}
+
+				parsed, err := url.Parse(nextLink)
+				if err != nil {
+					t.Fatalf("Failed to parse @odata.nextLink: %v", err)
+				}
+				if token := parsed.Query().Get("$skiptoken"); token == "" {
+					t.Fatalf("Expected $skiptoken query parameter in nextLink, got %s", nextLink)
 				}
 			},
 		},
