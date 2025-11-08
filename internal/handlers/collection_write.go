@@ -45,7 +45,8 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if err := h.processODataBindAnnotations(entity, requestData, h.db); err != nil {
+	pendingBindings, err := h.processODataBindAnnotations(entity, requestData, h.db)
+	if err != nil {
 		WriteError(w, http.StatusBadRequest, "Invalid @odata.bind annotation", err.Error())
 		return
 	}
@@ -69,6 +70,12 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 
 	if err := h.db.Create(entity).Error; err != nil {
 		WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error())
+		return
+	}
+
+	// Apply pending collection-valued navigation property bindings after entity is saved
+	if err := h.applyPendingCollectionBindings(entity, pendingBindings); err != nil {
+		WriteError(w, http.StatusInternalServerError, "Failed to bind navigation properties", err.Error())
 		return
 	}
 
