@@ -9,7 +9,11 @@ rely on version numbers to reason about compatibility.
 
 ## [Unreleased]
 
-- Track upcoming enhancements here.
+### Added
+
+- Persistent change-tracking storage backed by GORM, including a `_odata_change_log` table and
+  `ServiceConfig.PersistentChangeTracking` for restart-safe delta tokens.
+- Integration tests that recreate the service from stored change history to ensure delta tokens survive restarts.
 
 ## [v0.1.0] - 2025-11-07 _(planned)_
 

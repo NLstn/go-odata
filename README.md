@@ -79,6 +79,10 @@ func main() {
     if err := service.EnableChangeTracking("Products"); err != nil {
         log.Fatal(err)
     }
+
+    // To persist change history across restarts, build the service with:
+    // service, err := odata.NewServiceWithConfig(db, odata.ServiceConfig{PersistentChangeTracking: true})
+    // and handle err accordingly. The tracker stores events in the reserved `_odata_change_log` table.
     
     // Create HTTP mux and register the OData service as a handler
     mux := http.NewServeMux()

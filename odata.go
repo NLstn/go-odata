@@ -20,6 +20,12 @@ import (
 	"gorm.io/gorm"
 )
 
+// ServiceConfig controls optional service behaviours.
+type ServiceConfig struct {
+	// PersistentChangeTracking enables database-backed change tracking history.
+	PersistentChangeTracking bool
+}
+
 // DefaultNamespace is used when no explicit namespace is configured for the service.
 const DefaultNamespace = "ODataService"
 
@@ -45,6 +51,8 @@ type Service struct {
 	namespace string
 	// deltaTracker tracks entity changes for change tracking requests
 	deltaTracker *trackchanges.Tracker
+	// changeTrackingPersistent indicates whether tracker state is backed by the database
+	changeTrackingPersistent bool
 	// router handles HTTP routing for the service
 	router *servrouter.Router
 	// asyncManager manages asynchronous requests when enabled
@@ -61,20 +69,44 @@ type Service struct {
 
 // NewService creates a new OData service instance with database connection.
 func NewService(db *gorm.DB) *Service {
+	service, err := NewServiceWithConfig(db, ServiceConfig{})
+	if err != nil {
+		panic(err)
+	}
+	return service
+}
+
+// NewServiceWithConfig creates a new OData service instance with additional configuration.
+func NewServiceWithConfig(db *gorm.DB, cfg ServiceConfig) (*Service, error) {
 	entities := make(map[string]*metadata.EntityMetadata)
 	handlersMap := make(map[string]*handlers.EntityHandler)
 	logger := slog.Default()
+
+	var (
+		tracker *trackchanges.Tracker
+		err     error
+	)
+	if cfg.PersistentChangeTracking {
+		tracker, err = trackchanges.NewTrackerWithDB(db)
+		if err != nil {
+			return nil, fmt.Errorf("failed to initialize persistent change tracker: %w", err)
+		}
+	} else {
+		tracker = trackchanges.NewTracker()
+	}
+
 	s := &Service{
-		db:                     db,
-		entities:               entities,
-		handlers:               handlersMap,
-		metadataHandler:        handlers.NewMetadataHandler(entities),
-		serviceDocumentHandler: handlers.NewServiceDocumentHandler(entities, logger),
-		actions:                make(map[string][]*actions.ActionDefinition),
-		functions:              make(map[string][]*actions.FunctionDefinition),
-		namespace:              DefaultNamespace,
-		deltaTracker:           trackchanges.NewTracker(),
-		logger:                 logger,
+		db:                       db,
+		entities:                 entities,
+		handlers:                 handlersMap,
+		metadataHandler:          handlers.NewMetadataHandler(entities),
+		serviceDocumentHandler:   handlers.NewServiceDocumentHandler(entities, logger),
+		actions:                  make(map[string][]*actions.ActionDefinition),
+		functions:                make(map[string][]*actions.FunctionDefinition),
+		namespace:                DefaultNamespace,
+		deltaTracker:             tracker,
+		changeTrackingPersistent: cfg.PersistentChangeTracking,
+		logger:                   logger,
 	}
 	s.metadataHandler.SetNamespace(DefaultNamespace)
 	// Initialize batch handler with reference to service
@@ -98,7 +130,7 @@ func NewService(db *gorm.DB) *Service {
 		logger,
 	)
 	s.router.SetAsyncMonitor(s.asyncMonitorPrefix, s.asyncManager)
-	return s
+	return s, nil
 }
 
 // SetLogger sets a custom logger for the service.
