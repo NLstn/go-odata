@@ -66,7 +66,7 @@ func (h *EntityHandler) fetchPropertyValue(w http.ResponseWriter, entityKey stri
 		db = h.db
 	} else {
 		// For regular entities, build the key query
-		db, err = h.buildKeyQuery(entityKey)
+		db, err = h.buildKeyQuery(h.db, entityKey)
 		if err != nil {
 			if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidKey, err.Error()); writeErr != nil {
 				h.logger.Error("Error writing error response", "error", writeErr)

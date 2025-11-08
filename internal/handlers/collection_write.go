@@ -10,6 +10,7 @@ import (
 	"github.com/nlstn/go-odata/internal/preference"
 	"github.com/nlstn/go-odata/internal/response"
 	"github.com/nlstn/go-odata/internal/trackchanges"
+	"gorm.io/gorm"
 )
 
 func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request) {
@@ -45,45 +46,59 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	pendingBindings, err := h.processODataBindAnnotations(entity, requestData, h.db)
-	if err != nil {
-		WriteError(w, http.StatusBadRequest, "Invalid @odata.bind annotation", err.Error())
+	var changeEvents []changeEvent
+	if err := h.db.Transaction(func(tx *gorm.DB) error {
+		pendingBindings, err := h.processODataBindAnnotations(entity, requestData, tx)
+		if err != nil {
+			WriteError(w, http.StatusBadRequest, "Invalid @odata.bind annotation", err.Error())
+			return newTransactionHandledError(err)
+		}
+
+		h.clearAutoIncrementKeys(entity)
+
+		if err := h.validateRequiredProperties(requestData); err != nil {
+			WriteError(w, http.StatusBadRequest, "Missing required properties", err.Error())
+			return newTransactionHandledError(err)
+		}
+
+		if err := h.validateRequiredFieldsNotNull(requestData); err != nil {
+			WriteError(w, http.StatusBadRequest, "Invalid null value", err.Error())
+			return newTransactionHandledError(err)
+		}
+
+		if err := h.callBeforeCreate(entity, r); err != nil {
+			WriteError(w, http.StatusForbidden, "Authorization failed", err.Error())
+			return newTransactionHandledError(err)
+		}
+
+		if err := tx.Create(entity).Error; err != nil {
+			WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error())
+			return newTransactionHandledError(err)
+		}
+
+		// Apply pending collection-valued navigation property bindings after entity is saved
+		if err := h.applyPendingCollectionBindings(tx, entity, pendingBindings); err != nil {
+			WriteError(w, http.StatusInternalServerError, "Failed to bind navigation properties", err.Error())
+			return newTransactionHandledError(err)
+		}
+
+		if err := h.callAfterCreate(entity, r); err != nil {
+			h.logger.Error("AfterCreate hook failed", "error", err)
+		}
+
+		changeEvents = append(changeEvents, changeEvent{entity: entity, changeType: trackchanges.ChangeTypeAdded})
+		return nil
+	}); err != nil {
+		if isTransactionHandled(err) {
+			return
+		}
+		h.writeDatabaseError(w, err)
 		return
 	}
 
-	h.clearAutoIncrementKeys(entity)
-
-	if err := h.validateRequiredProperties(requestData); err != nil {
-		WriteError(w, http.StatusBadRequest, "Missing required properties", err.Error())
-		return
+	for _, event := range changeEvents {
+		h.recordChange(event.entity, event.changeType)
 	}
-
-	if err := h.validateRequiredFieldsNotNull(requestData); err != nil {
-		WriteError(w, http.StatusBadRequest, "Invalid null value", err.Error())
-		return
-	}
-
-	if err := h.callBeforeCreate(entity, r); err != nil {
-		WriteError(w, http.StatusForbidden, "Authorization failed", err.Error())
-		return
-	}
-
-	if err := h.db.Create(entity).Error; err != nil {
-		WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error())
-		return
-	}
-
-	// Apply pending collection-valued navigation property bindings after entity is saved
-	if err := h.applyPendingCollectionBindings(entity, pendingBindings); err != nil {
-		WriteError(w, http.StatusInternalServerError, "Failed to bind navigation properties", err.Error())
-		return
-	}
-
-	if err := h.callAfterCreate(entity, r); err != nil {
-		h.logger.Error("AfterCreate hook failed", "error", err)
-	}
-
-	h.recordChange(entity, trackchanges.ChangeTypeAdded)
 
 	location := h.buildEntityLocation(r, entity)
 	w.Header().Set("Location", location)
@@ -131,25 +146,39 @@ func (h *EntityHandler) handlePostMediaEntity(w http.ResponseWriter, r *http.Req
 		method.Call([]reflect.Value{reflect.ValueOf(contentType)})
 	}
 
-	if err := h.callBeforeCreate(entity, r); err != nil {
-		if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", err.Error()); writeErr != nil {
-			h.logger.Error("Error writing error response", "error", writeErr)
+	var changeEvents []changeEvent
+	if err := h.db.Transaction(func(tx *gorm.DB) error {
+		if err := h.callBeforeCreate(entity, r); err != nil {
+			if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", err.Error()); writeErr != nil {
+				h.logger.Error("Error writing error response", "error", writeErr)
+			}
+			return newTransactionHandledError(err)
 		}
+
+		if err := tx.Create(entity).Error; err != nil {
+			if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error()); writeErr != nil {
+				h.logger.Error("Error writing error response", "error", writeErr)
+			}
+			return newTransactionHandledError(err)
+		}
+
+		if err := h.callAfterCreate(entity, r); err != nil {
+			h.logger.Error("AfterCreate hook failed", "error", err)
+		}
+
+		changeEvents = append(changeEvents, changeEvent{entity: entity, changeType: trackchanges.ChangeTypeAdded})
+		return nil
+	}); err != nil {
+		if isTransactionHandled(err) {
+			return
+		}
+		h.writeDatabaseError(w, err)
 		return
 	}
 
-	if err := h.db.Create(entity).Error; err != nil {
-		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error()); writeErr != nil {
-			h.logger.Error("Error writing error response", "error", writeErr)
-		}
-		return
+	for _, event := range changeEvents {
+		h.recordChange(event.entity, event.changeType)
 	}
-
-	if err := h.callAfterCreate(entity, r); err != nil {
-		h.logger.Error("AfterCreate hook failed", "error", err)
-	}
-
-	h.recordChange(entity, trackchanges.ChangeTypeAdded)
 
 	location := h.buildEntityLocation(r, entity)
 	w.Header().Set("Location", location)

@@ -16,7 +16,7 @@ import (
 func (h *EntityHandler) fetchEntityByKey(entityKey string, queryOptions *query.QueryOptions, scopes []func(*gorm.DB) *gorm.DB) (interface{}, error) {
 	result := reflect.New(h.metadata.EntityType).Interface()
 
-	db, err := h.buildKeyQuery(entityKey)
+	db, err := h.buildKeyQuery(h.db, entityKey)
 	if err != nil {
 		return nil, err
 	}
@@ -92,10 +92,10 @@ func (h *EntityHandler) writeInvalidQueryError(w http.ResponseWriter, err error)
 }
 
 // fetchAndVerifyEntity fetches an entity by key and handles errors
-func (h *EntityHandler) fetchAndVerifyEntity(entityKey string, w http.ResponseWriter) (interface{}, error) {
+func (h *EntityHandler) fetchAndVerifyEntity(db *gorm.DB, entityKey string, w http.ResponseWriter) (interface{}, error) {
 	entity := reflect.New(h.metadata.EntityType).Interface()
 
-	db, err := h.buildKeyQuery(entityKey)
+	query, err := h.buildKeyQuery(db, entityKey)
 	if err != nil {
 		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidKey, err.Error()); writeErr != nil {
 			h.logger.Error("Error writing error response", "error", writeErr)
@@ -103,7 +103,7 @@ func (h *EntityHandler) fetchAndVerifyEntity(entityKey string, w http.ResponseWr
 		return nil, err
 	}
 
-	if err := db.First(entity).Error; err != nil {
+	if err := query.First(entity).Error; err != nil {
 		h.handleFetchError(w, err, entityKey)
 		return nil, err
 	}

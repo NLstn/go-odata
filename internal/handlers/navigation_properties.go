@@ -145,7 +145,7 @@ func (h *EntityHandler) handleNavigationCollectionWithQueryOptions(w http.Respon
 	}
 
 	parent := reflect.New(h.metadata.EntityType).Interface()
-	db, err := h.buildKeyQuery(entityKey)
+	db, err := h.buildKeyQuery(h.db, entityKey)
 	if err != nil {
 		WriteError(w, http.StatusBadRequest, ErrMsgInvalidKey, err.Error())
 		return
@@ -308,7 +308,7 @@ func (h *EntityHandler) handleNavigationCollectionItem(w http.ResponseWriter, r 
 
 	// First verify that the parent entity exists
 	parent := reflect.New(h.metadata.EntityType).Interface()
-	parentDB, err := h.buildKeyQuery(entityKey)
+	parentDB, err := h.buildKeyQuery(h.db, entityKey)
 	if err != nil {
 		WriteError(w, http.StatusBadRequest, ErrMsgInvalidKey, err.Error())
 		return
@@ -491,7 +491,7 @@ func (h *EntityHandler) fetchParentEntityWithNav(entityKey, navPropertyName stri
 		db = h.db
 	} else {
 		// For regular entities, build the key query
-		db, err = h.buildKeyQuery(entityKey)
+		db, err = h.buildKeyQuery(h.db, entityKey)
 		if err != nil {
 			return nil, err
 		}
@@ -945,7 +945,7 @@ func (h *EntityHandler) updateNavigationPropertyReference(entityKey string, navP
 
 	// Fetch the parent entity
 	parent := reflect.New(h.metadata.EntityType).Interface()
-	db, err := h.buildKeyQuery(entityKey)
+	db, err := h.buildKeyQuery(h.db, entityKey)
 	if err != nil {
 		return fmt.Errorf("invalid entity key: %w", err)
 	}
@@ -1018,7 +1018,7 @@ func (h *EntityHandler) addNavigationPropertyReference(entityKey string, navProp
 
 	// Fetch the parent entity
 	parent := reflect.New(h.metadata.EntityType).Interface()
-	db, err := h.buildKeyQuery(entityKey)
+	db, err := h.buildKeyQuery(h.db, entityKey)
 	if err != nil {
 		return fmt.Errorf("invalid entity key: %w", err)
 	}
@@ -1056,7 +1056,7 @@ func (h *EntityHandler) addNavigationPropertyReference(entityKey string, navProp
 func (h *EntityHandler) deleteNavigationPropertyReference(entityKey string, navProp *metadata.PropertyMetadata) error {
 	// Fetch the parent entity
 	parent := reflect.New(h.metadata.EntityType).Interface()
-	db, err := h.buildKeyQuery(entityKey)
+	db, err := h.buildKeyQuery(h.db, entityKey)
 	if err != nil {
 		return fmt.Errorf("invalid entity key: %w", err)
 	}
@@ -1102,7 +1102,7 @@ func (h *EntityHandler) deleteCollectionNavigationPropertyReference(entityKey st
 
 	// Fetch the parent entity
 	parent := reflect.New(h.metadata.EntityType).Interface()
-	db, err := h.buildKeyQuery(entityKey)
+	db, err := h.buildKeyQuery(h.db, entityKey)
 	if err != nil {
 		return fmt.Errorf("invalid entity key: %w", err)
 	}
