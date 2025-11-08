@@ -102,10 +102,31 @@ func TestServiceRegisterEntity(t *testing.T) {
 		t.Error("RegisterEntity() with invalid entity should return error")
 	}
 
-	// Test registration with pointer
-	err = service.RegisterEntity(&Product{})
+	// Test registration with pointer on a new service instance
+	pointerService := NewService(db)
+
+	err = pointerService.RegisterEntity(&Product{})
 	if err != nil {
 		t.Errorf("RegisterEntity() with pointer error = %v, want nil", err)
+	}
+}
+
+func TestServiceRegisterEntityDuplicate(t *testing.T) {
+	db := setupTestDB(t)
+	service := NewService(db)
+
+	if err := service.RegisterEntity(Product{}); err != nil {
+		t.Fatalf("RegisterEntity(Product) error = %v", err)
+	}
+
+	err := service.RegisterEntity(&Product{})
+	if err == nil {
+		t.Fatal("expected error when registering duplicate entity set name")
+	}
+
+	expected := "entity set 'Products' is already registered"
+	if err.Error() != expected {
+		t.Fatalf("unexpected error: got %q, want %q", err.Error(), expected)
 	}
 }
 
@@ -152,6 +173,29 @@ func TestEnableChangeTracking(t *testing.T) {
 
 	if err := service.EnableChangeTracking("Singleton"); err == nil {
 		t.Fatalf("expected error enabling change tracking for singleton entity")
+	}
+}
+
+func TestServiceRegisterSingletonDuplicate(t *testing.T) {
+	db := setupTestDB(t)
+	service := NewService(db)
+
+	type singletonEntity struct {
+		ID int `json:"id" odata:"key"`
+	}
+
+	if err := service.RegisterSingleton(&singletonEntity{}, "Singleton"); err != nil {
+		t.Fatalf("RegisterSingleton error = %v", err)
+	}
+
+	err := service.RegisterSingleton(&singletonEntity{}, "Singleton")
+	if err == nil {
+		t.Fatal("expected error when registering duplicate singleton name")
+	}
+
+	expected := "singleton 'Singleton' is already registered"
+	if err.Error() != expected {
+		t.Fatalf("unexpected error: got %q, want %q", err.Error(), expected)
 	}
 }
 

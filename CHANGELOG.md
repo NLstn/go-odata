@@ -15,6 +15,11 @@ rely on version numbers to reason about compatibility.
   `ServiceConfig.PersistentChangeTracking` for restart-safe delta tokens.
 - Integration tests that recreate the service from stored change history to ensure delta tokens survive restarts.
 
+### Changed
+
+- `Service.RegisterEntity` and `Service.RegisterSingleton` now return descriptive errors when duplicate names are registered
+  instead of overwriting existing metadata.
+
 ## [v0.1.0] - 2025-11-07 _(planned)_
 
 ### Added
