@@ -39,7 +39,7 @@ func (h *EntityHandler) HandleMediaEntityValue(w http.ResponseWriter, r *http.Re
 func (h *EntityHandler) handleGetMediaEntityValue(w http.ResponseWriter, r *http.Request, entityKey string) {
 	// Fetch the entity
 	entity := reflect.New(h.metadata.EntityType).Interface()
-	db, err := h.buildKeyQuery(entityKey)
+	db, err := h.buildKeyQuery(h.db, entityKey)
 	if err != nil {
 		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidKey, err.Error()); writeErr != nil {
 			h.logger.Error("Error writing error response", "error", writeErr)
@@ -118,7 +118,7 @@ func (h *EntityHandler) handlePutMediaEntityValue(w http.ResponseWriter, r *http
 
 	// Fetch the entity
 	entity := reflect.New(h.metadata.EntityType).Interface()
-	db, err := h.buildKeyQuery(entityKey)
+	db, err := h.buildKeyQuery(h.db, entityKey)
 	if err != nil {
 		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidKey, err.Error()); writeErr != nil {
 			h.logger.Error("Error writing error response", "error", writeErr)

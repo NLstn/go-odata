@@ -168,7 +168,7 @@ func (h *EntityHandler) bindSingleNavigationProperty(entityValue reflect.Value, 
 		targetHandler := NewEntityHandler(db, targetMetadata, h.logger)
 		targetHandler.SetEntitiesMetadata(h.entitiesMetadata)
 
-		targetDB, err := targetHandler.buildKeyQuery(entityKey)
+		targetDB, err := targetHandler.buildKeyQuery(db, entityKey)
 		if err != nil {
 			return fmt.Errorf("invalid entity key '%s': %w", entityKey, err)
 		}
@@ -264,7 +264,7 @@ func (h *EntityHandler) bindSingleNavigationPropertyForUpdate(entityValue reflec
 		targetHandler := NewEntityHandler(db, targetMetadata, h.logger)
 		targetHandler.SetEntitiesMetadata(h.entitiesMetadata)
 
-		targetDB, err := targetHandler.buildKeyQuery(entityKey)
+		targetDB, err := targetHandler.buildKeyQuery(db, entityKey)
 		if err != nil {
 			return nil, fmt.Errorf("invalid entity key '%s': %w", entityKey, err)
 		}
@@ -401,7 +401,7 @@ func (h *EntityHandler) bindCollectionNavigationProperty(entityValue reflect.Val
 			return nil, fmt.Errorf("all references in collection must be from the same entity set")
 		}
 
-		targetDB, err := targetHandler.buildKeyQuery(entityKey)
+		targetDB, err := targetHandler.buildKeyQuery(db, entityKey)
 		if err != nil {
 			return nil, fmt.Errorf("invalid entity key '%s': %w", entityKey, err)
 		}
@@ -424,7 +424,7 @@ func (h *EntityHandler) bindCollectionNavigationProperty(entityValue reflect.Val
 
 // applyPendingCollectionBindings applies pending collection-valued navigation property bindings
 // after the entity has been saved and has a primary key
-func (h *EntityHandler) applyPendingCollectionBindings(entity interface{}, pendingBindings []PendingCollectionBinding) error {
+func (h *EntityHandler) applyPendingCollectionBindings(db *gorm.DB, entity interface{}, pendingBindings []PendingCollectionBinding) error {
 	if len(pendingBindings) == 0 {
 		return nil
 	}
@@ -435,13 +435,13 @@ func (h *EntityHandler) applyPendingCollectionBindings(entity interface{}, pendi
 
 		if len(targetEntities) == 0 {
 			// Empty array means clear/replace the collection with an empty set
-			if err := h.db.Model(entity).Association(navProp.Name).Replace(); err != nil {
+			if err := db.Model(entity).Association(navProp.Name).Replace(); err != nil {
 				return fmt.Errorf("failed to clear collection navigation property '%s': %w", navProp.Name, err)
 			}
 		} else {
 			// Replace the collection with the new set of entities
 			// Using Replace() instead of Append() because @odata.bind should set the exact collection
-			if err := h.db.Model(entity).Association(navProp.Name).Replace(targetEntities...); err != nil {
+			if err := db.Model(entity).Association(navProp.Name).Replace(targetEntities...); err != nil {
 				return fmt.Errorf("failed to bind collection navigation property '%s': %w", navProp.Name, err)
 			}
 		}

@@ -162,7 +162,7 @@ func (h *EntityHandler) HandleEntityRef(w http.ResponseWriter, r *http.Request, 
 
 	// Fetch the entity to ensure it exists
 	entity := reflect.New(h.metadata.EntityType).Interface()
-	db, err := h.buildKeyQuery(entityKey)
+	db, err := h.buildKeyQuery(h.db, entityKey)
 	if err != nil {
 		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidKey, err.Error()); writeErr != nil {
 			h.logger.Error("Error writing error response", "error", writeErr)

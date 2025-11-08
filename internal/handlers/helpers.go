@@ -35,9 +35,12 @@ func SetODataVersionHeader(w http.ResponseWriter) {
 }
 
 // buildKeyQuery builds a GORM query with WHERE conditions for the entity key(s)
-// Supports both single keys and composite keys
-func (h *EntityHandler) buildKeyQuery(entityKey string) (*gorm.DB, error) {
-	db := h.db
+// Supports both single keys and composite keys. When db is nil the handler's default
+// database handle is used.
+func (h *EntityHandler) buildKeyQuery(db *gorm.DB, entityKey string) (*gorm.DB, error) {
+	if db == nil {
+		db = h.db
+	}
 
 	// Parse the key - could be single value or composite key format
 	components := &response.ODataURLComponents{

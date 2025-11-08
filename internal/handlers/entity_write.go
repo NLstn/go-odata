@@ -19,49 +19,61 @@ var errETagMismatch = errors.New("etag mismatch")
 
 // handleDeleteEntity handles DELETE requests for individual entities
 func (h *EntityHandler) handleDeleteEntity(w http.ResponseWriter, r *http.Request, entityKey string) {
-	// Fetch and delete the entity
-	entity, err := h.fetchAndVerifyEntity(entityKey, w)
-	if err != nil {
-		return // Error already written
-	}
+	var (
+		entity       interface{}
+		changeEvents []changeEvent
+	)
 
-	// Check If-Match header if ETag is configured
-	if h.metadata.ETagProperty != nil {
-		ifMatch := r.Header.Get(HeaderIfMatch)
-		currentETag := etag.Generate(entity, h.metadata)
+	if err := h.db.Transaction(func(tx *gorm.DB) error {
+		fetched, err := h.fetchAndVerifyEntity(tx, entityKey, w)
+		if err != nil {
+			return newTransactionHandledError(err)
+		}
+		entity = fetched
 
-		if !etag.Match(ifMatch, currentETag) {
-			if writeErr := response.WriteError(w, http.StatusPreconditionFailed, ErrMsgPreconditionFailed,
-				ErrDetailPreconditionFailed); writeErr != nil {
+		if h.metadata.ETagProperty != nil {
+			ifMatch := r.Header.Get(HeaderIfMatch)
+			currentETag := etag.Generate(entity, h.metadata)
+
+			if !etag.Match(ifMatch, currentETag) {
+				if writeErr := response.WriteError(w, http.StatusPreconditionFailed, ErrMsgPreconditionFailed,
+					ErrDetailPreconditionFailed); writeErr != nil {
+					h.logger.Error("Error writing error response", "error", writeErr)
+				}
+				return newTransactionHandledError(errETagMismatch)
+			}
+		}
+
+		if err := h.callBeforeDelete(entity, r); err != nil {
+			if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", err.Error()); writeErr != nil {
 				h.logger.Error("Error writing error response", "error", writeErr)
 			}
+			return newTransactionHandledError(err)
+		}
+
+		if err := tx.Delete(entity).Error; err != nil {
+			h.writeDatabaseError(w, err)
+			return newTransactionHandledError(err)
+		}
+
+		if err := h.callAfterDelete(entity, r); err != nil {
+			h.logger.Error("AfterDelete hook failed", "error", err)
+		}
+
+		changeEvents = append(changeEvents, changeEvent{entity: entity, changeType: trackchanges.ChangeTypeDeleted})
+		return nil
+	}); err != nil {
+		if isTransactionHandled(err) {
 			return
 		}
-	}
-
-	// Call BeforeDelete hook if it exists
-	if err := h.callBeforeDelete(entity, r); err != nil {
-		if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", err.Error()); writeErr != nil {
-			h.logger.Error("Error writing error response", "error", writeErr)
-		}
-		return
-	}
-
-	// Delete the entity
-	if err := h.db.Delete(entity).Error; err != nil {
 		h.writeDatabaseError(w, err)
 		return
 	}
 
-	// Call AfterDelete hook if it exists
-	if err := h.callAfterDelete(entity, r); err != nil {
-		// Log the error but don't fail the request since the entity was already deleted
-		h.logger.Error("AfterDelete hook failed", "error", err)
+	for _, event := range changeEvents {
+		h.recordChange(event.entity, event.changeType)
 	}
 
-	h.recordChange(entity, trackchanges.ChangeTypeDeleted)
-
-	// Return 204 No Content according to OData v4 spec
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -74,129 +86,126 @@ func (h *EntityHandler) handlePatchEntity(w http.ResponseWriter, r *http.Request
 
 	pref := preference.ParsePrefer(r)
 
-	// Fetch and update the entity
-	db, entity, err := h.fetchAndUpdateEntity(w, r, entityKey)
-	if err != nil {
-		return // Error already written
-	}
+	var (
+		entity       interface{}
+		changeEvents []changeEvent
+	)
 
-	if entity != nil {
-		if err := db.First(entity).Error; err == nil {
-			h.recordChange(entity, trackchanges.ChangeTypeUpdated)
-		} else {
-			h.logger.Error("Error refreshing entity for change tracking", "error", err)
-		}
-	}
+	if err := h.db.Transaction(func(tx *gorm.DB) error {
+		entity = reflect.New(h.metadata.EntityType).Interface()
 
-	// Write response based on preference
-	h.writeUpdateResponse(w, r, pref, db)
-}
-
-// fetchAndUpdateEntity fetches an entity and applies PATCH updates
-func (h *EntityHandler) fetchAndUpdateEntity(w http.ResponseWriter, r *http.Request, entityKey string) (*gorm.DB, interface{}, error) {
-	entity := reflect.New(h.metadata.EntityType).Interface()
-
-	db, err := h.buildKeyQuery(entityKey)
-	if err != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidKey, err.Error()); writeErr != nil {
-			h.logger.Error("Error writing error response", "error", writeErr)
-		}
-		return nil, nil, err
-	}
-
-	if err := db.First(entity).Error; err != nil {
-		h.handleFetchError(w, err, entityKey)
-		return nil, nil, err
-	}
-
-	// Check If-Match header if ETag is configured
-	if h.metadata.ETagProperty != nil {
-		ifMatch := r.Header.Get(HeaderIfMatch)
-		currentETag := etag.Generate(entity, h.metadata)
-
-		if !etag.Match(ifMatch, currentETag) {
-			if writeErr := response.WriteError(w, http.StatusPreconditionFailed, ErrMsgPreconditionFailed,
-				ErrDetailPreconditionFailed); writeErr != nil {
+		db, err := h.buildKeyQuery(tx, entityKey)
+		if err != nil {
+			if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidKey, err.Error()); writeErr != nil {
 				h.logger.Error("Error writing error response", "error", writeErr)
 			}
-			return nil, nil, errETagMismatch
+			return newTransactionHandledError(err)
 		}
-	}
 
-	// Parse the request body to get the update data
-	updateData, err := h.parsePatchRequestBody(r, w)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	if err := h.validateKeyPropertiesNotUpdated(updateData, w); err != nil {
-		return nil, nil, err
-	}
-
-	// Validate that all properties in updateData are valid entity properties
-	// Skip validation for @odata.bind annotations
-	if err := h.validatePropertiesExistForUpdate(updateData, w); err != nil {
-		return nil, nil, err
-	}
-
-	// Process @odata.bind annotations to update navigation property relationships
-	// This also adds the foreign key values to updateData
-	pendingBindings, err := h.processODataBindAnnotationsForUpdate(entity, updateData, h.db)
-	if err != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid @odata.bind annotation", err.Error()); writeErr != nil {
-			h.logger.Error("Error writing error response", "error", writeErr)
+		if err := db.First(entity).Error; err != nil {
+			h.handleFetchError(w, err, entityKey)
+			return newTransactionHandledError(err)
 		}
-		return nil, nil, err
-	}
 
-	// Remove @odata.bind annotations from updateData before updating the entity
-	// as they are not actual properties (the foreign keys have been added)
-	h.removeODataBindAnnotations(updateData)
+		if h.metadata.ETagProperty != nil {
+			ifMatch := r.Header.Get(HeaderIfMatch)
+			currentETag := etag.Generate(entity, h.metadata)
 
-	// Validate data types
-	if err := h.validateDataTypes(updateData); err != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid data type", err.Error()); writeErr != nil {
-			h.logger.Error("Error writing error response", "error", writeErr)
+			if !etag.Match(ifMatch, currentETag) {
+				if writeErr := response.WriteError(w, http.StatusPreconditionFailed, ErrMsgPreconditionFailed,
+					ErrDetailPreconditionFailed); writeErr != nil {
+					h.logger.Error("Error writing error response", "error", writeErr)
+				}
+				return newTransactionHandledError(errETagMismatch)
+			}
 		}
-		return nil, nil, err
-	}
 
-	// Validate that required fields are not being set to null
-	if err := h.validateRequiredFieldsNotNull(updateData); err != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid value for required property", err.Error()); writeErr != nil {
-			h.logger.Error("Error writing error response", "error", writeErr)
+		updateData, err := h.parsePatchRequestBody(r, w)
+		if err != nil {
+			return newTransactionHandledError(err)
 		}
-		return nil, nil, err
-	}
 
-	// Call BeforeUpdate hook if it exists
-	if err := h.callBeforeUpdate(entity, r); err != nil {
-		if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", err.Error()); writeErr != nil {
-			h.logger.Error("Error writing error response", "error", writeErr)
+		if err := h.validateKeyPropertiesNotUpdated(updateData, w); err != nil {
+			return newTransactionHandledError(err)
 		}
-		return nil, nil, err
-	}
 
-	if err := h.db.Model(entity).Updates(updateData).Error; err != nil {
+		if err := h.validatePropertiesExistForUpdate(updateData, w); err != nil {
+			return newTransactionHandledError(err)
+		}
+
+		pendingBindings, err := h.processODataBindAnnotationsForUpdate(entity, updateData, tx)
+		if err != nil {
+			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid @odata.bind annotation", err.Error()); writeErr != nil {
+				h.logger.Error("Error writing error response", "error", writeErr)
+			}
+			return newTransactionHandledError(err)
+		}
+
+		h.removeODataBindAnnotations(updateData)
+
+		if err := h.validateDataTypes(updateData); err != nil {
+			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid data type", err.Error()); writeErr != nil {
+				h.logger.Error("Error writing error response", "error", writeErr)
+			}
+			return newTransactionHandledError(err)
+		}
+
+		if err := h.validateRequiredFieldsNotNull(updateData); err != nil {
+			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid value for required property", err.Error()); writeErr != nil {
+				h.logger.Error("Error writing error response", "error", writeErr)
+			}
+			return newTransactionHandledError(err)
+		}
+
+		if err := h.callBeforeUpdate(entity, r); err != nil {
+			if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", err.Error()); writeErr != nil {
+				h.logger.Error("Error writing error response", "error", writeErr)
+			}
+			return newTransactionHandledError(err)
+		}
+
+		if err := tx.Model(entity).Updates(updateData).Error; err != nil {
+			h.writeDatabaseError(w, err)
+			return newTransactionHandledError(err)
+		}
+
+		if err := h.applyPendingCollectionBindings(tx, entity, pendingBindings); err != nil {
+			if writeErr := response.WriteError(w, http.StatusInternalServerError, "Failed to bind navigation properties", err.Error()); writeErr != nil {
+				h.logger.Error("Error writing error response", "error", writeErr)
+			}
+			return newTransactionHandledError(err)
+		}
+
+		if err := h.callAfterUpdate(entity, r); err != nil {
+			h.logger.Error("AfterUpdate hook failed", "error", err)
+		}
+
+		if err := tx.First(entity).Error; err != nil {
+			h.logger.Error("Error refreshing entity for change tracking", "error", err)
+		} else {
+			changeEvents = append(changeEvents, changeEvent{entity: entity, changeType: trackchanges.ChangeTypeUpdated})
+		}
+
+		return nil
+	}); err != nil {
+		if isTransactionHandled(err) {
+			return
+		}
 		h.writeDatabaseError(w, err)
-		return nil, nil, err
+		return
 	}
 
-	// Apply pending collection-valued navigation property bindings after entity is updated
-	if err := h.applyPendingCollectionBindings(entity, pendingBindings); err != nil {
-		if writeErr := response.WriteError(w, http.StatusInternalServerError, "Failed to bind navigation properties", err.Error()); writeErr != nil {
-			h.logger.Error("Error writing error response", "error", writeErr)
-		}
-		return nil, nil, err
+	for _, event := range changeEvents {
+		h.recordChange(event.entity, event.changeType)
 	}
 
-	// Call AfterUpdate hook if it exists
-	if err := h.callAfterUpdate(entity, r); err != nil {
-		// Log the error but don't fail the request since the entity was already updated
-		h.logger.Error("AfterUpdate hook failed", "error", err)
+	db, err := h.buildKeyQuery(h.db, entityKey)
+	if err != nil {
+		h.writeDatabaseError(w, err)
+		return
 	}
 
-	return db, entity, nil
+	h.writeUpdateResponse(w, r, pref, db)
 }
 
 // writeUpdateResponse writes the response for PATCH/PUT operations based on preferences
@@ -244,93 +253,95 @@ func (h *EntityHandler) handlePutEntity(w http.ResponseWriter, r *http.Request, 
 
 	pref := preference.ParsePrefer(r)
 
-	// Fetch and replace the entity
-	db, err := h.fetchAndReplaceEntity(w, r, entityKey)
-	if err != nil {
-		return // Error already written
-	}
+	var changeEvents []changeEvent
 
-	if db != nil {
-		replacedEntity := reflect.New(h.metadata.EntityType).Interface()
-		if err := db.First(replacedEntity).Error; err == nil {
-			h.recordChange(replacedEntity, trackchanges.ChangeTypeUpdated)
-		} else {
-			h.logger.Error("Error refreshing entity for change tracking", "error", err)
-		}
-	}
+	if err := h.db.Transaction(func(tx *gorm.DB) error {
+		entity := reflect.New(h.metadata.EntityType).Interface()
 
-	// Write response based on preference
-	h.writeUpdateResponse(w, r, pref, db)
-}
-
-// fetchAndReplaceEntity fetches an entity and performs PUT replacement
-func (h *EntityHandler) fetchAndReplaceEntity(w http.ResponseWriter, r *http.Request, entityKey string) (*gorm.DB, error) {
-	entity := reflect.New(h.metadata.EntityType).Interface()
-
-	db, err := h.buildKeyQuery(entityKey)
-	if err != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidKey, err.Error()); writeErr != nil {
-			h.logger.Error("Error writing error response", "error", writeErr)
-		}
-		return nil, err
-	}
-
-	if err := db.First(entity).Error; err != nil {
-		h.handleFetchError(w, err, entityKey)
-		return nil, err
-	}
-
-	// Check If-Match header if ETag is configured
-	if h.metadata.ETagProperty != nil {
-		ifMatch := r.Header.Get(HeaderIfMatch)
-		currentETag := etag.Generate(entity, h.metadata)
-
-		if !etag.Match(ifMatch, currentETag) {
-			if writeErr := response.WriteError(w, http.StatusPreconditionFailed, ErrMsgPreconditionFailed,
-				ErrDetailPreconditionFailed); writeErr != nil {
+		db, err := h.buildKeyQuery(tx, entityKey)
+		if err != nil {
+			if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidKey, err.Error()); writeErr != nil {
 				h.logger.Error("Error writing error response", "error", writeErr)
 			}
-			return nil, errETagMismatch
+			return newTransactionHandledError(err)
 		}
-	}
 
-	// Create a new instance for the replacement data
-	replacementEntity := reflect.New(h.metadata.EntityType).Interface()
-	if err := json.NewDecoder(r.Body).Decode(replacementEntity); err != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidRequestBody,
-			fmt.Sprintf(ErrDetailFailedToParseJSON, err.Error())); writeErr != nil {
-			h.logger.Error("Error writing error response", "error", writeErr)
+		if err := db.First(entity).Error; err != nil {
+			h.handleFetchError(w, err, entityKey)
+			return newTransactionHandledError(err)
 		}
-		return nil, err
-	}
 
-	if err := h.preserveKeyProperties(entity, replacementEntity); err != nil {
-		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgInternalError, err.Error()); writeErr != nil {
-			h.logger.Error("Error writing error response", "error", writeErr)
+		if h.metadata.ETagProperty != nil {
+			ifMatch := r.Header.Get(HeaderIfMatch)
+			currentETag := etag.Generate(entity, h.metadata)
+
+			if !etag.Match(ifMatch, currentETag) {
+				if writeErr := response.WriteError(w, http.StatusPreconditionFailed, ErrMsgPreconditionFailed,
+					ErrDetailPreconditionFailed); writeErr != nil {
+					h.logger.Error("Error writing error response", "error", writeErr)
+				}
+				return newTransactionHandledError(errETagMismatch)
+			}
 		}
-		return nil, err
-	}
 
-	// Call BeforeUpdate hook if it exists (PUT is also an update operation)
-	if err := h.callBeforeUpdate(entity, r); err != nil {
-		if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", err.Error()); writeErr != nil {
-			h.logger.Error("Error writing error response", "error", writeErr)
+		replacementEntity := reflect.New(h.metadata.EntityType).Interface()
+		if err := json.NewDecoder(r.Body).Decode(replacementEntity); err != nil {
+			if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidRequestBody,
+				fmt.Sprintf(ErrDetailFailedToParseJSON, err.Error())); writeErr != nil {
+				h.logger.Error("Error writing error response", "error", writeErr)
+			}
+			return newTransactionHandledError(err)
 		}
-		return nil, err
-	}
 
-	if err := h.db.Model(entity).Select("*").Updates(replacementEntity).Error; err != nil {
+		if err := h.preserveKeyProperties(entity, replacementEntity); err != nil {
+			if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgInternalError, err.Error()); writeErr != nil {
+				h.logger.Error("Error writing error response", "error", writeErr)
+			}
+			return newTransactionHandledError(err)
+		}
+
+		if err := h.callBeforeUpdate(entity, r); err != nil {
+			if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", err.Error()); writeErr != nil {
+				h.logger.Error("Error writing error response", "error", writeErr)
+			}
+			return newTransactionHandledError(err)
+		}
+
+		if err := tx.Model(entity).Select("*").Updates(replacementEntity).Error; err != nil {
+			h.writeDatabaseError(w, err)
+			return newTransactionHandledError(err)
+		}
+
+		if err := h.callAfterUpdate(entity, r); err != nil {
+			h.logger.Error("AfterUpdate hook failed", "error", err)
+		}
+
+		if err := tx.First(entity).Error; err != nil {
+			h.logger.Error("Error refreshing entity for change tracking", "error", err)
+		} else {
+			changeEvents = append(changeEvents, changeEvent{entity: entity, changeType: trackchanges.ChangeTypeUpdated})
+		}
+
+		return nil
+	}); err != nil {
+		if isTransactionHandled(err) {
+			return
+		}
 		h.writeDatabaseError(w, err)
-		return nil, err
+		return
 	}
 
-	// Call AfterUpdate hook if it exists
-	if err := h.callAfterUpdate(entity, r); err != nil {
-		// Log the error but don't fail the request since the entity was already updated
-		h.logger.Error("AfterUpdate hook failed", "error", err)
+	for _, event := range changeEvents {
+		h.recordChange(event.entity, event.changeType)
 	}
 
-	return db, nil
+	db, err := h.buildKeyQuery(h.db, entityKey)
+	if err != nil {
+		h.writeDatabaseError(w, err)
+		return
+	}
+
+	h.writeUpdateResponse(w, r, pref, db)
 }
 
 // preserveKeyProperties copies key property values from source to destination

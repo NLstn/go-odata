@@ -14,6 +14,11 @@ rely on version numbers to reason about compatibility.
 - Persistent change-tracking storage backed by GORM, including a `_odata_change_log` table and
   `ServiceConfig.PersistentChangeTracking` for restart-safe delta tokens.
 - Integration tests that recreate the service from stored change history to ensure delta tokens survive restarts.
+- Regression tests covering transactional rollbacks for navigation binding failures to ensure no phantom change-tracking events are emitted.
+
+### Changed
+
+- Entity create/update/delete handlers now execute within database transactions so navigation binding errors roll back persisted rows and change-tracking events are recorded only after successful commits.
 
 ### Changed
 

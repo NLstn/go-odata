@@ -44,7 +44,7 @@ func (h *EntityHandler) handleGetStreamProperty(w http.ResponseWriter, r *http.R
 
 	// Fetch the entity
 	entity := reflect.New(h.metadata.EntityType).Interface()
-	db, err := h.buildKeyQuery(entityKey)
+	db, err := h.buildKeyQuery(h.db, entityKey)
 	if err != nil {
 		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidKey, err.Error()); writeErr != nil {
 			h.logger.Error("Error writing error response", "error", writeErr)
@@ -161,7 +161,7 @@ func (h *EntityHandler) handlePutStreamProperty(w http.ResponseWriter, r *http.R
 
 	// Fetch the entity
 	entity := reflect.New(h.metadata.EntityType).Interface()
-	db, err := h.buildKeyQuery(entityKey)
+	db, err := h.buildKeyQuery(h.db, entityKey)
 	if err != nil {
 		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidKey, err.Error()); writeErr != nil {
 			h.logger.Error("Error writing error response", "error", writeErr)
