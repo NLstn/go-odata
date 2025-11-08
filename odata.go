@@ -209,6 +209,13 @@ func (s *Service) RegisterEntity(entity interface{}) error {
 		return fmt.Errorf("failed to analyze entity: %w", err)
 	}
 
+	if _, exists := s.entities[entityMetadata.EntitySetName]; exists {
+		return fmt.Errorf("entity set '%s' is already registered", entityMetadata.EntitySetName)
+	}
+	if _, exists := s.handlers[entityMetadata.EntitySetName]; exists {
+		return fmt.Errorf("entity handler for '%s' is already registered", entityMetadata.EntitySetName)
+	}
+
 	// Store the metadata
 	s.entities[entityMetadata.EntitySetName] = entityMetadata
 
@@ -252,6 +259,13 @@ func (s *Service) RegisterSingleton(entity interface{}, singletonName string) er
 	singletonMetadata, err := metadata.AnalyzeSingleton(entity, singletonName)
 	if err != nil {
 		return fmt.Errorf("failed to analyze singleton: %w", err)
+	}
+
+	if _, exists := s.entities[singletonName]; exists {
+		return fmt.Errorf("singleton '%s' is already registered", singletonName)
+	}
+	if _, exists := s.handlers[singletonName]; exists {
+		return fmt.Errorf("singleton handler for '%s' is already registered", singletonName)
 	}
 
 	// Store the metadata using singleton name as key
