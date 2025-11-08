@@ -29,6 +29,11 @@ rely on version numbers to reason about compatibility.
 
 - Navigation property pagination now emits `$skiptoken` next links and documents the ordering requirements for deterministic paging.
 
+### Fixed
+
+- Preserve entity handler configuration when executing transactional batch requests so navigation property
+  handling and change tracking continue to work inside changesets.
+
 ## [v0.1.0] - 2025-11-07 _(planned)_
 
 ### Added

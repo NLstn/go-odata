@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -19,6 +20,19 @@ type BatchIntegrationProduct struct {
 	Price       float64 `json:"Price"`
 	Category    string  `json:"Category"`
 	Description string  `json:"Description"`
+}
+
+type BatchIntegrationCustomer struct {
+	ID     uint                    `json:"ID" gorm:"primaryKey" odata:"key"`
+	Name   string                  `json:"Name"`
+	Orders []BatchIntegrationOrder `json:"Orders" gorm:"foreignKey:CustomerID;references:ID"`
+}
+
+type BatchIntegrationOrder struct {
+	ID         uint                      `json:"ID" gorm:"primaryKey" odata:"key"`
+	Amount     float64                   `json:"Amount"`
+	CustomerID uint                      `json:"CustomerID"`
+	Customer   *BatchIntegrationCustomer `json:"Customer" gorm:"foreignKey:CustomerID;references:ID"`
 }
 
 func setupBatchIntegrationTest(t *testing.T) (*odata.Service, *gorm.DB) {
@@ -311,6 +325,130 @@ Accept: application/json
 	}
 	if !strings.Contains(responseBody, "HTTP/1.1 201") {
 		t.Error("Response does not contain POST success (201)")
+	}
+}
+
+func TestBatchIntegration_ChangesetWithNavigationAndChangeTracking(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("Failed to connect to database: %v", err)
+	}
+
+	if err := db.AutoMigrate(&BatchIntegrationCustomer{}, &BatchIntegrationOrder{}); err != nil {
+		t.Fatalf("Failed to migrate database: %v", err)
+	}
+
+	service := odata.NewService(db)
+	if err := service.RegisterEntity(&BatchIntegrationCustomer{}); err != nil {
+		t.Fatalf("Failed to register customer entity: %v", err)
+	}
+	if err := service.RegisterEntity(&BatchIntegrationOrder{}); err != nil {
+		t.Fatalf("Failed to register order entity: %v", err)
+	}
+	if err := service.EnableChangeTracking("BatchIntegrationOrders"); err != nil {
+		t.Fatalf("Failed to enable change tracking: %v", err)
+	}
+
+	customer := BatchIntegrationCustomer{ID: 1, Name: "Contoso"}
+	if err := db.Create(&customer).Error; err != nil {
+		t.Fatalf("Failed to seed customer: %v", err)
+	}
+
+	initialReq := httptest.NewRequest(http.MethodGet, "/BatchIntegrationOrders", nil)
+	initialReq.Header.Set("Prefer", "odata.track-changes")
+	initialRes := httptest.NewRecorder()
+	service.ServeHTTP(initialRes, initialReq)
+	if initialRes.Code != http.StatusOK {
+		t.Fatalf("Initial delta request failed: %d", initialRes.Code)
+	}
+	initialToken := extractDeltaToken(t, initialRes.Body.Bytes())
+
+	batchBoundary := "batch_nav_ct"
+	changesetBoundary := "changeset_nav_ct"
+	body := fmt.Sprintf(`--%s
+Content-Type: multipart/mixed; boundary=%s
+
+--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+POST /BatchIntegrationOrders HTTP/1.1
+Host: localhost
+Content-Type: application/json
+
+{"ID":1,"Amount":42.5}
+
+--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+POST /BatchIntegrationCustomers(1)/Orders/$ref HTTP/1.1
+Host: localhost
+Content-Type: application/json
+
+{"@odata.id":"/BatchIntegrationOrders(1)"}
+
+--%s--
+
+--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+GET /BatchIntegrationOrders?$expand=Customer HTTP/1.1
+Host: localhost
+Accept: application/json
+
+ 
+--%s--
+`, batchBoundary, changesetBoundary, changesetBoundary, changesetBoundary, changesetBoundary, batchBoundary, batchBoundary)
+
+	req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+	req.Header.Set("Content-Type", fmt.Sprintf("multipart/mixed; boundary=%s", batchBoundary))
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Batch request failed: status=%d body=%s", w.Code, w.Body.String())
+	}
+
+	responseBody := w.Body.String()
+	if strings.Count(responseBody, "HTTP/1.1 201") != 1 {
+		t.Fatalf("Expected one creation response, got body: %s", responseBody)
+	}
+	if strings.Count(responseBody, "HTTP/1.1 204") != 1 {
+		t.Fatalf("Expected one navigation reference response, got body: %s", responseBody)
+	}
+	if !strings.Contains(responseBody, "HTTP/1.1 200") {
+		t.Fatalf("Expected final GET response, got body: %s", responseBody)
+	}
+	if !strings.Contains(responseBody, "Contoso") || !strings.Contains(responseBody, "\"Customer\"") {
+		t.Fatalf("Expanded customer information missing from response: %s", responseBody)
+	}
+
+	var order BatchIntegrationOrder
+	if err := db.First(&order, 1).Error; err != nil {
+		t.Fatalf("Failed to load created order: %v", err)
+	}
+	if order.CustomerID != 1 {
+		t.Fatalf("Expected order to be associated with customer 1, got %d", order.CustomerID)
+	}
+
+	deltaReq := httptest.NewRequest(http.MethodGet,
+		"/BatchIntegrationOrders?$deltatoken="+url.QueryEscape(initialToken), nil)
+	deltaRes := httptest.NewRecorder()
+	service.ServeHTTP(deltaRes, deltaReq)
+	if deltaRes.Code != http.StatusOK {
+		t.Fatalf("Delta request failed: %d", deltaRes.Code)
+	}
+
+	deltaPayload := decodeJSON(t, deltaRes.Body.Bytes())
+	entries := valueEntries(t, deltaPayload)
+	if len(entries) != 1 {
+		t.Fatalf("Expected 1 change entry, got %d", len(entries))
+	}
+	if id, ok := entries[0]["ID"].(float64); !ok || uint(id) != order.ID {
+		t.Fatalf("Expected change entry for order %d, got %v", order.ID, entries[0])
 	}
 }
 

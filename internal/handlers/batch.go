@@ -283,30 +283,223 @@ func (h *BatchHandler) executeRequestInTransaction(req *batchRequest, tx *gorm.D
 	// Create temporary handlers that use the transaction
 	txHandlers := make(map[string]*EntityHandler)
 	for name, handler := range h.handlers {
-		txHandlers[name] = NewEntityHandler(tx, handler.metadata, handler.logger)
+		txHandler := NewEntityHandler(tx, handler.metadata, handler.logger)
+		txHandler.SetNamespace(handler.namespace)
+		txHandler.SetDeltaTracker(handler.tracker)
+		if handler.entitiesMetadata != nil {
+			txHandler.SetEntitiesMetadata(handler.entitiesMetadata)
+		}
+		txHandlers[name] = txHandler
 	}
 
 	// Create a service handler for the transaction
+	getKeyString := func(components *response.ODataURLComponents) string {
+		if components == nil {
+			return ""
+		}
+		if components.EntityKey != "" {
+			return components.EntityKey
+		}
+		if len(components.EntityKeyMap) == 0 {
+			return ""
+		}
+
+		parts := make([]string, 0, len(components.EntityKeyMap))
+		for key, value := range components.EntityKeyMap {
+			isNumeric := true
+			for _, ch := range value {
+				if ch < '0' || ch > '9' {
+					isNumeric = false
+					break
+				}
+			}
+
+			if isNumeric {
+				parts = append(parts, fmt.Sprintf("%s=%s", key, value))
+			} else {
+				parts = append(parts, fmt.Sprintf("%s='%s'", key, value))
+			}
+		}
+
+		return strings.Join(parts, ",")
+	}
+
+	handlePropertyRequest := func(w http.ResponseWriter, r *http.Request, handler *EntityHandler,
+		components *response.ODataURLComponents, key string) {
+		property := components.NavigationProperty
+		if property == "" {
+			if err := response.WriteError(w, http.StatusNotFound, "Property not found",
+				"Requested property was not found on the target entity"); err != nil {
+				h.logger.Error("Error writing error response", "error", err)
+			}
+			return
+		}
+
+		if components.IsCount {
+			handler.HandleNavigationPropertyCount(w, r, key, property)
+			return
+		}
+
+		if handler.IsNavigationProperty(property) {
+			if components.IsValue {
+				if err := response.WriteError(w, http.StatusBadRequest, "Invalid request",
+					"$value is not supported on navigation properties"); err != nil {
+					h.logger.Error("Error writing error response", "error", err)
+				}
+				return
+			}
+			handler.HandleNavigationProperty(w, r, key, property, components.IsRef)
+			return
+		}
+
+		if handler.IsStreamProperty(property) {
+			if components.IsRef {
+				if err := response.WriteError(w, http.StatusBadRequest, "Invalid request",
+					"$ref is not supported on stream properties"); err != nil {
+					h.logger.Error("Error writing error response", "error", err)
+				}
+				return
+			}
+			handler.HandleStreamProperty(w, r, key, property, components.IsValue)
+			return
+		}
+
+		if handler.IsStructuralProperty(property) {
+			handler.HandleStructuralProperty(w, r, key, property, components.IsValue)
+			return
+		}
+
+		if handler.IsComplexTypeProperty(property) {
+			segments := components.PropertySegments
+			if len(segments) == 0 {
+				segments = []string{property}
+			}
+			handler.HandleComplexTypeProperty(w, r, key, segments, components.IsValue)
+			return
+		}
+
+		if err := response.WriteError(w, http.StatusNotFound, "Property not found",
+			fmt.Sprintf("'%s' is not a valid property for %s", property, components.EntitySet)); err != nil {
+			h.logger.Error("Error writing error response", "error", err)
+		}
+	}
+
 	serviceHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := strings.TrimPrefix(r.URL.Path, "/")
+		if path == "" {
+			if err := response.WriteError(w, http.StatusNotFound, "Resource not found",
+				"Requested resource is not available in transactional batch requests"); err != nil {
+				h.logger.Error("Error writing error response", "error", err)
+			}
+			return
+		}
 
-		// Find the entity set
-		for entitySet, handler := range txHandlers {
-			if strings.HasPrefix(path, entitySet) {
-				if strings.Contains(path, "(") {
-					// Entity request
-					keyStart := strings.Index(path, "(")
-					keyEnd := strings.Index(path, ")")
-					if keyStart > 0 && keyEnd > keyStart {
-						key := path[keyStart+1 : keyEnd]
-						handler.HandleEntity(w, r, key)
-						return
-					}
-				} else {
-					// Collection request
-					handler.HandleCollection(w, r)
-					return
+		switch path {
+		case "$metadata":
+			if err := response.WriteError(w, http.StatusNotFound, "Resource not found",
+				"Metadata is not accessible inside transactional batch requests"); err != nil {
+				h.logger.Error("Error writing error response", "error", err)
+			}
+			return
+		case "$batch":
+			if err := response.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
+				"Nested $batch requests are not supported within transactional batch requests"); err != nil {
+				h.logger.Error("Error writing error response", "error", err)
+			}
+			return
+		}
+
+		components, err := response.ParseODataURLComponents(path)
+		if err != nil {
+			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid URL", err.Error()); writeErr != nil {
+				h.logger.Error("Error writing error response", "error", writeErr)
+			}
+			return
+		}
+
+		handler, exists := txHandlers[components.EntitySet]
+		if !exists {
+			if writeErr := response.WriteError(w, http.StatusNotFound, "Entity set not found",
+				fmt.Sprintf("Entity set '%s' is not registered", components.EntitySet)); writeErr != nil {
+				h.logger.Error("Error writing error response", "error", writeErr)
+			}
+			return
+		}
+
+		if components.TypeCast != "" {
+			parts := strings.Split(components.TypeCast, ".")
+			if len(parts) < 2 {
+				if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid type cast",
+					fmt.Sprintf("Type cast '%s' is not in the correct format (Namespace.TypeName)", components.TypeCast)); writeErr != nil {
+					h.logger.Error("Error writing error response", "error", writeErr)
 				}
+				return
+			}
+
+			typeName := parts[len(parts)-1]
+			ctx := WithTypeCast(r.Context(), typeName)
+			r = r.WithContext(ctx)
+		}
+
+		hasKey := components.EntityKey != "" || len(components.EntityKeyMap) > 0
+		keyString := getKeyString(components)
+		isSingleton := handler.IsSingleton()
+
+		switch {
+		case components.IsCount:
+			if hasKey && components.NavigationProperty != "" {
+				handler.HandleNavigationPropertyCount(w, r, keyString, components.NavigationProperty)
+				return
+			}
+			if !hasKey && components.NavigationProperty == "" {
+				handler.HandleCount(w, r)
+				return
+			}
+			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid request",
+				"$count is not supported on individual entities. Use $count on collections or navigation properties."); writeErr != nil {
+				h.logger.Error("Error writing error response", "error", writeErr)
+			}
+		case components.IsRef:
+			if hasKey && components.NavigationProperty == "" {
+				handler.HandleEntityRef(w, r, keyString)
+				return
+			}
+			if !hasKey && components.NavigationProperty == "" {
+				handler.HandleCollectionRef(w, r)
+				return
+			}
+			handlePropertyRequest(w, r, handler, components, keyString)
+		case isSingleton:
+			if components.NavigationProperty != "" {
+				handlePropertyRequest(w, r, handler, components, keyString)
+			} else {
+				handler.HandleSingleton(w, r)
+			}
+		case !hasKey:
+			if components.IsValue {
+				if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid request",
+					"$value is not supported on entity collections. Use $value on individual properties: EntitySet(key)/PropertyName/$value"); writeErr != nil {
+					h.logger.Error("Error writing error response", "error", writeErr)
+				}
+				return
+			}
+			if components.NavigationProperty != "" {
+				if writeErr := response.WriteError(w, http.StatusNotFound, "Property or operation not found",
+					fmt.Sprintf("'%s' is not a valid property, action, or function for %s", components.NavigationProperty, components.EntitySet)); writeErr != nil {
+					h.logger.Error("Error writing error response", "error", writeErr)
+				}
+				return
+			}
+			handler.HandleCollection(w, r)
+		default:
+			if components.NavigationProperty != "" {
+				handlePropertyRequest(w, r, handler, components, keyString)
+				return
+			}
+			if components.IsValue {
+				handler.HandleMediaEntityValue(w, r, keyString)
+			} else {
+				handler.HandleEntity(w, r, keyString)
 			}
 		}
 	})
