@@ -11,30 +11,11 @@ rely on version numbers to reason about compatibility.
 
 ### Added
 
-- Persistent change-tracking storage backed by GORM, including a `_odata_change_log` table and
-  `ServiceConfig.PersistentChangeTracking` for restart-safe delta tokens.
-- Integration tests that recreate the service from stored change history to ensure delta tokens survive restarts.
-- Regression tests covering transactional rollbacks for navigation binding failures to ensure no phantom change-tracking events are emitted.
-
 ### Changed
-
-- Entity create/update/delete handlers now execute within database transactions so navigation binding errors roll back persisted rows and change-tracking events are recorded only after successful commits.
-
-### Changed
-
-- `Service.RegisterEntity` and `Service.RegisterSingleton` now return descriptive errors when duplicate names are registered
-  instead of overwriting existing metadata.
 
 ### Fixed
 
-- Navigation property pagination now emits `$skiptoken` next links and documents the ordering requirements for deterministic paging.
-
-### Fixed
-
-- Preserve entity handler configuration when executing transactional batch requests so navigation property
-  handling and change tracking continue to work inside changesets.
-
-## [v0.1.0] - 2025-11-07 _(planned)_
+## [v0.4.0] - 2025-11-08
 
 ### Added
 
@@ -44,15 +25,31 @@ rely on version numbers to reason about compatibility.
   `$orderby`, `$top`, `$skip`, `$count`, `$search`, and `$apply` aggregations.
 - Change-tracking infrastructure with `Service.EnableChangeTracking` and
   delta-token responses for clients that need incremental synchronization.
+- Persistent change-tracking storage backed by GORM, including a `_odata_change_log` table and
+  `ServiceConfig.PersistentChangeTracking` for restart-safe delta tokens.
 - Asynchronous request processing via `Service.EnableAsyncProcessing` with job
   monitoring endpoints for long-running operations.
 - Hooks, lifecycle callbacks, and custom action/function registration so
   applications can inject business logic and expose bespoke operations.
 - Geospatial query support that integrates with GORM-backed entity models.
+- Integration tests that recreate the service from stored change history to ensure delta tokens survive restarts.
+- Regression tests covering transactional rollbacks for navigation binding failures to ensure no phantom change-tracking events are emitted.
+
+### Changed
+
+- Entity create/update/delete handlers now execute within database transactions so navigation binding errors roll back persisted rows and change-tracking events are recorded only after successful commits.
+- `Service.RegisterEntity` and `Service.RegisterSingleton` now return descriptive errors when duplicate names are registered
+  instead of overwriting existing metadata.
+
+### Fixed
+
+- Navigation property pagination now emits `$skiptoken` next links and documents the ordering requirements for deterministic paging.
+- Preserve entity handler configuration when executing transactional batch requests so navigation property
+  handling and change tracking continue to work inside changesets.
 
 ### Notes
 
-- This will be the first published tag for the repository. Subsequent releases
+- This is the first documented release in the changelog. Subsequent releases
   will increment the version following semantic versioning rules and will be
   recorded in this changelog alongside Git tags.
 
