@@ -3,6 +3,7 @@ package odata_test
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -370,6 +371,366 @@ func TestODataBind_NonExistentNavigationProperty(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("Expected status 400 for non-existent navigation property, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// Test POST with @odata.bind - Collection-valued navigation property
+func TestPostWithODataBind_CollectionValuedRelativeURL(t *testing.T) {
+	service, db := setupBindTestService(t)
+
+	// Create order items to bind to
+	orderItems := []BindTestOrderItem{
+		{ProductID: 1, Quantity: 2},
+		{ProductID: 2, Quantity: 3},
+		{ProductID: 3, Quantity: 1},
+	}
+	db.Create(&orderItems)
+
+	// Create a new order with items binding using relative URLs
+	newOrder := map[string]interface{}{
+		"OrderDate":        "2024-01-15",
+		"TotalPrice":       129.99,
+		"Items@odata.bind": []interface{}{"BindTestOrderItems(1)", "BindTestOrderItems(2)"},
+	}
+
+	body, _ := json.Marshal(newOrder)
+	req := httptest.NewRequest(http.MethodPost, "/BindTestOrders", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Errorf("Expected status 201, got %d: %s", w.Code, w.Body.String())
+		return
+	}
+
+	// Verify the order was created with the correct items
+	var order BindTestOrder
+	if err := db.Preload("Items").Where("order_date = ?", "2024-01-15").First(&order).Error; err != nil {
+		t.Fatalf("Failed to fetch created order: %v", err)
+	}
+
+	if len(order.Items) != 2 {
+		t.Errorf("Expected 2 items, got %d", len(order.Items))
+	}
+
+	// Verify the items are the correct ones
+	foundItems := make(map[int]bool)
+	for _, item := range order.Items {
+		foundItems[item.ID] = true
+	}
+	if !foundItems[1] || !foundItems[2] {
+		t.Errorf("Expected items 1 and 2, got items: %v", order.Items)
+	}
+}
+
+// Test POST with @odata.bind - Collection-valued with absolute URLs
+func TestPostWithODataBind_CollectionValuedAbsoluteURL(t *testing.T) {
+	service, db := setupBindTestService(t)
+
+	// Create order items to bind to
+	orderItems := []BindTestOrderItem{
+		{ProductID: 1, Quantity: 2},
+		{ProductID: 2, Quantity: 3},
+	}
+	db.Create(&orderItems)
+
+	// Create a new order with items binding using absolute URLs
+	newOrder := map[string]interface{}{
+		"OrderDate":  "2024-01-16",
+		"TotalPrice": 89.99,
+		"Items@odata.bind": []interface{}{
+			"http://localhost:8080/BindTestOrderItems(1)",
+			"http://localhost:8080/BindTestOrderItems(2)",
+		},
+	}
+
+	body, _ := json.Marshal(newOrder)
+	req := httptest.NewRequest(http.MethodPost, "/BindTestOrders", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Errorf("Expected status 201, got %d: %s", w.Code, w.Body.String())
+		return
+	}
+
+	// Verify the order was created with the correct items
+	var order BindTestOrder
+	if err := db.Preload("Items").Where("order_date = ?", "2024-01-16").First(&order).Error; err != nil {
+		t.Fatalf("Failed to fetch created order: %v", err)
+	}
+
+	if len(order.Items) != 2 {
+		t.Errorf("Expected 2 items, got %d", len(order.Items))
+	}
+}
+
+// Test POST with @odata.bind - Empty collection clears relationships
+func TestPostWithODataBind_CollectionValuedEmpty(t *testing.T) {
+	service, db := setupBindTestService(t)
+
+	// Create a new order with empty items array
+	newOrder := map[string]interface{}{
+		"OrderDate":        "2024-01-17",
+		"TotalPrice":       0.0,
+		"Items@odata.bind": []interface{}{},
+	}
+
+	body, _ := json.Marshal(newOrder)
+	req := httptest.NewRequest(http.MethodPost, "/BindTestOrders", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Errorf("Expected status 201, got %d: %s", w.Code, w.Body.String())
+		return
+	}
+
+	// Verify the order was created with no items
+	var order BindTestOrder
+	if err := db.Preload("Items").Where("order_date = ?", "2024-01-17").First(&order).Error; err != nil {
+		t.Fatalf("Failed to fetch created order: %v", err)
+	}
+
+	if len(order.Items) != 0 {
+		t.Errorf("Expected 0 items, got %d", len(order.Items))
+	}
+}
+
+// Test POST with @odata.bind - Invalid collection reference
+func TestPostWithODataBind_CollectionValuedInvalidReference(t *testing.T) {
+	service, _ := setupBindTestService(t)
+
+	// Try to create an order with a non-existent item
+	newOrder := map[string]interface{}{
+		"OrderDate":        "2024-01-18",
+		"TotalPrice":       99.99,
+		"Items@odata.bind": []interface{}{"BindTestOrderItems(999)"},
+	}
+
+	body, _ := json.Marshal(newOrder)
+	req := httptest.NewRequest(http.MethodPost, "/BindTestOrders", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// Test POST with @odata.bind - Mixed entity sets in collection
+func TestPostWithODataBind_CollectionValuedMixedEntitySets(t *testing.T) {
+	service, _ := setupBindTestService(t)
+
+	// Try to create an order with items from different entity sets
+	newOrder := map[string]interface{}{
+		"OrderDate":  "2024-01-19",
+		"TotalPrice": 99.99,
+		"Items@odata.bind": []interface{}{
+			"BindTestOrderItems(1)",
+			"BindTestProducts(1)", // Wrong entity set
+		},
+	}
+
+	body, _ := json.Marshal(newOrder)
+	req := httptest.NewRequest(http.MethodPost, "/BindTestOrders", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// Test POST with @odata.bind - Collection with invalid type (not array)
+func TestPostWithODataBind_CollectionValuedInvalidType(t *testing.T) {
+	service, _ := setupBindTestService(t)
+
+	// Try to create an order with items binding as string instead of array
+	newOrder := map[string]interface{}{
+		"OrderDate":        "2024-01-20",
+		"TotalPrice":       99.99,
+		"Items@odata.bind": "BindTestOrderItems(1)", // Should be array
+	}
+
+	body, _ := json.Marshal(newOrder)
+	req := httptest.NewRequest(http.MethodPost, "/BindTestOrders", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// Test PATCH with @odata.bind - Replace collection-valued navigation property
+func TestPatchWithODataBind_ReplaceCollection(t *testing.T) {
+	service, db := setupBindTestService(t)
+
+	// Create order items
+	orderItems := []BindTestOrderItem{
+		{ProductID: 1, Quantity: 2},
+		{ProductID: 2, Quantity: 3},
+		{ProductID: 3, Quantity: 1},
+	}
+	db.Create(&orderItems)
+
+	// Create an order with initial items
+	order := BindTestOrder{
+		OrderDate:  "2024-01-21",
+		TotalPrice: 99.99,
+	}
+	db.Create(&order)
+	// Add initial items
+	db.Model(&order).Association("Items").Append([]BindTestOrderItem{orderItems[0], orderItems[1]})
+
+	// Update the order to replace items with a different set
+	updateData := map[string]interface{}{
+		"Items@odata.bind": []interface{}{"BindTestOrderItems(2)", "BindTestOrderItems(3)"},
+	}
+
+	body, _ := json.Marshal(updateData)
+	req := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/BindTestOrders(%d)", order.ID), bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNoContent && w.Code != http.StatusOK {
+		t.Errorf("Expected status 204 or 200, got %d: %s", w.Code, w.Body.String())
+		return
+	}
+
+	// Verify the order's items were replaced
+	var updatedOrder BindTestOrder
+	if err := db.Preload("Items").First(&updatedOrder, order.ID).Error; err != nil {
+		t.Fatalf("Failed to fetch updated order: %v", err)
+	}
+
+	if len(updatedOrder.Items) != 2 {
+		t.Errorf("Expected 2 items, got %d", len(updatedOrder.Items))
+	}
+
+	// Verify we have items 2 and 3, not 1 and 2
+	foundItems := make(map[int]bool)
+	for _, item := range updatedOrder.Items {
+		foundItems[item.ID] = true
+	}
+	if !foundItems[2] || !foundItems[3] {
+		t.Errorf("Expected items 2 and 3, got items: %v", updatedOrder.Items)
+	}
+	if foundItems[1] {
+		t.Errorf("Item 1 should have been removed but is still present")
+	}
+}
+
+// Test PATCH with @odata.bind - Clear collection with empty array
+func TestPatchWithODataBind_ClearCollection(t *testing.T) {
+	service, db := setupBindTestService(t)
+
+	// Create order items
+	orderItems := []BindTestOrderItem{
+		{ProductID: 1, Quantity: 2},
+		{ProductID: 2, Quantity: 3},
+	}
+	db.Create(&orderItems)
+
+	// Create an order with initial items
+	order := BindTestOrder{
+		OrderDate:  "2024-01-22",
+		TotalPrice: 99.99,
+	}
+	db.Create(&order)
+	db.Model(&order).Association("Items").Append(orderItems)
+
+	// Update the order to clear all items
+	updateData := map[string]interface{}{
+		"Items@odata.bind": []interface{}{},
+	}
+
+	body, _ := json.Marshal(updateData)
+	req := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/BindTestOrders(%d)", order.ID), bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNoContent && w.Code != http.StatusOK {
+		t.Errorf("Expected status 204 or 200, got %d: %s", w.Code, w.Body.String())
+		return
+	}
+
+	// Verify the order's items were cleared
+	var updatedOrder BindTestOrder
+	if err := db.Preload("Items").First(&updatedOrder, order.ID).Error; err != nil {
+		t.Fatalf("Failed to fetch updated order: %v", err)
+	}
+
+	if len(updatedOrder.Items) != 0 {
+		t.Errorf("Expected 0 items after clearing, got %d", len(updatedOrder.Items))
+	}
+}
+
+// Test PATCH with @odata.bind - Mixed update with regular properties and collection binding
+func TestPatchWithODataBind_MixedUpdateWithCollection(t *testing.T) {
+	service, db := setupBindTestService(t)
+
+	// Create order items
+	orderItems := []BindTestOrderItem{
+		{ProductID: 1, Quantity: 2},
+		{ProductID: 2, Quantity: 3},
+	}
+	db.Create(&orderItems)
+
+	// Create an order
+	order := BindTestOrder{
+		OrderDate:  "2024-01-23",
+		TotalPrice: 50.00,
+	}
+	db.Create(&order)
+
+	// Update both regular properties and collection navigation property
+	updateData := map[string]interface{}{
+		"TotalPrice":       199.99,
+		"Items@odata.bind": []interface{}{"BindTestOrderItems(1)", "BindTestOrderItems(2)"},
+	}
+
+	body, _ := json.Marshal(updateData)
+	req := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/BindTestOrders(%d)", order.ID), bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNoContent && w.Code != http.StatusOK {
+		t.Errorf("Expected status 204 or 200, got %d: %s", w.Code, w.Body.String())
+		return
+	}
+
+	// Verify both updates were applied
+	var updatedOrder BindTestOrder
+	if err := db.Preload("Items").First(&updatedOrder, order.ID).Error; err != nil {
+		t.Fatalf("Failed to fetch updated order: %v", err)
+	}
+
+	if updatedOrder.TotalPrice != 199.99 {
+		t.Errorf("Expected TotalPrice to be 199.99, got %f", updatedOrder.TotalPrice)
+	}
+
+	if len(updatedOrder.Items) != 2 {
+		t.Errorf("Expected 2 items, got %d", len(updatedOrder.Items))
 	}
 }
 

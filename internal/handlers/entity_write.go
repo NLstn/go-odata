@@ -141,7 +141,8 @@ func (h *EntityHandler) fetchAndUpdateEntity(w http.ResponseWriter, r *http.Requ
 
 	// Process @odata.bind annotations to update navigation property relationships
 	// This also adds the foreign key values to updateData
-	if err := h.processODataBindAnnotationsForUpdate(entity, updateData, h.db); err != nil {
+	pendingBindings, err := h.processODataBindAnnotationsForUpdate(entity, updateData, h.db)
+	if err != nil {
 		if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid @odata.bind annotation", err.Error()); writeErr != nil {
 			h.logger.Error("Error writing error response", "error", writeErr)
 		}
@@ -178,6 +179,14 @@ func (h *EntityHandler) fetchAndUpdateEntity(w http.ResponseWriter, r *http.Requ
 
 	if err := h.db.Model(entity).Updates(updateData).Error; err != nil {
 		h.writeDatabaseError(w, err)
+		return nil, nil, err
+	}
+
+	// Apply pending collection-valued navigation property bindings after entity is updated
+	if err := h.applyPendingCollectionBindings(entity, pendingBindings); err != nil {
+		if writeErr := response.WriteError(w, http.StatusInternalServerError, "Failed to bind navigation properties", err.Error()); writeErr != nil {
+			h.logger.Error("Error writing error response", "error", writeErr)
+		}
 		return nil, nil, err
 	}
 
