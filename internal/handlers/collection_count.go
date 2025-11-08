@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"reflect"
 
 	"github.com/nlstn/go-odata/internal/query"
@@ -8,8 +9,8 @@ import (
 )
 
 // countEntities applies query scopes and filters to return the total number of matching entities.
-func (h *EntityHandler) countEntities(queryOptions *query.QueryOptions, scopes []func(*gorm.DB) *gorm.DB) (int64, error) {
-	countDB := h.db.Model(reflect.New(h.metadata.EntityType).Interface())
+func (h *EntityHandler) countEntities(ctx context.Context, queryOptions *query.QueryOptions, scopes []func(*gorm.DB) *gorm.DB) (int64, error) {
+	countDB := h.db.WithContext(ctx).Model(reflect.New(h.metadata.EntityType).Interface())
 	if len(scopes) > 0 {
 		countDB = countDB.Scopes(scopes...)
 	}

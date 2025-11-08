@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -13,10 +14,10 @@ import (
 )
 
 // fetchEntityByKey fetches an entity by its key with optional expand
-func (h *EntityHandler) fetchEntityByKey(entityKey string, queryOptions *query.QueryOptions, scopes []func(*gorm.DB) *gorm.DB) (interface{}, error) {
+func (h *EntityHandler) fetchEntityByKey(ctx context.Context, entityKey string, queryOptions *query.QueryOptions, scopes []func(*gorm.DB) *gorm.DB) (interface{}, error) {
 	result := reflect.New(h.metadata.EntityType).Interface()
 
-	db, err := h.buildKeyQuery(h.db, entityKey)
+	db, err := h.buildKeyQuery(h.db.WithContext(ctx), entityKey)
 	if err != nil {
 		return nil, err
 	}

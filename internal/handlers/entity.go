@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"reflect"
@@ -104,7 +105,7 @@ func (h *EntityHandler) IsSingleton() bool {
 func (h *EntityHandler) FetchEntity(entityKey string) (interface{}, error) {
 	// Use empty query options since we just need to verify entity exists
 	queryOptions := &query.QueryOptions{}
-	return h.fetchEntityByKey(entityKey, queryOptions, nil)
+	return h.fetchEntityByKey(context.Background(), entityKey, queryOptions, nil)
 }
 
 // IsNotFoundError checks if an error is a "not found" error

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"reflect"
@@ -33,13 +34,14 @@ type PendingCollectionBinding struct {
 //	Collection-valued: "Orders@odata.bind": ["Orders(1)", "Orders(2)"]
 //
 // Returns a slice of pending collection bindings that must be applied after the entity is saved.
-func (h *EntityHandler) processODataBindAnnotations(entity interface{}, requestData map[string]interface{}, db *gorm.DB) ([]PendingCollectionBinding, error) {
+func (h *EntityHandler) processODataBindAnnotations(ctx context.Context, entity interface{}, requestData map[string]interface{}, db *gorm.DB) ([]PendingCollectionBinding, error) {
 	entityValue := reflect.ValueOf(entity)
 	if entityValue.Kind() == reflect.Ptr {
 		entityValue = entityValue.Elem()
 	}
 
 	var pendingBindings []PendingCollectionBinding
+	ctxDB := db.WithContext(ctx)
 
 	// Iterate through all properties to find @odata.bind annotations
 	for key, value := range requestData {
@@ -60,7 +62,7 @@ func (h *EntityHandler) processODataBindAnnotations(entity interface{}, requestD
 		// Process based on whether it's a collection or single-valued navigation property
 		if navProp.NavigationIsArray {
 			// Collection-valued navigation property
-			targetEntities, err := h.bindCollectionNavigationProperty(entityValue, navProp, value, db)
+			targetEntities, err := h.bindCollectionNavigationProperty(ctx, entityValue, navProp, value, ctxDB)
 			if err != nil {
 				return nil, fmt.Errorf("failed to bind collection navigation property '%s': %w", navPropName, err)
 			}
@@ -72,7 +74,7 @@ func (h *EntityHandler) processODataBindAnnotations(entity interface{}, requestD
 			})
 		} else {
 			// Single-valued navigation property
-			if err := h.bindSingleNavigationProperty(entityValue, navProp, value, db); err != nil {
+			if err := h.bindSingleNavigationProperty(ctx, entityValue, navProp, value, ctxDB); err != nil {
 				return nil, fmt.Errorf("failed to bind single navigation property '%s': %w", navPropName, err)
 			}
 		}
@@ -84,13 +86,14 @@ func (h *EntityHandler) processODataBindAnnotations(entity interface{}, requestD
 // processODataBindAnnotationsForUpdate is similar to processODataBindAnnotations but also
 // adds the foreign key values to the updateData map so they get persisted via Updates()
 // Returns a slice of pending collection bindings that must be applied after the entity is saved.
-func (h *EntityHandler) processODataBindAnnotationsForUpdate(entity interface{}, requestData map[string]interface{}, db *gorm.DB) ([]PendingCollectionBinding, error) {
+func (h *EntityHandler) processODataBindAnnotationsForUpdate(ctx context.Context, entity interface{}, requestData map[string]interface{}, db *gorm.DB) ([]PendingCollectionBinding, error) {
 	entityValue := reflect.ValueOf(entity)
 	if entityValue.Kind() == reflect.Ptr {
 		entityValue = entityValue.Elem()
 	}
 
 	var pendingBindings []PendingCollectionBinding
+	ctxDB := db.WithContext(ctx)
 
 	// Iterate through all properties to find @odata.bind annotations
 	for key, value := range requestData {
@@ -111,7 +114,7 @@ func (h *EntityHandler) processODataBindAnnotationsForUpdate(entity interface{},
 		// Process based on whether it's a collection or single-valued navigation property
 		if navProp.NavigationIsArray {
 			// Collection-valued navigation property
-			targetEntities, err := h.bindCollectionNavigationProperty(entityValue, navProp, value, db)
+			targetEntities, err := h.bindCollectionNavigationProperty(ctx, entityValue, navProp, value, ctxDB)
 			if err != nil {
 				return nil, fmt.Errorf("failed to bind collection navigation property '%s': %w", navPropName, err)
 			}
@@ -123,7 +126,7 @@ func (h *EntityHandler) processODataBindAnnotationsForUpdate(entity interface{},
 			})
 		} else {
 			// Single-valued navigation property
-			foreignKeyValues, err := h.bindSingleNavigationPropertyForUpdate(entityValue, navProp, value, db)
+			foreignKeyValues, err := h.bindSingleNavigationPropertyForUpdate(ctx, entityValue, navProp, value, ctxDB)
 			if err != nil {
 				return nil, fmt.Errorf("failed to bind single navigation property '%s': %w", navPropName, err)
 			}
@@ -138,7 +141,7 @@ func (h *EntityHandler) processODataBindAnnotationsForUpdate(entity interface{},
 }
 
 // bindSingleNavigationProperty binds a single-valued navigation property
-func (h *EntityHandler) bindSingleNavigationProperty(entityValue reflect.Value, navProp *metadata.PropertyMetadata, value interface{}, db *gorm.DB) error {
+func (h *EntityHandler) bindSingleNavigationProperty(ctx context.Context, entityValue reflect.Value, navProp *metadata.PropertyMetadata, value interface{}, db *gorm.DB) error {
 	// Value should be a string containing the entity reference
 	refURL, ok := value.(string)
 	if !ok {
@@ -165,10 +168,11 @@ func (h *EntityHandler) bindSingleNavigationProperty(entityValue reflect.Value, 
 	// If we have referential constraints (foreign key), set the foreign key value directly
 	if len(navProp.ReferentialConstraints) > 0 {
 		// Build a query to fetch the target entity to get its key value(s)
-		targetHandler := NewEntityHandler(db, targetMetadata, h.logger)
+		ctxDB := db.WithContext(ctx)
+		targetHandler := NewEntityHandler(ctxDB, targetMetadata, h.logger)
 		targetHandler.SetEntitiesMetadata(h.entitiesMetadata)
 
-		targetDB, err := targetHandler.buildKeyQuery(db, entityKey)
+		targetDB, err := targetHandler.buildKeyQuery(ctxDB, entityKey)
 		if err != nil {
 			return fmt.Errorf("invalid entity key '%s': %w", entityKey, err)
 		}
@@ -232,7 +236,7 @@ func (h *EntityHandler) bindSingleNavigationProperty(entityValue reflect.Value, 
 
 // bindSingleNavigationPropertyForUpdate binds a single-valued navigation property
 // and returns the foreign key values that should be added to updateData
-func (h *EntityHandler) bindSingleNavigationPropertyForUpdate(entityValue reflect.Value, navProp *metadata.PropertyMetadata, value interface{}, db *gorm.DB) (map[string]interface{}, error) {
+func (h *EntityHandler) bindSingleNavigationPropertyForUpdate(ctx context.Context, entityValue reflect.Value, navProp *metadata.PropertyMetadata, value interface{}, db *gorm.DB) (map[string]interface{}, error) {
 	foreignKeyValues := make(map[string]interface{})
 
 	// Value should be a string containing the entity reference
@@ -261,10 +265,11 @@ func (h *EntityHandler) bindSingleNavigationPropertyForUpdate(entityValue reflec
 	// If we have referential constraints (foreign key), set the foreign key value directly
 	if len(navProp.ReferentialConstraints) > 0 {
 		// Build a query to fetch the target entity to get its key value(s)
-		targetHandler := NewEntityHandler(db, targetMetadata, h.logger)
+		ctxDB := db.WithContext(ctx)
+		targetHandler := NewEntityHandler(ctxDB, targetMetadata, h.logger)
 		targetHandler.SetEntitiesMetadata(h.entitiesMetadata)
 
-		targetDB, err := targetHandler.buildKeyQuery(db, entityKey)
+		targetDB, err := targetHandler.buildKeyQuery(ctxDB, entityKey)
 		if err != nil {
 			return nil, fmt.Errorf("invalid entity key '%s': %w", entityKey, err)
 		}
@@ -343,7 +348,7 @@ func (h *EntityHandler) bindSingleNavigationPropertyForUpdate(entityValue reflec
 
 // bindCollectionNavigationProperty binds a collection-valued navigation property
 // Returns the slice of target entities to be bound after the main entity is saved
-func (h *EntityHandler) bindCollectionNavigationProperty(entityValue reflect.Value, navProp *metadata.PropertyMetadata, value interface{}, db *gorm.DB) ([]interface{}, error) {
+func (h *EntityHandler) bindCollectionNavigationProperty(ctx context.Context, entityValue reflect.Value, navProp *metadata.PropertyMetadata, value interface{}, db *gorm.DB) ([]interface{}, error) {
 	_ = entityValue // Not used here, but available if needed for future enhancements
 
 	// Value should be an array of strings containing entity references
@@ -381,7 +386,8 @@ func (h *EntityHandler) bindCollectionNavigationProperty(entityValue reflect.Val
 	}
 
 	// Fetch all referenced entities
-	targetHandler := NewEntityHandler(db, targetMetadata, h.logger)
+	ctxDB := db.WithContext(ctx)
+	targetHandler := NewEntityHandler(ctxDB, targetMetadata, h.logger)
 	targetHandler.SetEntitiesMetadata(h.entitiesMetadata)
 
 	// Pre-allocate slice for target entities
@@ -401,7 +407,7 @@ func (h *EntityHandler) bindCollectionNavigationProperty(entityValue reflect.Val
 			return nil, fmt.Errorf("all references in collection must be from the same entity set")
 		}
 
-		targetDB, err := targetHandler.buildKeyQuery(db, entityKey)
+		targetDB, err := targetHandler.buildKeyQuery(ctxDB, entityKey)
 		if err != nil {
 			return nil, fmt.Errorf("invalid entity key '%s': %w", entityKey, err)
 		}
@@ -424,24 +430,25 @@ func (h *EntityHandler) bindCollectionNavigationProperty(entityValue reflect.Val
 
 // applyPendingCollectionBindings applies pending collection-valued navigation property bindings
 // after the entity has been saved and has a primary key
-func (h *EntityHandler) applyPendingCollectionBindings(db *gorm.DB, entity interface{}, pendingBindings []PendingCollectionBinding) error {
+func (h *EntityHandler) applyPendingCollectionBindings(ctx context.Context, db *gorm.DB, entity interface{}, pendingBindings []PendingCollectionBinding) error {
 	if len(pendingBindings) == 0 {
 		return nil
 	}
 
+	ctxDB := db.WithContext(ctx)
 	for _, binding := range pendingBindings {
 		navProp := binding.NavigationProperty
 		targetEntities := binding.TargetEntities
 
 		if len(targetEntities) == 0 {
 			// Empty array means clear/replace the collection with an empty set
-			if err := db.Model(entity).Association(navProp.Name).Replace(); err != nil {
+			if err := ctxDB.Model(entity).Association(navProp.Name).Replace(); err != nil {
 				return fmt.Errorf("failed to clear collection navigation property '%s': %w", navProp.Name, err)
 			}
 		} else {
 			// Replace the collection with the new set of entities
 			// Using Replace() instead of Append() because @odata.bind should set the exact collection
-			if err := db.Model(entity).Association(navProp.Name).Replace(targetEntities...); err != nil {
+			if err := ctxDB.Model(entity).Association(navProp.Name).Replace(targetEntities...); err != nil {
 				return fmt.Errorf("failed to bind collection navigation property '%s': %w", navProp.Name, err)
 			}
 		}

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"reflect"
@@ -16,12 +17,13 @@ import (
 
 func (h *EntityHandler) handleGetCollection(w http.ResponseWriter, r *http.Request) {
 	pref := preference.ParsePrefer(r)
+	ctx := r.Context()
 
 	h.executeCollectionQuery(w, &collectionExecutionContext{
 		Metadata:          h.metadata,
 		ParseQueryOptions: h.parseCollectionQueryOptions(w, r, pref),
 		BeforeRead:        h.beforeReadCollection(r),
-		CountFunc:         h.collectionCountFunc(),
+		CountFunc:         h.collectionCountFunc(ctx),
 		FetchFunc:         h.fetchResultsWithTypeCast(r),
 		NextLinkFunc:      h.collectionNextLinkFunc(r),
 		AfterRead:         h.afterReadCollection(r),
@@ -82,13 +84,13 @@ func (h *EntityHandler) beforeReadCollection(r *http.Request) func(*query.QueryO
 	}
 }
 
-func (h *EntityHandler) collectionCountFunc() func(*query.QueryOptions, []func(*gorm.DB) *gorm.DB) (*int64, error) {
+func (h *EntityHandler) collectionCountFunc(ctx context.Context) func(*query.QueryOptions, []func(*gorm.DB) *gorm.DB) (*int64, error) {
 	return func(queryOptions *query.QueryOptions, scopes []func(*gorm.DB) *gorm.DB) (*int64, error) {
 		if !queryOptions.Count {
 			return nil, nil
 		}
 
-		count, err := h.countEntities(queryOptions, scopes)
+		count, err := h.countEntities(ctx, queryOptions, scopes)
 		if err != nil {
 			return nil, err
 		}
@@ -113,14 +115,14 @@ func (h *EntityHandler) afterReadCollection(r *http.Request) func(*query.QueryOp
 	}
 }
 
-func (h *EntityHandler) fetchResults(queryOptions *query.QueryOptions, scopes []func(*gorm.DB) *gorm.DB) (interface{}, error) {
+func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.QueryOptions, scopes []func(*gorm.DB) *gorm.DB) (interface{}, error) {
 	modifiedOptions := *queryOptions
 	if queryOptions.Top != nil {
 		topPlusOne := *queryOptions.Top + 1
 		modifiedOptions.Top = &topPlusOne
 	}
 
-	db := h.db
+	db := h.db.WithContext(ctx)
 	if len(scopes) > 0 {
 		db = db.Scopes(scopes...)
 	}
@@ -205,13 +207,14 @@ func (h *EntityHandler) trimResults(sliceValue interface{}, maxLen int) interfac
 }
 
 func (h *EntityHandler) fetchResultsWithTypeCast(r *http.Request) func(*query.QueryOptions, []func(*gorm.DB) *gorm.DB) (interface{}, error) {
+	ctx := r.Context()
 	return func(queryOptions *query.QueryOptions, scopes []func(*gorm.DB) *gorm.DB) (interface{}, error) {
-		results, err := h.fetchResults(queryOptions, scopes)
+		results, err := h.fetchResults(ctx, queryOptions, scopes)
 		if err != nil {
 			return nil, err
 		}
 
-		if typeCast := GetTypeCast(r.Context()); typeCast != "" {
+		if typeCast := GetTypeCast(ctx); typeCast != "" {
 			results = h.filterCollectionByType(results, typeCast)
 		}
 
@@ -494,12 +497,12 @@ validateChildren:
 	return nil
 }
 
-func (h *EntityHandler) getTotalCount(queryOptions *query.QueryOptions, w http.ResponseWriter, scopes []func(*gorm.DB) *gorm.DB) *int64 {
+func (h *EntityHandler) getTotalCount(ctx context.Context, queryOptions *query.QueryOptions, w http.ResponseWriter, scopes []func(*gorm.DB) *gorm.DB) *int64 {
 	if !queryOptions.Count {
 		return nil
 	}
 
-	count, err := h.countEntities(queryOptions, scopes)
+	count, err := h.countEntities(ctx, queryOptions, scopes)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error())
 		return nil
