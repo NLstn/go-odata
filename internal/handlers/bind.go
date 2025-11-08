@@ -441,16 +441,7 @@ func (h *EntityHandler) applyPendingCollectionBindings(entity interface{}, pendi
 		} else {
 			// Replace the collection with the new set of entities
 			// Using Replace() instead of Append() because @odata.bind should set the exact collection
-			// GORM requires the actual entity values, not pointers to interface{}
-			// So we need to dereference each pointer
-			actualEntities := make([]interface{}, len(targetEntities))
-			for i, te := range targetEntities {
-				// te is already a pointer to the concrete type (from reflect.New().Interface())
-				// We just need to pass it as-is
-				actualEntities[i] = te
-			}
-			
-			if err := h.db.Model(entity).Association(navProp.Name).Replace(actualEntities...); err != nil {
+			if err := h.db.Model(entity).Association(navProp.Name).Replace(targetEntities...); err != nil {
 				return fmt.Errorf("failed to bind collection navigation property '%s': %w", navProp.Name, err)
 			}
 		}
