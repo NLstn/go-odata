@@ -20,6 +20,10 @@ rely on version numbers to reason about compatibility.
 - `Service.RegisterEntity` and `Service.RegisterSingleton` now return descriptive errors when duplicate names are registered
   instead of overwriting existing metadata.
 
+### Fixed
+
+- Navigation property pagination now emits `$skiptoken` next links and documents the ordering requirements for deterministic paging.
+
 ## [v0.1.0] - 2025-11-07 _(planned)_
 
 ### Added
