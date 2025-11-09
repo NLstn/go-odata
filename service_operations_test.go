@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/nlstn/go-odata/internal/actions"
@@ -47,6 +48,7 @@ func newTestService() *Service {
 		functions: make(map[string][]*actions.FunctionDefinition),
 		handlers:  make(map[string]*handlers.EntityHandler),
 		entities:  make(map[string]*metadata.EntityMetadata),
+		namespace: DefaultNamespace,
 	}
 }
 
@@ -320,5 +322,49 @@ func TestHandleActionOrFunction_FunctionHandlerError(t *testing.T) {
 	}
 	if len(resp.Error.Details) == 0 || resp.Error.Details[0].Message != "explode" {
 		t.Fatalf("unexpected details: %#v", resp.Error.Details)
+	}
+}
+
+func TestHandleActionOrFunction_FunctionContextUsesNamespace(t *testing.T) {
+	svc := newTestService()
+	svc.namespace = "Contoso.Sales"
+
+	type functionResult struct {
+		Street string
+	}
+
+	functionName := "GetWarehouseAddress"
+	svc.functions[functionName] = []*actions.FunctionDefinition{
+		{
+			Name:       functionName,
+			ReturnType: reflect.TypeOf(functionResult{}),
+			Handler: func(http.ResponseWriter, *http.Request, interface{}, map[string]interface{}) (interface{}, error) {
+				return functionResult{Street: "Main"}, nil
+			},
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/GetWarehouseAddress()", nil)
+	rec := httptest.NewRecorder()
+
+	svc.handleActionOrFunction(rec, req, functionName, "", false, "")
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var payload map[string]interface{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	ctxValue, ok := payload["@odata.context"].(string)
+	if !ok {
+		t.Fatalf("expected @odata.context string, got %T", payload["@odata.context"])
+	}
+
+	expectedSuffix := "/$metadata#Contoso.Sales.functionResult"
+	if !strings.HasSuffix(ctxValue, expectedSuffix) {
+		t.Fatalf("context URL = %q, want suffix %q", ctxValue, expectedSuffix)
 	}
 }
