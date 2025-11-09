@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/nlstn/go-odata/internal/etag"
@@ -49,7 +48,7 @@ func (h *EntityHandler) buildDeltaEntries(r *http.Request, events []trackchanges
 	baseURL := response.BuildBaseURL(r)
 	entityTypeAnnotation := ""
 	if metadataLevel == "full" {
-		entityTypeAnnotation = fmt.Sprintf("#ODataService.%s", h.metadata.EntityName)
+		entityTypeAnnotation = "#" + h.qualifiedTypeName(h.metadata.EntityName)
 	}
 
 	entries := make([]map[string]interface{}, 0, len(events))
