@@ -159,6 +159,8 @@ if err := service.EnableAsyncProcessing(odata.AsyncConfig{
 }); err != nil {
     log.Fatalf("enable async processing: %v", err)
 }
+
+defer service.Close()
 ```
 
 With async processing enabled:
@@ -180,6 +182,10 @@ Completed jobs are kept for 24 hours by default (`async.DefaultJobRetention`).
 Setting `JobRetention` to zero uses that default, while applications that must
 retain data indefinitely can opt out by setting `DisableRetention: true` and
 managing cleanup manually.
+
+Call `service.Close()` during shutdown to stop the background async manager and
+release its resources. The method is idempotent so repeated shutdown hooks are
+safe.
 
 The development server (`cmd/devserver`) enables async processing by default
 using the standard `/$async/jobs/` prefix and advertises the monitor endpoint in

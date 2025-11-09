@@ -71,6 +71,7 @@ func main() {
 
 	// Create OData service
 	service := odata.NewService(Db)
+	defer service.Close()
 
 	if err := service.SetNamespace("DevService"); err != nil {
 		log.Fatal("Failed to set service namespace:", err)

@@ -592,6 +592,8 @@ if err := service.EnableAsyncProcessing(odata.AsyncConfig{
 }); err != nil {
         log.Fatalf("enable async processing: %v", err)
 }
+
+defer service.Close()
 ```
 
 When `JobRetention` is left at zero the manager applies the 24-hour
@@ -608,3 +610,7 @@ Once enabled, the router reserves the monitor path and exposes the following beh
 - **Cancellation** is available via `DELETE` on the monitor URI. The router calls the async manager’s cancellation hook and returns `204 No Content`, even if the worker finishes later.
 
 These guarantees let clients reliably poll job status without conflicting with regular entity routing.
+
+`Service.Close` shuts down the async manager’s background goroutines and resets
+the related configuration. You can call it from multiple cleanup hooks—each call
+is a no-op once the manager is already stopped.
