@@ -17,6 +17,10 @@ rely on version numbers to reason about compatibility.
 - `AsyncConfig.DisableRetention` allows services to opt out of automatic async
   job cleanup when stricter audit retention is required.
 
+- Support deriving action/function parameters from a struct by setting
+  `ParameterStructType`, and expose an `actions.BindParams` helper so handlers can
+  consume strongly typed inputs without manual map assertions.
+
 ### Changed
 
 - Moved service routing and operation handling into internal packages to reduce

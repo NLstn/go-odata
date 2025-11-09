@@ -21,22 +21,24 @@ type ParameterDefinition struct {
 
 // ActionDefinition defines an OData action
 type ActionDefinition struct {
-	Name       string
-	IsBound    bool
-	EntitySet  string // For bound actions, the entity set it's bound to
-	Handler    ActionHandler
-	Parameters []ParameterDefinition
-	ReturnType reflect.Type // nil if no return value
+	Name                string
+	IsBound             bool
+	EntitySet           string // For bound actions, the entity set it's bound to
+	Handler             ActionHandler
+	Parameters          []ParameterDefinition
+	ParameterStructType reflect.Type
+	ReturnType          reflect.Type // nil if no return value
 }
 
 // FunctionDefinition defines an OData function
 type FunctionDefinition struct {
-	Name       string
-	IsBound    bool
-	EntitySet  string // For bound functions, the entity set it's bound to
-	Handler    FunctionHandler
-	Parameters []ParameterDefinition
-	ReturnType reflect.Type
+	Name                string
+	IsBound             bool
+	EntitySet           string // For bound functions, the entity set it's bound to
+	Handler             FunctionHandler
+	Parameters          []ParameterDefinition
+	ParameterStructType reflect.Type
+	ReturnType          reflect.Type
 }
 
 // ActionHandler is the function signature for action handlers
@@ -50,10 +52,13 @@ type ActionHandler func(w http.ResponseWriter, r *http.Request, ctx interface{},
 type FunctionHandler func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) (interface{}, error)
 
 // ParseActionParameters parses action parameters from request body
-func ParseActionParameters(r *http.Request, paramDefs []ParameterDefinition) (map[string]interface{}, error) {
+func ParseActionParameters(r *http.Request, paramDefs []ParameterDefinition, structType reflect.Type) (map[string]interface{}, error) {
 	params := make(map[string]interface{})
 
 	if len(paramDefs) == 0 {
+		if err := bindStructToParams(params, structType); err != nil {
+			return nil, err
+		}
 		return params, nil
 	}
 
@@ -86,14 +91,21 @@ func ParseActionParameters(r *http.Request, paramDefs []ParameterDefinition) (ma
 		params[paramDef.Name] = value
 	}
 
+	if err := bindStructToParams(params, structType); err != nil {
+		return nil, err
+	}
+
 	return params, nil
 }
 
 // ParseFunctionParameters parses function parameters from URL query string or path
-func ParseFunctionParameters(r *http.Request, paramDefs []ParameterDefinition) (map[string]interface{}, error) {
+func ParseFunctionParameters(r *http.Request, paramDefs []ParameterDefinition, structType reflect.Type) (map[string]interface{}, error) {
 	params := make(map[string]interface{})
 
 	if len(paramDefs) == 0 {
+		if err := bindStructToParams(params, structType); err != nil {
+			return nil, err
+		}
 		return params, nil
 	}
 
@@ -141,6 +153,10 @@ func ParseFunctionParameters(r *http.Request, paramDefs []ParameterDefinition) (
 		}
 
 		params[paramDef.Name] = converted
+	}
+
+	if err := bindStructToParams(params, structType); err != nil {
+		return nil, err
 	}
 
 	return params, nil
@@ -493,14 +509,19 @@ func parametersMatch(p1, p2 []ParameterDefinition) bool {
 		return false
 	}
 
+	type paramSignature struct {
+		Type     reflect.Type
+		Required bool
+	}
+
 	// Create maps for comparison (order shouldn't matter for signature matching)
-	params1 := make(map[string]reflect.Type)
+	params1 := make(map[string]paramSignature)
 	for _, p := range p1 {
-		params1[p.Name] = p.Type
+		params1[p.Name] = paramSignature{Type: p.Type, Required: p.Required}
 	}
 
 	for _, p := range p2 {
-		if t, exists := params1[p.Name]; !exists || t != p.Type {
+		if sig, exists := params1[p.Name]; !exists || sig.Type != p.Type || sig.Required != p.Required {
 			return false
 		}
 	}
@@ -530,7 +551,7 @@ func ResolveActionOverload(r *http.Request, candidates []*ActionDefinition, isBo
 
 	// If only one candidate after filtering, try to parse with its parameters
 	if len(filtered) == 1 {
-		params, err := ParseActionParameters(r, filtered[0].Parameters)
+		params, err := ParseActionParameters(r, filtered[0].Parameters, filtered[0].ParameterStructType)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -586,6 +607,12 @@ func ResolveActionOverload(r *http.Request, candidates []*ActionDefinition, isBo
 			}
 
 			if allMatch {
+				if err := bindStructToParams(params, candidate.ParameterStructType); err != nil {
+					allMatch = false
+				}
+			}
+
+			if allMatch {
 				return candidate, params, nil
 			}
 		}
@@ -634,7 +661,7 @@ func ResolveFunctionOverload(r *http.Request, candidates []*FunctionDefinition, 
 
 	// If only one candidate after filtering and parameter count matches, use it
 	if len(filtered) == 1 {
-		params, err := ParseFunctionParameters(r, filtered[0].Parameters)
+		params, err := ParseFunctionParameters(r, filtered[0].Parameters, filtered[0].ParameterStructType)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -644,7 +671,7 @@ func ResolveFunctionOverload(r *http.Request, candidates []*FunctionDefinition, 
 	// Multiple candidates - try to find the best match based on provided parameters
 	for _, candidate := range filtered {
 		if functionParameterNamesMatch(candidate.Parameters, providedParams) {
-			params, err := ParseFunctionParameters(r, candidate.Parameters)
+			params, err := ParseFunctionParameters(r, candidate.Parameters, candidate.ParameterStructType)
 			if err != nil {
 				continue // Try next candidate if this one fails
 			}

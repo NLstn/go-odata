@@ -204,6 +204,50 @@ Parameters: []odata.ParameterDefinition{
 }
 ```
 
+### Binding Parameters to Structs
+
+When a payload naturally maps to a Go struct, you can eliminate manual `ParameterDefinition`
+lists by setting `ParameterStructType`. go-odata will derive the correct parameter metadata
+and keep the legacy parameter map populated for backwards compatibility.
+
+Inside the handler, use the generic helper `actions.BindParams[T]` to obtain a strongly typed
+struct without repetitive type assertions:
+
+```go
+import (
+    odata "github.com/nlstn/go-odata"
+    "github.com/nlstn/go-odata/internal/actions"
+)
+
+type ApplyDiscountInput struct {
+    Percentage float64 `mapstructure:"percentage"`
+    Reason     *string `mapstructure:"reason,omitempty"`
+}
+
+service.RegisterAction(odata.ActionDefinition{
+    Name:                "ApplyDiscount",
+    EntitySet:           "Products",
+    ParameterStructType: reflect.TypeOf(ApplyDiscountInput{}),
+    Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) error {
+        input, err := actions.BindParams[ApplyDiscountInput](params)
+        if err != nil {
+            return err
+        }
+
+        // input.Percentage is a float64, input.Reason is *string (nil when omitted)
+        // ... perform work ...
+        return nil
+    },
+})
+```
+
+Pointers or fields tagged with `,omitempty` are treated as optional. You can also request
+`*ApplyDiscountInput` by calling `actions.BindParams[*ApplyDiscountInput](params)` if you prefer
+pointer semantics.
+
+The same pattern works for functions—set `ParameterStructType` on the `FunctionDefinition`
+and call `actions.BindParams` inside the function handler.
+
 Supported types:
 - `string` - Text values
 - `int`, `int32`, `int64` - Integer values

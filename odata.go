@@ -344,6 +344,17 @@ func (s *Service) RegisterAction(action actions.ActionDefinition) error {
 	if action.Handler == nil {
 		return fmt.Errorf("action handler cannot be nil")
 	}
+	if action.ParameterStructType != nil {
+		derived, err := actions.ParameterDefinitionsFromStruct(action.ParameterStructType)
+		if err != nil {
+			return fmt.Errorf("invalid parameter struct for action '%s': %w", action.Name, err)
+		}
+		if len(action.Parameters) == 0 {
+			action.Parameters = derived
+		} else if !parameterDefinitionsCompatible(action.Parameters, derived) {
+			return fmt.Errorf("parameter definitions do not match struct type for action '%s'", action.Name)
+		}
+	}
 	if action.IsBound && action.EntitySet == "" {
 		return fmt.Errorf("bound action must specify entity set")
 	}
@@ -382,6 +393,17 @@ func (s *Service) RegisterFunction(function actions.FunctionDefinition) error {
 	}
 	if function.ReturnType == nil {
 		return fmt.Errorf("function must have a return type")
+	}
+	if function.ParameterStructType != nil {
+		derived, err := actions.ParameterDefinitionsFromStruct(function.ParameterStructType)
+		if err != nil {
+			return fmt.Errorf("invalid parameter struct for function '%s': %w", function.Name, err)
+		}
+		if len(function.Parameters) == 0 {
+			function.Parameters = derived
+		} else if !parameterDefinitionsCompatible(function.Parameters, derived) {
+			return fmt.Errorf("parameter definitions do not match struct type for function '%s'", function.Name)
+		}
 	}
 	if function.IsBound && function.EntitySet == "" {
 		return fmt.Errorf("bound function must specify entity set")
@@ -429,4 +451,23 @@ func (s *Service) SetNamespace(namespace string) error {
 		handler.SetNamespace(trimmed)
 	}
 	return nil
+}
+
+func parameterDefinitionsCompatible(existing, derived []actions.ParameterDefinition) bool {
+	if len(existing) != len(derived) {
+		return false
+	}
+
+	expected := make(map[string]actions.ParameterDefinition, len(derived))
+	for _, def := range derived {
+		expected[def.Name] = def
+	}
+
+	for _, def := range existing {
+		if match, ok := expected[def.Name]; !ok || match.Type != def.Type || match.Required != def.Required {
+			return false
+		}
+	}
+
+	return true
 }
