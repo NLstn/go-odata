@@ -1,4 +1,4 @@
-package odata
+package runtime_test
 
 import (
 	"net/http"
@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	odata "github.com/nlstn/go-odata"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -26,20 +27,21 @@ func TestServiceRespondAsyncFlow(t *testing.T) {
 		t.Fatalf("failed to migrate test entity: %v", err)
 	}
 
-	svc := NewService(db)
+	svc := odata.NewService(db)
 	if err := svc.RegisterEntity(&asyncTestEntity{}); err != nil {
 		t.Fatalf("failed to register entity: %v", err)
 	}
 
-	if err := svc.EnableAsyncProcessing(AsyncConfig{
+	if err := svc.EnableAsyncProcessing(odata.AsyncConfig{
 		MonitorPathPrefix:    "/$async/jobs",
 		DefaultRetryInterval: 3 * time.Second,
 		JobRetention:         time.Minute,
 	}); err != nil {
 		t.Fatalf("failed to enable async processing: %v", err)
 	}
-	if svc.asyncManager != nil {
-		t.Cleanup(svc.asyncManager.Close)
+	mgr := svc.AsyncManager()
+	if mgr != nil {
+		t.Cleanup(mgr.Close)
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/AsyncTestEntities", nil)
@@ -65,12 +67,16 @@ func TestServiceRespondAsyncFlow(t *testing.T) {
 		t.Fatal("expected Location header with monitor URL")
 	}
 
-	if !strings.HasPrefix(location, svc.asyncMonitorPrefix) {
-		t.Fatalf("monitor URL %q does not start with prefix %q", location, svc.asyncMonitorPrefix)
+	if !strings.HasPrefix(location, svc.AsyncMonitorPrefix()) {
+		t.Fatalf("monitor URL %q does not start with prefix %q", location, svc.AsyncMonitorPrefix())
 	}
 
-	jobID := strings.TrimPrefix(location, svc.asyncMonitorPrefix)
-	job, ok := svc.asyncManager.GetJob(jobID)
+	jobID := strings.TrimPrefix(location, svc.AsyncMonitorPrefix())
+	mgr = svc.AsyncManager()
+	if mgr == nil {
+		t.Fatal("async manager is not configured")
+	}
+	job, ok := mgr.GetJob(jobID)
 	if !ok {
 		t.Fatalf("expected job %q to be registered", jobID)
 	}
