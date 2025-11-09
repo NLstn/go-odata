@@ -78,6 +78,10 @@ func NewService(db *gorm.DB) *Service {
 
 // NewServiceWithConfig creates a new OData service instance with additional configuration.
 func NewServiceWithConfig(db *gorm.DB, cfg ServiceConfig) (*Service, error) {
+	if db == nil {
+		return nil, fmt.Errorf("odata: database handle is required")
+	}
+
 	entities := make(map[string]*metadata.EntityMetadata)
 	handlersMap := make(map[string]*handlers.EntityHandler)
 	logger := slog.Default()

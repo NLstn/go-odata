@@ -16,6 +16,8 @@ rely on version numbers to reason about compatibility.
 ### Fixed
 
 - Ensure function context URLs honor the configured service namespace when returning complex types.
+- NewService constructors now return a clear error when given a nil database
+  handle, preventing later panics from misconfigured callers.
 
 ## [v0.4.0] - 2025-11-08
 
