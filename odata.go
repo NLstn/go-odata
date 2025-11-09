@@ -245,6 +245,29 @@ func (s *Service) AsyncMonitorPrefix() string {
 	return s.asyncMonitorPrefix
 }
 
+// Close releases resources held by the service, including background managers.
+// It is safe to call multiple times; subsequent calls have no effect.
+func (s *Service) Close() error {
+	if s == nil {
+		return nil
+	}
+
+	if s.asyncManager != nil {
+		s.asyncManager.Close()
+	}
+
+	if s.router != nil {
+		s.router.SetAsyncMonitor("", nil)
+	}
+
+	s.asyncManager = nil
+	s.asyncConfig = nil
+	s.asyncQueue = nil
+	s.asyncMonitorPrefix = ""
+
+	return nil
+}
+
 // RegisterEntity registers an entity type with the OData service.
 func (s *Service) RegisterEntity(entity interface{}) error {
 	// Analyze the entity structure

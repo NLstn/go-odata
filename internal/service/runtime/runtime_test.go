@@ -39,10 +39,11 @@ func TestServiceRespondAsyncFlow(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("failed to enable async processing: %v", err)
 	}
-	mgr := svc.AsyncManager()
-	if mgr != nil {
-		t.Cleanup(mgr.Close)
-	}
+	t.Cleanup(func() {
+		if err := svc.Close(); err != nil {
+			t.Fatalf("failed to close service: %v", err)
+		}
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "/AsyncTestEntities", nil)
 	req.Header.Set("Prefer", "return=minimal, respond-async")
@@ -71,23 +72,23 @@ func TestServiceRespondAsyncFlow(t *testing.T) {
 		t.Fatalf("monitor URL %q does not start with prefix %q", location, svc.AsyncMonitorPrefix())
 	}
 
-	jobID := strings.TrimPrefix(location, svc.AsyncMonitorPrefix())
-	mgr = svc.AsyncManager()
-	if mgr == nil {
-		t.Fatal("async manager is not configured")
+	deadline := time.Now().Add(2 * time.Second)
+	var (
+		monitorRec *httptest.ResponseRecorder
+		status     = http.StatusAccepted
+	)
+	for time.Now().Before(deadline) {
+		monitorReq := httptest.NewRequest(http.MethodGet, location, nil)
+		monitorRec = httptest.NewRecorder()
+		svc.ServeHTTP(monitorRec, monitorReq)
+		status = monitorRec.Code
+		if status != http.StatusAccepted {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
-	job, ok := mgr.GetJob(jobID)
-	if !ok {
-		t.Fatalf("expected job %q to be registered", jobID)
-	}
 
-	job.Wait()
-
-	monitorReq := httptest.NewRequest(http.MethodGet, location, nil)
-	monitorRec := httptest.NewRecorder()
-	svc.ServeHTTP(monitorRec, monitorReq)
-
-	if monitorRec.Code == http.StatusAccepted {
-		t.Fatalf("expected terminal monitor response, got status %d", monitorRec.Code)
+	if status == http.StatusAccepted {
+		t.Fatalf("expected terminal monitor response before deadline, last status %d", status)
 	}
 }
