@@ -3,7 +3,10 @@ package odata
 import (
 	"net/http"
 	"reflect"
+	"strings"
 	"testing"
+
+	"github.com/nlstn/go-odata/internal/actions"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -401,5 +404,132 @@ func TestRegisterFunctionValidation(t *testing.T) {
 				t.Fatalf("RegisterFunction() error = %q, want %q", err.Error(), tc.expectedErr)
 			}
 		})
+	}
+}
+
+func TestRegisterActionWithParameterStructType(t *testing.T) {
+	db := setupTestDB(t)
+	service := NewService(db)
+
+	handler := func(http.ResponseWriter, *http.Request, interface{}, map[string]interface{}) error { return nil }
+
+	type applyDiscountParams struct {
+		Percentage float64 `mapstructure:"percentage"`
+		Reason     *string `mapstructure:"reason,omitempty"`
+	}
+
+	err := service.RegisterAction(ActionDefinition{
+		Name:                "ApplyDiscount",
+		Handler:             handler,
+		ParameterStructType: reflect.TypeOf(applyDiscountParams{}),
+	})
+	if err != nil {
+		t.Fatalf("RegisterAction() unexpected error: %v", err)
+	}
+
+	defs := service.actions["ApplyDiscount"]
+	if len(defs) != 1 {
+		t.Fatalf("expected 1 action definition, got %d", len(defs))
+	}
+
+	params := defs[0].Parameters
+	if len(params) != 2 {
+		t.Fatalf("expected 2 parameters, got %d", len(params))
+	}
+
+	paramMap := make(map[string]actions.ParameterDefinition)
+	for _, p := range params {
+		paramMap[p.Name] = p
+	}
+
+	percentage, ok := paramMap["percentage"]
+	if !ok {
+		t.Fatalf("percentage parameter not found")
+	}
+	if percentage.Type != reflect.TypeOf(float64(0)) || !percentage.Required {
+		t.Fatalf("percentage parameter mismatch: %#v", percentage)
+	}
+
+	reason, ok := paramMap["reason"]
+	if !ok {
+		t.Fatalf("reason parameter not found")
+	}
+	if reason.Type != reflect.TypeOf((*string)(nil)) || reason.Required {
+		t.Fatalf("reason parameter mismatch: %#v", reason)
+	}
+
+	if defs[0].ParameterStructType != reflect.TypeOf(applyDiscountParams{}) {
+		t.Fatalf("ParameterStructType not preserved")
+	}
+}
+
+func TestRegisterFunctionWithParameterStructType(t *testing.T) {
+	db := setupTestDB(t)
+	service := NewService(db)
+
+	if err := service.RegisterEntity(Product{}); err != nil {
+		t.Fatalf("failed to register product entity: %v", err)
+	}
+
+	handler := func(http.ResponseWriter, *http.Request, interface{}, map[string]interface{}) (interface{}, error) {
+		return nil, nil
+	}
+
+	type priceInput struct {
+		TaxRate float64 `mapstructure:"taxRate"`
+	}
+
+	err := service.RegisterFunction(FunctionDefinition{
+		Name:                "TotalPrice",
+		Handler:             handler,
+		ReturnType:          reflect.TypeOf(float64(0)),
+		ParameterStructType: reflect.TypeOf(priceInput{}),
+	})
+	if err != nil {
+		t.Fatalf("RegisterFunction() unexpected error: %v", err)
+	}
+
+	defs := service.functions["TotalPrice"]
+	if len(defs) != 1 {
+		t.Fatalf("expected 1 function definition, got %d", len(defs))
+	}
+
+	params := defs[0].Parameters
+	if len(params) != 1 {
+		t.Fatalf("expected 1 parameter, got %d", len(params))
+	}
+
+	if params[0].Name != "taxRate" || params[0].Type != reflect.TypeOf(float64(0)) || !params[0].Required {
+		t.Fatalf("unexpected parameter definition: %#v", params[0])
+	}
+
+	if defs[0].ParameterStructType != reflect.TypeOf(priceInput{}) {
+		t.Fatalf("ParameterStructType not preserved")
+	}
+}
+
+func TestRegisterActionWithMismatchedStructParameters(t *testing.T) {
+	db := setupTestDB(t)
+	service := NewService(db)
+
+	handler := func(http.ResponseWriter, *http.Request, interface{}, map[string]interface{}) error { return nil }
+
+	type payload struct {
+		Count int `mapstructure:"count"`
+	}
+
+	err := service.RegisterAction(ActionDefinition{
+		Name:    "BadAction",
+		Handler: handler,
+		Parameters: []ParameterDefinition{
+			{Name: "other", Type: reflect.TypeOf(""), Required: true},
+		},
+		ParameterStructType: reflect.TypeOf(payload{}),
+	})
+	if err == nil {
+		t.Fatal("expected error for mismatched parameter definitions, got nil")
+	}
+	if !strings.Contains(err.Error(), "parameter definitions do not match struct type") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }

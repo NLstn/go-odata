@@ -11,6 +11,10 @@ rely on version numbers to reason about compatibility.
 
 ### Added
 
+- Support deriving action/function parameters from a struct by setting
+  `ParameterStructType`, and expose an `actions.BindParams` helper so handlers can
+  consume strongly typed inputs without manual map assertions.
+
 ### Changed
 
 ### Fixed
