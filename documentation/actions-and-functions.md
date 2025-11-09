@@ -328,11 +328,21 @@ For bound operations, the context contains the entity instance:
 Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) (interface{}, error) {
     // For bound function on Products
     product := ctx.(*Product)
-    
+
     // Use the product data
     return product.Price * 1.1, nil
 }
 ```
+
+### Navigation Targets and Renamed Properties
+
+When invoking a bound action or function after traversing a navigation property, the router now resolves the target entity set using metadata rather than assuming the property name matches the entity set. This enables patterns such as:
+
+```text
+/Stores(1)/FeaturedItems/GetAveragePrice()
+```
+
+Where `FeaturedItems` is a navigation property that targets the `NavigationFunctionItems` entity set. The `internal/service/router.EntityHandler` interface exposes a `NavigationTargetSet(name string) (string, bool)` helper so custom handlers can surface the correct entity set names. The built-in entity handler automatically implements this by inspecting the metadata collected during `Service.RegisterEntity`, so no extra configuration is required when your navigation properties use descriptive names.
 
 ### Response Formatting
 

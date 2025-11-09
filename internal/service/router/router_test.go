@@ -31,20 +31,22 @@ func newTestAsyncManager(t *testing.T) *async.Manager {
 }
 
 type stubEntityHandler struct {
-	isSingleton     bool
-	navigationProps map[string]bool
-	streamProps     map[string]bool
-	structuralProps map[string]bool
-	complexProps    map[string]bool
-	calls           []string
+	isSingleton       bool
+	navigationProps   map[string]bool
+	navigationTargets map[string]string
+	streamProps       map[string]bool
+	structuralProps   map[string]bool
+	complexProps      map[string]bool
+	calls             []string
 }
 
 func newStubEntityHandler() *stubEntityHandler {
 	return &stubEntityHandler{
-		navigationProps: make(map[string]bool),
-		streamProps:     make(map[string]bool),
-		structuralProps: make(map[string]bool),
-		complexProps:    make(map[string]bool),
+		navigationProps:   make(map[string]bool),
+		navigationTargets: make(map[string]string),
+		streamProps:       make(map[string]bool),
+		structuralProps:   make(map[string]bool),
+		complexProps:      make(map[string]bool),
 	}
 }
 
@@ -119,6 +121,16 @@ func (h *stubEntityHandler) IsComplexTypeProperty(name string) bool {
 }
 
 func (h *stubEntityHandler) FetchEntity(string) (interface{}, error) { return nil, nil }
+
+func (h *stubEntityHandler) NavigationTargetSet(name string) (string, bool) {
+	if target, ok := h.navigationTargets[name]; ok {
+		return target, true
+	}
+	if value, ok := h.navigationProps[name]; ok && value {
+		return name, true
+	}
+	return "", false
+}
 
 func boolToString(v bool) string {
 	if v {
@@ -533,5 +545,45 @@ func TestRouter_FunctionCompositionAfterNavigation(t *testing.T) {
 
 	if !invoked {
 		t.Fatalf("expected function composition to invoke function on target entity set")
+	}
+}
+
+func TestRouter_FunctionCompositionWithRenamedNavigation(t *testing.T) {
+	handler := newStubEntityHandler()
+	handler.navigationProps["FeaturedProducts"] = true
+	handler.navigationTargets["FeaturedProducts"] = "Products"
+
+	targetHandler := newStubEntityHandler()
+
+	invoked := false
+	r := &Router{
+		resolveHandler: func(entitySet string) (EntityHandler, bool) {
+			if entitySet == "Categories" {
+				return handler, true
+			}
+			if entitySet == "Products" {
+				return targetHandler, true
+			}
+			return nil, false
+		},
+		handleServiceDocument: func(http.ResponseWriter, *http.Request) {},
+		handleMetadata:        func(http.ResponseWriter, *http.Request) {},
+		handleBatch:           func(http.ResponseWriter, *http.Request) {},
+		actions:               make(map[string][]*actions.ActionDefinition),
+		functions:             map[string][]*actions.FunctionDefinition{"GetAveragePrice": nil},
+		actionInvoker: func(_ http.ResponseWriter, _ *http.Request, name, key string, isBound bool, entitySet string) {
+			invoked = true
+			if name != "GetAveragePrice" || key != "" || !isBound || entitySet != "Products" {
+				t.Fatalf("unexpected invocation parameters: name=%s key=%s bound=%v set=%s", name, key, isBound, entitySet)
+			}
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/Categories(1)/FeaturedProducts/GetAveragePrice()", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if !invoked {
+		t.Fatalf("expected function composition to use navigation target entity set")
 	}
 }

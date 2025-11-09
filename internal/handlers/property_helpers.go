@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/response"
@@ -53,6 +54,56 @@ func (h *EntityHandler) findStreamProperty(propertyName string) *metadata.Proper
 // IsStreamProperty checks if a property name is a stream property
 func (h *EntityHandler) IsStreamProperty(propertyName string) bool {
 	return h.findStreamProperty(propertyName) != nil
+}
+
+// NavigationTargetSet returns the entity set name for the given navigation property, if available.
+func (h *EntityHandler) NavigationTargetSet(propertyName string) (string, bool) {
+	navPropName, _ := h.parseNavigationPropertyWithKey(propertyName)
+	navProp := h.findNavigationProperty(navPropName)
+	if navProp == nil {
+		return "", false
+	}
+
+	targetName := strings.TrimSpace(navProp.NavigationTarget)
+	if targetName == "" {
+		return "", false
+	}
+
+	if h.entitiesMetadata == nil {
+		return "", false
+	}
+
+	if meta, ok := h.entitiesMetadata[targetName]; ok && meta != nil {
+		if meta.EntitySetName != "" {
+			return meta.EntitySetName, true
+		}
+	}
+
+	for setName, meta := range h.entitiesMetadata {
+		if meta == nil {
+			continue
+		}
+
+		if meta.EntitySetName == targetName || meta.EntityName == targetName {
+			if meta.EntitySetName != "" {
+				return meta.EntitySetName, true
+			}
+			if setName != "" {
+				return setName, true
+			}
+		}
+
+		if meta.EntityType != nil && meta.EntityType.Name() == targetName {
+			if meta.EntitySetName != "" {
+				return meta.EntitySetName, true
+			}
+			if setName != "" {
+				return setName, true
+			}
+		}
+	}
+
+	return "", false
 }
 
 // writeMethodNotAllowedError writes a method not allowed error for a specific context
