@@ -175,7 +175,10 @@ type AsyncConfig struct {
 	// MaxQueueSize limits concurrently executing async jobs. Zero disables the limit.
 	MaxQueueSize int
 	// JobRetention controls how long completed jobs are retained for polling clients.
+	// A zero duration applies async.DefaultJobRetention unless DisableRetention is true.
 	JobRetention time.Duration
+	// DisableRetention disables automatic removal of completed jobs from the backing store.
+	DisableRetention bool
 }
 
 // EnableAsyncProcessing configures asynchronous request handling for the service.
@@ -200,7 +203,12 @@ func (s *Service) EnableAsyncProcessing(cfg AsyncConfig) error {
 		s.runtime.ConfigureAsync(nil, nil, "", 0)
 	}
 
-	mgr, err := async.NewManager(s.db, normalized.JobRetention)
+	managerOptions := make([]async.ManagerOption, 0, 1)
+	if normalized.DisableRetention {
+		managerOptions = append(managerOptions, async.WithRetentionDisabled())
+	}
+
+	mgr, err := async.NewManager(s.db, normalized.JobRetention, managerOptions...)
 	if err != nil {
 		return fmt.Errorf("failed to configure async processing: %w", err)
 	}

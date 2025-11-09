@@ -13,11 +13,15 @@ rely on version numbers to reason about compatibility.
 
 - Lifecycle hooks now expose the active GORM transaction through `odata.TransactionFromContext`, enabling user code to perform
   additional queries that participate in the same commit.
+- `AsyncConfig.DisableRetention` allows services to opt out of automatic async
+  job cleanup when stricter audit retention is required.
 
 ### Changed
 
 - Moved service routing and operation handling into internal packages to reduce
   root-level surface area while keeping exported APIs unchanged.
+- Async job managers now apply a 24-hour default retention window when no
+  duration is provided and continue purging expired rows in the background.
 
 ### Fixed
 

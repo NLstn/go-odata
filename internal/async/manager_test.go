@@ -195,6 +195,54 @@ func TestManagerCleanupRemovesOldJobs(t *testing.T) {
 	}
 }
 
+func TestManagerDefaultRetentionCleanup(t *testing.T) {
+	originalDefault := defaultJobRetention
+	defaultJobRetention = 50 * time.Millisecond
+	t.Cleanup(func() {
+		defaultJobRetention = originalDefault
+	})
+
+	mgr, db := newTestManager(t, 0)
+
+	job, err := mgr.StartJob(context.Background(), func(ctx context.Context) (*StoredResponse, error) {
+		return &StoredResponse{StatusCode: http.StatusOK}, nil
+	})
+	if err != nil {
+		t.Fatalf("StartJob error: %v", err)
+	}
+	if err := job.SetMonitorURL("/async/jobs/" + job.ID); err != nil {
+		t.Fatalf("SetMonitorURL error: %v", err)
+	}
+
+	job.Wait()
+
+	var record JobRecord
+	if err := db.First(&record, "id = ?", job.ID).Error; err != nil {
+		t.Fatalf("expected job record to exist before cleanup, got %v", err)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	var lookupErr error
+	for time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+		lookupErr = db.First(&record, "id = ?", job.ID).Error
+		if errors.Is(lookupErr, gorm.ErrRecordNotFound) {
+			break
+		}
+	}
+
+	if !errors.Is(lookupErr, gorm.ErrRecordNotFound) {
+		t.Fatalf("expected job row to be deleted by background cleanup, got %v", lookupErr)
+	}
+
+	mgr.mu.Lock()
+	_, exists := mgr.jobs[job.ID]
+	mgr.mu.Unlock()
+	if exists {
+		t.Fatalf("expected job to be removed from memory after cleanup")
+	}
+}
+
 func TestManagerPersistenceAcrossInstances(t *testing.T) {
 	mgr1, db := newTestManager(t, 0)
 

@@ -155,7 +155,7 @@ if err := service.EnableAsyncProcessing(odata.AsyncConfig{
     MonitorPathPrefix:    "/$async/jobs/", // default when empty
     DefaultRetryInterval: 5 * time.Second,  // Retry-After header while pending
     MaxQueueSize:         8,                // Optional worker limit
-    JobRetention:         15 * time.Minute, // How long to keep completed jobs
+    JobRetention:         15 * time.Minute, // Overrides the 24h default retention window
 }); err != nil {
     log.Fatalf("enable async processing: %v", err)
 }
@@ -175,6 +175,11 @@ With async processing enabled:
   keeps monitor state isolated from application models and allows a fresh
   `async.Manager` to serve completed job results until the retention TTL deletes
   the row.
+
+Completed jobs are kept for 24 hours by default (`async.DefaultJobRetention`).
+Setting `JobRetention` to zero uses that default, while applications that must
+retain data indefinitely can opt out by setting `DisableRetention: true` and
+managing cleanup manually.
 
 The development server (`cmd/devserver`) enables async processing by default
 using the standard `/$async/jobs/` prefix and advertises the monitor endpoint in

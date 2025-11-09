@@ -17,6 +17,13 @@ import (
 	"gorm.io/gorm"
 )
 
+const (
+	// DefaultJobRetention is the default amount of time completed jobs are retained.
+	DefaultJobRetention = 24 * time.Hour
+)
+
+var defaultJobRetention = DefaultJobRetention
+
 // JobStatus represents the lifecycle state of an asynchronous job.
 type JobStatus string
 
@@ -88,8 +95,23 @@ type Manager struct {
 	db            *gorm.DB
 }
 
+type managerConfig struct {
+	disableRetention bool
+}
+
+// ManagerOption configures behaviour of NewManager.
+type ManagerOption func(*managerConfig)
+
+// WithRetentionDisabled prevents the manager from applying a default TTL and disables cleanup.
+func WithRetentionDisabled() ManagerOption {
+	return func(cfg *managerConfig) {
+		cfg.disableRetention = true
+	}
+}
+
 // NewManager constructs a Manager with the supplied TTL for completed jobs.
-func NewManager(db *gorm.DB, ttl time.Duration) (*Manager, error) {
+// A zero TTL applies DefaultJobRetention unless WithRetentionDisabled is provided.
+func NewManager(db *gorm.DB, ttl time.Duration, opts ...ManagerOption) (*Manager, error) {
 	if db == nil {
 		return nil, errors.New("async: database handle is required")
 	}
@@ -98,17 +120,31 @@ func NewManager(db *gorm.DB, ttl time.Duration) (*Manager, error) {
 		return nil, err
 	}
 
+	cfg := managerConfig{}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(&cfg)
+		}
+	}
+
+	effectiveTTL := ttl
+	if cfg.disableRetention {
+		effectiveTTL = 0
+	} else if effectiveTTL <= 0 {
+		effectiveTTL = defaultJobRetention
+	}
+
 	m := &Manager{
 		jobs:        make(map[string]*Job),
-		ttl:         ttl,
+		ttl:         effectiveTTL,
 		stopCleanup: make(chan struct{}),
 		db:          db,
 	}
 
-	if ttl > 0 {
-		interval := ttl / 2
+	if effectiveTTL > 0 {
+		interval := effectiveTTL / 2
 		if interval <= 0 {
-			interval = ttl
+			interval = effectiveTTL
 		}
 		m.cleanupTicker = time.NewTicker(interval)
 		go func() {
