@@ -63,8 +63,10 @@ func (h *EntityHandler) callAfterDelete(entity interface{}, r *http.Request) err
 	return callHook(entity, "AfterDelete", r)
 }
 
-// callHook invokes a hook method on an entity using reflection
-// It tries both value and pointer receivers
+// callHook invokes a hook method on an entity using reflection.
+// It tries both value and pointer receivers. Hooks receive the request context and
+// can access the active transaction via odata.TransactionFromContext when invoked
+// from entity and collection write handlers.
 func callHook(entity interface{}, methodName string, r *http.Request) error {
 	ctx := r.Context()
 

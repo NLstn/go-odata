@@ -49,6 +49,7 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 
 	var changeEvents []changeEvent
 	if err := h.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		hookReq := requestWithTransaction(r, tx)
 		pendingBindings, err := h.processODataBindAnnotations(ctx, entity, requestData, tx)
 		if err != nil {
 			WriteError(w, http.StatusBadRequest, "Invalid @odata.bind annotation", err.Error())
@@ -67,7 +68,7 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 			return newTransactionHandledError(err)
 		}
 
-		if err := h.callBeforeCreate(entity, r); err != nil {
+		if err := h.callBeforeCreate(entity, hookReq); err != nil {
 			WriteError(w, http.StatusForbidden, "Authorization failed", err.Error())
 			return newTransactionHandledError(err)
 		}
@@ -83,7 +84,7 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 			return newTransactionHandledError(err)
 		}
 
-		if err := h.callAfterCreate(entity, r); err != nil {
+		if err := h.callAfterCreate(entity, hookReq); err != nil {
 			h.logger.Error("AfterCreate hook failed", "error", err)
 		}
 
@@ -150,7 +151,8 @@ func (h *EntityHandler) handlePostMediaEntity(w http.ResponseWriter, r *http.Req
 
 	var changeEvents []changeEvent
 	if err := h.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := h.callBeforeCreate(entity, r); err != nil {
+		hookReq := requestWithTransaction(r, tx)
+		if err := h.callBeforeCreate(entity, hookReq); err != nil {
 			if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", err.Error()); writeErr != nil {
 				h.logger.Error("Error writing error response", "error", writeErr)
 			}
@@ -164,7 +166,7 @@ func (h *EntityHandler) handlePostMediaEntity(w http.ResponseWriter, r *http.Req
 			return newTransactionHandledError(err)
 		}
 
-		if err := h.callAfterCreate(entity, r); err != nil {
+		if err := h.callAfterCreate(entity, hookReq); err != nil {
 			h.logger.Error("AfterCreate hook failed", "error", err)
 		}
 
