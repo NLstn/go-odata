@@ -31,6 +31,7 @@ type EntityHandler interface {
 	IsStreamProperty(string) bool
 	IsStructuralProperty(string) bool
 	IsComplexTypeProperty(string) bool
+	NavigationTargetSet(string) (string, bool)
 	FetchEntity(string) (interface{}, error)
 }
 
@@ -368,7 +369,7 @@ func (r *Router) handlePropertyRequest(w http.ResponseWriter, req *http.Request,
 		if handler.IsNavigationProperty(firstSegment) && r.isActionOrFunction(lastOperationName) {
 			// This is function composition: navigate first, then invoke operation
 			// We need to get the target entity set for the navigation property
-			targetEntitySet := r.getNavigationTargetEntitySet(firstSegment)
+			targetEntitySet := r.getNavigationTargetEntitySet(handler, firstSegment)
 			if targetEntitySet == "" {
 				if writeErr := response.WriteError(w, http.StatusInternalServerError, "Internal error",
 					fmt.Sprintf("Could not determine target entity set for navigation property '%s'", firstSegment)); writeErr != nil {
@@ -475,12 +476,13 @@ func (r *Router) isActionOrFunction(name string) bool {
 }
 
 // getNavigationTargetEntitySet returns the target entity set name for a navigation property
-func (r *Router) getNavigationTargetEntitySet(navigationProperty string) string {
-	// Look up the handler for the navigation target by trying common patterns
-	// Navigation property names often match entity set names (e.g., Products -> Products)
-	if targetHandler, exists := r.resolveHandler(navigationProperty); exists {
-		_ = targetHandler // We found it
-		return navigationProperty
+func (r *Router) getNavigationTargetEntitySet(handler EntityHandler, navigationProperty string) string {
+	if handler == nil {
+		return ""
+	}
+
+	if target, ok := handler.NavigationTargetSet(navigationProperty); ok {
+		return target
 	}
 
 	return ""

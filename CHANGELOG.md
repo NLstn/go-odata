@@ -10,6 +10,7 @@ rely on version numbers to reason about compatibility.
 ## [Unreleased]
 
 ### Added
+- Entity handlers now expose `NavigationTargetSet` so the router can resolve bound actions and functions after renamed navigation properties.
 
 ### Changed
 
