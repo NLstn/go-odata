@@ -11,6 +11,9 @@ rely on version numbers to reason about compatibility.
 
 ### Added
 
+- Lifecycle hooks now expose the active GORM transaction through `odata.TransactionFromContext`, enabling user code to perform
+  additional queries that participate in the same commit.
+
 ### Changed
 
 - Moved service routing and operation handling into internal packages to reduce

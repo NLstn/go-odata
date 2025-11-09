@@ -26,6 +26,7 @@ func (h *EntityHandler) handleDeleteEntity(w http.ResponseWriter, r *http.Reques
 	)
 
 	if err := h.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		hookReq := requestWithTransaction(r, tx)
 		fetched, err := h.fetchAndVerifyEntity(tx, entityKey, w)
 		if err != nil {
 			return newTransactionHandledError(err)
@@ -45,7 +46,7 @@ func (h *EntityHandler) handleDeleteEntity(w http.ResponseWriter, r *http.Reques
 			}
 		}
 
-		if err := h.callBeforeDelete(entity, r); err != nil {
+		if err := h.callBeforeDelete(entity, hookReq); err != nil {
 			if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", err.Error()); writeErr != nil {
 				h.logger.Error("Error writing error response", "error", writeErr)
 			}
@@ -57,7 +58,7 @@ func (h *EntityHandler) handleDeleteEntity(w http.ResponseWriter, r *http.Reques
 			return newTransactionHandledError(err)
 		}
 
-		if err := h.callAfterDelete(entity, r); err != nil {
+		if err := h.callAfterDelete(entity, hookReq); err != nil {
 			h.logger.Error("AfterDelete hook failed", "error", err)
 		}
 
@@ -94,6 +95,7 @@ func (h *EntityHandler) handlePatchEntity(w http.ResponseWriter, r *http.Request
 
 	ctx := r.Context()
 	if err := h.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		hookReq := requestWithTransaction(r, tx)
 		entity = reflect.New(h.metadata.EntityType).Interface()
 
 		db, err := h.buildKeyQuery(tx, entityKey)
@@ -159,7 +161,7 @@ func (h *EntityHandler) handlePatchEntity(w http.ResponseWriter, r *http.Request
 			return newTransactionHandledError(err)
 		}
 
-		if err := h.callBeforeUpdate(entity, r); err != nil {
+		if err := h.callBeforeUpdate(entity, hookReq); err != nil {
 			if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", err.Error()); writeErr != nil {
 				h.logger.Error("Error writing error response", "error", writeErr)
 			}
@@ -178,7 +180,7 @@ func (h *EntityHandler) handlePatchEntity(w http.ResponseWriter, r *http.Request
 			return newTransactionHandledError(err)
 		}
 
-		if err := h.callAfterUpdate(entity, r); err != nil {
+		if err := h.callAfterUpdate(entity, hookReq); err != nil {
 			h.logger.Error("AfterUpdate hook failed", "error", err)
 		}
 
@@ -259,6 +261,7 @@ func (h *EntityHandler) handlePutEntity(w http.ResponseWriter, r *http.Request, 
 
 	ctx := r.Context()
 	if err := h.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		hookReq := requestWithTransaction(r, tx)
 		entity := reflect.New(h.metadata.EntityType).Interface()
 
 		db, err := h.buildKeyQuery(tx, entityKey)
@@ -303,7 +306,7 @@ func (h *EntityHandler) handlePutEntity(w http.ResponseWriter, r *http.Request, 
 			return newTransactionHandledError(err)
 		}
 
-		if err := h.callBeforeUpdate(entity, r); err != nil {
+		if err := h.callBeforeUpdate(entity, hookReq); err != nil {
 			if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", err.Error()); writeErr != nil {
 				h.logger.Error("Error writing error response", "error", writeErr)
 			}
@@ -315,7 +318,7 @@ func (h *EntityHandler) handlePutEntity(w http.ResponseWriter, r *http.Request, 
 			return newTransactionHandledError(err)
 		}
 
-		if err := h.callAfterUpdate(entity, r); err != nil {
+		if err := h.callAfterUpdate(entity, hookReq); err != nil {
 			h.logger.Error("AfterUpdate hook failed", "error", err)
 		}
 

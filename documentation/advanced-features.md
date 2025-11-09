@@ -346,6 +346,50 @@ func (p *Product) AfterCreate(ctx context.Context, r *http.Request) error {
 }
 ```
 
+### Using the active transaction inside hooks
+
+Entity and collection write handlers execute inside a shared GORM transaction. The active `*gorm.DB` is stored on the request
+context so your hooks can participate in the same transaction by calling `odata.TransactionFromContext`:
+
+```go
+func (p *Product) BeforeCreate(ctx context.Context, r *http.Request) error {
+    tx, ok := odata.TransactionFromContext(ctx)
+    if !ok {
+        return fmt.Errorf("transaction unavailable")
+    }
+
+    audit := CreationAudit{
+        ProductID: p.ID,
+        PerformedBy: r.Header.Get("X-User"),
+    }
+    if err := tx.Create(&audit).Error; err != nil {
+        return err
+    }
+    return nil
+}
+
+func (p *Product) BeforeUpdate(ctx context.Context, r *http.Request) error {
+    tx, ok := odata.TransactionFromContext(ctx)
+    if !ok {
+        return fmt.Errorf("transaction unavailable")
+    }
+
+    if err := tx.Model(&Inventory{}).
+        Where("product_id = ?", p.ID).
+        Update("last_checked_at", time.Now()).Error; err != nil {
+        return err
+    }
+
+    if p.IsRetired {
+        return fmt.Errorf("retired products cannot be edited")
+    }
+    return nil
+}
+```
+
+Any error returned by a hook still aborts the handler, rolling back changes performed via the shared transaction so partial updates
+never escape to the database.
+
 ### Hook Use Cases
 
 **Validation:**
