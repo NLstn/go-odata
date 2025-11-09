@@ -15,7 +15,9 @@ import (
 	"github.com/nlstn/go-odata/internal/async"
 	"github.com/nlstn/go-odata/internal/handlers"
 	"github.com/nlstn/go-odata/internal/metadata"
+	"github.com/nlstn/go-odata/internal/service/operations"
 	servrouter "github.com/nlstn/go-odata/internal/service/router"
+	servruntime "github.com/nlstn/go-odata/internal/service/runtime"
 	"github.com/nlstn/go-odata/internal/trackchanges"
 	"gorm.io/gorm"
 )
@@ -55,6 +57,10 @@ type Service struct {
 	changeTrackingPersistent bool
 	// router handles HTTP routing for the service
 	router *servrouter.Router
+	// operationsHandler orchestrates action and function execution
+	operationsHandler *operations.Handler
+	// runtime coordinates HTTP handling and async dispatch
+	runtime *servruntime.Runtime
 	// asyncManager manages asynchronous requests when enabled
 	asyncManager *async.Manager
 	// asyncConfig stores the configuration for async processing
@@ -113,6 +119,7 @@ func NewServiceWithConfig(db *gorm.DB, cfg ServiceConfig) (*Service, error) {
 		logger:                   logger,
 	}
 	s.metadataHandler.SetNamespace(DefaultNamespace)
+	s.operationsHandler = operations.NewHandler(s.actions, s.functions, s.handlers, s.entities, s.namespace, logger)
 	// Initialize batch handler with reference to service
 	s.batchHandler = handlers.NewBatchHandler(db, handlersMap, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		s.serveHTTP(w, r, false)
@@ -130,10 +137,11 @@ func NewServiceWithConfig(db *gorm.DB, cfg ServiceConfig) (*Service, error) {
 		s.batchHandler.HandleBatch,
 		s.actions,
 		s.functions,
-		s.handleActionOrFunction,
+		s.operationsHandler.HandleActionOrFunction,
 		logger,
 	)
 	s.router.SetAsyncMonitor(s.asyncMonitorPrefix, s.asyncManager)
+	s.runtime = servruntime.New(s.router, logger)
 	return s, nil
 }
 
@@ -146,6 +154,12 @@ func (s *Service) SetLogger(logger *slog.Logger) {
 	s.logger = logger
 	s.router.SetLogger(logger)
 	s.serviceDocumentHandler.SetLogger(logger)
+	if s.operationsHandler != nil {
+		s.operationsHandler.SetLogger(logger)
+	}
+	if s.runtime != nil {
+		s.runtime.SetLogger(logger)
+	}
 	// Update logger for all existing handlers
 	for _, handler := range s.handlers {
 		handler.SetLogger(logger)
@@ -182,6 +196,10 @@ func (s *Service) EnableAsyncProcessing(cfg AsyncConfig) error {
 		s.asyncManager = nil
 	}
 
+	if s.runtime != nil {
+		s.runtime.ConfigureAsync(nil, nil, "", 0)
+	}
+
 	mgr, err := async.NewManager(s.db, normalized.JobRetention)
 	if err != nil {
 		return fmt.Errorf("failed to configure async processing: %w", err)
@@ -202,7 +220,21 @@ func (s *Service) EnableAsyncProcessing(cfg AsyncConfig) error {
 		s.asyncQueue = nil
 	}
 
+	if s.runtime != nil {
+		s.runtime.ConfigureAsync(s.asyncManager, s.asyncQueue, s.asyncMonitorPrefix, s.asyncConfig.DefaultRetryInterval)
+	}
+
 	return nil
+}
+
+// AsyncManager exposes the current async manager instance for testing and monitoring.
+func (s *Service) AsyncManager() *async.Manager {
+	return s.asyncManager
+}
+
+// AsyncMonitorPrefix returns the configured monitor path prefix.
+func (s *Service) AsyncMonitorPrefix() string {
+	return s.asyncMonitorPrefix
 }
 
 // RegisterEntity registers an entity type with the OData service.

@@ -1,4 +1,4 @@
-package odata
+package runtime
 
 import (
 	"bytes"
@@ -8,35 +8,86 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"time"
 
 	"github.com/nlstn/go-odata/internal/async"
 	"github.com/nlstn/go-odata/internal/preference"
+	servrouter "github.com/nlstn/go-odata/internal/service/router"
 )
 
-// ServeHTTP implements http.Handler by delegating to the internal router.
-func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	s.serveHTTP(w, r, true)
+// Logger captures the subset of slog.Logger functionality required by the runtime.
+type Logger interface {
+	Error(msg string, args ...any)
 }
 
-func (s *Service) serveHTTP(w http.ResponseWriter, r *http.Request, allowAsync bool) {
-	if s.router == nil {
+// Runtime coordinates HTTP request handling for a service instance.
+type Runtime struct {
+	router *servrouter.Router
+	logger Logger
+
+	asyncEnabled         bool
+	asyncManager         *async.Manager
+	asyncQueue           chan struct{}
+	asyncMonitorPrefix   string
+	defaultRetryInterval time.Duration
+}
+
+// New creates a new Runtime.
+func New(router *servrouter.Router, logger Logger) *Runtime {
+	return &Runtime{
+		router: router,
+		logger: logger,
+	}
+}
+
+// SetRouter updates the router used to dispatch requests.
+func (rt *Runtime) SetRouter(router *servrouter.Router) {
+	rt.router = router
+}
+
+// SetLogger updates the logger used for error reporting.
+func (rt *Runtime) SetLogger(logger Logger) {
+	rt.logger = logger
+}
+
+// ConfigureAsync configures asynchronous request processing dependencies.
+func (rt *Runtime) ConfigureAsync(manager *async.Manager, queue chan struct{}, monitorPrefix string, defaultRetryInterval time.Duration) {
+	if manager == nil {
+		rt.asyncEnabled = false
+		rt.asyncManager = nil
+		rt.asyncQueue = nil
+		rt.asyncMonitorPrefix = ""
+		rt.defaultRetryInterval = 0
+		return
+	}
+
+	rt.asyncEnabled = true
+	rt.asyncManager = manager
+	rt.asyncQueue = queue
+	rt.asyncMonitorPrefix = monitorPrefix
+	rt.defaultRetryInterval = defaultRetryInterval
+}
+
+// ServeHTTP dispatches the request via the configured router.
+func (rt *Runtime) ServeHTTP(w http.ResponseWriter, r *http.Request, allowAsync bool) {
+	if rt.router == nil {
 		http.Error(w, "service router not initialized", http.StatusInternalServerError)
 		return
 	}
 
-	if allowAsync && s.tryHandleAsync(w, r) {
+	if allowAsync && rt.tryHandleAsync(w, r) {
 		return
 	}
 
-	s.router.ServeHTTP(w, r)
+	rt.router.ServeHTTP(w, r)
 }
 
-func (s *Service) tryHandleAsync(w http.ResponseWriter, r *http.Request) bool {
-	if s.asyncManager == nil || s.asyncConfig == nil {
+func (rt *Runtime) tryHandleAsync(w http.ResponseWriter, r *http.Request) bool {
+	if !rt.asyncEnabled || rt.asyncManager == nil {
 		return false
 	}
 
-	if s.asyncMonitorPrefix != "" && strings.HasPrefix(r.URL.Path, s.asyncMonitorPrefix) {
+	if rt.asyncMonitorPrefix != "" && strings.HasPrefix(r.URL.Path, rt.asyncMonitorPrefix) {
 		return false
 	}
 
@@ -58,7 +109,7 @@ func (s *Service) tryHandleAsync(w http.ResponseWriter, r *http.Request) bool {
 
 	sanitizedPrefer := preference.SanitizeForAsyncDispatch(r.Header.Get("Prefer"))
 
-	queueToken := s.acquireAsyncSlot()
+	queueToken := rt.acquireAsyncSlot()
 	if queueToken == nil {
 		// Fallback to synchronous execution
 		restoreRequestBody(r, body)
@@ -80,7 +131,7 @@ func (s *Service) tryHandleAsync(w http.ResponseWriter, r *http.Request) bool {
 		}
 
 		recorder := httptest.NewRecorder()
-		s.router.ServeHTTP(recorder, cloned)
+		rt.router.ServeHTTP(recorder, cloned)
 
 		return &async.StoredResponse{
 			StatusCode: recorder.Code,
@@ -90,11 +141,11 @@ func (s *Service) tryHandleAsync(w http.ResponseWriter, r *http.Request) bool {
 	}
 
 	jobOpts := []async.JobOption{}
-	if s.asyncConfig.DefaultRetryInterval > 0 {
-		jobOpts = append(jobOpts, async.WithRetryAfter(s.asyncConfig.DefaultRetryInterval))
+	if rt.defaultRetryInterval > 0 {
+		jobOpts = append(jobOpts, async.WithRetryAfter(rt.defaultRetryInterval))
 	}
 
-	job, err := s.asyncManager.StartJob(r.Context(), handler, jobOpts...)
+	job, err := rt.asyncManager.StartJob(r.Context(), handler, jobOpts...)
 	if err != nil {
 		restoreRequestBody(r, body)
 		queueToken.release()
@@ -106,8 +157,8 @@ func (s *Service) tryHandleAsync(w http.ResponseWriter, r *http.Request) bool {
 	// and restores the body on the clone. Restoring here would race with r.Clone()
 	// in the worker goroutine.
 
-	if s.asyncMonitorPrefix != "" {
-		if err := job.SetMonitorURL(s.asyncMonitorPrefix + job.ID); err != nil {
+	if rt.asyncMonitorPrefix != "" {
+		if err := job.SetMonitorURL(rt.asyncMonitorPrefix + job.ID); err != nil {
 			log.Printf("odata: failed to persist async monitor URL for job %s: %v", job.ID, err)
 		}
 	}
@@ -127,14 +178,14 @@ func (t *queueToken) release() {
 	<-t.ch
 }
 
-func (s *Service) acquireAsyncSlot() *queueToken {
-	if s.asyncQueue == nil {
+func (rt *Runtime) acquireAsyncSlot() *queueToken {
+	if rt.asyncQueue == nil {
 		return &queueToken{}
 	}
 
 	select {
-	case s.asyncQueue <- struct{}{}:
-		return &queueToken{ch: s.asyncQueue}
+	case rt.asyncQueue <- struct{}{}:
+		return &queueToken{ch: rt.asyncQueue}
 	default:
 		return nil
 	}

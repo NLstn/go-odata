@@ -13,6 +13,9 @@ rely on version numbers to reason about compatibility.
 
 ### Changed
 
+- Moved service routing and operation handling into internal packages to reduce
+  root-level surface area while keeping exported APIs unchanged.
+
 ### Fixed
 
 - Ensure function context URLs honor the configured service namespace when returning complex types.
