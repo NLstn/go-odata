@@ -149,7 +149,7 @@ func (s *Service) handleActionOrFunction(w http.ResponseWriter, r *http.Request,
 		metadataLevel := response.GetODataMetadataLevel(r)
 		w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
 
-		contextFragment := metadata.FunctionContextFragment(functionDef.ReturnType, s.entities)
+		contextFragment := metadata.FunctionContextFragment(functionDef.ReturnType, s.entities, s.namespace)
 		if contextFragment == "" {
 			contextFragment = "Edm.String"
 		}

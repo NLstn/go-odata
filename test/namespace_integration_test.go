@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -15,6 +16,10 @@ import (
 type NamespaceProduct struct {
 	ID   uint   `json:"ID" gorm:"primaryKey" odata:"key"`
 	Name string `json:"Name"`
+}
+
+type NamespaceFunctionResult struct {
+	Info string `json:"Info"`
 }
 
 func setupNamespaceDB(t *testing.T) *gorm.DB {
@@ -38,6 +43,16 @@ func TestServiceCustomNamespace(t *testing.T) {
 
 	if err := service.SetNamespace("Contoso"); err != nil {
 		t.Fatalf("SetNamespace failed: %v", err)
+	}
+
+	if err := service.RegisterFunction(odata.FunctionDefinition{
+		Name:       "GetNamespaceInfo",
+		ReturnType: reflect.TypeOf(NamespaceFunctionResult{}),
+		Handler: func(http.ResponseWriter, *http.Request, interface{}, map[string]interface{}) (interface{}, error) {
+			return NamespaceFunctionResult{Info: "Configured"}, nil
+		},
+	}); err != nil {
+		t.Fatalf("RegisterFunction failed: %v", err)
 	}
 
 	// Verify XML metadata namespace
@@ -109,5 +124,25 @@ func TestServiceCustomNamespace(t *testing.T) {
 	}
 	if entityType, ok := entity["@odata.type"].(string); !ok || entityType != "#Contoso.NamespaceProduct" {
 		t.Fatalf("expected @odata.type=#Contoso.NamespaceProduct, got %v", entity["@odata.type"])
+	}
+
+	reqFunction := httptest.NewRequest(http.MethodGet, "/GetNamespaceInfo()", nil)
+	reqFunction.Header.Set("Accept", "application/json")
+	wFunction := httptest.NewRecorder()
+	service.ServeHTTP(wFunction, reqFunction)
+	if wFunction.Code != http.StatusOK {
+		t.Fatalf("unexpected status for function: %d", wFunction.Code)
+	}
+
+	var functionPayload map[string]interface{}
+	if err := json.Unmarshal(wFunction.Body.Bytes(), &functionPayload); err != nil {
+		t.Fatalf("failed to parse function response: %v", err)
+	}
+	contextValue, ok := functionPayload["@odata.context"].(string)
+	if !ok {
+		t.Fatalf("expected function @odata.context string, got %T", functionPayload["@odata.context"])
+	}
+	if !strings.Contains(contextValue, "$metadata#Contoso.NamespaceFunctionResult") {
+		t.Fatalf("expected namespace-qualified context URL, got %s", contextValue)
 	}
 }

@@ -3,15 +3,18 @@ package metadata
 import (
 	"fmt"
 	"reflect"
+	"strings"
 	"time"
 )
+
+const defaultNamespace = "ODataService"
 
 var (
 	timeType = reflect.TypeOf(time.Time{})
 )
 
 // FunctionContextFragment builds the metadata fragment for a function return type.
-func FunctionContextFragment(returnType reflect.Type, entities map[string]*EntityMetadata) string {
+func FunctionContextFragment(returnType reflect.Type, entities map[string]*EntityMetadata, namespace string) string {
 	if returnType == nil {
 		return ""
 	}
@@ -57,7 +60,7 @@ func FunctionContextFragment(returnType reflect.Type, entities map[string]*Entit
 	}
 
 	if typ.Kind() == reflect.Struct {
-		qualifiedName := buildQualifiedComplexTypeName(typ)
+		qualifiedName := buildQualifiedComplexTypeName(typ, namespace)
 		if qualifiedName == "" {
 			return ""
 		}
@@ -152,7 +155,7 @@ func primitiveEdmType(goType reflect.Type) (string, bool) {
 	return "", false
 }
 
-func buildQualifiedComplexTypeName(goType reflect.Type) string {
+func buildQualifiedComplexTypeName(goType reflect.Type, namespace string) string {
 	if goType == nil {
 		return ""
 	}
@@ -165,5 +168,13 @@ func buildQualifiedComplexTypeName(goType reflect.Type) string {
 		return ""
 	}
 
-	return fmt.Sprintf("ODataService.%s", goType.Name())
+	return fmt.Sprintf("%s.%s", normalizeNamespace(namespace), goType.Name())
+}
+
+func normalizeNamespace(namespace string) string {
+	trimmed := strings.TrimSpace(namespace)
+	if trimmed == "" {
+		return defaultNamespace
+	}
+	return trimmed
 }
