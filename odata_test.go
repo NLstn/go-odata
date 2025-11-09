@@ -46,6 +46,43 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
+func TestNewServiceWithConfigNilDB(t *testing.T) {
+	service, err := NewServiceWithConfig(nil, ServiceConfig{})
+	if err == nil {
+		t.Fatal("expected error when creating service with nil database")
+	}
+
+	expected := "odata: database handle is required"
+	if err.Error() != expected {
+		t.Fatalf("unexpected error: got %q, want %q", err.Error(), expected)
+	}
+
+	if service != nil {
+		t.Fatal("expected returned service to be nil when database is nil")
+	}
+}
+
+func TestNewServiceNilDBPanics(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic when creating service with nil database")
+		}
+
+		err, ok := r.(error)
+		if !ok {
+			t.Fatalf("expected panic to be an error, got %T", r)
+		}
+
+		expected := "odata: database handle is required"
+		if err.Error() != expected {
+			t.Fatalf("unexpected panic message: got %q, want %q", err.Error(), expected)
+		}
+	}()
+
+	_ = NewService(nil)
+}
+
 func TestNewService(t *testing.T) {
 	db := setupTestDB(t)
 
