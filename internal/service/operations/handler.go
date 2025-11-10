@@ -51,6 +51,11 @@ func (h *Handler) SetLogger(logger Logger) {
 	h.logger = logger
 }
 
+// SetNamespace updates the namespace used for function context fragments.
+func (h *Handler) SetNamespace(namespace string) {
+	h.namespace = namespace
+}
+
 type invocationError struct {
 	status  int
 	message string
