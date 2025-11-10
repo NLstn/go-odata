@@ -416,6 +416,7 @@ func (s *Service) SetNamespace(namespace string) error {
 
 	s.namespace = trimmed
 	s.metadataHandler.SetNamespace(trimmed)
+	s.operationsHandler.SetNamespace(trimmed)
 	for _, handler := range s.handlers {
 		handler.SetNamespace(trimmed)
 	}
