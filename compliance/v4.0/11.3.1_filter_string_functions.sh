@@ -23,36 +23,123 @@ test_contains_function() {
     local RESPONSE=$(http_get_body "$SERVER_URL/Products?\$filter=contains(Name,'Laptop')")
     local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=contains(Name,'Laptop')")
     
-    if [ "$HTTP_CODE" = "200" ]; then
-        # Check that response contains value array
-        if echo "$RESPONSE" | grep -q '"value"'; then
-            return 0
-        else
-            echo "  Details: Response missing 'value' array"
-            return 1
-        fi
-    else
+    if [ "$HTTP_CODE" != "200" ]; then
         echo "  Details: Status code: $HTTP_CODE (expected 200)"
         return 1
     fi
+    
+    # Check that response contains value array
+    if ! echo "$RESPONSE" | grep -q '"value"'; then
+        echo "  Details: Response missing 'value' array"
+        return 1
+    fi
+    
+    # Verify all returned entities have "Laptop" in Name
+    local NAMES=$(echo "$RESPONSE" | grep -o '"Name"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/"Name"[[:space:]]*:[[:space:]]*"//; s/"$//')
+    
+    if [ -z "$NAMES" ]; then
+        echo "  Details: No entities returned or no Name field found"
+        return 1
+    fi
+    
+    while IFS= read -r name; do
+        if [ -n "$name" ]; then
+            if ! echo "$name" | grep -q "Laptop"; then
+                echo "  Details: Found entity with Name='$name' which does not contain 'Laptop'"
+                return 1
+            fi
+        fi
+    done <<< "$NAMES"
+    
+    return 0
 }
 
 # Test 2: startswith function
 test_startswith_function() {
     local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=startswith(Name,'Gaming')")
-    check_status "$HTTP_CODE" "200"
+    if ! check_status "$HTTP_CODE" "200"; then
+        return 1
+    fi
+    
+    local RESPONSE=$(http_get_body "$SERVER_URL/Products?\$filter=startswith(Name,'Gaming')")
+    
+    # Verify all returned entities have Name starting with "Gaming"
+    local NAMES=$(echo "$RESPONSE" | grep -o '"Name"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/"Name"[[:space:]]*:[[:space:]]*"//; s/"$//')
+    
+    if [ -z "$NAMES" ]; then
+        echo "  Details: No entities returned or no Name field found"
+        return 1
+    fi
+    
+    while IFS= read -r name; do
+        if [ -n "$name" ]; then
+            if ! echo "$name" | grep -q "^Gaming"; then
+                echo "  Details: Found entity with Name='$name' which does not start with 'Gaming'"
+                return 1
+            fi
+        fi
+    done <<< "$NAMES"
+    
+    return 0
 }
 
 # Test 3: endswith function
 test_endswith_function() {
     local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=endswith(Name,'Mouse')")
-    check_status "$HTTP_CODE" "200"
+    if ! check_status "$HTTP_CODE" "200"; then
+        return 1
+    fi
+    
+    local RESPONSE=$(http_get_body "$SERVER_URL/Products?\$filter=endswith(Name,'Mouse')")
+    
+    # Verify all returned entities have Name ending with "Mouse"
+    local NAMES=$(echo "$RESPONSE" | grep -o '"Name"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/"Name"[[:space:]]*:[[:space:]]*"//; s/"$//')
+    
+    if [ -z "$NAMES" ]; then
+        echo "  Details: No entities returned or no Name field found"
+        return 1
+    fi
+    
+    while IFS= read -r name; do
+        if [ -n "$name" ]; then
+            if ! echo "$name" | grep -q "Mouse$"; then
+                echo "  Details: Found entity with Name='$name' which does not end with 'Mouse'"
+                return 1
+            fi
+        fi
+    done <<< "$NAMES"
+    
+    return 0
 }
 
 # Test 4: length function
 test_length_function() {
-    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=length(Name) gt 10")
-    check_status "$HTTP_CODE" "200"
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=length(Name)%20gt%2010")
+    if ! check_status "$HTTP_CODE" "200"; then
+        return 1
+    fi
+    
+    local RESPONSE=$(http_get_body "$SERVER_URL/Products?\$filter=length(Name)%20gt%2010")
+    
+    # Verify all returned entities have Name length > 10
+    local NAMES=$(echo "$RESPONSE" | grep -o '"Name"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/"Name"[[:space:]]*:[[:space:]]*"//; s/"$//')
+    
+    if [ -z "$NAMES" ]; then
+        echo "  Details: No entities returned or no Name field found"
+        return 1
+    fi
+    
+    while IFS= read -r name; do
+        if [ -n "$name" ]; then
+            local len=${#name}
+            if [ "$len" -le 10 ]; then
+                echo "  Details: Found entity with Name='$name' (length=$len) which is not > 10"
+                return 1
+            fi
+        fi
+    done <<< "$NAMES"
+    
+    return 0
 }
 
 # Test 5: indexof function
@@ -69,14 +156,62 @@ test_substring_function() {
 
 # Test 7: tolower function
 test_tolower_function() {
-    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=tolower(Name) eq 'laptop'")
-    check_status "$HTTP_CODE" "200"
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=tolower(Name)%20eq%20'laptop'")
+    if ! check_status "$HTTP_CODE" "200"; then
+        return 1
+    fi
+    
+    local RESPONSE=$(http_get_body "$SERVER_URL/Products?\$filter=tolower(Name)%20eq%20'laptop'")
+    
+    # Verify all returned entities have Name that equals "laptop" when lowercased
+    local NAMES=$(echo "$RESPONSE" | grep -o '"Name"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/"Name"[[:space:]]*:[[:space:]]*"//; s/"$//')
+    
+    if [ -z "$NAMES" ]; then
+        echo "  Details: No entities returned or no Name field found"
+        return 1
+    fi
+    
+    while IFS= read -r name; do
+        if [ -n "$name" ]; then
+            local lower_name=$(echo "$name" | tr '[:upper:]' '[:lower:]')
+            if [ "$lower_name" != "laptop" ]; then
+                echo "  Details: Found entity with Name='$name' (lowercase='$lower_name') which does not equal 'laptop'"
+                return 1
+            fi
+        fi
+    done <<< "$NAMES"
+    
+    return 0
 }
 
 # Test 8: toupper function
 test_toupper_function() {
-    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=toupper(Name) eq 'LAPTOP'")
-    check_status "$HTTP_CODE" "200"
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=toupper(Name)%20eq%20'LAPTOP'")
+    if ! check_status "$HTTP_CODE" "200"; then
+        return 1
+    fi
+    
+    local RESPONSE=$(http_get_body "$SERVER_URL/Products?\$filter=toupper(Name)%20eq%20'LAPTOP'")
+    
+    # Verify all returned entities have Name that equals "LAPTOP" when uppercased
+    local NAMES=$(echo "$RESPONSE" | grep -o '"Name"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/"Name"[[:space:]]*:[[:space:]]*"//; s/"$//')
+    
+    if [ -z "$NAMES" ]; then
+        echo "  Details: No entities returned or no Name field found"
+        return 1
+    fi
+    
+    while IFS= read -r name; do
+        if [ -n "$name" ]; then
+            local upper_name=$(echo "$name" | tr '[:lower:]' '[:upper:]')
+            if [ "$upper_name" != "LAPTOP" ]; then
+                echo "  Details: Found entity with Name='$name' (uppercase='$upper_name') which does not equal 'LAPTOP'"
+                return 1
+            fi
+        fi
+    done <<< "$NAMES"
+    
+    return 0
 }
 
 # Test 9: trim function
