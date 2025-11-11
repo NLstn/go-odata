@@ -164,6 +164,8 @@ func (h *BatchHandler) processChangeset(r io.Reader, boundary string) []batchRes
 		return []batchResponse{h.createErrorResponse(http.StatusInternalServerError, "Failed to start transaction")}
 	}
 
+	pendingEvents := make([]pendingChangeEvent, 0)
+
 	var hasError bool
 	for {
 		part, err := reader.NextPart()
@@ -184,7 +186,7 @@ func (h *BatchHandler) processChangeset(r io.Reader, boundary string) []batchRes
 		}
 
 		// Execute request within transaction
-		resp := h.executeRequestInTransaction(req, tx)
+		resp := h.executeRequestInTransaction(req, tx, &pendingEvents)
 		responses = append(responses, resp)
 
 		// If any request fails, mark as error
@@ -202,6 +204,7 @@ func (h *BatchHandler) processChangeset(r io.Reader, boundary string) []batchRes
 			tx.Rollback()
 			return []batchResponse{h.createErrorResponse(http.StatusInternalServerError, "Failed to commit transaction")}
 		}
+		flushPendingChangeEvents(pendingEvents)
 	}
 
 	return responses
@@ -279,7 +282,7 @@ func (h *BatchHandler) executeRequest(req *batchRequest) batchResponse {
 }
 
 // executeRequestInTransaction executes a request within a transaction
-func (h *BatchHandler) executeRequestInTransaction(req *batchRequest, tx *gorm.DB) batchResponse {
+func (h *BatchHandler) executeRequestInTransaction(req *batchRequest, tx *gorm.DB, pendingEvents *[]pendingChangeEvent) batchResponse {
 	// Create temporary handlers that use the transaction
 	txHandlers := make(map[string]*EntityHandler)
 	for name, handler := range h.handlers {
@@ -517,6 +520,8 @@ func (h *BatchHandler) executeRequestInTransaction(req *batchRequest, tx *gorm.D
 			httpReq.Header.Add(key, value)
 		}
 	}
+
+	httpReq = httpReq.WithContext(withTransactionAndEvents(httpReq.Context(), tx, pendingEvents))
 
 	// Execute request
 	recorder := httptest.NewRecorder()

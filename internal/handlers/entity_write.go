@@ -25,8 +25,7 @@ func (h *EntityHandler) handleDeleteEntity(w http.ResponseWriter, r *http.Reques
 		changeEvents []changeEvent
 	)
 
-	if err := h.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		hookReq := requestWithTransaction(r, tx)
+	if err := h.runInTransaction(ctx, r, func(tx *gorm.DB, hookReq *http.Request) error {
 		fetched, err := h.fetchAndVerifyEntity(tx, entityKey, w)
 		if err != nil {
 			return newTransactionHandledError(err)
@@ -72,9 +71,7 @@ func (h *EntityHandler) handleDeleteEntity(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	for _, event := range changeEvents {
-		h.recordChange(event.entity, event.changeType)
-	}
+	h.finalizeChangeEvents(ctx, changeEvents)
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -94,8 +91,7 @@ func (h *EntityHandler) handlePatchEntity(w http.ResponseWriter, r *http.Request
 	)
 
 	ctx := r.Context()
-	if err := h.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		hookReq := requestWithTransaction(r, tx)
+	if err := h.runInTransaction(ctx, r, func(tx *gorm.DB, hookReq *http.Request) error {
 		entity = reflect.New(h.metadata.EntityType).Interface()
 
 		db, err := h.buildKeyQuery(tx, entityKey)
@@ -199,9 +195,7 @@ func (h *EntityHandler) handlePatchEntity(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	for _, event := range changeEvents {
-		h.recordChange(event.entity, event.changeType)
-	}
+	h.finalizeChangeEvents(ctx, changeEvents)
 
 	db, err := h.buildKeyQuery(h.db.WithContext(ctx), entityKey)
 	if err != nil {
@@ -260,8 +254,7 @@ func (h *EntityHandler) handlePutEntity(w http.ResponseWriter, r *http.Request, 
 	var changeEvents []changeEvent
 
 	ctx := r.Context()
-	if err := h.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		hookReq := requestWithTransaction(r, tx)
+	if err := h.runInTransaction(ctx, r, func(tx *gorm.DB, hookReq *http.Request) error {
 		entity := reflect.New(h.metadata.EntityType).Interface()
 
 		db, err := h.buildKeyQuery(tx, entityKey)
@@ -337,9 +330,7 @@ func (h *EntityHandler) handlePutEntity(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	for _, event := range changeEvents {
-		h.recordChange(event.entity, event.changeType)
-	}
+	h.finalizeChangeEvents(ctx, changeEvents)
 
 	db, err := h.buildKeyQuery(h.db.WithContext(ctx), entityKey)
 	if err != nil {
