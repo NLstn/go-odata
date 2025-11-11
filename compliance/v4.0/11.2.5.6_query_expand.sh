@@ -14,7 +14,20 @@ test_1() {
         return 1
     fi
     local BODY=$(http_get_body "$SERVER_URL/Products?\$expand=Descriptions&\$top=1")
-    check_json_field "$BODY" "Descriptions"
+    
+    # Verify Descriptions field is present
+    if ! check_json_field "$BODY" "Descriptions"; then
+        return 1
+    fi
+    
+    # Verify Descriptions is an array or object (expanded data)
+    # Should contain either [] or [{...}] for expanded navigation property
+    if ! echo "$BODY" | grep -q '"Descriptions"[[:space:]]*:[[:space:]]*\['; then
+        echo "  Details: Descriptions field is not an array (not properly expanded)"
+        return 1
+    fi
+    
+    return 0
 }
 
 # Test 2: $expand with $select on expanded entity
@@ -24,7 +37,20 @@ test_2() {
         return 1
     fi
     local BODY=$(http_get_body "$SERVER_URL/Products?\$expand=Descriptions(\$select=Description)&\$top=1")
-    check_json_field "$BODY" "Descriptions"
+    
+    # Verify Descriptions field is present and expanded
+    if ! check_json_field "$BODY" "Descriptions"; then
+        return 1
+    fi
+    
+    # Verify the expanded Descriptions contains Description field
+    # (nested $select should limit properties in expanded entities)
+    if ! echo "$BODY" | grep -q '"Description"'; then
+        echo "  Details: Expanded Descriptions missing Description field"
+        return 1
+    fi
+    
+    return 0
 }
 
 # Test 3: Multiple $expand
@@ -34,7 +60,19 @@ test_3() {
         return 1
     fi
     local BODY=$(http_get_body "$SERVER_URL/Products(1)?\$expand=Descriptions")
-    check_json_field "$BODY" "Descriptions"
+    
+    # Verify Descriptions field is present and expanded
+    if ! check_json_field "$BODY" "Descriptions"; then
+        return 1
+    fi
+    
+    # Verify it's expanded (should be an array)
+    if ! echo "$BODY" | grep -q '"Descriptions"[[:space:]]*:[[:space:]]*\['; then
+        echo "  Details: Descriptions not expanded as array"
+        return 1
+    fi
+    
+    return 0
 }
 
 # Run all tests

@@ -21,57 +21,229 @@ echo ""
 # Test 1: eq (equals) operator
 test_eq_operator() {
     local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=Status%20eq%201")
+    if ! check_status "$HTTP_CODE" "200"; then
+        return 1
+    fi
     
-    check_status "$HTTP_CODE" "200"
+    local RESPONSE=$(http_get_body "$SERVER_URL/Products?\$filter=Status%20eq%201")
+    
+    # Verify all returned entities have Status=1
+    local STATUSES=$(echo "$RESPONSE" | grep -o '"Status"[[:space:]]*:[[:space:]]*[0-9]*' | grep -o '[0-9]*$')
+    
+    if [ -z "$STATUSES" ]; then
+        echo "  Details: No entities returned or no Status field found"
+        return 1
+    fi
+    
+    while IFS= read -r status; do
+        if [ -n "$status" ] && [ "$status" != "1" ]; then
+            echo "  Details: Found entity with Status=$status (expected 1)"
+            return 1
+        fi
+    done <<< "$STATUSES"
+    
+    return 0
 }
 
 # Test 2: ne (not equals) operator
 test_ne_operator() {
     local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=Status%20ne%200")
+    if ! check_status "$HTTP_CODE" "200"; then
+        return 1
+    fi
     
-    check_status "$HTTP_CODE" "200"
+    local RESPONSE=$(http_get_body "$SERVER_URL/Products?\$filter=Status%20ne%200")
+    
+    # Verify all returned entities have Status != 0
+    local STATUSES=$(echo "$RESPONSE" | grep -o '"Status"[[:space:]]*:[[:space:]]*[0-9]*' | grep -o '[0-9]*$')
+    
+    if [ -z "$STATUSES" ]; then
+        echo "  Details: No entities returned or no Status field found"
+        return 1
+    fi
+    
+    while IFS= read -r status; do
+        if [ -n "$status" ] && [ "$status" = "0" ]; then
+            echo "  Details: Found entity with Status=0 (expected != 0)"
+            return 1
+        fi
+    done <<< "$STATUSES"
+    
+    return 0
 }
 
 # Test 3: gt (greater than) operator
 test_gt_operator() {
     local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=Price%20gt%2050")
+    if ! check_status "$HTTP_CODE" "200"; then
+        return 1
+    fi
     
-    check_status "$HTTP_CODE" "200"
+    local RESPONSE=$(http_get_body "$SERVER_URL/Products?\$filter=Price%20gt%2050")
+    
+    # Verify all returned entities have Price > 50
+    local PRICES=$(echo "$RESPONSE" | grep -o '"Price"[[:space:]]*:[[:space:]]*[0-9.]*' | grep -o '[0-9.]*$')
+    
+    if [ -z "$PRICES" ]; then
+        echo "  Details: No entities returned or no Price field found"
+        return 1
+    fi
+    
+    while IFS= read -r price; do
+        if [ -n "$price" ]; then
+            local IS_VALID=$(echo "$price" | awk '{if ($1 > 50) print "yes"; else print "no"}')
+            if [ "$IS_VALID" != "yes" ]; then
+                echo "  Details: Found entity with Price=$price (expected > 50)"
+                return 1
+            fi
+        fi
+    done <<< "$PRICES"
+    
+    return 0
 }
 
 # Test 4: ge (greater than or equal) operator
 test_ge_operator() {
     local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=Price%20ge%2050")
+    if ! check_status "$HTTP_CODE" "200"; then
+        return 1
+    fi
     
-    check_status "$HTTP_CODE" "200"
+    local RESPONSE=$(http_get_body "$SERVER_URL/Products?\$filter=Price%20ge%2050")
+    
+    # Verify all returned entities have Price >= 50
+    local PRICES=$(echo "$RESPONSE" | grep -o '"Price"[[:space:]]*:[[:space:]]*[0-9.]*' | grep -o '[0-9.]*$')
+    
+    if [ -z "$PRICES" ]; then
+        echo "  Details: No entities returned or no Price field found"
+        return 1
+    fi
+    
+    while IFS= read -r price; do
+        if [ -n "$price" ]; then
+            local IS_VALID=$(echo "$price" | awk '{if ($1 >= 50) print "yes"; else print "no"}')
+            if [ "$IS_VALID" != "yes" ]; then
+                echo "  Details: Found entity with Price=$price (expected >= 50)"
+                return 1
+            fi
+        fi
+    done <<< "$PRICES"
+    
+    return 0
 }
 
 # Test 5: lt (less than) operator
 test_lt_operator() {
     local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=Price%20lt%20100")
+    if ! check_status "$HTTP_CODE" "200"; then
+        return 1
+    fi
     
-    check_status "$HTTP_CODE" "200"
+    local RESPONSE=$(http_get_body "$SERVER_URL/Products?\$filter=Price%20lt%20100")
+    
+    # Verify all returned entities have Price < 100
+    local PRICES=$(echo "$RESPONSE" | grep -o '"Price"[[:space:]]*:[[:space:]]*[0-9.]*' | grep -o '[0-9.]*$')
+    
+    if [ -z "$PRICES" ]; then
+        echo "  Details: No entities returned or no Price field found"
+        return 1
+    fi
+    
+    while IFS= read -r price; do
+        if [ -n "$price" ]; then
+            local IS_VALID=$(echo "$price" | awk '{if ($1 < 100) print "yes"; else print "no"}')
+            if [ "$IS_VALID" != "yes" ]; then
+                echo "  Details: Found entity with Price=$price (expected < 100)"
+                return 1
+            fi
+        fi
+    done <<< "$PRICES"
+    
+    return 0
 }
 
 # Test 6: le (less than or equal) operator
 test_le_operator() {
     local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=Price%20le%20100")
+    if ! check_status "$HTTP_CODE" "200"; then
+        return 1
+    fi
     
-    check_status "$HTTP_CODE" "200"
+    local RESPONSE=$(http_get_body "$SERVER_URL/Products?\$filter=Price%20le%20100")
+    
+    # Verify all returned entities have Price <= 100
+    local PRICES=$(echo "$RESPONSE" | grep -o '"Price"[[:space:]]*:[[:space:]]*[0-9.]*' | grep -o '[0-9.]*$')
+    
+    if [ -z "$PRICES" ]; then
+        echo "  Details: No entities returned or no Price field found"
+        return 1
+    fi
+    
+    while IFS= read -r price; do
+        if [ -n "$price" ]; then
+            local IS_VALID=$(echo "$price" | awk '{if ($1 <= 100) print "yes"; else print "no"}')
+            if [ "$IS_VALID" != "yes" ]; then
+                echo "  Details: Found entity with Price=$price (expected <= 100)"
+                return 1
+            fi
+        fi
+    done <<< "$PRICES"
+    
+    return 0
 }
 
 # Test 7: eq with string
 test_eq_string() {
     local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=Name%20eq%20%27Laptop%27")
+    if ! check_status "$HTTP_CODE" "200"; then
+        return 1
+    fi
     
-    check_status "$HTTP_CODE" "200"
+    local RESPONSE=$(http_get_body "$SERVER_URL/Products?\$filter=Name%20eq%20%27Laptop%27")
+    
+    # Verify all returned entities have Name='Laptop'
+    local NAMES=$(echo "$RESPONSE" | grep -o '"Name"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/"Name"[[:space:]]*:[[:space:]]*"//; s/"$//')
+    
+    if [ -z "$NAMES" ]; then
+        echo "  Details: No entities returned or no Name field found"
+        return 1
+    fi
+    
+    while IFS= read -r name; do
+        if [ -n "$name" ] && [ "$name" != "Laptop" ]; then
+            echo "  Details: Found entity with Name='$name' (expected 'Laptop')"
+            return 1
+        fi
+    done <<< "$NAMES"
+    
+    return 0
 }
 
 # Test 8: ne with string
 test_ne_string() {
     local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=Name%20ne%20%27Laptop%27")
+    if ! check_status "$HTTP_CODE" "200"; then
+        return 1
+    fi
     
-    check_status "$HTTP_CODE" "200"
+    local RESPONSE=$(http_get_body "$SERVER_URL/Products?\$filter=Name%20ne%20%27Laptop%27")
+    
+    # Verify all returned entities have Name != 'Laptop'
+    local NAMES=$(echo "$RESPONSE" | grep -o '"Name"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/"Name"[[:space:]]*:[[:space:]]*"//; s/"$//')
+    
+    if [ -z "$NAMES" ]; then
+        echo "  Details: No entities returned or no Name field found"
+        return 1
+    fi
+    
+    while IFS= read -r name; do
+        if [ -n "$name" ] && [ "$name" = "Laptop" ]; then
+            echo "  Details: Found entity with Name='Laptop' (expected != 'Laptop')"
+            return 1
+        fi
+    done <<< "$NAMES"
+    
+    return 0
 }
 
 # Test 9: Comparison with decimal numbers
@@ -91,8 +263,31 @@ test_null_comparison() {
 # Test 11: Multiple comparisons combined
 test_multiple_comparisons() {
     local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=Price%20ge%2010%20and%20Price%20le%20100")
+    if ! check_status "$HTTP_CODE" "200"; then
+        return 1
+    fi
     
-    check_status "$HTTP_CODE" "200"
+    local RESPONSE=$(http_get_body "$SERVER_URL/Products?\$filter=Price%20ge%2010%20and%20Price%20le%20100")
+    
+    # Verify all returned entities have 10 <= Price <= 100
+    local PRICES=$(echo "$RESPONSE" | grep -o '"Price"[[:space:]]*:[[:space:]]*[0-9.]*' | grep -o '[0-9.]*$')
+    
+    if [ -z "$PRICES" ]; then
+        echo "  Details: No entities returned or no Price field found"
+        return 1
+    fi
+    
+    while IFS= read -r price; do
+        if [ -n "$price" ]; then
+            local IS_VALID=$(echo "$price" | awk '{if ($1 >= 10 && $1 <= 100) print "yes"; else print "no"}')
+            if [ "$IS_VALID" != "yes" ]; then
+                echo "  Details: Found entity with Price=$price (expected 10 <= Price <= 100)"
+                return 1
+            fi
+        fi
+    done <<< "$PRICES"
+    
+    return 0
 }
 
 # Test 12: Comparison operators return correct results
