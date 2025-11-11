@@ -21,22 +21,91 @@ echo ""
 # Test 1: AND operator
 test_and_operator() {
     local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=Price%20gt%2010%20and%20Price%20lt%20100")
+    if ! check_status "$HTTP_CODE" "200"; then
+        return 1
+    fi
     
-    check_status "$HTTP_CODE" "200"
+    local RESPONSE=$(http_get_body "$SERVER_URL/Products?\$filter=Price%20gt%2010%20and%20Price%20lt%20100")
+    
+    # Verify all returned entities have 10 < Price < 100
+    local PRICES=$(echo "$RESPONSE" | grep -o '"Price"[[:space:]]*:[[:space:]]*[0-9.]*' | grep -o '[0-9.]*$')
+    
+    if [ -z "$PRICES" ]; then
+        echo "  Details: No entities returned or no Price field found"
+        return 1
+    fi
+    
+    while IFS= read -r price; do
+        if [ -n "$price" ]; then
+            local IS_VALID=$(echo "$price" | awk '{if ($1 > 10 && $1 < 100) print "yes"; else print "no"}')
+            if [ "$IS_VALID" != "yes" ]; then
+                echo "  Details: Found entity with Price=$price (expected 10 < Price < 100)"
+                return 1
+            fi
+        fi
+    done <<< "$PRICES"
+    
+    return 0
 }
 
 # Test 2: OR operator
 test_or_operator() {
     local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=Price%20lt%2010%20or%20Price%20gt%20100")
+    if ! check_status "$HTTP_CODE" "200"; then
+        return 1
+    fi
     
-    check_status "$HTTP_CODE" "200"
+    local RESPONSE=$(http_get_body "$SERVER_URL/Products?\$filter=Price%20lt%2010%20or%20Price%20gt%20100")
+    
+    # Verify all returned entities have Price < 10 OR Price > 100
+    local PRICES=$(echo "$RESPONSE" | grep -o '"Price"[[:space:]]*:[[:space:]]*[0-9.]*' | grep -o '[0-9.]*$')
+    
+    if [ -z "$PRICES" ]; then
+        echo "  Details: No entities returned or no Price field found"
+        return 1
+    fi
+    
+    while IFS= read -r price; do
+        if [ -n "$price" ]; then
+            local IS_VALID=$(echo "$price" | awk '{if ($1 < 10 || $1 > 100) print "yes"; else print "no"}')
+            if [ "$IS_VALID" != "yes" ]; then
+                echo "  Details: Found entity with Price=$price (expected Price < 10 or Price > 100)"
+                return 1
+            fi
+        fi
+    done <<< "$PRICES"
+    
+    return 0
 }
 
 # Test 3: NOT operator
 test_not_operator() {
     local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=not%20(Price%20gt%2050)")
+    if ! check_status "$HTTP_CODE" "200"; then
+        return 1
+    fi
     
-    check_status "$HTTP_CODE" "200"
+    local RESPONSE=$(http_get_body "$SERVER_URL/Products?\$filter=not%20(Price%20gt%2050)")
+    
+    # Verify all returned entities have NOT (Price > 50), i.e., Price <= 50
+    local PRICES=$(echo "$RESPONSE" | grep -o '"Price"[[:space:]]*:[[:space:]]*[0-9.]*' | grep -o '[0-9.]*$')
+    
+    if [ -z "$PRICES" ]; then
+        echo "  Details: No entities returned or no Price field found"
+        return 1
+    fi
+    
+    while IFS= read -r price; do
+        if [ -n "$price" ]; then
+            local IS_VALID=$(echo "$price" | awk '{if ($1 <= 50) print "yes"; else print "no"}')
+            if [ "$IS_VALID" != "yes" ]; then
+                echo "  Details: Found entity with Price=$price (expected Price <= 50)"
+                return 1
+            fi
+        fi
+    done <<< "$PRICES"
+    
+    return 0
 }
 
 # Test 4: Complex expression with AND and OR
@@ -85,39 +154,87 @@ test_not_with_or() {
 test_and_result_correctness() {
     local RESPONSE=$(http_get_body "$SERVER_URL/Products?\$filter=Price%20gt%2010%20and%20Price%20lt%20100")
     
-    # Should return products with price between 10 and 100
-    # Verify response is valid JSON with value array
-    if check_json_field "$RESPONSE" "value"; then
-        # Check that returned products meet the criteria
-        # (This is a basic check - full validation would parse JSON)
-        return 0
-    else
+    if ! check_json_field "$RESPONSE" "value"; then
         return 1
     fi
+    
+    # Verify all returned entities have 10 < Price < 100
+    local PRICES=$(echo "$RESPONSE" | grep -o '"Price"[[:space:]]*:[[:space:]]*[0-9.]*' | grep -o '[0-9.]*$')
+    
+    if [ -z "$PRICES" ]; then
+        echo "  Details: No entities returned"
+        return 1
+    fi
+    
+    while IFS= read -r price; do
+        if [ -n "$price" ]; then
+            local IS_VALID=$(echo "$price" | awk '{if ($1 > 10 && $1 < 100) print "yes"; else print "no"}')
+            if [ "$IS_VALID" != "yes" ]; then
+                echo "  Details: Found entity with Price=$price (not in range (10, 100))"
+                return 1
+            fi
+        fi
+    done <<< "$PRICES"
+    
+    return 0
 }
 
 # Test 11: OR result returns correct entities
 test_or_result_correctness() {
     local RESPONSE=$(http_get_body "$SERVER_URL/Products?\$filter=Price%20lt%2010%20or%20Price%20gt%20100")
     
-    # Should return products with price less than 10 OR greater than 100
-    if check_json_field "$RESPONSE" "value"; then
-        return 0
-    else
+    if ! check_json_field "$RESPONSE" "value"; then
         return 1
     fi
+    
+    # Verify all returned entities have Price < 10 OR Price > 100
+    local PRICES=$(echo "$RESPONSE" | grep -o '"Price"[[:space:]]*:[[:space:]]*[0-9.]*' | grep -o '[0-9.]*$')
+    
+    if [ -z "$PRICES" ]; then
+        echo "  Details: No entities returned"
+        return 1
+    fi
+    
+    while IFS= read -r price; do
+        if [ -n "$price" ]; then
+            local IS_VALID=$(echo "$price" | awk '{if ($1 < 10 || $1 > 100) print "yes"; else print "no"}')
+            if [ "$IS_VALID" != "yes" ]; then
+                echo "  Details: Found entity with Price=$price (expected < 10 or > 100)"
+                return 1
+            fi
+        fi
+    done <<< "$PRICES"
+    
+    return 0
 }
 
 # Test 12: NOT result returns correct entities
 test_not_result_correctness() {
     local RESPONSE=$(http_get_body "$SERVER_URL/Products?\$filter=not%20(Price%20gt%2050)")
     
-    # Should return products with price NOT greater than 50 (i.e., <= 50)
-    if check_json_field "$RESPONSE" "value"; then
-        return 0
-    else
+    if ! check_json_field "$RESPONSE" "value"; then
         return 1
     fi
+    
+    # Verify all returned entities have NOT (Price > 50), i.e., Price <= 50
+    local PRICES=$(echo "$RESPONSE" | grep -o '"Price"[[:space:]]*:[[:space:]]*[0-9.]*' | grep -o '[0-9.]*$')
+    
+    if [ -z "$PRICES" ]; then
+        echo "  Details: No entities returned"
+        return 1
+    fi
+    
+    while IFS= read -r price; do
+        if [ -n "$price" ]; then
+            local IS_VALID=$(echo "$price" | awk '{if ($1 <= 50) print "yes"; else print "no"}')
+            if [ "$IS_VALID" != "yes" ]; then
+                echo "  Details: Found entity with Price=$price (expected <= 50)"
+                return 1
+            fi
+        fi
+    done <<< "$PRICES"
+    
+    return 0
 }
 
 echo "  Request: GET $SERVER_URL/Products?\$filter=Price gt 10 and Price lt 100"
