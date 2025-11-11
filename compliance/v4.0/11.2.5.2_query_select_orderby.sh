@@ -14,7 +14,21 @@ test_1() {
         return 1
     fi
     local BODY=$(http_get_body "$SERVER_URL/Products?\$select=Name")
-    check_json_field "$BODY" "Name"
+    
+    # Verify Name field is present
+    if ! check_json_field "$BODY" "Name"; then
+        return 1
+    fi
+    
+    # Verify that ONLY Name field is present (not other fields like Price, Description, etc.)
+    # $select should limit the returned properties
+    # Check for presence of fields that should NOT be in the response
+    if echo "$BODY" | grep -q '"Description"[[:space:]]*:'; then
+        echo "  Details: Response contains 'Description' field which was not selected"
+        return 1
+    fi
+    
+    return 0
 }
 
 # Test 2: $select with multiple properties
@@ -24,10 +38,22 @@ test_2() {
         return 1
     fi
     local BODY=$(http_get_body "$SERVER_URL/Products?\$select=Name,Price")
-    if check_json_field "$BODY" "Name" && check_json_field "$BODY" "Price"; then
-        return 0
+    
+    # Verify both Name and Price are present
+    if ! check_json_field "$BODY" "Name"; then
+        return 1
     fi
-    return 1
+    if ! check_json_field "$BODY" "Price"; then
+        return 1
+    fi
+    
+    # Verify that fields NOT in $select are not present
+    if echo "$BODY" | grep -q '"Description"[[:space:]]*:'; then
+        echo "  Details: Response contains 'Description' field which was not selected"
+        return 1
+    fi
+    
+    return 0
 }
 
 # Test 3: Basic $orderby ascending
@@ -37,7 +63,35 @@ test_3() {
         return 1
     fi
     local BODY=$(http_get_body "$SERVER_URL/Products?\$orderby=Price%20asc")
-    check_json_field "$BODY" "value"
+    
+    if ! check_json_field "$BODY" "value"; then
+        return 1
+    fi
+    
+    # Verify the results are actually ordered by Price ascending
+    local PRICES=$(echo "$BODY" | grep -o '"Price"[[:space:]]*:[[:space:]]*[0-9.]*' | grep -o '[0-9.]*$')
+    
+    if [ -z "$PRICES" ]; then
+        echo "  Details: No Price values found in response"
+        return 1
+    fi
+    
+    # Check that each price is >= the previous price
+    local prev_price=""
+    while IFS= read -r price; do
+        if [ -n "$price" ]; then
+            if [ -n "$prev_price" ]; then
+                local IS_ORDERED=$(echo "$prev_price $price" | awk '{if ($1 <= $2) print "yes"; else print "no"}')
+                if [ "$IS_ORDERED" != "yes" ]; then
+                    echo "  Details: Results not ordered ascending: found $price after $prev_price"
+                    return 1
+                fi
+            fi
+            prev_price="$price"
+        fi
+    done <<< "$PRICES"
+    
+    return 0
 }
 
 # Test 4: $orderby descending
@@ -47,7 +101,35 @@ test_4() {
         return 1
     fi
     local BODY=$(http_get_body "$SERVER_URL/Products?\$orderby=Price%20desc")
-    check_json_field "$BODY" "value"
+    
+    if ! check_json_field "$BODY" "value"; then
+        return 1
+    fi
+    
+    # Verify the results are actually ordered by Price descending
+    local PRICES=$(echo "$BODY" | grep -o '"Price"[[:space:]]*:[[:space:]]*[0-9.]*' | grep -o '[0-9.]*$')
+    
+    if [ -z "$PRICES" ]; then
+        echo "  Details: No Price values found in response"
+        return 1
+    fi
+    
+    # Check that each price is <= the previous price
+    local prev_price=""
+    while IFS= read -r price; do
+        if [ -n "$price" ]; then
+            if [ -n "$prev_price" ]; then
+                local IS_ORDERED=$(echo "$prev_price $price" | awk '{if ($1 >= $2) print "yes"; else print "no"}')
+                if [ "$IS_ORDERED" != "yes" ]; then
+                    echo "  Details: Results not ordered descending: found $price after $prev_price"
+                    return 1
+                fi
+            fi
+            prev_price="$price"
+        fi
+    done <<< "$PRICES"
+    
+    return 0
 }
 
 # Test 5: $orderby with multiple properties
@@ -67,10 +149,39 @@ test_6() {
         return 1
     fi
     local BODY=$(http_get_body "$SERVER_URL/Products?\$select=Name,Price&\$orderby=Price")
-    if check_json_field "$BODY" "Name" && check_json_field "$BODY" "Price"; then
-        return 0
+    
+    # Verify selected fields are present
+    if ! check_json_field "$BODY" "Name"; then
+        return 1
     fi
-    return 1
+    if ! check_json_field "$BODY" "Price"; then
+        return 1
+    fi
+    
+    # Verify ordering
+    local PRICES=$(echo "$BODY" | grep -o '"Price"[[:space:]]*:[[:space:]]*[0-9.]*' | grep -o '[0-9.]*$')
+    
+    if [ -z "$PRICES" ]; then
+        echo "  Details: No Price values found in response"
+        return 1
+    fi
+    
+    # Check that prices are ordered ascending (default when direction not specified)
+    local prev_price=""
+    while IFS= read -r price; do
+        if [ -n "$price" ]; then
+            if [ -n "$prev_price" ]; then
+                local IS_ORDERED=$(echo "$prev_price $price" | awk '{if ($1 <= $2) print "yes"; else print "no"}')
+                if [ "$IS_ORDERED" != "yes" ]; then
+                    echo "  Details: Results not ordered: found $price after $prev_price"
+                    return 1
+                fi
+            fi
+            prev_price="$price"
+        fi
+    done <<< "$PRICES"
+    
+    return 0
 }
 
 # Run all tests
