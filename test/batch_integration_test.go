@@ -486,29 +486,39 @@ Accept: application/json
 	}
 }
 
-// TestBatchIntegration_ChangesetRollback tests that changesets are atomic
-// Note: Currently, this feature requires deeper transaction handling integration
-// This test is skipped for now and represents a future enhancement
+// TestBatchIntegration_ChangesetRollback verifies that transactional changesets
+// commit or roll back database rows and change tracking events together.
 func TestBatchIntegration_ChangesetRollback(t *testing.T) {
-	t.Skip("Changeset rollback on validation errors requires deeper transaction integration - future enhancement")
+	t.Run("success commits and records change events", func(t *testing.T) {
+		service, db := setupBatchIntegrationTest(t)
 
-	service, db := setupBatchIntegrationTest(t)
+		if err := service.EnableChangeTracking("BatchIntegrationProducts"); err != nil {
+			t.Fatalf("enable change tracking: %v", err)
+		}
 
-	// Insert a product that will be referenced
-	product := BatchIntegrationProduct{
-		ID:       1,
-		Name:     "Existing Product",
-		Price:    50.00,
-		Category: "Electronics",
-	}
-	db.Create(&product)
+		initialReq := httptest.NewRequest(http.MethodGet, "/BatchIntegrationProducts", nil)
+		initialReq.Header.Set("Prefer", "odata.track-changes")
+		initialRes := httptest.NewRecorder()
+		service.ServeHTTP(initialRes, initialReq)
+		if initialRes.Code != http.StatusOK {
+			t.Fatalf("initial delta request failed: %d", initialRes.Code)
+		}
+		initialToken := extractDeltaToken(t, initialRes.Body.Bytes())
 
-	// Create batch request with changeset that should fail
-	// First request succeeds, second fails - both should be rolled back
-	batchBoundary := "batch_36d5c8c6"
-	changesetBoundary := "changeset_77162fcd"
-	body := fmt.Sprintf(`--%s
+		batchBoundary := "batch_changeset_success"
+		changesetBoundary := "changeset_success"
+		body := fmt.Sprintf(`--%s
 Content-Type: multipart/mixed; boundary=%s
+
+--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+POST /BatchIntegrationProducts HTTP/1.1
+Host: localhost
+Content-Type: application/json
+
+{"Name":"Product 1","Price":10.00,"Category":"Electronics"}
 
 --%s
 Content-Type: application/http
@@ -520,6 +530,82 @@ Content-Type: application/json
 
 {"Name":"Product 2","Price":20.00,"Category":"Books"}
 
+--%s--
+
+--%s--
+`, batchBoundary, changesetBoundary, changesetBoundary, changesetBoundary, changesetBoundary, batchBoundary)
+
+		req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+		req.Header.Set("Content-Type", fmt.Sprintf("multipart/mixed; boundary=%s", batchBoundary))
+		res := httptest.NewRecorder()
+
+		service.ServeHTTP(res, req)
+
+		if res.Code != http.StatusOK {
+			t.Fatalf("batch request failed: %d body: %s", res.Code, res.Body.String())
+		}
+
+		var products []BatchIntegrationProduct
+		if err := db.Order("id").Find(&products).Error; err != nil {
+			t.Fatalf("query products: %v", err)
+		}
+		if len(products) != 2 {
+			t.Fatalf("expected 2 products, got %d", len(products))
+		}
+		names := []string{products[0].Name, products[1].Name}
+		expectedNames := []string{"Product 1", "Product 2"}
+		for i, expected := range expectedNames {
+			if names[i] != expected {
+				t.Fatalf("expected product %d to be %s, got %s", i+1, expected, names[i])
+			}
+		}
+
+		deltaReq := httptest.NewRequest(http.MethodGet,
+			"/BatchIntegrationProducts?$deltatoken="+url.QueryEscape(initialToken), nil)
+		deltaRes := httptest.NewRecorder()
+		service.ServeHTTP(deltaRes, deltaReq)
+		if deltaRes.Code != http.StatusOK {
+			t.Fatalf("delta request failed: %d", deltaRes.Code)
+		}
+
+		deltaPayload := decodeJSON(t, deltaRes.Body.Bytes())
+		entries := valueEntries(t, deltaPayload)
+		if len(entries) != 2 {
+			t.Fatalf("expected 2 change events, got %d", len(entries))
+		}
+		observed := map[string]bool{}
+		for _, entry := range entries {
+			name, _ := entry["Name"].(string)
+			observed[name] = true
+		}
+		for _, expected := range expectedNames {
+			if !observed[expected] {
+				t.Fatalf("missing change tracking event for %s", expected)
+			}
+		}
+	})
+
+	t.Run("failure rolls back database and change events", func(t *testing.T) {
+		service, db := setupBatchIntegrationTest(t)
+
+		if err := service.EnableChangeTracking("BatchIntegrationProducts"); err != nil {
+			t.Fatalf("enable change tracking: %v", err)
+		}
+
+		initialReq := httptest.NewRequest(http.MethodGet, "/BatchIntegrationProducts", nil)
+		initialReq.Header.Set("Prefer", "odata.track-changes")
+		initialRes := httptest.NewRecorder()
+		service.ServeHTTP(initialRes, initialReq)
+		if initialRes.Code != http.StatusOK {
+			t.Fatalf("initial delta request failed: %d", initialRes.Code)
+		}
+		initialToken := extractDeltaToken(t, initialRes.Body.Bytes())
+
+		batchBoundary := "batch_changeset_failure"
+		changesetBoundary := "changeset_failure"
+		body := fmt.Sprintf(`--%s
+Content-Type: multipart/mixed; boundary=%s
+
 --%s
 Content-Type: application/http
 Content-Transfer-Encoding: binary
@@ -528,29 +614,55 @@ POST /BatchIntegrationProducts HTTP/1.1
 Host: localhost
 Content-Type: application/json
 
-{"InvalidField":"This should fail"}
+{"Name":"ShouldRollback","Price":30.00,"Category":"Garden"}
+
+--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+POST /BatchIntegrationProducts HTTP/1.1
+Host: localhost
+Content-Type: application/json
+
+{"Name":
 
 --%s--
 
 --%s--
 `, batchBoundary, changesetBoundary, changesetBoundary, changesetBoundary, changesetBoundary, batchBoundary)
 
-	req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
-	req.Header.Set("Content-Type", fmt.Sprintf("multipart/mixed; boundary=%s", batchBoundary))
-	w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+		req.Header.Set("Content-Type", fmt.Sprintf("multipart/mixed; boundary=%s", batchBoundary))
+		res := httptest.NewRecorder()
 
-	service.ServeHTTP(w, req)
+		service.ServeHTTP(res, req)
 
-	if w.Code != http.StatusOK {
-		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
-	}
+		if res.Code != http.StatusOK {
+			t.Fatalf("batch request failed: %d body: %s", res.Code, res.Body.String())
+		}
 
-	// Verify only the original product exists (changeset was rolled back)
-	var count int64
-	db.Model(&BatchIntegrationProduct{}).Count(&count)
-	if count != 1 {
-		t.Errorf("Expected 1 product in database (changeset rolled back), got %d", count)
-	}
+		var count int64
+		if err := db.Model(&BatchIntegrationProduct{}).Count(&count).Error; err != nil {
+			t.Fatalf("count products: %v", err)
+		}
+		if count != 0 {
+			t.Fatalf("expected no products after rollback, found %d", count)
+		}
+
+		deltaReq := httptest.NewRequest(http.MethodGet,
+			"/BatchIntegrationProducts?$deltatoken="+url.QueryEscape(initialToken), nil)
+		deltaRes := httptest.NewRecorder()
+		service.ServeHTTP(deltaRes, deltaReq)
+		if deltaRes.Code != http.StatusOK {
+			t.Fatalf("delta request failed: %d", deltaRes.Code)
+		}
+
+		deltaPayload := decodeJSON(t, deltaRes.Body.Bytes())
+		entries := valueEntries(t, deltaPayload)
+		if len(entries) != 0 {
+			t.Fatalf("expected no change tracking events after rollback, got %d", len(entries))
+		}
+	})
 }
 
 func TestBatchIntegration_GetCollection(t *testing.T) {

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"reflect"
@@ -172,6 +173,19 @@ func (h *EntityHandler) recordChange(entity interface{}, changeType trackchanges
 		if h.logger != nil {
 			h.logger.Error("failed to record change event", "entitySet", h.metadata.EntitySetName, "err", err)
 		}
+	}
+}
+
+func (h *EntityHandler) finalizeChangeEvents(ctx context.Context, events []changeEvent) {
+	if len(events) == 0 {
+		return
+	}
+	if _, ok := TransactionFromContext(ctx); ok {
+		addPendingChangeEvents(ctx, h, events)
+		return
+	}
+	for _, event := range events {
+		h.recordChange(event.entity, event.changeType)
 	}
 }
 

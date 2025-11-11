@@ -48,8 +48,7 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 	}
 
 	var changeEvents []changeEvent
-	if err := h.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		hookReq := requestWithTransaction(r, tx)
+	if err := h.runInTransaction(ctx, r, func(tx *gorm.DB, hookReq *http.Request) error {
 		pendingBindings, err := h.processODataBindAnnotations(ctx, entity, requestData, tx)
 		if err != nil {
 			WriteError(w, http.StatusBadRequest, "Invalid @odata.bind annotation", err.Error())
@@ -98,9 +97,7 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	for _, event := range changeEvents {
-		h.recordChange(event.entity, event.changeType)
-	}
+	h.finalizeChangeEvents(ctx, changeEvents)
 
 	location := h.buildEntityLocation(r, entity)
 	w.Header().Set("Location", location)
@@ -150,8 +147,7 @@ func (h *EntityHandler) handlePostMediaEntity(w http.ResponseWriter, r *http.Req
 	}
 
 	var changeEvents []changeEvent
-	if err := h.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		hookReq := requestWithTransaction(r, tx)
+	if err := h.runInTransaction(ctx, r, func(tx *gorm.DB, hookReq *http.Request) error {
 		if err := h.callBeforeCreate(entity, hookReq); err != nil {
 			if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", err.Error()); writeErr != nil {
 				h.logger.Error("Error writing error response", "error", writeErr)
@@ -180,9 +176,7 @@ func (h *EntityHandler) handlePostMediaEntity(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	for _, event := range changeEvents {
-		h.recordChange(event.entity, event.changeType)
-	}
+	h.finalizeChangeEvents(ctx, changeEvents)
 
 	location := h.buildEntityLocation(r, entity)
 	w.Header().Set("Location", location)

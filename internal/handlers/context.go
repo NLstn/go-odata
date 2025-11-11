@@ -11,8 +11,9 @@ import (
 type contextKey string
 
 const (
-	typeCastKey      contextKey = "odata_type_cast"
-	transactionDBKey contextKey = "odata_transaction_db"
+	typeCastKey          contextKey = "odata_type_cast"
+	transactionDBKey     contextKey = "odata_transaction_db"
+	transactionEventsKey contextKey = "odata_transaction_events"
 )
 
 // WithTypeCast adds a type cast filter to the request context
@@ -31,8 +32,16 @@ func GetTypeCast(ctx context.Context) string {
 
 // withTransaction attaches the active transaction to the context for hook consumption.
 func withTransaction(ctx context.Context, tx *gorm.DB) context.Context {
+	return withTransactionAndEvents(ctx, tx, nil)
+}
+
+// withTransactionAndEvents attaches the active transaction and pending change collector to the context.
+func withTransactionAndEvents(ctx context.Context, tx *gorm.DB, events *[]pendingChangeEvent) context.Context {
 	if ctx == nil {
 		ctx = context.Background()
+	}
+	if events != nil {
+		ctx = context.WithValue(ctx, transactionEventsKey, events)
 	}
 	return context.WithValue(ctx, transactionDBKey, tx)
 }
@@ -43,6 +52,21 @@ func requestWithTransaction(r *http.Request, tx *gorm.DB) *http.Request {
 		return nil
 	}
 	return r.WithContext(withTransaction(r.Context(), tx))
+}
+
+// addPendingChangeEvents appends change tracking events to the shared transaction collector.
+func addPendingChangeEvents(ctx context.Context, handler *EntityHandler, events []changeEvent) {
+	if ctx == nil || len(events) == 0 {
+		return
+	}
+	raw := ctx.Value(transactionEventsKey)
+	pending, ok := raw.(*[]pendingChangeEvent)
+	if !ok || pending == nil {
+		return
+	}
+	for _, event := range events {
+		*pending = append(*pending, pendingChangeEvent{handler: handler, event: event})
+	}
 }
 
 // TransactionFromContext retrieves the active transaction stored for hook execution.
