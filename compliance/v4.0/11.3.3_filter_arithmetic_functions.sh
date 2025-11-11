@@ -20,8 +20,32 @@ echo ""
 
 # Test 1: add operator
 test_add_operator() {
-    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=Price add 10 gt 100")
-    check_status "$HTTP_CODE" "200"
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=Price%20add%2010%20gt%20100")
+    if ! check_status "$HTTP_CODE" "200"; then
+        return 1
+    fi
+    
+    local RESPONSE=$(http_get_body "$SERVER_URL/Products?\$filter=Price%20add%2010%20gt%20100")
+    
+    # Verify all returned entities have Price + 10 > 100, i.e., Price > 90
+    local PRICES=$(echo "$RESPONSE" | grep -o '"Price"[[:space:]]*:[[:space:]]*[0-9.]*' | grep -o '[0-9.]*$')
+    
+    if [ -z "$PRICES" ]; then
+        echo "  Details: No entities returned or no Price field found"
+        return 1
+    fi
+    
+    while IFS= read -r price; do
+        if [ -n "$price" ]; then
+            local IS_VALID=$(echo "$price" | awk '{if ($1 > 90) print "yes"; else print "no"}')
+            if [ "$IS_VALID" != "yes" ]; then
+                echo "  Details: Found entity with Price=$price (expected Price + 10 > 100, i.e. Price > 90)"
+                return 1
+            fi
+        fi
+    done <<< "$PRICES"
+    
+    return 0
 }
 
 # Test 2: sub operator
@@ -44,8 +68,34 @@ test_div_operator() {
 
 # Test 5: mod operator
 test_mod_operator() {
-    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=Price mod 10 eq 0")
-    check_status "$HTTP_CODE" "200"
+    local HTTP_CODE=$(http_get "$SERVER_URL/Products?\$filter=Price%20mod%2010%20eq%200")
+    if ! check_status "$HTTP_CODE" "200"; then
+        return 1
+    fi
+    
+    local RESPONSE=$(http_get_body "$SERVER_URL/Products?\$filter=Price%20mod%2010%20eq%200")
+    
+    # Verify all returned entities have Price mod 10 == 0 (i.e., Price is divisible by 10)
+    # This means Price should be like 10, 20, 30, 40, 50, etc.
+    local PRICES=$(echo "$RESPONSE" | grep -o '"Price"[[:space:]]*:[[:space:]]*[0-9.]*' | grep -o '[0-9.]*$')
+    
+    if [ -z "$PRICES" ]; then
+        # It's okay if no products match this criteria
+        return 0
+    fi
+    
+    while IFS= read -r price; do
+        if [ -n "$price" ]; then
+            # Check if price is divisible by 10 (allowing for floating point)
+            local REMAINDER=$(echo "$price" | awk '{print int($1) % 10}')
+            if [ "$REMAINDER" != "0" ]; then
+                echo "  Details: Found entity with Price=$price (expected Price mod 10 == 0)"
+                return 1
+            fi
+        fi
+    done <<< "$PRICES"
+    
+    return 0
 }
 
 # Test 6: ceiling function

@@ -26,17 +26,24 @@ test_404_error_object() {
     local HTTP_CODE=$(echo "$RESPONSE" | tail -1)
     local BODY=$(echo "$RESPONSE" | head -n -1)
 
-    if [ "$HTTP_CODE" = "404" ]; then
-        if echo "$BODY" | grep -q '"error"'; then
-            return 0
-        else
-            echo "  Details: No 'error' object in response"
-            return 1
-        fi
-    else
-        echo "  Details: Status code: $HTTP_CODE"
+    if [ "$HTTP_CODE" != "404" ]; then
+        echo "  Details: Status code: $HTTP_CODE (expected 404)"
         return 1
     fi
+    
+    # Verify error object is present
+    if ! echo "$BODY" | grep -q '"error"'; then
+        echo "  Details: No 'error' object in response"
+        return 1
+    fi
+    
+    # Verify it's a JSON object with proper structure
+    if ! echo "$BODY" | python3 -m json.tool > /dev/null 2>&1; then
+        echo "  Details: Response is not valid JSON"
+        return 1
+    fi
+    
+    return 0
 }
 
 run_test "404 error response contains 'error' object" test_404_error_object
@@ -44,7 +51,21 @@ run_test "404 error response contains 'error' object" test_404_error_object
 # Test 2: Error object contains 'code' property
 test_error_code_property() {
     local RESPONSE=$(curl -s "$SERVER_URL/Products(999999)" 2>&1)
-    check_json_field "$RESPONSE" "code"
+    
+    # Check that error.code exists
+    if ! echo "$RESPONSE" | grep -q '"code"'; then
+        echo "  Details: No 'code' property in error"
+        return 1
+    fi
+    
+    # Verify code is a string (not empty, not null)
+    local CODE=$(echo "$RESPONSE" | grep -o '"code"[[:space:]]*:[[:space:]]*"[^"]*"')
+    if [ -z "$CODE" ]; then
+        echo "  Details: 'code' property is not a non-empty string"
+        return 1
+    fi
+    
+    return 0
 }
 
 run_test "Error object contains 'code' property" test_error_code_property
@@ -52,7 +73,21 @@ run_test "Error object contains 'code' property" test_error_code_property
 # Test 3: Error object contains 'message' property
 test_error_message_property() {
     local RESPONSE=$(curl -s "$SERVER_URL/Products(999999)" 2>&1)
-    check_json_field "$RESPONSE" "message"
+    
+    # Check that error.message exists
+    if ! echo "$RESPONSE" | grep -q '"message"'; then
+        echo "  Details: No 'message' property in error"
+        return 1
+    fi
+    
+    # Verify message is a string (not empty, not null)
+    local MESSAGE=$(echo "$RESPONSE" | grep -o '"message"[[:space:]]*:[[:space:]]*"[^"]*"')
+    if [ -z "$MESSAGE" ]; then
+        echo "  Details: 'message' property is not a non-empty string"
+        return 1
+    fi
+    
+    return 0
 }
 
 run_test "Error object contains 'message' property" test_error_message_property
@@ -78,17 +113,28 @@ test_invalid_query_error() {
     local HTTP_CODE=$(echo "$RESPONSE" | tail -1)
     local BODY=$(echo "$RESPONSE" | head -n -1)
 
-    if [ "$HTTP_CODE" = "400" ]; then
-        if echo "$BODY" | grep -q '"error"'; then
-            return 0
-        else
-            echo "  Details: No error object"
-            return 1
-        fi
-    else
-        echo "  Details: Status code: $HTTP_CODE (may accept invalid syntax)"
+    if [ "$HTTP_CODE" != "400" ]; then
+        echo "  Details: Status code: $HTTP_CODE (expected 400 for invalid syntax)"
         return 1
     fi
+    
+    # Verify error object is present
+    if ! echo "$BODY" | grep -q '"error"'; then
+        echo "  Details: No error object in 400 response"
+        return 1
+    fi
+    
+    # Verify error has code and message
+    if ! echo "$BODY" | grep -q '"code"'; then
+        echo "  Details: Error missing 'code' property"
+        return 1
+    fi
+    if ! echo "$BODY" | grep -q '"message"'; then
+        echo "  Details: Error missing 'message' property"
+        return 1
+    fi
+    
+    return 0
 }
 
 run_test "Invalid query returns 400 with error object" test_invalid_query_error
