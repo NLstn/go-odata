@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -392,6 +393,88 @@ func TestEntityHandlerInitializeEntityKeys_Generator(t *testing.T) {
 
 		if entity.ID != "generated" {
 			t.Fatalf("expected generated ID to be 'generated', got %q", entity.ID)
+		}
+	})
+
+	t.Run("assign generated uuid bytes to string", func(t *testing.T) {
+		uuidBytes := [16]byte{0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff}
+		expected := formatUUIDFromBytes(uuidBytes)
+
+		entity := &struct {
+			ID string
+		}{}
+
+		handler := &EntityHandler{
+			metadata: &metadata.EntityMetadata{
+				KeyProperties: []metadata.PropertyMetadata{
+					{Name: "ID", JsonName: "id", Type: reflect.TypeOf(""), IsKey: true, KeyGenerator: "custom"},
+				},
+			},
+			keyGeneratorResolver: makeResolver(uuidBytes, nil),
+		}
+
+		if err := handler.initializeEntityKeys(context.Background(), entity); err != nil {
+			t.Fatalf("initializeEntityKeys() error = %v", err)
+		}
+
+		if entity.ID != expected {
+			t.Fatalf("expected generated UUID string %q, got %q", expected, entity.ID)
+		}
+	})
+
+	t.Run("assign generated uuid bytes to pointer alias", func(t *testing.T) {
+		type uuidAlias [16]byte
+
+		uuidBytes := [16]byte{0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f}
+
+		entity := &struct {
+			ID *uuidAlias
+		}{}
+
+		handler := &EntityHandler{
+			metadata: &metadata.EntityMetadata{
+				KeyProperties: []metadata.PropertyMetadata{
+					{Name: "ID", JsonName: "id", Type: reflect.TypeOf(&uuidAlias{}), IsKey: true, KeyGenerator: "custom"},
+				},
+			},
+			keyGeneratorResolver: makeResolver(uuidBytes, nil),
+		}
+
+		if err := handler.initializeEntityKeys(context.Background(), entity); err != nil {
+			t.Fatalf("initializeEntityKeys() error = %v", err)
+		}
+
+		if entity.ID == nil {
+			t.Fatal("expected generated UUID pointer to be non-nil")
+		}
+
+		if *entity.ID != uuidAlias(uuidBytes) {
+			t.Fatalf("expected generated UUID pointer value %v, got %v", uuidAlias(uuidBytes), *entity.ID)
+		}
+	})
+
+	t.Run("assign generated uuid bytes to slice", func(t *testing.T) {
+		uuidBytes := [16]byte{0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f}
+
+		entity := &struct {
+			ID []byte
+		}{}
+
+		handler := &EntityHandler{
+			metadata: &metadata.EntityMetadata{
+				KeyProperties: []metadata.PropertyMetadata{
+					{Name: "ID", JsonName: "id", Type: reflect.TypeOf([]byte{}), IsKey: true, KeyGenerator: "custom"},
+				},
+			},
+			keyGeneratorResolver: makeResolver(uuidBytes, nil),
+		}
+
+		if err := handler.initializeEntityKeys(context.Background(), entity); err != nil {
+			t.Fatalf("initializeEntityKeys() error = %v", err)
+		}
+
+		if !bytes.Equal(entity.ID, uuidBytes[:]) {
+			t.Fatalf("expected generated UUID bytes %x, got %x", uuidBytes, entity.ID)
 		}
 	})
 
