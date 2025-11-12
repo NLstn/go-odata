@@ -5,6 +5,9 @@ package odata
 // automatically handles the necessary OData protocol logic.
 
 import (
+	"context"
+	"crypto/rand"
+	"encoding/binary"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -20,7 +23,11 @@ import (
 	servruntime "github.com/nlstn/go-odata/internal/service/runtime"
 	"github.com/nlstn/go-odata/internal/trackchanges"
 	"gorm.io/gorm"
+	"sync"
 )
+
+// KeyGenerator describes a function that produces a key value for new entities.
+type KeyGenerator func(context.Context) (interface{}, error)
 
 // ServiceConfig controls optional service behaviours.
 type ServiceConfig struct {
@@ -71,6 +78,9 @@ type Service struct {
 	asyncMonitorPrefix string
 	// logger is used for structured logging throughout the service
 	logger *slog.Logger
+	// keyGenerators maintains registered key generator functions by name
+	keyGenerators   map[string]KeyGenerator
+	keyGeneratorsMu sync.RWMutex
 }
 
 // NewService creates a new OData service instance with database connection.
@@ -117,6 +127,7 @@ func NewServiceWithConfig(db *gorm.DB, cfg ServiceConfig) (*Service, error) {
 		deltaTracker:             tracker,
 		changeTrackingPersistent: cfg.PersistentChangeTracking,
 		logger:                   logger,
+		keyGenerators:            make(map[string]KeyGenerator),
 	}
 	s.metadataHandler.SetNamespace(DefaultNamespace)
 	s.operationsHandler = operations.NewHandler(s.actions, s.functions, s.handlers, s.entities, s.namespace, logger)
@@ -142,7 +153,32 @@ func NewServiceWithConfig(db *gorm.DB, cfg ServiceConfig) (*Service, error) {
 	)
 	s.router.SetAsyncMonitor(s.asyncMonitorPrefix, s.asyncManager)
 	s.runtime = servruntime.New(s.router, logger)
+
+	if err := s.RegisterKeyGenerator("uuid", func(context.Context) (interface{}, error) {
+		return generateUUIDString()
+	}); err != nil {
+		return nil, fmt.Errorf("failed to register default key generator: %w", err)
+	}
+
 	return s, nil
+}
+
+func generateUUIDString() (string, error) {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+
+	b[6] = (b[6] & 0x0f) | 0x40
+	b[8] = (b[8] & 0x3f) | 0x80
+
+	return fmt.Sprintf("%08x-%04x-%04x-%04x-%04x%08x",
+		binary.BigEndian.Uint32(b[0:4]),
+		binary.BigEndian.Uint16(b[4:6]),
+		binary.BigEndian.Uint16(b[6:8]),
+		binary.BigEndian.Uint16(b[8:10]),
+		binary.BigEndian.Uint16(b[10:12]),
+		binary.BigEndian.Uint32(b[12:16])), nil
 }
 
 // SetLogger sets a custom logger for the service.
@@ -268,6 +304,36 @@ func (s *Service) Close() error {
 	return nil
 }
 
+// RegisterKeyGenerator registers a key generator function under the provided name.
+// Existing generators with the same name will be replaced.
+func (s *Service) RegisterKeyGenerator(name string, generator KeyGenerator) error {
+	trimmed := strings.ToLower(strings.TrimSpace(name))
+	if trimmed == "" {
+		return fmt.Errorf("key generator name cannot be empty")
+	}
+	if generator == nil {
+		return fmt.Errorf("key generator '%s' cannot be nil", trimmed)
+	}
+
+	s.keyGeneratorsMu.Lock()
+	if s.keyGenerators == nil {
+		s.keyGenerators = make(map[string]KeyGenerator)
+	}
+	s.keyGenerators[trimmed] = generator
+	s.keyGeneratorsMu.Unlock()
+
+	metadata.RegisterKeyGeneratorName(trimmed)
+	return nil
+}
+
+func (s *Service) resolveKeyGenerator(name string) (KeyGenerator, bool) {
+	trimmed := strings.ToLower(strings.TrimSpace(name))
+	s.keyGeneratorsMu.RLock()
+	defer s.keyGeneratorsMu.RUnlock()
+	generator, ok := s.keyGenerators[trimmed]
+	return generator, ok
+}
+
 // RegisterEntity registers an entity type with the OData service.
 func (s *Service) RegisterEntity(entity interface{}) error {
 	// Analyze the entity structure
@@ -291,6 +357,13 @@ func (s *Service) RegisterEntity(entity interface{}) error {
 	handler.SetNamespace(s.namespace)
 	handler.SetEntitiesMetadata(s.entities)
 	handler.SetDeltaTracker(s.deltaTracker)
+	handler.SetKeyGeneratorResolver(func(name string) (func(context.Context) (interface{}, error), bool) {
+		generator, ok := s.resolveKeyGenerator(name)
+		if !ok {
+			return nil, false
+		}
+		return generator, true
+	})
 	s.handlers[entityMetadata.EntitySetName] = handler
 
 	s.logger.Debug("Registered entity",
@@ -342,6 +415,13 @@ func (s *Service) RegisterSingleton(entity interface{}, singletonName string) er
 	handler := handlers.NewEntityHandler(s.db, singletonMetadata, s.logger)
 	handler.SetNamespace(s.namespace)
 	handler.SetEntitiesMetadata(s.entities)
+	handler.SetKeyGeneratorResolver(func(name string) (func(context.Context) (interface{}, error), bool) {
+		generator, ok := s.resolveKeyGenerator(name)
+		if !ok {
+			return nil, false
+		}
+		return generator, true
+	})
 	s.handlers[singletonName] = handler
 
 	s.logger.Debug("Registered singleton",
