@@ -386,6 +386,14 @@ See [cmd/complianceserver/README.md](../cmd/complianceserver/README.md) for more
 
 ## Database Configuration
 
+The go-odata library works with GORM-compatible databases. Below are configuration examples for common databases.
+
+### Supported Databases
+
+- **SQLite** - Fully supported and tested
+- **PostgreSQL** - Support in progress (most features work)
+- **Other databases** - May work through GORM, but not actively tested. [Open an issue](https://github.com/NLstn/go-odata/issues) if you need support for a specific database.
+
 ### SQLite (In-Memory)
 
 ```go
