@@ -155,7 +155,11 @@ func NewServiceWithConfig(db *gorm.DB, cfg ServiceConfig) (*Service, error) {
 	s.runtime = servruntime.New(s.router, logger)
 
 	if err := s.RegisterKeyGenerator("uuid", func(context.Context) (interface{}, error) {
-		return generateUUIDString()
+		uuid, err := generateUUIDBytes()
+		if err != nil {
+			return nil, err
+		}
+		return uuid, nil
 	}); err != nil {
 		return nil, fmt.Errorf("failed to register default key generator: %w", err)
 	}
@@ -163,22 +167,16 @@ func NewServiceWithConfig(db *gorm.DB, cfg ServiceConfig) (*Service, error) {
 	return s, nil
 }
 
-func generateUUIDString() (string, error) {
+func generateUUIDBytes() ([16]byte, error) {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {
-		return "", err
+		return [16]byte{}, err
 	}
 
 	b[6] = (b[6] & 0x0f) | 0x40
 	b[8] = (b[8] & 0x3f) | 0x80
 
-	return fmt.Sprintf("%08x-%04x-%04x-%04x-%04x%08x",
-		binary.BigEndian.Uint32(b[0:4]),
-		binary.BigEndian.Uint16(b[4:6]),
-		binary.BigEndian.Uint16(b[6:8]),
-		binary.BigEndian.Uint16(b[8:10]),
-		binary.BigEndian.Uint16(b[10:12]),
-		binary.BigEndian.Uint32(b[12:16])), nil
+	return b, nil
 }
 
 // SetLogger sets a custom logger for the service.

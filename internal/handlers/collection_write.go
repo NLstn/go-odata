@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -306,6 +307,16 @@ func assignGeneratedValue(field reflect.Value, value interface{}) error {
 		return nil
 	}
 
+	if uuidBytes, ok := value.([16]byte); ok {
+		return assignUUIDBytes(field, uuidBytes)
+	}
+
+	if byteSlice, ok := value.([]byte); ok && len(byteSlice) == 16 {
+		var uuidBytes [16]byte
+		copy(uuidBytes[:], byteSlice)
+		return assignUUIDBytes(field, uuidBytes)
+	}
+
 	if targetType.Kind() == reflect.Ptr {
 		elemType := targetType.Elem()
 		if val.Type().AssignableTo(elemType) {
@@ -339,6 +350,57 @@ func assignGeneratedValue(field reflect.Value, value interface{}) error {
 	}
 
 	return fmt.Errorf("generated key type %s cannot be assigned to field type %s", val.Type(), targetType)
+}
+
+func assignUUIDBytes(field reflect.Value, uuidBytes [16]byte) error {
+	targetType := field.Type()
+	uuidVal := reflect.ValueOf(uuidBytes)
+
+	if uuidVal.Type().AssignableTo(targetType) {
+		field.Set(uuidVal)
+		return nil
+	}
+
+	if uuidVal.Type().ConvertibleTo(targetType) {
+		field.Set(uuidVal.Convert(targetType))
+		return nil
+	}
+
+	switch targetType.Kind() {
+	case reflect.Ptr:
+		elem := targetType.Elem()
+		ptr := reflect.New(elem)
+		if err := assignUUIDBytes(ptr.Elem(), uuidBytes); err != nil {
+			return err
+		}
+		field.Set(ptr)
+		return nil
+	case reflect.Interface:
+		field.Set(uuidVal)
+		return nil
+	case reflect.String:
+		field.SetString(formatUUIDFromBytes(uuidBytes))
+		return nil
+	case reflect.Slice:
+		if targetType.Elem().Kind() == reflect.Uint8 {
+			bytes := make([]byte, len(uuidBytes))
+			copy(bytes, uuidBytes[:])
+			field.SetBytes(bytes)
+			return nil
+		}
+	}
+
+	return fmt.Errorf("generated key type %s cannot be assigned to field type %s", uuidVal.Type(), targetType)
+}
+
+func formatUUIDFromBytes(b [16]byte) string {
+	return fmt.Sprintf("%08x-%04x-%04x-%04x-%04x%08x",
+		binary.BigEndian.Uint32(b[0:4]),
+		binary.BigEndian.Uint16(b[4:6]),
+		binary.BigEndian.Uint16(b[6:8]),
+		binary.BigEndian.Uint16(b[8:10]),
+		binary.BigEndian.Uint16(b[10:12]),
+		binary.BigEndian.Uint32(b[12:16]))
 }
 
 func (h *EntityHandler) buildEntityLocation(r *http.Request, entity interface{}) string {
