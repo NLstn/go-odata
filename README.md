@@ -252,6 +252,24 @@ release plan so downstream integrations can assess compatibility expectations.
 - Go 1.24 or later
 - GORM-compatible database driver
 
+## Supported Databases
+
+The library works with any GORM-compatible database, but testing and active support vary by database:
+
+- ✅ **SQLite** - Fully supported and tested. All features work reliably.
+- 🚧 **PostgreSQL** - Support in progress. Most features work, but some edge cases are still being tested.
+- ❓ **Other databases** (MySQL, SQL Server, etc.) - Should work through GORM compatibility, but not actively tested.
+
+### Using Other Databases
+
+If you'd like to use a database that isn't listed above or encounter issues:
+
+1. Open an issue on [GitHub Issues](https://github.com/NLstn/go-odata/issues)
+2. Share your use case and any errors you encounter
+3. We'll work with you to add official support
+
+While the library is designed to work with any GORM-compatible database through GORM's abstraction layer, we focus our testing efforts on SQLite and PostgreSQL to ensure the best experience.
+
 ## Testing
 
 Run the test suite:
