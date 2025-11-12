@@ -60,7 +60,7 @@ func main() {
 	}
 
 	// Auto-migrate the Product, ProductDescription, Category, CompanyInfo, and User models
-	if err := Db.AutoMigrate(&entities.Category{}, &entities.Product{}, &entities.ProductDescription{}, &entities.CompanyInfo{}, &entities.User{}); err != nil {
+	if err := Db.AutoMigrate(&entities.Category{}, &entities.Product{}, &entities.ProductDescription{}, &entities.CompanyInfo{}, &entities.User{}, &entities.APIKey{}); err != nil {
 		log.Fatal("Failed to migrate database:", err)
 	}
 
@@ -89,6 +89,9 @@ func main() {
 	}
 	if err := service.RegisterEntity(&entities.User{}); err != nil {
 		log.Fatal("Failed to register User entity:", err)
+	}
+	if err := service.RegisterEntity(&entities.APIKey{}); err != nil {
+		log.Fatal("Failed to register APIKey entity:", err)
 	}
 
 	if err := service.EnableChangeTracking("Products"); err != nil {
@@ -143,6 +146,7 @@ func main() {
 	fmt.Println("  Users:                http://localhost:8080/Users")
 	fmt.Println("  Single User:          http://localhost:8080/Users(1)")
 	fmt.Println("  Company (Singleton):  http://localhost:8080/Company")
+	fmt.Println("  API Keys:             http://localhost:8080/APIKeys")
 	fmt.Println("  Async Monitor:        http://localhost:8080/$async/jobs/{jobID}")
 	fmt.Println()
 	fmt.Println("OData Actions and Functions:")

@@ -76,6 +76,9 @@ Generates large datasets for realistic performance testing:
 - 10,000 products with varied attributes
 - 100 categories
 - 30,000 product descriptions (3 languages per product)
+- 1,000 API keys with server-generated UUID identifiers
+
+The API key dataset is deliberately write-heavy to highlight server-managed key generation during benchmarking workloads.
 
 ## Endpoints
 
@@ -86,6 +89,7 @@ Generates large datasets for realistic performance testing:
 - `GET /Products` - Product list
 - `GET /ProductDescriptions` - Product description list
 - `GET /Company` - Company info singleton
+- `GET /APIKeys` - API key list with server-generated identifiers
 
 ### Performance Testing
 - `POST /Reseed` - Reset database to extensive performance testing state
