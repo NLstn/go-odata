@@ -21,6 +21,7 @@ type EntityHandler struct {
 	namespace        string
 	tracker          *trackchanges.Tracker
 	logger           *slog.Logger
+	ftsManager       *query.FTSManager
 }
 
 // NewEntityHandler creates a new entity handler
@@ -34,6 +35,11 @@ func NewEntityHandler(db *gorm.DB, entityMetadata *metadata.EntityMetadata, logg
 		namespace: defaultNamespace,
 		logger:    logger,
 	}
+}
+
+// SetFTSManager sets the FTS manager for the handler
+func (h *EntityHandler) SetFTSManager(ftsManager *query.FTSManager) {
+	h.ftsManager = ftsManager
 }
 
 // SetLogger sets the logger for the handler.

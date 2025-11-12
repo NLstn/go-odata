@@ -15,6 +15,7 @@ import (
 	"github.com/nlstn/go-odata/internal/async"
 	"github.com/nlstn/go-odata/internal/handlers"
 	"github.com/nlstn/go-odata/internal/metadata"
+	"github.com/nlstn/go-odata/internal/query"
 	"github.com/nlstn/go-odata/internal/service/operations"
 	servrouter "github.com/nlstn/go-odata/internal/service/router"
 	servruntime "github.com/nlstn/go-odata/internal/service/runtime"
@@ -71,6 +72,8 @@ type Service struct {
 	asyncMonitorPrefix string
 	// logger is used for structured logging throughout the service
 	logger *slog.Logger
+	// ftsManager manages full-text search functionality for SQLite
+	ftsManager *query.FTSManager
 }
 
 // NewService creates a new OData service instance with database connection.
@@ -105,6 +108,9 @@ func NewServiceWithConfig(db *gorm.DB, cfg ServiceConfig) (*Service, error) {
 		tracker = trackchanges.NewTracker()
 	}
 
+	// Initialize FTS manager for SQLite full-text search
+	ftsManager := query.NewFTSManager(db)
+
 	s := &Service{
 		db:                       db,
 		entities:                 entities,
@@ -117,6 +123,7 @@ func NewServiceWithConfig(db *gorm.DB, cfg ServiceConfig) (*Service, error) {
 		deltaTracker:             tracker,
 		changeTrackingPersistent: cfg.PersistentChangeTracking,
 		logger:                   logger,
+		ftsManager:               ftsManager,
 	}
 	s.metadataHandler.SetNamespace(DefaultNamespace)
 	s.operationsHandler = operations.NewHandler(s.actions, s.functions, s.handlers, s.entities, s.namespace, logger)
@@ -291,6 +298,7 @@ func (s *Service) RegisterEntity(entity interface{}) error {
 	handler.SetNamespace(s.namespace)
 	handler.SetEntitiesMetadata(s.entities)
 	handler.SetDeltaTracker(s.deltaTracker)
+	handler.SetFTSManager(s.ftsManager)
 	s.handlers[entityMetadata.EntitySetName] = handler
 
 	s.logger.Debug("Registered entity",
@@ -342,6 +350,7 @@ func (s *Service) RegisterSingleton(entity interface{}, singletonName string) er
 	handler := handlers.NewEntityHandler(s.db, singletonMetadata, s.logger)
 	handler.SetNamespace(s.namespace)
 	handler.SetEntitiesMetadata(s.entities)
+	handler.SetFTSManager(s.ftsManager)
 	s.handlers[singletonName] = handler
 
 	s.logger.Debug("Registered singleton",
