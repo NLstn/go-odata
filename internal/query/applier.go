@@ -12,8 +12,30 @@ func ShouldUseMapResults(options *QueryOptions) bool {
 
 // ApplyQueryOptions applies parsed query options to a GORM database query
 func ApplyQueryOptions(db *gorm.DB, options *QueryOptions, entityMetadata *metadata.EntityMetadata) *gorm.DB {
+	return ApplyQueryOptionsWithFTS(db, options, entityMetadata, nil, "")
+}
+
+// ApplyQueryOptionsWithFTS applies parsed query options to a GORM database query with optional FTS support
+func ApplyQueryOptionsWithFTS(db *gorm.DB, options *QueryOptions, entityMetadata *metadata.EntityMetadata, ftsManager *FTSManager, tableName string) *gorm.DB {
 	if options == nil {
 		return db
+	}
+
+	// Try to apply search at database level using FTS if available
+	searchAppliedAtDB := false
+	if options.Search != "" && ftsManager != nil && ftsManager.IsFTSAvailable() && tableName != "" {
+		var err error
+		db, err = ftsManager.ApplyFTSSearch(db, tableName, options.Search, entityMetadata)
+		if err == nil {
+			searchAppliedAtDB = true
+		}
+		// If FTS fails, we'll fall back to in-memory search
+	}
+
+	// Store whether search was applied at DB level for later use
+	if searchAppliedAtDB {
+		// Mark that search was already applied so it doesn't get applied again in-memory
+		db = db.Set("_fts_search_applied", true)
 	}
 
 	// Apply transformations (if present, they take precedence over other query options)

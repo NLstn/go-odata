@@ -131,7 +131,19 @@ func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.Qu
 		db = h.applySkipTokenFilter(db, queryOptions)
 	}
 
-	db = query.ApplyQueryOptions(db, &modifiedOptions, h.metadata)
+	// Get the table name for FTS (convert EntitySetName to snake_case for table name)
+	tableName := toSnakeCase(h.metadata.EntitySetName)
+
+	// Apply query options with FTS support
+	db = query.ApplyQueryOptionsWithFTS(db, &modifiedOptions, h.metadata, h.ftsManager, tableName)
+
+	// Check if search was applied at database level
+	searchAppliedAtDB := false
+	if val, ok := db.Get("_fts_search_applied"); ok {
+		if applied, ok := val.(bool); ok && applied {
+			searchAppliedAtDB = true
+		}
+	}
 
 	if query.ShouldUseMapResults(queryOptions) {
 		var results []map[string]interface{}
@@ -150,7 +162,8 @@ func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.Qu
 
 	sliceValue := reflect.ValueOf(results).Elem().Interface()
 
-	if queryOptions.Search != "" {
+	// Only apply in-memory search if it wasn't already applied at database level
+	if queryOptions.Search != "" && !searchAppliedAtDB {
 		sliceValue = query.ApplySearch(sliceValue, queryOptions.Search, h.metadata)
 	}
 
