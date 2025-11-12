@@ -30,7 +30,8 @@ func NewFTSManager(db *gorm.DB) *FTSManager {
 // detectFTS checks if SQLite FTS is available and which version
 func (m *FTSManager) detectFTS() {
 	// Check if we're using SQLite
-	if m.db.Dialector.Name() != "sqlite" {
+	dialector := m.db.Dialector
+	if dialector.Name() != "sqlite" {
 		return
 	}
 
@@ -76,8 +77,8 @@ func (m *FTSManager) isFTSVersionAvailable(version string) bool {
 		return false
 	}
 
-	// Clean up test table
-	_, _ = sqlDB.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %s", testTableName))
+	// Clean up test table - ignore error as cleanup is best-effort
+	_, _ = sqlDB.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %s", testTableName)) //nolint:errcheck
 
 	return true
 }
@@ -178,8 +179,7 @@ func (m *FTSManager) createFTSTable(tableName, ftsTableName string, searchableCo
 	}
 
 	// Create standalone FTS virtual table (simpler approach)
-	var createSQL string
-	createSQL = fmt.Sprintf(
+	createSQL := fmt.Sprintf(
 		"CREATE VIRTUAL TABLE IF NOT EXISTS %s USING %s(%s)",
 		ftsTableName,
 		strings.ToLower(m.ftsVersion),
@@ -250,7 +250,7 @@ func (m *FTSManager) createFTSTriggers(tableName, ftsTableName string, cols []st
 
 // buildUpdateSetClause builds the SET clause for UPDATE statement
 func (m *FTSManager) buildUpdateSetClause(cols []string, prefix string) string {
-	var parts []string
+	parts := make([]string, 0, len(cols))
 	for _, col := range cols {
 		parts = append(parts, fmt.Sprintf("%s = %s%s", col, prefix, col))
 	}
