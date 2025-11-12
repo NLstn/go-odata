@@ -11,6 +11,7 @@ This guide covers advanced features of go-odata including singletons, ETags, and
   - [Tenant Filtering Example](#tenant-filtering-example)
   - [Redacting Sensitive Data](#redacting-sensitive-data)
 - [Asynchronous Processing](#asynchronous-processing)
+- [Full-Text Search with SQLite FTS](#full-text-search-with-sqlite-fts)
 
 ## Singletons
 
@@ -614,3 +615,214 @@ These guarantees let clients reliably poll job status without conflicting with r
 `Service.Close` shuts down the async manager’s background goroutines and resets
 the related configuration. You can call it from multiple cleanup hooks—each call
 is a no-op once the manager is already stopped.
+
+## Full-Text Search with SQLite FTS
+
+The go-odata library automatically enhances `$search` query performance on SQLite backends by utilizing Full-Text Search (FTS) capabilities when available. This provides significant performance improvements for text search operations while maintaining backward compatibility.
+
+### Overview
+
+When you use the `$search` query parameter, the library:
+1. Automatically detects if SQLite FTS (FTS3, FTS4, or FTS5) is available
+2. If available, creates FTS virtual tables and applies search at the database level
+3. If not available, falls back to the existing in-memory search implementation
+4. Keeps FTS tables synchronized with your data using triggers
+
+### How It Works
+
+The FTS integration is completely automatic - no configuration required:
+
+```go
+// Standard setup - FTS is automatically initialized
+db, _ := gorm.Open(sqlite.Open("test.db"), &gorm.Config{})
+service := odata.NewService(db)
+service.RegisterEntity(&Product{})
+
+// Clients can use $search as usual
+// GET /Products?$search=laptop
+// If FTS is available, search runs at database level
+// Otherwise, it falls back to in-memory search
+```
+
+### Searchable Properties
+
+Mark properties as searchable using the `searchable` tag:
+
+```go
+type Product struct {
+    ID          int     `json:"ID" gorm:"primaryKey" odata:"key"`
+    Name        string  `json:"Name" odata:"searchable"`
+    Description string  `json:"Description" odata:"searchable"`
+    Category    string  `json:"Category"`  // Not searchable
+    Price       float64 `json:"Price"`
+}
+```
+
+If no properties are marked as searchable, all string properties are automatically included in the search index.
+
+### FTS Features
+
+**Supported:**
+- ✅ Full-text search with SQLite FTS3, FTS4, or FTS5
+- ✅ Automatic FTS detection and initialization
+- ✅ Automatic table synchronization via triggers
+- ✅ Case-insensitive search
+- ✅ Transparent fallback to in-memory search
+- ✅ Configurable searchable properties
+- ✅ Support for fuzziness and similarity settings
+
+**Search Behavior:**
+```bash
+# Search for products containing "laptop"
+GET /Products?$search=laptop
+
+# Search works across all searchable fields
+GET /Products?$search=gaming
+
+# Case-insensitive by default
+GET /Products?$search=LAPTOP  # Same as "laptop"
+```
+
+### Performance Benefits
+
+FTS provides significant performance improvements for text search:
+
+| Operation | In-Memory Search | FTS Search |
+|-----------|-----------------|------------|
+| Small datasets (<100 rows) | Fast | Fast |
+| Medium datasets (100-10K rows) | Moderate | Fast |
+| Large datasets (>10K rows) | Slow | Fast |
+
+**Key Benefits:**
+- Database-level filtering reduces memory usage
+- Better performance on large datasets
+- Utilizes SQLite's optimized FTS indexes
+- Reduces data transfer between database and application
+
+### FTS Virtual Tables
+
+The library automatically creates and manages FTS virtual tables:
+
+```sql
+-- Example: For Products entity, creates:
+CREATE VIRTUAL TABLE products_fts USING fts4(
+    id, name, description
+);
+
+-- With automatic triggers to keep data synchronized
+CREATE TRIGGER products_fts_ai AFTER INSERT ON products BEGIN
+    INSERT INTO products_fts(id, name, description) 
+    VALUES (NEW.id, NEW.name, NEW.description);
+END;
+```
+
+### Fallback Behavior
+
+If FTS is not available (e.g., non-SQLite database or FTS not compiled in):
+- Search automatically falls back to in-memory implementation
+- All existing fuzzy matching and similarity features work
+- No changes needed in client code
+- No errors or warnings
+
+```go
+// Works with any database backend
+db, _ := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+service := odata.NewService(db)
+// $search falls back to in-memory search automatically
+```
+
+### Advanced Search Options
+
+You can still use advanced search options with or without FTS:
+
+```go
+type Product struct {
+    ID    int    `json:"ID" odata:"key"`
+    Name  string `json:"Name" odata:"searchable,fuzziness=2"`
+    Email string `json:"Email" odata:"searchable,similarity=0.9"`
+}
+```
+
+When FTS is available:
+- Basic search uses FTS for optimal performance
+- Fuzzy matching and similarity scoring work at the application level
+
+When FTS is not available:
+- All features work via in-memory search
+- Full fuzzy matching and similarity support
+
+### FTS Versions
+
+The library supports all SQLite FTS versions:
+
+| Version | Features | Priority |
+|---------|----------|----------|
+| FTS5 | Latest, best performance | 1st choice |
+| FTS4 | Good performance, widely available | 2nd choice |
+| FTS3 | Basic FTS support | 3rd choice |
+
+The library automatically detects and uses the best available version.
+
+### Limitations
+
+1. **SQLite Only**: FTS integration only works with SQLite databases. Other databases automatically use in-memory search.
+
+2. **Simple Queries**: FTS is optimized for simple full-text queries. Complex boolean expressions or advanced fuzzy matching may fall back to in-memory processing.
+
+3. **Storage Overhead**: FTS virtual tables require additional disk space (approximately 30-50% of indexed text).
+
+4. **Write Performance**: FTS triggers add minimal overhead to INSERT/UPDATE/DELETE operations.
+
+### Best Practices
+
+1. **Mark Searchable Fields**: Explicitly mark fields as `searchable` to control which fields are indexed.
+
+2. **Index Size**: Be mindful of text field sizes when marking as searchable - large text fields increase index size.
+
+3. **Test Both Paths**: Test your search functionality with both FTS enabled and disabled to ensure consistent behavior.
+
+4. **Monitor Performance**: Use SQLite's `EXPLAIN QUERY PLAN` to verify FTS usage in queries.
+
+### Example: Complete Implementation
+
+```go
+package main
+
+import (
+    "log"
+    "net/http"
+    
+    "github.com/nlstn/go-odata"
+    "gorm.io/driver/sqlite"
+    "gorm.io/gorm"
+)
+
+type Article struct {
+    ID      int    `json:"ID" gorm:"primaryKey" odata:"key"`
+    Title   string `json:"Title" odata:"searchable"`
+    Content string `json:"Content" odata:"searchable"`
+    Author  string `json:"Author"`
+    Tags    string `json:"Tags" odata:"searchable"`
+}
+
+func main() {
+    db, _ := gorm.Open(sqlite.Open("articles.db"), &gorm.Config{})
+    db.AutoMigrate(&Article{})
+    
+    service := odata.NewService(db)
+    service.RegisterEntity(&Article{})
+    
+    http.Handle("/", service)
+    log.Println("Server with FTS-enabled search on :8080")
+    http.ListenAndServe(":8080", nil)
+}
+```
+
+Clients can now use efficient full-text search:
+```bash
+# Search across title, content, and tags
+GET /Articles?$search=golang
+
+# Combine with other query options
+GET /Articles?$search=database&$top=10&$orderby=Title
+```
