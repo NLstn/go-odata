@@ -154,6 +154,39 @@ func TestAnalyzeEntity(t *testing.T) {
 	}
 }
 
+func TestAnalyzeEntity_KeyGenerator(t *testing.T) {
+	type GeneratedEntity struct {
+		ID   string `json:"id" odata:"key,generate=uuid"`
+		Name string `json:"name"`
+	}
+
+	meta, err := AnalyzeEntity(GeneratedEntity{})
+	if err != nil {
+		t.Fatalf("AnalyzeEntity() error = %v", err)
+	}
+
+	if len(meta.KeyProperties) != 1 {
+		t.Fatalf("expected 1 key property, got %d", len(meta.KeyProperties))
+	}
+
+	key := meta.KeyProperties[0]
+	if key.KeyGenerator != "uuid" {
+		t.Fatalf("expected key generator 'uuid', got %q", key.KeyGenerator)
+	}
+
+	if key.DatabaseGenerated {
+		t.Fatal("expected generated key to disable database-managed flag")
+	}
+
+	type UnknownGenerator struct {
+		ID string `json:"id" odata:"key,generate=custom"`
+	}
+
+	if _, err := AnalyzeEntity(UnknownGenerator{}); err == nil {
+		t.Fatal("expected error for unknown generator")
+	}
+}
+
 func TestPluralize(t *testing.T) {
 	tests := []struct {
 		input string

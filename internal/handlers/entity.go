@@ -15,13 +15,14 @@ import (
 
 // EntityHandler handles HTTP requests for entity collections
 type EntityHandler struct {
-	db               *gorm.DB
-	metadata         *metadata.EntityMetadata
-	entitiesMetadata map[string]*metadata.EntityMetadata
-	namespace        string
-	tracker          *trackchanges.Tracker
-	logger           *slog.Logger
-	ftsManager       *query.FTSManager
+	db                   *gorm.DB
+	metadata             *metadata.EntityMetadata
+	entitiesMetadata     map[string]*metadata.EntityMetadata
+	namespace            string
+	tracker              *trackchanges.Tracker
+	logger               *slog.Logger
+	ftsManager           *query.FTSManager
+	keyGeneratorResolver func(string) (func(context.Context) (interface{}, error), bool)
 }
 
 // NewEntityHandler creates a new entity handler
@@ -53,6 +54,11 @@ func (h *EntityHandler) SetLogger(logger *slog.Logger) {
 // SetEntitiesMetadata sets the entities metadata registry for navigation property handling
 func (h *EntityHandler) SetEntitiesMetadata(entitiesMetadata map[string]*metadata.EntityMetadata) {
 	h.entitiesMetadata = entitiesMetadata
+}
+
+// SetKeyGeneratorResolver injects a resolver used to look up key generator functions by name.
+func (h *EntityHandler) SetKeyGeneratorResolver(resolver func(string) (func(context.Context) (interface{}, error), bool)) {
+	h.keyGeneratorResolver = resolver
 }
 
 // SetNamespace updates the namespace used for generated metadata annotations.
