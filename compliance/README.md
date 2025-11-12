@@ -64,6 +64,16 @@ Skipped tests help track which parts of the OData v4 spec are not yet implemente
 
 The compliance test script automatically starts and stops the compliance server, so no manual server setup is required.
 
+### **IMPORTANT: All tests MUST be run through `run_compliance_tests.sh`**
+
+**DO NOT run individual test scripts directly.** The `run_compliance_tests.sh` script handles:
+- Starting and stopping the compliance server automatically
+- Database seeding and cleanup
+- Proper environment setup
+- Test result aggregation and reporting
+
+Running tests directly can lead to inconsistent results, missing test data, or server state issues.
+
 ### Run All Tests
 
 ```bash
@@ -97,7 +107,7 @@ Run all tests (both 4.0 and 4.01):
 
 ### Run Specific Tests
 
-Run tests matching a pattern (server auto-starts):
+**Always use `run_compliance_tests.sh` to run tests:**
 ```bash
 ./run_compliance_tests.sh header          # All header tests
 ./run_compliance_tests.sh 8.1.1          # Specific section
@@ -105,11 +115,7 @@ Run tests matching a pattern (server auto-starts):
 ./run_compliance_tests.sh --version 4.0 filter  # Only 4.0 filter tests
 ```
 
-Run a single test directly (requires server to be running):
-```bash
-cd v4.0
-./8.1.1_header_content_type.sh
-```
+The test runner automatically starts the server, seeds the database, and handles cleanup.
 
 ### Use External Server
 
@@ -433,18 +439,31 @@ The master test runner generates a markdown report with:
 
 All new compliance tests **MUST** use the standardized test framework (`test_framework.sh`) to ensure consistent reporting and integration with the master test runner.
 
+### **MANDATORY: Use HTTP Functions from test_framework.sh**
+
+**All HTTP requests in compliance tests MUST use the framework's HTTP functions** (`http_get`, `http_post`, `http_patch`, `http_put`, `http_delete`) **instead of raw `curl` commands.** 
+
+Using the framework functions provides:
+- Automatic debug logging when `--debug` flag is used
+- Consistent error handling
+- Proper URL encoding
+- Standardized response formatting
+
+**The ONLY exception is in cleanup functions**, where raw curl can be used for simplicity.
+
 ### Guide for Coding Agents (AI Contributors)
 
 **Important:** This section provides specific guidance for AI coding agents and automated contributors on how to write compliance tests that integrate properly with the test framework.
 
 #### Core Principles for AI Agents
 
-1. **Always use the test framework** - Source `test_framework.sh` at the start of every test script
-2. **Use framework HTTP functions** - Never use raw `curl` directly; use `http_get`, `http_post`, etc. for automatic debug logging
-3. **Follow the exact template structure** - Consistency is critical for automation
-4. **Return proper exit codes** - Let the framework handle this via `print_summary()`
-5. **Don't manually track counters** - The framework manages PASSED, FAILED, and TOTAL automatically
-6. **Clean up test data** - Always implement and register a cleanup function
+1. **Always run tests through run_compliance_tests.sh** - Never run test scripts directly; use the runner for proper environment setup
+2. **Always use the test framework** - Source `test_framework.sh` at the start of every test script
+3. **MANDATORY: Use framework HTTP functions** - **NEVER use raw `curl`** except in cleanup functions; always use `http_get`, `http_post`, `http_patch`, `http_put`, `http_delete` for automatic debug logging and consistent behavior
+4. **Follow the exact template structure** - Consistency is critical for automation
+5. **Return proper exit codes** - Let the framework handle this via `print_summary()`
+6. **Don't manually track counters** - The framework manages PASSED, FAILED, and TOTAL automatically
+7. **Clean up test data** - Always implement and register a cleanup function
 
 #### Required Script Structure for AI Agents
 
@@ -607,16 +626,30 @@ fi
 
 #### Common Pitfalls for AI Agents (AVOID THESE)
 
-❌ **DON'T use raw curl:**
+❌ **DON'T use raw curl (MANDATORY RULE - VIOLATION IS NOT ALLOWED):**
 ```bash
 # WRONG - bypasses debug logging and framework
+# THIS IS FORBIDDEN except in cleanup functions
 curl -s "$SERVER_URL/Products"
 ```
 
-✅ **DO use framework functions:**
+✅ **DO use framework functions (MANDATORY):**
 ```bash
 # CORRECT - enables debug logging
 http_get "$SERVER_URL/Products"
+```
+
+❌ **DON'T run test scripts directly:**
+```bash
+# WRONG - missing environment setup and database seeding
+cd v4.0
+./8.1.1_header_content_type.sh
+```
+
+✅ **DO use run_compliance_tests.sh:**
+```bash
+# CORRECT - proper environment setup
+./run_compliance_tests.sh 8.1.1
 ```
 
 ❌ **DON'T manually manage counters:**
