@@ -21,6 +21,7 @@ A Go library for building services that expose OData v4 APIs with automatic hand
 - 🎯 **Custom operations** - Easy registration of actions and functions
 - 📊 **Data aggregation** - Supports $apply transformations
 - 🧪 **Fully tested** - 85+ compliance tests ensuring OData v4 adherence
+- 🔑 **Server-side key generation** - Validate directives during metadata analysis and plug in custom generators
 
 ### OData v4 Specification
 

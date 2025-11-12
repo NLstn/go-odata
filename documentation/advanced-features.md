@@ -580,6 +580,29 @@ For a single operation, hooks execute in this order:
 2. Database DELETE
 3. AfterDelete
 
+## Server-side Key Generation
+
+Use server-side key generation when you need identifiers that are independent of the database’s auto-increment behaviour. go-odata exposes a registry of key generators that you can populate at service startup.
+
+```go
+service := odata.NewService(db)
+
+service.RegisterKeyGenerator("timestamp", func(ctx context.Context) (interface{}, error) {
+        return time.Now().UnixNano(), nil
+})
+
+type APIKey struct {
+        KeyID string `json:"KeyID" gorm:"type:char(36);primaryKey" odata:"key,generate=uuid"`
+        Owner string `json:"Owner" odata:"required"`
+}
+```
+
+> Requires `import "context"` and `import "time"`.
+
+Metadata analysis validates that `generate=uuid` (or any other name you choose) has a registered generator. During POST requests the handler zeroes auto-increment numeric keys and calls the requested generator for every key property that declares one. That behaviour holds for single entities, collections, and composite keys.
+
+The development and performance sample servers ship with an `APIKeys` entity that uses `generate=uuid`. Run `go run ./cmd/devserver` and POST to `/APIKeys` without supplying a `KeyID` to see the feature in action.
+
 ## Asynchronous Processing
 
 `go-odata` can run long-running requests asynchronously when clients send `Prefer: respond-async`. Enable it with `Service.EnableAsyncProcessing` and provide a monitor prefix (defaults to `/$async/jobs/`). The helper returns an error because the async manager now persists job state using GORM. The library writes to a reserved `_odata_async_jobs` table so application models remain untouched and finished jobs can be monitored even after a manager restart.

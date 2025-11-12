@@ -132,7 +132,7 @@ func main() {
 	}
 
 	// Auto-migrate the Product, ProductDescription, Category, and CompanyInfo models
-	if err := Db.AutoMigrate(&entities.Category{}, &entities.Product{}, &entities.ProductDescription{}, &entities.CompanyInfo{}); err != nil {
+	if err := Db.AutoMigrate(&entities.Category{}, &entities.Product{}, &entities.ProductDescription{}, &entities.CompanyInfo{}, &entities.APIKey{}); err != nil {
 		log.Fatal("Failed to migrate database:", err)
 	}
 
@@ -161,6 +161,9 @@ func main() {
 	}
 	if err := service.RegisterEntity(&entities.ProductDescription{}); err != nil {
 		log.Fatal("Failed to register ProductDescription entity:", err)
+	}
+	if err := service.RegisterEntity(&entities.APIKey{}); err != nil {
+		log.Fatal("Failed to register APIKey entity:", err)
 	}
 
 	if err := service.EnableChangeTracking("Products"); err != nil {
@@ -195,6 +198,7 @@ func main() {
 	fmt.Printf("  Products:             http://localhost:%s/Products\n", *port)
 	fmt.Printf("  ProductDescriptions:  http://localhost:%s/ProductDescriptions\n", *port)
 	fmt.Printf("  Company (Singleton):  http://localhost:%s/Company\n", *port)
+	fmt.Printf("  API Keys:             http://localhost:%s/APIKeys\n", *port)
 	fmt.Println()
 	fmt.Println("Performance Testing:")
 	fmt.Printf("  POST http://localhost:%s/Reseed  (Resets database to performance testing state)\n", *port)

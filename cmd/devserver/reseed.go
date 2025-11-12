@@ -14,12 +14,12 @@ import (
 // This function drops and recreates all tables to ensure a clean state
 func seedDatabase(db *gorm.DB) error {
 	// Drop all tables (GORM handles the correct order based on foreign keys)
-	if err := db.Migrator().DropTable(&entities.ProductDescription{}, &entities.Product{}, &entities.Category{}, &entities.CompanyInfo{}, &entities.User{}); err != nil {
+	if err := db.Migrator().DropTable(&entities.ProductDescription{}, &entities.Product{}, &entities.Category{}, &entities.CompanyInfo{}, &entities.User{}, &entities.APIKey{}); err != nil {
 		return fmt.Errorf("failed to drop tables: %w", err)
 	}
 
 	// Recreate tables with fresh schema (auto-increment counters are automatically reset)
-	if err := db.AutoMigrate(&entities.Category{}, &entities.Product{}, &entities.ProductDescription{}, &entities.CompanyInfo{}, &entities.User{}); err != nil {
+	if err := db.AutoMigrate(&entities.Category{}, &entities.Product{}, &entities.ProductDescription{}, &entities.CompanyInfo{}, &entities.User{}, &entities.APIKey{}); err != nil {
 		return fmt.Errorf("failed to migrate database: %w", err)
 	}
 
@@ -53,8 +53,13 @@ func seedDatabase(db *gorm.DB) error {
 		return fmt.Errorf("failed to seed users: %w", err)
 	}
 
-	fmt.Printf("Database seeded with %d categories, %d products, %d descriptions, %d users, and company info\n",
-		len(sampleCategories), len(sampleProducts), len(sampleDescriptions), len(sampleUsers))
+	sampleAPIKeys := entities.GetSampleAPIKeys()
+	if err := db.Create(&sampleAPIKeys).Error; err != nil {
+		return fmt.Errorf("failed to seed API keys: %w", err)
+	}
+
+	fmt.Printf("Database seeded with %d categories, %d products, %d descriptions, %d users, %d API keys, and company info\n",
+		len(sampleCategories), len(sampleProducts), len(sampleDescriptions), len(sampleUsers), len(sampleAPIKeys))
 	return nil
 }
 
