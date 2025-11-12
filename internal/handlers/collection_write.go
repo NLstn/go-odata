@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -55,7 +56,10 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 			return newTransactionHandledError(err)
 		}
 
-		h.clearAutoIncrementKeys(entity)
+		if err := h.initializeEntityKeys(ctx, entity); err != nil {
+			WriteError(w, http.StatusInternalServerError, ErrMsgInternalError, err.Error())
+			return newTransactionHandledError(err)
+		}
 
 		if err := h.validateRequiredProperties(requestData); err != nil {
 			WriteError(w, http.StatusBadRequest, "Missing required properties", err.Error())
@@ -205,31 +209,136 @@ func (h *EntityHandler) validateRequiredProperties(requestData map[string]interf
 	return nil
 }
 
-func (h *EntityHandler) clearAutoIncrementKeys(entity interface{}) {
-	entityValue := reflect.ValueOf(entity)
-	if entityValue.Kind() == reflect.Ptr {
-		entityValue = entityValue.Elem()
+func (h *EntityHandler) initializeEntityKeys(ctx context.Context, entity interface{}) error {
+	if h.metadata == nil {
+		return fmt.Errorf("entity metadata is not initialized")
 	}
 
-	if len(h.metadata.KeyProperties) > 1 {
-		return
+	value := reflect.ValueOf(entity)
+	if value.Kind() == reflect.Ptr {
+		value = value.Elem()
 	}
 
 	for _, keyProp := range h.metadata.KeyProperties {
-		if strings.Contains(keyProp.GormTag, "autoIncrement:false") {
+		field := value.FieldByName(keyProp.Name)
+		if !field.IsValid() {
 			continue
 		}
 
-		field := entityValue.FieldByName(keyProp.Name)
-		if !field.IsValid() || !field.CanSet() {
+		if keyProp.DatabaseGenerated && field.CanSet() {
+			zeroField(field)
+		}
+
+		if keyProp.KeyGenerator == "" {
 			continue
 		}
 
-		switch field.Kind() {
-		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-			field.SetZero()
+		if !field.CanSet() {
+			return fmt.Errorf("cannot set generated key field %s", keyProp.Name)
+		}
+
+		generator, err := h.resolveKeyGenerator(keyProp.KeyGenerator)
+		if err != nil {
+			return err
+		}
+
+		generated, err := generator(ctx)
+		if err != nil {
+			return fmt.Errorf("key generator '%s' failed: %w", keyProp.KeyGenerator, err)
+		}
+
+		if err := assignGeneratedValue(field, generated); err != nil {
+			return err
 		}
 	}
+
+	return nil
+}
+
+func (h *EntityHandler) resolveKeyGenerator(name string) (func(context.Context) (interface{}, error), error) {
+	if h.keyGeneratorResolver == nil {
+		return nil, fmt.Errorf("no key generator resolver configured for '%s'", name)
+	}
+
+	generator, ok := h.keyGeneratorResolver(name)
+	if !ok || generator == nil {
+		return nil, fmt.Errorf("key generator '%s' is not registered", name)
+	}
+
+	return generator, nil
+}
+
+func zeroField(field reflect.Value) {
+	if field.CanSet() {
+		field.SetZero()
+	}
+}
+
+func assignGeneratedValue(field reflect.Value, value interface{}) error {
+	if !field.CanSet() {
+		return fmt.Errorf("cannot set generated value for field of type %s", field.Type())
+	}
+
+	if value == nil {
+		switch field.Kind() {
+		case reflect.Ptr, reflect.Interface, reflect.Map, reflect.Slice:
+			field.SetZero()
+			return nil
+		default:
+			return fmt.Errorf("key generator produced nil for non-nullable field of type %s", field.Type())
+		}
+	}
+
+	val := reflect.ValueOf(value)
+	if !val.IsValid() {
+		return fmt.Errorf("key generator produced invalid value")
+	}
+
+	targetType := field.Type()
+
+	if val.Type().AssignableTo(targetType) {
+		field.Set(val)
+		return nil
+	}
+
+	if val.Type().ConvertibleTo(targetType) {
+		field.Set(val.Convert(targetType))
+		return nil
+	}
+
+	if targetType.Kind() == reflect.Ptr {
+		elemType := targetType.Elem()
+		if val.Type().AssignableTo(elemType) {
+			ptr := reflect.New(elemType)
+			ptr.Elem().Set(val)
+			field.Set(ptr)
+			return nil
+		}
+		if val.Type().ConvertibleTo(elemType) {
+			ptr := reflect.New(elemType)
+			ptr.Elem().Set(val.Convert(elemType))
+			field.Set(ptr)
+			return nil
+		}
+	}
+
+	if targetType.Kind() == reflect.Interface && targetType.NumMethod() == 0 {
+		field.Set(val)
+		return nil
+	}
+
+	if targetType.Kind() == reflect.String {
+		switch v := value.(type) {
+		case fmt.Stringer:
+			field.SetString(v.String())
+			return nil
+		case []byte:
+			field.SetString(string(v))
+			return nil
+		}
+	}
+
+	return fmt.Errorf("generated key type %s cannot be assigned to field type %s", val.Type(), targetType)
 }
 
 func (h *EntityHandler) buildEntityLocation(r *http.Request, entity interface{}) string {

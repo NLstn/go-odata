@@ -3,11 +3,10 @@ package odata_test
 import (
 	"bytes"
 	"encoding/json"
+	odata "github.com/nlstn/go-odata"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	odata "github.com/nlstn/go-odata"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -35,6 +34,12 @@ type PostTestProductNoAutoIncrement struct {
 	ID    int     `json:"id" gorm:"primarykey" odata:"key"`
 	Name  string  `json:"name" odata:"required"`
 	Price float64 `json:"price"`
+}
+
+// PostUUIDProduct uses server-side key generation
+type PostUUIDProduct struct {
+	ID   string `json:"id" gorm:"type:char(36);primaryKey" odata:"key,generate=uuid"`
+	Name string `json:"name" odata:"required"`
 }
 
 func setupPostTestService(t *testing.T) (*odata.Service, *gorm.DB) {
@@ -85,6 +90,24 @@ func setupPostNoAutoIncrementTestService(t *testing.T) (*odata.Service, *gorm.DB
 
 	service := odata.NewService(db)
 	if err := service.RegisterEntity(PostTestProductNoAutoIncrement{}); err != nil {
+		t.Fatalf("Failed to register entity: %v", err)
+	}
+
+	return service, db
+}
+
+func setupPostUUIDTestService(t *testing.T) (*odata.Service, *gorm.DB) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("Failed to connect to database: %v", err)
+	}
+
+	if err := db.AutoMigrate(&PostUUIDProduct{}); err != nil {
+		t.Fatalf("Failed to migrate database: %v", err)
+	}
+
+	service := odata.NewService(db)
+	if err := service.RegisterEntity(&PostUUIDProduct{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
 	}
 
@@ -321,6 +344,76 @@ func TestPostEntity_WithKeyInBody(t *testing.T) {
 	if product.ID != 42 {
 		t.Errorf("Created entity ID = %d, want 42", product.ID)
 	}
+}
+
+func TestPostEntity_UUIDGeneratedKey(t *testing.T) {
+	service, db := setupPostUUIDTestService(t)
+
+	payload := map[string]interface{}{
+		"name": "Generated",
+	}
+
+	body, _ := json.Marshal(payload)
+
+	req := httptest.NewRequest(http.MethodPost, "/PostUUIDProducts", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("Status = %v, want %v. Body: %s", w.Code, http.StatusCreated, w.Body.String())
+	}
+
+	var response map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	rawID, ok := response["id"].(string)
+	if !ok || rawID == "" {
+		t.Fatalf("expected generated id string, got %v", response["id"])
+	}
+
+	var record PostUUIDProduct
+	if err := db.First(&record).Error; err != nil {
+		t.Fatalf("failed to fetch created record: %v", err)
+	}
+
+	if record.ID == "" {
+		t.Fatal("database record has empty UUID")
+	}
+
+	if !looksLikeUUID(rawID) {
+		t.Fatalf("response id %q is not in UUID format", rawID)
+	}
+
+	if record.ID != rawID {
+		t.Fatalf("response ID %s does not match stored ID %s", rawID, record.ID)
+	}
+}
+
+func looksLikeUUID(v string) bool {
+	if len(v) != 36 {
+		return false
+	}
+
+	for _, pos := range []int{8, 13, 18, 23} {
+		if v[pos] != '-' {
+			return false
+		}
+	}
+
+	for _, r := range v {
+		if r == '-' {
+			continue
+		}
+		if (r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F') {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func TestPostEntity_ToEntityEndpoint(t *testing.T) {

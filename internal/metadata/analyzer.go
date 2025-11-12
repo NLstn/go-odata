@@ -42,6 +42,8 @@ type PropertyMetadata struct {
 	Type              reflect.Type
 	FieldName         string
 	IsKey             bool
+	KeyGenerator      string
+	DatabaseGenerated bool
 	IsRequired        bool
 	JsonName          string
 	GormTag           string
@@ -242,12 +244,24 @@ func analyzeField(field reflect.StructField, metadata *EntityMetadata) (Property
 	analyzeNavigationProperty(&property, field)
 
 	// Check for OData tags
-	analyzeODataTags(&property, field, metadata)
+	if err := analyzeODataTags(&property, field, metadata); err != nil {
+		return PropertyMetadata{}, err
+	}
 
 	// Auto-detect nullability based on Go type and GORM tags
 	// This runs after OData tags so explicit odata:"nullable" takes precedence
 	if err := autoDetectNullability(&property); err != nil {
 		return PropertyMetadata{}, err
+	}
+
+	if property.KeyGenerator != "" {
+		property.DatabaseGenerated = false
+	} else if property.IsKey {
+		property.DatabaseGenerated = isDatabaseGeneratedKey(property)
+	}
+
+	if property.IsKey {
+		upsertKeyProperty(metadata, property)
 	}
 
 	if property.IsEnum {
@@ -398,7 +412,9 @@ func extractEmbeddedPrefix(gormTag string) string {
 }
 
 // analyzeODataTags processes OData-specific tags on a field
-func analyzeODataTags(property *PropertyMetadata, field reflect.StructField, metadata *EntityMetadata) {
+func analyzeODataTags(property *PropertyMetadata, field reflect.StructField, metadata *EntityMetadata) error {
+	var sawKey bool
+
 	if odataTag := field.Tag.Get("odata"); odataTag != "" {
 		// Check if similarity is defined in the tag to avoid setting default fuzziness
 		hasSimilarity := strings.Contains(odataTag, "similarity=")
@@ -407,23 +423,44 @@ func analyzeODataTags(property *PropertyMetadata, field reflect.StructField, met
 		parts := strings.Split(odataTag, ",")
 		for _, part := range parts {
 			part = strings.TrimSpace(part)
-			processODataTagPart(property, part, metadata, hasSimilarity)
+			if part == "key" {
+				sawKey = true
+			}
+			if err := processODataTagPart(property, part, metadata, hasSimilarity); err != nil {
+				return err
+			}
 		}
 	}
 
 	// Auto-detect key if no explicit key is set and field name is "ID"
 	if len(metadata.KeyProperties) == 0 && field.Name == "ID" {
 		property.IsKey = true
-		metadata.KeyProperties = append(metadata.KeyProperties, *property)
+		sawKey = true
 	}
+
+	if property.KeyGenerator != "" {
+		property.KeyGenerator = strings.ToLower(property.KeyGenerator)
+		if !KnownKeyGeneratorName(property.KeyGenerator) {
+			return fmt.Errorf("unknown key generator '%s' for field %s", property.KeyGenerator, property.Name)
+		}
+	}
+
+	if property.KeyGenerator != "" && !property.IsKey {
+		return fmt.Errorf("key generator configured for non-key field %s", property.Name)
+	}
+
+	if sawKey {
+		property.IsKey = true
+	}
+
+	return nil
 }
 
 // processODataTagPart processes a single OData tag part
-func processODataTagPart(property *PropertyMetadata, part string, metadata *EntityMetadata, hasSimilarity bool) {
+func processODataTagPart(property *PropertyMetadata, part string, metadata *EntityMetadata, hasSimilarity bool) error {
 	switch {
 	case part == "key":
 		property.IsKey = true
-		metadata.KeyProperties = append(metadata.KeyProperties, *property)
 	case part == "etag":
 		property.IsETag = true
 		metadata.ETagProperty = property
@@ -472,6 +509,50 @@ func processODataTagPart(property *PropertyMetadata, part string, metadata *Enti
 		}
 	case strings.HasPrefix(part, "contenttype="):
 		property.ContentType = strings.TrimPrefix(part, "contenttype=")
+	case strings.HasPrefix(part, "generate="):
+		property.KeyGenerator = strings.TrimSpace(strings.TrimPrefix(part, "generate="))
+	}
+
+	return nil
+}
+
+func upsertKeyProperty(metadata *EntityMetadata, property PropertyMetadata) {
+	if metadata == nil || !property.IsKey {
+		return
+	}
+
+	for i := range metadata.KeyProperties {
+		if metadata.KeyProperties[i].Name == property.Name {
+			metadata.KeyProperties[i] = property
+			return
+		}
+	}
+
+	metadata.KeyProperties = append(metadata.KeyProperties, property)
+}
+
+func isDatabaseGeneratedKey(property PropertyMetadata) bool {
+	if !property.IsKey {
+		return false
+	}
+
+	gormTag := strings.ToLower(property.GormTag)
+	if strings.Contains(gormTag, "autoincrement:false") {
+		return false
+	}
+
+	keyType := property.Type
+	for keyType.Kind() == reflect.Ptr {
+		keyType = keyType.Elem()
+	}
+
+	switch keyType.Kind() {
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return true
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return strings.Contains(gormTag, "autoincrement")
+	default:
+		return false
 	}
 }
 

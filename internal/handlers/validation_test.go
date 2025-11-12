@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -270,7 +271,7 @@ func TestClearAutoIncrementKeys(t *testing.T) {
 				Name: "Test",
 			},
 			keyProperties: []metadata.PropertyMetadata{
-				{Name: "ID", JsonName: "id", Type: reflect.TypeOf(uint(0)), GormTag: "primaryKey"},
+				{Name: "ID", JsonName: "id", Type: reflect.TypeOf(uint(0)), GormTag: "primaryKey", DatabaseGenerated: true},
 			},
 			expectedIDIsZero: true,
 		},
@@ -329,7 +330,9 @@ func TestClearAutoIncrementKeys(t *testing.T) {
 				},
 			}
 
-			handler.clearAutoIncrementKeys(tt.entity)
+			if err := handler.initializeEntityKeys(context.Background(), tt.entity); err != nil {
+				t.Fatalf("initializeEntityKeys() error = %v", err)
+			}
 
 			// Check the ID field value
 			entityValue := reflect.ValueOf(tt.entity).Elem()
@@ -355,4 +358,103 @@ func TestClearAutoIncrementKeys(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestEntityHandlerInitializeEntityKeys_Generator(t *testing.T) {
+	makeResolver := func(value interface{}, err error) func(string) (func(context.Context) (interface{}, error), bool) {
+		return func(name string) (func(context.Context) (interface{}, error), bool) {
+			if name != "custom" {
+				return nil, false
+			}
+			return func(context.Context) (interface{}, error) {
+				return value, err
+			}, true
+		}
+	}
+
+	t.Run("assign generated string", func(t *testing.T) {
+		entity := &struct {
+			ID string
+		}{}
+
+		handler := &EntityHandler{
+			metadata: &metadata.EntityMetadata{
+				KeyProperties: []metadata.PropertyMetadata{
+					{Name: "ID", JsonName: "id", Type: reflect.TypeOf(""), IsKey: true, KeyGenerator: "custom"},
+				},
+			},
+			keyGeneratorResolver: makeResolver("generated", nil),
+		}
+
+		if err := handler.initializeEntityKeys(context.Background(), entity); err != nil {
+			t.Fatalf("initializeEntityKeys() error = %v", err)
+		}
+
+		if entity.ID != "generated" {
+			t.Fatalf("expected generated ID to be 'generated', got %q", entity.ID)
+		}
+	})
+
+	t.Run("assign pointer field", func(t *testing.T) {
+		type identifier struct{ value string }
+		entity := &struct {
+			ID *identifier
+		}{}
+
+		generated := identifier{value: "abc"}
+
+		handler := &EntityHandler{
+			metadata: &metadata.EntityMetadata{
+				KeyProperties: []metadata.PropertyMetadata{
+					{Name: "ID", JsonName: "id", Type: reflect.TypeOf(&identifier{}), IsKey: true, KeyGenerator: "custom"},
+				},
+			},
+			keyGeneratorResolver: makeResolver(generated, nil),
+		}
+
+		if err := handler.initializeEntityKeys(context.Background(), entity); err != nil {
+			t.Fatalf("initializeEntityKeys() error = %v", err)
+		}
+
+		if entity.ID == nil || entity.ID.value != "abc" {
+			t.Fatalf("expected generated pointer value, got %#v", entity.ID)
+		}
+	})
+
+	t.Run("error when resolver missing", func(t *testing.T) {
+		entity := &struct {
+			ID string
+		}{}
+
+		handler := &EntityHandler{
+			metadata: &metadata.EntityMetadata{
+				KeyProperties: []metadata.PropertyMetadata{
+					{Name: "ID", JsonName: "id", Type: reflect.TypeOf(""), IsKey: true, KeyGenerator: "custom"},
+				},
+			},
+		}
+
+		if err := handler.initializeEntityKeys(context.Background(), entity); err == nil {
+			t.Fatal("expected error when resolver is missing")
+		}
+	})
+
+	t.Run("error when generator returns nil for non-pointer", func(t *testing.T) {
+		entity := &struct {
+			ID string
+		}{}
+
+		handler := &EntityHandler{
+			metadata: &metadata.EntityMetadata{
+				KeyProperties: []metadata.PropertyMetadata{
+					{Name: "ID", JsonName: "id", Type: reflect.TypeOf(""), IsKey: true, KeyGenerator: "custom"},
+				},
+			},
+			keyGeneratorResolver: makeResolver(nil, nil),
+		}
+
+		if err := handler.initializeEntityKeys(context.Background(), entity); err == nil {
+			t.Fatal("expected error when generator returned nil")
+		}
+	})
 }
