@@ -117,6 +117,26 @@ Run all tests (both 4.0 and 4.01):
 
 The test runner automatically starts the server, seeds the database, and handles cleanup.
 
+### Run Individual Tests Within a Test File
+
+To run specific test functions from a test file, use the `--test` option:
+
+```bash
+# Run only test_1 function from filter test
+./run_compliance_tests.sh 11.2.5.1_query_filter --test test_1
+
+# Run all tests with "contains" in their function name from filter scripts
+./run_compliance_tests.sh filter --test contains
+
+# Combine with version filtering
+./run_compliance_tests.sh --version 4.0 11.2.5.1 --test test_2
+```
+
+This is useful for:
+- Debugging a specific failing test
+- Iterative development of a single test function
+- Focused testing during feature implementation
+
 ### Use External Server
 
 If you want to manage the server manually:
@@ -607,7 +627,72 @@ test_filter_query() {
 run_test "Filter query returns filtered results" test_filter_query
 ```
 
-**Example 4: Skipping a test for unimplemented features**
+**Example 4: Using unified response for header validation**
+```bash
+test_location_header() {
+    # Create an entity and check the Location header
+    local RESPONSE=$(http_request_post "$SERVER_URL/Products" \
+        '{"Name":"New Product","Price":49.99,"CategoryID":1}' \
+        -H "Content-Type: application/json")
+    
+    local CODE=$(http_response_code "$RESPONSE")
+    local HEADERS=$(http_response_headers "$RESPONSE")
+    local BODY=$(http_response_body "$RESPONSE")
+    
+    # Check status code is 201 Created
+    if ! check_status "$CODE" "201"; then
+        return 1
+    fi
+    
+    # Check Location header is present
+    if ! echo "$HEADERS" | grep -qi "^Location:"; then
+        echo "  Details: Location header not found"
+        return 1
+    fi
+    
+    # Extract and validate Location header value
+    local LOCATION=$(echo "$HEADERS" | grep -i "^Location:" | cut -d' ' -f2- | tr -d '\r')
+    if [[ ! "$LOCATION" =~ Products\([0-9]+\) ]]; then
+        echo "  Details: Invalid Location header format: $LOCATION"
+        return 1
+    fi
+    
+    # Extract ID for cleanup
+    local ID=$(echo "$BODY" | grep -oP '"ID":\s*\K\d+')
+    CREATED_IDS+=("$ID")
+    
+    return 0
+}
+
+run_test "POST returns Location header" test_location_header
+```
+
+**Example 5: Checking ETag header with unified response**
+```bash
+test_etag_header() {
+    # Use unified response to get both body and headers
+    local RESPONSE=$(http_request_get "$SERVER_URL/Products(1)")
+    local CODE=$(http_response_code "$RESPONSE")
+    local HEADERS=$(http_response_headers "$RESPONSE")
+    
+    # Verify status code
+    if ! check_status "$CODE" "200"; then
+        return 1
+    fi
+    
+    # Check for ETag header
+    if echo "$HEADERS" | grep -qi "^Etag:"; then
+        return 0
+    else
+        echo "  Details: ETag header not found"
+        return 1
+    fi
+}
+
+run_test "GET returns ETag header" test_etag_header
+```
+
+**Example 6: Skipping a test for unimplemented features**
 ```bash
 # Skip a test when the corresponding OData feature is not yet implemented
 skip_test "Delta token support" "Delta token feature is not yet implemented in go-odata"
@@ -772,18 +857,71 @@ Use this information to understand why a test is failing and adjust your test lo
 
 #### HTTP Request Functions
 
-- `http_get URL [headers...]` - GET request, returns status code
-- `http_get_body URL [headers...]` - GET request, returns response body
-- `http_post URL data [headers...]` - POST request
-- `http_patch URL data [headers...]` - PATCH request
-- `http_put URL data [headers...]` - PUT request
-- `http_delete URL [headers...]` - DELETE request
+**Basic Functions (Separate Code/Body):**
+- `http_get URL [headers...]` - GET request, returns status code only
+- `http_get_body URL [headers...]` - GET request, returns response body only
+- `http_post URL data [headers...]` - POST request, returns full response
+- `http_patch URL data [headers...]` - PATCH request, returns full response
+- `http_put URL data [headers...]` - PUT request, returns full response
+- `http_delete URL [headers...]` - DELETE request, returns full response
 
 Example:
 ```bash
 HTTP_CODE=$(http_get "$SERVER_URL/Products")
 RESPONSE=$(http_get_body "$SERVER_URL/Products(1)" -H "Accept: application/json")
 ```
+
+**Unified Response Functions (Code, Headers, and Body):**
+
+For more advanced use cases where you need both status code, headers, and body in a single request:
+
+- `http_request_get URL [curl_options...]` - GET request, returns unified response object
+- `http_request_post URL data [curl_options...]` - POST request, returns unified response object
+- `http_request_patch URL data [curl_options...]` - PATCH request, returns unified response object
+- `http_request_put URL data [curl_options...]` - PUT request, returns unified response object
+- `http_request_delete URL [curl_options...]` - DELETE request, returns unified response object
+
+**Response Extraction Functions:**
+- `http_response_code "$response"` - Extract HTTP status code from unified response
+- `http_response_headers "$response"` - Extract HTTP headers from unified response
+- `http_response_body "$response"` - Extract HTTP body from unified response
+
+Example:
+```bash
+# Make a single request and extract all components
+RESPONSE=$(http_request_get "$SERVER_URL/Products(1)")
+CODE=$(http_response_code "$RESPONSE")
+HEADERS=$(http_response_headers "$RESPONSE")
+BODY=$(http_response_body "$RESPONSE")
+
+# Check status code
+if [ "$CODE" = "200" ]; then
+    echo "Success!"
+fi
+
+# Check for specific header
+if echo "$HEADERS" | grep -qi "etag"; then
+    echo "ETag header present"
+fi
+
+# Validate body content
+if echo "$BODY" | grep -q '"Name"'; then
+    echo "Body contains Name field"
+fi
+
+# Example with POST
+RESPONSE=$(http_request_post "$SERVER_URL/Products" \
+    '{"Name":"Test","Price":99.99}' \
+    -H "Content-Type: application/json")
+CODE=$(http_response_code "$RESPONSE")
+LOCATION=$(http_response_headers "$RESPONSE" | grep -i "^Location:" | cut -d' ' -f2)
+```
+
+**Benefits of Unified Response:**
+- Single HTTP request instead of multiple calls
+- Access to response headers (e.g., Location, ETag, Content-Type)
+- More efficient for tests that need to validate multiple response components
+- Consistent behavior across all HTTP methods
 
 #### Validation Functions
 
@@ -817,6 +955,39 @@ run_test "Response contains Name field" test_json_content
 
 # Skip a test for an unimplemented feature
 skip_test "Delta token support" "Delta tokens are not yet implemented"
+```
+
+#### When to Use Unified vs. Separate Functions
+
+**Use Separate Functions (`http_get`, `http_get_body`) when:**
+- You only need the status code OR the body (not both)
+- Testing simple scenarios that don't require header validation
+- Following existing test patterns in the codebase
+- Simplicity is preferred over completeness
+
+**Use Unified Functions (`http_request_*`) when:**
+- You need to validate HTTP headers (Location, ETag, Content-Type, etc.)
+- Testing compliance with header-related OData specifications
+- You need both status code and body from the same request
+- Writing comprehensive tests that validate multiple response aspects
+- Testing features like ETags, conditional requests, or caching
+
+**Example: When Unified is Better**
+```bash
+# Without unified - requires two requests or complex parsing
+CODE=$(http_get "$SERVER_URL/Products")
+# Can't easily get headers from http_get
+
+# With unified - single request, all components available
+RESPONSE=$(http_request_get "$SERVER_URL/Products")
+CODE=$(http_response_code "$RESPONSE")
+HEADERS=$(http_response_headers "$RESPONSE")
+BODY=$(http_response_body "$RESPONSE")
+
+# Now can validate headers
+if echo "$HEADERS" | grep -qi "^ETag:"; then
+    echo "✓ ETag header present"
+fi
 ```
 
 ### Standardized Output Format
