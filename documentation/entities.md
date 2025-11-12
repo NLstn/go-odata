@@ -109,6 +109,34 @@ type OrderItem struct {
 GET /OrderItems(OrderID=1,ProductID=5)
 ```
 
+## Server-generated Keys
+
+Use the `generate` directive to have go-odata assign key values before persistence. This is helpful when your database does not provide auto-increment columns or when you want consistent identifiers across storage backends.
+
+```go
+type APIKey struct {
+    KeyID string    `json:"KeyID" gorm:"type:char(36);primaryKey" odata:"key,generate=uuid"`
+    Owner string    `json:"Owner" odata:"required"`
+    Notes string    `json:"Notes"`
+}
+```
+
+When a client posts a new `APIKey` without a `KeyID`, the service resolves the `uuid` generator and injects a freshly minted identifier before the record is saved. The same logic runs for each entity in a bulk request.
+
+Register additional generators on the `Service` when you need different formats:
+
+```go
+service := odata.NewService(db)
+
+service.RegisterKeyGenerator("snowflake", func(ctx context.Context) (interface{}, error) {
+    return time.Now().UnixNano(), nil
+})
+```
+
+> Requires `import "context"` and `import "time"`.
+
+After registration you can reference `odata:"key,generate=snowflake"` on your entity fields. Generator names are validated during metadata analysis to catch typos early.
+
 ## Supported Tags
 
 ### OData Tags
@@ -116,6 +144,7 @@ GET /OrderItems(OrderID=1,ProductID=5)
 | Tag | Description | Example |
 |-----|-------------|---------|
 | `key` | Marks the field as the entity key (required) | `odata:"key"` |
+| `generate=NAME` | Uses a registered server-side key generator for the property | `odata:"key,generate=uuid"` |
 | `etag` | Marks the field to be used for ETag generation | `odata:"etag"` |
 | `required` | Marks the field as required | `odata:"required"` |
 | `maxlength=N` | Sets the maximum length for string properties | `odata:"maxlength=100"` |

@@ -22,6 +22,8 @@ rely on version numbers to reason about compatibility.
 - Public `Service.Close` helper to stop async processing and release resources.
 - Service-level key generator registry with metadata validation powers server-generated keys
   (including built-in UUIDs) and generalized entity key initialization.
+- Documentation for configuring server-generated keys plus sample API key entities in the
+  development and performance servers that exercise UUID-based generation.
 
 ### Changed
 
