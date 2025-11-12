@@ -7,7 +7,6 @@ package odata
 import (
 	"context"
 	"crypto/rand"
-	"encoding/binary"
 	"fmt"
 	"log/slog"
 	"net/http"
