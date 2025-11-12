@@ -131,11 +131,44 @@ reseed_database() {
 # This ensures individual test runs start with clean data
 FIRST_TEST=1
 
+# Test filtering support
+# Set TEST_FILTER environment variable to run only specific tests
+# TEST_FILTER can be:
+#   - Empty: run all tests (default)
+#   - "test_name": run only test with function name matching exactly
+#   - "pattern": run only tests with function name containing pattern
+TEST_FILTER="${TEST_FILTER:-}"
+
+# Function to check if a test should run based on filter
+# Usage: should_run_test "test_func_name"
+# Returns: 0 if test should run, 1 if it should be skipped
+should_run_test() {
+    local test_func="$1"
+    
+    # No filter means run all tests
+    if [ -z "$TEST_FILTER" ]; then
+        return 0
+    fi
+    
+    # Check if test function name matches filter (exact or pattern)
+    if [[ "$test_func" == *"$TEST_FILTER"* ]]; then
+        return 0
+    fi
+    
+    return 1
+}
+
 # Function to run a test and track results
 # Usage: run_test "Test description" command [expected_output]
 run_test() {
     local description="$1"
     local test_func="$2"
+    
+    # Check if this test should run based on filter
+    if ! should_run_test "$test_func"; then
+        # Silently skip tests that don't match filter
+        return 0
+    fi
     
     # Automatically reseed before first test when running individual scripts
     if [ $FIRST_TEST -eq 1 ]; then
@@ -189,6 +222,113 @@ url_encode() {
     # Use printf and xxd to properly encode, but for simple case just encode spaces
     # This is a basic implementation that handles the most common case
     echo "$string" | sed 's/ /%20/g'
+}
+
+# Internal function to make HTTP request and return unified response object
+# Returns a response object containing HTTP code, headers, and body separated by special markers
+# Usage: response=$(_http_request_internal METHOD URL [data] [curl_options...])
+#        code=$(http_response_code "$response")
+#        headers=$(http_response_headers "$response")
+#        body=$(http_response_body "$response")
+_http_request_internal() {
+    local method="$1"
+    local url="$2"
+    shift 2
+    
+    local data=""
+    local curl_method_args=()
+    
+    # For POST, PATCH, PUT, the third argument is data
+    if [ "$method" = "POST" ] || [ "$method" = "PATCH" ] || [ "$method" = "PUT" ]; then
+        data="$1"
+        shift
+        curl_method_args=(-X "$method" -d "$data")
+    elif [ "$method" = "DELETE" ]; then
+        curl_method_args=(-X DELETE)
+    fi
+    
+    # URL encode spaces in the query string part
+    if [[ "$url" == *"?"* ]]; then
+        local base="${url%%\?*}"
+        local query="${url#*\?}"
+        query=$(url_encode "$query")
+        url="${base}?${query}"
+    fi
+    
+    # Log request in debug mode
+    if [ -n "$data" ]; then
+        debug_log_request "$method" "$url" "$@" -d "$data"
+    else
+        debug_log_request "$method" "$url" "$@"
+    fi
+    
+    # Execute the request and capture headers, body, and status code
+    # We use a temporary file for headers to avoid complex delimiter issues
+    local temp_headers=$(mktemp)
+    local response=$(curl -g -s -D "$temp_headers" -w "\n---HTTP_STATUS_CODE---\n%{http_code}\n---END_HTTP_STATUS_CODE---" "${curl_method_args[@]}" "$@" "$url")
+    local http_code=$(echo "$response" | sed -n '/---HTTP_STATUS_CODE---/,/---END_HTTP_STATUS_CODE---/p' | sed '1d;$d' | tr -d '\n')
+    local body=$(echo "$response" | sed '/---HTTP_STATUS_CODE---/,/---END_HTTP_STATUS_CODE---/d')
+    local headers=$(cat "$temp_headers")
+    rm -f "$temp_headers"
+    
+    # Log response in debug mode
+    debug_log_response "$http_code" "$body"
+    
+    # Return unified response with markers for parsing
+    echo "---HTTP_RESPONSE_START---"
+    echo "---HTTP_CODE---"
+    echo "$http_code"
+    echo "---HTTP_HEADERS---"
+    echo "$headers"
+    echo "---HTTP_BODY---"
+    echo "$body"
+    echo "---HTTP_RESPONSE_END---"
+}
+
+# Unified HTTP request functions that return response object with code, headers, and body
+# Usage: response=$(http_request_get URL [curl_options...])
+#        code=$(http_response_code "$response")
+#        headers=$(http_response_headers "$response")
+#        body=$(http_response_body "$response")
+http_request_get() {
+    _http_request_internal "GET" "$@"
+}
+
+http_request_post() {
+    _http_request_internal "POST" "$@"
+}
+
+http_request_patch() {
+    _http_request_internal "PATCH" "$@"
+}
+
+http_request_put() {
+    _http_request_internal "PUT" "$@"
+}
+
+http_request_delete() {
+    _http_request_internal "DELETE" "$@"
+}
+
+# Function to extract HTTP status code from unified response
+# Usage: code=$(http_response_code "$response")
+http_response_code() {
+    local response="$1"
+    echo "$response" | sed -n '/---HTTP_CODE---/,/---HTTP_HEADERS---/p' | sed '1d;$d'
+}
+
+# Function to extract HTTP headers from unified response
+# Usage: headers=$(http_response_headers "$response")
+http_response_headers() {
+    local response="$1"
+    echo "$response" | sed -n '/---HTTP_HEADERS---/,/---HTTP_BODY---/p' | sed '1d;$d'
+}
+
+# Function to extract HTTP body from unified response
+# Usage: body=$(http_response_body "$response")
+http_response_body() {
+    local response="$1"
+    echo "$response" | sed -n '/---HTTP_BODY---/,/---HTTP_RESPONSE_END---/p' | sed '1d;$d'
 }
 
 # Function to make HTTP request and return status code
