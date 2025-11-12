@@ -40,6 +40,7 @@ usage() {
     echo "  --db TYPE            Database type to use for the compliance server: sqlite | postgres (default: sqlite)"
     echo "  --dsn DSN           Database DSN/connection string (required for postgres unless DATABASE_URL is set)"
     echo "  --version VERSION    Run tests for specific OData version: 4.0 | 4.01 | all (default: all)"
+    echo "  -t, --test PATTERN   Run only tests whose function name contains PATTERN"
     echo "  -v, --verbose        Show detailed test output"
     echo "  -f, --failures-only  Only show output for failing tests"
     echo "  --debug              Enable debug mode - prints full HTTP request/response for each test"
@@ -49,9 +50,11 @@ usage() {
     echo "  $0                   # Run all tests (auto-starts compliance server)"
     echo "  $0 --version 4.0    # Run only OData 4.0 tests"
     echo "  $0 --version 4.01   # Run only OData 4.01 tests"
-    echo "  $0 8.1.1            # Run specific test (auto-starts compliance server)"
-    echo "  $0 10.1             # Run specific test with detailed output"
-    echo "  $0 header           # Run all tests containing 'header'"
+    echo "  $0 8.1.1            # Run specific test script(s) matching '8.1.1'"
+    echo "  $0 10.1             # Run specific test script with detailed output"
+    echo "  $0 header           # Run all test scripts containing 'header'"
+    echo "  $0 8.1.1 -t test_2  # Run only test_2 function from 8.1.1 script"
+    echo "  $0 filter --test contains  # Run only tests with 'contains' in name from filter scripts"
     echo "  $0 -f               # Run all tests, show only failures"
     echo "  $0 -v 10.1          # Run specific test with full verbose output"
     echo "  $0 --debug 8.1.1    # Run test with debug output (full HTTP details)"
@@ -100,6 +103,7 @@ PATTERN=""
 SKIP_REPORT=0
 EXTERNAL_SERVER=0
 ODATA_VERSION="all"
+TEST_FILTER=""
 # Set DEBUG from environment variable if not already set, default to 0
 DEBUG=${DEBUG:-0}
 while [[ $# -gt 0 ]]; do
@@ -125,6 +129,11 @@ while [[ $# -gt 0 ]]; do
             ;;
         --version)
             ODATA_VERSION="$2"
+            shift 2
+            ;;
+        -t|--test)
+            TEST_FILTER="$2"
+            SKIP_REPORT=1  # Don't generate report when filtering individual tests
             shift 2
             ;;
         -v|--verbose)
@@ -155,6 +164,8 @@ done
 export SERVER_URL
 # Export DEBUG for child scripts
 export DEBUG
+# Export TEST_FILTER for test framework
+export TEST_FILTER
 
 echo ""
 echo "╔════════════════════════════════════════════════════════╗"
@@ -165,6 +176,9 @@ echo "Server URL: $SERVER_URL"
 echo "Database:   $DB_TYPE${DB_DSN:+ (dsn provided)}"
 echo "Version:    $ODATA_VERSION"
 echo "Report File: $REPORT_FILE"
+if [ -n "$TEST_FILTER" ]; then
+    echo "Test Filter: ENABLED (only running tests matching '$TEST_FILTER')"
+fi
 if [ $DEBUG -eq 1 ]; then
     echo "Debug Mode: ENABLED (full HTTP request/response details will be shown)"
 fi
