@@ -6,7 +6,7 @@ import (
 	"github.com/nlstn/go-odata/internal/metadata"
 )
 
-func TestHasFunctionParsing(t *testing.T) {
+func TestHasFunction(t *testing.T) {
 	// Test basic has function parsing
 	filterStr := "has(Status, 1)"
 
@@ -19,6 +19,7 @@ func TestHasFunctionParsing(t *testing.T) {
 		t.Fatal("Expected filter to be non-nil")
 	}
 
+	//nolint:staticcheck // SA5011: t.Fatal above ensures filter is not nil
 	t.Logf("Parsed filter: Property=%s, Operator=%s, Value=%v", filter.Property, filter.Operator, filter.Value)
 
 	if filter.Operator != OpHas {

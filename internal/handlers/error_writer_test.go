@@ -78,7 +78,7 @@ func TestWriteErrorLogsOnFailure(t *testing.T) {
 	}()
 
 	WriteError(fw, http.StatusInternalServerError, "TestCode", "test detail")
-	
+
 	// If we got here without panicking, the test passes
 	// The error is logged via slog which we've verified works in other contexts
 }

@@ -95,16 +95,19 @@ func TestNewService(t *testing.T) {
 		t.Fatal("NewService() returned nil")
 	}
 
+	//nolint:staticcheck // SA5011: t.Fatal above ensures service is not nil
 	if service.db == nil {
-		t.Error("Service.db is nil")
+		t.Fatal("Service.db is nil")
 	}
 
+	//nolint:staticcheck // SA5011: t.Fatal above ensures service is not nil
 	if service.entities == nil {
-		t.Error("Service.entities is nil")
+		t.Fatal("Service.entities is nil")
 	}
 
+	//nolint:staticcheck // SA5011: t.Fatal above ensures service is not nil
 	if service.handlers == nil {
-		t.Error("Service.handlers is nil")
+		t.Fatal("Service.handlers is nil")
 	}
 
 	if service.metadataHandler == nil {
@@ -182,6 +185,7 @@ func TestEnableChangeTracking(t *testing.T) {
 	if metadata == nil {
 		t.Fatalf("expected metadata for Products to be registered")
 	}
+	//nolint:staticcheck // SA5011: t.Fatalf above ensures metadata is not nil
 	if metadata.ChangeTrackingEnabled {
 		t.Fatalf("expected change tracking to be disabled by default")
 	}

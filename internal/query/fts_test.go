@@ -189,8 +189,8 @@ func TestToSnakeCase(t *testing.T) {
 		{"PascalCase", "pascal_case"},
 		{"camelCase", "camel_case"},
 		{"snake_case", "snake_case"},
-		{"ID", "id"},                    // Consecutive uppercase letters stay together
-		{"HTTPServer", "http_server"},   // Consecutive uppercase followed by lowercase
+		{"ID", "id"},                  // Consecutive uppercase letters stay together
+		{"HTTPServer", "http_server"}, // Consecutive uppercase followed by lowercase
 		{"Name", "name"},
 		{"Description", "description"},
 	}

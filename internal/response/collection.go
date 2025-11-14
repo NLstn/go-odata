@@ -164,18 +164,18 @@ func WriteODataDeltaResponse(w http.ResponseWriter, r *http.Request, entitySetNa
 
 // shouldAddIndexAnnotations checks if the $index query parameter is present in the request
 func shouldAddIndexAnnotations(r *http.Request) bool {
-_, exists := r.URL.Query()["$index"]
-return exists
+	_, exists := r.URL.Query()["$index"]
+	return exists
 }
 
 // addIndexAnnotations adds @odata.index annotations to collection items
 // The index represents the zero-based ordinal position of each item in the collection
 func addIndexAnnotations(data []interface{}) []interface{} {
-for i, item := range data {
-// Only add index to map items (structs are already converted to maps by this point)
-if itemMap, ok := item.(map[string]interface{}); ok {
-itemMap["@odata.index"] = i
-}
-}
-return data
+	for i, item := range data {
+		// Only add index to map items (structs are already converted to maps by this point)
+		if itemMap, ok := item.(map[string]interface{}); ok {
+			itemMap["@odata.index"] = i
+		}
+	}
+	return data
 }

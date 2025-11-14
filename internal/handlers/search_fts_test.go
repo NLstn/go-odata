@@ -59,40 +59,40 @@ func TestSearchWithFTS_Integration(t *testing.T) {
 	handler.SetFTSManager(ftsManager)
 
 	tests := []struct {
-		name          string
-		searchQuery   string
-		expectedIDs   []int
-		description   string
+		name        string
+		searchQuery string
+		expectedIDs []int
+		description string
 	}{
 		{
-			name:          "Search for 'laptop'",
-			searchQuery:   "laptop",
-			expectedIDs:   []int{1, 5},
-			description:   "Should find products with 'laptop' in name or description",
+			name:        "Search for 'laptop'",
+			searchQuery: "laptop",
+			expectedIDs: []int{1, 5},
+			description: "Should find products with 'laptop' in name or description",
 		},
 		{
-			name:          "Search for 'gaming'",
-			searchQuery:   "gaming",
-			expectedIDs:   []int{2, 5},
-			description:   "Should find products with 'gaming' in name or description",
+			name:        "Search for 'gaming'",
+			searchQuery: "gaming",
+			expectedIDs: []int{2, 5},
+			description: "Should find products with 'gaming' in name or description",
 		},
 		{
-			name:          "Search for 'wireless'",
-			searchQuery:   "wireless",
-			expectedIDs:   []int{3},
-			description:   "Should find wireless mouse",
+			name:        "Search for 'wireless'",
+			searchQuery: "wireless",
+			expectedIDs: []int{3},
+			description: "Should find wireless mouse",
 		},
 		{
-			name:          "Search for 'keyboard'",
-			searchQuery:   "keyboard",
-			expectedIDs:   []int{4},
-			description:   "Should find keyboard",
+			name:        "Search for 'keyboard'",
+			searchQuery: "keyboard",
+			expectedIDs: []int{4},
+			description: "Should find keyboard",
 		},
 		{
-			name:          "Search for 'professional'",
-			searchQuery:   "professionals",
-			expectedIDs:   []int{1},
-			description:   "Should find laptop with 'professionals' in description",
+			name:        "Search for 'professional'",
+			searchQuery: "professionals",
+			expectedIDs: []int{1},
+			description: "Should find laptop with 'professionals' in description",
 		},
 	}
 
