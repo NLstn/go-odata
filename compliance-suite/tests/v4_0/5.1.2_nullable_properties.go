@@ -39,9 +39,6 @@ func NullableProperties() *framework.TestSuite {
 			if resp.StatusCode == 201 {
 				return nil
 			}
-			if resp.StatusCode == 500 {
-				return ctx.Skip("server returned 500 on valid create with null value")
-			}
 			return fmt.Errorf("expected status 201, got %d", resp.StatusCode)
 		},
 	)
@@ -111,9 +108,6 @@ func NullableProperties() *framework.TestSuite {
 			}
 
 			if createResp.StatusCode != 201 {
-				if createResp.StatusCode == 500 {
-					return ctx.Skip("server returned 500 on creating entity with nullable property set to null")
-				}
 				return fmt.Errorf("failed to create entity (status: %d)", createResp.StatusCode)
 			}
 
@@ -169,9 +163,6 @@ func NullableProperties() *framework.TestSuite {
 			}
 
 			if createResp.StatusCode != 201 {
-				if createResp.StatusCode == 500 {
-					return ctx.Skip("server returned 500 on creating entity before update-to-null test")
-				}
 				return fmt.Errorf("failed to create entity (status: %d)", createResp.StatusCode)
 			}
 
@@ -249,9 +240,6 @@ func NullableProperties() *framework.TestSuite {
 			}
 
 			if createResp.StatusCode != 201 {
-				if createResp.StatusCode == 500 {
-					return ctx.Skip("server returned 500 on creating entity with null property for access test")
-				}
 				return fmt.Errorf("failed to create entity (status: %d)", createResp.StatusCode)
 			}
 

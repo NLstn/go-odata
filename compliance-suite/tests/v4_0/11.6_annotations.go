@@ -22,10 +22,6 @@ func InstanceAnnotations() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode == 500 {
-				return ctx.Skip("Server returning 500 for Products collection")
-			}
-
 			if err := ctx.AssertStatusCode(resp, 200); err != nil {
 				return err
 			}
@@ -42,10 +38,6 @@ func InstanceAnnotations() *framework.TestSuite {
 			resp, err := ctx.GET("/Products?$count=true")
 			if err != nil {
 				return err
-			}
-
-			if resp.StatusCode == 500 {
-				return ctx.Skip("Server returning 500 for Products collection")
 			}
 
 			if err := ctx.AssertStatusCode(resp, 200); err != nil {
@@ -70,10 +62,6 @@ func InstanceAnnotations() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode == 500 {
-				return ctx.Skip("Server returning 500 for Products entity")
-			}
-
 			if err := ctx.AssertStatusCode(resp, 200); err != nil {
 				return err
 			}
@@ -96,9 +84,6 @@ func InstanceAnnotations() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode == 500 {
-				return ctx.Skip("Server returning 500 for Products entity")
-			}
 
 			if err := ctx.AssertStatusCode(resp, 200); err != nil {
 				return err
@@ -122,9 +107,6 @@ func InstanceAnnotations() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode == 500 {
-				return ctx.Skip("Server returning 500 for Products entity")
-			}
 
 			if err := ctx.AssertStatusCode(resp, 200); err != nil {
 				return err
@@ -150,9 +132,6 @@ func InstanceAnnotations() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode == 500 {
-				return ctx.Skip("Server returning 500 for Products collection")
-			}
 
 			if err := ctx.AssertStatusCode(resp, 200); err != nil {
 				return err
