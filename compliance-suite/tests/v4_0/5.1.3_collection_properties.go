@@ -47,9 +47,12 @@ func CollectionProperties() *framework.TestSuite {
 				return err
 			}
 
-			// Lambda operators are advanced feature, may return 400, 500, or 501
-			if resp.StatusCode == 200 || resp.StatusCode == 400 || resp.StatusCode == 500 || resp.StatusCode == 501 {
+			// Lambda operators are advanced feature
+			if resp.StatusCode == 200 {
 				return nil
+			}
+			if resp.StatusCode == 400 || resp.StatusCode == 501 {
+				return ctx.Skip("Lambda operators (any/all) not implemented")
 			}
 
 			return fmt.Errorf("unexpected status: %d", resp.StatusCode)
@@ -65,9 +68,12 @@ func CollectionProperties() *framework.TestSuite {
 				return err
 			}
 
-			// Lambda operators are advanced feature, may return 400, 500, or 501
-			if resp.StatusCode == 200 || resp.StatusCode == 400 || resp.StatusCode == 500 || resp.StatusCode == 501 {
+			// Lambda operators are advanced feature
+			if resp.StatusCode == 200 {
 				return nil
+			}
+			if resp.StatusCode == 400 || resp.StatusCode == 501 {
+				return ctx.Skip("Lambda operators (any/all) not implemented")
 			}
 
 			return fmt.Errorf("unexpected status: %d", resp.StatusCode)

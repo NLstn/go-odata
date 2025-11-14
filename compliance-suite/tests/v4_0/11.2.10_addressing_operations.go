@@ -124,10 +124,6 @@ func AddressingOperations() *framework.TestSuite {
 				return nil
 			}
 
-			if resp.StatusCode == 500 {
-				return ctx.Skip("bound action returns 500 (server bug): Activate")
-			}
-
 			if resp.StatusCode == 404 || resp.StatusCode == 501 {
 				return fmt.Errorf("operation not addressable (status %d). Missing actions/functions are a compliance failure", resp.StatusCode)
 			}

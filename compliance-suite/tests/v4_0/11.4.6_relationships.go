@@ -67,8 +67,8 @@ func Relationships() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode == 404 || resp.StatusCode == 500 {
-				return ctx.Skip("$ref operations not fully implemented")
+			if resp.StatusCode == 404 {
+				return ctx.Skip("$ref operations not implemented")
 			}
 
 			if err := ctx.AssertStatusCode(resp, 200); err != nil {
@@ -92,8 +92,8 @@ func Relationships() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode == 404 || resp.StatusCode == 500 {
-				return ctx.Skip("$ref operations not fully implemented")
+			if resp.StatusCode == 404 {
+				return ctx.Skip("$ref operations not implemented")
 			}
 
 			if err := ctx.AssertStatusCode(resp, 200); err != nil {
@@ -124,8 +124,8 @@ func Relationships() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode == 404 || resp.StatusCode == 500 {
-				return ctx.Skip("$ref operations not fully implemented")
+			if resp.StatusCode == 404 {
+				return ctx.Skip("$ref operations not implemented")
 			}
 
 			// Should return 204 or 200
@@ -154,7 +154,7 @@ func Relationships() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode == 404 || resp.StatusCode == 500 {
+			if resp.StatusCode == 404  {
 				return ctx.Skip("$ref operations not fully implemented")
 			}
 
@@ -180,7 +180,7 @@ func Relationships() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode == 404 || resp.StatusCode == 500 {
+			if resp.StatusCode == 404  {
 				return ctx.Skip("$ref operations not fully implemented")
 			}
 
