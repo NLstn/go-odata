@@ -59,8 +59,52 @@ func registerRequestingEntitiesTests(suite *framework.TestSuite) {
 		"HEAD request for individual entity",
 		"HEAD request should return 200 without body",
 		func(ctx *framework.TestContext) error {
-			// Framework doesn't support HEAD, skip this test
-			return ctx.Skip("HEAD method not implemented in framework")
+			productPath, err := firstEntityPath(ctx, "Products")
+			if err != nil {
+				return err
+			}
+
+			getResp, err := ctx.GET(productPath)
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(getResp, 200); err != nil {
+				return err
+			}
+
+			headResp, err := ctx.HEAD(productPath)
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(headResp, 200); err != nil {
+				return err
+			}
+
+			if len(headResp.Body) != 0 {
+				return fmt.Errorf("expected no body in HEAD response, got %d bytes", len(headResp.Body))
+			}
+
+			// HEAD must provide the same metadata as GET responses.
+			// Validate key headers to ensure parity with the entity retrieval.
+			if ct := headResp.Headers.Get("Content-Type"); ct == "" {
+				return fmt.Errorf("Content-Type header missing in HEAD response")
+			} else if expected := getResp.Headers.Get("Content-Type"); expected != "" && ct != expected {
+				return fmt.Errorf("Content-Type header mismatch: expected %q, got %q", expected, ct)
+			}
+
+			if ov := headResp.Headers.Get("OData-Version"); ov == "" {
+				return fmt.Errorf("OData-Version header missing in HEAD response")
+			} else if expected := getResp.Headers.Get("OData-Version"); expected != "" && ov != expected {
+				return fmt.Errorf("OData-Version header mismatch: expected %q, got %q", expected, ov)
+			}
+
+			if etag := getResp.Headers.Get("ETag"); etag != "" {
+				if headResp.Headers.Get("ETag") != etag {
+					return fmt.Errorf("ETag header mismatch: expected %q", etag)
+				}
+			}
+
+			return nil
 		},
 	)
 
