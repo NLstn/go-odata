@@ -1,10 +1,14 @@
 package entities
 
-import "time"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 // CompanyInfo represents a singleton entity for company information
 type CompanyInfo struct {
-	ID          uint      `json:"ID" gorm:"primaryKey" odata:"key"`
+	ID          uuid.UUID `json:"ID" gorm:"type:uuid;primaryKey" odata:"key,generate=uuid"`
 	Name        string    `json:"Name" gorm:"not null" odata:"required,maxlength=200"`
 	CEO         string    `json:"CEO" gorm:"not null" odata:"required,maxlength=100"`
 	Founded     int       `json:"Founded" gorm:"not null"`
@@ -15,7 +19,13 @@ type CompanyInfo struct {
 	UpdatedAt   time.Time `json:"UpdatedAt" gorm:"not null"`
 }
 
+// TableName overrides the table name used by GORM to match OData singleton name
+func (CompanyInfo) TableName() string {
+	return "Company"
+}
+
 // GetCompanyInfo returns the singleton company information
+// Note: ID is server-generated
 func GetCompanyInfo() CompanyInfo {
 	// Create a simple SVG logo as binary data
 	svgLogo := []byte(`<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">
@@ -24,7 +34,6 @@ func GetCompanyInfo() CompanyInfo {
 </svg>`)
 
 	return CompanyInfo{
-		ID:          1,
 		Name:        "TechStore Inc.",
 		CEO:         "Sarah Johnson",
 		Founded:     2010,

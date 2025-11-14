@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nlstn/go-odata"
 	"github.com/nlstn/go-odata/cmd/complianceserver/entities"
 	"gorm.io/gorm"
@@ -26,30 +27,71 @@ func seedDatabase(db *gorm.DB) error {
 
 	// Seed categories first (products reference categories)
 	sampleCategories := entities.GetSampleCategories()
+	// Generate UUIDs for categories
+	for i := range sampleCategories {
+		sampleCategories[i].ID = uuid.New()
+	}
 	if err := db.Create(&sampleCategories).Error; err != nil {
 		return fmt.Errorf("failed to seed categories: %w", err)
 	}
 
-	// Seed products
+	// Seed products and set up relationships with categories
 	sampleProducts := entities.GetSampleProducts()
+	// Generate UUIDs for products and assign category IDs
+	// Products 0, 1, 4, 5, 6 -> Electronics (index 0)
+	// Product 2 -> Kitchen (index 1)
+	// Product 3 -> Furniture (index 2)
+	for i := range sampleProducts {
+		sampleProducts[i].ID = uuid.New()
+	}
+	if len(sampleCategories) >= 3 && len(sampleProducts) >= 7 {
+		sampleProducts[0].CategoryID = &sampleCategories[0].ID // Laptop -> Electronics
+		sampleProducts[1].CategoryID = &sampleCategories[0].ID // Wireless Mouse -> Electronics
+		sampleProducts[2].CategoryID = &sampleCategories[1].ID // Coffee Mug -> Kitchen
+		sampleProducts[3].CategoryID = &sampleCategories[2].ID // Office Chair -> Furniture
+		sampleProducts[4].CategoryID = &sampleCategories[0].ID // Smartphone -> Electronics
+		sampleProducts[5].CategoryID = &sampleCategories[0].ID // Premium Laptop Pro -> Electronics
+		sampleProducts[6].CategoryID = &sampleCategories[0].ID // Gaming Mouse Ultra -> Electronics
+	}
+
 	if err := db.Create(&sampleProducts).Error; err != nil {
 		return fmt.Errorf("failed to seed products: %w", err)
 	}
 
-	// Seed product descriptions
+	// Seed product descriptions and link them to products
 	sampleDescriptions := entities.GetSampleProductDescriptions()
+	// Map descriptions to products based on their original order
+	// Descriptions 0, 1 -> Product 0 (Laptop)
+	// Descriptions 2, 3 -> Product 1 (Wireless Mouse)
+	// Description 4 -> Product 2 (Coffee Mug)
+	// Descriptions 5, 6 -> Product 4 (Smartphone)
+	if len(sampleProducts) >= 5 && len(sampleDescriptions) >= 7 {
+		sampleDescriptions[0].ProductID = sampleProducts[0].ID // EN for Laptop
+		sampleDescriptions[1].ProductID = sampleProducts[0].ID // DE for Laptop
+		sampleDescriptions[2].ProductID = sampleProducts[1].ID // EN for Wireless Mouse
+		sampleDescriptions[3].ProductID = sampleProducts[1].ID // FR for Wireless Mouse
+		sampleDescriptions[4].ProductID = sampleProducts[2].ID // EN for Coffee Mug
+		sampleDescriptions[5].ProductID = sampleProducts[4].ID // EN for Smartphone
+		sampleDescriptions[6].ProductID = sampleProducts[4].ID // ES for Smartphone
+	}
+
 	if err := db.Create(&sampleDescriptions).Error; err != nil {
 		return fmt.Errorf("failed to seed product descriptions: %w", err)
 	}
 
 	// Seed company info singleton
 	companyInfo := entities.GetCompanyInfo()
+	companyInfo.ID = uuid.New()
 	if err := db.Create(&companyInfo).Error; err != nil {
 		return fmt.Errorf("failed to seed company info: %w", err)
 	}
 
 	// Seed media items
 	sampleMediaItems := getSampleMediaItems()
+	// Generate UUIDs for media items
+	for i := range sampleMediaItems {
+		sampleMediaItems[i].ID = uuid.New()
+	}
 	if err := db.Create(&sampleMediaItems).Error; err != nil {
 		return fmt.Errorf("failed to seed media items: %w", err)
 	}
@@ -60,13 +102,13 @@ func seedDatabase(db *gorm.DB) error {
 }
 
 // getSampleMediaItems returns sample media items for seeding
+// Note: IDs are server-generated
 func getSampleMediaItems() []entities.MediaItem {
 	now := time.Now()
 	size1 := int64(1024)
 	size2 := int64(2048)
 	return []entities.MediaItem{
 		{
-			ID:          1,
 			Name:        "Sample Image",
 			ContentType: "image/png",
 			Size:        &size1,
@@ -75,7 +117,6 @@ func getSampleMediaItems() []entities.MediaItem {
 			ModifiedAt:  now,
 		},
 		{
-			ID:          2,
 			Name:        "Sample Document",
 			ContentType: "application/pdf",
 			Size:        &size2,

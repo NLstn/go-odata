@@ -280,7 +280,8 @@ Run the test suite:
 go test ./...
 
 # Run all compliance tests
-./compliance/run_compliance_tests.sh
+cd compliance-suite
+go run .
 
 # Run tests with race detection
 go test -race ./...
@@ -296,7 +297,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 1. Run all unit tests: `go test ./...`
 2. Run tests with race detection: `go test -race ./...`
-3. Run compliance tests: `./compliance/run_compliance_tests.sh`
+3. Run compliance tests: `cd compliance-suite && go run .`
 4. Format your code: `go fmt ./...`
 5. Run go vet: `go vet ./...`
 6. Run linter: `golangci-lint run`

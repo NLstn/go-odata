@@ -161,8 +161,9 @@ The library includes comprehensive tests for geospatial functions:
 # Run geospatial function tests
 go test ./internal/query -v -run TestGeo
 
-# Run compliance tests (requires a running server with spatial support)
-./compliance/run_compliance_tests.sh geo
+# Run compliance tests with geospatial support
+cd compliance-suite
+go run . -pattern geo
 ```
 
 ## OData v4 Compliance

@@ -91,33 +91,32 @@ func TestEntityRetrieval(t *testing.T) {
 
 ## Compliance Tests
 
-The library includes a comprehensive OData v4 compliance test suite with 85+ test scripts covering the OData specification.
+The library includes a comprehensive OData v4 compliance test suite implemented in Go, covering the OData specification.
 
 ### Running Compliance Tests
 
-**IMPORTANT: Always use the master `run_compliance_tests.sh` script.**
-
 ```bash
 # Run all compliance tests (4.0 + 4.01) - RECOMMENDED
-./compliance/run_compliance_tests.sh
+cd compliance-suite
+go run .
 
 # Run only OData 4.0 tests
-./compliance/run_compliance_tests.sh --version 4.0
+go run . -version 4.0
 
 # Run only OData 4.01 tests
-./compliance/run_compliance_tests.sh --version 4.01
+go run . -version 4.01
 
-# Run a specific test
-./compliance/run_compliance_tests.sh 11.4.3_update_entity.sh
+# Run specific tests by pattern
+go run . -pattern filter
 
 # Run with verbose output
-./compliance/run_compliance_tests.sh -v
+go run . -verbose
 
-# Run with failures only
-./compliance/run_compliance_tests.sh -f
+# Run with debug mode (full HTTP details)
+go run . -debug
 
 # Save report to file
-./compliance/run_compliance_tests.sh -o compliance-report.md
+go run . -output compliance-report.md
 ```
 
 ### What Compliance Tests Cover
@@ -136,51 +135,58 @@ The compliance tests verify:
 ### Compliance Test Structure
 
 Tests are organized by OData version:
-- `compliance/v4.0/` - OData 4.0 specification tests (82 scripts)
-- `compliance/v4.01/` - OData 4.01-specific tests (3 scripts)
+- `compliance-suite/tests/v4_0/` - OData 4.0 specification tests
+- `compliance-suite/tests/v4_01/` - OData 4.01-specific tests
 
-Each test script:
+Each test:
 - Tests one specific section of the OData specification
-- Is named according to the spec section (e.g., `11.4.3_update_entity.sh`)
+- Is named according to the spec section (e.g., `query_filter.go`)
 - Includes spec reference URLs in comments
-- Is executable and can run independently
-- Returns exit code 0 on success, 1 on failure
+- Can be run independently or as part of the full suite
+- Returns appropriate exit codes for CI/CD integration
 
 ### Adding New Compliance Tests
 
 When adding new compliance tests:
 
 1. Choose the correct directory:
-   - Add to `v4.0/` for OData 4.0 features
-   - Add to `v4.01/` only for features new in OData 4.01
+   - Add to `compliance-suite/tests/v4_0/` for OData 4.0 features
+   - Add to `compliance-suite/tests/v4_01/` only for features new in OData 4.01
 
-2. Reference the official OData v4 specification sections
+2. Create a new Go file with a function that returns `*framework.TestSuite`
 
-3. Include spec URL in script header:
-```bash
-#!/bin/bash
-# Test: OData v4.0 - Section 11.4.3 Update Entity
-# Reference: https://docs.oasis-open.org/odata/odata/v4.01/...
+3. Reference the official OData v4 specification sections:
+```go
+func UpdateEntity() *framework.TestSuite {
+    suite := framework.NewTestSuite(
+        "11.4.3 Update Entity",
+        "Tests entity update operations",
+        "https://docs.oasis-open.org/odata/odata/v4.01/...",
+    )
+    // Add tests...
+    return suite
+}
 ```
 
-4. Source the test framework:
-```bash
-source "$SCRIPT_DIR/../test_framework.sh"
-```
+4. Use the test framework's assertion methods
 
 5. Write tests for both success and error cases
 
 6. Ensure tests are idempotent (don't leave test data)
 
-7. Update `compliance/README.md` with new test description
+7. Register the test suite in `compliance-suite/main.go`
+
+8. Update `compliance-suite/README.md` with new test description
 
 ### Continuous Integration
 
 All tests run automatically on every push and pull request via GitHub Actions:
 - Unit tests
-- Compliance tests (100% OData v4 compliance required)
+- Compliance tests (OData v4 compliance verification)
 - Code builds
 - Linting
+
+The Go-based compliance suite integrates seamlessly with CI/CD pipelines and returns appropriate exit codes for automated testing.
 
 ## Performance Profiling
 
@@ -223,8 +229,12 @@ Access these tasks in VS Code via **Terminal > Run Task...** or the Command Pale
 ### Running with CPU Profiling
 
 ```bash
-# Run compliance tests with CPU profiling
-./compliance/run_compliance_tests.sh --cpuprofile /tmp/cpu.prof
+# Run the performance server with CPU profiling enabled
+cd cmd/perfserver
+go run . -cpuprofile /tmp/cpu.prof
+
+# In another terminal, run your performance tests or load tests
+# Then stop the server and analyze the profile
 
 # Analyze the profile with pprof
 go tool pprof /tmp/cpu.prof
@@ -240,15 +250,17 @@ go tool pprof -list=FunctionName /tmp/cpu.prof  # Line-by-line analysis
 ### Profiling Workflow
 
 ```bash
-# 1. Run tests with profiling enabled
-./compliance/run_compliance_tests.sh --cpuprofile /tmp/before.prof
+# 1. Run server with profiling enabled
+cd cmd/perfserver
+go run . -cpuprofile /tmp/before.prof
 
-# 2. Make performance improvements to the code
+# 2. Run your load tests
+# 3. Stop the server, make performance improvements
 
-# 3. Run tests again with profiling
-./compliance/run_compliance_tests.sh --cpuprofile /tmp/after.prof
+# 4. Run server again with profiling
+go run . -cpuprofile /tmp/after.prof
 
-# 4. Compare the profiles
+# 5. Run load tests again, then compare the profiles
 go tool pprof -top /tmp/before.prof | head -20
 go tool pprof -top /tmp/after.prof | head -20
 ```
@@ -267,14 +279,12 @@ The library includes a comprehensive SQL query tracer for identifying performanc
 ### Enabling SQL Tracing
 
 ```bash
-# Enable SQL tracing
-./compliance/run_compliance_tests.sh --trace-sql
+# Run the performance server with SQL tracing enabled
+cd cmd/perfserver
+go run . -trace-sql -trace-sql-file sql-analysis.txt
 
-# Run specific test with SQL tracing
-./compliance/run_compliance_tests.sh --trace-sql 11.2.5
-
-# Save SQL analysis to a file
-./compliance/run_compliance_tests.sh --trace-sql --trace-sql-file sql-analysis.txt
+# Run your load tests, then review the SQL analysis file
+cat sql-analysis.txt
 ```
 
 ### What You Get
@@ -349,7 +359,10 @@ Use both SQL tracing and CPU profiling together:
 
 ```bash
 # Run with both SQL tracing and CPU profiling
-./compliance/run_compliance_tests.sh --trace-sql --cpuprofile /tmp/cpu.prof --trace-sql-file /tmp/sql-analysis.txt
+cd cmd/perfserver
+go run . -trace-sql -trace-sql-file /tmp/sql-analysis.txt -cpuprofile /tmp/cpu.prof
+
+# Run your load tests, then analyze both
 
 # Analyze CPU profile
 go tool pprof /tmp/cpu.prof
@@ -369,7 +382,7 @@ Ensure all quality checks pass:
 
 1. ✅ Run all unit tests: `go test ./...`
 2. ✅ Run tests with race detection: `go test -race ./...`
-3. ✅ Run compliance tests: `./compliance/run_compliance_tests.sh`
+3. ✅ Run compliance tests: `cd compliance-suite && go run .`
 4. ✅ Format your code: `go fmt ./...`
 5. ✅ Run go vet: `go vet ./...`
 6. ✅ Run linter: `golangci-lint run`

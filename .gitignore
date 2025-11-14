@@ -15,6 +15,7 @@ tmp/
 cmd/devserver/devserver
 cmd/complianceserver/complianceserver
 cmd/perfserver/perfserver
+compliance-suite/compliance-suite
 
 # Performance profiling files
 *.prof
