@@ -364,10 +364,11 @@ func (t *Tokenizer) readDateTimeLiteralIfPresent() (string, bool) {
 
 	// Optional fractional seconds already handled inside readTimeLiteral
 	// Handle timezone designator (Z or +/-hh:mm)
-	if t.ch == 'Z' || t.ch == 'z' {
+	switch t.ch {
+	case 'Z', 'z':
 		builder.WriteByte('Z')
 		t.advance()
-	} else if t.ch == '+' || t.ch == '-' {
+	case '+', '-':
 		builder.WriteRune(t.ch)
 		t.advance()
 		for i := 0; i < 2 && unicode.IsDigit(t.ch); i++ {

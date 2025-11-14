@@ -13,8 +13,8 @@ import (
 
 // Test entities with composite keys for navigation
 type ProductWithCompositeKey struct {
-	ID           uint                           `json:"ID" gorm:"primaryKey" odata:"key"`
-	Name         string                         `json:"Name"`
+	ID           uint                             `json:"ID" gorm:"primaryKey" odata:"key"`
+	Name         string                           `json:"Name"`
 	Descriptions []ProductDescriptionCompositeKey `json:"Descriptions" gorm:"foreignKey:ProductID"`
 }
 
@@ -239,9 +239,9 @@ func TestNavigationCompositeKey_AllDescriptions(t *testing.T) {
 
 // Helper function to check if a string contains a composite key substring
 func containsCompositeKeySubstring(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && 
-		(s[:len(substr)] == substr || s[len(s)-len(substr):] == substr || 
-		findCompositeKeySubstring(s, substr)))
+	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) &&
+		(s[:len(substr)] == substr || s[len(s)-len(substr):] == substr ||
+			findCompositeKeySubstring(s, substr)))
 }
 
 func findCompositeKeySubstring(s, substr string) bool {
