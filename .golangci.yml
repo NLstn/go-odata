@@ -39,3 +39,7 @@ linters:
       - linters:
           - gocyclo
         text: "TestExpandWithFilterIntegration|TestMetadataIntegrationJSON"
+      # Exclude SA5011 related information messages (not actual errors)
+      - linters:
+          - staticcheck
+        text: "SA5011\\(related information\\)"

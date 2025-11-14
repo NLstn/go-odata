@@ -10,7 +10,7 @@ func TestHasFunction(t *testing.T) {
 	// Test basic has function parsing
 	filterStr := "has(Status, 1)"
 
-	filter, err := parseFilterWithoutMetadata(filterStr)
+	filter, err := parseFilter(filterStr, nil, nil)
 	if err != nil {
 		t.Fatalf("Failed to parse filter: %v", err)
 	}
@@ -22,6 +22,7 @@ func TestHasFunction(t *testing.T) {
 	//nolint:staticcheck // SA5011: t.Fatal above ensures filter is not nil
 	t.Logf("Parsed filter: Property=%s, Operator=%s, Value=%v", filter.Property, filter.Operator, filter.Value)
 
+	//nolint:staticcheck // SA5011: t.Fatal above ensures filter is not nil
 	if filter.Operator != OpHas {
 		t.Errorf("Expected operator to be OpHas, got %s", filter.Operator)
 	}
@@ -62,8 +63,10 @@ func TestHasFunctionWithMetadata(t *testing.T) {
 		t.Fatal("Expected filter to be non-nil")
 	}
 
+	//nolint:staticcheck // SA5011: t.Fatal above ensures filter is not nil
 	t.Logf("Parsed filter: Property=%s, Operator=%s, Value=%v", filter.Property, filter.Operator, filter.Value)
 
+	//nolint:staticcheck // SA5011: t.Fatal above ensures filter is not nil
 	if filter.Operator != OpHas {
 		t.Errorf("Expected operator to be OpHas, got %s", filter.Operator)
 	}
@@ -112,8 +115,10 @@ func TestHasInfixParsing(t *testing.T) {
 		t.Fatal("Expected filter to be non-nil")
 	}
 
+	//nolint:staticcheck // SA5011: t.Fatal above ensures filter is not nil
 	t.Logf("Parsed filter: Property=%s, Operator=%s, Value=%v", filter.Property, filter.Operator, filter.Value)
 
+	//nolint:staticcheck // SA5011: t.Fatal above ensures filter is not nil
 	if filter.Operator != OpHas {
 		t.Errorf("Expected operator to be OpHas, got %s", filter.Operator)
 	}
@@ -154,12 +159,15 @@ func TestHasInfixWithMetadata(t *testing.T) {
 		t.Fatal("Expected filter to be non-nil")
 	}
 
+	//nolint:staticcheck // SA5011: t.Fatal above ensures filter is not nil
 	t.Logf("Parsed filter: Property=%s, Operator=%s, Value=%v", filter.Property, filter.Operator, filter.Value)
 
+	//nolint:staticcheck // SA5011: t.Fatal above ensures filter is not nil
 	if filter.Operator != OpHas {
 		t.Errorf("Expected operator to be OpHas, got %s", filter.Operator)
 	}
 
+	//nolint:staticcheck // SA5011: t.Fatal above ensures filter is not nil
 	if filter.Property != "Status" {
 		t.Errorf("Expected property to be 'Status', got '%s'", filter.Property)
 	}
