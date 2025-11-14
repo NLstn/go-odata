@@ -110,10 +110,12 @@ func TestNewService(t *testing.T) {
 		t.Fatal("Service.handlers is nil")
 	}
 
+	//nolint:staticcheck // SA5011: t.Fatal above ensures service is not nil
 	if service.metadataHandler == nil {
 		t.Error("Service.metadataHandler is nil")
 	}
 
+	//nolint:staticcheck // SA5011: t.Fatal above ensures service is not nil
 	if service.serviceDocumentHandler == nil {
 		t.Error("Service.serviceDocumentHandler is nil")
 	}
@@ -194,6 +196,7 @@ func TestEnableChangeTracking(t *testing.T) {
 		t.Fatalf("EnableChangeTracking returned error: %v", err)
 	}
 
+	//nolint:staticcheck // SA5011: t.Fatalf above ensures metadata is not nil
 	if !metadata.ChangeTrackingEnabled {
 		t.Fatalf("expected change tracking to be enabled after calling EnableChangeTracking")
 	}
