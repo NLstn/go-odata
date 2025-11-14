@@ -2,7 +2,6 @@ package v4_01
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/nlstn/go-odata/compliance-suite/framework"
 )
@@ -25,11 +24,16 @@ func OrderByComputedProperties() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode == 200 || resp.StatusCode == 400 || resp.StatusCode == 501 {
-				return nil
+			if err := requireStatusOK(resp); err != nil {
+				return err
 			}
 
-			return framework.NewError(fmt.Sprintf("Expected 200, 400, or 501 but got %d", resp.StatusCode))
+			entities, err := decodeCollection(resp)
+			if err != nil {
+				return err
+			}
+
+			return ensureComputedProperties(entities, "TaxedPrice")
 		},
 	)
 
@@ -43,11 +47,16 @@ func OrderByComputedProperties() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode == 200 || resp.StatusCode == 400 || resp.StatusCode == 501 {
-				return nil
+			if err := requireStatusOK(resp); err != nil {
+				return err
 			}
 
-			return framework.NewError(fmt.Sprintf("Expected 200, 400, or 501 but got %d", resp.StatusCode))
+			entities, err := decodeCollection(resp)
+			if err != nil {
+				return err
+			}
+
+			return ensureComputedProperties(entities, "DiscountPrice", "TaxedPrice")
 		},
 	)
 
@@ -61,11 +70,16 @@ func OrderByComputedProperties() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode == 200 || resp.StatusCode == 400 || resp.StatusCode == 501 {
-				return nil
+			if err := requireStatusOK(resp); err != nil {
+				return err
 			}
 
-			return framework.NewError(fmt.Sprintf("Expected 200, 400, or 501 but got %d", resp.StatusCode))
+			entities, err := decodeCollection(resp)
+			if err != nil {
+				return err
+			}
+
+			return ensureComputedProperties(entities, "DoublePrice")
 		},
 	)
 
@@ -79,11 +93,16 @@ func OrderByComputedProperties() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode == 200 || resp.StatusCode == 400 || resp.StatusCode == 501 {
-				return nil
+			if err := requireStatusOK(resp); err != nil {
+				return err
 			}
 
-			return framework.NewError(fmt.Sprintf("Expected 200, 400, or 501 but got %d", resp.StatusCode))
+			entities, err := decodeCollection(resp)
+			if err != nil {
+				return err
+			}
+
+			return ensureComputedProperties(entities, "MarkedUpPrice")
 		},
 	)
 
@@ -97,11 +116,16 @@ func OrderByComputedProperties() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode == 200 || resp.StatusCode == 400 || resp.StatusCode == 501 {
-				return nil
+			if err := requireStatusOK(resp); err != nil {
+				return err
 			}
 
-			return framework.NewError(fmt.Sprintf("Expected 200, 400, or 501 but got %d", resp.StatusCode))
+			entities, err := decodeCollection(resp)
+			if err != nil {
+				return err
+			}
+
+			return ensureComputedProperties(entities, "FinalPrice")
 		},
 	)
 
@@ -115,11 +139,16 @@ func OrderByComputedProperties() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode == 200 || resp.StatusCode == 400 || resp.StatusCode == 501 {
-				return nil
+			if err := requireStatusOK(resp); err != nil {
+				return err
 			}
 
-			return framework.NewError(fmt.Sprintf("Expected 200, 400, or 501 but got %d", resp.StatusCode))
+			entities, err := decodeCollection(resp)
+			if err != nil {
+				return err
+			}
+
+			return ensureComputedProperties(entities, "SalePrice")
 		},
 	)
 
@@ -133,11 +162,16 @@ func OrderByComputedProperties() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode == 200 || resp.StatusCode == 400 || resp.StatusCode == 501 {
-				return nil
+			if err := requireStatusOK(resp); err != nil {
+				return err
 			}
 
-			return framework.NewError(fmt.Sprintf("Expected 200, 400, or 501 but got %d", resp.StatusCode))
+			entities, err := decodeCollection(resp)
+			if err != nil {
+				return err
+			}
+
+			return ensureComputedProperties(entities, "HalfPrice")
 		},
 	)
 
@@ -151,11 +185,16 @@ func OrderByComputedProperties() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode == 200 || resp.StatusCode == 400 || resp.StatusCode == 501 {
-				return nil
+			if err := requireStatusOK(resp); err != nil {
+				return err
 			}
 
-			return framework.NewError(fmt.Sprintf("Expected 200, 400, or 501 but got %d", resp.StatusCode))
+			entities, err := decodeCollection(resp)
+			if err != nil {
+				return err
+			}
+
+			return ensureComputedProperties(entities, "HighPrice")
 		},
 	)
 
@@ -169,20 +208,16 @@ func OrderByComputedProperties() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode == 200 {
-				body := string(resp.Body)
-				if strings.Contains(body, "DoublePrice") {
-					return nil
-				}
-				return framework.NewError("Computed property not present in ordered response")
+			if err := requireStatusOK(resp); err != nil {
+				return err
 			}
 
-			if resp.StatusCode == 400 || resp.StatusCode == 501 {
-				ctx.Log("$compute not supported (optional)")
-				return nil
+			entities, err := decodeCollection(resp)
+			if err != nil {
+				return err
 			}
 
-			return framework.NewError(fmt.Sprintf("Expected 200, 400, or 501 but got %d", resp.StatusCode))
+			return ensureComputedProperties(entities, "DoublePrice")
 		},
 	)
 
@@ -196,11 +231,22 @@ func OrderByComputedProperties() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode == 200 || resp.StatusCode == 400 || resp.StatusCode == 501 {
-				return nil
+			if err := requireStatusOK(resp); err != nil {
+				return err
 			}
 
-			return framework.NewError(fmt.Sprintf("Expected 200, 400, or 501 but got %d", resp.StatusCode))
+			entities, err := decodeCollection(resp)
+			if err != nil {
+				return err
+			}
+
+			for i, entity := range entities {
+				if _, ok := entity["MarkedPrice"]; ok {
+					return framework.NewError(fmt.Sprintf("entity %d unexpectedly included computed property \"MarkedPrice\"", i))
+				}
+			}
+
+			return nil
 		},
 	)
 
