@@ -93,9 +93,10 @@ jobs:
     - name: Download dependencies
       run: |
         go mod download
-        cd cmd/complianceserver
+        cd compliance-suite
         go mod download
 
     - name: Run compliance tests (SQLite)
       run: |
-        ./compliance/run_compliance_tests.sh --db sqlite --dsn "/tmp/go-odata-compliance-ci.db" -o compliance-report-sqlite.md
+        cd compliance-suite
+        go run . -db sqlite
