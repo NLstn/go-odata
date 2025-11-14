@@ -20,10 +20,9 @@ func ReturningResults() *framework.TestSuite {
 		"POST with return=minimal returns 201/204 with no body",
 		func(ctx *framework.TestContext) error {
 			payload := map[string]interface{}{
-				"Name":       "Minimal Return Test",
-				"Price":      99.99,
-				"CategoryID": 1,
-				"Status":     1,
+				"Name":   "Minimal Return Test",
+				"Price":  99.99,
+				"Status": 1,
 			}
 
 			resp, err := ctx.POST("/Products", payload,
@@ -48,10 +47,9 @@ func ReturningResults() *framework.TestSuite {
 		"POST with return=representation returns 201 with entity",
 		func(ctx *framework.TestContext) error {
 			payload := map[string]interface{}{
-				"Name":       "Representation Return Test",
-				"Price":      149.99,
-				"CategoryID": 1,
-				"Status":     1,
+				"Name":   "Representation Return Test",
+				"Price":  149.99,
+				"Status": 1,
 			}
 
 			resp, err := ctx.POST("/Products", payload,
@@ -76,10 +74,9 @@ func ReturningResults() *framework.TestSuite {
 		func(ctx *framework.TestContext) error {
 			// First create an entity
 			createPayload := map[string]interface{}{
-				"Name":       "Patch Test",
-				"Price":      50.00,
-				"CategoryID": 1,
-				"Status":     1,
+				"Name":   "Patch Test",
+				"Price":  50.00,
+				"Status": 1,
 			}
 
 			createResp, err := ctx.POST("/Products", createPayload, framework.Header{Key: "Content-Type", Value: "application/json"})
@@ -96,7 +93,7 @@ func ReturningResults() *framework.TestSuite {
 				return err
 			}
 
-			id, ok := createData["ID"].(float64)
+			id, ok := createData["ID"].(string)
 			if !ok {
 				return framework.NewError("Could not extract entity ID")
 			}
@@ -106,7 +103,7 @@ func ReturningResults() *framework.TestSuite {
 				"Price": 75.00,
 			}
 
-			patchResp, err := ctx.PATCH(fmt.Sprintf("/Products(%d)", int(id)), updatePayload,
+			patchResp, err := ctx.PATCH(fmt.Sprintf("/Products(%s)", id), updatePayload,
 				framework.Header{Key: "Content-Type", Value: "application/json"},
 				framework.Header{Key: "Prefer", Value: "return=representation"})
 			if err != nil {
@@ -128,10 +125,9 @@ func ReturningResults() *framework.TestSuite {
 		func(ctx *framework.TestContext) error {
 			// First create an entity
 			createPayload := map[string]interface{}{
-				"Name":       "Patch Minimal Test",
-				"Price":      60.00,
-				"CategoryID": 1,
-				"Status":     1,
+				"Name":   "Patch Minimal Test",
+				"Price":  60.00,
+				"Status": 1,
 			}
 
 			createResp, err := ctx.POST("/Products", createPayload, framework.Header{Key: "Content-Type", Value: "application/json"})
@@ -148,7 +144,7 @@ func ReturningResults() *framework.TestSuite {
 				return err
 			}
 
-			id, ok := createData["ID"].(float64)
+			id, ok := createData["ID"].(string)
 			if !ok {
 				return framework.NewError("Could not extract entity ID")
 			}
@@ -158,7 +154,7 @@ func ReturningResults() *framework.TestSuite {
 				"Price": 85.00,
 			}
 
-			patchResp, err := ctx.PATCH(fmt.Sprintf("/Products(%d)", int(id)), updatePayload,
+			patchResp, err := ctx.PATCH(fmt.Sprintf("/Products(%s)", id), updatePayload,
 				framework.Header{Key: "Content-Type", Value: "application/json"},
 				framework.Header{Key: "Prefer", Value: "return=minimal"})
 			if err != nil {

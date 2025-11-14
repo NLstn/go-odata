@@ -26,6 +26,7 @@ const (
 	TokenColon
 	TokenDate
 	TokenTime
+	TokenDateTime
 )
 
 // Token represents a single token in the filter expression
@@ -309,16 +310,18 @@ func (t *Tokenizer) tokenizeString(pos int) *Token {
 
 // tokenizeNumber tokenizes numeric literals, or date/time literals
 func (t *Tokenizer) tokenizeNumber(pos int) *Token {
-	// Check for date literal first (YYYY-MM-DD)
-	if unicode.IsDigit(t.ch) && t.isDateLiteral() {
-		value := t.readDateLiteral()
-		return &Token{Type: TokenDate, Value: value, Pos: pos}
-	}
-
-	// Check for time literal (HH:MM:SS)
-	if unicode.IsDigit(t.ch) && t.isTimeLiteral() {
-		value := t.readTimeLiteral()
-		return &Token{Type: TokenTime, Value: value, Pos: pos}
+	if unicode.IsDigit(t.ch) {
+		if literal, ok := t.readDateTimeLiteralIfPresent(); ok {
+			return &Token{Type: TokenDateTime, Value: literal, Pos: pos}
+		}
+		if t.isDateLiteral() {
+			value := t.readDateLiteral()
+			return &Token{Type: TokenDate, Value: value, Pos: pos}
+		}
+		if t.isTimeLiteral() {
+			value := t.readTimeLiteral()
+			return &Token{Type: TokenTime, Value: value, Pos: pos}
+		}
 	}
 
 	// Otherwise parse as number
@@ -327,6 +330,61 @@ func (t *Tokenizer) tokenizeNumber(pos int) *Token {
 		return &Token{Type: TokenNumber, Value: value, Pos: pos}
 	}
 	return nil
+}
+
+// readDateTimeLiteralIfPresent detects and reads a full datetime literal (YYYY-MM-DDThh:mm:ss[.fff][Z|+/-hh:mm])
+func (t *Tokenizer) readDateTimeLiteralIfPresent() (string, bool) {
+	if !t.isDateLiteral() {
+		return "", false
+	}
+
+	start := t.pos
+	datePart := t.readDateLiteral()
+	if t.ch != 'T' && t.ch != 't' {
+		t.pos = start
+		t.ch = rune(t.input[t.pos])
+		return "", false
+	}
+
+	// Include the 'T'
+	t.advance()
+
+	if !t.isTimeLiteral() {
+		t.pos = start
+		t.ch = rune(t.input[t.pos])
+		return "", false
+	}
+
+	timePart := t.readTimeLiteral()
+
+	var builder strings.Builder
+	builder.WriteString(datePart)
+	builder.WriteByte('T')
+	builder.WriteString(timePart)
+
+	// Optional fractional seconds already handled inside readTimeLiteral
+	// Handle timezone designator (Z or +/-hh:mm)
+	if t.ch == 'Z' || t.ch == 'z' {
+		builder.WriteByte('Z')
+		t.advance()
+	} else if t.ch == '+' || t.ch == '-' {
+		builder.WriteRune(t.ch)
+		t.advance()
+		for i := 0; i < 2 && unicode.IsDigit(t.ch); i++ {
+			builder.WriteRune(t.ch)
+			t.advance()
+		}
+		if t.ch == ':' {
+			builder.WriteByte(':')
+			t.advance()
+		}
+		for i := 0; i < 2 && unicode.IsDigit(t.ch); i++ {
+			builder.WriteRune(t.ch)
+			t.advance()
+		}
+	}
+
+	return builder.String(), true
 }
 
 // tokenizeSpecialChar tokenizes special characters (parentheses, comma, operators)

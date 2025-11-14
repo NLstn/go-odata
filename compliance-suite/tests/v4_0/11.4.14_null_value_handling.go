@@ -24,7 +24,6 @@ func NullValueHandling() *framework.TestSuite {
 			payload := map[string]interface{}{
 				"Name":        "Null Test Product",
 				"Price":       99.99,
-				"CategoryID":  1,
 				"Description": nil,
 				"Status":      1,
 			}
