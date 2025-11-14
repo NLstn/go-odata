@@ -114,6 +114,9 @@ func (p *ASTParser) parseLiteral(token *Token) ASTNode {
 	case TokenTime:
 		p.advance()
 		return &LiteralExpr{Value: token.Value, Type: "time"}
+	case TokenDateTime:
+		p.advance()
+		return &LiteralExpr{Value: token.Value, Type: "datetime"}
 	default:
 		return nil
 	}

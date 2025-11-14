@@ -3,6 +3,7 @@ package v4_0
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 
 	"github.com/nlstn/go-odata/compliance-suite/framework"
 )
@@ -79,7 +80,7 @@ func PrimitiveDataTypes() *framework.TestSuite {
 		"test_datetime_type",
 		"Edm.DateTimeOffset type handles datetime values",
 		func(ctx *framework.TestContext) error {
-			resp, err := ctx.GET("/Products?$filter=CreatedAt lt 2025-12-31T23:59:59Z")
+			resp, err := ctx.GET("/Products?$filter=CreatedAt lt '2025-12-31T23:59:59Z'")
 			if err != nil {
 				return err
 			}
@@ -131,7 +132,8 @@ func PrimitiveDataTypes() *framework.TestSuite {
 		"test_special_characters",
 		"Special characters in strings are handled",
 		func(ctx *framework.TestContext) error {
-			resp, err := ctx.GET("/Products?$filter=contains(Name,'&') or contains(Name,'/')")
+			escapedFilter := url.QueryEscape("contains(Name,'&') or contains(Name,'/')")
+			resp, err := ctx.GET("/Products?$filter=" + escapedFilter)
 			if err != nil {
 				return err
 			}

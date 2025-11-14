@@ -375,6 +375,55 @@ func TestTokenizerTimeLiterals(t *testing.T) {
 	}
 }
 
+func TestTokenizerDateTimeLiterals(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "UTC datetime literal",
+			input:    "2025-12-31T23:59:59Z",
+			expected: "2025-12-31T23:59:59Z",
+		},
+		{
+			name:     "Datetime in expression",
+			input:    "CreatedAt lt 2025-12-31T23:59:59Z",
+			expected: "2025-12-31T23:59:59Z",
+		},
+		{
+			name:     "Offset datetime literal",
+			input:    "2024-07-01T10:30:00+02:00",
+			expected: "2024-07-01T10:30:00+02:00",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tokenizer := NewTokenizer(tt.input)
+			tokens, err := tokenizer.TokenizeAll()
+			if err != nil {
+				t.Fatalf("Tokenization failed: %v", err)
+			}
+
+			var found bool
+			for _, token := range tokens {
+				if token.Type == TokenDateTime {
+					found = true
+					if token.Value != tt.expected {
+						t.Errorf("Expected datetime value '%s', got '%s'", tt.expected, token.Value)
+					}
+					break
+				}
+			}
+
+			if !found {
+				t.Errorf("Expected to find a TokenDateTime, but didn't")
+			}
+		})
+	}
+}
+
 func TestTokenizerQualifiedTypeNames(t *testing.T) {
 	tests := []struct {
 		name     string
