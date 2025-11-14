@@ -27,9 +27,6 @@ func HEADRequests() *framework.TestSuite {
 
 			// Should return 200 or 405 (if HEAD not supported)
 			if resp.StatusCode != 200 && resp.StatusCode != 405 {
-				if resp.StatusCode == 500 {
-					return ctx.Skip("HEAD method not properly implemented (returns 500)")
-				}
 				return fmt.Errorf("expected status 200 or 405, got %d", resp.StatusCode)
 			}
 
@@ -56,9 +53,6 @@ func HEADRequests() *framework.TestSuite {
 
 			// Should return 200 or 405 (if HEAD not supported)
 			if resp.StatusCode != 200 && resp.StatusCode != 405 {
-				if resp.StatusCode == 500 {
-					return ctx.Skip("HEAD method not properly implemented (returns 500)")
-				}
 				return fmt.Errorf("expected status 200 or 405, got %d", resp.StatusCode)
 			}
 
@@ -140,9 +134,6 @@ func HEADRequests() *framework.TestSuite {
 
 			// Should return 200 or 405 (if HEAD not supported)
 			if resp.StatusCode != 200 && resp.StatusCode != 405 {
-				if resp.StatusCode == 500 {
-					return ctx.Skip("HEAD method not properly implemented (returns 500)")
-				}
 				return fmt.Errorf("expected status 200 or 405, got %d", resp.StatusCode)
 			}
 
@@ -162,9 +153,6 @@ func HEADRequests() *framework.TestSuite {
 
 			// Should return 404 or 405 (if HEAD not supported)
 			if resp.StatusCode != 404 && resp.StatusCode != 405 {
-				if resp.StatusCode == 500 {
-					return ctx.Skip("HEAD method not properly implemented (returns 500)")
-				}
 				return fmt.Errorf("expected status 404 or 405, got %d", resp.StatusCode)
 			}
 
@@ -244,9 +232,6 @@ func HEADRequests() *framework.TestSuite {
 
 			// Should return 200 or 405 (if HEAD not supported)
 			if resp.StatusCode != 200 && resp.StatusCode != 405 {
-				if resp.StatusCode == 500 {
-					return ctx.Skip("HEAD method not properly implemented (returns 500)")
-				}
 				return fmt.Errorf("expected status 200 or 405, got %d", resp.StatusCode)
 			}
 
