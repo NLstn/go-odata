@@ -91,13 +91,17 @@
         {
             "label": "Run compliance tests (SQLite)",
             "type": "shell",
-            "command": "bash",
+            "command": "go",
             "args": [
-                "-lc",
-                "./compliance/run_compliance_tests.sh --db sqlite -o ${workspaceFolder}/compliance-report.md"
+                "run",
+                ".",
+                "-db",
+                "sqlite",
+                "-output",
+                "${workspaceFolder}/compliance-report.md"
             ],
             "options": {
-                "cwd": "${workspaceFolder}"
+                "cwd": "${workspaceFolder}/compliance-suite"
             },
             "problemMatcher": [],
             "presentation": {
@@ -108,13 +112,19 @@
         {
             "label": "Run compliance tests (PostgreSQL)",
             "type": "shell",
-            "command": "bash",
+            "command": "go",
             "args": [
-                "-lc",
-                "./compliance/run_compliance_tests.sh --db postgres --dsn postgresql://odata:odata_dev@localhost:5432/odata_test?sslmode=disable -o ${workspaceFolder}/compliance-report.md"
+                "run",
+                ".",
+                "-db",
+                "postgres",
+                "-dsn",
+                "postgresql://odata:odata_dev@localhost:5432/odata_test?sslmode=disable",
+                "-output",
+                "${workspaceFolder}/compliance-report.md"
             ],
             "options": {
-                "cwd": "${workspaceFolder}"
+                "cwd": "${workspaceFolder}/compliance-suite"
             },
             "problemMatcher": [],
             "presentation": {

@@ -44,12 +44,12 @@ When adding new tests:
 
 **CRITICAL: Compliance tests MUST strictly adhere to the OData v4 specification.**
 
-The `compliance/` directory contains executable shell scripts that validate the library's compliance with the official OData v4 specification. Tests are organized by OData version:
+The `compliance-suite/` directory contains a Go-based test suite that validates the library's compliance with the official OData v4 specification. Tests are organized by OData version:
 
-- **`v4.0/`** - OData 4.0 specification compliance tests (82 scripts)
-- **`v4.01/`** - OData 4.01-specific compliance tests (3 scripts for features new in 4.01)
-- **`test_framework.sh`** - Shared test framework
-- **`run_compliance_tests.sh`** - Master test runner with version selection
+- **`tests/v4_0/`** - OData 4.0 specification compliance tests
+- **`tests/v4_01/`** - OData 4.01-specific compliance tests
+- **`framework/`** - Test framework with HTTP client and assertions
+- **`main.go`** - Test runner with server management and reporting
 
 ##### Compliance Test Requirements
 
@@ -59,13 +59,13 @@ The `compliance/` directory contains executable shell scripts that validate the 
    - Error response formats must match the specification exactly
    - No lenient behavior or "close enough" validations
 
-2. **Test Structure**: Each compliance test script:
+2. **Test Structure**: Each compliance test:
    - Tests one specific section of the OData v4 specification
-   - Is named according to the spec section (e.g., `11.4.3_update_entity.sh`)
-   - Is placed in `v4.0/` for OData 4.0 features, or `v4.01/` for 4.01-specific features
-   - Includes spec reference URLs in comments
-   - Is executable and can run independently
-   - Returns exit code 0 on success, 1 on failure
+   - Is named according to the spec section (e.g., `query_filter.go`)
+   - Is placed in `tests/v4_0/` for OData 4.0 features, or `tests/v4_01/` for 4.01-specific features
+   - Includes spec reference URLs in the TestSuite definition
+   - Can run independently or as part of the full suite
+   - Returns appropriate exit codes for CI/CD integration
    - Cleans up any test data it creates (non-destructive testing)
 
 3. **When Modifying Compliance Tests**:
@@ -77,9 +77,9 @@ The `compliance/` directory contains executable shell scripts that validate the 
 
 4. **Running Compliance Tests**:
    
-   **IMPORTANT: Always use the master `run_compliance_tests.sh` script to execute compliance tests.**
+   **IMPORTANT: Always run compliance tests using the Go-based test suite.**
    
-   The master script at `compliance/run_compliance_tests.sh` ensures:
+   The test suite at `compliance-suite/` ensures:
    - Proper test environment setup and cleanup
    - Consistent execution across all test versions
    - Comprehensive reporting and error tracking
@@ -87,19 +87,20 @@ The `compliance/` directory contains executable shell scripts that validate the 
    
    ```bash
    # Run all compliance tests (4.0 + 4.01) - PREFERRED METHOD
-   ./compliance/run_compliance_tests.sh
+   cd compliance-suite
+   go run .
    
    # Run only OData 4.0 tests
-   ./compliance/run_compliance_tests.sh --version 4.0
+   go run . -version 4.0
    
    # Run only OData 4.01 tests
-   ./compliance/run_compliance_tests.sh --version 4.01
+   go run . -version 4.01
    
-   # Run a specific test through the master script
-   ./compliance/run_compliance_tests.sh 11.4.3_update_entity.sh
+   # Run specific tests by pattern
+   go run . -pattern filter
    ```
 
-5. **Test Coverage**: Currently includes 85 test scripts covering:
+5. **Test Coverage**: The Go-based test suite covers:
    - HTTP headers (Content-Type, OData-Version, OData-MaxVersion, Accept, Prefer, Error responses)
    - Service document and metadata document
    - URL conventions (entity addressing, canonical URLs, property access, metadata levels, delta links)
@@ -108,18 +109,22 @@ The `compliance/` directory contains executable shell scripts that validate the 
    - Conditional requests (ETags, If-Match, If-None-Match)
    - Relationship management ($ref)
    - Batch requests
+   
+   The suite is actively being expanded with tests ported from the legacy bash implementation.
 
 6. **Adding New Compliance Tests**:
    - Choose the correct directory:
-     - Add to `v4.0/` for OData 4.0 features (applies to both 4.0 and 4.01)
-     - Add to `v4.01/` only for features new or different in OData 4.01
+     - Add to `tests/v4_0/` for OData 4.0 features (applies to both 4.0 and 4.01)
+     - Add to `tests/v4_01/` only for features new or different in OData 4.01
+   - Create a Go file with a function that returns `*framework.TestSuite`
    - Reference the official OData v4 specification sections
-   - Include spec URL in script header comments
-   - Source the test framework: `source "$SCRIPT_DIR/../test_framework.sh"`
+   - Include spec URL in the TestSuite definition
+   - Use the framework's HTTP methods (GET, POST, etc.) and assertions
    - Test both success cases and error cases
    - Validate response status codes, headers, and body structure
    - Ensure tests are idempotent and don't leave test data
-   - Update `compliance/README.md` with new test description
+   - Register the test suite in `compliance-suite/main.go`
+   - Update `compliance-suite/README.md` with new test description
 
 ### Requirements
 

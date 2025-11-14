@@ -2,6 +2,8 @@ package entities
 
 import (
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // ProductStatus represents product status as a flags enum
@@ -33,11 +35,11 @@ func (ProductStatus) EnumMembers() map[string]int {
 
 // Product represents a product entity for the compliance server
 type Product struct {
-	ID              uint          `json:"ID" gorm:"primaryKey" odata:"key"`
+	ID              uuid.UUID     `json:"ID" gorm:"type:uuid;primaryKey" odata:"key,generate=uuid"`
 	Name            string        `json:"Name" gorm:"not null" odata:"required,maxlength=100,searchable"`
 	Description     *string       `json:"Description" odata:"nullable,maxlength=500"` // Nullable description field
 	Price           float64       `json:"Price" gorm:"not null" odata:"required,precision=10,scale=2"`
-	CategoryID      *uint         `json:"CategoryID" odata:"nullable"` // Foreign key for Category navigation property
+	CategoryID      *uuid.UUID    `json:"CategoryID" gorm:"type:uuid" odata:"nullable"` // Foreign key for Category navigation property
 	Status          ProductStatus `json:"Status" gorm:"not null" odata:"enum=ProductStatus,flags"`
 	Version         int           `json:"Version" gorm:"default:1" odata:"etag"` // Version field used for optimistic concurrency control via ETag
 	CreatedAt       time.Time     `json:"CreatedAt" gorm:"not null"`
@@ -55,6 +57,11 @@ type Product struct {
 	Category        *Category            `json:"Category,omitempty" gorm:"foreignKey:CategoryID;references:ID"`
 	Descriptions    []ProductDescription `json:"Descriptions,omitempty" gorm:"foreignKey:ProductID;references:ID"`
 	RelatedProducts []Product            `json:"RelatedProducts,omitempty" gorm:"many2many:product_relations;"`
+}
+
+// TableName overrides the table name used by GORM to match OData entity set name
+func (Product) TableName() string {
+	return "Products"
 }
 
 // GetStreamProperty returns the content of a stream property by name
@@ -76,19 +83,15 @@ func (p *Product) SetStreamProperty(name string, content []byte, contentType str
 }
 
 // GetSampleProducts returns sample product data for seeding the database
+// Note: IDs are server-generated and should not be set in sample data
 func GetSampleProducts() []Product {
-	categoryElectronics := uint(1)
-	categoryKitchen := uint(2)
-	categoryFurniture := uint(3)
-
 	return []Product{
-		// Special Product at ID 1 - used by type casting tests
+		// Special Product - used by type casting tests
 		// Kept as "Laptop" name for backward compatibility with primitive type tests
 		{
-			ID:              1,
 			Name:            "Laptop",
 			Price:           999.99,
-			CategoryID:      &categoryElectronics,
+			CategoryID:      nil, // Will be set during seeding after categories are created
 			Status:          ProductStatusInStock | ProductStatusFeatured,
 			Version:         1,
 			CreatedAt:       time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC),
@@ -110,10 +113,9 @@ func GetSampleProducts() []Product {
 			},
 		},
 		{
-			ID:          2,
 			Name:        "Wireless Mouse",
 			Price:       29.99,
-			CategoryID:  &categoryElectronics,
+			CategoryID:  nil,                                        // Will be set during seeding
 			Status:      ProductStatusInStock | ProductStatusOnSale, // In stock and on sale
 			Version:     1,
 			CreatedAt:   time.Date(2024, 3, 20, 14, 45, 0, 0, time.UTC),
@@ -133,10 +135,9 @@ func GetSampleProducts() []Product {
 			},
 		},
 		{
-			ID:          3,
 			Name:        "Coffee Mug",
 			Price:       15.50,
-			CategoryID:  &categoryKitchen,
+			CategoryID:  nil,                  // Will be set during seeding
 			Status:      ProductStatusInStock, // Only in stock
 			Version:     1,
 			CreatedAt:   time.Date(2023, 11, 5, 9, 15, 0, 0, time.UTC),
@@ -156,10 +157,9 @@ func GetSampleProducts() []Product {
 			},
 		},
 		{
-			ID:          4,
 			Name:        "Office Chair",
 			Price:       249.99,
-			CategoryID:  &categoryFurniture,
+			CategoryID:  nil,                       // Will be set during seeding
 			Status:      ProductStatusDiscontinued, // Discontinued
 			Version:     1,
 			CreatedAt:   time.Date(2023, 8, 12, 16, 20, 0, 0, time.UTC),
@@ -169,10 +169,9 @@ func GetSampleProducts() []Product {
 			Dimensions:      nil,
 		},
 		{
-			ID:          5,
 			Name:        "Smartphone",
 			Price:       799.99,
-			CategoryID:  &categoryElectronics,
+			CategoryID:  nil,                                                                // Will be set during seeding
 			Status:      ProductStatusInStock | ProductStatusOnSale | ProductStatusFeatured, // In stock, on sale, and featured
 			Version:     1,
 			CreatedAt:   time.Date(2024, 6, 28, 11, 0, 0, 0, time.UTC),
@@ -193,10 +192,9 @@ func GetSampleProducts() []Product {
 		},
 		// Special Products (derived type)
 		{
-			ID:              10,
 			Name:            "Premium Laptop Pro",
 			Price:           1999.99,
-			CategoryID:      &categoryElectronics,
+			CategoryID:      nil, // Will be set during seeding
 			Status:          ProductStatusInStock | ProductStatusFeatured,
 			Version:         1,
 			CreatedAt:       time.Date(2024, 7, 1, 10, 0, 0, 0, time.UTC),
@@ -218,10 +216,9 @@ func GetSampleProducts() []Product {
 			},
 		},
 		{
-			ID:              11,
 			Name:            "Gaming Mouse Ultra",
 			Price:           149.99,
-			CategoryID:      &categoryElectronics,
+			CategoryID:      nil, // Will be set during seeding
 			Status:          ProductStatusInStock | ProductStatusOnSale,
 			Version:         1,
 			CreatedAt:       time.Date(2024, 7, 15, 14, 30, 0, 0, time.UTC),

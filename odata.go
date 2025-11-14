@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"sync"
+
 	"github.com/nlstn/go-odata/internal/actions"
 	"github.com/nlstn/go-odata/internal/async"
 	"github.com/nlstn/go-odata/internal/handlers"
@@ -23,7 +25,6 @@ import (
 	servruntime "github.com/nlstn/go-odata/internal/service/runtime"
 	"github.com/nlstn/go-odata/internal/trackchanges"
 	"gorm.io/gorm"
-	"sync"
 )
 
 // KeyGenerator describes a function that produces a key value for new entities.

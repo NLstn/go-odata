@@ -380,7 +380,7 @@ Features:
 
 **Use for:** Running compliance tests, validating OData v4 specification adherence
 
-**Note:** The compliance test script automatically starts and stops the compliance server.
+**Note:** The Go-based compliance test suite automatically starts and stops the compliance server.
 
 See [cmd/complianceserver/README.md](../cmd/complianceserver/README.md) for more details.
 

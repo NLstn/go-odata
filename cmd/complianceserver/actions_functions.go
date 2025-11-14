@@ -89,17 +89,8 @@ func registerFunctions(service *odata.Service, db *gorm.DB) {
 		Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) (interface{}, error) {
 			taxRate := params["taxRate"].(float64)
 
-			// Extract product ID from URL
-			path := r.URL.Path
-			var productID uint
-			if _, err := fmt.Sscanf(path, "/Products(%d)/GetTotalPrice", &productID); err != nil {
-				return nil, fmt.Errorf("invalid product ID")
-			}
-
-			var product entities.Product
-			if err := db.First(&product, productID).Error; err != nil {
-				return nil, err
-			}
+			// Use the bound context which contains the product entity
+			product := ctx.(*entities.Product)
 
 			totalPrice := product.Price * (1 + taxRate)
 			return totalPrice, nil
@@ -370,9 +361,11 @@ func registerActions(service *odata.Service, db *gorm.DB) {
 		Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) error {
 			// Get all products and reset their prices to original sample values
 			sampleProducts := entities.GetSampleProducts()
-			priceMap := make(map[uint]float64)
+			priceMap := make(map[string]float64)
 			for _, p := range sampleProducts {
-				priceMap[p.ID] = p.Price
+				if p.ID.String() != "" {
+					priceMap[p.ID.String()] = p.Price
+				}
 			}
 
 			var products []entities.Product
@@ -382,7 +375,7 @@ func registerActions(service *odata.Service, db *gorm.DB) {
 
 			updatedCount := 0
 			for i := range products {
-				if originalPrice, exists := priceMap[products[i].ID]; exists {
+				if originalPrice, exists := priceMap[products[i].ID.String()]; exists {
 					products[i].Price = originalPrice
 					if err := db.Save(&products[i]).Error; err != nil {
 						return err
