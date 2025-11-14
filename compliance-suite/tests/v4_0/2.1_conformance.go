@@ -52,6 +52,9 @@ func Conformance() *framework.TestSuite {
 			if err != nil {
 				return err
 			}
+			if err := ctx.AssertStatusCode(resp, 200); err != nil {
+				return err
+			}
 			if !ctx.IsValidJSON(resp) {
 				return framework.NewError("Service must support JSON format (invalid JSON response)")
 			}
@@ -66,6 +69,9 @@ func Conformance() *framework.TestSuite {
 		func(ctx *framework.TestContext) error {
 			resp, err := ctx.GET("/")
 			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(resp, 200); err != nil {
 				return err
 			}
 			odataVersion := resp.Headers.Get("OData-Version")
@@ -202,19 +208,25 @@ func Conformance() *framework.TestSuite {
 			if err != nil {
 				return err
 			}
+			if err := ctx.AssertStatusCode(resp, 200); err != nil {
+				return err
+			}
 
 			contentType := resp.Headers.Get("Content-Type")
+			if contentType == "" {
+				return framework.NewError("Content-Type header must specify UTF-8 encoding")
+			}
+			contentTypeLower := strings.ToLower(contentType)
 
 			// OData services should use UTF-8 encoding (implied or explicit)
 			// JSON is UTF-8 by default per RFC 8259
-			if strings.Contains(contentType, "application/json") {
+			if strings.Contains(contentTypeLower, "application/json") {
 				return nil
 			}
-			if strings.Contains(contentType, "charset=utf-8") || strings.Contains(contentType, "charset=UTF-8") {
+			if strings.Contains(contentTypeLower, "charset=utf-8") {
 				return nil
 			}
-			// JSON implies UTF-8, so this is acceptable
-			return nil
+			return framework.NewError("Service must respond using UTF-8 encoding")
 		},
 	)
 
