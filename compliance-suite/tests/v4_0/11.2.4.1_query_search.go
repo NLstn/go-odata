@@ -3,6 +3,7 @@ package v4_0
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 
 	"github.com/nlstn/go-odata/compliance-suite/framework"
 )
@@ -25,21 +26,20 @@ func QuerySearch() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode == 200 {
-				var result map[string]interface{}
-				if err := json.Unmarshal(resp.Body, &result); err != nil {
-					return fmt.Errorf("failed to parse JSON: %w", err)
-				}
-
-				if _, ok := result["value"]; !ok {
-					return fmt.Errorf("response missing 'value' array")
-				}
-
-				return nil
+			if resp.StatusCode != http.StatusOK {
+				return fmt.Errorf("expected status 200 but received %d", resp.StatusCode)
 			}
 
-			// $search may not be implemented
-			return ctx.Skip("$search not implemented")
+			var result map[string]interface{}
+			if err := json.Unmarshal(resp.Body, &result); err != nil {
+				return fmt.Errorf("failed to parse JSON: %w", err)
+			}
+
+			if _, ok := result["value"]; !ok {
+				return fmt.Errorf("response missing 'value' array")
+			}
+
+			return nil
 		},
 	)
 
@@ -53,20 +53,20 @@ func QuerySearch() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode == 200 {
-				var result map[string]interface{}
-				if err := json.Unmarshal(resp.Body, &result); err != nil {
-					return fmt.Errorf("failed to parse JSON: %w", err)
-				}
-
-				if _, ok := result["value"]; !ok {
-					return fmt.Errorf("response missing 'value' array")
-				}
-
-				return nil
+			if resp.StatusCode != http.StatusOK {
+				return fmt.Errorf("expected status 200 but received %d", resp.StatusCode)
 			}
 
-			return ctx.Skip("$search not implemented")
+			var result map[string]interface{}
+			if err := json.Unmarshal(resp.Body, &result); err != nil {
+				return fmt.Errorf("failed to parse JSON: %w", err)
+			}
+
+			if _, ok := result["value"]; !ok {
+				return fmt.Errorf("response missing 'value' array")
+			}
+
+			return nil
 		},
 	)
 
@@ -80,20 +80,20 @@ func QuerySearch() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode == 200 {
-				var result map[string]interface{}
-				if err := json.Unmarshal(resp.Body, &result); err != nil {
-					return fmt.Errorf("failed to parse JSON: %w", err)
-				}
-
-				if _, ok := result["value"]; !ok {
-					return fmt.Errorf("response missing 'value' array")
-				}
-
-				return nil
+			if resp.StatusCode != http.StatusOK {
+				return fmt.Errorf("expected status 200 but received %d", resp.StatusCode)
 			}
 
-			return ctx.Skip("$search not implemented")
+			var result map[string]interface{}
+			if err := json.Unmarshal(resp.Body, &result); err != nil {
+				return fmt.Errorf("failed to parse JSON: %w", err)
+			}
+
+			if _, ok := result["value"]; !ok {
+				return fmt.Errorf("response missing 'value' array")
+			}
+
+			return nil
 		},
 	)
 
@@ -107,20 +107,20 @@ func QuerySearch() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode == 200 {
-				var result map[string]interface{}
-				if err := json.Unmarshal(resp.Body, &result); err != nil {
-					return fmt.Errorf("failed to parse JSON: %w", err)
-				}
-
-				if _, ok := result["value"]; !ok {
-					return fmt.Errorf("response missing 'value' array")
-				}
-
-				return nil
+			if resp.StatusCode != http.StatusOK {
+				return fmt.Errorf("expected status 200 but received %d", resp.StatusCode)
 			}
 
-			return ctx.Skip("$search not implemented")
+			var result map[string]interface{}
+			if err := json.Unmarshal(resp.Body, &result); err != nil {
+				return fmt.Errorf("failed to parse JSON: %w", err)
+			}
+
+			if _, ok := result["value"]; !ok {
+				return fmt.Errorf("response missing 'value' array")
+			}
+
+			return nil
 		},
 	)
 
