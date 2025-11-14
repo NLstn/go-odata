@@ -34,6 +34,9 @@ func Introduction() *framework.TestSuite {
 			if err != nil {
 				return err
 			}
+			if err := ctx.AssertStatusCode(resp, 200); err != nil {
+				return err
+			}
 			if !ctx.IsValidJSON(resp) {
 				return framework.NewError("Service document is not valid JSON")
 			}
