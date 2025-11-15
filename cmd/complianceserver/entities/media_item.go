@@ -13,7 +13,7 @@ type MediaItem struct {
 	Name        string    `json:"Name" gorm:"not null" odata:"required,maxlength=100"`
 	ContentType string    `json:"ContentType" gorm:"not null" odata:"required,maxlength=100"` // MIME type of the media
 	Size        *int64    `json:"Size" odata:"nullable"`                                      // Size in bytes
-	Content     []byte    `json:"-" gorm:"type:blob"`                                         // Binary content (excluded from JSON)
+	Content     []byte    `json:"-"`                                                          // Binary content (excluded from JSON)
 	CreatedAt   time.Time `json:"CreatedAt" gorm:"not null"`
 	ModifiedAt  time.Time `json:"ModifiedAt" gorm:"not null"`
 }

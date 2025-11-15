@@ -52,7 +52,7 @@ type Product struct {
 	// Stream properties
 	Photo            struct{} `json:"-" gorm:"-" odata:"stream"`  // Photo stream property (logical property, no storage)
 	PhotoContentType string   `json:"-" gorm:"type:varchar(100)"` // Content type for Photo stream
-	PhotoContent     []byte   `json:"-" gorm:"type:blob"`         // Photo stream content
+	PhotoContent     []byte   `json:"-"`                          // Photo stream content
 	// Navigation properties
 	Category        *Category            `json:"Category,omitempty" gorm:"foreignKey:CategoryID;references:ID"`
 	Descriptions    []ProductDescription `json:"Descriptions,omitempty" gorm:"foreignKey:ProductID;references:ID"`
