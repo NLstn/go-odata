@@ -14,6 +14,7 @@ rely on version numbers to reason about compatibility.
 - CI/CD pipeline now runs compliance tests on both SQLite and PostgreSQL to ensure cross-database compatibility
 
 ### Fixed
+- Compliance tests now use file-based SQLite database (`/tmp/go-odata-compliance.db`) instead of in-memory database to prevent flakiness in CI environments
 - Database reseeding in compliance server now handles PostgreSQL foreign key constraints correctly, ensuring cross-database compatibility between SQLite and PostgreSQL without requiring users to handle database-specific cleanup logic
 - Removed SQLite-specific GORM blob type specification for binary content, allowing GORM to use appropriate database-specific types (BLOB for SQLite, BYTEA for PostgreSQL)
 - Compliance server entity table names now match OData entity set names (Products, Categories, ProductDescriptions, MediaItems, Company) fixing 300+ test failures
