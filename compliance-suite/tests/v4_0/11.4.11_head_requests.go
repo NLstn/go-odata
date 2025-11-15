@@ -10,8 +10,8 @@ import (
 func HEADRequests() *framework.TestSuite {
 	suite := framework.NewTestSuite(
 		"11.4.11 HEAD Requests",
-		"Tests HEAD requests for entities and collections according to OData v4 specification.",
-		"https://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part1-protocol/odata-v4.0-errata03-os-part1-protocol-complete.html#sec_CommonHeaders",
+		"Validates HEAD requests for entities, collections, and documents as defined in OData v4.0 section 11.4.11.",
+		"https://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part1-protocol/odata-v4.0-errata03-os-part1-protocol-complete.html#sec_HEADRequests",
 	)
 	invalidProductPath := nonExistingEntityPath("Products")
 
@@ -25,12 +25,8 @@ func HEADRequests() *framework.TestSuite {
 				return err
 			}
 
-			// Should return 200 or 405 (if HEAD not supported)
-			if resp.StatusCode != 200 && resp.StatusCode != 405 {
-				if resp.StatusCode == 500 {
-					return ctx.Skip("HEAD method not properly implemented (returns 500)")
-				}
-				return fmt.Errorf("expected status 200 or 405, got %d", resp.StatusCode)
+			if resp.StatusCode != 200 {
+				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
 			}
 
 			return nil
@@ -54,12 +50,8 @@ func HEADRequests() *framework.TestSuite {
 				return err
 			}
 
-			// Should return 200 or 405 (if HEAD not supported)
-			if resp.StatusCode != 200 && resp.StatusCode != 405 {
-				if resp.StatusCode == 500 {
-					return ctx.Skip("HEAD method not properly implemented (returns 500)")
-				}
-				return fmt.Errorf("expected status 200 or 405, got %d", resp.StatusCode)
+			if resp.StatusCode != 200 {
+				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
 			}
 
 			return nil
@@ -74,6 +66,10 @@ func HEADRequests() *framework.TestSuite {
 			resp, err := ctx.HEAD("/Products")
 			if err != nil {
 				return err
+			}
+
+			if resp.StatusCode != 200 {
+				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
 			}
 
 			// HEAD should return headers only, no body
@@ -95,11 +91,13 @@ func HEADRequests() *framework.TestSuite {
 				return err
 			}
 
-			// Content-Length header should be present (optional)
-			// If HEAD is not supported (405), that's fine too
-			if resp.StatusCode == 200 {
-				// Check for Content-Length (optional, so just verify we got a response)
-				return nil
+			if resp.StatusCode != 200 {
+				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+			}
+
+			contentLength := resp.Headers.Get("Content-Length")
+			if contentLength == "" {
+				return fmt.Errorf("Content-Length header missing")
 			}
 
 			return nil
@@ -116,13 +114,14 @@ func HEADRequests() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode == 200 {
-				version := resp.Headers.Get("OData-Version")
-				if version == "" {
-					return fmt.Errorf("OData-Version header missing")
-				}
+			if resp.StatusCode != 200 {
+				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
 			}
-			// If HEAD not supported (405), that's acceptable
+
+			version := resp.Headers.Get("OData-Version")
+			if version == "" {
+				return fmt.Errorf("OData-Version header missing")
+			}
 
 			return nil
 		},
@@ -138,12 +137,8 @@ func HEADRequests() *framework.TestSuite {
 				return err
 			}
 
-			// Should return 200 or 405 (if HEAD not supported)
-			if resp.StatusCode != 200 && resp.StatusCode != 405 {
-				if resp.StatusCode == 500 {
-					return ctx.Skip("HEAD method not properly implemented (returns 500)")
-				}
-				return fmt.Errorf("expected status 200 or 405, got %d", resp.StatusCode)
+			if resp.StatusCode != 200 {
+				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
 			}
 
 			return nil
@@ -160,12 +155,8 @@ func HEADRequests() *framework.TestSuite {
 				return err
 			}
 
-			// Should return 404 or 405 (if HEAD not supported)
-			if resp.StatusCode != 404 && resp.StatusCode != 405 {
-				if resp.StatusCode == 500 {
-					return ctx.Skip("HEAD method not properly implemented (returns 500)")
-				}
-				return fmt.Errorf("expected status 404 or 405, got %d", resp.StatusCode)
+			if resp.StatusCode != 404 {
+				return fmt.Errorf("expected status 404, got %d", resp.StatusCode)
 			}
 
 			return nil
@@ -182,13 +173,14 @@ func HEADRequests() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode == 200 {
-				contentType := resp.Headers.Get("Content-Type")
-				if contentType == "" {
-					return fmt.Errorf("Content-Type header missing")
-				}
+			if resp.StatusCode != 200 {
+				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
 			}
-			// If HEAD not supported (405), that's acceptable
+
+			contentType := resp.Headers.Get("Content-Type")
+			if contentType == "" {
+				return fmt.Errorf("Content-Type header missing")
+			}
 
 			return nil
 		},
@@ -204,9 +196,8 @@ func HEADRequests() *framework.TestSuite {
 				return err
 			}
 
-			// Should return 200 or 405 (if HEAD not supported)
-			if resp.StatusCode != 200 && resp.StatusCode != 405 {
-				return fmt.Errorf("expected status 200 or 405, got %d", resp.StatusCode)
+			if resp.StatusCode != 200 {
+				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
 			}
 
 			return nil
@@ -223,9 +214,8 @@ func HEADRequests() *framework.TestSuite {
 				return err
 			}
 
-			// Should return 200 or 405 (if HEAD not supported)
-			if resp.StatusCode != 200 && resp.StatusCode != 405 {
-				return fmt.Errorf("expected status 200 or 405, got %d", resp.StatusCode)
+			if resp.StatusCode != 200 {
+				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
 			}
 
 			return nil
@@ -242,12 +232,8 @@ func HEADRequests() *framework.TestSuite {
 				return err
 			}
 
-			// Should return 200 or 405 (if HEAD not supported)
-			if resp.StatusCode != 200 && resp.StatusCode != 405 {
-				if resp.StatusCode == 500 {
-					return ctx.Skip("HEAD method not properly implemented (returns 500)")
-				}
-				return fmt.Errorf("expected status 200 or 405, got %d", resp.StatusCode)
+			if resp.StatusCode != 200 {
+				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
 			}
 
 			return nil
