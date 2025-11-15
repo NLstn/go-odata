@@ -81,6 +81,21 @@ jobs:
     name: Compliance Tests
     runs-on: ubuntu-latest
     
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: odata
+          POSTGRES_PASSWORD: odata_test
+          POSTGRES_DB: odata_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
     steps:
     - name: Check out code
       uses: actions/checkout@v5
@@ -100,3 +115,8 @@ jobs:
       run: |
         cd compliance-suite
         go run . -db sqlite
+
+    - name: Run compliance tests (PostgreSQL)
+      run: |
+        cd compliance-suite
+        go run . -db postgres -dsn "postgresql://odata:odata_test@localhost:5432/odata_test?sslmode=disable"
