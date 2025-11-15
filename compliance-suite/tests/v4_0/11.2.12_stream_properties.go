@@ -60,8 +60,8 @@ func StreamProperties() *framework.TestSuite {
 				return nil
 			}
 
-			if resp.StatusCode == 404 || resp.StatusCode == 405 || resp.StatusCode == 501 || resp.StatusCode == 500 {
-				return ctx.Skip("media entities not fully implemented (status: %d)")
+			if resp.StatusCode == 404 || resp.StatusCode == 405 || resp.StatusCode == 501 {
+				return ctx.Skip("media entities not implemented")
 			}
 
 			return fmt.Errorf("unexpected status: %d", resp.StatusCode)
@@ -86,8 +86,8 @@ func StreamProperties() *framework.TestSuite {
 				return nil
 			}
 
-			if resp.StatusCode == 404 || resp.StatusCode == 405 || resp.StatusCode == 501 || resp.StatusCode == 500 {
-				return ctx.Skip("media entity $value not fully implemented (status: %d)")
+			if resp.StatusCode == 404 || resp.StatusCode == 405 || resp.StatusCode == 501 {
+				return ctx.Skip("media entity $value not implemented")
 			}
 
 			return fmt.Errorf("unexpected status: %d", resp.StatusCode)
@@ -112,8 +112,8 @@ func StreamProperties() *framework.TestSuite {
 				return nil
 			}
 
-			if resp.StatusCode == 404 || resp.StatusCode == 405 || resp.StatusCode == 501 || resp.StatusCode == 500 {
-				return ctx.Skip("stream properties not fully implemented (status: %d)")
+			if resp.StatusCode == 404 || resp.StatusCode == 405 || resp.StatusCode == 501 {
+				return ctx.Skip("stream properties not implemented")
 			}
 
 			return fmt.Errorf("unexpected status: %d", resp.StatusCode)
@@ -143,7 +143,7 @@ func StreamProperties() *framework.TestSuite {
 				return nil
 			}
 
-			if resp.StatusCode == 404 || resp.StatusCode == 405 || resp.StatusCode == 501 || resp.StatusCode == 500 {
+			if resp.StatusCode == 404 || resp.StatusCode == 405 || resp.StatusCode == 501  {
 				return ctx.Skip("media content unavailable (status: %d)")
 			}
 
@@ -165,7 +165,7 @@ func StreamProperties() *framework.TestSuite {
 				return nil
 			}
 
-			if resp.StatusCode == 404 || resp.StatusCode == 405 || resp.StatusCode == 501 || resp.StatusCode == 500 {
+			if resp.StatusCode == 404 || resp.StatusCode == 405 || resp.StatusCode == 501  {
 				return ctx.Skip("media entity creation unsupported (status: %d)")
 			}
 
@@ -191,7 +191,7 @@ func StreamProperties() *framework.TestSuite {
 				return nil
 			}
 
-			if resp.StatusCode == 404 || resp.StatusCode == 405 || resp.StatusCode == 501 || resp.StatusCode == 500 {
+			if resp.StatusCode == 404 || resp.StatusCode == 405 || resp.StatusCode == 501  {
 				return ctx.Skip("media entity update unsupported (status: %d)")
 			}
 
@@ -217,7 +217,7 @@ func StreamProperties() *framework.TestSuite {
 				return nil
 			}
 
-			if resp.StatusCode == 404 || resp.StatusCode == 405 || resp.StatusCode == 501 || resp.StatusCode == 500 {
+			if resp.StatusCode == 404 || resp.StatusCode == 405 || resp.StatusCode == 501  {
 				return ctx.Skip("media entity metadata missing (status: %d)")
 			}
 
@@ -268,7 +268,7 @@ func StreamProperties() *framework.TestSuite {
 				return nil
 			}
 
-			if resp.StatusCode == 404 || resp.StatusCode == 405 || resp.StatusCode == 501 || resp.StatusCode == 500 {
+			if resp.StatusCode == 404 || resp.StatusCode == 405 || resp.StatusCode == 501  {
 				return ctx.Skip("media stream negotiation failed (status: %d)")
 			}
 
@@ -294,7 +294,7 @@ func StreamProperties() *framework.TestSuite {
 				return nil
 			}
 
-			if resp.StatusCode == 404 || resp.StatusCode == 405 || resp.StatusCode == 501 || resp.StatusCode == 500 {
+			if resp.StatusCode == 404 || resp.StatusCode == 405 || resp.StatusCode == 501  {
 				return ctx.Skip("media entity deletion failed (status: %d)")
 			}
 
@@ -324,7 +324,7 @@ func StreamProperties() *framework.TestSuite {
 				return fmt.Errorf("specification violation - missing media link annotations")
 			}
 
-			if resp.StatusCode == 404 || resp.StatusCode == 405 || resp.StatusCode == 501 || resp.StatusCode == 500 {
+			if resp.StatusCode == 404 || resp.StatusCode == 405 || resp.StatusCode == 501  {
 				return ctx.Skip("media entity endpoint unavailable (status: %d)")
 			}
 
@@ -350,7 +350,7 @@ func StreamProperties() *framework.TestSuite {
 				return nil
 			}
 
-			if resp.StatusCode == 404 || resp.StatusCode == 405 || resp.StatusCode == 501 || resp.StatusCode == 500 {
+			if resp.StatusCode == 404 || resp.StatusCode == 405 || resp.StatusCode == 501  {
 				return ctx.Skip("stream property $value missing (status: %d)")
 			}
 

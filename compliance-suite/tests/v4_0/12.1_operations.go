@@ -1,6 +1,8 @@
 package v4_0
 
 import (
+	"fmt"
+
 	"github.com/nlstn/go-odata/compliance-suite/framework"
 )
 
@@ -35,14 +37,18 @@ func Operations() *framework.TestSuite {
 				return err
 			}
 
-			// May return 200, 404 (not implemented), or 501
+			// If operation exists in metadata, must work properly
 			if resp.StatusCode == 200 {
-				return nil
-			} else if resp.StatusCode == 404 || resp.StatusCode == 501 {
-				return ctx.Skip("Unbound functions not implemented")
+				// Validate response is valid OData collection or entity
+				return ctx.AssertJSONField(resp, "value")
+			}
+			
+			// 404 indicates function not defined (acceptable if not in metadata)
+			if resp.StatusCode == 404 {
+				return ctx.Skip("Unbound function not defined in service")
 			}
 
-			return framework.NewError("Unexpected status code for unbound function")
+			return fmt.Errorf("Unexpected status code %d for unbound function", resp.StatusCode)
 		},
 	)
 
@@ -56,14 +62,17 @@ func Operations() *framework.TestSuite {
 				return err
 			}
 
-			// May return 200, 404 (not implemented), or 501
+			// If function exists, parameters must be handled correctly
 			if resp.StatusCode == 200 {
-				return nil
-			} else if resp.StatusCode == 404 || resp.StatusCode == 501 {
-				return ctx.Skip("Function parameters not implemented")
+				return ctx.AssertJSONField(resp, "value")
+			}
+			
+			// 404 indicates function not defined
+			if resp.StatusCode == 404 {
+				return ctx.Skip("Unbound function with parameters not defined in service")
 			}
 
-			return framework.NewError("Unexpected status code for function with parameters")
+			return fmt.Errorf("Unexpected status code %d for function with parameters", resp.StatusCode)
 		},
 	)
 
@@ -81,14 +90,21 @@ func Operations() *framework.TestSuite {
 				return err
 			}
 
-			// May return 200, 404 (not implemented), or 501
+			// If bound function exists, must return valid result
 			if resp.StatusCode == 200 {
+				// Should return a value
+				if len(resp.Body) == 0 {
+					return framework.NewError("Bound function returned empty body")
+				}
 				return nil
-			} else if resp.StatusCode == 404 || resp.StatusCode == 501 {
-				return ctx.Skip("Bound functions not implemented")
+			}
+			
+			// 404 indicates function not bound to this entity type
+			if resp.StatusCode == 404 {
+				return ctx.Skip("Bound function not defined for this entity type")
 			}
 
-			return framework.NewError("Unexpected status code for bound function")
+			return fmt.Errorf("Unexpected status code %d for bound function", resp.StatusCode)
 		},
 	)
 
@@ -102,14 +118,20 @@ func Operations() *framework.TestSuite {
 				return err
 			}
 
-			// May return 200, 404 (not implemented), or 501
+			// If function exists, must work correctly
 			if resp.StatusCode == 200 {
+				if len(resp.Body) == 0 {
+					return framework.NewError("Collection-bound function returned empty body")
+				}
 				return nil
-			} else if resp.StatusCode == 404 || resp.StatusCode == 501 {
-				return ctx.Skip("Collection-bound functions not implemented")
+			}
+			
+			// 404 indicates function not bound to this collection
+			if resp.StatusCode == 404 {
+				return ctx.Skip("Collection-bound function not defined for Products")
 			}
 
-			return framework.NewError("Unexpected status code for collection-bound function")
+			return fmt.Errorf("Unexpected status code %d for collection-bound function", resp.StatusCode)
 		},
 	)
 
@@ -125,14 +147,17 @@ func Operations() *framework.TestSuite {
 				return err
 			}
 
-			// May return 200/204, 404 (not implemented), or 501
+			// Actions must return success when invoked
 			if resp.StatusCode == 200 || resp.StatusCode == 204 {
 				return nil
-			} else if resp.StatusCode == 404 || resp.StatusCode == 501 {
-				return ctx.Skip("Unbound actions not implemented")
+			}
+			
+			// 404 indicates action not defined
+			if resp.StatusCode == 404 {
+				return ctx.Skip("Unbound action not defined in service")
 			}
 
-			return framework.NewError("Unexpected status code for unbound action")
+			return fmt.Errorf("Unexpected status code %d for unbound action", resp.StatusCode)
 		},
 	)
 
@@ -154,14 +179,17 @@ func Operations() *framework.TestSuite {
 				return err
 			}
 
-			// May return 200/204, 404 (not implemented), or 501
+			// Bound actions must work when defined
 			if resp.StatusCode == 200 || resp.StatusCode == 204 {
 				return nil
-			} else if resp.StatusCode == 404 || resp.StatusCode == 501 {
-				return ctx.Skip("Bound actions not implemented")
+			}
+			
+			// 404 indicates action not bound to this entity type
+			if resp.StatusCode == 404 {
+				return ctx.Skip("Bound action not defined for this entity type")
 			}
 
-			return framework.NewError("Unexpected status code for bound action")
+			return fmt.Errorf("Unexpected status code %d for bound action", resp.StatusCode)
 		},
 	)
 
@@ -176,12 +204,19 @@ func Operations() *framework.TestSuite {
 			}
 
 			if resp.StatusCode == 200 {
-				return ctx.AssertJSONField(resp, "value")
-			} else if resp.StatusCode == 404 || resp.StatusCode == 501 {
-				return ctx.Skip("Operations not implemented")
+				// Must return valid OData collection format
+				if err := ctx.AssertJSONField(resp, "value"); err != nil {
+					return fmt.Errorf("Operation returning collection must include 'value' array: %v", err)
+				}
+				return nil
+			}
+			
+			// 404 indicates operation not defined
+			if resp.StatusCode == 404 {
+				return ctx.Skip("Operation not defined in service")
 			}
 
-			return framework.NewError("Unexpected status code")
+			return fmt.Errorf("Unexpected status code %d", resp.StatusCode)
 		},
 	)
 

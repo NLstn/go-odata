@@ -65,8 +65,9 @@ func NavigationProperties() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode == 404 || resp.StatusCode == 501 {
-				return nil // Feature not implemented, skip
+			// Navigation properties are core OData feature and must work
+			if resp.StatusCode == 404 {
+				return framework.NewError("Navigation property 'Category' not found - must be implemented if declared in metadata")
 			}
 
 			if err := ctx.AssertStatusCode(resp, 200); err != nil {
@@ -105,8 +106,9 @@ func NavigationProperties() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode == 404 || resp.StatusCode == 501 {
-				return nil // Feature not implemented, skip
+			// Navigation properties are core OData feature and must work
+			if resp.StatusCode == 404 {
+				return framework.NewError("Navigation property 'Products' not found - must be implemented if declared in metadata")
 			}
 
 			if err := ctx.AssertStatusCode(resp, 200); err != nil {
@@ -140,8 +142,9 @@ func NavigationProperties() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode == 404 || resp.StatusCode == 501 {
-				return nil // Feature not implemented, skip
+			// $filter on navigation is a core OData query option
+			if resp.StatusCode == 404 {
+				return framework.NewError("Navigation property with $filter not found - must be supported")
 			}
 
 			if err := ctx.AssertStatusCode(resp, 200); err != nil {
@@ -165,8 +168,9 @@ func NavigationProperties() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode == 404 || resp.StatusCode == 501 {
-				return nil // Feature not implemented, skip
+			// $count on navigation is a core OData feature
+			if resp.StatusCode == 404 {
+				return framework.NewError("Navigation property $count not found - must be supported")
 			}
 
 			if err := ctx.AssertStatusCode(resp, 200); err != nil {
