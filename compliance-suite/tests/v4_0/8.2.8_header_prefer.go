@@ -30,7 +30,7 @@ func HeaderPrefer() *framework.TestSuite {
 			return err
 		}			// Must accept successful creation
 			if resp.StatusCode != 201 && resp.StatusCode != 204 && resp.StatusCode != 200 {
-				return fmt.Errorf("Expected successful creation (200/201/204), got %d", resp.StatusCode)
+				return fmt.Errorf("expected successful creation (200/201/204), got %d", resp.StatusCode)
 			}
 
 			// When return=minimal is honored, should return 204 No Content
@@ -64,18 +64,18 @@ func HeaderPrefer() *framework.TestSuite {
 			return err
 		}			// Must accept successful creation  
 			if resp.StatusCode != 201 && resp.StatusCode != 200 {
-				return fmt.Errorf("Expected successful creation (200/201), got %d", resp.StatusCode)
+				return fmt.Errorf("expected successful creation (200/201), got %d", resp.StatusCode)
 			}
 
 			// When return=representation is honored, should return entity in response body
 			// Even if not explicitly honored, 201 Created should include representation
 			if resp.StatusCode == 200 || resp.StatusCode == 201 {
 				if len(resp.Body) == 0 {
-					return framework.NewError("Expected entity representation in response body")
+					return framework.NewError("expected entity representation in response body")
 				}
 				// Verify it's valid JSON with the entity
 				if err := ctx.AssertJSONField(resp, "Name"); err != nil {
-					return fmt.Errorf("Response body should contain created entity: %v", err)
+					return fmt.Errorf("response body should contain created entity: %v", err)
 				}
 			}
 
