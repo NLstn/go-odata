@@ -12,6 +12,7 @@ rely on version numbers to reason about compatibility.
 ### Added
 
 ### Fixed
+- Database reseeding in compliance server now handles PostgreSQL foreign key constraints correctly, ensuring cross-database compatibility between SQLite and PostgreSQL without requiring users to handle database-specific cleanup logic
 - Compliance server entity table names now match OData entity set names (Products, Categories, ProductDescriptions, MediaItems, Company) fixing 300+ test failures
 - Registered all 105 test suites in compliance test runner (previously only 45 were registered)
 - Compliance test pass rate improved from 30% to 75% (501 of 666 tests now passing)

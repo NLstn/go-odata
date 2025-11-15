@@ -62,14 +62,10 @@ func main() {
 		log.Fatalf("Unsupported database type: %s. Use 'sqlite' or 'postgres'", *dbType)
 	}
 
-	// Auto-migrate the Product, ProductDescription, Category, CompanyInfo, and MediaItem models
-	if err := Db.AutoMigrate(&entities.Category{}, &entities.Product{}, &entities.ProductDescription{}, &entities.CompanyInfo{}, &entities.MediaItem{}); err != nil {
-		log.Fatal("Failed to migrate database:", err)
-	}
-
-	// Seed the database with sample data
+	// Initialize database with sample data
+	// This handles the initial migration and seeding in one step
 	if err := seedDatabase(Db); err != nil {
-		log.Fatal("Failed to seed database:", err)
+		log.Fatal("Failed to initialize database:", err)
 	}
 
 	// Create OData service
