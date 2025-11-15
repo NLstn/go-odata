@@ -258,7 +258,7 @@ release plan so downstream integrations can assess compatibility expectations.
 The library works with any GORM-compatible database, but testing and active support vary by database:
 
 - ✅ **SQLite** - Fully supported and tested. All features work reliably.
-- 🚧 **PostgreSQL** - Support in progress. Most features work, but some edge cases are still being tested.
+- ✅ **PostgreSQL** - Fully supported and tested. All compliance tests pass on PostgreSQL 17.
 - ❓ **Other databases** (MySQL, SQL Server, etc.) - Should work through GORM compatibility, but not actively tested.
 
 ### Using Other Databases

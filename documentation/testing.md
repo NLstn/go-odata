@@ -91,14 +91,18 @@ func TestEntityRetrieval(t *testing.T) {
 
 ## Compliance Tests
 
-The library includes a comprehensive OData v4 compliance test suite implemented in Go, covering the OData specification.
+The library includes a comprehensive OData v4 compliance test suite implemented in Go, covering the OData specification. Tests run on both SQLite and PostgreSQL to ensure cross-database compatibility.
 
 ### Running Compliance Tests
 
 ```bash
-# Run all compliance tests (4.0 + 4.01) - RECOMMENDED
+# Run all compliance tests (4.0 + 4.01) with SQLite - RECOMMENDED
 cd compliance-suite
 go run .
+
+# Run all compliance tests with PostgreSQL
+cd compliance-suite
+go run . -db postgres -dsn "postgresql://user:pass@localhost:5432/dbname?sslmode=disable"
 
 # Run only OData 4.0 tests
 go run . -version 4.0
