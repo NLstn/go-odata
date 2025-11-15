@@ -18,19 +18,17 @@ func HeaderPrefer() *framework.TestSuite {
 		"test_prefer_return_minimal",
 		"Prefer: return=minimal",
 		func(ctx *framework.TestContext) error {
-			resp, err := ctx.POST("/Products", map[string]interface{}{
-				"Name":       "Prefer Test",
-				"Price":      99.99,
-				"CategoryID": 1,
-			}, framework.Header{
-				Key:   "Prefer",
-				Value: "return=minimal",
-			})
-			if err != nil {
-				return err
-			}
-
-			// Must accept successful creation
+		resp, err := ctx.POST("/Products", map[string]interface{}{
+			"Name":   "Prefer Test",
+			"Price":  99.99,
+			"Status": 1, // ProductStatusInStock
+		}, framework.Header{
+			Key:   "Prefer",
+			Value: "return=minimal",
+		})
+		if err != nil {
+			return err
+		}			// Must accept successful creation
 			if resp.StatusCode != 201 && resp.StatusCode != 204 && resp.StatusCode != 200 {
 				return fmt.Errorf("Expected successful creation (200/201/204), got %d", resp.StatusCode)
 			}
@@ -54,19 +52,17 @@ func HeaderPrefer() *framework.TestSuite {
 		"test_prefer_return_representation",
 		"Prefer: return=representation",
 		func(ctx *framework.TestContext) error {
-			resp, err := ctx.POST("/Products", map[string]interface{}{
-				"Name":       "Prefer Test 2",
-				"Price":      99.99,
-				"CategoryID": 1,
-			}, framework.Header{
-				Key:   "Prefer",
-				Value: "return=representation",
-			})
-			if err != nil {
-				return err
-			}
-
-			// Must accept successful creation  
+		resp, err := ctx.POST("/Products", map[string]interface{}{
+			"Name":   "Prefer Test 2",
+			"Price":  99.99,
+			"Status": 1, // ProductStatusInStock
+		}, framework.Header{
+			Key:   "Prefer",
+			Value: "return=representation",
+		})
+		if err != nil {
+			return err
+		}			// Must accept successful creation  
 			if resp.StatusCode != 201 && resp.StatusCode != 200 {
 				return fmt.Errorf("Expected successful creation (200/201), got %d", resp.StatusCode)
 			}
