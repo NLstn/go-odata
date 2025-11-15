@@ -719,7 +719,9 @@ func startComplianceServer() (*exec.Cmd, error) {
 	} else {
 		dsn := *dbDSN
 		if dsn == "" {
-			dsn = ":memory:"
+			// Use file-based SQLite for stability in CI environments
+			// Using /tmp ensures a clean state for each test run
+			dsn = "/tmp/go-odata-compliance.db"
 		}
 		dbArgs = append(dbArgs, "-db", "sqlite", "-dsn", dsn)
 	}
