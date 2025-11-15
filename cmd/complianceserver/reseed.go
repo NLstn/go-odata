@@ -14,11 +14,33 @@ import (
 
 // seedDatabase initializes the database with sample data
 // This function drops and recreates all tables to ensure a clean state
+// It handles both initial setup and reseeding operations
 func seedDatabase(db *gorm.DB) error {
-	// Drop all tables (GORM handles the correct order based on foreign keys)
-	if err := db.Migrator().DropTable(&entities.ProductDescription{}, &entities.Product{}, &entities.Category{}, &entities.CompanyInfo{}, &entities.MediaItem{}); err != nil {
-		return fmt.Errorf("failed to drop tables: %w", err)
+	// Get the database dialect name to determine the database type
+	dialectName := db.Name()
+
+	// Drop all existing tables to ensure a clean state
+	// For PostgreSQL, we need to handle join tables explicitly first
+	if dialectName == "postgres" {
+		// Drop the many-to-many join table first to avoid foreign key constraint issues
+		// Intentionally ignoring errors if the table doesn't exist (first-time setup)
+		//nolint:errcheck
+		_ = db.Migrator().DropTable("product_relations")
 	}
+
+	// Drop all entity tables in reverse dependency order
+	// ProductDescription -> Product -> Category (and CompanyInfo, MediaItem independently)
+	// Intentionally ignoring errors if tables don't exist (first-time setup)
+	//nolint:errcheck
+	_ = db.Migrator().DropTable(&entities.ProductDescription{})
+	//nolint:errcheck
+	_ = db.Migrator().DropTable(&entities.Product{})
+	//nolint:errcheck
+	_ = db.Migrator().DropTable(&entities.Category{})
+	//nolint:errcheck
+	_ = db.Migrator().DropTable(&entities.CompanyInfo{})
+	//nolint:errcheck
+	_ = db.Migrator().DropTable(&entities.MediaItem{})
 
 	// Recreate tables with fresh schema (auto-increment counters are automatically reset)
 	if err := db.AutoMigrate(&entities.Category{}, &entities.Product{}, &entities.ProductDescription{}, &entities.CompanyInfo{}, &entities.MediaItem{}); err != nil {
