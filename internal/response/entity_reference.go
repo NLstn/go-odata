@@ -26,6 +26,14 @@ func WriteEntityReference(w http.ResponseWriter, r *http.Request, entityID strin
 	SetODataVersionHeader(w)
 	w.WriteHeader(http.StatusOK)
 
+	if r.Method == http.MethodHead {
+		jsonBytes, err := json.Marshal(response)
+		if err == nil {
+			w.Header().Set("Content-Length", fmt.Sprintf("%d", len(jsonBytes)))
+		}
+		return nil
+	}
+
 	encoder := json.NewEncoder(w)
 	encoder.SetEscapeHTML(false)
 	return encoder.Encode(response)
@@ -64,6 +72,14 @@ func WriteEntityReferenceCollection(w http.ResponseWriter, r *http.Request, enti
 	w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
 	SetODataVersionHeader(w)
 	w.WriteHeader(http.StatusOK)
+
+	if r.Method == http.MethodHead {
+		jsonBytes, err := json.Marshal(response)
+		if err == nil {
+			w.Header().Set("Content-Length", fmt.Sprintf("%d", len(jsonBytes)))
+		}
+		return nil
+	}
 
 	encoder := json.NewEncoder(w)
 	encoder.SetEscapeHTML(false)

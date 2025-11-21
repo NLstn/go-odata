@@ -52,7 +52,6 @@ func (h *EntityHandler) writeEntityResponseWithETag(w http.ResponseWriter, r *ht
 
 	// Get metadata level
 	metadataLevel := response.GetODataMetadataLevel(r)
-
 	contextURL := fmt.Sprintf(ODataContextFormat, response.BuildBaseURL(r), h.metadata.EntitySetName)
 
 	// Use pre-computed ETag if provided, otherwise generate it
@@ -66,20 +65,22 @@ func (h *EntityHandler) writeEntityResponseWithETag(w http.ResponseWriter, r *ht
 	if etagValue != "" {
 		w.Header().Set(HeaderETag, etagValue)
 	}
-
 	if status == 0 {
 		status = http.StatusOK
 	}
 
-	// Set Content-Type with dynamic metadata level
-	w.Header().Set(HeaderContentType, fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
-	w.WriteHeader(status)
-
-	// For HEAD requests, don't write the body
 	if r.Method == http.MethodHead {
+		jsonBytes, err := json.Marshal(odataResponse)
+		if err == nil {
+			w.Header().Set(HeaderContentType, fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
+			w.Header().Set("Content-Length", fmt.Sprintf("%d", len(jsonBytes)))
+		}
+		w.WriteHeader(status)
 		return
 	}
 
+	w.Header().Set(HeaderContentType, fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
+	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(odataResponse); err != nil {
 		h.logger.Error("Error writing entity response", "error", err)
 	}
