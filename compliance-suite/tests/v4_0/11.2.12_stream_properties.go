@@ -29,17 +29,10 @@ func StreamProperties() *framework.TestSuite {
 		return fmt.Sprintf("/MediaItems(%s)", ids[index]), nil
 	}
 
-	var productPath string
+	// Helper function to get product path for each test
+	// Note: Must refetch on each call because database is reseeded between tests
 	getProductPath := func(ctx *framework.TestContext) (string, error) {
-		if productPath != "" {
-			return productPath, nil
-		}
-		path, err := firstEntityPath(ctx, "Products")
-		if err != nil {
-			return "", err
-		}
-		productPath = path
-		return productPath, nil
+		return firstEntityPath(ctx, "Products")
 	}
 
 	// Test 1: Request media entity
