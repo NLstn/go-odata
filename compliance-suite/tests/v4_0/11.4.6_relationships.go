@@ -146,7 +146,7 @@ func Relationships() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode == 404  {
+			if resp.StatusCode == 404 {
 				return ctx.Skip("$ref operations not fully implemented")
 			}
 
@@ -173,7 +173,7 @@ func Relationships() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode == 404  {
+			if resp.StatusCode == 404 {
 				return ctx.Skip("$ref operations not fully implemented")
 			}
 

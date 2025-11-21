@@ -19,17 +19,17 @@ func ConditionalRequests() *framework.TestSuite {
 		if err != nil {
 			return "", "", err
 		}
-		
+
 		// Fetch the product to get its ETag
 		resp, err := ctx.GET(path)
 		if err != nil {
 			return "", "", err
 		}
-		
+
 		if err := ctx.AssertStatusCode(resp, 200); err != nil {
 			return "", "", err
 		}
-		
+
 		etag := resp.Headers.Get("ETag")
 		return path, etag, nil
 	}
@@ -54,7 +54,7 @@ func ConditionalRequests() *framework.TestSuite {
 			if err != nil {
 				return err
 			}
-			
+
 			body := string(resp.Body)
 			if framework.ContainsAny(body, `"@odata.etag"`) {
 				return nil
@@ -74,7 +74,7 @@ func ConditionalRequests() *framework.TestSuite {
 			if err != nil {
 				return err
 			}
-			
+
 			if etag == "" {
 				return ctx.Skip("No ETag support")
 			}
@@ -97,7 +97,7 @@ func ConditionalRequests() *framework.TestSuite {
 			if err != nil {
 				return err
 			}
-			
+
 			if etag == "" {
 				return ctx.Skip("No ETag support")
 			}
@@ -120,7 +120,7 @@ func ConditionalRequests() *framework.TestSuite {
 			if err != nil {
 				return err
 			}
-			
+
 			if etag == "" {
 				return ctx.Skip("No ETag support")
 			}
@@ -154,7 +154,7 @@ func ConditionalRequests() *framework.TestSuite {
 			if err != nil {
 				return err
 			}
-			
+
 			if etag == "" {
 				return ctx.Skip("No ETag support")
 			}
@@ -183,7 +183,7 @@ func ConditionalRequests() *framework.TestSuite {
 			if err != nil {
 				return err
 			}
-			
+
 			if etag == "" {
 				return ctx.Skip("No ETag support")
 			}

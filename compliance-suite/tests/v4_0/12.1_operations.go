@@ -35,7 +35,7 @@ func Operations() *framework.TestSuite {
 				// Validate response is valid OData collection or entity
 				return ctx.AssertJSONField(resp, "value")
 			}
-			
+
 			// 404 indicates function not defined (acceptable if not in metadata)
 			if resp.StatusCode == 404 {
 				return ctx.Skip("Unbound function not defined in service")
@@ -59,7 +59,7 @@ func Operations() *framework.TestSuite {
 			if resp.StatusCode == 200 {
 				return ctx.AssertJSONField(resp, "value")
 			}
-			
+
 			// 404 indicates function not defined
 			if resp.StatusCode == 404 {
 				return ctx.Skip("Unbound function with parameters not defined in service")
@@ -91,7 +91,7 @@ func Operations() *framework.TestSuite {
 				}
 				return nil
 			}
-			
+
 			// 404 indicates function not bound to this entity type
 			if resp.StatusCode == 404 {
 				return ctx.Skip("Bound function not defined for this entity type")
@@ -118,7 +118,7 @@ func Operations() *framework.TestSuite {
 				}
 				return nil
 			}
-			
+
 			// 404 indicates function not bound to this collection
 			if resp.StatusCode == 404 {
 				return ctx.Skip("Collection-bound function not defined for Products")
@@ -144,7 +144,7 @@ func Operations() *framework.TestSuite {
 			if resp.StatusCode == 200 || resp.StatusCode == 204 {
 				return nil
 			}
-			
+
 			// 404 indicates action not defined
 			if resp.StatusCode == 404 {
 				return ctx.Skip("Unbound action not defined in service")
@@ -176,7 +176,7 @@ func Operations() *framework.TestSuite {
 			if resp.StatusCode == 200 || resp.StatusCode == 204 {
 				return nil
 			}
-			
+
 			// 404 indicates action not bound to this entity type
 			if resp.StatusCode == 404 {
 				return ctx.Skip("Bound action not defined for this entity type")
@@ -203,7 +203,7 @@ func Operations() *framework.TestSuite {
 				}
 				return nil
 			}
-			
+
 			// 404 indicates operation not defined
 			if resp.StatusCode == 404 {
 				return ctx.Skip("Operation not defined in service")

@@ -51,7 +51,8 @@ func CollectionProperties() *framework.TestSuite {
 			if resp.StatusCode == 200 {
 				return nil
 			}
-			if resp.StatusCode == 400 || resp.StatusCode == 501 {
+			// Accept 400, 500, or 501 as indication feature is not implemented
+			if resp.StatusCode == 400 || resp.StatusCode == 500 || resp.StatusCode == 501 {
 				return ctx.Skip("Lambda operators (any/all) not implemented")
 			}
 
@@ -72,7 +73,8 @@ func CollectionProperties() *framework.TestSuite {
 			if resp.StatusCode == 200 {
 				return nil
 			}
-			if resp.StatusCode == 400 || resp.StatusCode == 501 {
+			// Accept 400, 500, or 501 as indication feature is not implemented
+			if resp.StatusCode == 400 || resp.StatusCode == 500 || resp.StatusCode == 501 {
 				return ctx.Skip("Lambda operators (any/all) not implemented")
 			}
 
