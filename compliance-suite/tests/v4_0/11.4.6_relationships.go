@@ -14,44 +14,31 @@ func Relationships() *framework.TestSuite {
 		"https://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part1-protocol/odata-v4.0-errata03-os-part1-protocol-complete.html#sec_ManagingRelationships",
 	)
 
-	var (
-		productPath          string
-		productSegment       string
-		secondProductSegment string
-		categorySegment      string
-	)
-
-	ensureProductSegments := func(ctx *framework.TestContext) error {
-		if productSegment != "" && secondProductSegment != "" {
-			return nil
-		}
+	// Helper functions to get fresh entity IDs for each test
+	// Note: These must refetch IDs each time because the database is reseeded between tests
+	ensureProductSegments := func(ctx *framework.TestContext) (string, string, string, error) {
 		ids, err := fetchEntityIDs(ctx, "Products", 2)
 		if err != nil {
-			return err
+			return "", "", "", err
 		}
 		if len(ids) == 0 {
-			return fmt.Errorf("no products available for relationship tests")
+			return "", "", "", fmt.Errorf("no products available for relationship tests")
 		}
-		productSegment = fmt.Sprintf("Products(%s)", ids[0])
-		productPath = "/" + productSegment
+		productSegment := fmt.Sprintf("Products(%s)", ids[0])
+		productPath := "/" + productSegment
+		secondProductSegment := productSegment
 		if len(ids) > 1 {
 			secondProductSegment = fmt.Sprintf("Products(%s)", ids[1])
-		} else {
-			secondProductSegment = productSegment
 		}
-		return nil
+		return productPath, productSegment, secondProductSegment, nil
 	}
 
-	ensureCategorySegment := func(ctx *framework.TestContext) error {
-		if categorySegment != "" {
-			return nil
-		}
+	ensureCategorySegment := func(ctx *framework.TestContext) (string, error) {
 		id, err := firstEntityID(ctx, "Categories")
 		if err != nil {
-			return err
+			return "", err
 		}
-		categorySegment = fmt.Sprintf("Categories(%s)", id)
-		return nil
+		return fmt.Sprintf("Categories(%s)", id), nil
 	}
 
 	// Test 1: Read entity reference with $ref
@@ -59,7 +46,8 @@ func Relationships() *framework.TestSuite {
 		"test_read_entity_reference",
 		"Read entity reference with $ref",
 		func(ctx *framework.TestContext) error {
-			if err := ensureProductSegments(ctx); err != nil {
+			productPath, _, _, err := ensureProductSegments(ctx)
+			if err != nil {
 				return err
 			}
 			resp, err := ctx.GET(productPath + "/Category/$ref")
@@ -84,7 +72,8 @@ func Relationships() *framework.TestSuite {
 		"test_read_collection_references",
 		"Read collection of entity references",
 		func(ctx *framework.TestContext) error {
-			if err := ensureProductSegments(ctx); err != nil {
+			productPath, _, _, err := ensureProductSegments(ctx)
+			if err != nil {
 				return err
 			}
 			resp, err := ctx.GET(productPath + "/RelatedProducts/$ref")
@@ -109,10 +98,12 @@ func Relationships() *framework.TestSuite {
 		"test_create_entity_reference",
 		"Create/update entity reference with PUT",
 		func(ctx *framework.TestContext) error {
-			if err := ensureProductSegments(ctx); err != nil {
+			productPath, _, _, err := ensureProductSegments(ctx)
+			if err != nil {
 				return err
 			}
-			if err := ensureCategorySegment(ctx); err != nil {
+			categorySegment, err := ensureCategorySegment(ctx)
+			if err != nil {
 				return err
 			}
 			payload := map[string]interface{}{
@@ -142,7 +133,8 @@ func Relationships() *framework.TestSuite {
 		"test_add_reference_collection",
 		"Add entity reference to collection with POST",
 		func(ctx *framework.TestContext) error {
-			if err := ensureProductSegments(ctx); err != nil {
+			productPath, _, secondProductSegment, err := ensureProductSegments(ctx)
+			if err != nil {
 				return err
 			}
 			payload := map[string]interface{}{
@@ -172,7 +164,8 @@ func Relationships() *framework.TestSuite {
 		"test_delete_entity_reference",
 		"Delete entity reference with DELETE",
 		func(ctx *framework.TestContext) error {
-			if err := ensureProductSegments(ctx); err != nil {
+			productPath, _, _, err := ensureProductSegments(ctx)
+			if err != nil {
 				return err
 			}
 			resp, err := ctx.DELETE(productPath + "/Category/$ref")
@@ -193,7 +186,8 @@ func Relationships() *framework.TestSuite {
 		"test_invalid_reference",
 		"Invalid @odata.id in reference returns 400",
 		func(ctx *framework.TestContext) error {
-			if err := ensureProductSegments(ctx); err != nil {
+			productPath, _, _, err := ensureProductSegments(ctx)
+			if err != nil {
 				return err
 			}
 			payload := map[string]interface{}{

@@ -12,21 +12,26 @@ func ConditionalRequests() *framework.TestSuite {
 		"https://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part1-protocol/odata-v4.0-errata03-os-part1-protocol-complete.html#sec_ConditionalRequests",
 	)
 
-	var (
-		etag        string
-		productPath string
-	)
-
-	getProductPath := func(ctx *framework.TestContext) (string, error) {
-		if productPath != "" {
-			return productPath, nil
-		}
+	// Helper function to get product path and ETag for each test
+	// Note: Must refetch on each call because database is reseeded between tests
+	getProductAndETag := func(ctx *framework.TestContext) (string, string, error) {
 		path, err := firstEntityPath(ctx, "Products")
 		if err != nil {
-			return "", err
+			return "", "", err
 		}
-		productPath = path
-		return productPath, nil
+		
+		// Fetch the product to get its ETag
+		resp, err := ctx.GET(path)
+		if err != nil {
+			return "", "", err
+		}
+		
+		if err := ctx.AssertStatusCode(resp, 200); err != nil {
+			return "", "", err
+		}
+		
+		etag := resp.Headers.Get("ETag")
+		return path, etag, nil
 	}
 
 	// Test 1: Entity with @odata.etag should include ETag header
@@ -34,25 +39,22 @@ func ConditionalRequests() *framework.TestSuite {
 		"test_etag_header",
 		"Response includes ETag header for entity with @odata.etag",
 		func(ctx *framework.TestContext) error {
-			path, err := getProductPath(ctx)
-			if err != nil {
-				return err
-			}
-			resp, err := ctx.GET(path)
+			path, etag, err := getProductAndETag(ctx)
 			if err != nil {
 				return err
 			}
 
-			if err := ctx.AssertStatusCode(resp, 200); err != nil {
-				return err
-			}
-
-			etag = resp.Headers.Get("ETag")
 			if etag != "" {
 				return nil
 			}
 
 			// ETags are optional, check if @odata.etag is in body
+			// Re-fetch to get body since we already consumed it in getProductAndETag
+			resp, err := ctx.GET(path)
+			if err != nil {
+				return err
+			}
+			
 			body := string(resp.Body)
 			if framework.ContainsAny(body, `"@odata.etag"`) {
 				return nil
@@ -68,14 +70,15 @@ func ConditionalRequests() *framework.TestSuite {
 		"test_if_none_match_matching",
 		"If-None-Match with matching ETag returns 304 Not Modified",
 		func(ctx *framework.TestContext) error {
+			path, etag, err := getProductAndETag(ctx)
+			if err != nil {
+				return err
+			}
+			
 			if etag == "" {
 				return ctx.Skip("No ETag support")
 			}
 
-			path, err := getProductPath(ctx)
-			if err != nil {
-				return err
-			}
 			resp, err := ctx.GET(path, framework.Header{Key: "If-None-Match", Value: etag})
 			if err != nil {
 				return err
@@ -90,14 +93,15 @@ func ConditionalRequests() *framework.TestSuite {
 		"test_if_none_match_non_matching",
 		"If-None-Match with non-matching ETag returns 200",
 		func(ctx *framework.TestContext) error {
+			path, etag, err := getProductAndETag(ctx)
+			if err != nil {
+				return err
+			}
+			
 			if etag == "" {
 				return ctx.Skip("No ETag support")
 			}
 
-			path, err := getProductPath(ctx)
-			if err != nil {
-				return err
-			}
 			resp, err := ctx.GET(path, framework.Header{Key: "If-None-Match", Value: `"different-etag"`})
 			if err != nil {
 				return err
@@ -112,17 +116,17 @@ func ConditionalRequests() *framework.TestSuite {
 		"test_if_match_matching",
 		"If-Match with matching ETag allows PATCH",
 		func(ctx *framework.TestContext) error {
+			path, etag, err := getProductAndETag(ctx)
+			if err != nil {
+				return err
+			}
+			
 			if etag == "" {
 				return ctx.Skip("No ETag support")
 			}
 
 			payload := map[string]interface{}{
 				"Name": "Test update",
-			}
-
-			path, err := getProductPath(ctx)
-			if err != nil {
-				return err
 			}
 
 			resp, err := ctx.PATCH(path, payload,
@@ -146,6 +150,11 @@ func ConditionalRequests() *framework.TestSuite {
 		"test_if_match_non_matching",
 		"If-Match with non-matching ETag returns 412 Precondition Failed",
 		func(ctx *framework.TestContext) error {
+			path, etag, err := getProductAndETag(ctx)
+			if err != nil {
+				return err
+			}
+			
 			if etag == "" {
 				return ctx.Skip("No ETag support")
 			}
@@ -154,10 +163,6 @@ func ConditionalRequests() *framework.TestSuite {
 				"Name": "Test update",
 			}
 
-			path, err := getProductPath(ctx)
-			if err != nil {
-				return err
-			}
 			resp, err := ctx.PATCH(path, payload,
 				framework.Header{Key: "Content-Type", Value: "application/json"},
 				framework.Header{Key: "If-Match", Value: `"wrong-etag"`})
@@ -174,6 +179,11 @@ func ConditionalRequests() *framework.TestSuite {
 		"test_if_match_wildcard",
 		"If-Match: * allows update regardless of ETag",
 		func(ctx *framework.TestContext) error {
+			path, etag, err := getProductAndETag(ctx)
+			if err != nil {
+				return err
+			}
+			
 			if etag == "" {
 				return ctx.Skip("No ETag support")
 			}
@@ -182,10 +192,6 @@ func ConditionalRequests() *framework.TestSuite {
 				"Name": "Test update with wildcard",
 			}
 
-			path, err := getProductPath(ctx)
-			if err != nil {
-				return err
-			}
 			resp, err := ctx.PATCH(path, payload,
 				framework.Header{Key: "Content-Type", Value: "application/json"},
 				framework.Header{Key: "If-Match", Value: "*"})

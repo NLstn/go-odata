@@ -760,6 +760,7 @@ func (h *EntityHandler) handlePutNavigationPropertyRef(w http.ResponseWriter, r 
 
 	// Update the navigation property reference
 	if err := h.updateNavigationPropertyReference(entityKey, navProp, targetKey); err != nil {
+		h.logger.Error("Failed to update navigation property reference", "error", err, "entityKey", entityKey, "navProp", navProp.Name, "targetKey", targetKey)
 		WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError,
 			fmt.Sprintf("Failed to update navigation property: %v", err))
 		return
@@ -829,6 +830,7 @@ func (h *EntityHandler) handlePostNavigationPropertyRef(w http.ResponseWriter, r
 
 	// Add the reference to the collection navigation property
 	if err := h.addNavigationPropertyReference(entityKey, navProp, targetKey); err != nil {
+		h.logger.Error("Failed to add navigation property reference", "error", err, "entityKey", entityKey, "navProp", navProp.Name, "targetKey", targetKey)
 		WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError,
 			fmt.Sprintf("Failed to add navigation property reference: %v", err))
 		return
@@ -857,6 +859,7 @@ func (h *EntityHandler) handleDeleteNavigationPropertyRef(w http.ResponseWriter,
 	if navProp.NavigationIsArray && targetKey != "" {
 		// DELETE specific reference from collection: EntitySet(key)/NavProp(targetKey)/$ref
 		if err := h.deleteCollectionNavigationPropertyReference(entityKey, navProp, targetKey); err != nil {
+			h.logger.Error("Failed to delete collection navigation property reference", "error", err, "entityKey", entityKey, "navProp", navProp.Name, "targetKey", targetKey)
 			WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError,
 				fmt.Sprintf("Failed to delete navigation property reference: %v", err))
 			return
@@ -870,6 +873,7 @@ func (h *EntityHandler) handleDeleteNavigationPropertyRef(w http.ResponseWriter,
 		// Single-valued navigation property
 		// Remove the reference by setting the navigation property to null
 		if err := h.deleteNavigationPropertyReference(entityKey, navProp); err != nil {
+			h.logger.Error("Failed to delete single navigation property reference", "error", err, "entityKey", entityKey, "navProp", navProp.Name)
 			WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError,
 				fmt.Sprintf("Failed to delete navigation property reference: %v", err))
 			return

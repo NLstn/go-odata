@@ -428,7 +428,12 @@ func (c *TestContext) debugResponse(resp *HTTPResponse) {
 // AssertStatusCode checks if the response has the expected status code
 func (c *TestContext) AssertStatusCode(resp *HTTPResponse, expected int) error {
 	if resp.StatusCode != expected {
-		return fmt.Errorf("status code: %d (expected %d)", resp.StatusCode, expected)
+		// Include response body in error message for debugging
+		bodyPreview := string(resp.Body)
+		if len(bodyPreview) > 200 {
+			bodyPreview = bodyPreview[:200] + "..."
+		}
+		return fmt.Errorf("status code: %d (expected %d), body: %s", resp.StatusCode, expected, bodyPreview)
 	}
 	return nil
 }

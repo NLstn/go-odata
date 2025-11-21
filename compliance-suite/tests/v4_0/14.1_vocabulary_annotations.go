@@ -12,17 +12,10 @@ func VocabularyAnnotations() *framework.TestSuite {
 		"https://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part3-csdl/odata-v4.0-errata03-os-part3-csdl-complete.html#sec_Annotation",
 	)
 
-	var productPath string
+	// Helper function to get product path for each test
+	// Note: Must refetch on each call because database is reseeded between tests
 	getProductPath := func(ctx *framework.TestContext) (string, error) {
-		if productPath != "" {
-			return productPath, nil
-		}
-		path, err := firstEntityPath(ctx, "Products")
-		if err != nil {
-			return "", err
-		}
-		productPath = path
-		return productPath, nil
+		return firstEntityPath(ctx, "Products")
 	}
 
 	// Test 1: Metadata document structure supports annotations
