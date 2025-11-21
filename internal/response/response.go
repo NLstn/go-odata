@@ -147,13 +147,18 @@ func WriteServiceDocument(w http.ResponseWriter, r *http.Request, entitySets []s
 	}
 
 	metadataLevel := GetODataMetadataLevel(r)
-	w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
-	w.WriteHeader(http.StatusOK)
-
 	if r.Method == http.MethodHead {
+		jsonBytes, err := json.Marshal(serviceDoc)
+		if err == nil {
+			w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
+			w.Header().Set("Content-Length", fmt.Sprintf("%d", len(jsonBytes)))
+		}
+		w.WriteHeader(http.StatusOK)
 		return nil
 	}
 
+	w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
+	w.WriteHeader(http.StatusOK)
 	encoder := json.NewEncoder(w)
 	encoder.SetEscapeHTML(false)
 	return encoder.Encode(serviceDoc)
