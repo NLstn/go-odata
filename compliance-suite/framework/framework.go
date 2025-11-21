@@ -20,6 +20,7 @@ type TestSuite struct {
 	Results     *TestResults
 	ServerURL   string
 	Debug       bool
+	Verbose     bool
 	Client      *http.Client
 }
 
@@ -108,17 +109,22 @@ func (s *TestSuite) AddTest(name, description string, fn func(*TestContext) erro
 
 // Run executes all tests in the suite
 func (s *TestSuite) Run() error {
-	fmt.Println("======================================")
-	fmt.Printf("OData v4 Compliance Test\n")
-	fmt.Printf("Suite: %s\n", s.Name)
-	fmt.Println("======================================")
-	fmt.Println()
-	fmt.Printf("Description: %s\n", s.Description)
-	fmt.Println()
-	fmt.Printf("Spec Reference: %s\n", s.SpecURL)
-	fmt.Println()
+	if s.Verbose {
+		fmt.Println("======================================")
+		fmt.Printf("OData v4 Compliance Test\n")
+		fmt.Printf("Suite: %s\n", s.Name)
+		fmt.Println("======================================")
+		fmt.Println()
+		fmt.Printf("Description: %s\n", s.Description)
+		fmt.Println()
+		fmt.Printf("Spec Reference: %s\n", s.SpecURL)
+		fmt.Println()
+	} else {
+		// In non-verbose mode, show a simple progress message
+		fmt.Printf("Running %d tests... ", len(s.Tests))
+	}
 
-	for _, test := range s.Tests {
+	for i, test := range s.Tests {
 		s.Results.Total++
 		ctx := &TestContext{
 			suite:  s,
@@ -128,8 +134,10 @@ func (s *TestSuite) Run() error {
 
 		// Reseed the database before each test to ensure clean state and isolation
 		if err := s.reseedDatabase(); err != nil {
-			fmt.Printf("\n⚠ WARNING: Failed to reseed database before test '%s': %v\n", test.Description, err)
-			fmt.Println("Continuing with existing data...")
+			if s.Verbose {
+				fmt.Printf("\n⚠ WARNING: Failed to reseed database before test '%s': %v\n", test.Description, err)
+				fmt.Println("Continuing with existing data...")
+			}
 		}
 
 		err := test.Fn(ctx)
@@ -137,30 +145,45 @@ func (s *TestSuite) Run() error {
 			if skipErr, ok := err.(*SkipError); ok {
 				s.Results.Skipped++
 				s.Results.Details = append(s.Results.Details, TestDetail{
-					Name:   test.Name,
+					Name:   test.Description,
 					Status: StatusSkip,
 					Error:  skipErr.Reason,
 				})
-				fmt.Printf("\n⊘ SKIP: %s\n", test.Description)
-				fmt.Printf("  Reason: %s\n", skipErr.Reason)
+				if s.Verbose {
+					fmt.Printf("\n⊘ SKIP: %s\n", test.Description)
+					fmt.Printf("  Reason: %s\n", skipErr.Reason)
+				}
 			} else {
 				s.Results.Failed++
 				s.Results.Details = append(s.Results.Details, TestDetail{
-					Name:   test.Name,
+					Name:   test.Description,
 					Status: StatusFail,
 					Error:  err.Error(),
 				})
-				fmt.Printf("\n✗ FAIL: %s\n", test.Description)
-				fmt.Printf("  Details: %s\n", err.Error())
+				if s.Verbose {
+					fmt.Printf("\n✗ FAIL: %s\n", test.Description)
+					fmt.Printf("  Details: %s\n", err.Error())
+				}
 			}
 		} else {
 			s.Results.Passed++
 			s.Results.Details = append(s.Results.Details, TestDetail{
-				Name:   test.Name,
+				Name:   test.Description,
 				Status: StatusPass,
 			})
-			fmt.Printf("\n✓ PASS: %s\n", test.Description)
+			if s.Verbose {
+				fmt.Printf("\n✓ PASS: %s\n", test.Description)
+			}
 		}
+
+		// Print progress dots in non-verbose mode
+		if !s.Verbose && (i+1)%10 == 0 {
+			fmt.Printf("%d/%d ", i+1, len(s.Tests))
+		}
+	}
+
+	if !s.Verbose {
+		fmt.Printf("Done\n")
 	}
 
 	s.PrintSummary()
@@ -183,6 +206,20 @@ func (s *TestSuite) PrintSummary() {
 		fmt.Println("Status: PASSING")
 	} else {
 		fmt.Println("Status: FAILING")
+		
+		// Print failed tests list
+		if !s.Verbose && s.Results.Failed > 0 {
+			fmt.Println()
+			fmt.Println("Failed Tests:")
+			for _, detail := range s.Results.Details {
+				if detail.Status == StatusFail {
+					fmt.Printf("  ✗ %s\n", detail.Name)
+					if detail.Error != "" {
+						fmt.Printf("    Error: %s\n", detail.Error)
+					}
+				}
+			}
+		}
 	}
 }
 
