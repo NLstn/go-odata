@@ -39,6 +39,15 @@ Those tests are used to check OData spec compatibility end to end using the comp
 - `ctx.AssertBodyContains(resp, text)` - validate response body content
 - `return ctx.Skip("reason")` - skip tests not yet implemented
 
+**CRITICAL: Test Strictness Requirements:**
+- Tests MUST validate actual feature behavior, not just HTTP response codes
+- Tests MUST NOT accept 404 (Not Found) or 501 (Not Implemented) as passing responses
+- If a feature returns 404/501, the test must FAIL or be marked as SKIPPED with `ctx.Skip("feature not implemented")`
+- Tests must verify that the feature works correctly according to the OData specification
+- Example: A $filter test must verify that filtering actually works, not just that the endpoint returns 200
+- Example: An $expand test must verify that related entities are actually expanded in the response
+- Tests should validate response structure, data correctness, and spec-compliant behavior
+
 ## Test Structure
 
 Compliance tests are written in Go using the `framework` package.
