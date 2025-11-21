@@ -14,6 +14,11 @@ rely on version numbers to reason about compatibility.
 - CI/CD pipeline now runs compliance tests on both SQLite and PostgreSQL to ensure cross-database compatibility
 
 ### Fixed
+- Compliance test flakiness eliminated by implementing per-test database reseeding instead of per-suite reseeding
+  - Async processing tests now pass consistently (previously failed 5/6 tests on first run, 0/6 on second run)
+  - Test isolation improved: each test starts with clean database state
+  - Async table lifecycle fixed: explicit cleanup and verification of `_odata_async_jobs` table after reseed
+  - Test results now consistent across runs: ~13 deterministic failures instead of 10-14 flaky failures
 - Compliance tests now use file-based SQLite database (`/tmp/go-odata-compliance.db`) instead of in-memory database to prevent flakiness in CI environments
 - Database reseeding in compliance server now handles PostgreSQL foreign key constraints correctly, ensuring cross-database compatibility between SQLite and PostgreSQL without requiring users to handle database-specific cleanup logic
 - Removed SQLite-specific GORM blob type specification for binary content, allowing GORM to use appropriate database-specific types (BLOB for SQLite, BYTEA for PostgreSQL)

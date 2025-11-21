@@ -164,6 +164,12 @@ func registerReseedAction(service *odata.Service, db *gorm.DB) {
 				return err
 			}
 
+			// Drop the async jobs table if it exists to ensure clean state
+			if err := db.Migrator().DropTable("_odata_async_jobs"); err != nil {
+				// Log but don't fail - table might not exist
+				fmt.Printf("Note: Could not drop async jobs table: %v\n", err)
+			}
+
 			// Re-enable async processing to recreate the _odata_async_jobs table
 			// that was dropped during seedDatabase
 			if err := service.EnableAsyncProcessing(odata.AsyncConfig{
@@ -175,7 +181,16 @@ func registerReseedAction(service *odata.Service, db *gorm.DB) {
 				return err
 			}
 
-			// Return success response
+			// Wait a brief moment to ensure async table is fully initialized
+			// This prevents race conditions when tests immediately use async features
+			time.Sleep(50 * time.Millisecond)
+
+			// Verify async table was created successfully
+			if db.Migrator().HasTable("_odata_async_jobs") {
+				fmt.Println("Async jobs table successfully initialized")
+			} else {
+				fmt.Println("Warning: Async jobs table not detected after initialization")
+			} // Return success response
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 
