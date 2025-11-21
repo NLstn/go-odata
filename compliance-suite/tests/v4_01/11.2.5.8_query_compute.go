@@ -24,16 +24,16 @@ func QueryCompute() *framework.TestSuite {
 				return err
 			}
 
-			// Accept 200 (supported) or 400/501 (not supported yet)
-			if resp.StatusCode == 200 {
-				return nil
-			}
-			if resp.StatusCode == 400 || resp.StatusCode == 501 {
-				ctx.Log("$compute not supported (optional OData v4.01 feature)")
-				return nil
+			if err := requireStatusOK(resp); err != nil {
+				return err
 			}
 
-			return framework.NewError(fmt.Sprintf("Expected 200, 400, or 501 but got %d", resp.StatusCode))
+			entities, err := decodeCollection(resp)
+			if err != nil {
+				return err
+			}
+
+			return ensureComputedProperties(entities, "PriceWithTax")
 		},
 	)
 
@@ -47,11 +47,16 @@ func QueryCompute() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode == 200 || resp.StatusCode == 400 || resp.StatusCode == 501 {
-				return nil
+			if err := requireStatusOK(resp); err != nil {
+				return err
 			}
 
-			return framework.NewError(fmt.Sprintf("Expected 200, 400, or 501 but got %d", resp.StatusCode))
+			entities, err := decodeCollection(resp)
+			if err != nil {
+				return err
+			}
+
+			return ensureComputedProperties(entities, "UpperName")
 		},
 	)
 
@@ -65,11 +70,16 @@ func QueryCompute() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode == 200 || resp.StatusCode == 400 || resp.StatusCode == 501 {
-				return nil
+			if err := requireStatusOK(resp); err != nil {
+				return err
 			}
 
-			return framework.NewError(fmt.Sprintf("Expected 200, 400, or 501 but got %d", resp.StatusCode))
+			entities, err := decodeCollection(resp)
+			if err != nil {
+				return err
+			}
+
+			return ensureComputedProperties(entities, "DoublePrice")
 		},
 	)
 
@@ -83,11 +93,16 @@ func QueryCompute() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode == 200 || resp.StatusCode == 400 || resp.StatusCode == 501 {
-				return nil
+			if err := requireStatusOK(resp); err != nil {
+				return err
 			}
 
-			return framework.NewError(fmt.Sprintf("Expected 200, 400, or 501 but got %d", resp.StatusCode))
+			entities, err := decodeCollection(resp)
+			if err != nil {
+				return err
+			}
+
+			return ensureComputedProperties(entities, "PriceWithTax")
 		},
 	)
 
@@ -101,11 +116,16 @@ func QueryCompute() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode == 200 || resp.StatusCode == 400 || resp.StatusCode == 501 {
-				return nil
+			if err := requireStatusOK(resp); err != nil {
+				return err
 			}
 
-			return framework.NewError(fmt.Sprintf("Expected 200, 400, or 501 but got %d", resp.StatusCode))
+			entities, err := decodeCollection(resp)
+			if err != nil {
+				return err
+			}
+
+			return ensureComputedProperties(entities, "HalfPrice")
 		},
 	)
 
@@ -119,11 +139,16 @@ func QueryCompute() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode == 200 || resp.StatusCode == 400 || resp.StatusCode == 501 {
-				return nil
+			if err := requireStatusOK(resp); err != nil {
+				return err
 			}
 
-			return framework.NewError(fmt.Sprintf("Expected 200, 400, or 501 but got %d", resp.StatusCode))
+			entities, err := decodeCollection(resp)
+			if err != nil {
+				return err
+			}
+
+			return ensureComputedProperties(entities, "WithTax", "Discounted")
 		},
 	)
 
@@ -137,11 +162,16 @@ func QueryCompute() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode == 200 || resp.StatusCode == 400 || resp.StatusCode == 501 {
-				return nil
+			if err := requireStatusOK(resp); err != nil {
+				return err
 			}
 
-			return framework.NewError(fmt.Sprintf("Expected 200, 400, or 501 but got %d", resp.StatusCode))
+			entities, err := decodeCollection(resp)
+			if err != nil {
+				return err
+			}
+
+			return ensureComputedProperties(entities, "CreatedYear")
 		},
 	)
 
@@ -155,19 +185,14 @@ func QueryCompute() *framework.TestSuite {
 				return err
 			}
 
-			// Should return 400 when syntax is invalid, or 501 if not supported
 			if resp.StatusCode == 400 {
-				return nil
-			}
-			if resp.StatusCode == 501 {
-				ctx.Log("$compute not supported (optional)")
 				return nil
 			}
 			if resp.StatusCode == 200 {
 				return framework.NewError("Invalid syntax accepted")
 			}
 
-			return framework.NewError(fmt.Sprintf("Expected 400 or 501 but got %d", resp.StatusCode))
+			return framework.NewError(fmt.Sprintf("Expected 400 but got %d", resp.StatusCode))
 		},
 	)
 
@@ -181,11 +206,16 @@ func QueryCompute() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode == 200 || resp.StatusCode == 400 || resp.StatusCode == 501 {
-				return nil
+			if err := requireStatusOK(resp); err != nil {
+				return err
 			}
 
-			return framework.NewError(fmt.Sprintf("Expected 200, 400, or 501 but got %d", resp.StatusCode))
+			entities, err := decodeCollection(resp)
+			if err != nil {
+				return err
+			}
+
+			return ensureComputedProperties(entities, "Location")
 		},
 	)
 
@@ -199,11 +229,32 @@ func QueryCompute() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode == 200 || resp.StatusCode == 400 || resp.StatusCode == 501 {
-				return nil
+			if err := requireStatusOK(resp); err != nil {
+				return err
 			}
 
-			return framework.NewError(fmt.Sprintf("Expected 200, 400, or 501 but got %d", resp.StatusCode))
+			entities, err := decodeCollection(resp)
+			if err != nil {
+				return err
+			}
+
+			for i, entity := range entities {
+				categoryRaw, ok := entity["Category"]
+				if !ok {
+					return framework.NewError(fmt.Sprintf("entity %d missing expanded Category", i))
+				}
+
+				category, ok := categoryRaw.(map[string]interface{})
+				if !ok {
+					return framework.NewError(fmt.Sprintf("entity %d has invalid Category payload", i))
+				}
+
+				if _, ok := category["DoubleID"]; !ok {
+					return framework.NewError(fmt.Sprintf("entity %d expanded Category missing computed property \"DoubleID\"", i))
+				}
+			}
+
+			return nil
 		},
 	)
 
