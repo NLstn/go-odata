@@ -12,17 +12,18 @@ import (
 
 // handleMetadataXML handles XML metadata format (existing implementation)
 func (h *MetadataHandler) handleMetadataXML(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/xml")
-	w.WriteHeader(http.StatusOK)
-
-	if r.Method == http.MethodHead {
-		return
-	}
-
 	model := h.newMetadataModel()
 	h.onceXML.Do(func() {
 		h.cachedXML = h.buildMetadataDocument(model)
 	})
+
+	w.Header().Set("Content-Type", "application/xml")
+	w.WriteHeader(http.StatusOK)
+
+	if r.Method == http.MethodHead {
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(h.cachedXML)))
+		return
+	}
 
 	if _, err := w.Write([]byte(h.cachedXML)); err != nil {
 		h.logger.Error("Error writing metadata response", "error", err)
