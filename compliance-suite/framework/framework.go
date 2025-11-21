@@ -118,18 +118,18 @@ func (s *TestSuite) Run() error {
 	fmt.Printf("Spec Reference: %s\n", s.SpecURL)
 	fmt.Println()
 
-	// Reseed the database before running tests to ensure a clean state
-	if err := s.reseedDatabase(); err != nil {
-		fmt.Printf("⚠ WARNING: Failed to reseed database: %v\n", err)
-		fmt.Println("Continuing with existing data...")
-	}
-
 	for _, test := range s.Tests {
 		s.Results.Total++
 		ctx := &TestContext{
 			suite:  s,
 			name:   test.Name,
 			buffer: &bytes.Buffer{},
+		}
+
+		// Reseed the database before each test to ensure clean state and isolation
+		if err := s.reseedDatabase(); err != nil {
+			fmt.Printf("\n⚠ WARNING: Failed to reseed database before test '%s': %v\n", test.Description, err)
+			fmt.Println("Continuing with existing data...")
 		}
 
 		err := test.Fn(ctx)
