@@ -206,7 +206,7 @@ func (s *TestSuite) PrintSummary() {
 		fmt.Println("Status: PASSING")
 	} else {
 		fmt.Println("Status: FAILING")
-		
+
 		// Print failed tests list
 		if !s.Verbose && s.Results.Failed > 0 {
 			fmt.Println()
