@@ -84,7 +84,6 @@ func InstanceAnnotations() *framework.TestSuite {
 				return err
 			}
 
-
 			if err := ctx.AssertStatusCode(resp, 200); err != nil {
 				return err
 			}
@@ -106,7 +105,6 @@ func InstanceAnnotations() *framework.TestSuite {
 			if err != nil {
 				return err
 			}
-
 
 			if err := ctx.AssertStatusCode(resp, 200); err != nil {
 				return err
@@ -131,7 +129,6 @@ func InstanceAnnotations() *framework.TestSuite {
 			if err != nil {
 				return err
 			}
-
 
 			if err := ctx.AssertStatusCode(resp, 200); err != nil {
 				return err
