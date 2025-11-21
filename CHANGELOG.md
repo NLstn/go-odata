@@ -14,6 +14,7 @@ rely on version numbers to reason about compatibility.
 - CI/CD pipeline now runs compliance tests on both SQLite and PostgreSQL to ensure cross-database compatibility
 
 ### Fixed
+- Data race in async monitor configuration resolved by synchronizing access in the router, fixing `-race` CI test failures in `internal/service/runtime.TestServiceRespondAsyncFlow`.
 - Compliance test flakiness eliminated by implementing per-test database reseeding instead of per-suite reseeding
   - Async processing tests now pass consistently (previously failed 5/6 tests on first run, 0/6 on second run)
   - Test isolation improved: each test starts with clean database state

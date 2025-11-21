@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/nlstn/go-odata/internal/actions"
 	"github.com/nlstn/go-odata/internal/async"
@@ -52,6 +53,9 @@ type Router struct {
 	actionInvoker         ActionInvoker
 	logger                *slog.Logger
 
+	// Protects async monitor configuration to avoid races between
+	// SetAsyncMonitor and concurrent request handling.
+	asyncMu            sync.RWMutex
 	asyncManager       *async.Manager
 	asyncMonitorPrefix string
 }
@@ -209,21 +213,28 @@ func (r *Router) SetAsyncMonitor(prefix string, manager *async.Manager) {
 		}
 	}
 
+	r.asyncMu.Lock()
 	r.asyncMonitorPrefix = prefix
 	r.asyncManager = manager
+	r.asyncMu.Unlock()
 }
 
 func (r *Router) tryServeAsyncMonitor(w http.ResponseWriter, req *http.Request) bool {
-	if r.asyncManager == nil || r.asyncMonitorPrefix == "" || req == nil || req.URL == nil {
+	r.asyncMu.RLock()
+	manager := r.asyncManager
+	prefix := r.asyncMonitorPrefix
+	r.asyncMu.RUnlock()
+
+	if manager == nil || prefix == "" || req == nil || req.URL == nil {
 		return false
 	}
 
 	path := req.URL.Path
-	if !strings.HasPrefix(path, r.asyncMonitorPrefix) {
+	if !strings.HasPrefix(path, prefix) {
 		return false
 	}
 
-	suffix := strings.TrimPrefix(path, r.asyncMonitorPrefix)
+	suffix := strings.TrimPrefix(path, prefix)
 	if suffix == "" {
 		http.NotFound(w, req)
 		return true
@@ -237,7 +248,7 @@ func (r *Router) tryServeAsyncMonitor(w http.ResponseWriter, req *http.Request) 
 		return true
 	}
 
-	r.asyncManager.ServeMonitor(w, req)
+	manager.ServeMonitor(w, req)
 	return true
 }
 
