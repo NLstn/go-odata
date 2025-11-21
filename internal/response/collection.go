@@ -62,13 +62,18 @@ func writeODataCollectionResponse(w http.ResponseWriter, r *http.Request, entity
 		response["@odata.deltaLink"] = *deltaLink
 	}
 
-	w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
-	w.WriteHeader(http.StatusOK)
-
 	if r.Method == http.MethodHead {
+		jsonBytes, err := json.Marshal(response)
+		if err == nil {
+			w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
+			w.Header().Set("Content-Length", fmt.Sprintf("%d", len(jsonBytes)))
+		}
+		w.WriteHeader(http.StatusOK)
 		return nil
 	}
 
+	w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
+	w.WriteHeader(http.StatusOK)
 	encoder := json.NewEncoder(w)
 	encoder.SetEscapeHTML(false)
 	return encoder.Encode(response)
@@ -114,13 +119,18 @@ func writeODataCollectionWithNavigationResponse(w http.ResponseWriter, r *http.R
 		response["@odata.deltaLink"] = *deltaLink
 	}
 
-	w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
-	w.WriteHeader(http.StatusOK)
-
 	if r.Method == http.MethodHead {
+		jsonBytes, err := json.Marshal(response)
+		if err == nil {
+			w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
+			w.Header().Set("Content-Length", fmt.Sprintf("%d", len(jsonBytes)))
+		}
+		w.WriteHeader(http.StatusOK)
 		return nil
 	}
 
+	w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
+	w.WriteHeader(http.StatusOK)
 	encoder := json.NewEncoder(w)
 	encoder.SetEscapeHTML(false)
 	return encoder.Encode(response)
@@ -150,13 +160,18 @@ func WriteODataDeltaResponse(w http.ResponseWriter, r *http.Request, entitySetNa
 		response["@odata.deltaLink"] = *deltaLink
 	}
 
-	w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
-	w.WriteHeader(http.StatusOK)
-
 	if r.Method == http.MethodHead {
+		jsonBytes, err := json.Marshal(response)
+		if err == nil {
+			w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
+			w.Header().Set("Content-Length", fmt.Sprintf("%d", len(jsonBytes)))
+		}
+		w.WriteHeader(http.StatusOK)
 		return nil
 	}
 
+	w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
+	w.WriteHeader(http.StatusOK)
 	encoder := json.NewEncoder(w)
 	encoder.SetEscapeHTML(false)
 	return encoder.Encode(response)

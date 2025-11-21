@@ -12,17 +12,18 @@ import (
 
 // handleMetadataJSON handles JSON metadata format (CSDL JSON)
 func (h *MetadataHandler) handleMetadataJSON(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-
-	if r.Method == http.MethodHead {
-		return
-	}
-
 	model := h.newMetadataModel()
 	h.onceJSON.Do(func() {
 		h.cachedJSON = h.buildMetadataJSON(model)
 	})
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	if r.Method == http.MethodHead {
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(h.cachedJSON)))
+		return
+	}
 
 	if _, err := w.Write(h.cachedJSON); err != nil {
 		h.logger.Error("Error writing JSON metadata response", "error", err)
