@@ -56,6 +56,36 @@ The main test runner (`main.go`) provides:
 - Comprehensive test reporting
 - Exit codes for CI/CD integration
 
+### Output Modes
+
+The compliance suite supports two output modes:
+
+**Normal Mode (default)**
+- Shows progress indicators: "Running X tests... 10/20 ... Done"
+- Shows test result summary with pass/fail/skip counts
+- Lists failed tests (if any) at the end with error details
+- Ideal for CI/CD pipelines and quick local testing
+
+**Verbose Mode (`-verbose`)**
+- Shows full suite description and spec reference
+- Shows individual test results: ✓ PASS, ✗ FAIL, ⊘ SKIP
+- Shows detailed error messages for each failure
+- Ideal for debugging and development
+
+Example outputs:
+
+```bash
+# Normal mode - concise output
+Running 10 tests... 10/10 Done
+COMPLIANCE_TEST_RESULT:PASSED=10:FAILED=0:SKIPPED=0:TOTAL=10
+
+# Verbose mode - detailed output
+✓ PASS: Test should validate entity creation
+✓ PASS: Test should handle concurrent requests
+✗ FAIL: Test should validate deep insert
+  Error: expected status code 201 but got 500
+```
+
 ## Usage
 
 ### Running Tests
@@ -64,6 +94,9 @@ The main test runner (`main.go`) provides:
 # Run all tests (auto-starts compliance server)
 cd compliance-suite
 go run main.go
+
+# Run with verbose mode to see all test results
+go run main.go -verbose
 
 # Run with debug mode for full HTTP details
 go run main.go -debug
@@ -242,7 +275,7 @@ func Introduction() *framework.TestSuite {
     Run only tests matching pattern
 
 -verbose
-    Show detailed test output
+    Enable verbose mode to show all test results (default: only shows progress and summary)
 
 -debug
     Enable debug mode with full HTTP details

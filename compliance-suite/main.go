@@ -20,6 +20,7 @@ var (
 	version        = flag.String("version", "all", "OData version to test (4.0, 4.01, or all)")
 	pattern        = flag.String("pattern", "", "Run only tests matching pattern")
 	debug          = flag.Bool("debug", false, "Enable debug mode with full HTTP details")
+	verbose        = flag.Bool("verbose", false, "Enable verbose mode to show all test results")
 	externalServer = flag.Bool("external-server", false, "Use an external server (don't start/stop)")
 	outputFile     = flag.String("output", "compliance-report.md", "Output file for the report")
 )
@@ -48,6 +49,9 @@ func main() {
 	fmt.Printf("Report File: %s\n", *outputFile)
 	if *debug {
 		fmt.Println("Debug Mode: ENABLED")
+	}
+	if *verbose {
+		fmt.Println("Verbose Mode: ENABLED")
 	}
 	fmt.Println()
 
@@ -631,6 +635,7 @@ func main() {
 		suite := suiteInfo.Suite()
 		suite.ServerURL = *serverURL
 		suite.Debug = *debug
+		suite.Verbose = *verbose
 
 		versionPrefix := "V4"
 		if suiteInfo.Version == "4.01" {
