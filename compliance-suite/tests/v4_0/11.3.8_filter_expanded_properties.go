@@ -94,15 +94,48 @@ func RegisterFilterExpandedPropertiesTests(suite *framework.TestSuite) {
 }
 
 func testFilterAnyOnNavigation(ctx *framework.TestContext) error {
-	return ctx.Skip("Lambda operators (any/all) not yet implemented")
+	// Filter products that have descriptions in English
+	filter := url.QueryEscape("Descriptions/any(d: d/LanguageKey eq 'EN')")
+	resp, err := ctx.GET(fmt.Sprintf("/Products?$filter=%s", filter))
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+	}
+
+	return nil
 }
 
 func testFilterAllOnNavigation(ctx *framework.TestContext) error {
-	return ctx.Skip("Lambda operators (any/all) not yet implemented")
+	// Filter products where all descriptions are NOT in XX language (non-existent)
+	filter := url.QueryEscape("Descriptions/all(d: d/LanguageKey ne 'XX')")
+	resp, err := ctx.GET(fmt.Sprintf("/Products?$filter=%s", filter))
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+	}
+
+	return nil
 }
 
 func testFilterAnyComplex(ctx *framework.TestContext) error {
-	return ctx.Skip("Lambda operators (any/all) not yet implemented")
+	// Filter products with English descriptions containing "Laptop"
+	filter := url.QueryEscape("Descriptions/any(d: d/LanguageKey eq 'EN' and contains(d/Description, 'Laptop'))")
+	resp, err := ctx.GET(fmt.Sprintf("/Products?$filter=%s", filter))
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+	}
+
+	return nil
 }
 
 func testExpandWithNestedFilter(ctx *framework.TestContext) error {
@@ -135,29 +168,107 @@ func testFilterBothLevels(ctx *framework.TestContext) error {
 }
 
 func testAnyWithStringFunction(ctx *framework.TestContext) error {
-	return ctx.Skip("Lambda operators (any/all) not yet implemented")
+	// Filter products with descriptions containing "laptop" (case insensitive via contains)
+	filter := url.QueryEscape("Descriptions/any(d: contains(d/Description, 'laptop'))")
+	resp, err := ctx.GET(fmt.Sprintf("/Products?$filter=%s", filter))
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+	}
+
+	return nil
 }
 
 func testMultipleAnyFilters(ctx *framework.TestContext) error {
-	return ctx.Skip("Lambda operators (any/all) not yet implemented")
+	// Filter products that have both EN and DE descriptions
+	filter := url.QueryEscape("Descriptions/any(d: d/LanguageKey eq 'EN') and Descriptions/any(d: d/LanguageKey eq 'DE')")
+	resp, err := ctx.GET(fmt.Sprintf("/Products?$filter=%s", filter))
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+	}
+
+	return nil
 }
 
 func testNavigationFilterOr(ctx *framework.TestContext) error {
-	return ctx.Skip("Lambda operators (any/all) not yet implemented")
+	// Filter products with descriptions in EN or DE language
+	filter := url.QueryEscape("Descriptions/any(d: d/LanguageKey eq 'EN' or d/LanguageKey eq 'DE')")
+	resp, err := ctx.GET(fmt.Sprintf("/Products?$filter=%s", filter))
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+	}
+
+	return nil
 }
 
 func testNestedAnyCondition(ctx *framework.TestContext) error {
-	return ctx.Skip("Lambda operators (any/all) not yet implemented")
+	// Complex condition with string function and comparison
+	filter := url.QueryEscape("Descriptions/any(d: contains(d/Description, 'laptop') and d/LanguageKey eq 'EN')")
+	resp, err := ctx.GET(fmt.Sprintf("/Products?$filter=%s", filter))
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+	}
+
+	return nil
 }
 
 func testExpandAndFilterSameNav(ctx *framework.TestContext) error {
-	return ctx.Skip("Lambda operators (any/all) not yet implemented")
+	// Apply both $filter and $expand on same navigation property
+	filter := url.QueryEscape("Descriptions/any(d: d/LanguageKey eq 'EN')")
+	expand := "Descriptions"
+	resp, err := ctx.GET(fmt.Sprintf("/Products?$filter=%s&$expand=%s", filter, expand))
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+	}
+
+	return nil
 }
 
 func testNotAnyOnNavigation(ctx *framework.TestContext) error {
-	return ctx.Skip("Lambda operators (any/all) not yet implemented")
+	// Filter products that do NOT have any descriptions in French
+	filter := url.QueryEscape("not Descriptions/any(d: d/LanguageKey eq 'FR')")
+	resp, err := ctx.GET(fmt.Sprintf("/Products?$filter=%s", filter))
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+	}
+
+	return nil
 }
 
 func testComplexCombinedFilter(ctx *framework.TestContext) error {
-	return ctx.Skip("Lambda operators (any/all) not yet implemented")
+	// Combine entity property filter with navigation property filter
+	filter := url.QueryEscape("Price gt 100 and Descriptions/any(d: d/LanguageKey eq 'EN')")
+	resp, err := ctx.GET(fmt.Sprintf("/Products?$filter=%s", filter))
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+	}
+
+	return nil
 }
