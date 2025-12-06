@@ -614,36 +614,69 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Run tests
-	fmt.Println("═════════════════════════════════════════════════════════")
-	fmt.Println()
+	// Prepare suites (apply pattern filter) so we can compute totals for concise progress output
+	type preparedSuite struct {
+		info          TestSuiteInfo
+		suite         *framework.TestSuite
+		versionPrefix string
+	}
 
-	totalSuites := 0
-	passedSuites := 0
-	totalTests := 0
-	passedTests := 0
-	failedTests := 0
-	skippedTests := 0
+	var suitesToRun []preparedSuite
+	totalPlannedTests := 0
 
 	for _, suiteInfo := range testSuites {
-		// Skip if pattern is specified and doesn't match
 		if *pattern != "" && !strings.Contains(suiteInfo.Name, *pattern) {
 			continue
 		}
 
-		totalSuites++
 		suite := suiteInfo.Suite()
 		suite.ServerURL = *serverURL
 		suite.Debug = *debug
 		suite.Verbose = *verbose
+		suite.Quiet = !*verbose
 
 		versionPrefix := "V4"
 		if suiteInfo.Version == "4.01" {
 			versionPrefix = "V4.01"
 		}
 
-		fmt.Printf("\033[0;34mRunning: [%s] %s\033[0m\n", versionPrefix, suiteInfo.Name)
-		fmt.Println("─────────────────────────────────────────────────────────")
+		totalPlannedTests += len(suite.Tests)
+
+		suitesToRun = append(suitesToRun, preparedSuite{
+			info:          suiteInfo,
+			suite:         suite,
+			versionPrefix: versionPrefix,
+		})
+	}
+
+	if len(suitesToRun) == 0 {
+		fmt.Println("No test suites matched the provided pattern.")
+		os.Exit(1)
+	}
+
+	// Run tests
+	fmt.Println("═════════════════════════════════════════════════════════")
+	fmt.Println()
+
+	totalSuites := len(suitesToRun)
+	passedSuites := 0
+	totalTests := 0
+	passedTests := 0
+	failedTests := 0
+	skippedTests := 0
+
+	if !*verbose {
+		fmt.Printf("Running %d suites (%d total tests)\n", totalSuites, totalPlannedTests)
+		fmt.Println()
+	}
+
+	for idx, prepared := range suitesToRun {
+		suite := prepared.suite
+
+		if *verbose {
+			fmt.Printf("\033[0;34mRunning: [%s] %s\033[0m\n", prepared.versionPrefix, prepared.info.Name)
+			fmt.Println("─────────────────────────────────────────────────────────")
+		}
 
 		err := suite.Run()
 
@@ -656,6 +689,19 @@ func main() {
 			passedSuites++
 		}
 
+		if *verbose {
+			fmt.Println()
+		} else {
+			progressLine := fmt.Sprintf(
+				"Progress: suites %d/%d | tests %d/%d | passed %d | failed %d | skipped %d",
+				idx+1, totalSuites, totalTests, totalPlannedTests, passedTests, failedTests, skippedTests,
+			)
+			fmt.Printf("\r%-80s", progressLine)
+		}
+	}
+
+	if !*verbose {
+		fmt.Println()
 		fmt.Println()
 	}
 
