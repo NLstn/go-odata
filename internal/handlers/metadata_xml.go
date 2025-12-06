@@ -18,13 +18,14 @@ func (h *MetadataHandler) handleMetadataXML(w http.ResponseWriter, r *http.Reque
 	})
 
 	w.Header().Set("Content-Type", "application/xml")
-	w.WriteHeader(http.StatusOK)
 
 	if r.Method == http.MethodHead {
 		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(h.cachedXML)))
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 
+	w.WriteHeader(http.StatusOK)
 	if _, err := w.Write([]byte(h.cachedXML)); err != nil {
 		h.logger.Error("Error writing metadata response", "error", err)
 	}
