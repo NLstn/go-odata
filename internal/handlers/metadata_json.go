@@ -18,14 +18,13 @@ func (h *MetadataHandler) handleMetadataJSON(w http.ResponseWriter, r *http.Requ
 	})
 
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(h.cachedJSON)))
 
 	if r.Method == http.MethodHead {
-		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(h.cachedJSON)))
 		w.WriteHeader(http.StatusOK)
 		return
 	}
 
-	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(h.cachedJSON)))
 	w.WriteHeader(http.StatusOK)
 	if _, err := w.Write(h.cachedJSON); err != nil {
 		h.logger.Error("Error writing JSON metadata response", "error", err)
