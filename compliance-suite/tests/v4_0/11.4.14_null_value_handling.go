@@ -14,7 +14,7 @@ func NullValueHandling() *framework.TestSuite {
 		"https://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part1-protocol/odata-v4.0-errata03-os-part1-protocol-complete.html",
 	)
 
-	var createdID int
+	var createdID string
 
 	// Test 1: Create entity with null property
 	suite.AddTest(
@@ -42,8 +42,8 @@ func NullValueHandling() *framework.TestSuite {
 				return err
 			}
 
-			if id, ok := data["ID"].(float64); ok {
-				createdID = int(id)
+			if id, ok := data["ID"].(string); ok {
+				createdID = id
 			}
 
 			return nil
@@ -55,11 +55,11 @@ func NullValueHandling() *framework.TestSuite {
 		"test_retrieve_null_property",
 		"Retrieve entity returns null property correctly",
 		func(ctx *framework.TestContext) error {
-			if createdID == 0 {
+			if createdID == "" {
 				return ctx.Skip("No test entity available")
 			}
 
-			resp, err := ctx.GET(fmt.Sprintf("/Products(%d)", createdID))
+			resp, err := ctx.GET(fmt.Sprintf("/Products(%s)", createdID))
 			if err != nil {
 				return err
 			}
@@ -83,7 +83,7 @@ func NullValueHandling() *framework.TestSuite {
 		"test_patch_to_null",
 		"Update property to null using PATCH",
 		func(ctx *framework.TestContext) error {
-			if createdID == 0 {
+			if createdID == "" {
 				return ctx.Skip("No test entity available")
 			}
 
@@ -91,7 +91,7 @@ func NullValueHandling() *framework.TestSuite {
 				"Description": nil,
 			}
 
-			resp, err := ctx.PATCH(fmt.Sprintf("/Products(%d)", createdID), payload, framework.Header{Key: "Content-Type", Value: "application/json"})
+			resp, err := ctx.PATCH(fmt.Sprintf("/Products(%s)", createdID), payload, framework.Header{Key: "Content-Type", Value: "application/json"})
 			if err != nil {
 				return err
 			}
