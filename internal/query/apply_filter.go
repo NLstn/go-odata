@@ -205,9 +205,11 @@ func buildLambdaCondition(filter *FilterExpression, entityMetadata *metadata.Ent
 	if relatedEntityName == "" {
 		relatedEntityName = navProp.JsonName
 	}
-	relatedTableName := toSnakeCase(pluralize(relatedEntityName))
+	// Use PascalCase for table names (e.g., "ProductDescriptions", "Products")
+	relatedTableName := pluralize(relatedEntityName)
 
-	parentTableName := toSnakeCase(pluralize(entityMetadata.EntityName))
+	// Use PascalCase for parent table name (e.g., "Products", "Categories")
+	parentTableName := pluralize(entityMetadata.EntityName)
 
 	foreignKeyColumn := toSnakeCase(entityMetadata.EntityName) + "_id"
 
