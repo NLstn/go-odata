@@ -61,10 +61,10 @@ The main test runner (`main.go`) provides:
 The compliance suite supports two output modes:
 
 **Normal Mode (default)**
-- Shows progress indicators: "Running X tests... 10/20 ... Done"
-- Shows test result summary with pass/fail/skip counts
-- Lists failed tests (if any) at the end with error details
+- Shows a single progress line with suite and test counts
+- Prints only the overall result summary (pass/fail/skip totals)
 - Ideal for CI/CD pipelines and quick local testing
+- Use `-verbose` to see per-suite and per-test details
 
 **Verbose Mode (`-verbose`)**
 - Shows full suite description and spec reference
@@ -76,14 +76,26 @@ Example outputs:
 
 ```bash
 # Normal mode - concise output
-Running 10 tests... 10/10 Done
-COMPLIANCE_TEST_RESULT:PASSED=10:FAILED=0:SKIPPED=0:TOTAL=10
+Running 105 suites (666 total tests)
+
+Progress: suites 105/105 | tests 666/666 | passed 666 | failed 0 | skipped 0
+
+╔════════════════════════════════════════════════════════╗
+║                  OVERALL SUMMARY                       ║
+╚════════════════════════════════════════════════════════╝
+Test Scripts: 105/105 passed (100%)
+Individual Tests:
+    - Total: 666
+    - Passing: 666
+    - Failing: 0
+    - Skipped: 0
+    - Pass Rate: 100%
 
 # Verbose mode - detailed output
 ✓ PASS: Test should validate entity creation
 ✓ PASS: Test should handle concurrent requests
 ✗ FAIL: Test should validate deep insert
-  Error: expected status code 201 but got 500
+    Error: expected status code 201 but got 500
 ```
 
 ## Usage

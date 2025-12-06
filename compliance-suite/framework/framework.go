@@ -21,6 +21,7 @@ type TestSuite struct {
 	ServerURL   string
 	Debug       bool
 	Verbose     bool
+	Quiet       bool
 	Client      *http.Client
 }
 
@@ -119,8 +120,8 @@ func (s *TestSuite) Run() error {
 		fmt.Println()
 		fmt.Printf("Spec Reference: %s\n", s.SpecURL)
 		fmt.Println()
-	} else {
-		// In non-verbose mode, show a simple progress message
+	} else if !s.Quiet {
+		// In non-verbose mode, show a simple progress message unless suppressed
 		fmt.Printf("Running %d tests... ", len(s.Tests))
 	}
 
@@ -176,17 +177,19 @@ func (s *TestSuite) Run() error {
 			}
 		}
 
-		// Print progress dots in non-verbose mode
-		if !s.Verbose && (i+1)%10 == 0 {
+		// Print progress dots in non-verbose, non-quiet mode
+		if !s.Verbose && !s.Quiet && (i+1)%10 == 0 {
 			fmt.Printf("%d/%d ", i+1, len(s.Tests))
 		}
 	}
 
-	if !s.Verbose {
+	if !s.Verbose && !s.Quiet {
 		fmt.Printf("Done\n")
 	}
 
-	s.PrintSummary()
+	if !s.Quiet {
+		s.PrintSummary()
+	}
 
 	if s.Results.Failed > 0 {
 		return fmt.Errorf("%d test(s) failed", s.Results.Failed)

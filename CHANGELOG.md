@@ -60,6 +60,7 @@ rely on version numbers to reason about compatibility.
   root-level surface area while keeping exported APIs unchanged.
 - Async job managers now apply a 24-hour default retention window when no
   duration is provided and continue purging expired rows in the background.
+- Compliance suite default output is now concise (overall progress and summary only); use `-verbose` for per-suite and per-test details.
 
 ### Fixed
 
