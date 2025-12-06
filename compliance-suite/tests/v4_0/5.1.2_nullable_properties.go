@@ -28,8 +28,8 @@ func NullableProperties() *framework.TestSuite {
 			}
 			resp, err := ctx.POST("/ProductDescriptions", map[string]interface{}{
 				"ProductID":   productID,
-				"LanguageKey": "IT",
-				"Description": "Italian description",
+				"LanguageKey": "T1",
+				"Description": "Test description with null",
 				"LongText":    nil,
 			})
 			if err != nil {
@@ -99,8 +99,8 @@ func NullableProperties() *framework.TestSuite {
 			}
 			createResp, err := ctx.POST("/ProductDescriptions", map[string]interface{}{
 				"ProductID":   pid,
-				"LanguageKey": "FR",
-				"Description": "French description",
+				"LanguageKey": "T2",
+				"Description": "Test description for null representation",
 				"LongText":    nil,
 			})
 			if err != nil {
@@ -154,8 +154,8 @@ func NullableProperties() *framework.TestSuite {
 			}
 			createResp, err := ctx.POST("/ProductDescriptions", map[string]interface{}{
 				"ProductID":   pid,
-				"LanguageKey": "ES",
-				"Description": "Spanish description",
+				"LanguageKey": "T3",
+				"Description": "Test description for nullable update",
 				"LongText":    "Some long text",
 			})
 			if err != nil {
@@ -231,8 +231,8 @@ func NullableProperties() *framework.TestSuite {
 			}
 			createResp, err := ctx.POST("/ProductDescriptions", map[string]interface{}{
 				"ProductID":   pid,
-				"LanguageKey": "PT",
-				"Description": "Portuguese description",
+				"LanguageKey": "T4",
+				"Description": "Test description for null property access",
 				"LongText":    nil,
 			})
 			if err != nil {
@@ -295,7 +295,7 @@ func NullableProperties() *framework.TestSuite {
 			}
 			resp, err := ctx.POST("/ProductDescriptions", map[string]interface{}{
 				"ProductID":   pid,
-				"LanguageKey": "NL",
+				"LanguageKey": "T5",
 				"Description": nil, // Description is non-nullable
 				"LongText":    "Some text",
 			})
