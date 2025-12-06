@@ -71,10 +71,15 @@ func (h *EntityHandler) writeEntityResponseWithETag(w http.ResponseWriter, r *ht
 
 	if r.Method == http.MethodHead {
 		jsonBytes, err := json.Marshal(odataResponse)
-		if err == nil {
-			w.Header().Set(HeaderContentType, fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
-			w.Header().Set("Content-Length", fmt.Sprintf("%d", len(jsonBytes)))
+		if err != nil {
+			h.logger.Error("Error marshaling entity response for HEAD request", "error", err)
+			if writeErr := response.WriteError(w, http.StatusInternalServerError, "Internal Server Error", "Failed to marshal response for HEAD request."); writeErr != nil {
+				h.logger.Error("Error writing error response", "error", writeErr)
+			}
+			return
 		}
+		w.Header().Set(HeaderContentType, fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(jsonBytes)))
 		w.WriteHeader(status)
 		return
 	}

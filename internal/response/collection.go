@@ -64,10 +64,11 @@ func writeODataCollectionResponse(w http.ResponseWriter, r *http.Request, entity
 
 	if r.Method == http.MethodHead {
 		jsonBytes, err := json.Marshal(response)
-		if err == nil {
-			w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
-			w.Header().Set("Content-Length", fmt.Sprintf("%d", len(jsonBytes)))
+		if err != nil {
+			return WriteError(w, http.StatusInternalServerError, "Internal Server Error", "Failed to marshal response to JSON")
 		}
+		w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(jsonBytes)))
 		w.WriteHeader(http.StatusOK)
 		return nil
 	}
@@ -121,10 +122,11 @@ func writeODataCollectionWithNavigationResponse(w http.ResponseWriter, r *http.R
 
 	if r.Method == http.MethodHead {
 		jsonBytes, err := json.Marshal(response)
-		if err == nil {
-			w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
-			w.Header().Set("Content-Length", fmt.Sprintf("%d", len(jsonBytes)))
+		if err != nil {
+			return WriteError(w, http.StatusInternalServerError, "Internal Server Error", "Failed to serialize response to JSON.")
 		}
+		w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(jsonBytes)))
 		w.WriteHeader(http.StatusOK)
 		return nil
 	}
@@ -162,10 +164,11 @@ func WriteODataDeltaResponse(w http.ResponseWriter, r *http.Request, entitySetNa
 
 	if r.Method == http.MethodHead {
 		jsonBytes, err := json.Marshal(response)
-		if err == nil {
-			w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
-			w.Header().Set("Content-Length", fmt.Sprintf("%d", len(jsonBytes)))
+		if err != nil {
+			return err
 		}
+		w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(jsonBytes)))
 		w.WriteHeader(http.StatusOK)
 		return nil
 	}

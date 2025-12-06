@@ -149,10 +149,11 @@ func WriteServiceDocument(w http.ResponseWriter, r *http.Request, entitySets []s
 	metadataLevel := GetODataMetadataLevel(r)
 	if r.Method == http.MethodHead {
 		jsonBytes, err := json.Marshal(serviceDoc)
-		if err == nil {
-			w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
-			w.Header().Set("Content-Length", fmt.Sprintf("%d", len(jsonBytes)))
+		if err != nil {
+			return WriteError(w, http.StatusInternalServerError, "Internal Server Error", "Failed to marshal service document.")
 		}
+		w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(jsonBytes)))
 		w.WriteHeader(http.StatusOK)
 		return nil
 	}

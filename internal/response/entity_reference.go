@@ -22,18 +22,21 @@ func WriteEntityReference(w http.ResponseWriter, r *http.Request, entityID strin
 	}
 
 	metadataLevel := GetODataMetadataLevel(r)
-	w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
 	SetODataVersionHeader(w)
-	w.WriteHeader(http.StatusOK)
 
 	if r.Method == http.MethodHead {
 		jsonBytes, err := json.Marshal(response)
-		if err == nil {
-			w.Header().Set("Content-Length", fmt.Sprintf("%d", len(jsonBytes)))
+		if err != nil {
+			return WriteError(w, http.StatusInternalServerError, "Internal Server Error", "Failed to serialize response to JSON.")
 		}
+		w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(jsonBytes)))
+		w.WriteHeader(http.StatusOK)
 		return nil
 	}
 
+	w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
+	w.WriteHeader(http.StatusOK)
 	encoder := json.NewEncoder(w)
 	encoder.SetEscapeHTML(false)
 	return encoder.Encode(response)
@@ -69,18 +72,21 @@ func WriteEntityReferenceCollection(w http.ResponseWriter, r *http.Request, enti
 	}
 
 	metadataLevel := GetODataMetadataLevel(r)
-	w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
 	SetODataVersionHeader(w)
-	w.WriteHeader(http.StatusOK)
 
 	if r.Method == http.MethodHead {
 		jsonBytes, err := json.Marshal(response)
-		if err == nil {
-			w.Header().Set("Content-Length", fmt.Sprintf("%d", len(jsonBytes)))
+		if err != nil {
+			return WriteError(w, http.StatusInternalServerError, "Internal Server Error", "Failed to serialize response to JSON.")
 		}
+		w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(jsonBytes)))
+		w.WriteHeader(http.StatusOK)
 		return nil
 	}
 
+	w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
+	w.WriteHeader(http.StatusOK)
 	encoder := json.NewEncoder(w)
 	encoder.SetEscapeHTML(false)
 	return encoder.Encode(response)
