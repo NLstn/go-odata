@@ -3,6 +3,45 @@ package odata
 // Package odata provides functionality for building OData services in Go.
 // This library allows you to define Go structs representing entities and
 // automatically handles the necessary OData protocol logic.
+//
+// # Hooks
+//
+// Entity types can optionally implement hook methods to inject custom business logic
+// at specific points in the request lifecycle. All hook methods are optional and are
+// automatically discovered via reflection.
+//
+// ## Lifecycle Hooks
+//
+// Implement these methods on your entity type to handle lifecycle events:
+//
+//	func (p *Product) BeforeCreate(ctx context.Context, r *http.Request) error
+//	func (p *Product) AfterCreate(ctx context.Context, r *http.Request) error
+//	func (p *Product) BeforeUpdate(ctx context.Context, r *http.Request) error
+//	func (p *Product) AfterUpdate(ctx context.Context, r *http.Request) error
+//	func (p *Product) BeforeDelete(ctx context.Context, r *http.Request) error
+//	func (p *Product) AfterDelete(ctx context.Context, r *http.Request) error
+//
+// Hooks have access to the request context and HTTP request, allowing you to validate
+// data, apply business rules, log changes, or check authentication/authorization.
+// Returning an error from a Before* hook aborts the operation and returns the error
+// to the client. Errors from After* hooks are logged but don't affect the response.
+//
+// ## Read Hooks
+//
+// Implement these methods to customize query behavior and response data:
+//
+//	func (p Product) BeforeReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error)
+//	func (p Product) AfterReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions, results interface{}) (interface{}, error)
+//	func (p Product) BeforeReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error)
+//	func (p Product) AfterReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions, entity interface{}) (interface{}, error)
+//
+// Before* read hooks return GORM scopes that are applied before OData query options
+// ($filter, $orderby, $top, $skip). Use them for authorization filters and eager-loading.
+// After* read hooks receive the final results after all query processing and can redact
+// sensitive data or append computed fields.
+//
+// See the EntityHook interface documentation for detailed hook descriptions and
+// the documentation directory for comprehensive examples and use cases.
 
 import (
 	"context"
@@ -29,6 +68,189 @@ import (
 
 // KeyGenerator describes a function that produces a key value for new entities.
 type KeyGenerator func(context.Context) (interface{}, error)
+
+// EntityHook defines optional lifecycle hooks that entity types can implement to inject
+// custom business logic at specific points in the request lifecycle.
+//
+// All hook methods are optional. If a method exists on an entity type, it will be
+// automatically detected and called at the appropriate time.
+//
+// Hook methods should be defined on the entity type. While you can use pointer or
+// value receivers, ensure consistency with how your entity is used elsewhere.
+//
+// # Lifecycle Hooks
+//
+// BeforeCreate is called before a new entity is created via POST request. Return an
+// error to prevent creation; the error will be returned to the client. Use this hook
+// for validation, authorization checks, or setting default values.
+//
+//	func (p *Product) BeforeCreate(ctx context.Context, r *http.Request) error {
+//	    if p.Price < 0 {
+//	        return fmt.Errorf("price cannot be negative")
+//	    }
+//	    p.CreatedAt = time.Now()
+//	    return nil
+//	}
+//
+// AfterCreate is called after a new entity has been successfully created and persisted
+// to the database. Errors returned are logged but do not affect the response to the client.
+// Use this hook for audit logging or triggering external notifications.
+//
+//	func (p *Product) AfterCreate(ctx context.Context, r *http.Request) error {
+//	    log.Printf("Product created: %s", p.Name)
+//	    return nil
+//	}
+//
+// BeforeUpdate is called before an entity is updated via PATCH or PUT request. Return
+// an error to prevent the update. Use this for validation, authorization, or tracking
+// what changed.
+//
+//	func (p *Product) BeforeUpdate(ctx context.Context, r *http.Request) error {
+//	    if p.Price < 0 {
+//	        return fmt.Errorf("price cannot be negative")
+//	    }
+//	    return nil
+//	}
+//
+// AfterUpdate is called after an entity has been successfully updated. Errors are logged
+// but do not affect the response. Use this for audit logging.
+//
+// BeforeDelete is called before an entity is deleted via DELETE request. Return an error
+// to prevent deletion. Use this for authorization checks or protecting special entities.
+//
+//	func (p *Product) BeforeDelete(ctx context.Context, r *http.Request) error {
+//	    if p.IsProtected {
+//	        return fmt.Errorf("cannot delete protected products")
+//	    }
+//	    return nil
+//	}
+//
+// AfterDelete is called after an entity has been successfully deleted. Errors are logged
+// but do not affect the response. Use this for audit logging or cleanup.
+//
+// # Accessing the Transaction
+//
+// Write hooks (Before/After Create/Update/Delete) execute inside a shared GORM transaction.
+// Use TransactionFromContext to participate in the same transaction:
+//
+//	func (p *Product) BeforeCreate(ctx context.Context, r *http.Request) error {
+//	    tx, ok := TransactionFromContext(ctx)
+//	    if !ok {
+//	        return fmt.Errorf("transaction unavailable")
+//	    }
+//
+//	    audit := AuditLog{ProductID: p.ID, Action: "CREATE"}
+//	    if err := tx.Create(&audit).Error; err != nil {
+//	        return err
+//	    }
+//	    return nil
+//	}
+//
+// Any error returned aborts the operation and rolls back all changes made via
+// the shared transaction.
+type EntityHook interface {
+	// BeforeCreate is called before a new entity is created via POST.
+	// Return an error to prevent the creation and return that error to the client.
+	BeforeCreate(ctx context.Context, r *http.Request) error
+
+	// AfterCreate is called after a new entity has been successfully created.
+	// Any error returned will be logged but won't affect the response to the client.
+	AfterCreate(ctx context.Context, r *http.Request) error
+
+	// BeforeUpdate is called before an entity is updated via PATCH or PUT.
+	// Return an error to prevent the update and return that error to the client.
+	BeforeUpdate(ctx context.Context, r *http.Request) error
+
+	// AfterUpdate is called after an entity has been successfully updated.
+	// Any error returned will be logged but won't affect the response to the client.
+	AfterUpdate(ctx context.Context, r *http.Request) error
+
+	// BeforeDelete is called before an entity is deleted via DELETE.
+	// Return an error to prevent the deletion and return that error to the client.
+	BeforeDelete(ctx context.Context, r *http.Request) error
+
+	// AfterDelete is called after an entity has been successfully deleted.
+	// Any error returned will be logged but won't affect the response to the client.
+	AfterDelete(ctx context.Context, r *http.Request) error
+}
+
+// ReadHook defines optional read hooks that entity types can implement to customize
+// query behavior and response data.
+//
+// All read hook methods are optional. Unlike EntityHook which is an interface,
+// these are standalone methods that are discovered via reflection on your entity type.
+//
+// # Before Read Hooks
+//
+// BeforeReadCollection is called before fetching a collection. It returns GORM scopes
+// that are applied before OData query options ($filter, $orderby, $top, $skip).
+//
+//	func (p Product) BeforeReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
+//	    // Apply tenant filter
+//	    tenantID := r.Header.Get("X-Tenant-ID")
+//	    if tenantID == "" {
+//	        return nil, fmt.Errorf("missing tenant header")
+//	    }
+//	    return []func(*gorm.DB) *gorm.DB{
+//	        func(db *gorm.DB) *gorm.DB { return db.Where("tenant_id = ?", tenantID) },
+//	    }, nil
+//	}
+//
+// BeforeReadEntity is called before fetching a single entity. It works the same as
+// BeforeReadCollection but for individual entity reads. Return scopes for authorization
+// filters or eager-loading related data.
+//
+// # After Read Hooks
+//
+// AfterReadCollection is called after fetching a collection. It receives the results
+// after all query processing and can redact sensitive data or transform the response.
+// Return nil, nil to keep the original response.
+//
+//	func (p Product) AfterReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions, results interface{}) (interface{}, error) {
+//	    products, ok := results.([]Product)
+//	    if !ok {
+//	        return results, nil
+//	    }
+//	    // Redact cost price for non-privileged users
+//	    if !isPrivileged(r) {
+//	        for i := range products {
+//	            products[i].CostPrice = 0
+//	        }
+//	    }
+//	    return products, nil
+//	}
+//
+// AfterReadEntity is called after fetching a single entity. It works the same as
+// AfterReadCollection but for individual entity reads.
+//
+// # Hook Execution Order
+//
+// For any operation, hooks execute in this order:
+//
+//	Create: BeforeCreate -> INSERT -> AfterCreate
+//	Update: BeforeUpdate -> UPDATE -> AfterUpdate
+//	Delete: BeforeDelete -> DELETE -> AfterDelete
+//	Read:   BeforeRead* -> SELECT + OData options -> AfterRead*
+type ReadHook interface {
+	// BeforeReadCollection is called before fetching a collection.
+	// Return GORM scopes to apply before OData options ($filter, $orderby, etc).
+	// These scopes are ideal for authorization filters and eager-loading.
+	BeforeReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error)
+
+	// AfterReadCollection is called after fetching a collection.
+	// It receives the results after all query processing and can redact or transform them.
+	// Return nil, nil to keep the original response.
+	AfterReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions, results interface{}) (interface{}, error)
+
+	// BeforeReadEntity is called before fetching a single entity.
+	// Return GORM scopes to apply before OData options. Ideal for authorization and eager-loading.
+	BeforeReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error)
+
+	// AfterReadEntity is called after fetching a single entity.
+	// It receives the entity after all query processing and can redact or transform it.
+	// Return nil, nil to keep the original response.
+	AfterReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions, entity interface{}) (interface{}, error)
+}
 
 // ServiceConfig controls optional service behaviours.
 type ServiceConfig struct {
