@@ -16,12 +16,22 @@ type TestProduct struct {
 	Descriptions []TestProductDescription `json:"Descriptions" gorm:"foreignKey:TestProductID;references:ID"`
 }
 
+// TableName specifies the table name for TestProduct
+func (TestProduct) TableName() string {
+	return "TestProducts"
+}
+
 // TestProductDescription is a test entity for lambda applier tests
 type TestProductDescription struct {
 	TestProductID uint         `json:"TestProductID" gorm:"primaryKey;column:test_product_id"`
 	LanguageKey   string       `json:"LanguageKey" gorm:"primaryKey;size:2"`
 	Description   string       `json:"Description"`
 	Product       *TestProduct `gorm:"foreignKey:TestProductID;references:ID"`
+}
+
+// TableName specifies the table name for TestProductDescription
+func (TestProductDescription) TableName() string {
+	return "TestProductDescriptions"
 }
 
 // setupTestDB creates an in-memory database for testing
