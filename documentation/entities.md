@@ -184,13 +184,26 @@ Without quotes, the OData parser treats hyphens as operators, resulting in an er
 
 ### OData v4 GUID Type
 
-The OData v4 specification provides multiple ways to represent GUIDs:
+The OData v4 specification provides multiple ways to represent GUIDs, depending on how you define the field in Go:
 
-1. **String literal**: `'uuid-value'` - Use this in filters when your key is defined as a string type
-2. **Typed GUID**: `guid'uuid-value'` - Use this if your property is explicitly typed as `Edm.Guid` in the metadata
-3. **Raw value in path**: `uuid-value` - Use this for direct entity access by key
+**For `string` type UUIDs** (most common):
+```go
+ID string `json:"id" gorm:"type:uuid;primaryKey" odata:"key"`
+```
+- Exposed as `Edm.String` in OData metadata
+- **Key access**: `/Entity(uuid-value)` (no quotes)
+- **Filter**: `?$filter=field eq 'uuid-value'` (single quotes)
 
-Most Go applications store UUIDs as strings (using `string` type with `gorm:"type:uuid"`), so you'll typically use string literal syntax (`'uuid-value'`) in filters.
+**For `uuid.UUID` type UUIDs**:
+```go
+import "github.com/google/uuid"
+ID uuid.UUID `json:"id" gorm:"type:uuid;primaryKey" odata:"key"`
+```
+- Exposed as `Edm.Guid` in OData metadata
+- **Key access**: `/Entity(uuid-value)` or `/Entity(guid'uuid-value')` (both work)
+- **Filter**: `?$filter=field eq guid'uuid-value'` (typed GUID literal)
+
+Most Go applications use `string` type with `gorm:"type:uuid"`, so you'll typically use string literal syntax (`'uuid-value'`) in filters, not the `guid'value'` syntax.
 
 ### Complete Example
 
