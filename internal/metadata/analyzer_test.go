@@ -715,3 +715,96 @@ func TestSearchSimilarityValidation(t *testing.T) {
 		}
 	})
 }
+
+func TestAnalyzeEntity_AutoTag(t *testing.T) {
+	t.Run("auto tag on single field", func(t *testing.T) {
+		type AutoFieldEntity struct {
+			ID        int    `json:"id" odata:"key"`
+			Name      string `json:"name" odata:"required"`
+			CreatedAt string `json:"created_at" odata:"auto"`
+		}
+
+		meta, err := AnalyzeEntity(AutoFieldEntity{})
+		if err != nil {
+			t.Fatalf("Expected no error, got: %v", err)
+		}
+
+		// Check that the auto field is marked correctly
+		createdAtProp := meta.FindProperty("CreatedAt")
+		if createdAtProp == nil {
+			t.Fatal("Expected to find CreatedAt property")
+		}
+		if !createdAtProp.IsAuto {
+			t.Error("Expected CreatedAt property to be marked as auto")
+		}
+	})
+
+	t.Run("auto tag with other tags", func(t *testing.T) {
+		type MultiTagAutoEntity struct {
+			ID        int    `json:"id" odata:"key"`
+			Name      string `json:"name" odata:"required"`
+			CreatedAt string `json:"created_at" odata:"auto,required"`
+			UpdatedBy string `json:"updated_by" odata:"auto,maxlength=100"`
+		}
+
+		meta, err := AnalyzeEntity(MultiTagAutoEntity{})
+		if err != nil {
+			t.Fatalf("Expected no error, got: %v", err)
+		}
+
+		// Check CreatedAt field
+		createdAtProp := meta.FindProperty("CreatedAt")
+		if createdAtProp == nil {
+			t.Fatal("Expected to find CreatedAt property")
+		}
+		if !createdAtProp.IsAuto {
+			t.Error("Expected CreatedAt property to be marked as auto")
+		}
+		if !createdAtProp.IsRequired {
+			t.Error("Expected CreatedAt property to be marked as required")
+		}
+
+		// Check UpdatedBy field
+		updatedByProp := meta.FindProperty("UpdatedBy")
+		if updatedByProp == nil {
+			t.Fatal("Expected to find UpdatedBy property")
+		}
+		if !updatedByProp.IsAuto {
+			t.Error("Expected UpdatedBy property to be marked as auto")
+		}
+		if updatedByProp.MaxLength != 100 {
+			t.Errorf("Expected UpdatedBy MaxLength to be 100, got %d", updatedByProp.MaxLength)
+		}
+	})
+
+	t.Run("auto tag works with non-nullable types", func(t *testing.T) {
+		type NonNullableAutoEntity struct {
+			ID        int    `json:"id" odata:"key"`
+			Name      string `json:"name" odata:"required"`
+			CreatedAt string `json:"created_at" odata:"auto"` // string (non-nullable)
+			Count     int    `json:"count" odata:"auto"`      // int (non-nullable)
+		}
+
+		meta, err := AnalyzeEntity(NonNullableAutoEntity{})
+		if err != nil {
+			t.Fatalf("Expected no error for auto fields with non-nullable types, got: %v", err)
+		}
+
+		// Check that the auto fields are marked correctly
+		createdAtProp := meta.FindProperty("CreatedAt")
+		if createdAtProp == nil {
+			t.Fatal("Expected to find CreatedAt property")
+		}
+		if !createdAtProp.IsAuto {
+			t.Error("Expected CreatedAt property to be marked as auto")
+		}
+
+		countProp := meta.FindProperty("Count")
+		if countProp == nil {
+			t.Fatal("Expected to find Count property")
+		}
+		if !countProp.IsAuto {
+			t.Error("Expected Count property to be marked as auto")
+		}
+	})
+}
