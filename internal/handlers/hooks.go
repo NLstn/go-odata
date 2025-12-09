@@ -9,58 +9,58 @@ import (
 	"gorm.io/gorm"
 )
 
-// callBeforeCreate calls the BeforeCreate hook if it exists on the entity
+// callBeforeCreate calls the ODataBeforeCreate hook if it exists on the entity
 func (h *EntityHandler) callBeforeCreate(entity interface{}, r *http.Request) error {
-	if !h.metadata.Hooks.HasBeforeCreate {
+	if !h.metadata.Hooks.HasODataBeforeCreate {
 		return nil
 	}
 
-	return callHook(entity, "BeforeCreate", r)
+	return callHook(entity, "ODataBeforeCreate", r)
 }
 
-// callAfterCreate calls the AfterCreate hook if it exists on the entity
+// callAfterCreate calls the ODataAfterCreate hook if it exists on the entity
 func (h *EntityHandler) callAfterCreate(entity interface{}, r *http.Request) error {
-	if !h.metadata.Hooks.HasAfterCreate {
+	if !h.metadata.Hooks.HasODataAfterCreate {
 		return nil
 	}
 
-	return callHook(entity, "AfterCreate", r)
+	return callHook(entity, "ODataAfterCreate", r)
 }
 
-// callBeforeUpdate calls the BeforeUpdate hook if it exists on the entity
+// callBeforeUpdate calls the ODataBeforeUpdate hook if it exists on the entity
 func (h *EntityHandler) callBeforeUpdate(entity interface{}, r *http.Request) error {
-	if !h.metadata.Hooks.HasBeforeUpdate {
+	if !h.metadata.Hooks.HasODataBeforeUpdate {
 		return nil
 	}
 
-	return callHook(entity, "BeforeUpdate", r)
+	return callHook(entity, "ODataBeforeUpdate", r)
 }
 
-// callAfterUpdate calls the AfterUpdate hook if it exists on the entity
+// callAfterUpdate calls the ODataAfterUpdate hook if it exists on the entity
 func (h *EntityHandler) callAfterUpdate(entity interface{}, r *http.Request) error {
-	if !h.metadata.Hooks.HasAfterUpdate {
+	if !h.metadata.Hooks.HasODataAfterUpdate {
 		return nil
 	}
 
-	return callHook(entity, "AfterUpdate", r)
+	return callHook(entity, "ODataAfterUpdate", r)
 }
 
-// callBeforeDelete calls the BeforeDelete hook if it exists on the entity
+// callBeforeDelete calls the ODataBeforeDelete hook if it exists on the entity
 func (h *EntityHandler) callBeforeDelete(entity interface{}, r *http.Request) error {
-	if !h.metadata.Hooks.HasBeforeDelete {
+	if !h.metadata.Hooks.HasODataBeforeDelete {
 		return nil
 	}
 
-	return callHook(entity, "BeforeDelete", r)
+	return callHook(entity, "ODataBeforeDelete", r)
 }
 
-// callAfterDelete calls the AfterDelete hook if it exists on the entity
+// callAfterDelete calls the ODataAfterDelete hook if it exists on the entity
 func (h *EntityHandler) callAfterDelete(entity interface{}, r *http.Request) error {
-	if !h.metadata.Hooks.HasAfterDelete {
+	if !h.metadata.Hooks.HasODataAfterDelete {
 		return nil
 	}
 
-	return callHook(entity, "AfterDelete", r)
+	return callHook(entity, "ODataAfterDelete", r)
 }
 
 // callHook invokes a hook method on an entity using reflection.
@@ -109,14 +109,14 @@ func callHook(entity interface{}, methodName string, r *http.Request) error {
 	return nil
 }
 
-// callBeforeReadCollection invokes the BeforeReadCollection hook if defined and returns any scopes it produces.
+// callBeforeReadCollection invokes the ODataBeforeReadCollection hook if defined and returns any scopes it produces.
 func callBeforeReadCollection(meta *metadata.EntityMetadata, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
-	if meta == nil || !meta.Hooks.HasBeforeReadCollection {
+	if meta == nil || !meta.Hooks.HasODataBeforeReadCollection {
 		return nil, nil
 	}
 
 	ctx := r.Context()
-	results, ok := invokeReadHook(meta, "BeforeReadCollection", ctx, r, opts)
+	results, ok := invokeReadHook(meta, "ODataBeforeReadCollection", ctx, r, opts)
 	if !ok || len(results) == 0 {
 		return nil, nil
 	}
@@ -139,14 +139,14 @@ func callBeforeReadCollection(meta *metadata.EntityMetadata, r *http.Request, op
 	return scopes, nil
 }
 
-// callAfterReadCollection invokes the AfterReadCollection hook if defined and returns an override when provided.
+// callAfterReadCollection invokes the ODataAfterReadCollection hook if defined and returns an override when provided.
 func callAfterReadCollection(meta *metadata.EntityMetadata, r *http.Request, opts *query.QueryOptions, results interface{}) (interface{}, bool, error) {
-	if meta == nil || !meta.Hooks.HasAfterReadCollection {
+	if meta == nil || !meta.Hooks.HasODataAfterReadCollection {
 		return nil, false, nil
 	}
 
 	ctx := r.Context()
-	callResults, ok := invokeReadHook(meta, "AfterReadCollection", ctx, r, opts, results)
+	callResults, ok := invokeReadHook(meta, "ODataAfterReadCollection", ctx, r, opts, results)
 	if !ok || len(callResults) == 0 {
 		return nil, false, nil
 	}
@@ -173,14 +173,14 @@ func callAfterReadCollection(meta *metadata.EntityMetadata, r *http.Request, opt
 	return override, overrideProvided, nil
 }
 
-// callBeforeReadEntity invokes the BeforeReadEntity hook if defined and returns any scopes it produces.
+// callBeforeReadEntity invokes the ODataBeforeReadEntity hook if defined and returns any scopes it produces.
 func callBeforeReadEntity(meta *metadata.EntityMetadata, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
-	if meta == nil || !meta.Hooks.HasBeforeReadEntity {
+	if meta == nil || !meta.Hooks.HasODataBeforeReadEntity {
 		return nil, nil
 	}
 
 	ctx := r.Context()
-	results, ok := invokeReadHook(meta, "BeforeReadEntity", ctx, r, opts)
+	results, ok := invokeReadHook(meta, "ODataBeforeReadEntity", ctx, r, opts)
 	if !ok || len(results) == 0 {
 		return nil, nil
 	}
@@ -203,14 +203,14 @@ func callBeforeReadEntity(meta *metadata.EntityMetadata, r *http.Request, opts *
 	return scopes, nil
 }
 
-// callAfterReadEntity invokes the AfterReadEntity hook if defined and returns an override when provided.
+// callAfterReadEntity invokes the ODataAfterReadEntity hook if defined and returns an override when provided.
 func callAfterReadEntity(meta *metadata.EntityMetadata, r *http.Request, opts *query.QueryOptions, entity interface{}) (interface{}, bool, error) {
-	if meta == nil || !meta.Hooks.HasAfterReadEntity {
+	if meta == nil || !meta.Hooks.HasODataAfterReadEntity {
 		return nil, false, nil
 	}
 
 	ctx := r.Context()
-	callResults, ok := invokeReadHook(meta, "AfterReadEntity", ctx, r, opts, entity)
+	callResults, ok := invokeReadHook(meta, "ODataAfterReadEntity", ctx, r, opts, entity)
 	if !ok || len(callResults) == 0 {
 		return nil, false, nil
 	}

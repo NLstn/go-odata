@@ -28,7 +28,7 @@ var (
 	hookTransactionAttempted bool
 )
 
-func (e *TransactionContextEntity) BeforeUpdate(ctx context.Context, _ *http.Request) error {
+func (e *TransactionContextEntity) ODataBeforeUpdate(ctx context.Context, _ *http.Request) error {
 	hookTransactionAttempted = true
 	tx, ok := odata.TransactionFromContext(ctx)
 	if !ok {

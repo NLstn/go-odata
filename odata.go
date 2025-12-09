@@ -14,12 +14,12 @@ package odata
 //
 // Implement these methods on your entity type to handle lifecycle events:
 //
-//	func (p *Product) BeforeCreate(ctx context.Context, r *http.Request) error
-//	func (p *Product) AfterCreate(ctx context.Context, r *http.Request) error
-//	func (p *Product) BeforeUpdate(ctx context.Context, r *http.Request) error
-//	func (p *Product) AfterUpdate(ctx context.Context, r *http.Request) error
-//	func (p *Product) BeforeDelete(ctx context.Context, r *http.Request) error
-//	func (p *Product) AfterDelete(ctx context.Context, r *http.Request) error
+//	func (p *Product) ODataBeforeCreate(ctx context.Context, r *http.Request) error
+//	func (p *Product) ODataAfterCreate(ctx context.Context, r *http.Request) error
+//	func (p *Product) ODataBeforeUpdate(ctx context.Context, r *http.Request) error
+//	func (p *Product) ODataAfterUpdate(ctx context.Context, r *http.Request) error
+//	func (p *Product) ODataBeforeDelete(ctx context.Context, r *http.Request) error
+//	func (p *Product) ODataAfterDelete(ctx context.Context, r *http.Request) error
 //
 // Hooks have access to the request context and HTTP request, allowing you to validate
 // data, apply business rules, log changes, or check authentication/authorization.
@@ -80,11 +80,11 @@ type KeyGenerator func(context.Context) (interface{}, error)
 //
 // # Lifecycle Hooks
 //
-// BeforeCreate is called before a new entity is created via POST request. Return an
+// ODataBeforeCreate is called before a new entity is created via POST request. Return an
 // error to prevent creation; the error will be returned to the client. Use this hook
 // for validation, authorization checks, or setting default values.
 //
-//	func (p *Product) BeforeCreate(ctx context.Context, r *http.Request) error {
+//	func (p *Product) ODataBeforeCreate(ctx context.Context, r *http.Request) error {
 //	    if p.Price < 0 {
 //	        return fmt.Errorf("price cannot be negative")
 //	    }
@@ -92,40 +92,40 @@ type KeyGenerator func(context.Context) (interface{}, error)
 //	    return nil
 //	}
 //
-// AfterCreate is called after a new entity has been successfully created and persisted
+// ODataAfterCreate is called after a new entity has been successfully created and persisted
 // to the database. Errors returned are logged but do not affect the response to the client.
 // Use this hook for audit logging or triggering external notifications.
 //
-//	func (p *Product) AfterCreate(ctx context.Context, r *http.Request) error {
+//	func (p *Product) ODataAfterCreate(ctx context.Context, r *http.Request) error {
 //	    log.Printf("Product created: %s", p.Name)
 //	    return nil
 //	}
 //
-// BeforeUpdate is called before an entity is updated via PATCH or PUT request. Return
+// ODataBeforeUpdate is called before an entity is updated via PATCH or PUT request. Return
 // an error to prevent the update. Use this for validation, authorization, or tracking
 // what changed.
 //
-//	func (p *Product) BeforeUpdate(ctx context.Context, r *http.Request) error {
+//	func (p *Product) ODataBeforeUpdate(ctx context.Context, r *http.Request) error {
 //	    if p.Price < 0 {
 //	        return fmt.Errorf("price cannot be negative")
 //	    }
 //	    return nil
 //	}
 //
-// AfterUpdate is called after an entity has been successfully updated. Errors are logged
+// ODataAfterUpdate is called after an entity has been successfully updated. Errors are logged
 // but do not affect the response. Use this for audit logging.
 //
-// BeforeDelete is called before an entity is deleted via DELETE request. Return an error
+// ODataBeforeDelete is called before an entity is deleted via DELETE request. Return an error
 // to prevent deletion. Use this for authorization checks or protecting special entities.
 //
-//	func (p *Product) BeforeDelete(ctx context.Context, r *http.Request) error {
+//	func (p *Product) ODataBeforeDelete(ctx context.Context, r *http.Request) error {
 //	    if p.IsProtected {
 //	        return fmt.Errorf("cannot delete protected products")
 //	    }
 //	    return nil
 //	}
 //
-// AfterDelete is called after an entity has been successfully deleted. Errors are logged
+// ODataAfterDelete is called after an entity has been successfully deleted. Errors are logged
 // but do not affect the response. Use this for audit logging or cleanup.
 //
 // # Accessing the Transaction
@@ -133,7 +133,7 @@ type KeyGenerator func(context.Context) (interface{}, error)
 // Write hooks (Before/After Create/Update/Delete) execute inside a shared GORM transaction.
 // Use TransactionFromContext to participate in the same transaction:
 //
-//	func (p *Product) BeforeCreate(ctx context.Context, r *http.Request) error {
+//	func (p *Product) ODataBeforeCreate(ctx context.Context, r *http.Request) error {
 //	    tx, ok := TransactionFromContext(ctx)
 //	    if !ok {
 //	        return fmt.Errorf("transaction unavailable")
@@ -149,29 +149,29 @@ type KeyGenerator func(context.Context) (interface{}, error)
 // Any error returned aborts the operation and rolls back all changes made via
 // the shared transaction.
 type EntityHook interface {
-	// BeforeCreate is called before a new entity is created via POST.
+	// ODataBeforeCreate is called before a new entity is created via POST.
 	// Return an error to prevent the creation and return that error to the client.
-	BeforeCreate(ctx context.Context, r *http.Request) error
+	ODataBeforeCreate(ctx context.Context, r *http.Request) error
 
-	// AfterCreate is called after a new entity has been successfully created.
+	// ODataAfterCreate is called after a new entity has been successfully created.
 	// Any error returned will be logged but won't affect the response to the client.
-	AfterCreate(ctx context.Context, r *http.Request) error
+	ODataAfterCreate(ctx context.Context, r *http.Request) error
 
-	// BeforeUpdate is called before an entity is updated via PATCH or PUT.
+	// ODataBeforeUpdate is called before an entity is updated via PATCH or PUT.
 	// Return an error to prevent the update and return that error to the client.
-	BeforeUpdate(ctx context.Context, r *http.Request) error
+	ODataBeforeUpdate(ctx context.Context, r *http.Request) error
 
-	// AfterUpdate is called after an entity has been successfully updated.
+	// ODataAfterUpdate is called after an entity has been successfully updated.
 	// Any error returned will be logged but won't affect the response to the client.
-	AfterUpdate(ctx context.Context, r *http.Request) error
+	ODataAfterUpdate(ctx context.Context, r *http.Request) error
 
-	// BeforeDelete is called before an entity is deleted via DELETE.
+	// ODataBeforeDelete is called before an entity is deleted via DELETE.
 	// Return an error to prevent the deletion and return that error to the client.
-	BeforeDelete(ctx context.Context, r *http.Request) error
+	ODataBeforeDelete(ctx context.Context, r *http.Request) error
 
-	// AfterDelete is called after an entity has been successfully deleted.
+	// ODataAfterDelete is called after an entity has been successfully deleted.
 	// Any error returned will be logged but won't affect the response to the client.
-	AfterDelete(ctx context.Context, r *http.Request) error
+	ODataAfterDelete(ctx context.Context, r *http.Request) error
 }
 
 // ReadHook defines optional read hooks that entity types can implement to customize
@@ -227,9 +227,9 @@ type EntityHook interface {
 //
 // For any operation, hooks execute in this order:
 //
-//	Create: BeforeCreate -> INSERT -> AfterCreate
-//	Update: BeforeUpdate -> UPDATE -> AfterUpdate
-//	Delete: BeforeDelete -> DELETE -> AfterDelete
+//	Create: ODataBeforeCreate -> INSERT -> ODataAfterCreate
+//	Update: ODataBeforeUpdate -> UPDATE -> ODataAfterUpdate
+//	Delete: ODataBeforeDelete -> DELETE -> ODataAfterDelete
 //	Read:   BeforeRead* -> SELECT + OData options -> AfterRead*
 type ReadHook interface {
 	// BeforeReadCollection is called before fetching a collection.

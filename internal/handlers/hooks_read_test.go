@@ -39,28 +39,28 @@ func tenantScopes(r *http.Request) ([]func(*gorm.DB) *gorm.DB, error) {
 	return []func(*gorm.DB) *gorm.DB{scope}, nil
 }
 
-func (readHookEntity) BeforeReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
+func (readHookEntity) ODataBeforeReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
 	if r.Header.Get("X-Deny") == "collection" {
 		return nil, fmt.Errorf("collection denied")
 	}
 	return tenantScopes(r)
 }
 
-func (readHookEntity) AfterReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions, results interface{}) (interface{}, error) {
+func (readHookEntity) ODataAfterReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions, results interface{}) (interface{}, error) {
 	if r.Header.Get("X-Override") == "collection" {
 		return []map[string]interface{}{{"Custom": "collection"}}, nil
 	}
 	return nil, nil
 }
 
-func (readHookEntity) BeforeReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
+func (readHookEntity) ODataBeforeReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
 	if r.Header.Get("X-Deny") == "entity" {
 		return nil, fmt.Errorf("entity denied")
 	}
 	return tenantScopes(r)
 }
 
-func (readHookEntity) AfterReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions, entity interface{}) (interface{}, error) {
+func (readHookEntity) ODataAfterReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions, entity interface{}) (interface{}, error) {
 	if r.Header.Get("X-Override") == "entity" {
 		return map[string]interface{}{"Message": "entity"}, nil
 	}
@@ -70,11 +70,11 @@ func (readHookEntity) AfterReadEntity(ctx context.Context, r *http.Request, opts
 	return nil, nil
 }
 
-func (readHookChild) BeforeReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
+func (readHookChild) ODataBeforeReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
 	return tenantScopes(r)
 }
 
-func (readHookChild) AfterReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions, results interface{}) (interface{}, error) {
+func (readHookChild) ODataAfterReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions, results interface{}) (interface{}, error) {
 	if r.Header.Get("X-Override") == "nav" {
 		return []map[string]interface{}{{"Custom": "nav"}}, nil
 	}

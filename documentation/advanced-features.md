@@ -294,16 +294,16 @@ Make sure your migrations or provisioning scripts allow the library to create an
 
 The library supports the following hooks:
 
-- `BeforeCreate` - Called before creating a new entity
-- `AfterCreate` - Called after creating a new entity
-- `BeforeUpdate` - Called before updating an entity
-- `AfterUpdate` - Called after updating an entity
-- `BeforeDelete` - Called before deleting an entity
-- `AfterDelete` - Called after deleting an entity
-- `BeforeReadCollection` - Called before reading a collection (applies additional GORM scopes)
-- `AfterReadCollection` - Called after reading a collection (allows mutating/overriding the result)
-- `BeforeReadEntity` - Called before reading a single entity (applies additional GORM scopes)
-- `AfterReadEntity` - Called after reading a single entity (allows mutating/overriding the result)
+- `ODataBeforeCreate` - Called before creating a new entity
+- `ODataAfterCreate` - Called after creating a new entity
+- `ODataBeforeUpdate` - Called before updating an entity
+- `ODataAfterUpdate` - Called after updating an entity
+- `ODataBeforeDelete` - Called before deleting an entity
+- `ODataAfterDelete` - Called after deleting an entity
+- `ODataBeforeReadCollection` - Called before reading a collection (applies additional GORM scopes)
+- `ODataAfterReadCollection` - Called after reading a collection (allows mutating/overriding the result)
+- `ODataBeforeReadEntity` - Called before reading a single entity (applies additional GORM scopes)
+- `ODataAfterReadEntity` - Called after reading a single entity (allows mutating/overriding the result)
 
 ### Implementing Hooks
 
@@ -322,8 +322,8 @@ type Product struct {
     UpdatedAt time.Time `json:"UpdatedAt"`
 }
 
-// BeforeCreate hook
-func (p *Product) BeforeCreate(ctx context.Context, r *http.Request) error {
+// ODataBeforeCreate hook
+func (p *Product) ODataBeforeCreate(ctx context.Context, r *http.Request) error {
     p.CreatedAt = time.Now()
     if p.Price < 0 {
         return fmt.Errorf("price cannot be negative")
@@ -331,8 +331,8 @@ func (p *Product) BeforeCreate(ctx context.Context, r *http.Request) error {
     return nil
 }
 
-// BeforeUpdate hook
-func (p *Product) BeforeUpdate(ctx context.Context, r *http.Request) error {
+// ODataBeforeUpdate hook
+func (p *Product) ODataBeforeUpdate(ctx context.Context, r *http.Request) error {
     p.UpdatedAt = time.Now()
     if p.Price < 0 {
         return fmt.Errorf("price cannot be negative")
@@ -340,8 +340,8 @@ func (p *Product) BeforeUpdate(ctx context.Context, r *http.Request) error {
     return nil
 }
 
-// AfterCreate hook
-func (p *Product) AfterCreate(ctx context.Context, r *http.Request) error {
+// ODataAfterCreate hook
+func (p *Product) ODataAfterCreate(ctx context.Context, r *http.Request) error {
     log.Printf("Product created: %s (ID: %d)", p.Name, p.ID)
     return nil
 }
@@ -353,7 +353,7 @@ Entity and collection write handlers execute inside a shared GORM transaction. T
 context so your hooks can participate in the same transaction by calling `odata.TransactionFromContext`:
 
 ```go
-func (p *Product) BeforeCreate(ctx context.Context, r *http.Request) error {
+func (p *Product) ODataBeforeCreate(ctx context.Context, r *http.Request) error {
     tx, ok := odata.TransactionFromContext(ctx)
     if !ok {
         return fmt.Errorf("transaction unavailable")
@@ -369,7 +369,7 @@ func (p *Product) BeforeCreate(ctx context.Context, r *http.Request) error {
     return nil
 }
 
-func (p *Product) BeforeUpdate(ctx context.Context, r *http.Request) error {
+func (p *Product) ODataBeforeUpdate(ctx context.Context, r *http.Request) error {
     tx, ok := odata.TransactionFromContext(ctx)
     if !ok {
         return fmt.Errorf("transaction unavailable")
@@ -395,7 +395,7 @@ never escape to the database.
 
 **Validation:**
 ```go
-func (p *Product) BeforeCreate(_ context.Context, _ *http.Request) error {
+func (p *Product) ODataBeforeCreate(_ context.Context, _ *http.Request) error {
     if p.Price < 0 {
         return fmt.Errorf("price cannot be negative")
     }
@@ -408,13 +408,13 @@ func (p *Product) BeforeCreate(_ context.Context, _ *http.Request) error {
 
 **Timestamps:**
 ```go
-func (p *Product) BeforeCreate(_ context.Context, _ *http.Request) error {
+func (p *Product) ODataBeforeCreate(_ context.Context, _ *http.Request) error {
     p.CreatedAt = time.Now()
     p.UpdatedAt = time.Now()
     return nil
 }
 
-func (p *Product) BeforeUpdate(_ context.Context, _ *http.Request) error {
+func (p *Product) ODataBeforeUpdate(_ context.Context, _ *http.Request) error {
     p.UpdatedAt = time.Now()
     return nil
 }
@@ -422,7 +422,7 @@ func (p *Product) BeforeUpdate(_ context.Context, _ *http.Request) error {
 
 **Audit Logging:**
 ```go
-func (p *Product) AfterUpdate(ctx context.Context, r *http.Request) error {
+func (p *Product) ODataAfterUpdate(ctx context.Context, r *http.Request) error {
     auditLog := AuditLog{
         EntityType: "Product",
         EntityID:   p.ID,
@@ -435,7 +435,7 @@ func (p *Product) AfterUpdate(ctx context.Context, r *http.Request) error {
 
 **Business Logic:**
 ```go
-func (o *Order) BeforeCreate(ctx context.Context, r *http.Request) error {
+func (o *Order) ODataBeforeCreate(ctx context.Context, r *http.Request) error {
     // Calculate total from items
     var total float64
     for _, item := range o.Items {
@@ -454,7 +454,7 @@ If a hook returns an error:
 - Database changes are rolled back (for operations in transactions)
 
 ```go
-func (p *Product) BeforeCreate(_ context.Context, _ *http.Request) error {
+func (p *Product) ODataBeforeCreate(_ context.Context, _ *http.Request) error {
     if p.Price > 100000 {
         return fmt.Errorf("price exceeds maximum allowed value")
     }
@@ -476,8 +476,8 @@ Client receives:
 
 Read hooks let you shape read behavior without forking handlers:
 
-- **Before hooks** (`BeforeReadCollection` / `BeforeReadEntity`) return additional [GORM scopes](https://gorm.io/docs/scopes.html). Each scope is applied to the underlying query *before* OData options like `$filter`, `$orderby`, `$top`, `$skip`, and `$count` execute. This is the preferred place for authorization filters, tenant scoping, or eager-loading navigation properties.
-- **After hooks** (`AfterReadCollection` / `AfterReadEntity`) receive the fetched results after all query options and pagination have been applied. They can mutate or replace the response payload (e.g., redact fields, append computed properties) before it is sent to the client.
+- **Before hooks** (`ODataBeforeReadCollection` / `ODataBeforeReadEntity`) return additional [GORM scopes](https://gorm.io/docs/scopes.html). Each scope is applied to the underlying query *before* OData options like `$filter`, `$orderby`, `$top`, `$skip`, and `$count` execute. This is the preferred place for authorization filters, tenant scoping, or eager-loading navigation properties.
+- **After hooks** (`ODataAfterReadCollection` / `ODataAfterReadEntity`) receive the fetched results after all query options and pagination have been applied. They can mutate or replace the response payload (e.g., redact fields, append computed properties) before it is sent to the client.
 
 Hook signatures:
 
@@ -493,7 +493,7 @@ Return `(nil, nil)` from an After hook to keep the original response body.
 
 ### Tenant Filtering Example
 
-Apply multi-tenant filters centrally by returning scopes from `BeforeReadCollection` and `BeforeReadEntity` hooks:
+Apply multi-tenant filters centrally by returning scopes from `ODataBeforeReadCollection` and `ODataBeforeReadEntity` hooks:
 
 ```go
 // Requires: import "fmt" and "gorm.io/gorm"
@@ -530,7 +530,7 @@ By returning scopes instead of mutating the request, the same tenant filter is a
 
 ### Redacting Sensitive Data
 
-Use `AfterReadEntity` or `AfterReadCollection` to redact fields just before they leave the service:
+Use `ODataAfterReadEntity` or `ODataAfterReadCollection` to redact fields just before they leave the service:
 
 ```go
 func (Product) AfterReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions, entity interface{}) (interface{}, error) {

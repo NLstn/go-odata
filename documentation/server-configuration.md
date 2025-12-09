@@ -357,7 +357,7 @@ Features:
 - Sample Product, Category, and User data
 - Custom authentication middleware (demo only)
 - Example actions and functions
-- Lifecycle hooks (BeforeCreate, BeforeUpdate)
+- Lifecycle hooks (ODataBeforeCreate, ODataBeforeUpdate)
 - Runs on `http://localhost:8080`
 
 **Use for:** Testing features, exploring the library, development

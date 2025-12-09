@@ -23,16 +23,16 @@ type EntityMetadata struct {
 	StreamProperties      []PropertyMetadata // Named stream properties on this entity
 	// Hooks defines which lifecycle hooks are available on this entity
 	Hooks struct {
-		HasBeforeCreate         bool
-		HasAfterCreate          bool
-		HasBeforeUpdate         bool
-		HasAfterUpdate          bool
-		HasBeforeDelete         bool
-		HasAfterDelete          bool
-		HasBeforeReadCollection bool
-		HasAfterReadCollection  bool
-		HasBeforeReadEntity     bool
-		HasAfterReadEntity      bool
+		HasODataBeforeCreate         bool
+		HasODataAfterCreate          bool
+		HasODataBeforeUpdate         bool
+		HasODataAfterUpdate          bool
+		HasODataBeforeDelete         bool
+		HasODataAfterDelete          bool
+		HasODataBeforeReadCollection bool
+		HasODataAfterReadCollection  bool
+		HasODataBeforeReadEntity     bool
+		HasODataAfterReadEntity      bool
 	}
 }
 
@@ -699,54 +699,54 @@ func detectHooks(metadata *EntityMetadata) {
 	valueType := entityType
 	ptrType := reflect.PointerTo(entityType)
 
-	// Check BeforeCreate
-	if hasMethod(valueType, "BeforeCreate") || hasMethod(ptrType, "BeforeCreate") {
-		metadata.Hooks.HasBeforeCreate = true
+	// Check ODataBeforeCreate
+	if hasMethod(valueType, "ODataBeforeCreate") || hasMethod(ptrType, "ODataBeforeCreate") {
+		metadata.Hooks.HasODataBeforeCreate = true
 	}
 
-	// Check AfterCreate
-	if hasMethod(valueType, "AfterCreate") || hasMethod(ptrType, "AfterCreate") {
-		metadata.Hooks.HasAfterCreate = true
+	// Check ODataAfterCreate
+	if hasMethod(valueType, "ODataAfterCreate") || hasMethod(ptrType, "ODataAfterCreate") {
+		metadata.Hooks.HasODataAfterCreate = true
 	}
 
-	// Check BeforeUpdate
-	if hasMethod(valueType, "BeforeUpdate") || hasMethod(ptrType, "BeforeUpdate") {
-		metadata.Hooks.HasBeforeUpdate = true
+	// Check ODataBeforeUpdate
+	if hasMethod(valueType, "ODataBeforeUpdate") || hasMethod(ptrType, "ODataBeforeUpdate") {
+		metadata.Hooks.HasODataBeforeUpdate = true
 	}
 
-	// Check AfterUpdate
-	if hasMethod(valueType, "AfterUpdate") || hasMethod(ptrType, "AfterUpdate") {
-		metadata.Hooks.HasAfterUpdate = true
+	// Check ODataAfterUpdate
+	if hasMethod(valueType, "ODataAfterUpdate") || hasMethod(ptrType, "ODataAfterUpdate") {
+		metadata.Hooks.HasODataAfterUpdate = true
 	}
 
-	// Check BeforeDelete
-	if hasMethod(valueType, "BeforeDelete") || hasMethod(ptrType, "BeforeDelete") {
-		metadata.Hooks.HasBeforeDelete = true
+	// Check ODataBeforeDelete
+	if hasMethod(valueType, "ODataBeforeDelete") || hasMethod(ptrType, "ODataBeforeDelete") {
+		metadata.Hooks.HasODataBeforeDelete = true
 	}
 
-	// Check AfterDelete
-	if hasMethod(valueType, "AfterDelete") || hasMethod(ptrType, "AfterDelete") {
-		metadata.Hooks.HasAfterDelete = true
+	// Check ODataAfterDelete
+	if hasMethod(valueType, "ODataAfterDelete") || hasMethod(ptrType, "ODataAfterDelete") {
+		metadata.Hooks.HasODataAfterDelete = true
 	}
 
-	// Check BeforeReadCollection
-	if hasMethod(valueType, "BeforeReadCollection") || hasMethod(ptrType, "BeforeReadCollection") {
-		metadata.Hooks.HasBeforeReadCollection = true
+	// Check ODataBeforeReadCollection
+	if hasMethod(valueType, "ODataBeforeReadCollection") || hasMethod(ptrType, "ODataBeforeReadCollection") {
+		metadata.Hooks.HasODataBeforeReadCollection = true
 	}
 
-	// Check AfterReadCollection
-	if hasMethod(valueType, "AfterReadCollection") || hasMethod(ptrType, "AfterReadCollection") {
-		metadata.Hooks.HasAfterReadCollection = true
+	// Check ODataAfterReadCollection
+	if hasMethod(valueType, "ODataAfterReadCollection") || hasMethod(ptrType, "ODataAfterReadCollection") {
+		metadata.Hooks.HasODataAfterReadCollection = true
 	}
 
-	// Check BeforeReadEntity
-	if hasMethod(valueType, "BeforeReadEntity") || hasMethod(ptrType, "BeforeReadEntity") {
-		metadata.Hooks.HasBeforeReadEntity = true
+	// Check ODataBeforeReadEntity
+	if hasMethod(valueType, "ODataBeforeReadEntity") || hasMethod(ptrType, "ODataBeforeReadEntity") {
+		metadata.Hooks.HasODataBeforeReadEntity = true
 	}
 
-	// Check AfterReadEntity
-	if hasMethod(valueType, "AfterReadEntity") || hasMethod(ptrType, "AfterReadEntity") {
-		metadata.Hooks.HasAfterReadEntity = true
+	// Check ODataAfterReadEntity
+	if hasMethod(valueType, "ODataAfterReadEntity") || hasMethod(ptrType, "ODataAfterReadEntity") {
+		metadata.Hooks.HasODataAfterReadEntity = true
 	}
 }
 

@@ -53,9 +53,9 @@ type Product struct {
 	RelatedProducts []Product            `json:"RelatedProducts,omitempty" gorm:"many2many:product_relations;"`
 }
 
-// BeforeCreate is a lifecycle hook that is called before a Product is created.
+// ODataBeforeCreate is a lifecycle hook that is called before a Product is created.
 // This hook enforces that only admins can create products.
-func (p Product) BeforeCreate(ctx context.Context, r *http.Request) error {
+func (p Product) ODataBeforeCreate(ctx context.Context, r *http.Request) error {
 	// Check if the user is an admin
 	// In a real application, you would extract this from authentication tokens/session
 	isAdmin := r.Header.Get("X-User-Role") == "admin"
@@ -67,9 +67,9 @@ func (p Product) BeforeCreate(ctx context.Context, r *http.Request) error {
 	return nil
 }
 
-// BeforeUpdate is a lifecycle hook that is called before a Product is updated.
+// ODataBeforeUpdate is a lifecycle hook that is called before a Product is updated.
 // This hook enforces that only admins can update products.
-func (p Product) BeforeUpdate(ctx context.Context, r *http.Request) error {
+func (p Product) ODataBeforeUpdate(ctx context.Context, r *http.Request) error {
 	// Check if the user is an admin
 	// In a real application, you would extract this from authentication tokens/session
 	isAdmin := r.Header.Get("X-User-Role") == "admin"

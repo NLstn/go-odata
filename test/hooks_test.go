@@ -37,8 +37,8 @@ var (
 	shouldFailHook     bool
 )
 
-// BeforeCreate hook
-func (e TestEntity) BeforeCreate(ctx context.Context, r *http.Request) error {
+// ODataBeforeCreate hook
+func (e TestEntity) ODataBeforeCreate(ctx context.Context, r *http.Request) error {
 	beforeCreateCalled = true
 	if shouldFailHook {
 		return fmt.Errorf("before create hook failed")
@@ -46,14 +46,14 @@ func (e TestEntity) BeforeCreate(ctx context.Context, r *http.Request) error {
 	return nil
 }
 
-// AfterCreate hook
-func (e TestEntity) AfterCreate(ctx context.Context, r *http.Request) error {
+// ODataAfterCreate hook
+func (e TestEntity) ODataAfterCreate(ctx context.Context, r *http.Request) error {
 	afterCreateCalled = true
 	return nil
 }
 
-// BeforeUpdate hook
-func (e TestEntity) BeforeUpdate(ctx context.Context, r *http.Request) error {
+// ODataBeforeUpdate hook
+func (e TestEntity) ODataBeforeUpdate(ctx context.Context, r *http.Request) error {
 	beforeUpdateCalled = true
 	if shouldFailHook {
 		return fmt.Errorf("before update hook failed")
@@ -61,14 +61,14 @@ func (e TestEntity) BeforeUpdate(ctx context.Context, r *http.Request) error {
 	return nil
 }
 
-// AfterUpdate hook
-func (e TestEntity) AfterUpdate(ctx context.Context, r *http.Request) error {
+// ODataAfterUpdate hook
+func (e TestEntity) ODataAfterUpdate(ctx context.Context, r *http.Request) error {
 	afterUpdateCalled = true
 	return nil
 }
 
-// BeforeDelete hook
-func (e TestEntity) BeforeDelete(ctx context.Context, r *http.Request) error {
+// ODataBeforeDelete hook
+func (e TestEntity) ODataBeforeDelete(ctx context.Context, r *http.Request) error {
 	beforeDeleteCalled = true
 	if shouldFailHook {
 		return fmt.Errorf("before delete hook failed")
@@ -76,8 +76,8 @@ func (e TestEntity) BeforeDelete(ctx context.Context, r *http.Request) error {
 	return nil
 }
 
-// AfterDelete hook
-func (e TestEntity) AfterDelete(ctx context.Context, r *http.Request) error {
+// ODataAfterDelete hook
+func (e TestEntity) ODataAfterDelete(ctx context.Context, r *http.Request) error {
 	afterDeleteCalled = true
 	return nil
 }
