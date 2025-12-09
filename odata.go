@@ -713,7 +713,7 @@ type (
 //
 //  1. Explicitly using Parameters field:
 //     Parameters: []ParameterDefinition{
-//     {Name: "percentage", Type: reflect.TypeOf(float64(0)), Required: true},
+//         {Name: "percentage", Type: reflect.TypeOf(float64(0)), Required: true},
 //     }
 //
 //  2. Automatically via ParameterStructType field:
@@ -863,7 +863,7 @@ func (s *Service) RegisterAction(action actions.ActionDefinition) error {
 //
 //  1. Explicitly using Parameters field:
 //     Parameters: []ParameterDefinition{
-//     {Name: "taxRate", Type: reflect.TypeOf(float64(0)), Required: true},
+//         {Name: "taxRate", Type: reflect.TypeOf(float64(0)), Required: true},
 //     }
 //
 //  2. Automatically via ParameterStructType field:
