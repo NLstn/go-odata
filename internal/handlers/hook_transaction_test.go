@@ -15,7 +15,7 @@ type transactionHookEntity struct {
 	ObservedOK bool
 }
 
-func (e *transactionHookEntity) BeforeCreate(ctx context.Context, _ *http.Request) error {
+func (e *transactionHookEntity) ODataBeforeCreate(ctx context.Context, _ *http.Request) error {
 	e.ObservedTx, e.ObservedOK = TransactionFromContext(ctx)
 	return nil
 }
@@ -31,7 +31,7 @@ func TestCallHookIncludesTransactionInContext(t *testing.T) {
 
 	if err := db.Transaction(func(tx *gorm.DB) error {
 		hookReq := requestWithTransaction(req, tx)
-		if err := callHook(entity, "BeforeCreate", hookReq); err != nil {
+		if err := callHook(entity, "ODataBeforeCreate", hookReq); err != nil {
 			return err
 		}
 		if !entity.ObservedOK {

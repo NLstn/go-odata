@@ -14,19 +14,19 @@ type testReadHooksEntity struct {
 	ID int `json:"id" odata:"key"`
 }
 
-func (testReadHooksEntity) BeforeReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
+func (testReadHooksEntity) ODataBeforeReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
 	return nil, nil
 }
 
-func (testReadHooksEntity) AfterReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions, results interface{}) (interface{}, error) {
+func (testReadHooksEntity) ODataAfterReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions, results interface{}) (interface{}, error) {
 	return results, nil
 }
 
-func (*testReadHooksEntity) BeforeReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
+func (*testReadHooksEntity) ODataBeforeReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
 	return nil, nil
 }
 
-func (*testReadHooksEntity) AfterReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions, entity interface{}) (interface{}, error) {
+func (*testReadHooksEntity) ODataAfterReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions, entity interface{}) (interface{}, error) {
 	return entity, nil
 }
 
@@ -36,16 +36,16 @@ func TestDetectReadHooks(t *testing.T) {
 		t.Fatalf("AnalyzeEntity(testReadHooksEntity) returned error: %v", err)
 	}
 
-	if !meta.Hooks.HasBeforeReadCollection {
-		t.Errorf("expected HasBeforeReadCollection to be true")
+	if !meta.Hooks.HasODataBeforeReadCollection {
+		t.Errorf("expected HasODataBeforeReadCollection to be true")
 	}
-	if !meta.Hooks.HasAfterReadCollection {
-		t.Errorf("expected HasAfterReadCollection to be true")
+	if !meta.Hooks.HasODataAfterReadCollection {
+		t.Errorf("expected HasODataAfterReadCollection to be true")
 	}
-	if !meta.Hooks.HasBeforeReadEntity {
-		t.Errorf("expected HasBeforeReadEntity to be true")
+	if !meta.Hooks.HasODataBeforeReadEntity {
+		t.Errorf("expected HasODataBeforeReadEntity to be true")
 	}
-	if !meta.Hooks.HasAfterReadEntity {
-		t.Errorf("expected HasAfterReadEntity to be true")
+	if !meta.Hooks.HasODataAfterReadEntity {
+		t.Errorf("expected HasODataAfterReadEntity to be true")
 	}
 }

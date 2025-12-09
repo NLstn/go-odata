@@ -69,9 +69,9 @@ type Product struct {
     Items     []OrderItem  `json:"Items,omitempty" gorm:"many2many:order_items"`
 }
 
-// BeforeCreate enforces that only admins can create products.
+// ODataBeforeCreate enforces that only admins can create products.
 // This mirrors the production hook in cmd/devserver/entities/product.go.
-func (p Product) BeforeCreate(ctx context.Context, r *http.Request) error {
+func (p Product) ODataBeforeCreate(ctx context.Context, r *http.Request) error {
     isAdmin := r.Header.Get("X-User-Role") == "admin"
     if !isAdmin {
         return fmt.Errorf("only administrators are allowed to create products")
@@ -79,8 +79,8 @@ func (p Product) BeforeCreate(ctx context.Context, r *http.Request) error {
     return nil
 }
 
-// BeforeUpdate reuses the same authorization guard as the development server.
-func (p Product) BeforeUpdate(ctx context.Context, r *http.Request) error {
+// ODataBeforeUpdate reuses the same authorization guard as the development server.
+func (p Product) ODataBeforeUpdate(ctx context.Context, r *http.Request) error {
     isAdmin := r.Header.Get("X-User-Role") == "admin"
     if !isAdmin {
         return fmt.Errorf("only administrators are allowed to update products")
