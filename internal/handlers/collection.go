@@ -43,6 +43,12 @@ func (h *EntityHandler) HandleCount(w http.ResponseWriter, r *http.Request) {
 
 // handleGetCount handles GET requests for entity collection count
 func (h *EntityHandler) handleGetCount(w http.ResponseWriter, r *http.Request) {
+	// Check if there's an overwrite handler
+	if h.overwrite.hasGetCount() {
+		h.handleGetCountOverwrite(w, r)
+		return
+	}
+
 	queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata)
 	if err != nil {
 		WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions, err.Error())
@@ -58,6 +64,39 @@ func (h *EntityHandler) handleGetCount(w http.ResponseWriter, r *http.Request) {
 	count, countErr := h.countEntities(r.Context(), queryOptions, scopes)
 	if countErr != nil {
 		WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, countErr.Error())
+		return
+	}
+
+	w.Header().Set(HeaderContentType, "text/plain")
+	w.WriteHeader(http.StatusOK)
+
+	if r.Method == http.MethodHead {
+		return
+	}
+
+	if _, writeErr := fmt.Fprintf(w, "%d", count); writeErr != nil {
+		h.logger.Error("Error writing count response", "error", writeErr)
+	}
+}
+
+// handleGetCountOverwrite handles GET count requests using the overwrite handler
+func (h *EntityHandler) handleGetCountOverwrite(w http.ResponseWriter, r *http.Request) {
+	queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata)
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions, err.Error())
+		return
+	}
+
+	// Create overwrite context
+	ctx := &OverwriteContext{
+		QueryOptions: queryOptions,
+		Request:      r,
+	}
+
+	// Call the overwrite handler
+	count, err := h.overwrite.getCount(ctx)
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "Error getting count", err.Error())
 		return
 	}
 

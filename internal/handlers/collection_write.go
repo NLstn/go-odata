@@ -10,12 +10,19 @@ import (
 	"strings"
 
 	"github.com/nlstn/go-odata/internal/preference"
+	"github.com/nlstn/go-odata/internal/query"
 	"github.com/nlstn/go-odata/internal/response"
 	"github.com/nlstn/go-odata/internal/trackchanges"
 	"gorm.io/gorm"
 )
 
 func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request) {
+	// Check if there's an overwrite handler
+	if h.overwrite.hasCreate() {
+		h.handlePostEntityOverwrite(w, r)
+		return
+	}
+
 	ctx := r.Context()
 	contentType := r.Header.Get("Content-Type")
 	if h.metadata.HasStream && !strings.Contains(contentType, "application/json") {
@@ -457,4 +464,69 @@ func (h *EntityHandler) buildEntityLocation(r *http.Request, entity interface{})
 	}
 
 	return fmt.Sprintf("%s/%s(%s)", baseURL, entitySetName, strings.Join(keyParts, ","))
+}
+
+// handlePostEntityOverwrite handles POST entity requests using the overwrite handler
+func (h *EntityHandler) handlePostEntityOverwrite(w http.ResponseWriter, r *http.Request) {
+	if err := validateContentType(w, r); err != nil {
+		return
+	}
+
+	pref := preference.ParsePrefer(r)
+
+	// Parse the request body
+	var requestData map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&requestData); err != nil {
+		WriteError(w, http.StatusBadRequest, ErrMsgInvalidRequestBody,
+			fmt.Sprintf(ErrDetailFailedToParseJSON, err.Error()))
+		return
+	}
+
+	// Convert to entity for type-safe handling
+	entity := reflect.New(h.metadata.EntityType).Interface()
+	jsonData, err := json.Marshal(requestData)
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "Failed to process request data", err.Error())
+		return
+	}
+	if err := json.Unmarshal(jsonData, entity); err != nil {
+		WriteError(w, http.StatusBadRequest, ErrMsgInvalidRequestBody,
+			fmt.Sprintf(ErrDetailFailedToParseJSON, err.Error()))
+		return
+	}
+
+	// Create overwrite context with empty query options (CREATE doesn't use query options,
+	// but we provide a consistent context interface across all operations)
+	ctx := &OverwriteContext{
+		QueryOptions: &query.QueryOptions{},
+		Request:      r,
+	}
+
+	// Call the overwrite handler
+	result, err := h.overwrite.create(ctx, entity)
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "Error creating entity", err.Error())
+		return
+	}
+
+	if result == nil {
+		WriteError(w, http.StatusInternalServerError, "Error creating entity", "handler returned nil entity")
+		return
+	}
+
+	// Build response
+	location := h.buildEntityLocation(r, result)
+	w.Header().Set("Location", location)
+
+	if applied := pref.GetPreferenceApplied(); applied != "" {
+		w.Header().Set(HeaderPreferenceApplied, applied)
+	}
+
+	if pref.ShouldReturnContent(true) {
+		SetODataHeader(w, HeaderODataEntityId, location)
+		h.writeEntityResponseWithETag(w, r, result, "", http.StatusCreated)
+	} else {
+		SetODataHeader(w, HeaderODataEntityId, location)
+		w.WriteHeader(http.StatusNoContent)
+	}
 }

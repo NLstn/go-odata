@@ -23,6 +23,7 @@ type EntityHandler struct {
 	logger               *slog.Logger
 	ftsManager           *query.FTSManager
 	keyGeneratorResolver func(string) (func(context.Context) (interface{}, error), bool)
+	overwrite            *entityOverwriteHandlers
 }
 
 // NewEntityHandler creates a new entity handler
@@ -110,6 +111,65 @@ func (h *EntityHandler) EnableChangeTracking() error {
 // IsSingleton returns true if this handler is for a singleton
 func (h *EntityHandler) IsSingleton() bool {
 	return h.metadata.IsSingleton
+}
+
+// SetOverwrite configures all overwrite handlers for this entity handler.
+func (h *EntityHandler) SetOverwrite(ow *EntityOverwrite) {
+	if ow == nil {
+		h.overwrite = nil
+		return
+	}
+	h.overwrite = &entityOverwriteHandlers{
+		getCollection: ow.GetCollection,
+		getEntity:     ow.GetEntity,
+		create:        ow.Create,
+		update:        ow.Update,
+		delete:        ow.Delete,
+		getCount:      ow.GetCount,
+	}
+}
+
+// SetGetCollectionOverwrite configures the overwrite handler for GetCollection operation.
+func (h *EntityHandler) SetGetCollectionOverwrite(handler GetCollectionHandler) {
+	h.ensureOverwrite()
+	h.overwrite.getCollection = handler
+}
+
+// SetGetEntityOverwrite configures the overwrite handler for GetEntity operation.
+func (h *EntityHandler) SetGetEntityOverwrite(handler GetEntityHandler) {
+	h.ensureOverwrite()
+	h.overwrite.getEntity = handler
+}
+
+// SetCreateOverwrite configures the overwrite handler for Create operation.
+func (h *EntityHandler) SetCreateOverwrite(handler CreateHandler) {
+	h.ensureOverwrite()
+	h.overwrite.create = handler
+}
+
+// SetUpdateOverwrite configures the overwrite handler for Update operation.
+func (h *EntityHandler) SetUpdateOverwrite(handler UpdateHandler) {
+	h.ensureOverwrite()
+	h.overwrite.update = handler
+}
+
+// SetDeleteOverwrite configures the overwrite handler for Delete operation.
+func (h *EntityHandler) SetDeleteOverwrite(handler DeleteHandler) {
+	h.ensureOverwrite()
+	h.overwrite.delete = handler
+}
+
+// SetGetCountOverwrite configures the overwrite handler for GetCount operation.
+func (h *EntityHandler) SetGetCountOverwrite(handler GetCountHandler) {
+	h.ensureOverwrite()
+	h.overwrite.getCount = handler
+}
+
+// ensureOverwrite creates the overwrite handlers struct if it doesn't exist.
+func (h *EntityHandler) ensureOverwrite() {
+	if h.overwrite == nil {
+		h.overwrite = &entityOverwriteHandlers{}
+	}
 }
 
 // FetchEntity fetches an entity by its key string
