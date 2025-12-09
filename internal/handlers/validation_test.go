@@ -541,3 +541,200 @@ func TestEntityHandlerInitializeEntityKeys_Generator(t *testing.T) {
 		}
 	})
 }
+
+func TestValidateAutoPropertiesNotProvided(t *testing.T) {
+	testMetadata := &metadata.EntityMetadata{
+		Properties: []metadata.PropertyMetadata{
+			{Name: "ID", JsonName: "id", Type: reflect.TypeOf(0), IsKey: true},
+			{Name: "Name", JsonName: "name", Type: reflect.TypeOf(""), IsRequired: true},
+			{Name: "CreatedAt", JsonName: "created_at", Type: reflect.TypeOf(""), IsAuto: true},
+			{Name: "UpdatedAt", JsonName: "updated_at", Type: reflect.TypeOf(""), IsAuto: true},
+			{Name: "Description", JsonName: "description", Type: reflect.TypeOf("")},
+		},
+	}
+
+	handler := &EntityHandler{metadata: testMetadata}
+
+	tests := []struct {
+		name        string
+		requestData map[string]interface{}
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name: "Valid request without auto fields",
+			requestData: map[string]interface{}{
+				"name":        "Test Product",
+				"description": "A test product",
+			},
+			wantErr: false,
+		},
+		{
+			name: "Invalid request with one auto field",
+			requestData: map[string]interface{}{
+				"name":       "Test Product",
+				"created_at": "2024-01-01",
+			},
+			wantErr:     true,
+			errContains: "created_at",
+		},
+		{
+			name: "Invalid request with multiple auto fields",
+			requestData: map[string]interface{}{
+				"name":       "Test Product",
+				"created_at": "2024-01-01",
+				"updated_at": "2024-01-02",
+			},
+			wantErr:     true,
+			errContains: "created_at",
+		},
+		{
+			name: "Valid request with only non-auto fields",
+			requestData: map[string]interface{}{
+				"name":        "Test Product",
+				"description": "Description",
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := handler.validateAutoPropertiesNotProvided(tt.requestData)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("validateAutoPropertiesNotProvided() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr && err != nil && tt.errContains != "" {
+				if !containsString(err.Error(), tt.errContains) {
+					t.Errorf("Expected error to contain %q, got: %v", tt.errContains, err)
+				}
+			}
+		})
+	}
+}
+
+func TestValidatePropertiesExistForUpdate_AutoFields(t *testing.T) {
+	testMetadata := &metadata.EntityMetadata{
+		EntityName: "TestEntity",
+		Properties: []metadata.PropertyMetadata{
+			{Name: "ID", JsonName: "id", Type: reflect.TypeOf(0), IsKey: true},
+			{Name: "Name", JsonName: "name", Type: reflect.TypeOf(""), IsRequired: true},
+			{Name: "CreatedAt", JsonName: "created_at", Type: reflect.TypeOf(""), IsAuto: true},
+			{Name: "UpdatedAt", JsonName: "updated_at", Type: reflect.TypeOf(""), IsAuto: true},
+			{Name: "Description", JsonName: "description", Type: reflect.TypeOf("")},
+		},
+	}
+
+	handler := &EntityHandler{metadata: testMetadata}
+
+	tests := []struct {
+		name        string
+		updateData  map[string]interface{}
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name: "Valid update without auto fields",
+			updateData: map[string]interface{}{
+				"name":        "Updated Name",
+				"description": "Updated Description",
+			},
+			wantErr: false,
+		},
+		{
+			name: "Invalid update with auto field",
+			updateData: map[string]interface{}{
+				"name":       "Updated Name",
+				"created_at": "2024-01-01",
+			},
+			wantErr:     true,
+			errContains: "automatically set server-side",
+		},
+		{
+			name: "Invalid update with multiple auto fields",
+			updateData: map[string]interface{}{
+				"created_at": "2024-01-01",
+				"updated_at": "2024-01-02",
+			},
+			wantErr:     true,
+			errContains: "automatically set server-side",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			err := handler.validatePropertiesExistForUpdate(tt.updateData, w)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("validatePropertiesExistForUpdate() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr && err != nil && tt.errContains != "" {
+				if !containsString(err.Error(), tt.errContains) {
+					t.Errorf("Expected error to contain %q, got: %v", tt.errContains, err)
+				}
+			}
+		})
+	}
+}
+
+func TestValidateRequiredProperties_AutoFields(t *testing.T) {
+	testMetadata := &metadata.EntityMetadata{
+		Properties: []metadata.PropertyMetadata{
+			{Name: "ID", JsonName: "id", Type: reflect.TypeOf(0), IsKey: true},
+			{Name: "Name", JsonName: "name", Type: reflect.TypeOf(""), IsRequired: true},
+			{Name: "CreatedAt", JsonName: "created_at", Type: reflect.TypeOf(""), IsRequired: true, IsAuto: true},
+			{Name: "UpdatedAt", JsonName: "updated_at", Type: reflect.TypeOf(""), IsAuto: true},
+			{Name: "Price", JsonName: "price", Type: reflect.TypeOf(0.0), IsRequired: true},
+		},
+	}
+
+	handler := &EntityHandler{metadata: testMetadata}
+
+	tests := []struct {
+		name        string
+		requestData map[string]interface{}
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name: "Valid request with all non-auto required fields",
+			requestData: map[string]interface{}{
+				"name":  "Test Product",
+				"price": 99.99,
+			},
+			wantErr: false,
+		},
+		{
+			name: "Valid request - auto required fields can be omitted",
+			requestData: map[string]interface{}{
+				"name":  "Test Product",
+				"price": 99.99,
+				// created_at is required AND auto, but should not cause an error
+			},
+			wantErr: false,
+		},
+		{
+			name: "Invalid request - missing non-auto required field",
+			requestData: map[string]interface{}{
+				"name": "Test Product",
+				// price is missing and required
+			},
+			wantErr:     true,
+			errContains: "price",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := handler.validateRequiredProperties(tt.requestData)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("validateRequiredProperties() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr && err != nil && tt.errContains != "" {
+				if !containsString(err.Error(), tt.errContains) {
+					t.Errorf("Expected error to contain %q, got: %v", tt.errContains, err)
+				}
+			}
+		})
+	}
+}
