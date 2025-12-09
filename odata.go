@@ -659,29 +659,36 @@ func (s *Service) RegisterSingleton(entity interface{}, singletonName string) er
 	return nil
 }
 
-// Re-export types from internal/actions package for public API.
+// Types for registering custom OData actions and functions.
 //
-// These types are used to register custom OData actions and functions with the service.
-// See the documentation for each type for detailed field descriptions and usage examples.
+// The following types are re-exported from internal/actions package to provide a public API
+// for defining and registering custom operations. See RegisterAction and RegisterFunction
+// methods for usage examples, or refer to documentation/actions-and-functions.md for
+// comprehensive guides.
 type (
 	// ParameterDefinition describes a single parameter for an action or function.
 	// Use reflect.TypeOf to specify the expected Go type for the parameter.
+	// See the full documentation on this type for field descriptions and examples.
 	ParameterDefinition = actions.ParameterDefinition
 
 	// ActionDefinition defines an OData action that can modify data (invoked with POST).
 	// Actions can be bound to entities or unbound (service-level).
+	// See the full documentation on this type for field descriptions and examples.
 	ActionDefinition = actions.ActionDefinition
 
 	// FunctionDefinition defines an OData function that computes values (invoked with GET).
 	// Functions must be side-effect-free and can be bound to entities or unbound.
+	// See the full documentation on this type for field descriptions and examples.
 	FunctionDefinition = actions.FunctionDefinition
 
 	// ActionHandler is the function signature for implementing action logic.
 	// Return an error to abort the action; return nil after writing the HTTP response.
+	// See the full documentation on this type for parameter descriptions and examples.
 	ActionHandler = actions.ActionHandler
 
 	// FunctionHandler is the function signature for implementing function logic.
 	// Return the computed value and nil error on success; return nil and error on failure.
+	// See the full documentation on this type for parameter descriptions and examples.
 	FunctionHandler = actions.FunctionHandler
 )
 
