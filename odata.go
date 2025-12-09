@@ -659,16 +659,134 @@ func (s *Service) RegisterSingleton(entity interface{}, singletonName string) er
 	return nil
 }
 
-// Re-export types from internal/actions package for public API
+// Re-export types from internal/actions package for public API.
+//
+// These types are used to register custom OData actions and functions with the service.
+// See the documentation for each type for detailed field descriptions and usage examples.
 type (
+	// ParameterDefinition describes a single parameter for an action or function.
+	// Use reflect.TypeOf to specify the expected Go type for the parameter.
 	ParameterDefinition = actions.ParameterDefinition
-	ActionDefinition    = actions.ActionDefinition
-	FunctionDefinition  = actions.FunctionDefinition
-	ActionHandler       = actions.ActionHandler
-	FunctionHandler     = actions.FunctionHandler
+
+	// ActionDefinition defines an OData action that can modify data (invoked with POST).
+	// Actions can be bound to entities or unbound (service-level).
+	ActionDefinition = actions.ActionDefinition
+
+	// FunctionDefinition defines an OData function that computes values (invoked with GET).
+	// Functions must be side-effect-free and can be bound to entities or unbound.
+	FunctionDefinition = actions.FunctionDefinition
+
+	// ActionHandler is the function signature for implementing action logic.
+	// Return an error to abort the action; return nil after writing the HTTP response.
+	ActionHandler = actions.ActionHandler
+
+	// FunctionHandler is the function signature for implementing function logic.
+	// Return the computed value and nil error on success; return nil and error on failure.
+	FunctionHandler = actions.FunctionHandler
 )
 
-// RegisterAction registers an action with the OData service
+// RegisterAction registers a custom OData action with the service.
+//
+// Actions are operations that modify data and are invoked via HTTP POST. They can be bound to
+// specific entities or unbound (accessible at the service root).
+//
+// # Required Fields
+//
+//   - Name: The action name (e.g., "ApplyDiscount")
+//   - Handler: The function implementing the action logic (see ActionHandler)
+//
+// # Bound vs Unbound Actions
+//
+// Bound actions (IsBound = true):
+//   - Must specify EntitySet (e.g., "Products")
+//   - Invoked on entity instances: POST /Products(1)/ApplyDiscount
+//   - The ctx parameter in the handler contains the entity instance
+//   - EntitySet must match a registered entity set
+//
+// Unbound actions (IsBound = false):
+//   - Invoked at service root: POST /ResetAllPrices
+//   - The ctx parameter in the handler is nil
+//
+// # Parameters
+//
+// Parameters can be defined in two ways:
+//
+//  1. Explicitly using Parameters field:
+//     Parameters: []ParameterDefinition{
+//     {Name: "percentage", Type: reflect.TypeOf(float64(0)), Required: true},
+//     }
+//
+//  2. Automatically via ParameterStructType field:
+//     ParameterStructType: reflect.TypeOf(MyParamsStruct{})
+//     The framework derives parameters from struct fields
+//
+// Parameters are passed in the JSON request body for actions.
+//
+// # Return Values
+//
+//   - Set ReturnType to nil for actions that return no value (should return HTTP 204 No Content)
+//   - Set ReturnType to reflect.TypeOf(MyType{}) for actions that return values
+//
+// # Error Handling
+//
+// Return an error to abort the action and send an error response to the client.
+// The handler must write the HTTP response (status, headers, body) before returning nil.
+//
+// # Example - Bound Action with Return Value
+//
+//	err := service.RegisterAction(ActionDefinition{
+//	    Name:      "ApplyDiscount",
+//	    IsBound:   true,
+//	    EntitySet: "Products",
+//	    Parameters: []ParameterDefinition{
+//	        {Name: "percentage", Type: reflect.TypeOf(float64(0)), Required: true},
+//	    },
+//	    ReturnType: reflect.TypeOf(Product{}),
+//	    Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) error {
+//	        product := ctx.(*Product)
+//	        percentage := params["percentage"].(float64)
+//	        product.Price = product.Price * (1 - percentage/100)
+//	        if err := db.Save(product).Error; err != nil {
+//	            return err
+//	        }
+//	        w.Header().Set("Content-Type", "application/json;odata.metadata=minimal")
+//	        w.WriteHeader(http.StatusOK)
+//	        response := map[string]interface{}{
+//	            "@odata.context": "$metadata#Products/$entity",
+//	            "value":          product,
+//	        }
+//	        return json.NewEncoder(w).Encode(response)
+//	    },
+//	})
+//
+// Invoke: POST /Products(1)/ApplyDiscount with body {"percentage": 10}
+//
+// # Example - Unbound Action with No Return Value
+//
+//	err := service.RegisterAction(ActionDefinition{
+//	    Name:       "ResetAllPrices",
+//	    IsBound:    false,
+//	    Parameters: []ParameterDefinition{},
+//	    ReturnType: nil,
+//	    Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) error {
+//	        if err := db.Model(&Product{}).Update("Price", 0).Error; err != nil {
+//	            return err
+//	        }
+//	        w.WriteHeader(http.StatusNoContent)
+//	        return nil
+//	    },
+//	})
+//
+// Invoke: POST /ResetAllPrices
+//
+// # Overloading
+//
+// Multiple actions with the same name but different parameter signatures can be registered
+// (action overloading). The framework selects the appropriate overload based on the
+// parameters provided in the request.
+//
+// See documentation/actions-and-functions.md for comprehensive examples and best practices.
+
 func (s *Service) RegisterAction(action actions.ActionDefinition) error {
 	if action.Name == "" {
 		return fmt.Errorf("action name cannot be empty")
@@ -715,7 +833,127 @@ func (s *Service) RegisterAction(action actions.ActionDefinition) error {
 	return nil
 }
 
-// RegisterFunction registers a function with the OData service
+// RegisterFunction registers a custom OData function with the service.
+//
+// Functions are side-effect-free operations that compute and return values. They are invoked via
+// HTTP GET and must not modify data. Functions can be bound to specific entities or unbound
+// (accessible at the service root).
+//
+// # Required Fields
+//
+//   - Name: The function name (e.g., "GetTotalPrice")
+//   - Handler: The function implementing the logic (see FunctionHandler)
+//   - ReturnType: The Go type of the return value (e.g., reflect.TypeOf(float64(0)))
+//
+// # Bound vs Unbound Functions
+//
+// Bound functions (IsBound = true):
+//   - Must specify EntitySet (e.g., "Products")
+//   - Invoked on entity instances: GET /Products(1)/GetTotalPrice(taxRate=0.08)
+//   - The ctx parameter in the handler contains the entity instance
+//   - EntitySet must match a registered entity set
+//
+// Unbound functions (IsBound = false):
+//   - Invoked at service root: GET /GetTopProducts(count=10)
+//   - The ctx parameter in the handler is nil
+//
+// # Parameters
+//
+// Parameters can be defined in two ways:
+//
+//  1. Explicitly using Parameters field:
+//     Parameters: []ParameterDefinition{
+//     {Name: "taxRate", Type: reflect.TypeOf(float64(0)), Required: true},
+//     }
+//
+//  2. Automatically via ParameterStructType field:
+//     ParameterStructType: reflect.TypeOf(MyParamsStruct{})
+//     The framework derives parameters from struct fields
+//
+// Parameters are passed in the URL query string or using OData function call syntax:
+//   - Query string: GET /GetTopProducts?count=10
+//   - Function call: GET /GetTopProducts(count=10)
+//
+// # Return Values
+//
+// Functions must always return a value. The ReturnType field is required and specifies
+// the Go type of the return value:
+//   - Primitive types: reflect.TypeOf(float64(0)), reflect.TypeOf(""), etc.
+//   - Complex types: reflect.TypeOf(Product{})
+//   - Collections: reflect.TypeOf([]Product{})
+//
+// The framework automatically serializes the return value to JSON with appropriate OData annotations.
+//
+// # Error Handling
+//
+// Return (nil, error) to abort the function and send an error response to the client.
+// Return (value, nil) on success. The framework handles response formatting automatically.
+//
+// # Example - Bound Function
+//
+//	err := service.RegisterFunction(FunctionDefinition{
+//	    Name:      "GetTotalPrice",
+//	    IsBound:   true,
+//	    EntitySet: "Products",
+//	    Parameters: []ParameterDefinition{
+//	        {Name: "taxRate", Type: reflect.TypeOf(float64(0)), Required: true},
+//	    },
+//	    ReturnType: reflect.TypeOf(float64(0)),
+//	    Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) (interface{}, error) {
+//	        product := ctx.(*Product)
+//	        taxRate := params["taxRate"].(float64)
+//	        totalPrice := product.Price * (1 + taxRate)
+//	        return totalPrice, nil
+//	    },
+//	})
+//
+// Invoke: GET /Products(1)/GetTotalPrice(taxRate=0.08)
+//
+// Response:
+//
+//	{
+//	  "@odata.context": "$metadata#Edm.Double",
+//	  "value": 1079.99
+//	}
+//
+// # Example - Unbound Function Returning Collection
+//
+//	err := service.RegisterFunction(FunctionDefinition{
+//	    Name:    "GetTopProducts",
+//	    IsBound: false,
+//	    Parameters: []ParameterDefinition{
+//	        {Name: "count", Type: reflect.TypeOf(int64(0)), Required: true},
+//	    },
+//	    ReturnType: reflect.TypeOf([]Product{}),
+//	    Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) (interface{}, error) {
+//	        count := params["count"].(int64)
+//	        var products []Product
+//	        if err := db.Order("price DESC").Limit(int(count)).Find(&products).Error; err != nil {
+//	            return nil, err
+//	        }
+//	        return products, nil
+//	    },
+//	})
+//
+// Invoke: GET /GetTopProducts(count=10)
+//
+// Response:
+//
+//	{
+//	  "@odata.context": "$metadata#Products",
+//	  "value": [
+//	    {"ID": 1, "Name": "Laptop", "Price": 999.99},
+//	    ...
+//	  ]
+//	}
+//
+// # Overloading
+//
+// Multiple functions with the same name but different parameter signatures can be registered
+// (function overloading). The framework selects the appropriate overload based on the
+// parameters provided in the request.
+//
+// See documentation/actions-and-functions.md for comprehensive examples and best practices.
 func (s *Service) RegisterFunction(function actions.FunctionDefinition) error {
 	if function.Name == "" {
 		return fmt.Errorf("function name cannot be empty")

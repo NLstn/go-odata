@@ -5,6 +5,11 @@ This guide covers how to register and implement custom OData actions and functio
 ## Table of Contents
 
 - [Overview](#overview)
+- [Type Definitions](#type-definitions)
+  - [ActionDefinition](#actiondefinition)
+  - [FunctionDefinition](#functiondefinition)
+  - [ParameterDefinition](#parameterdefinition)
+  - [Handler Signatures](#handler-signatures)
 - [Functions](#functions)
 - [Actions](#actions)
 - [Parameter Types](#parameter-types)
@@ -20,6 +25,159 @@ OData v4 supports custom operations beyond standard CRUD through Actions and Fun
 Both can be:
 - **Unbound**: Standalone operations accessible at the service root
 - **Bound**: Operations tied to specific entities or entity sets
+
+## Type Definitions
+
+### ActionDefinition
+
+`ActionDefinition` describes an OData action that can modify data.
+
+```go
+type ActionDefinition struct {
+    Name                string           // Action name (e.g., "ApplyDiscount")
+    IsBound             bool             // true for bound actions, false for unbound
+    EntitySet           string           // Required for bound actions (e.g., "Products")
+    Handler             ActionHandler    // Function implementing the action logic
+    Parameters          []ParameterDefinition // Action parameters (from JSON body)
+    ParameterStructType reflect.Type     // Optional: derive parameters from struct
+    ReturnType          reflect.Type     // Return type, or nil for no return value
+}
+```
+
+**Field Details:**
+
+- **Name**: The action name as it appears in URLs. For bound actions: `/Products(1)/ApplyDiscount`. For unbound: `/ApplyDiscount`.
+
+- **IsBound**: 
+  - `true`: Action is bound to an entity or collection. The `ctx` parameter contains the entity instance.
+  - `false`: Action is unbound (service-level). The `ctx` parameter is nil.
+
+- **EntitySet**: Required when `IsBound` is `true`. Must match a registered entity set name (e.g., "Products").
+
+- **Handler**: The function implementing the action. See [ActionHandler](#actionhandler) for signature details.
+
+- **Parameters**: List of parameter definitions. Parameters are passed in the JSON request body. Can be empty.
+
+- **ParameterStructType**: Optional. When set, parameters are automatically derived from struct fields using reflection. Use `reflect.TypeOf(MyStructType{})`.
+
+- **ReturnType**: 
+  - `nil`: Action returns no value (should respond with HTTP 204 No Content)
+  - `reflect.TypeOf(MyType{})`: Action returns a value of the specified type
+
+### FunctionDefinition
+
+`FunctionDefinition` describes an OData function that computes and returns values.
+
+```go
+type FunctionDefinition struct {
+    Name                string            // Function name (e.g., "GetTotalPrice")
+    IsBound             bool              // true for bound functions, false for unbound
+    EntitySet           string            // Required for bound functions (e.g., "Products")
+    Handler             FunctionHandler   // Function implementing the computation logic
+    Parameters          []ParameterDefinition // Function parameters (from URL)
+    ParameterStructType reflect.Type      // Optional: derive parameters from struct
+    ReturnType          reflect.Type      // Required: return type
+}
+```
+
+**Field Details:**
+
+- **Name**: The function name as it appears in URLs. For bound functions: `/Products(1)/GetTotalPrice(taxRate=0.08)`. For unbound: `/GetTopProducts(count=10)`.
+
+- **IsBound**: 
+  - `true`: Function is bound to an entity or collection. The `ctx` parameter contains the entity instance.
+  - `false`: Function is unbound (service-level). The `ctx` parameter is nil.
+
+- **EntitySet**: Required when `IsBound` is `true`. Must match a registered entity set name (e.g., "Products").
+
+- **Handler**: The function implementing the computation. See [FunctionHandler](#functionhandler) for signature details.
+
+- **Parameters**: List of parameter definitions. Parameters are passed in the URL query string or function call syntax. Can be empty.
+
+- **ParameterStructType**: Optional. When set, parameters are automatically derived from struct fields using reflection. Use `reflect.TypeOf(MyStructType{})`.
+
+- **ReturnType**: Required. The Go type of the return value. Use `reflect.TypeOf(MyType{})`.
+
+### ParameterDefinition
+
+`ParameterDefinition` describes a single parameter for an action or function.
+
+```go
+type ParameterDefinition struct {
+    Name     string        // Parameter name
+    Type     reflect.Type  // Expected Go type
+    Required bool          // true if parameter must be present
+}
+```
+
+**Field Details:**
+
+- **Name**: The parameter name as it appears in requests (JSON body for actions, URL for functions).
+
+- **Type**: The expected Go type, obtained via `reflect.TypeOf()`. Common examples:
+  - `reflect.TypeOf("")` for string
+  - `reflect.TypeOf(int64(0))` for int64
+  - `reflect.TypeOf(float64(0))` for float64
+  - `reflect.TypeOf(false)` for bool
+  - `reflect.TypeOf(MyStruct{})` for complex types
+  - `reflect.TypeOf([]MyStruct{})` for slices
+
+- **Required**: 
+  - `true`: Parameter must be present in the request
+  - `false`: Parameter is optional and may be omitted
+
+### Handler Signatures
+
+#### ActionHandler
+
+```go
+type ActionHandler func(
+    w http.ResponseWriter,
+    r *http.Request,
+    ctx interface{},
+    params map[string]interface{},
+) error
+```
+
+**Parameters:**
+- `w`: HTTP response writer for setting headers and writing the response
+- `r`: HTTP request containing headers, URL, and parsed body
+- `ctx`: For bound actions, contains the entity instance (cast to appropriate type). For unbound actions, nil.
+- `params`: Map of parameter names to parsed values (use type assertions to access)
+
+**Returns:**
+- `error`: Return an error to abort and send error response. Return nil after writing the HTTP response.
+
+**Responsibilities:**
+- Write HTTP status code (e.g., `w.WriteHeader(http.StatusOK)` or `http.StatusNoContent`)
+- Set response headers (e.g., `w.Header().Set("Content-Type", "application/json")`)
+- Write response body (if any)
+
+#### FunctionHandler
+
+```go
+type FunctionHandler func(
+    w http.ResponseWriter,
+    r *http.Request,
+    ctx interface{},
+    params map[string]interface{},
+) (interface{}, error)
+```
+
+**Parameters:**
+- `w`: HTTP response writer (usually handled automatically by the framework)
+- `r`: HTTP request containing headers, URL, and parsed parameters
+- `ctx`: For bound functions, contains the entity instance (cast to appropriate type). For unbound functions, nil.
+- `params`: Map of parameter names to parsed values (use type assertions to access)
+
+**Returns:**
+- `interface{}`: The computed result (must match `ReturnType`)
+- `error`: Return nil on success, or an error to abort and send error response
+
+**Framework Responsibilities:**
+- Automatically serializes return value to JSON
+- Sets appropriate HTTP status code (200 OK)
+- Adds OData context annotations
 
 ## Functions
 
