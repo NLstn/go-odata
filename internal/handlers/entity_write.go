@@ -483,10 +483,8 @@ func (h *EntityHandler) handleDeleteEntityOverwrite(w http.ResponseWriter, r *ht
 	// Call the overwrite handler
 	if err := h.overwrite.delete(ctx); err != nil {
 		if IsNotFoundError(err) {
-			if writeErr := response.WriteError(w, http.StatusNotFound, ErrMsgEntityNotFound,
-				fmt.Sprintf("Entity with key '%s' not found", entityKey)); writeErr != nil {
-				h.logger.Error("Error writing error response", "error", writeErr)
-			}
+			WriteError(w, http.StatusNotFound, ErrMsgEntityNotFound,
+				fmt.Sprintf("Entity with key '%s' not found", entityKey))
 			return
 		}
 		WriteError(w, http.StatusInternalServerError, "Error deleting entity", err.Error())
@@ -507,10 +505,8 @@ func (h *EntityHandler) handleUpdateEntityOverwrite(w http.ResponseWriter, r *ht
 	// Parse the request body
 	var updateData map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&updateData); err != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidRequestBody,
-			fmt.Sprintf(ErrDetailFailedToParseJSON, err.Error())); writeErr != nil {
-			h.logger.Error("Error writing error response", "error", writeErr)
-		}
+		WriteError(w, http.StatusBadRequest, ErrMsgInvalidRequestBody,
+			fmt.Sprintf(ErrDetailFailedToParseJSON, err.Error()))
 		return
 	}
 
@@ -525,10 +521,8 @@ func (h *EntityHandler) handleUpdateEntityOverwrite(w http.ResponseWriter, r *ht
 	result, err := h.overwrite.update(ctx, updateData, isFullReplace)
 	if err != nil {
 		if IsNotFoundError(err) {
-			if writeErr := response.WriteError(w, http.StatusNotFound, ErrMsgEntityNotFound,
-				fmt.Sprintf("Entity with key '%s' not found", entityKey)); writeErr != nil {
-				h.logger.Error("Error writing error response", "error", writeErr)
-			}
+			WriteError(w, http.StatusNotFound, ErrMsgEntityNotFound,
+				fmt.Sprintf("Entity with key '%s' not found", entityKey))
 			return
 		}
 		WriteError(w, http.StatusInternalServerError, "Error updating entity", err.Error())

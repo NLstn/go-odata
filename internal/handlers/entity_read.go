@@ -166,10 +166,8 @@ func (h *EntityHandler) handleGetEntityOverwrite(w http.ResponseWriter, r *http.
 	if err != nil {
 		// Check if it's a not found error
 		if IsNotFoundError(err) {
-			if writeErr := response.WriteError(w, http.StatusNotFound, ErrMsgEntityNotFound,
-				fmt.Sprintf("Entity with key '%s' not found", entityKey)); writeErr != nil {
-				h.logger.Error("Error writing error response", "error", writeErr)
-			}
+			WriteError(w, http.StatusNotFound, ErrMsgEntityNotFound,
+				fmt.Sprintf("Entity with key '%s' not found", entityKey))
 			return
 		}
 		WriteError(w, http.StatusInternalServerError, "Error fetching entity", err.Error())
@@ -177,10 +175,8 @@ func (h *EntityHandler) handleGetEntityOverwrite(w http.ResponseWriter, r *http.
 	}
 
 	if result == nil {
-		if writeErr := response.WriteError(w, http.StatusNotFound, ErrMsgEntityNotFound,
-			fmt.Sprintf("Entity with key '%s' not found", entityKey)); writeErr != nil {
-			h.logger.Error("Error writing error response", "error", writeErr)
-		}
+		WriteError(w, http.StatusNotFound, ErrMsgEntityNotFound,
+			fmt.Sprintf("Entity with key '%s' not found", entityKey))
 		return
 	}
 
