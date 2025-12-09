@@ -231,7 +231,7 @@ GET /Clubs(b5937c38-0b97-43ff-b7b3-61133b37d6fc)
 GET /Members?$filter=clubId eq 'b5937c38-0b97-43ff-b7b3-61133b37d6fc'
 
 # Combine multiple conditions
-GET /Members?$filter=clubId eq 'b5937c38-0b97-43ff-b7b3-61133b37d6fc' and Name eq 'John'
+GET /Members?$filter=clubId eq 'b5937c38-0b97-43ff-b7b3-61133b37d6fc' and name eq 'John'
 
 # Access related entities (no quotes in path)
 GET /Clubs(b5937c38-0b97-43ff-b7b3-61133b37d6fc)/Members
