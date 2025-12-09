@@ -79,8 +79,13 @@ type ParameterDefinition struct {
 //	        product := ctx.(*Product)
 //	        percentage := params["percentage"].(float64)
 //	        product.Price = product.Price * (1 - percentage/100)
-//	        // ... save and return response
-//	        return nil
+//	        if err := db.Save(product).Error; err != nil {
+//	            return err
+//	        }
+//	        // Write response with updated product
+//	        w.Header().Set("Content-Type", "application/json")
+//	        w.WriteHeader(http.StatusOK)
+//	        return json.NewEncoder(w).Encode(map[string]interface{}{"value": product})
 //	    },
 //	})
 //
@@ -157,7 +162,10 @@ type ActionDefinition struct {
 //	    ReturnType: reflect.TypeOf([]Product{}),
 //	    Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) (interface{}, error) {
 //	        count := params["count"].(int64)
-//	        // ... fetch top products
+//	        var products []Product
+//	        if err := db.Order("price DESC").Limit(int(count)).Find(&products).Error; err != nil {
+//	            return nil, err
+//	        }
 //	        return products, nil
 //	    },
 //	})
