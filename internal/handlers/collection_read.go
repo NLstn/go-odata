@@ -16,6 +16,12 @@ import (
 )
 
 func (h *EntityHandler) handleGetCollection(w http.ResponseWriter, r *http.Request) {
+	// Check if there's an overwrite handler
+	if h.overwrite.hasGetCollection() {
+		h.handleGetCollectionOverwrite(w, r)
+		return
+	}
+
 	pref := preference.ParsePrefer(r)
 	ctx := r.Context()
 
@@ -29,6 +35,52 @@ func (h *EntityHandler) handleGetCollection(w http.ResponseWriter, r *http.Reque
 		AfterRead:         h.afterReadCollection(r),
 		WriteResponse:     h.collectionResponseWriter(w, r, pref),
 	})
+}
+
+// handleGetCollectionOverwrite handles GET collection requests using the overwrite handler
+func (h *EntityHandler) handleGetCollectionOverwrite(w http.ResponseWriter, r *http.Request) {
+	pref := preference.ParsePrefer(r)
+
+	// Parse and validate query options
+	queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata)
+	if err != nil {
+		h.writeInvalidQueryError(w, err)
+		return
+	}
+
+	// Handle delta token requests - these are not supported with overwrite handlers
+	// because delta tokens require change tracking at the data layer
+	if queryOptions.DeltaToken != nil {
+		h.handleDeltaCollection(w, r, *queryOptions.DeltaToken)
+		return
+	}
+
+	// Apply max page size preference
+	if pref.MaxPageSize != nil {
+		queryOptions = h.applyMaxPageSize(queryOptions, *pref.MaxPageSize)
+	}
+
+	// Create overwrite context
+	ctx := &OverwriteContext{
+		QueryOptions: queryOptions,
+		Request:      r,
+	}
+
+	// Call the overwrite handler
+	result, err := h.overwrite.getCollection(ctx)
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "Error fetching collection", err.Error())
+		return
+	}
+
+	if result == nil {
+		result = &CollectionResult{Items: []interface{}{}}
+	}
+
+	// Build the response
+	if err := h.collectionResponseWriter(w, r, pref)(queryOptions, result.Items, result.Count, nil); err != nil {
+		h.logger.Error("Error writing collection response", "error", err)
+	}
 }
 
 func (h *EntityHandler) parseCollectionQueryOptions(w http.ResponseWriter, r *http.Request, pref *preference.Preference) func() (*query.QueryOptions, error) {

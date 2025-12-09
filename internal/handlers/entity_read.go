@@ -34,6 +34,12 @@ func (h *EntityHandler) HandleEntity(w http.ResponseWriter, r *http.Request, ent
 
 // handleGetEntity handles GET requests for individual entities
 func (h *EntityHandler) handleGetEntity(w http.ResponseWriter, r *http.Request, entityKey string) {
+	// Check if there's an overwrite handler
+	if h.overwrite.hasGetEntity() {
+		h.handleGetEntityOverwrite(w, r, entityKey)
+		return
+	}
+
 	ctx := r.Context()
 	// Parse query options for $expand and $select
 	queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata)
@@ -121,6 +127,65 @@ func (h *EntityHandler) handleGetEntity(w http.ResponseWriter, r *http.Request, 
 
 	// Build and write response
 	h.writeEntityResponseWithETag(w, r, result, currentETag, http.StatusOK)
+}
+
+// handleGetEntityOverwrite handles GET entity requests using the overwrite handler
+func (h *EntityHandler) handleGetEntityOverwrite(w http.ResponseWriter, r *http.Request, entityKey string) {
+	// Parse query options for $expand and $select
+	queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata)
+	if err != nil {
+		h.writeInvalidQueryError(w, err)
+		return
+	}
+
+	// Validate that $top and $skip are not used on individual entities
+	if queryOptions.Top != nil {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions,
+			"$top query option is not applicable to individual entities"); writeErr != nil {
+			h.logger.Error("Error writing error response", "error", writeErr)
+		}
+		return
+	}
+	if queryOptions.Skip != nil {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions,
+			"$skip query option is not applicable to individual entities"); writeErr != nil {
+			h.logger.Error("Error writing error response", "error", writeErr)
+		}
+		return
+	}
+
+	// Create overwrite context
+	ctx := &OverwriteContext{
+		QueryOptions: queryOptions,
+		EntityKey:    entityKey,
+		Request:      r,
+	}
+
+	// Call the overwrite handler
+	result, err := h.overwrite.getEntity(ctx)
+	if err != nil {
+		// Check if it's a not found error
+		if IsNotFoundError(err) {
+			if writeErr := response.WriteError(w, http.StatusNotFound, ErrMsgEntityNotFound,
+				fmt.Sprintf("Entity with key '%s' not found", entityKey)); writeErr != nil {
+				h.logger.Error("Error writing error response", "error", writeErr)
+			}
+			return
+		}
+		WriteError(w, http.StatusInternalServerError, "Error fetching entity", err.Error())
+		return
+	}
+
+	if result == nil {
+		if writeErr := response.WriteError(w, http.StatusNotFound, ErrMsgEntityNotFound,
+			fmt.Sprintf("Entity with key '%s' not found", entityKey)); writeErr != nil {
+			h.logger.Error("Error writing error response", "error", writeErr)
+		}
+		return
+	}
+
+	// Build and write response
+	h.writeEntityResponseWithETag(w, r, result, "", http.StatusOK)
 }
 
 // HandleEntityRef handles GET requests for entity references (e.g., Products(1)/$ref)

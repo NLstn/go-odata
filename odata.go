@@ -690,6 +690,42 @@ type (
 	// Return the computed value and nil error on success; return nil and error on failure.
 	// See the full documentation on this type for parameter descriptions and examples.
 	FunctionHandler = actions.FunctionHandler
+
+	// OverwriteContext provides context information for overwrite handlers.
+	// It contains the parsed OData query options and entity key (for single entity operations).
+	OverwriteContext = handlers.OverwriteContext
+
+	// CollectionResult represents the result from a GetCollection overwrite handler.
+	CollectionResult = handlers.CollectionResult
+
+	// GetCollectionHandler is the function signature for overwriting the GetCollection operation.
+	// It receives the overwrite context and should return the collection result or an error.
+	GetCollectionHandler = handlers.GetCollectionHandler
+
+	// GetEntityHandler is the function signature for overwriting the GetEntity operation.
+	// It receives the overwrite context (including EntityKey) and should return the entity or an error.
+	GetEntityHandler = handlers.GetEntityHandler
+
+	// CreateHandler is the function signature for overwriting the Create operation.
+	// It receives the overwrite context and the parsed entity data, and should return the created entity or an error.
+	CreateHandler = handlers.CreateHandler
+
+	// UpdateHandler is the function signature for overwriting the Update operation.
+	// It receives the overwrite context (including EntityKey), update data, and whether it's a full replacement (PUT).
+	// It should return the updated entity or an error.
+	UpdateHandler = handlers.UpdateHandler
+
+	// DeleteHandler is the function signature for overwriting the Delete operation.
+	// It receives the overwrite context (including EntityKey) and should return an error if deletion fails.
+	DeleteHandler = handlers.DeleteHandler
+
+	// GetCountHandler is the function signature for overwriting the GetCount operation.
+	// It receives the overwrite context and should return the count or an error.
+	GetCountHandler = handlers.GetCountHandler
+
+	// EntityOverwrite contains all overwrite handlers for an entity set.
+	// Any handler that is nil will use the default GORM-based implementation.
+	EntityOverwrite = handlers.EntityOverwrite
 )
 
 // RegisterAction registers a custom OData action with the service.
@@ -1027,6 +1063,185 @@ func (s *Service) SetNamespace(namespace string) error {
 	for _, handler := range s.handlers {
 		handler.SetNamespace(trimmed)
 	}
+	return nil
+}
+
+// SetEntityOverwrite configures all overwrite handlers for the specified entity set.
+//
+// Overwrite handlers completely replace the default GORM-based data access for entity operations.
+// The library still validates OData query syntax before calling overwrite handlers, and handlers
+// receive parsed OData query options that they can apply to their custom data sources.
+//
+// # Example
+//
+//	err := service.SetEntityOverwrite("Products", &EntityOverwrite{
+//	    GetCollection: func(ctx *OverwriteContext) (*CollectionResult, error) {
+//	        // Fetch products from external API instead of database
+//	        products, err := externalAPI.GetProducts()
+//	        if err != nil {
+//	            return nil, err
+//	        }
+//	        return &CollectionResult{Items: products}, nil
+//	    },
+//	    GetEntity: func(ctx *OverwriteContext) (interface{}, error) {
+//	        // Fetch single product by key from external API
+//	        return externalAPI.GetProduct(ctx.EntityKey)
+//	    },
+//	})
+//
+// Any handler that is nil will use the default GORM-based implementation.
+func (s *Service) SetEntityOverwrite(entitySetName string, overwrite *EntityOverwrite) error {
+	handler, exists := s.handlers[entitySetName]
+	if !exists {
+		return fmt.Errorf("entity set '%s' is not registered", entitySetName)
+	}
+
+	handler.SetOverwrite(overwrite)
+	s.logger.Debug("Set entity overwrite",
+		"entitySet", entitySetName,
+		"hasGetCollection", overwrite != nil && overwrite.GetCollection != nil,
+		"hasGetEntity", overwrite != nil && overwrite.GetEntity != nil,
+		"hasCreate", overwrite != nil && overwrite.Create != nil,
+		"hasUpdate", overwrite != nil && overwrite.Update != nil,
+		"hasDelete", overwrite != nil && overwrite.Delete != nil,
+		"hasGetCount", overwrite != nil && overwrite.GetCount != nil)
+	return nil
+}
+
+// SetGetCollectionOverwrite configures the overwrite handler for the GetCollection operation.
+//
+// The handler replaces the default collection retrieval logic (GET /EntitySet).
+// OData query options ($filter, $select, $expand, $orderby, $top, $skip, $search, $count)
+// are parsed and validated before the handler is called, and are available in the context.
+//
+// # Example
+//
+//	err := service.SetGetCollectionOverwrite("Products", func(ctx *OverwriteContext) (*CollectionResult, error) {
+//	    products, err := customDB.Query(ctx.QueryOptions.Filter, ctx.QueryOptions.Top)
+//	    if err != nil {
+//	        return nil, err
+//	    }
+//	    return &CollectionResult{Items: products}, nil
+//	})
+func (s *Service) SetGetCollectionOverwrite(entitySetName string, handler GetCollectionHandler) error {
+	h, exists := s.handlers[entitySetName]
+	if !exists {
+		return fmt.Errorf("entity set '%s' is not registered", entitySetName)
+	}
+
+	h.SetGetCollectionOverwrite(handler)
+	return nil
+}
+
+// SetGetEntityOverwrite configures the overwrite handler for the GetEntity operation.
+//
+// The handler replaces the default single entity retrieval logic (GET /EntitySet(key)).
+// The entity key is available in ctx.EntityKey.
+//
+// # Example
+//
+//	err := service.SetGetEntityOverwrite("Products", func(ctx *OverwriteContext) (interface{}, error) {
+//	    return customDB.GetById(ctx.EntityKey)
+//	})
+func (s *Service) SetGetEntityOverwrite(entitySetName string, handler GetEntityHandler) error {
+	h, exists := s.handlers[entitySetName]
+	if !exists {
+		return fmt.Errorf("entity set '%s' is not registered", entitySetName)
+	}
+
+	h.SetGetEntityOverwrite(handler)
+	return nil
+}
+
+// SetCreateOverwrite configures the overwrite handler for the Create operation.
+//
+// The handler replaces the default entity creation logic (POST /EntitySet).
+// The entity parameter contains the parsed entity from the request body.
+// The handler should return the created entity with any server-generated values.
+//
+// # Example
+//
+//	err := service.SetCreateOverwrite("Products", func(ctx *OverwriteContext, entity interface{}) (interface{}, error) {
+//	    product := entity.(*Product)
+//	    product.ID = generateID()
+//	    if err := customDB.Insert(product); err != nil {
+//	        return nil, err
+//	    }
+//	    return product, nil
+//	})
+func (s *Service) SetCreateOverwrite(entitySetName string, handler CreateHandler) error {
+	h, exists := s.handlers[entitySetName]
+	if !exists {
+		return fmt.Errorf("entity set '%s' is not registered", entitySetName)
+	}
+
+	h.SetCreateOverwrite(handler)
+	return nil
+}
+
+// SetUpdateOverwrite configures the overwrite handler for the Update operation.
+//
+// The handler replaces the default entity update logic (PATCH/PUT /EntitySet(key)).
+// The entity key is available in ctx.EntityKey. The updateData contains the properties to update.
+// The isFullReplace parameter is true for PUT requests (complete replacement) and false for PATCH (partial update).
+// The handler should return the updated entity.
+//
+// # Example
+//
+//	err := service.SetUpdateOverwrite("Products", func(ctx *OverwriteContext, updateData map[string]interface{}, isFullReplace bool) (interface{}, error) {
+//	    if isFullReplace {
+//	        return customDB.Replace(ctx.EntityKey, updateData)
+//	    }
+//	    return customDB.PartialUpdate(ctx.EntityKey, updateData)
+//	})
+func (s *Service) SetUpdateOverwrite(entitySetName string, handler UpdateHandler) error {
+	h, exists := s.handlers[entitySetName]
+	if !exists {
+		return fmt.Errorf("entity set '%s' is not registered", entitySetName)
+	}
+
+	h.SetUpdateOverwrite(handler)
+	return nil
+}
+
+// SetDeleteOverwrite configures the overwrite handler for the Delete operation.
+//
+// The handler replaces the default entity deletion logic (DELETE /EntitySet(key)).
+// The entity key is available in ctx.EntityKey.
+// Return nil to indicate successful deletion, or an error to abort.
+//
+// # Example
+//
+//	err := service.SetDeleteOverwrite("Products", func(ctx *OverwriteContext) error {
+//	    return customDB.Delete(ctx.EntityKey)
+//	})
+func (s *Service) SetDeleteOverwrite(entitySetName string, handler DeleteHandler) error {
+	h, exists := s.handlers[entitySetName]
+	if !exists {
+		return fmt.Errorf("entity set '%s' is not registered", entitySetName)
+	}
+
+	h.SetDeleteOverwrite(handler)
+	return nil
+}
+
+// SetGetCountOverwrite configures the overwrite handler for the GetCount operation.
+//
+// The handler replaces the default count retrieval logic (GET /EntitySet/$count).
+// OData $filter query option is parsed and available in ctx.QueryOptions for filtering the count.
+//
+// # Example
+//
+//	err := service.SetGetCountOverwrite("Products", func(ctx *OverwriteContext) (int64, error) {
+//	    return customDB.Count(ctx.QueryOptions.Filter)
+//	})
+func (s *Service) SetGetCountOverwrite(entitySetName string, handler GetCountHandler) error {
+	h, exists := s.handlers[entitySetName]
+	if !exists {
+		return fmt.Errorf("entity set '%s' is not registered", entitySetName)
+	}
+
+	h.SetGetCountOverwrite(handler)
 	return nil
 }
 

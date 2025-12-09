@@ -10,6 +10,7 @@ import (
 
 	"github.com/nlstn/go-odata/internal/etag"
 	"github.com/nlstn/go-odata/internal/preference"
+	"github.com/nlstn/go-odata/internal/query"
 	"github.com/nlstn/go-odata/internal/response"
 	"github.com/nlstn/go-odata/internal/trackchanges"
 	"gorm.io/gorm"
@@ -19,6 +20,12 @@ var errETagMismatch = errors.New("etag mismatch")
 
 // handleDeleteEntity handles DELETE requests for individual entities
 func (h *EntityHandler) handleDeleteEntity(w http.ResponseWriter, r *http.Request, entityKey string) {
+	// Check if there's an overwrite handler
+	if h.overwrite.hasDelete() {
+		h.handleDeleteEntityOverwrite(w, r, entityKey)
+		return
+	}
+
 	ctx := r.Context()
 	var (
 		entity       interface{}
@@ -78,6 +85,12 @@ func (h *EntityHandler) handleDeleteEntity(w http.ResponseWriter, r *http.Reques
 
 // handlePatchEntity handles PATCH requests for individual entities
 func (h *EntityHandler) handlePatchEntity(w http.ResponseWriter, r *http.Request, entityKey string) {
+	// Check if there's an overwrite handler
+	if h.overwrite.hasUpdate() {
+		h.handleUpdateEntityOverwrite(w, r, entityKey, false)
+		return
+	}
+
 	// Validate Content-Type header
 	if err := validateContentType(w, r); err != nil {
 		return
@@ -244,6 +257,12 @@ func (h *EntityHandler) returnUpdatedEntity(w http.ResponseWriter, r *http.Reque
 // handlePutEntity handles PUT requests for individual entities
 // PUT performs a complete replacement according to OData v4 spec
 func (h *EntityHandler) handlePutEntity(w http.ResponseWriter, r *http.Request, entityKey string) {
+	// Check if there's an overwrite handler
+	if h.overwrite.hasUpdate() {
+		h.handleUpdateEntityOverwrite(w, r, entityKey, true)
+		return
+	}
+
 	// Validate Content-Type header
 	if err := validateContentType(w, r); err != nil {
 		return
@@ -448,5 +467,92 @@ func (h *EntityHandler) removeODataBindAnnotations(updateData map[string]interfa
 		if strings.HasSuffix(key, "@odata.bind") {
 			delete(updateData, key)
 		}
+	}
+}
+
+// handleDeleteEntityOverwrite handles DELETE entity requests using the overwrite handler
+func (h *EntityHandler) handleDeleteEntityOverwrite(w http.ResponseWriter, r *http.Request, entityKey string) {
+	// Create overwrite context with empty query options (DELETE doesn't use query options,
+	// but we provide a consistent context interface across all operations)
+	ctx := &OverwriteContext{
+		QueryOptions: &query.QueryOptions{},
+		EntityKey:    entityKey,
+		Request:      r,
+	}
+
+	// Call the overwrite handler
+	if err := h.overwrite.delete(ctx); err != nil {
+		if IsNotFoundError(err) {
+			if writeErr := response.WriteError(w, http.StatusNotFound, ErrMsgEntityNotFound,
+				fmt.Sprintf("Entity with key '%s' not found", entityKey)); writeErr != nil {
+				h.logger.Error("Error writing error response", "error", writeErr)
+			}
+			return
+		}
+		WriteError(w, http.StatusInternalServerError, "Error deleting entity", err.Error())
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleUpdateEntityOverwrite handles PATCH/PUT entity requests using the overwrite handler
+func (h *EntityHandler) handleUpdateEntityOverwrite(w http.ResponseWriter, r *http.Request, entityKey string, isFullReplace bool) {
+	if err := validateContentType(w, r); err != nil {
+		return
+	}
+
+	pref := preference.ParsePrefer(r)
+
+	// Parse the request body
+	var updateData map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&updateData); err != nil {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidRequestBody,
+			fmt.Sprintf(ErrDetailFailedToParseJSON, err.Error())); writeErr != nil {
+			h.logger.Error("Error writing error response", "error", writeErr)
+		}
+		return
+	}
+
+	// Create overwrite context
+	ctx := &OverwriteContext{
+		QueryOptions: &query.QueryOptions{},
+		EntityKey:    entityKey,
+		Request:      r,
+	}
+
+	// Call the overwrite handler
+	result, err := h.overwrite.update(ctx, updateData, isFullReplace)
+	if err != nil {
+		if IsNotFoundError(err) {
+			if writeErr := response.WriteError(w, http.StatusNotFound, ErrMsgEntityNotFound,
+				fmt.Sprintf("Entity with key '%s' not found", entityKey)); writeErr != nil {
+				h.logger.Error("Error writing error response", "error", writeErr)
+			}
+			return
+		}
+		WriteError(w, http.StatusInternalServerError, "Error updating entity", err.Error())
+		return
+	}
+
+	// Build response
+	if applied := pref.GetPreferenceApplied(); applied != "" {
+		w.Header().Set(HeaderPreferenceApplied, applied)
+	}
+
+	if pref.ShouldReturnContent(false) {
+		if result != nil {
+			h.writeEntityResponseWithETag(w, r, result, "", http.StatusOK)
+		} else {
+			// If no result was returned but content was requested, return 204
+			w.WriteHeader(http.StatusNoContent)
+		}
+	} else {
+		// For 204 No Content, include OData-EntityId if we have the result
+		if result != nil {
+			entityId := h.buildEntityLocation(r, result)
+			SetODataHeader(w, HeaderODataEntityId, entityId)
+		}
+		w.WriteHeader(http.StatusNoContent)
 	}
 }
