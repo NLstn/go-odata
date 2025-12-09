@@ -8,6 +8,8 @@ This guide covers how to define entities in go-odata using Go structs with appro
 - [Entity with Rich Metadata](#entity-with-rich-metadata)
 - [Entity with Relationships](#entity-with-relationships)
 - [Composite Keys](#composite-keys)
+- [Server-generated Keys](#server-generated-keys)
+- [Working with UUID/GUID Keys](#working-with-uuidguid-keys)
 - [Supported Tags](#supported-tags)
 - [Read Hooks and Query Options](#read-hooks-and-query-options)
 
@@ -136,6 +138,102 @@ service.RegisterKeyGenerator("snowflake", func(ctx context.Context) (interface{}
 > Requires `import "context"` and `import "time"`.
 
 After registration you can reference `odata:"key,generate=snowflake"` on your entity fields. Generator names are validated during metadata analysis to catch typos early.
+
+## Working with UUID/GUID Keys
+
+When using UUIDs (Universally Unique Identifiers) or GUIDs as entity keys, the formatting requirements differ between key access paths and filter expressions. Understanding these differences is essential to avoid common issues.
+
+### Key Access (Entity by ID)
+
+When accessing an entity directly by its UUID key in the URL path, **do not use quotes** around the UUID value:
+
+```bash
+✅ Correct:
+GET /Clubs(b5937c38-0b97-43ff-b7b3-61133b37d6fc)
+GET /APIKeys(e7c9d5fe-19e2-4c88-8e3b-79de0cf4af01)
+
+❌ Incorrect:
+GET /Clubs('b5937c38-0b97-43ff-b7b3-61133b37d6fc')
+```
+
+The quoted version generates SQL with nested quotes (e.g., `WHERE id = "'uuid'"` instead of `WHERE id = 'uuid'`), causing the query to fail.
+
+**Example entity definition:**
+
+```go
+type Club struct {
+    ID   string `json:"id" gorm:"type:uuid;primaryKey" odata:"key"`
+    Name string `json:"name" odata:"required"`
+}
+```
+
+### Filter Expressions
+
+In `$filter` query options, UUID values used as string literals **must be quoted**:
+
+```bash
+✅ Correct:
+GET /Members?$filter=clubId eq 'b5937c38-0b97-43ff-b7b3-61133b37d6fc'
+GET /APIKeys?$filter=Owner eq 'Integration Tests'
+
+❌ Incorrect:
+GET /Members?$filter=clubId eq b5937c38-0b97-43ff-b7b3-61133b37d6fc
+```
+
+Without quotes, the OData parser treats hyphens as operators, resulting in an error like "unexpected token after expression."
+
+### OData v4 GUID Type
+
+The OData v4 specification provides multiple ways to represent GUIDs:
+
+1. **String literal**: `'uuid-value'` - Use this in filters when your key is defined as a string type
+2. **Typed GUID**: `guid'uuid-value'` - Use this if your property is explicitly typed as `Edm.Guid` in the metadata
+3. **Raw value in path**: `uuid-value` - Use this for direct entity access by key
+
+Most Go applications store UUIDs as strings (using `string` type with `gorm:"type:uuid"`), so you'll typically use string literal syntax (`'uuid-value'`) in filters.
+
+### Complete Example
+
+```go
+type Member struct {
+    ID      string `json:"id" gorm:"type:uuid;primaryKey" odata:"key,generate=uuid"`
+    ClubID  string `json:"clubId" gorm:"type:uuid;not null" odata:"required"`
+    Name    string `json:"name" odata:"required"`
+}
+
+type Club struct {
+    ID      string   `json:"id" gorm:"type:uuid;primaryKey" odata:"key,generate=uuid"`
+    Name    string   `json:"name" odata:"required"`
+    Members []Member `json:"members" gorm:"foreignKey:ClubID;references:ID"`
+}
+```
+
+**Valid requests:**
+
+```bash
+# Get a specific club by ID (no quotes in path)
+GET /Clubs(b5937c38-0b97-43ff-b7b3-61133b37d6fc)
+
+# Filter members by club ID (quotes in filter expression)
+GET /Members?$filter=clubId eq 'b5937c38-0b97-43ff-b7b3-61133b37d6fc'
+
+# Combine multiple conditions
+GET /Members?$filter=clubId eq 'b5937c38-0b97-43ff-b7b3-61133b37d6fc' and Name eq 'John'
+
+# Access related entities (no quotes in path)
+GET /Clubs(b5937c38-0b97-43ff-b7b3-61133b37d6fc)/Members
+```
+
+### Quick Reference
+
+| Context | Format | Example |
+|---------|--------|---------|
+| Entity by key | No quotes | `/Clubs(uuid-value)` |
+| Composite key with UUID | No quotes | `/Items(OrderID=123,ItemID=uuid-value)` |
+| Filter with string UUID | Single quotes | `?$filter=clubId eq 'uuid-value'` |
+| Property comparison | Single quotes | `?$filter=id eq '...' and status eq 'active'` |
+
+This distinction follows the OData v4 URL conventions where path segments containing key values are parsed differently than literal values within query expressions.
 
 ## Supported Tags
 

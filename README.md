@@ -207,6 +207,8 @@ All standard OData v4 query options are supported:
 - Batch requests: `POST /$batch`
 - Custom actions and functions
 
+> **Note on UUID/GUID Keys:** When using UUID strings as entity keys, don't use quotes in the path (`/Entity(uuid-value)`), but do use quotes in filter expressions (`?$filter=field eq 'uuid-value'`). See [Working with UUID/GUID Keys](documentation/entities.md#working-with-uuidguid-keys) for details.
+
 See the [OData v4 specification](https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html) for complete protocol details.
 
 ## Asynchronous Processing (`Prefer: respond-async`)
