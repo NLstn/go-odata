@@ -12,14 +12,91 @@ import (
 	"strings"
 )
 
-// ParameterDefinition defines a parameter for an action or function
+// ParameterDefinition defines a parameter for an action or function.
+//
+// Parameters are passed to action and function handlers via the params map[string]interface{}.
+// The framework automatically parses and validates parameters based on these definitions before
+// invoking the handler.
+//
+// Fields:
+//   - Name: The parameter name as it appears in the request (JSON body for actions, URL for functions)
+//   - Type: The expected Go type (obtained via reflect.TypeOf). Common types include:
+//     - reflect.TypeOf("") for string
+//     - reflect.TypeOf(int64(0)) for int64
+//     - reflect.TypeOf(float64(0)) for float64
+//     - reflect.TypeOf(false) for bool
+//     - reflect.TypeOf(MyStruct{}) for complex types
+//     - reflect.TypeOf([]MyStruct{}) for slices
+//     - reflect.TypeOf(map[string]interface{}{}) for maps
+//   - Required: If true, the parameter must be present in the request. If false, the parameter
+//     is optional and may be omitted.
+//
+// Example:
+//
+//	[]ParameterDefinition{
+//	    {Name: "percentage", Type: reflect.TypeOf(float64(0)), Required: true},
+//	    {Name: "reason", Type: reflect.TypeOf(""), Required: false},
+//	}
 type ParameterDefinition struct {
 	Name     string
 	Type     reflect.Type
 	Required bool
 }
 
-// ActionDefinition defines an OData action
+// ActionDefinition defines an OData action that can modify data.
+//
+// Actions are operations invoked via HTTP POST that may have side effects like creating,
+// updating, or deleting data. They can be bound to specific entities or unbound (service-level).
+//
+// Fields:
+//   - Name: The action name as it appears in URLs (e.g., "ApplyDiscount" for /Products(1)/ApplyDiscount)
+//   - IsBound: If true, the action is bound to an entity or entity collection.
+//     Bound actions receive the entity instance via the ctx parameter.
+//     If false, the action is unbound and accessible at the service root.
+//   - EntitySet: Required for bound actions. The entity set name the action is bound to
+//     (e.g., "Products"). Must match a registered entity set. Ignored for unbound actions.
+//   - Handler: The function that implements the action logic. See ActionHandler for signature details.
+//   - Parameters: Definitions for action parameters. Parameters are passed in the JSON request body.
+//     Can be empty if the action takes no parameters beyond the binding parameter.
+//   - ParameterStructType: Optional. If set, parameters are automatically derived from the struct
+//     fields using reflection. This eliminates the need to manually define Parameters.
+//     Use reflect.TypeOf(MyStructType{}) to set this field.
+//   - ReturnType: The Go type of the return value, or nil if the action returns no value.
+//     Use reflect.TypeOf(MyType{}) to specify a return type.
+//     Actions with nil ReturnType should return HTTP 204 No Content.
+//
+// Example - Bound action with parameters:
+//
+//	service.RegisterAction(ActionDefinition{
+//	    Name:      "ApplyDiscount",
+//	    IsBound:   true,
+//	    EntitySet: "Products",
+//	    Parameters: []ParameterDefinition{
+//	        {Name: "percentage", Type: reflect.TypeOf(float64(0)), Required: true},
+//	    },
+//	    ReturnType: reflect.TypeOf(Product{}),
+//	    Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) error {
+//	        product := ctx.(*Product)
+//	        percentage := params["percentage"].(float64)
+//	        product.Price = product.Price * (1 - percentage/100)
+//	        // ... save and return response
+//	        return nil
+//	    },
+//	})
+//
+// Example - Unbound action with no parameters:
+//
+//	service.RegisterAction(ActionDefinition{
+//	    Name:       "ResetAllPrices",
+//	    IsBound:    false,
+//	    Parameters: []ParameterDefinition{},
+//	    ReturnType: nil,
+//	    Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) error {
+//	        // ... perform reset logic
+//	        w.WriteHeader(http.StatusNoContent)
+//	        return nil
+//	    },
+//	})
 type ActionDefinition struct {
 	Name                string
 	IsBound             bool
@@ -30,7 +107,60 @@ type ActionDefinition struct {
 	ReturnType          reflect.Type // nil if no return value
 }
 
-// FunctionDefinition defines an OData function
+// FunctionDefinition defines an OData function that computes and returns values.
+//
+// Functions are side-effect-free operations invoked via HTTP GET that compute and return values.
+// They cannot modify data. Functions can be bound to specific entities or unbound (service-level).
+//
+// Fields:
+//   - Name: The function name as it appears in URLs (e.g., "GetTotalPrice" for /Products(1)/GetTotalPrice(taxRate=0.08))
+//   - IsBound: If true, the function is bound to an entity or entity collection.
+//     Bound functions receive the entity instance via the ctx parameter.
+//     If false, the function is unbound and accessible at the service root.
+//   - EntitySet: Required for bound functions. The entity set name the function is bound to
+//     (e.g., "Products"). Must match a registered entity set. Ignored for unbound functions.
+//   - Handler: The function that implements the function logic. See FunctionHandler for signature details.
+//   - Parameters: Definitions for function parameters. Parameters are passed in the URL query string
+//     or using OData function call syntax (e.g., /FunctionName(param1=value1,param2=value2)).
+//     Can be empty if the function takes no parameters beyond the binding parameter.
+//   - ParameterStructType: Optional. If set, parameters are automatically derived from the struct
+//     fields using reflection. This eliminates the need to manually define Parameters.
+//     Use reflect.TypeOf(MyStructType{}) to set this field.
+//   - ReturnType: Required. The Go type of the return value. Use reflect.TypeOf(MyType{}) to specify.
+//     Functions must always return a value (unlike actions which can return nil).
+//
+// Example - Bound function with parameters:
+//
+//	service.RegisterFunction(FunctionDefinition{
+//	    Name:      "GetTotalPrice",
+//	    IsBound:   true,
+//	    EntitySet: "Products",
+//	    Parameters: []ParameterDefinition{
+//	        {Name: "taxRate", Type: reflect.TypeOf(float64(0)), Required: true},
+//	    },
+//	    ReturnType: reflect.TypeOf(float64(0)),
+//	    Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) (interface{}, error) {
+//	        product := ctx.(*Product)
+//	        taxRate := params["taxRate"].(float64)
+//	        return product.Price * (1 + taxRate), nil
+//	    },
+//	})
+//
+// Example - Unbound function returning a collection:
+//
+//	service.RegisterFunction(FunctionDefinition{
+//	    Name:    "GetTopProducts",
+//	    IsBound: false,
+//	    Parameters: []ParameterDefinition{
+//	        {Name: "count", Type: reflect.TypeOf(int64(0)), Required: true},
+//	    },
+//	    ReturnType: reflect.TypeOf([]Product{}),
+//	    Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) (interface{}, error) {
+//	        count := params["count"].(int64)
+//	        // ... fetch top products
+//	        return products, nil
+//	    },
+//	})
 type FunctionDefinition struct {
 	Name                string
 	IsBound             bool
@@ -41,14 +171,95 @@ type FunctionDefinition struct {
 	ReturnType          reflect.Type
 }
 
-// ActionHandler is the function signature for action handlers
-// ctx contains the binding parameter (entity) for bound actions, nil for unbound
-// params contains the action parameters
+// ActionHandler is the function signature for action handlers.
+//
+// Action handlers are responsible for implementing the business logic of an OData action
+// and writing the HTTP response.
+//
+// Parameters:
+//   - w: The HTTP response writer. Use this to set headers and write the response body.
+//   - r: The HTTP request containing headers, URL, and parsed body parameters.
+//   - ctx: For bound actions, contains the entity instance (e.g., *Product for an action bound to Products).
+//     For unbound actions, ctx is nil. Cast ctx to the appropriate entity type based on EntitySet.
+//   - params: A map of parameter names to their parsed values. Values are typed according to the
+//     ParameterDefinition.Type field. Use type assertions to access values (e.g., params["percentage"].(float64)).
+//
+// Return value:
+//   - error: Return an error to abort the action and send an error response to the client.
+//     Return nil to indicate success. The handler is responsible for writing the HTTP response
+//     (status code, headers, and body) before returning nil.
+//
+// Response guidelines:
+//   - Actions that return no value should return HTTP 204 No Content
+//   - Actions that return a value should return HTTP 200 OK with a JSON response
+//   - Set the Content-Type header to "application/json;odata.metadata=minimal"
+//   - Include the @odata.context annotation in the response
+//
+// Example:
+//
+//	func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) error {
+//	    product := ctx.(*Product)
+//	    percentage := params["percentage"].(float64)
+//
+//	    product.Price = product.Price * (1 - percentage/100)
+//	    if err := db.Save(product).Error; err != nil {
+//	        return err
+//	    }
+//
+//	    w.Header().Set("Content-Type", "application/json;odata.metadata=minimal")
+//	    w.WriteHeader(http.StatusOK)
+//	    response := map[string]interface{}{
+//	        "@odata.context": "$metadata#Products/$entity",
+//	        "value":          product,
+//	    }
+//	    return json.NewEncoder(w).Encode(response)
+//	}
 type ActionHandler func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) error
 
-// FunctionHandler is the function signature for function handlers
-// ctx contains the binding parameter (entity) for bound functions, nil for unbound
-// params contains the function parameters
+// FunctionHandler is the function signature for function handlers.
+//
+// Function handlers compute and return values without modifying data. They should be idempotent
+// and side-effect-free.
+//
+// Parameters:
+//   - w: The HTTP response writer. While you can use this for custom response formatting, the framework
+//     typically handles response serialization automatically based on the return value.
+//   - r: The HTTP request containing headers, URL, and parsed parameters from query string or function call syntax.
+//   - ctx: For bound functions, contains the entity instance (e.g., *Product for a function bound to Products).
+//     For unbound functions, ctx is nil. Cast ctx to the appropriate entity type based on EntitySet.
+//   - params: A map of parameter names to their parsed values. Values are typed according to the
+//     ParameterDefinition.Type field. Use type assertions to access values (e.g., params["taxRate"].(float64)).
+//
+// Return values:
+//   - interface{}: The computed result to return to the client. The type must match the FunctionDefinition.ReturnType.
+//     The framework automatically serializes this to JSON with appropriate OData annotations.
+//   - error: Return an error to abort the function and send an error response to the client.
+//     Return nil as the error to indicate success.
+//
+// Response handling:
+//   - The framework automatically formats the response with HTTP 200 OK and proper OData JSON structure
+//   - Primitive types (int, float, bool, string) are wrapped in a value property
+//   - Complex types and collections are serialized with appropriate @odata.context
+//
+// Example - Bound function:
+//
+//	func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) (interface{}, error) {
+//	    product := ctx.(*Product)
+//	    taxRate := params["taxRate"].(float64)
+//	    totalPrice := product.Price * (1 + taxRate)
+//	    return totalPrice, nil
+//	}
+//
+// Example - Unbound function returning a collection:
+//
+//	func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) (interface{}, error) {
+//	    count := params["count"].(int64)
+//	    var products []Product
+//	    if err := db.Order("price DESC").Limit(int(count)).Find(&products).Error; err != nil {
+//	        return nil, err
+//	    }
+//	    return products, nil
+//	}
 type FunctionHandler func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) (interface{}, error)
 
 // ParseActionParameters parses action parameters from request body
