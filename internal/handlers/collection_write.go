@@ -62,6 +62,11 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 			return newTransactionHandledError(err)
 		}
 
+		if err := h.validateAutoPropertiesNotProvided(requestData); err != nil {
+			WriteError(w, http.StatusBadRequest, "Invalid property", err.Error())
+			return newTransactionHandledError(err)
+		}
+
 		if err := h.validateRequiredProperties(requestData); err != nil {
 			WriteError(w, http.StatusBadRequest, "Missing required properties", err.Error())
 			return newTransactionHandledError(err)
@@ -192,7 +197,8 @@ func (h *EntityHandler) handlePostMediaEntity(w http.ResponseWriter, r *http.Req
 func (h *EntityHandler) validateRequiredProperties(requestData map[string]interface{}) error {
 	var missingFields []string
 	for _, prop := range h.metadata.Properties {
-		if !prop.IsRequired || prop.IsKey {
+		// Skip keys and auto fields (server-side fields)
+		if !prop.IsRequired || prop.IsKey || prop.IsAuto {
 			continue
 		}
 
@@ -205,6 +211,27 @@ func (h *EntityHandler) validateRequiredProperties(requestData map[string]interf
 
 	if len(missingFields) > 0 {
 		return fmt.Errorf("missing required properties: %s", strings.Join(missingFields, ", "))
+	}
+
+	return nil
+}
+
+func (h *EntityHandler) validateAutoPropertiesNotProvided(requestData map[string]interface{}) error {
+	var autoFields []string
+	for _, prop := range h.metadata.Properties {
+		// Skip non-auto fields
+		if !prop.IsAuto {
+			continue
+		}
+
+		// Check if the auto field exists in the JSON request data
+		if _, exists := requestData[prop.JsonName]; exists {
+			autoFields = append(autoFields, prop.JsonName)
+		}
+	}
+
+	if len(autoFields) > 0 {
+		return fmt.Errorf("properties marked as 'auto' cannot be provided by clients and are set server-side: %s", strings.Join(autoFields, ", "))
 	}
 
 	return nil
