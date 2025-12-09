@@ -533,7 +533,7 @@ By returning scopes instead of mutating the request, the same tenant filter is a
 Use `ODataAfterReadEntity` or `ODataAfterReadCollection` to redact fields just before they leave the service:
 
 ```go
-func (Product) AfterReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions, entity interface{}) (interface{}, error) {
+func (Product) ODataAfterReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions, entity interface{}) (interface{}, error) {
     product, ok := entity.(*Product)
     if !ok {
         return entity, nil
@@ -545,7 +545,7 @@ func (Product) AfterReadEntity(ctx context.Context, r *http.Request, opts *query
     return product, nil
 }
 
-func (Product) AfterReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions, results interface{}) (interface{}, error) {
+func (Product) ODataAfterReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions, results interface{}) (interface{}, error) {
     products, ok := results.([]Product)
     if !ok {
         return results, nil

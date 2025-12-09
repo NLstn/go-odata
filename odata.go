@@ -230,7 +230,7 @@ type EntityHook interface {
 //	Create: ODataBeforeCreate -> INSERT -> ODataAfterCreate
 //	Update: ODataBeforeUpdate -> UPDATE -> ODataAfterUpdate
 //	Delete: ODataBeforeDelete -> DELETE -> ODataAfterDelete
-//	Read:   BeforeRead* -> SELECT + OData options -> AfterRead*
+//	Read:   ODataBeforeReadCollection/ODataBeforeReadEntity -> SELECT + OData options -> ODataAfterReadCollection/ODataAfterReadEntity
 type ReadHook interface {
 	// BeforeReadCollection is called before fetching a collection.
 	// Return GORM scopes to apply before OData options ($filter, $orderby, etc).
@@ -870,7 +870,7 @@ func (s *Service) RegisterAction(action actions.ActionDefinition) error {
 //
 //  1. Explicitly using Parameters field:
 //     Parameters: []ParameterDefinition{
-//         {Name: "taxRate", Type: reflect.TypeOf(float64(0)), Required: true},
+//     {Name: "taxRate", Type: reflect.TypeOf(float64(0)), Required: true},
 //     }
 //
 //  2. Automatically via ParameterStructType field:
