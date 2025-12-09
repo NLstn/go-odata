@@ -404,9 +404,15 @@ func (h *EntityHandler) validateKeyPropertiesNotUpdated(updateData map[string]in
 func (h *EntityHandler) validatePropertiesExistForUpdate(updateData map[string]interface{}, w http.ResponseWriter) error {
 	// Build a map of valid property names (both JSON names and struct field names)
 	validProperties := make(map[string]bool)
+	autoProperties := make(map[string]bool)
 	for _, prop := range h.metadata.Properties {
 		validProperties[prop.JsonName] = true
 		validProperties[prop.Name] = true
+		// Track auto properties to reject client updates
+		if prop.IsAuto {
+			autoProperties[prop.JsonName] = true
+			autoProperties[prop.Name] = true
+		}
 		// Allow @odata.bind annotations for navigation properties
 		if prop.IsNavigationProp {
 			validProperties[prop.JsonName+"@odata.bind"] = true
@@ -419,6 +425,14 @@ func (h *EntityHandler) validatePropertiesExistForUpdate(updateData map[string]i
 		if !validProperties[propName] {
 			err := fmt.Errorf("property '%s' does not exist on entity type '%s'", propName, h.metadata.EntityName)
 			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid property", err.Error()); writeErr != nil {
+				h.logger.Error("Error writing error response", "error", writeErr)
+			}
+			return err
+		}
+		// Reject attempts to update auto properties
+		if autoProperties[propName] {
+			err := fmt.Errorf("property '%s' is automatically set server-side and cannot be modified by clients", propName)
+			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid property modification", err.Error()); writeErr != nil {
 				h.logger.Error("Error writing error response", "error", writeErr)
 			}
 			return err

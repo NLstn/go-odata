@@ -79,6 +79,8 @@ type PropertyMetadata struct {
 	IsStream               bool   // True if this is a stream property (Edm.Stream type)
 	StreamContentTypeField string // Name of the field containing the content type for this stream
 	StreamContentField     string // Name of the field containing the binary content for this stream
+	// Auto properties
+	IsAuto bool // True if this property is automatically set server-side (clients cannot provide/modify it)
 }
 
 // AnalyzeEntity extracts metadata from a Go struct for OData usage
@@ -511,6 +513,8 @@ func processODataTagPart(property *PropertyMetadata, part string, metadata *Enti
 		property.ContentType = strings.TrimPrefix(part, "contenttype=")
 	case strings.HasPrefix(part, "generate="):
 		property.KeyGenerator = strings.TrimSpace(strings.TrimPrefix(part, "generate="))
+	case part == "auto":
+		property.IsAuto = true
 	}
 
 	return nil
