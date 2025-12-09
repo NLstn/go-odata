@@ -108,6 +108,69 @@ errors—invalid struct tags or duplicate entity names will cause `RegisterEntit
 - **[Advanced Features](documentation/advanced-features.md)** - Singletons, ETags, lifecycle hooks, and read hooks for tenant filtering or redaction
 - **[Testing](documentation/testing.md)** - Unit tests, compliance tests, and performance profiling
 
+## Hooks: Inject Custom Logic
+
+Entity types can implement optional hook methods to inject business logic at specific points in the request lifecycle. Hooks are automatically discovered via reflection - no registration needed.
+
+### Lifecycle Hooks
+
+Execute custom validation, authorization, and logging logic:
+
+```go
+type Product struct {
+    ID        uint      `json:"ID" gorm:"primaryKey" odata:"key"`
+    Name      string    `json:"Name" odata:"required"`
+    Price     float64   `json:"Price"`
+    CreatedAt time.Time `json:"CreatedAt"`
+}
+
+// BeforeCreate validates input before creating
+func (p *Product) BeforeCreate(ctx context.Context, r *http.Request) error {
+    if p.Price < 0 {
+        return fmt.Errorf("price cannot be negative")
+    }
+    p.CreatedAt = time.Now()
+    return nil
+}
+
+// AfterCreate logs the creation
+func (p *Product) AfterCreate(ctx context.Context, r *http.Request) error {
+    log.Printf("Product created: %s", p.Name)
+    return nil
+}
+
+// Also available: BeforeUpdate, AfterUpdate, BeforeDelete, AfterDelete
+```
+
+### Read Hooks
+
+Customize queries with tenant filters and redact sensitive data:
+
+```go
+// Apply tenant filter before querying
+func (p Product) BeforeReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
+    tenantID := r.Header.Get("X-Tenant-ID")
+    if tenantID == "" {
+        return nil, fmt.Errorf("missing tenant header")
+    }
+    return []func(*gorm.DB) *gorm.DB{
+        func(db *gorm.DB) *gorm.DB { return db.Where("tenant_id = ?", tenantID) },
+    }, nil
+}
+
+// Redact sensitive fields before returning
+func (p Product) AfterReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions, entity interface{}) (interface{}, error) {
+    product, ok := entity.(*Product)
+    if !ok || isPrivileged(r) {
+        return entity, nil
+    }
+    product.CostPrice = 0 // Hide from non-privileged users
+    return product, nil
+}
+```
+
+All hook methods are optional. See [EntityHook](https://pkg.go.dev/github.com/nlstn/go-odata#EntityHook) and the [Advanced Features documentation](documentation/advanced-features.md) for details.
+
 ## What You Get
 
 Once your service is running, it automatically provides OData v4 endpoints:
