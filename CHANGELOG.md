@@ -9,6 +9,22 @@ rely on version numbers to reason about compatibility.
 
 ## [Unreleased]
 
+### Breaking Changes
+- **Hook method names renamed with "OData" prefix**: All EntityHook interface methods have been renamed to avoid conflicts with GORM's hook detection logic
+  - `BeforeCreate` → `ODataBeforeCreate`
+  - `AfterCreate` → `ODataAfterCreate`
+  - `BeforeUpdate` → `ODataBeforeUpdate`
+  - `AfterUpdate` → `ODataAfterUpdate`
+  - `BeforeDelete` → `ODataBeforeDelete`
+  - `AfterDelete` → `ODataAfterDelete`
+  - `BeforeReadCollection` → `ODataBeforeReadCollection`
+  - `AfterReadCollection` → `ODataAfterReadCollection`
+  - `BeforeReadEntity` → `ODataBeforeReadEntity`
+  - `AfterReadEntity` → `ODataAfterReadEntity`
+  - **Migration Required**: Existing hook implementations must be renamed to use the new "OData" prefix
+  - **Benefit**: Models can now safely implement both GORM hooks (e.g., `BeforeCreate(*gorm.DB) error`) and OData hooks (e.g., `ODataBeforeCreate(context.Context, *http.Request) error`) without GORM warnings
+  - See migration guide for detailed update instructions
+
 ### Added
 - PostgreSQL is now fully supported alongside SQLite with all 105 compliance test suites passing on both databases
 - CI/CD pipeline now runs compliance tests on both SQLite and PostgreSQL to ensure cross-database compatibility
