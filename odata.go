@@ -659,6 +659,71 @@ func (s *Service) RegisterSingleton(entity interface{}, singletonName string) er
 	return nil
 }
 
+// RegisterVirtualEntity registers a virtual entity type with the OData service.
+// Virtual entities have no database backing store and require overwrite handlers for all operations.
+// Operations without overwrite handlers will return HTTP 405 Method Not Allowed.
+//
+// Virtual entities are useful for:
+//   - Exposing data from external APIs or services
+//   - Creating computed or aggregated views
+//   - Implementing custom business logic without database persistence
+//
+// Example:
+//
+//	type ExternalProduct struct {
+//	    ID   int    `json:"id" odata:"key"`
+//	    Name string `json:"name"`
+//	}
+//
+//	service.RegisterVirtualEntity(&ExternalProduct{})
+//	service.SetEntityOverwrite("ExternalProducts", &EntityOverwrite{
+//	    GetCollection: func(ctx *OverwriteContext) (*CollectionResult, error) {
+//	        // Fetch from external API
+//	        products := fetchFromExternalAPI()
+//	        return &CollectionResult{Items: products}, nil
+//	    },
+//	    GetEntity: func(ctx *OverwriteContext) (interface{}, error) {
+//	        // Fetch single entity from external API
+//	        return fetchFromExternalAPI(ctx.EntityKey)
+//	    },
+//	})
+func (s *Service) RegisterVirtualEntity(entity interface{}) error {
+	// Analyze the entity structure
+	entityMetadata, err := metadata.AnalyzeVirtualEntity(entity)
+	if err != nil {
+		return fmt.Errorf("failed to analyze virtual entity: %w", err)
+	}
+
+	if _, exists := s.entities[entityMetadata.EntitySetName]; exists {
+		return fmt.Errorf("entity set '%s' is already registered", entityMetadata.EntitySetName)
+	}
+	if _, exists := s.handlers[entityMetadata.EntitySetName]; exists {
+		return fmt.Errorf("entity handler for '%s' is already registered", entityMetadata.EntitySetName)
+	}
+
+	// Store the metadata
+	s.entities[entityMetadata.EntitySetName] = entityMetadata
+
+	// Create and store the handler (no database operations will be performed)
+	handler := handlers.NewEntityHandler(s.db, entityMetadata, s.logger)
+	handler.SetNamespace(s.namespace)
+	handler.SetEntitiesMetadata(s.entities)
+	handler.SetFTSManager(s.ftsManager)
+	handler.SetKeyGeneratorResolver(func(name string) (func(context.Context) (interface{}, error), bool) {
+		generator, ok := s.resolveKeyGenerator(name)
+		if !ok {
+			return nil, false
+		}
+		return generator, true
+	})
+	s.handlers[entityMetadata.EntitySetName] = handler
+
+	s.logger.Debug("Registered virtual entity",
+		"entity", entityMetadata.EntityName,
+		"entitySet", entityMetadata.EntitySetName)
+	return nil
+}
+
 // Types for registering custom OData actions and functions.
 //
 // The following types are re-exported from internal/actions package to provide a public API

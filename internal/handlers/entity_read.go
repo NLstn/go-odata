@@ -40,6 +40,15 @@ func (h *EntityHandler) handleGetEntity(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
+	// Check if this is a virtual entity without overwrite handler
+	if h.metadata.IsVirtual {
+		if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+			"Virtual entities require an overwrite handler for GetEntity operation"); err != nil {
+			h.logger.Error("Error writing error response", "error", err)
+		}
+		return
+	}
+
 	ctx := r.Context()
 	// Parse query options for $expand and $select
 	queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata)
