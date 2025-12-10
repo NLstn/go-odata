@@ -18,6 +18,7 @@ type EntityMetadata struct {
 	IsSingleton   bool               // True if this is a singleton (single instance accessible by name)
 	SingletonName string             // Name of the singleton (if IsSingleton is true)
 	HasStream     bool               // True if this is a media entity (has a media stream)
+	IsVirtual     bool               // True if this is a virtual entity (no database backing store, requires overwrite handlers)
 	// ChangeTrackingEnabled indicates whether $deltatoken and change tracking responses are enabled for this entity set
 	ChangeTrackingEnabled bool
 	StreamProperties      []PropertyMetadata // Named stream properties on this entity
@@ -204,6 +205,71 @@ func AnalyzeSingleton(entity interface{}, singletonName string) (*EntityMetadata
 	return metadata, nil
 }
 
+// AnalyzeVirtualEntity extracts metadata from a Go struct for OData virtual entity usage.
+// Virtual entities have no database backing store and require overwrite handlers for all operations.
+func AnalyzeVirtualEntity(entity interface{}) (*EntityMetadata, error) {
+	entityType := reflect.TypeOf(entity)
+
+	// Handle pointer types
+	if entityType.Kind() == reflect.Ptr {
+		entityType = entityType.Elem()
+	}
+
+	if entityType.Kind() != reflect.Struct {
+		return nil, fmt.Errorf("entity must be a struct, got %s", entityType.Kind())
+	}
+
+	metadata := initializeVirtualEntityMetadata(entityType)
+
+	// Analyze struct fields
+	for i := 0; i < entityType.NumField(); i++ {
+		field := entityType.Field(i)
+
+		// Skip unexported fields
+		if !field.IsExported() {
+			continue
+		}
+
+		property, err := analyzeField(field, metadata)
+		if err != nil {
+			return nil, fmt.Errorf("error analyzing field %s: %w", field.Name, err)
+		}
+		metadata.Properties = append(metadata.Properties, property)
+	}
+
+	// Validate that we have at least one key property
+	if len(metadata.KeyProperties) == 0 {
+		return nil, fmt.Errorf("entity %s must have at least one key property (use `odata:\"key\"` tag or name field 'ID')", metadata.EntityName)
+	}
+
+	// Validate that no field has both fuzziness and similarity defined
+	for _, prop := range metadata.Properties {
+		if prop.SearchFuzziness > 0 && prop.SearchSimilarity > 0 {
+			return nil, fmt.Errorf("property %s cannot have both fuzziness and similarity defined; use one or the other", prop.Name)
+		}
+		// Validate similarity range (0.0 to 1.0) - only check if similarity was set (non-zero)
+		if prop.SearchSimilarity != 0 && (prop.SearchSimilarity < 0.0 || prop.SearchSimilarity > 1.0) {
+			return nil, fmt.Errorf("property %s has invalid similarity value %.2f; must be between 0.0 and 1.0", prop.Name, prop.SearchSimilarity)
+		}
+	}
+
+	// For backwards compatibility, set KeyProperty to first key if only one key exists
+	if len(metadata.KeyProperties) == 1 {
+		metadata.KeyProperty = &metadata.KeyProperties[0]
+	}
+
+	// Detect if this is a media entity (has HasStream() method)
+	detectMediaEntity(metadata, entity)
+
+	// Detect stream properties
+	detectStreamProperties(metadata)
+
+	// Detect available lifecycle hooks
+	detectHooks(metadata)
+
+	return metadata, nil
+}
+
 // initializeMetadata creates a new EntityMetadata struct with basic information
 func initializeMetadata(entityType reflect.Type) *EntityMetadata {
 	entityName := entityType.Name()
@@ -229,6 +295,20 @@ func initializeSingletonMetadata(entityType reflect.Type, singletonName string) 
 		SingletonName: singletonName,
 		Properties:    make([]PropertyMetadata, 0),
 		IsSingleton:   true,
+	}
+}
+
+// initializeVirtualEntityMetadata creates a new EntityMetadata struct for a virtual entity
+func initializeVirtualEntityMetadata(entityType reflect.Type) *EntityMetadata {
+	entityName := entityType.Name()
+	entitySetName := pluralize(entityName)
+
+	return &EntityMetadata{
+		EntityType:    entityType,
+		EntityName:    entityName,
+		EntitySetName: entitySetName,
+		Properties:    make([]PropertyMetadata, 0),
+		IsVirtual:     true,
 	}
 }
 

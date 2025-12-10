@@ -26,6 +26,15 @@ func (h *EntityHandler) handleDeleteEntity(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	// Check if this is a virtual entity without overwrite handler
+	if h.metadata.IsVirtual {
+		if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+			"Virtual entities require an overwrite handler for Delete operation"); err != nil {
+			h.logger.Error("Error writing error response", "error", err)
+		}
+		return
+	}
+
 	ctx := r.Context()
 	var (
 		entity       interface{}
@@ -88,6 +97,15 @@ func (h *EntityHandler) handlePatchEntity(w http.ResponseWriter, r *http.Request
 	// Check if there's an overwrite handler
 	if h.overwrite.hasUpdate() {
 		h.handleUpdateEntityOverwrite(w, r, entityKey, false)
+		return
+	}
+
+	// Check if this is a virtual entity without overwrite handler
+	if h.metadata.IsVirtual {
+		if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+			"Virtual entities require an overwrite handler for Update operation"); err != nil {
+			h.logger.Error("Error writing error response", "error", err)
+		}
 		return
 	}
 
@@ -260,6 +278,15 @@ func (h *EntityHandler) handlePutEntity(w http.ResponseWriter, r *http.Request, 
 	// Check if there's an overwrite handler
 	if h.overwrite.hasUpdate() {
 		h.handleUpdateEntityOverwrite(w, r, entityKey, true)
+		return
+	}
+
+	// Check if this is a virtual entity without overwrite handler
+	if h.metadata.IsVirtual {
+		if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+			"Virtual entities require an overwrite handler for Update operation"); err != nil {
+			h.logger.Error("Error writing error response", "error", err)
+		}
 		return
 	}
 

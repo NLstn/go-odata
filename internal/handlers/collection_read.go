@@ -22,6 +22,15 @@ func (h *EntityHandler) handleGetCollection(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	// Check if this is a virtual entity without overwrite handler
+	if h.metadata.IsVirtual {
+		if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+			"Virtual entities require an overwrite handler for GetCollection operation"); err != nil {
+			h.logger.Error("Error writing error response", "error", err)
+		}
+		return
+	}
+
 	pref := preference.ParsePrefer(r)
 	ctx := r.Context()
 
