@@ -22,6 +22,7 @@ A Go library for building services that expose OData v4 APIs with automatic hand
 - 📊 **Data aggregation** - Supports $apply transformations
 - 🧪 **Fully tested** - 85+ compliance tests ensuring OData v4 adherence
 - 🔑 **Server-side key generation** - Validate directives during metadata analysis and plug in custom generators
+- 🌐 **Virtual entities** - Expose data from external APIs without database backing
 
 ### OData v4 Specification
 
@@ -103,6 +104,7 @@ errors—invalid struct tags or duplicate entity names will cause `RegisterEntit
 - **[Entity Definition](documentation/entities.md)** - Define entities with rich metadata and relationships
 - **[End-to-End Tutorial](documentation/tutorial.md)** - Build a multi-entity Products/Orders/Customers backend with hooks and custom operations
 - **[Server Configuration](documentation/server-configuration.md)** - Configure the service, add middleware, and integrate with your application
+- **[Virtual Entities](documentation/virtual-entities.md)** - Expose data from external APIs without database backing
 - **[Actions and Functions](documentation/actions-and-functions.md)** - Implement custom OData operations
 - **[Geospatial Functions](documentation/geospatial.md)** - Query geographic data with spatial functions
 - **[Advanced Features](documentation/advanced-features.md)** - Singletons, ETags, lifecycle hooks, and read hooks for tenant filtering or redaction
