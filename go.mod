@@ -1,3 +1,5 @@
+// Package go-odata implements the OData v4.01 specification for building
+// OData v4 services in Go.
 module github.com/nlstn/go-odata
 
 go 1.24
