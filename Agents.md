@@ -2,7 +2,9 @@
 
 ## Library Description
 
-`go-odata` is a Go library for building services that expose OData APIs with automatic handling of OData protocol logic. It allows you to define Go structs representing entities and automatically handles the necessary OData protocol logic, making it easy to build OData-compliant APIs.
+**IMPORTANT: This library implements OData v4, specifically the OData v4.01 specification. This is NOT an OData v2 library.**
+
+`go-odata` is a Go library for building services that expose OData v4 APIs with automatic handling of OData v4 protocol logic. It allows you to define Go structs representing entities and automatically handles the necessary OData v4 protocol logic, making it easy to build OData v4-compliant APIs.
 
 ### Architecture
 
