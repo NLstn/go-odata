@@ -229,12 +229,14 @@ func TestVirtualEntity_WithOverwriteHandlers(t *testing.T) {
 			return &CollectionResult{Items: virtualData}, nil
 		},
 		GetEntity: func(ctx *OverwriteContext) (interface{}, error) {
-			if ctx.EntityKey == "1" {
+			switch ctx.EntityKey {
+			case "1":
 				return &virtualData[0], nil
-			} else if ctx.EntityKey == "2" {
+			case "2":
 				return &virtualData[1], nil
+			default:
+				return nil, gorm.ErrRecordNotFound
 			}
-			return nil, gorm.ErrRecordNotFound
 		},
 		Create: func(ctx *OverwriteContext, entity interface{}) (interface{}, error) {
 			product := entity.(*TestVirtualProduct)
