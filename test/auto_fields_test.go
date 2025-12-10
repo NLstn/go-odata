@@ -25,8 +25,8 @@ type Club struct {
 	UpdatedBy string    `json:"updated_by" odata:"auto"`
 }
 
-// BeforeCreate hook sets auto fields from context
-func (c *Club) BeforeCreate(ctx context.Context, r *http.Request) error {
+// ODataBeforeCreate hook sets auto fields from context
+func (c *Club) ODataBeforeCreate(ctx context.Context, r *http.Request) error {
 	userID := "test-user"
 	now := time.Now()
 	c.CreatedAt = now
@@ -36,8 +36,8 @@ func (c *Club) BeforeCreate(ctx context.Context, r *http.Request) error {
 	return nil
 }
 
-// BeforeUpdate hook sets auto fields from context
-func (c *Club) BeforeUpdate(ctx context.Context, r *http.Request) error {
+// ODataBeforeUpdate hook sets auto fields from context
+func (c *Club) ODataBeforeUpdate(ctx context.Context, r *http.Request) error {
 	userID := "test-user"
 	now := time.Now()
 	c.UpdatedAt = now
@@ -186,4 +186,3 @@ func TestAutoFields_POST_HooksSetValues(t *testing.T) {
 		t.Error("Expected created_at to be set")
 	}
 }
-
