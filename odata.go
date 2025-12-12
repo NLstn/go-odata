@@ -1,9 +1,9 @@
 package odata
 
-// Package odata provides functionality for building OData v4 services in Go.
-// This library implements the OData v4.01 specification and allows you to define
-// Go structs representing entities while automatically handling the necessary
-// OData v4 protocol logic.
+// Package odata provides functionality for building OData services in Go.
+// This library implements the OData v4.01 specification, allowing you to define
+// Go structs representing entities and automatically handles the necessary OData
+// protocol logic.
 //
 // # Hooks
 //
