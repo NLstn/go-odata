@@ -1,6 +1,6 @@
 # go-odata Documentation
 
-Welcome to the go-odata documentation! This library implements the OData v4.01 specification. This directory contains detailed guides for using the library.
+Welcome to the go-odata documentation! This library implements the OData v4.01 specification, and this directory contains detailed guides for using the library.
 
 ## Table of Contents
 
