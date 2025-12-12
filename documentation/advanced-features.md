@@ -639,15 +639,20 @@ These guarantees let clients reliably poll job status without conflicting with r
 the related configuration. You can call it from multiple cleanup hooks—each call
 is a no-op once the manager is already stopped.
 
-## Full-Text Search with SQLite FTS
+## Full-Text Search with Database FTS
 
-The go-odata library automatically enhances `$search` query performance on SQLite backends by utilizing Full-Text Search (FTS) capabilities when available. This provides significant performance improvements for text search operations while maintaining backward compatibility.
+The go-odata library automatically enhances `$search` query performance by utilizing database-native Full-Text Search (FTS) capabilities when available. This provides significant performance improvements for text search operations while maintaining backward compatibility.
+
+### Supported Databases
+
+- **SQLite**: FTS3, FTS4, and FTS5 virtual tables
+- **PostgreSQL**: Built-in full-text search with `tsvector`, `tsquery`, and GIN indexes
 
 ### Overview
 
 When you use the `$search` query parameter, the library:
-1. Automatically detects if SQLite FTS (FTS3, FTS4, or FTS5) is available
-2. If available, creates FTS virtual tables and applies search at the database level
+1. Automatically detects if database FTS is available (SQLite FTS3/4/5 or PostgreSQL)
+2. If available, creates FTS tables/indexes and applies search at the database level
 3. If not available, falls back to the existing in-memory search implementation
 4. Keeps FTS tables synchronized with your data using triggers
 
@@ -656,8 +661,13 @@ When you use the `$search` query parameter, the library:
 The FTS integration is completely automatic - no configuration required:
 
 ```go
-// Standard setup - FTS is automatically initialized
+// SQLite setup - FTS is automatically initialized
 db, _ := gorm.Open(sqlite.Open("test.db"), &gorm.Config{})
+service := odata.NewService(db)
+service.RegisterEntity(&Product{})
+
+// PostgreSQL setup - FTS is automatically initialized
+db, _ := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 service := odata.NewService(db)
 service.RegisterEntity(&Product{})
 
@@ -687,8 +697,9 @@ If no properties are marked as searchable, all string properties are automatical
 
 **Supported:**
 - ✅ Full-text search with SQLite FTS3, FTS4, or FTS5
+- ✅ Full-text search with PostgreSQL (tsvector/tsquery)
 - ✅ Automatic FTS detection and initialization
-- ✅ Automatic table synchronization via triggers
+- ✅ Automatic table/index synchronization via triggers
 - ✅ Case-insensitive search
 - ✅ Transparent fallback to in-memory search
 - ✅ Configurable searchable properties
@@ -719,10 +730,12 @@ FTS provides significant performance improvements for text search:
 **Key Benefits:**
 - Database-level filtering reduces memory usage
 - Better performance on large datasets
-- Utilizes SQLite's optimized FTS indexes
+- Utilizes database-optimized FTS indexes
 - Reduces data transfer between database and application
 
-### FTS Virtual Tables
+### Database-Specific Implementation
+
+#### SQLite FTS
 
 The library automatically creates and manages FTS virtual tables:
 
@@ -739,9 +752,57 @@ CREATE TRIGGER products_fts_ai AFTER INSERT ON products BEGIN
 END;
 ```
 
+#### PostgreSQL FTS
+
+For PostgreSQL, the library creates FTS tables with `tsvector` columns and GIN indexes:
+
+```sql
+-- Example: For Products entity, creates:
+CREATE TABLE products_fts (
+    id INTEGER PRIMARY KEY,
+    search_vector tsvector
+);
+
+-- Create GIN index for fast full-text search
+CREATE INDEX products_fts_search_idx 
+ON products_fts USING GIN(search_vector);
+
+-- Trigger function to maintain FTS table
+CREATE OR REPLACE FUNCTION products_fts_sync() RETURNS TRIGGER AS $$
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        INSERT INTO products_fts (id, search_vector)
+        VALUES (NEW.id, 
+            to_tsvector('english', coalesce(NEW.name, '')) || ' ' ||
+            to_tsvector('english', coalesce(NEW.description, ''))
+        );
+        RETURN NEW;
+    ELSIF TG_OP = 'UPDATE' THEN
+        UPDATE products_fts 
+        SET search_vector = 
+            to_tsvector('english', coalesce(NEW.name, '')) || ' ' ||
+            to_tsvector('english', coalesce(NEW.description, ''))
+        WHERE id = NEW.id;
+        RETURN NEW;
+    ELSIF TG_OP = 'DELETE' THEN
+        DELETE FROM products_fts WHERE id = OLD.id;
+        RETURN OLD;
+    END IF;
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+```
+
+**PostgreSQL FTS Features:**
+- Uses `to_tsvector()` for text normalization and stemming
+- Uses `plainto_tsquery()` for simple query parsing
+- English language configuration by default
+- Handles NULL values gracefully with `coalesce()`
+- GIN indexes provide fast search performance
+
 ### Fallback Behavior
 
-If FTS is not available (e.g., non-SQLite database or FTS not compiled in):
+If FTS is not available (e.g., unsupported database or FTS not available):
 - Search automatically falls back to in-memory implementation
 - All existing fuzzy matching and similarity features work
 - No changes needed in client code
