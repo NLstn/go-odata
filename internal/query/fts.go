@@ -9,11 +9,12 @@ import (
 	"gorm.io/gorm"
 )
 
-// FTSManager manages SQLite Full-Text Search functionality
+// FTSManager manages Full-Text Search functionality for SQLite and PostgreSQL
 type FTSManager struct {
 	db           *gorm.DB
 	ftsAvailable bool
-	ftsVersion   string // "FTS5", "FTS4", "FTS3", or ""
+	ftsVersion   string // "FTS5", "FTS4", "FTS3", "POSTGRES", or ""
+	dbDialect    string // "sqlite", "postgres", or other
 	ftsTables    map[string]bool
 }
 
@@ -27,33 +28,45 @@ func NewFTSManager(db *gorm.DB) *FTSManager {
 	return manager
 }
 
-// detectFTS checks if SQLite FTS is available and which version
+// detectFTS checks if FTS is available and which version/type
 func (m *FTSManager) detectFTS() {
-	// Check if we're using SQLite
 	dialector := m.db.Dialector
-	if dialector.Name() != "sqlite" {
+	m.dbDialect = dialector.Name()
+
+	// Check for PostgreSQL FTS
+	if m.dbDialect == "postgres" {
+		if m.isPostgresFTSAvailable() {
+			m.ftsAvailable = true
+			m.ftsVersion = "POSTGRES"
+			return
+		}
+		m.ftsAvailable = false
+		m.ftsVersion = ""
 		return
 	}
 
-	// Try to detect FTS5 first (preferred)
-	if m.isFTSVersionAvailable("fts5") {
-		m.ftsAvailable = true
-		m.ftsVersion = "FTS5"
-		return
-	}
+	// Check for SQLite FTS
+	if m.dbDialect == "sqlite" {
+		// Try to detect FTS5 first (preferred)
+		if m.isFTSVersionAvailable("fts5") {
+			m.ftsAvailable = true
+			m.ftsVersion = "FTS5"
+			return
+		}
 
-	// Fall back to FTS4
-	if m.isFTSVersionAvailable("fts4") {
-		m.ftsAvailable = true
-		m.ftsVersion = "FTS4"
-		return
-	}
+		// Fall back to FTS4
+		if m.isFTSVersionAvailable("fts4") {
+			m.ftsAvailable = true
+			m.ftsVersion = "FTS4"
+			return
+		}
 
-	// Fall back to FTS3
-	if m.isFTSVersionAvailable("fts3") {
-		m.ftsAvailable = true
-		m.ftsVersion = "FTS3"
-		return
+		// Fall back to FTS3
+		if m.isFTSVersionAvailable("fts3") {
+			m.ftsAvailable = true
+			m.ftsVersion = "FTS3"
+			return
+		}
 	}
 
 	m.ftsAvailable = false
@@ -83,12 +96,34 @@ func (m *FTSManager) isFTSVersionAvailable(version string) bool {
 	return true
 }
 
+// isPostgresFTSAvailable checks if PostgreSQL full-text search is available
+func (m *FTSManager) isPostgresFTSAvailable() bool {
+	var sqlDB *sql.DB
+	var err error
+
+	sqlDB, err = m.db.DB()
+	if err != nil {
+		return false
+	}
+
+	// Test if we can use to_tsvector and to_tsquery functions
+	// These are built-in to PostgreSQL and should always be available
+	var result int
+	err = sqlDB.QueryRow("SELECT 1 WHERE to_tsvector('english', 'test') @@ to_tsquery('english', 'test')").Scan(&result)
+	// If query executes without error (even if no rows), FTS is available
+	if err != nil && err != sql.ErrNoRows {
+		return false
+	}
+
+	return true
+}
+
 // IsFTSAvailable returns true if FTS is available
 func (m *FTSManager) IsFTSAvailable() bool {
 	return m.ftsAvailable
 }
 
-// GetFTSVersion returns the FTS version available (FTS5, FTS4, FTS3, or empty string)
+// GetFTSVersion returns the FTS version available (FTS5, FTS4, FTS3, POSTGRES, or empty string)
 func (m *FTSManager) GetFTSVersion() string {
 	return m.ftsVersion
 }
@@ -152,16 +187,8 @@ func (m *FTSManager) getAllStringColumns(entityMetadata *metadata.EntityMetadata
 	return cols
 }
 
-// createFTSTable creates the FTS virtual table
+// createFTSTable creates the FTS virtual table or index
 func (m *FTSManager) createFTSTable(tableName, ftsTableName string, searchableCols []string, entityMetadata *metadata.EntityMetadata) error {
-	var sqlDB *sql.DB
-	var err error
-
-	sqlDB, err = m.db.DB()
-	if err != nil {
-		return fmt.Errorf("failed to get SQL DB: %w", err)
-	}
-
 	// Get the key column(s)
 	var keyCol string
 	if len(entityMetadata.KeyProperties) > 0 {
@@ -176,6 +203,24 @@ func (m *FTSManager) createFTSTable(tableName, ftsTableName string, searchableCo
 		if col != keyCol {
 			allCols = append(allCols, col)
 		}
+	}
+
+	// Choose implementation based on database type
+	if m.ftsVersion == "POSTGRES" {
+		return m.createPostgresFTSTable(tableName, ftsTableName, searchableCols, keyCol)
+	}
+
+	return m.createSQLiteFTSTable(tableName, ftsTableName, allCols, keyCol)
+}
+
+// createSQLiteFTSTable creates SQLite FTS virtual table
+func (m *FTSManager) createSQLiteFTSTable(tableName, ftsTableName string, allCols []string, keyCol string) error {
+	var sqlDB *sql.DB
+	var err error
+
+	sqlDB, err = m.db.DB()
+	if err != nil {
+		return fmt.Errorf("failed to get SQL DB: %w", err)
 	}
 
 	// Create standalone FTS virtual table (simpler approach)
@@ -198,6 +243,54 @@ func (m *FTSManager) createFTSTable(tableName, ftsTableName string, searchableCo
 
 	// Populate existing data into FTS table
 	if err := m.populateFTSTable(tableName, ftsTableName, allCols); err != nil {
+		return fmt.Errorf("failed to populate FTS table: %w", err)
+	}
+
+	return nil
+}
+
+// createPostgresFTSTable creates PostgreSQL FTS table with tsvector column and GIN index
+func (m *FTSManager) createPostgresFTSTable(tableName, ftsTableName string, searchableCols []string, keyCol string) error {
+	var sqlDB *sql.DB
+	var err error
+
+	sqlDB, err = m.db.DB()
+	if err != nil {
+		return fmt.Errorf("failed to get SQL DB: %w", err)
+	}
+
+	// Build the column list for the FTS table
+	// PostgreSQL FTS uses a tsvector column that combines all searchable fields
+	createSQL := fmt.Sprintf(`
+		CREATE TABLE IF NOT EXISTS %s (
+			%s INTEGER PRIMARY KEY,
+			search_vector tsvector
+		)
+	`, ftsTableName, keyCol)
+
+	_, err = sqlDB.Exec(createSQL)
+	if err != nil {
+		return fmt.Errorf("failed to create FTS table: %w", err)
+	}
+
+	// Create GIN index on tsvector column for fast full-text search
+	indexSQL := fmt.Sprintf(`
+		CREATE INDEX IF NOT EXISTS %s_search_idx 
+		ON %s USING GIN(search_vector)
+	`, ftsTableName, ftsTableName)
+
+	_, err = sqlDB.Exec(indexSQL)
+	if err != nil {
+		return fmt.Errorf("failed to create GIN index: %w", err)
+	}
+
+	// Create triggers to keep FTS table in sync with main table
+	if err := m.createPostgresFTSTriggers(tableName, ftsTableName, searchableCols, keyCol); err != nil {
+		return fmt.Errorf("failed to create FTS triggers: %w", err)
+	}
+
+	// Populate existing data into FTS table
+	if err := m.populatePostgresFTSTable(tableName, ftsTableName, searchableCols, keyCol); err != nil {
 		return fmt.Errorf("failed to populate FTS table: %w", err)
 	}
 
@@ -281,6 +374,129 @@ func (m *FTSManager) populateFTSTable(tableName, ftsTableName string, cols []str
 	return nil
 }
 
+// createPostgresFTSTriggers creates PostgreSQL triggers to keep FTS table in sync
+func (m *FTSManager) createPostgresFTSTriggers(tableName, ftsTableName string, searchableCols []string, keyCol string) error {
+	var sqlDB *sql.DB
+	var err error
+
+	sqlDB, err = m.db.DB()
+	if err != nil {
+		return err
+	}
+
+	// Build tsvector expression combining all searchable columns
+	tsvectorExpr := m.buildPostgresTSVectorExpr(searchableCols)
+
+	// Create a trigger function for INSERT and UPDATE
+	functionSQL := fmt.Sprintf(`
+		CREATE OR REPLACE FUNCTION %s_sync() RETURNS TRIGGER AS $$
+		BEGIN
+			IF TG_OP = 'INSERT' THEN
+				INSERT INTO %s (%s, search_vector)
+				VALUES (NEW.%s, %s);
+				RETURN NEW;
+			ELSIF TG_OP = 'UPDATE' THEN
+				UPDATE %s SET search_vector = %s WHERE %s = NEW.%s;
+				RETURN NEW;
+			ELSIF TG_OP = 'DELETE' THEN
+				DELETE FROM %s WHERE %s = OLD.%s;
+				RETURN OLD;
+			END IF;
+			RETURN NULL;
+		END;
+		$$ LANGUAGE plpgsql;
+	`, ftsTableName, ftsTableName, keyCol, keyCol, tsvectorExpr,
+		ftsTableName, tsvectorExpr, keyCol, keyCol,
+		ftsTableName, keyCol, keyCol)
+
+	_, err = sqlDB.Exec(functionSQL)
+	if err != nil {
+		return fmt.Errorf("failed to create trigger function: %w", err)
+	}
+
+	// Drop existing triggers if they exist (to avoid duplicates)
+	dropTriggers := []string{
+		fmt.Sprintf("DROP TRIGGER IF EXISTS %s_insert_trigger ON %s", ftsTableName, tableName),
+		fmt.Sprintf("DROP TRIGGER IF EXISTS %s_update_trigger ON %s", ftsTableName, tableName),
+		fmt.Sprintf("DROP TRIGGER IF EXISTS %s_delete_trigger ON %s", ftsTableName, tableName),
+	}
+
+	for _, dropSQL := range dropTriggers {
+		_, _ = sqlDB.Exec(dropSQL) // Ignore errors for non-existent triggers
+	}
+
+	// Create triggers for INSERT, UPDATE, DELETE
+	insertTrigger := fmt.Sprintf(`
+		CREATE TRIGGER %s_insert_trigger
+		AFTER INSERT ON %s
+		FOR EACH ROW
+		EXECUTE FUNCTION %s_sync()
+	`, ftsTableName, tableName, ftsTableName)
+
+	updateTrigger := fmt.Sprintf(`
+		CREATE TRIGGER %s_update_trigger
+		AFTER UPDATE ON %s
+		FOR EACH ROW
+		EXECUTE FUNCTION %s_sync()
+	`, ftsTableName, tableName, ftsTableName)
+
+	deleteTrigger := fmt.Sprintf(`
+		CREATE TRIGGER %s_delete_trigger
+		AFTER DELETE ON %s
+		FOR EACH ROW
+		EXECUTE FUNCTION %s_sync()
+	`, ftsTableName, tableName, ftsTableName)
+
+	triggers := []string{insertTrigger, updateTrigger, deleteTrigger}
+	for _, trigger := range triggers {
+		if _, err := sqlDB.Exec(trigger); err != nil {
+			return fmt.Errorf("failed to create trigger: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// buildPostgresTSVectorExpr builds a PostgreSQL tsvector expression from column names
+func (m *FTSManager) buildPostgresTSVectorExpr(cols []string) string {
+	parts := make([]string, 0, len(cols))
+	for _, col := range cols {
+		// Use coalesce to handle NULL values
+		parts = append(parts, fmt.Sprintf("to_tsvector('english', coalesce(NEW.%s, ''))", col))
+	}
+	return strings.Join(parts, " || ' ' || ")
+}
+
+// populatePostgresFTSTable populates the PostgreSQL FTS table with existing data
+func (m *FTSManager) populatePostgresFTSTable(tableName, ftsTableName string, searchableCols []string, keyCol string) error {
+	var sqlDB *sql.DB
+	var err error
+
+	sqlDB, err = m.db.DB()
+	if err != nil {
+		return err
+	}
+
+	// Build tsvector expression for existing data
+	tsvectorParts := make([]string, 0, len(searchableCols))
+	for _, col := range searchableCols {
+		tsvectorParts = append(tsvectorParts, fmt.Sprintf("to_tsvector('english', coalesce(%s, ''))", col))
+	}
+	tsvectorExpr := strings.Join(tsvectorParts, " || ' ' || ")
+
+	insertSQL := fmt.Sprintf(
+		"INSERT INTO %s (%s, search_vector) SELECT %s, %s FROM %s",
+		ftsTableName, keyCol, keyCol, tsvectorExpr, tableName,
+	)
+
+	_, err = sqlDB.Exec(insertSQL)
+	if err != nil {
+		return fmt.Errorf("failed to populate FTS table: %w", err)
+	}
+
+	return nil
+}
+
 // ApplyFTSSearch applies FTS search to a GORM query
 func (m *FTSManager) ApplyFTSSearch(db *gorm.DB, tableName string, searchQuery string, entityMetadata *metadata.EntityMetadata) (*gorm.DB, error) {
 	if !m.ftsAvailable {
@@ -309,8 +525,13 @@ func (m *FTSManager) ApplyFTSSearch(db *gorm.DB, tableName string, searchQuery s
 		ftsTableName, tableName, keyCol, ftsTableName, keyCol,
 	))
 
-	// For FTS5, use the MATCH operator
-	if m.ftsVersion == "FTS5" {
+	// Apply search condition based on database type
+	if m.ftsVersion == "POSTGRES" {
+		// PostgreSQL uses @@ operator with plainto_tsquery for simple text search
+		// plainto_tsquery handles normalization and removes special characters
+		db = db.Where(fmt.Sprintf("%s.search_vector @@ plainto_tsquery('english', ?)", ftsTableName), escapedQuery)
+	} else if m.ftsVersion == "FTS5" {
+		// For FTS5, use the MATCH operator
 		db = db.Where(fmt.Sprintf("%s MATCH ?", ftsTableName), escapedQuery)
 	} else {
 		// For FTS4/FTS3, also use MATCH
