@@ -507,6 +507,19 @@ func (m *FTSManager) ApplyFTSSearch(db *gorm.DB, tableName string, searchQuery s
 		return db, nil
 	}
 
+	// Validate inputs
+	if entityMetadata == nil {
+		return db, fmt.Errorf("entity metadata is required")
+	}
+
+	if tableName == "" {
+		return db, fmt.Errorf("table name is required")
+	}
+
+	if len(entityMetadata.KeyProperties) == 0 {
+		return db, fmt.Errorf("entity has no key properties")
+	}
+
 	// Ensure FTS table exists
 	if err := m.EnsureFTSTable(tableName, entityMetadata); err != nil {
 		return db, err
