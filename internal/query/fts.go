@@ -223,7 +223,18 @@ func (m *FTSManager) createSQLiteFTSTable(tableName, ftsTableName string, allCol
 		return fmt.Errorf("failed to get SQL DB: %w", err)
 	}
 
+	// Validate identifiers to prevent SQL injection
+	if !isValidSQLIdentifier(tableName) || !isValidSQLIdentifier(ftsTableName) || !isValidSQLIdentifier(keyCol) {
+		return fmt.Errorf("invalid SQL identifier in table or column name")
+	}
+	for _, col := range allCols {
+		if !isValidSQLIdentifier(col) {
+			return fmt.Errorf("invalid SQL identifier in column: %s", col)
+		}
+	}
+
 	// Create standalone FTS virtual table (simpler approach)
+	// Note: identifiers are validated above and come from internal metadata, not user input
 	createSQL := fmt.Sprintf(
 		"CREATE VIRTUAL TABLE IF NOT EXISTS %s USING %s(%s)",
 		ftsTableName,
@@ -259,8 +270,19 @@ func (m *FTSManager) createPostgresFTSTable(tableName, ftsTableName string, sear
 		return fmt.Errorf("failed to get SQL DB: %w", err)
 	}
 
+	// Validate identifiers to prevent SQL injection
+	if !isValidSQLIdentifier(tableName) || !isValidSQLIdentifier(ftsTableName) || !isValidSQLIdentifier(keyCol) {
+		return fmt.Errorf("invalid SQL identifier in table or column name")
+	}
+	for _, col := range searchableCols {
+		if !isValidSQLIdentifier(col) {
+			return fmt.Errorf("invalid SQL identifier in searchable column: %s", col)
+		}
+	}
+
 	// Build the column list for the FTS table
 	// PostgreSQL FTS uses a tsvector column that combines all searchable fields
+	// Note: identifiers are validated above and come from internal metadata, not user input
 	createSQL := fmt.Sprintf(`
 		CREATE TABLE IF NOT EXISTS %s (
 			%s INTEGER PRIMARY KEY,
@@ -528,28 +550,48 @@ func (m *FTSManager) ApplyFTSSearch(db *gorm.DB, tableName string, searchQuery s
 	ftsTableName := m.getFTSTableName(tableName)
 	keyCol := toSnakeCase(entityMetadata.KeyProperties[0].Name)
 
-	// Escape single quotes in search query
-	escapedQuery := strings.ReplaceAll(searchQuery, "'", "''")
+	// Validate identifiers to prevent SQL injection
+	if !isValidSQLIdentifier(tableName) || !isValidSQLIdentifier(ftsTableName) || !isValidSQLIdentifier(keyCol) {
+		return db, fmt.Errorf("invalid SQL identifier in table or column name")
+	}
 
 	// Apply FTS search using JOIN
 	// The FTS table is queried and then joined with the main table
+	// Note: table and column names are validated above and come from internal metadata,
+	// not user input, so string formatting is safe here
 	db = db.Joins(fmt.Sprintf(
 		"INNER JOIN %s ON %s.%s = %s.%s",
 		ftsTableName, tableName, keyCol, ftsTableName, keyCol,
 	))
 
 	// Apply search condition based on database type
+	// Search query is passed as a parameterized value, not interpolated
 	if m.ftsVersion == "POSTGRES" {
 		// PostgreSQL uses @@ operator with plainto_tsquery for simple text search
 		// plainto_tsquery handles normalization and removes special characters
-		db = db.Where(fmt.Sprintf("%s.search_vector @@ plainto_tsquery('english', ?)", ftsTableName), escapedQuery)
+		// No manual escaping needed - parameterized query handles it safely
+		db = db.Where(fmt.Sprintf("%s.search_vector @@ plainto_tsquery('english', ?)", ftsTableName), searchQuery)
 	} else if m.ftsVersion == "FTS5" {
 		// For FTS5, use the MATCH operator
-		db = db.Where(fmt.Sprintf("%s MATCH ?", ftsTableName), escapedQuery)
+		db = db.Where(fmt.Sprintf("%s MATCH ?", ftsTableName), searchQuery)
 	} else {
 		// For FTS4/FTS3, also use MATCH
-		db = db.Where(fmt.Sprintf("%s MATCH ?", ftsTableName), escapedQuery)
+		db = db.Where(fmt.Sprintf("%s MATCH ?", ftsTableName), searchQuery)
 	}
 
 	return db, nil
+}
+
+// isValidSQLIdentifier validates that a string is a safe SQL identifier
+// It checks that the identifier only contains alphanumeric characters and underscores
+func isValidSQLIdentifier(identifier string) bool {
+	if identifier == "" {
+		return false
+	}
+	for _, ch := range identifier {
+		if !((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_') {
+			return false
+		}
+	}
+	return true
 }
