@@ -391,10 +391,9 @@ func ResourcePath() *framework.TestSuite {
 				return err
 			}
 
-			// Should return 404 (not found), 400 (bad request), or 301 (redirect to normalized path)
-			// If server normalizes empty segments to a valid path and returns 200, mark as skipped pending router update.
+			// OData spec: empty path segments are invalid and should return 404, 400, or 301 (redirect)
 			if resp.StatusCode == 200 {
-				return ctx.Skip("server normalizes empty segments; behavior under review")
+				return fmt.Errorf("server accepted invalid URL with empty path segments (should return 400 or 404)")
 			}
 			if resp.StatusCode != 404 && resp.StatusCode != 400 && resp.StatusCode != 301 {
 				return fmt.Errorf("empty path segments must return 404, 400, or 301 per OData spec (got %d)", resp.StatusCode)

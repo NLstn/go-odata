@@ -55,8 +55,9 @@ func Relationships() *framework.TestSuite {
 				return err
 			}
 
+			// $ref is a mandatory feature in OData v4
 			if resp.StatusCode == 404 {
-				return ctx.Skip("$ref operations not implemented")
+				return fmt.Errorf("$ref is mandatory in OData v4, but got status 404 (not implemented)")
 			}
 
 			if err := ctx.AssertStatusCode(resp, 200); err != nil {
@@ -81,8 +82,9 @@ func Relationships() *framework.TestSuite {
 				return err
 			}
 
+			// $ref is a mandatory feature in OData v4
 			if resp.StatusCode == 404 {
-				return ctx.Skip("$ref operations not implemented")
+				return fmt.Errorf("$ref is mandatory in OData v4, but got status 404 (not implemented)")
 			}
 
 			if err := ctx.AssertStatusCode(resp, 200); err != nil {
@@ -115,8 +117,9 @@ func Relationships() *framework.TestSuite {
 				return err
 			}
 
+			// $ref manipulation is a mandatory feature in OData v4
 			if resp.StatusCode == 404 {
-				return ctx.Skip("$ref operations not implemented")
+				return fmt.Errorf("$ref is mandatory in OData v4, but got status 404 (not implemented)")
 			}
 
 			// Should return 204 or 200
@@ -146,8 +149,9 @@ func Relationships() *framework.TestSuite {
 				return err
 			}
 
+			// $ref manipulation is a mandatory feature in OData v4
 			if resp.StatusCode == 404 {
-				return ctx.Skip("$ref operations not fully implemented")
+				return fmt.Errorf("$ref is mandatory in OData v4, but got status 404 (not implemented)")
 			}
 
 			// Should return 204 or 201
@@ -173,8 +177,9 @@ func Relationships() *framework.TestSuite {
 				return err
 			}
 
+			// $ref manipulation is a mandatory feature in OData v4
 			if resp.StatusCode == 404 {
-				return ctx.Skip("$ref operations not fully implemented")
+				return fmt.Errorf("$ref is mandatory in OData v4, but got status 404 (not implemented)")
 			}
 
 			return ctx.AssertStatusCode(resp, 204)

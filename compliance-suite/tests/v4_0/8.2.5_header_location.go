@@ -1,6 +1,7 @@
 package v4_0
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/nlstn/go-odata/compliance-suite/framework"
@@ -35,10 +36,14 @@ func HeaderLocation() *framework.TestSuite {
 				return ctx.Skip("Entity creation not supported or failed")
 			}
 
-			// Location header should contain URL of created entity
+			// OData v4 requires Location header in 201 responses
 			location := resp.Headers.Get("Location")
-			if location != "" && !strings.Contains(location, "Products") {
-				return framework.NewError("Location should contain entity URL")
+			if location == "" {
+				return fmt.Errorf("Location header is required for 201 responses per OData v4 spec")
+			}
+
+			if !strings.Contains(location, "Products") {
+				return fmt.Errorf("Location header should contain entity URL, got: %s", location)
 			}
 
 			return nil

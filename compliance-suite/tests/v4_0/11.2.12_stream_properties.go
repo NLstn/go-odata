@@ -188,7 +188,7 @@ func StreamProperties() *framework.TestSuite {
 				return ctx.Skip("media entity update unsupported (status: %d)")
 			}
 
-			return fmt.Errorf("unexpected status: %d", resp.StatusCode)
+			return fmt.Errorf("unexpected status %d updating media entity. Response: %s", resp.StatusCode, string(resp.Body))
 		},
 	)
 

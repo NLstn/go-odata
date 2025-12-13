@@ -1,6 +1,7 @@
 package v4_0
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/url"
 
@@ -80,6 +81,14 @@ func testGeoDistance(ctx *framework.TestContext) error {
 	// 200 OK = supported, 400/404/501 = not implemented (acceptable)
 	switch resp.StatusCode {
 	case 200:
+		// Validate response structure when geospatial is supported
+		var result map[string]interface{}
+		if err := json.Unmarshal(resp.Body, &result); err != nil {
+			return fmt.Errorf("failed to parse response: %w", err)
+		}
+		if _, ok := result["value"]; !ok {
+			return fmt.Errorf("response missing 'value' array")
+		}
 		return nil
 	case 400, 404, 501:
 		return ctx.Skip("geo.distance not implemented (optional feature)")
@@ -97,6 +106,14 @@ func testGeoLength(ctx *framework.TestContext) error {
 
 	switch resp.StatusCode {
 	case 200:
+		// Validate response structure when geospatial is supported
+		var result map[string]interface{}
+		if err := json.Unmarshal(resp.Body, &result); err != nil {
+			return fmt.Errorf("failed to parse response: %w", err)
+		}
+		if _, ok := result["value"]; !ok {
+			return fmt.Errorf("response missing 'value' array")
+		}
 		return nil
 	case 400, 404, 501:
 		return ctx.Skip("geo.length not implemented (optional feature)")
@@ -114,6 +131,14 @@ func testGeoIntersects(ctx *framework.TestContext) error {
 
 	switch resp.StatusCode {
 	case 200:
+		// Validate response structure when geospatial is supported
+		var result map[string]interface{}
+		if err := json.Unmarshal(resp.Body, &result); err != nil {
+			return fmt.Errorf("failed to parse response: %w", err)
+		}
+		if _, ok := result["value"]; !ok {
+			return fmt.Errorf("response missing 'value' array")
+		}
 		return nil
 	case 400, 404, 501:
 		return ctx.Skip("geo.intersects not implemented (optional feature)")
@@ -161,6 +186,14 @@ func testGeoLiteralFormat(ctx *framework.TestContext) error {
 
 	switch resp.StatusCode {
 	case 200:
+		// Validate response structure when geospatial is supported
+		var result map[string]interface{}
+		if err := json.Unmarshal(resp.Body, &result); err != nil {
+			return fmt.Errorf("failed to parse response: %w", err)
+		}
+		if _, ok := result["value"]; !ok {
+			return fmt.Errorf("response missing 'value' array")
+		}
 		return nil
 	case 400, 404, 501:
 		return ctx.Skip("Geospatial functions not implemented (optional feature)")
@@ -179,6 +212,14 @@ func testGeometryVsGeography(ctx *framework.TestContext) error {
 
 	switch resp.StatusCode {
 	case 200:
+		// Validate response structure when geospatial is supported
+		var result map[string]interface{}
+		if err := json.Unmarshal(resp.Body, &result); err != nil {
+			return fmt.Errorf("failed to parse response: %w", err)
+		}
+		if _, ok := result["value"]; !ok {
+			return fmt.Errorf("response missing 'value' array")
+		}
 		return nil
 	case 400, 404, 501:
 		return ctx.Skip("Geometry type not implemented (optional feature)")
@@ -196,6 +237,14 @@ func testGeoCombinedFilter(ctx *framework.TestContext) error {
 
 	switch resp.StatusCode {
 	case 200:
+		// Validate response structure when geospatial is supported
+		var result map[string]interface{}
+		if err := json.Unmarshal(resp.Body, &result); err != nil {
+			return fmt.Errorf("failed to parse response: %w", err)
+		}
+		if _, ok := result["value"]; !ok {
+			return fmt.Errorf("response missing 'value' array")
+		}
 		return nil
 	case 400, 404, 501:
 		return ctx.Skip("Combined geo filter not supported (optional feature)")
