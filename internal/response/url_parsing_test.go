@@ -48,6 +48,27 @@ func TestParseODataURLComponentsCompositeKey(t *testing.T) {
 			},
 			expectKey: "5", // Should be set for backwards compatibility
 		},
+		{
+			name:            "Single string key with single quotes",
+			path:            "UserSessions('1f8d7b3b-3271-4ce2-8ea9-a875ad35bbd6')",
+			expectEntitySet: "UserSessions",
+			expectKeyMap:    map[string]string{},
+			expectKey:       "1f8d7b3b-3271-4ce2-8ea9-a875ad35bbd6", // Quotes should be stripped
+		},
+		{
+			name:            "Single string key with double quotes",
+			path:            `UserSessions("abc-def-ghi")`,
+			expectEntitySet: "UserSessions",
+			expectKeyMap:    map[string]string{},
+			expectKey:       "abc-def-ghi", // Quotes should be stripped
+		},
+		{
+			name:            "Single string key with spaces and quotes",
+			path:            "Users('John Doe')",
+			expectEntitySet: "Users",
+			expectKeyMap:    map[string]string{},
+			expectKey:       "John Doe", // Quotes should be stripped
+		},
 	}
 
 	for _, tt := range tests {
