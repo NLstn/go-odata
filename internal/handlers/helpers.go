@@ -126,9 +126,12 @@ func parseCompositeKey(keyPart string, components *response.ODataURLComponents) 
 		keyName := strings.TrimSpace(parts[0])
 		keyValue := strings.TrimSpace(parts[1])
 
-		// Remove quotes from value if present
-		if len(keyValue) > 0 && (keyValue[0] == '\'' || keyValue[0] == '"') {
-			keyValue = strings.Trim(keyValue, "'\"")
+		// Remove quotes from value if they match
+		if len(keyValue) >= 2 {
+			if (keyValue[0] == '\'' && keyValue[len(keyValue)-1] == '\'') ||
+				(keyValue[0] == '"' && keyValue[len(keyValue)-1] == '"') {
+				keyValue = keyValue[1 : len(keyValue)-1]
+			}
 		}
 
 		components.EntityKeyMap[keyName] = keyValue
