@@ -714,36 +714,48 @@ func getEntitySetName(entityType reflect.Type) string {
 	valueType := entityType
 	ptrType := reflect.PointerTo(entityType)
 
-	// Check if EntitySetName method exists on value receiver
-	if method, found := valueType.MethodByName("EntitySetName"); found {
-		// Verify the method signature: func() string
-		methodType := method.Type
-		if methodType.NumIn() == 1 && methodType.NumOut() == 1 && methodType.Out(0).Kind() == reflect.String {
-			// Create a zero value instance and call the method
-			zeroVal := reflect.New(entityType).Elem()
-			result := zeroVal.MethodByName("EntitySetName").Call(nil)
-			if len(result) > 0 {
-				return result[0].String()
-			}
-		}
+	// Try value receiver first
+	if name := tryGetEntitySetName(valueType, entityType); name != "" {
+		return name
 	}
 
-	// Check if EntitySetName method exists on pointer receiver
-	if method, found := ptrType.MethodByName("EntitySetName"); found {
-		// Verify the method signature: func() string
-		methodType := method.Type
-		if methodType.NumIn() == 1 && methodType.NumOut() == 1 && methodType.Out(0).Kind() == reflect.String {
-			// Create a zero value pointer instance and call the method
-			zeroVal := reflect.New(entityType)
-			result := zeroVal.MethodByName("EntitySetName").Call(nil)
-			if len(result) > 0 {
-				return result[0].String()
-			}
-		}
+	// Try pointer receiver
+	if name := tryGetEntitySetName(ptrType, entityType); name != "" {
+		return name
 	}
 
 	// Fall back to pluralization
 	return pluralize(entityType.Name())
+}
+
+// tryGetEntitySetName attempts to call the EntitySetName method on the given type.
+// Returns empty string if the method doesn't exist or has wrong signature.
+func tryGetEntitySetName(checkType reflect.Type, entityType reflect.Type) string {
+	method, found := checkType.MethodByName("EntitySetName")
+	if !found {
+		return ""
+	}
+
+	// Verify the method signature: func() string
+	methodType := method.Type
+	if methodType.NumIn() != 1 || methodType.NumOut() != 1 || methodType.Out(0).Kind() != reflect.String {
+		return ""
+	}
+
+	// Create appropriate zero value and call the method
+	var zeroVal reflect.Value
+	if checkType.Kind() == reflect.Ptr {
+		zeroVal = reflect.New(entityType)
+	} else {
+		zeroVal = reflect.New(entityType).Elem()
+	}
+
+	result := zeroVal.MethodByName("EntitySetName").Call(nil)
+	if len(result) > 0 {
+		return result[0].String()
+	}
+
+	return ""
 }
 
 // detectMediaEntity checks if the entity implements HasStream() method
