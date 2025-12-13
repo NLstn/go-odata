@@ -27,7 +27,9 @@ func getTestPostgresDB(t *testing.T) *gorm.DB {
 	// Try to get DSN from environment variable
 	dsn := os.Getenv("POSTGRES_TEST_DSN")
 	if dsn == "" {
-		// Default test DSN
+		// Default test DSN with hardcoded credentials (postgres:postgres).
+		// For your own test setup, set the POSTGRES_TEST_DSN environment variable
+		// to avoid using default credentials.
 		dsn = "postgresql://postgres:postgres@localhost:5432/odata_test?sslmode=disable"
 	}
 
@@ -146,6 +148,34 @@ func TestPostgresIntegrationSearch_WithSearchableFields(t *testing.T) {
 			expectedCount:  1,
 			expectedIDs:    []uint{4},
 			description:    "Should find products with both words in searchable fields",
+		},
+		{
+			name:           "Search with special characters (quotes)",
+			path:           "/PostgresSearchTestProducts?$search=laptop%27s",
+			expectedStatus: http.StatusOK,
+			expectedCount:  0, // May not match but should handle gracefully
+			description:    "Should handle single quotes without errors",
+		},
+		{
+			name:           "Search with special characters (semicolon)",
+			path:           "/PostgresSearchTestProducts?$search=laptop%3Bdesktop",
+			expectedStatus: http.StatusOK,
+			expectedCount:  0, // plainto_tsquery removes special chars
+			description:    "Should handle semicolons without SQL injection",
+		},
+		{
+			name:           "Search with OR operator",
+			path:           "/PostgresSearchTestProducts?$search=laptop%20OR%20wireless",
+			expectedStatus: http.StatusOK,
+			// plainto_tsquery treats OR as a regular word, not an operator
+			description:    "Should handle OR as text, not SQL operator",
+		},
+		{
+			name:           "Search with AND operator",
+			path:           "/PostgresSearchTestProducts?$search=laptop%20AND%20professional",
+			expectedStatus: http.StatusOK,
+			// plainto_tsquery treats AND as a regular word, not an operator
+			description:    "Should handle AND as text, not SQL operator",
 		},
 	}
 

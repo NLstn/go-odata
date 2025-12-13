@@ -3,6 +3,7 @@ package query
 import (
 	"database/sql"
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/nlstn/go-odata/internal/metadata"
@@ -207,7 +208,7 @@ func (m *FTSManager) createFTSTable(tableName, ftsTableName string, searchableCo
 
 	// Choose implementation based on database type
 	if m.ftsVersion == "POSTGRES" {
-		return m.createPostgresFTSTable(tableName, ftsTableName, searchableCols, keyCol)
+		return m.createPostgresFTSTable(tableName, ftsTableName, searchableCols, keyCol, entityMetadata)
 	}
 
 	return m.createSQLiteFTSTable(tableName, ftsTableName, allCols, keyCol)
@@ -261,7 +262,7 @@ func (m *FTSManager) createSQLiteFTSTable(tableName, ftsTableName string, allCol
 }
 
 // createPostgresFTSTable creates PostgreSQL FTS table with tsvector column and GIN index
-func (m *FTSManager) createPostgresFTSTable(tableName, ftsTableName string, searchableCols []string, keyCol string) error {
+func (m *FTSManager) createPostgresFTSTable(tableName, ftsTableName string, searchableCols []string, keyCol string, entityMetadata *metadata.EntityMetadata) error {
 	var sqlDB *sql.DB
 	var err error
 
@@ -280,15 +281,21 @@ func (m *FTSManager) createPostgresFTSTable(tableName, ftsTableName string, sear
 		}
 	}
 
+	// Determine the PostgreSQL type for the primary key column
+	keyType := "INTEGER" // Default fallback
+	if len(entityMetadata.KeyProperties) > 0 {
+		keyType = goTypeToPostgresType(entityMetadata.KeyProperties[0].Type)
+	}
+
 	// Build the column list for the FTS table
 	// PostgreSQL FTS uses a tsvector column that combines all searchable fields
 	// Note: identifiers are validated above and come from internal metadata, not user input
 	createSQL := fmt.Sprintf(`
 		CREATE TABLE IF NOT EXISTS %s (
-			%s INTEGER PRIMARY KEY,
+			%s %s PRIMARY KEY,
 			search_vector tsvector
 		)
-	`, ftsTableName, keyCol)
+	`, ftsTableName, keyCol, keyType)
 
 	_, err = sqlDB.Exec(createSQL)
 	if err != nil {
@@ -444,7 +451,8 @@ func (m *FTSManager) createPostgresFTSTriggers(tableName, ftsTableName string, s
 	}
 
 	for _, dropSQL := range dropTriggers {
-		_, _ = sqlDB.Exec(dropSQL) // Ignore errors for non-existent triggers
+		// Ignore errors for non-existent triggers - this is expected on first run
+		_, _ = sqlDB.Exec(dropSQL) //nolint:errcheck
 	}
 
 	// Create triggers for INSERT, UPDATE, DELETE
@@ -481,12 +489,21 @@ func (m *FTSManager) createPostgresFTSTriggers(tableName, ftsTableName string, s
 
 // buildPostgresTSVectorExpr builds a PostgreSQL tsvector expression from column names
 func (m *FTSManager) buildPostgresTSVectorExpr(cols []string) string {
+	// Validate identifiers for defense in depth
+	for _, col := range cols {
+		if !isValidSQLIdentifier(col) {
+			// Return empty string if validation fails - caller will handle the error
+			return ""
+		}
+	}
+
 	parts := make([]string, 0, len(cols))
 	for _, col := range cols {
 		// Use coalesce to handle NULL values
 		parts = append(parts, fmt.Sprintf("to_tsvector('english', coalesce(NEW.%s, ''))", col))
 	}
-	return strings.Join(parts, " || ' ' || ")
+	// PostgreSQL's || operator for tsvectors correctly merges them without needing a space literal
+	return strings.Join(parts, " || ")
 }
 
 // populatePostgresFTSTable populates the PostgreSQL FTS table with existing data
@@ -499,12 +516,23 @@ func (m *FTSManager) populatePostgresFTSTable(tableName, ftsTableName string, se
 		return err
 	}
 
+	// Validate identifiers for defense in depth
+	if !isValidSQLIdentifier(tableName) || !isValidSQLIdentifier(ftsTableName) || !isValidSQLIdentifier(keyCol) {
+		return fmt.Errorf("invalid SQL identifier in table or column name")
+	}
+	for _, col := range searchableCols {
+		if !isValidSQLIdentifier(col) {
+			return fmt.Errorf("invalid SQL identifier in searchable column: %s", col)
+		}
+	}
+
 	// Build tsvector expression for existing data
 	tsvectorParts := make([]string, 0, len(searchableCols))
 	for _, col := range searchableCols {
 		tsvectorParts = append(tsvectorParts, fmt.Sprintf("to_tsvector('english', coalesce(%s, ''))", col))
 	}
-	tsvectorExpr := strings.Join(tsvectorParts, " || ' ' || ")
+	// PostgreSQL's || operator for tsvectors correctly merges them without needing a space literal
+	tsvectorExpr := strings.Join(tsvectorParts, " || ")
 
 	insertSQL := fmt.Sprintf(
 		"INSERT INTO %s (%s, search_vector) SELECT %s, %s FROM %s",
@@ -566,15 +594,16 @@ func (m *FTSManager) ApplyFTSSearch(db *gorm.DB, tableName string, searchQuery s
 
 	// Apply search condition based on database type
 	// Search query is passed as a parameterized value, not interpolated
-	if m.ftsVersion == "POSTGRES" {
+	switch m.ftsVersion {
+	case "POSTGRES":
 		// PostgreSQL uses @@ operator with plainto_tsquery for simple text search
 		// plainto_tsquery handles normalization and removes special characters
 		// No manual escaping needed - parameterized query handles it safely
 		db = db.Where(fmt.Sprintf("%s.search_vector @@ plainto_tsquery('english', ?)", ftsTableName), searchQuery)
-	} else if m.ftsVersion == "FTS5" {
+	case "FTS5":
 		// For FTS5, use the MATCH operator
 		db = db.Where(fmt.Sprintf("%s MATCH ?", ftsTableName), searchQuery)
-	} else {
+	default:
 		// For FTS4/FTS3, also use MATCH
 		db = db.Where(fmt.Sprintf("%s MATCH ?", ftsTableName), searchQuery)
 	}
@@ -589,9 +618,53 @@ func isValidSQLIdentifier(identifier string) bool {
 		return false
 	}
 	for _, ch := range identifier {
-		if !((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_') {
+		// Apply De Morgan's law for simpler logic
+		if (ch < 'a' || ch > 'z') && (ch < 'A' || ch > 'Z') && (ch < '0' || ch > '9') && ch != '_' {
 			return false
 		}
 	}
 	return true
+}
+
+// goTypeToPostgresType maps Go types to PostgreSQL column types
+func goTypeToPostgresType(t reflect.Type) string {
+	// Handle pointer types
+	if t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+
+	switch t.Kind() {
+	case reflect.Int, reflect.Int32:
+		return "INTEGER"
+	case reflect.Int8:
+		return "SMALLINT"
+	case reflect.Int16:
+		return "SMALLINT"
+	case reflect.Int64:
+		return "BIGINT"
+	case reflect.Uint, reflect.Uint32:
+		return "BIGINT"
+	case reflect.Uint8:
+		return "SMALLINT"
+	case reflect.Uint16:
+		return "INTEGER"
+	case reflect.Uint64:
+		return "BIGINT"
+	case reflect.String:
+		return "TEXT"
+	case reflect.Float32:
+		return "REAL"
+	case reflect.Float64:
+		return "DOUBLE PRECISION"
+	case reflect.Bool:
+		return "BOOLEAN"
+	default:
+		// Check for UUID types by name
+		typeName := t.String()
+		if strings.Contains(typeName, "UUID") || strings.Contains(typeName, "uuid") {
+			return "UUID"
+		}
+		// Default to TEXT for unknown types
+		return "TEXT"
+	}
 }

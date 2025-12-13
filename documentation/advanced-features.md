@@ -773,14 +773,14 @@ BEGIN
     IF TG_OP = 'INSERT' THEN
         INSERT INTO products_fts (id, search_vector)
         VALUES (NEW.id, 
-            to_tsvector('english', coalesce(NEW.name, '')) || ' ' ||
+            to_tsvector('english', coalesce(NEW.name, '')) ||
             to_tsvector('english', coalesce(NEW.description, ''))
         );
         RETURN NEW;
     ELSIF TG_OP = 'UPDATE' THEN
         UPDATE products_fts 
         SET search_vector = 
-            to_tsvector('english', coalesce(NEW.name, '')) || ' ' ||
+            to_tsvector('english', coalesce(NEW.name, '')) ||
             to_tsvector('english', coalesce(NEW.description, ''))
         WHERE id = NEW.id;
         RETURN NEW;

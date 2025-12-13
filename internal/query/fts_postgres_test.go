@@ -23,7 +23,9 @@ func getPostgresDB(t *testing.T) *gorm.DB {
 	// Try to get DSN from environment variable
 	dsn := os.Getenv("POSTGRES_TEST_DSN")
 	if dsn == "" {
-		// Default test DSN
+		// Default test DSN with hardcoded credentials (postgres:postgres).
+		// For your own test setup, set the POSTGRES_TEST_DSN environment variable
+		// to avoid using default credentials.
 		dsn = "postgresql://postgres:postgres@localhost:5432/odata_test?sslmode=disable"
 	}
 
