@@ -276,7 +276,12 @@ func ParseODataURLComponents(path string) (*ODataURLComponents, error) {
 
 func parseKeyPart(keyPart string, components *ODataURLComponents) error {
 	if !strings.Contains(keyPart, "=") {
-		components.EntityKey = keyPart
+		// For single keys, strip surrounding quotes (same as composite keys)
+		cleanKey := keyPart
+		if len(cleanKey) > 0 && (cleanKey[0] == '\'' || cleanKey[0] == '"') {
+			cleanKey = strings.Trim(cleanKey, "'\"")
+		}
+		components.EntityKey = cleanKey
 		return nil
 	}
 
