@@ -21,8 +21,8 @@ func applySelect(db *gorm.DB, selectedProperties []string, entityMetadata *metad
 		propName = strings.TrimSpace(propName)
 		for _, prop := range entityMetadata.Properties {
 			if (prop.JsonName == propName || prop.Name == propName) && !prop.IsNavigationProp && !prop.IsComplexType && !prop.IsStream {
-				// Use snake_case column name for database queries
-				columnName := toSnakeCase(prop.Name)
+				// Use GetColumnName for proper column name resolution (handles GORM tags and metadata)
+				columnName := GetColumnName(prop.Name, entityMetadata)
 				columns = append(columns, columnName)
 				selectedPropMap[prop.Name] = true
 				break
@@ -32,8 +32,8 @@ func applySelect(db *gorm.DB, selectedProperties []string, entityMetadata *metad
 
 	for _, keyProp := range entityMetadata.KeyProperties {
 		if !selectedPropMap[keyProp.Name] {
-			// Use snake_case column name for database queries
-			columnName := toSnakeCase(keyProp.Name)
+			// Use GetColumnName for proper column name resolution (handles GORM tags and metadata)
+			columnName := GetColumnName(keyProp.Name, entityMetadata)
 			columns = append(columns, columnName)
 		}
 	}
