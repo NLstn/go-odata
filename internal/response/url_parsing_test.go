@@ -69,6 +69,20 @@ func TestParseODataURLComponentsCompositeKey(t *testing.T) {
 			expectKeyMap:    map[string]string{},
 			expectKey:       "John Doe", // Quotes should be stripped
 		},
+		{
+			name:            "Single string key with mismatched quotes should not strip",
+			path:            "Keys('value\")",
+			expectEntitySet: "Keys",
+			expectKeyMap:    map[string]string{},
+			expectKey:       "'value\"", // Quotes should NOT be stripped (mismatched)
+		},
+		{
+			name:            "Single string key with embedded quotes",
+			path:            "Keys('a\"b')",
+			expectEntitySet: "Keys",
+			expectKeyMap:    map[string]string{},
+			expectKey:       "a\"b", // Only outer quotes should be stripped
+		},
 	}
 
 	for _, tt := range tests {
