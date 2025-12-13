@@ -6,6 +6,8 @@ import (
 	"github.com/nlstn/go-odata/compliance-suite/framework"
 )
 
+const errRefMandatory = "$ref is mandatory in OData v4, but got status 404 (not implemented)"
+
 // Relationships creates the 11.4.6 Managing Relationships test suite
 func Relationships() *framework.TestSuite {
 	suite := framework.NewTestSuite(
@@ -57,7 +59,7 @@ func Relationships() *framework.TestSuite {
 
 			// $ref is a mandatory feature in OData v4
 			if resp.StatusCode == 404 {
-				return fmt.Errorf("$ref is mandatory in OData v4, but got status 404 (not implemented)")
+				return fmt.Errorf(errRefMandatory)
 			}
 
 			if err := ctx.AssertStatusCode(resp, 200); err != nil {
@@ -84,7 +86,7 @@ func Relationships() *framework.TestSuite {
 
 			// $ref is a mandatory feature in OData v4
 			if resp.StatusCode == 404 {
-				return fmt.Errorf("$ref is mandatory in OData v4, but got status 404 (not implemented)")
+				return fmt.Errorf(errRefMandatory)
 			}
 
 			if err := ctx.AssertStatusCode(resp, 200); err != nil {
@@ -119,7 +121,7 @@ func Relationships() *framework.TestSuite {
 
 			// $ref manipulation is a mandatory feature in OData v4
 			if resp.StatusCode == 404 {
-				return fmt.Errorf("$ref is mandatory in OData v4, but got status 404 (not implemented)")
+				return fmt.Errorf(errRefMandatory)
 			}
 
 			// Should return 204 or 200
@@ -151,7 +153,7 @@ func Relationships() *framework.TestSuite {
 
 			// $ref manipulation is a mandatory feature in OData v4
 			if resp.StatusCode == 404 {
-				return fmt.Errorf("$ref is mandatory in OData v4, but got status 404 (not implemented)")
+				return fmt.Errorf(errRefMandatory)
 			}
 
 			// Should return 204 or 201
@@ -179,7 +181,7 @@ func Relationships() *framework.TestSuite {
 
 			// $ref manipulation is a mandatory feature in OData v4
 			if resp.StatusCode == 404 {
-				return fmt.Errorf("$ref is mandatory in OData v4, but got status 404 (not implemented)")
+				return fmt.Errorf(errRefMandatory)
 			}
 
 			return ctx.AssertStatusCode(resp, 204)
