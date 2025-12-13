@@ -20,8 +20,10 @@ services:
     restart: unless-stopped
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      # Mount init scripts to set up databases and users (odata_test, keycloak)
       - ./postgres-init:/docker-entrypoint-initdb.d:ro
     environment:
+      # Postgres superuser password (init scripts run as postgres user)
       POSTGRES_PASSWORD: postgres
     ports:
       - "5432:5432"

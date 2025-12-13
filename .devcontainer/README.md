@@ -5,6 +5,10 @@ This directory contains the development container configuration for GitHub Codes
 ## What's Included
 
 - **Go 1.24**: Latest Go development environment
+- **PostgreSQL 16**: Database with automatic initialization
+  - Main database: `odata_test` (user: `odata`, password: `odata_dev`)
+  - Keycloak database: `keycloak` (user: `keycloak`, password: `keycloak_dev`)
+  - Initialization script located in `postgres-init/init.sql`
 - **VS Code Extensions**:
   - Go language support with IntelliSense
   - GitHub Copilot for AI-assisted coding
