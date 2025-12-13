@@ -35,6 +35,23 @@ type RegisteredEnumEntity struct {
 	Value RegisteredEnum `json:"value" odata:"enum=RegisteredEnum"`
 }
 
+// News entity with custom EntitySetName for testing
+type News struct {
+	ID      int    `json:"id" gorm:"primarykey" odata:"key"`
+	Title   string `json:"title"`
+	Content string `json:"content"`
+}
+
+func (News) EntitySetName() string {
+	return "News"
+}
+
+// Article entity without EntitySetName for comparison
+type Article struct {
+	ID    int    `json:"id" gorm:"primarykey" odata:"key"`
+	Title string `json:"title"`
+}
+
 func setupTestDB(t *testing.T) *gorm.DB {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
@@ -575,5 +592,54 @@ func TestRegisterActionWithMismatchedStructParameters(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "parameter definitions do not match struct type") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// TestEntitySetNameInterface tests the EntitySetName() interface functionality
+func TestEntitySetNameInterface(t *testing.T) {
+	db := setupTestDB(t)
+	service := NewService(db)
+
+	// Auto-migrate the News table
+	if err := db.AutoMigrate(&News{}); err != nil {
+		t.Fatalf("Failed to migrate News table: %v", err)
+	}
+
+	// Register the News entity
+	if err := service.RegisterEntity(&News{}); err != nil {
+		t.Fatalf("Failed to register News entity: %v", err)
+	}
+
+	// Verify the entity was registered with correct entity set name
+	if meta, exists := service.entities["News"]; !exists {
+		t.Fatalf("News entity set not found in service.entities")
+	} else {
+		if meta.EntityName != "News" {
+			t.Errorf("EntityName = %v, want News", meta.EntityName)
+		}
+		if meta.EntitySetName != "News" {
+			t.Errorf("EntitySetName = %v, want News (should not be 'Newses')", meta.EntitySetName)
+		}
+	}
+
+	// Test that default pluralization still works for entities without EntitySetName()
+	if err := db.AutoMigrate(&Article{}); err != nil {
+		t.Fatalf("Failed to migrate Article table: %v", err)
+	}
+
+	if err := service.RegisterEntity(&Article{}); err != nil {
+		t.Fatalf("Failed to register Article entity: %v", err)
+	}
+
+	// Verify Article uses default pluralization
+	if meta, exists := service.entities["Articles"]; !exists {
+		t.Fatalf("Articles entity set not found in service.entities")
+	} else {
+		if meta.EntityName != "Article" {
+			t.Errorf("EntityName = %v, want Article", meta.EntityName)
+		}
+		if meta.EntitySetName != "Articles" {
+			t.Errorf("EntitySetName = %v, want Articles (default pluralization)", meta.EntitySetName)
+		}
 	}
 }
