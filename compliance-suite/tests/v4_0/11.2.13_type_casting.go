@@ -41,7 +41,7 @@ func TypeCasting() *framework.TestSuite {
 			}
 
 			if resp.StatusCode == 400 || resp.StatusCode == 404 || resp.StatusCode == 501 {
-				return fmt.Errorf("specification violation: isof function must be supported (status: %d)", resp.StatusCode)
+				return fmt.Errorf("type casting failed but derived types exist in metadata (status: %d)", resp.StatusCode)
 			}
 
 			return fmt.Errorf("unexpected status: %d", resp.StatusCode)
@@ -70,7 +70,7 @@ func TypeCasting() *framework.TestSuite {
 			}
 
 			if resp.StatusCode == 404 || resp.StatusCode == 400 || resp.StatusCode == 501 {
-				return fmt.Errorf("specification violation: Type cast in path must be supported (status: %d)", resp.StatusCode)
+				return fmt.Errorf("type casting failed but derived types exist in metadata (status: %d)", resp.StatusCode)
 			}
 
 			return fmt.Errorf("unexpected status: %d", resp.StatusCode)
@@ -95,7 +95,7 @@ func TypeCasting() *framework.TestSuite {
 			}
 
 			if resp.StatusCode == 404 || resp.StatusCode == 400 || resp.StatusCode == 501 {
-				return fmt.Errorf("specification violation: Type cast on collection must be supported (status: %d)", resp.StatusCode)
+				return fmt.Errorf("type casting failed but derived types exist in metadata (status: %d)", resp.StatusCode)
 			}
 
 			return fmt.Errorf("unexpected status: %d", resp.StatusCode)
@@ -120,7 +120,7 @@ func TypeCasting() *framework.TestSuite {
 			}
 
 			if resp.StatusCode == 400 || resp.StatusCode == 501 {
-				return fmt.Errorf("specification violation: cast function must be supported (status: %d)", resp.StatusCode)
+				return fmt.Errorf("type casting failed but derived types exist in metadata (status: %d)", resp.StatusCode)
 			}
 
 			return fmt.Errorf("unexpected status: %d", resp.StatusCode)
@@ -149,7 +149,7 @@ func TypeCasting() *framework.TestSuite {
 			}
 
 			if resp.StatusCode == 404 || resp.StatusCode == 400 || resp.StatusCode == 501 {
-				return fmt.Errorf("specification violation: Derived type property access must be supported (status: %d)", resp.StatusCode)
+				return fmt.Errorf("type casting failed but derived types exist in metadata (status: %d)", resp.StatusCode)
 			}
 
 			return fmt.Errorf("unexpected status: %d", resp.StatusCode)
@@ -174,7 +174,7 @@ func TypeCasting() *framework.TestSuite {
 			}
 
 			if resp.StatusCode == 400 || resp.StatusCode == 404 || resp.StatusCode == 501 {
-				return fmt.Errorf("specification violation: Combined isof filter must be supported (status: %d)", resp.StatusCode)
+				return fmt.Errorf("type casting failed but derived types exist in metadata (status: %d)", resp.StatusCode)
 			}
 
 			return fmt.Errorf("unexpected status: %d", resp.StatusCode)
@@ -192,7 +192,7 @@ func TypeCasting() *framework.TestSuite {
 			}
 
 			if resp.StatusCode != 200 {
-				return fmt.Errorf("specification violation: Polymorphic entity set must be accessible (status: %d)", resp.StatusCode)
+				return fmt.Errorf("polymorphic entity set access failed (status: %d)", resp.StatusCode)
 			}
 
 			return nil
@@ -225,7 +225,7 @@ func TypeCasting() *framework.TestSuite {
 			}
 
 			if resp.StatusCode == 400 || resp.StatusCode == 404 || resp.StatusCode == 501 {
-				return fmt.Errorf("specification violation: Entity retrieval must support polymorphic type metadata (status: %d)", resp.StatusCode)
+				return fmt.Errorf("entity retrieval failed (status: %d)", resp.StatusCode)
 			}
 
 			return fmt.Errorf("unexpected status: %d", resp.StatusCode)
@@ -253,7 +253,7 @@ func TypeCasting() *framework.TestSuite {
 			}
 
 			if resp.StatusCode == 400 || resp.StatusCode == 404 || resp.StatusCode == 501 {
-				return fmt.Errorf("specification violation: Metadata document must describe derived types (status: %d)", resp.StatusCode)
+				return fmt.Errorf("metadata retrieval failed (status: %d)", resp.StatusCode)
 			}
 
 			return fmt.Errorf("unexpected status: %d", resp.StatusCode)
@@ -282,7 +282,7 @@ func TypeCasting() *framework.TestSuite {
 			}
 
 			if resp.StatusCode == 400 || resp.StatusCode == 404 || resp.StatusCode == 501 {
-				return fmt.Errorf("specification violation: Creating derived type entities must be supported (status: %d)", resp.StatusCode)
+				return fmt.Errorf("type casting failed but derived types exist in metadata (status: %d)", resp.StatusCode)
 			}
 
 			return fmt.Errorf("unexpected status: %d", resp.StatusCode)
@@ -311,7 +311,7 @@ func TypeCasting() *framework.TestSuite {
 			}
 
 			if resp.StatusCode == 404 || resp.StatusCode == 400 || resp.StatusCode == 501 {
-				return fmt.Errorf("specification violation: Type cast with navigation must be supported (status: %d)", resp.StatusCode)
+				return fmt.Errorf("type casting failed but derived types exist in metadata (status: %d)", resp.StatusCode)
 			}
 
 			return fmt.Errorf("unexpected status: %d", resp.StatusCode)
