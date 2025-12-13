@@ -191,6 +191,9 @@ func (m *FTSManager) getAllStringColumns(entityMetadata *metadata.EntityMetadata
 // createFTSTable creates the FTS virtual table or index
 func (m *FTSManager) createFTSTable(tableName, ftsTableName string, searchableCols []string, entityMetadata *metadata.EntityMetadata) error {
 	// Get the key column(s)
+	// Note: FTS tables use only the first key property for linking back to the main table.
+	// This is sufficient for joining and is consistent with the SQLite FTS implementation.
+	// For composite keys, the FTS table uses the first key component as the primary key.
 	var keyCol string
 	if len(entityMetadata.KeyProperties) > 0 {
 		keyCol = toSnakeCase(entityMetadata.KeyProperties[0].Name)
