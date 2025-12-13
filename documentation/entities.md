@@ -5,6 +5,7 @@ This guide covers how to define entities in go-odata using Go structs with appro
 ## Table of Contents
 
 - [Basic Entity](#basic-entity)
+- [Custom Entity Set Names](#custom-entity-set-names)
 - [Entity with Rich Metadata](#entity-with-rich-metadata)
 - [Entity with Relationships](#entity-with-relationships)
 - [Composite Keys](#composite-keys)
@@ -39,6 +40,66 @@ if err := service.RegisterEntity(&Product{}); err != nil {
 
 Always bubble up registration errors—problems such as malformed tags or duplicate entity names are detected during
 `RegisterEntity` and should be fixed before serving requests.
+
+## Custom Entity Set Names
+
+By default, go-odata automatically pluralizes entity names to create entity set names. For example, a `Product` entity becomes a `Products` entity set accessible at `/Products`. However, some words don't pluralize correctly (like "News", "Series", "Species") or you may want to use a custom name.
+
+You can override the automatic pluralization by implementing an `EntitySetName()` method on your entity type:
+
+```go
+type News struct {
+    ID      int    `json:"id" odata:"key"`
+    Title   string `json:"title" odata:"required"`
+    Content string `json:"content"`
+}
+
+// EntitySetName returns the custom entity set name
+func (News) EntitySetName() string {
+    return "News"
+}
+```
+
+**Register the entity:**
+
+```go
+service := odata.NewService(db)
+if err := service.RegisterEntity(&News{}); err != nil {
+    return err
+}
+// The entity set will be accessible at /News instead of /Newses
+```
+
+**Additional examples:**
+
+```go
+type Species struct {
+    ID   int    `json:"id" odata:"key"`
+    Name string `json:"name"`
+}
+
+func (Species) EntitySetName() string {
+    return "Species"  // Instead of "Specieses"
+}
+
+type Headquarters struct {
+    ID      int    `json:"id" odata:"key"`
+    Address string `json:"address"`
+}
+
+func (Headquarters) EntitySetName() string {
+    return "Headquarters"  // Instead of "Headquarterses"
+}
+```
+
+The `EntitySetName()` method works with both value and pointer receivers, similar to how GORM's `TableName()` method works. This gives you full control over how your entities are exposed in the OData API.
+
+**Common use cases:**
+
+- Already-plural words: News, Series, Species, Data, Information
+- Mass nouns that don't pluralize: Equipment, Furniture, Luggage
+- Proper nouns ending in 's': Windows, Linus
+- Custom API design: You might want "People" instead of "Persons" or "Staff" instead of "Employees"
 
 ## Entity with Rich Metadata
 

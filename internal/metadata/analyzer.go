@@ -273,7 +273,7 @@ func AnalyzeVirtualEntity(entity interface{}) (*EntityMetadata, error) {
 // initializeMetadata creates a new EntityMetadata struct with basic information
 func initializeMetadata(entityType reflect.Type) *EntityMetadata {
 	entityName := entityType.Name()
-	entitySetName := pluralize(entityName)
+	entitySetName := getEntitySetName(entityType)
 
 	return &EntityMetadata{
 		EntityType:    entityType,
@@ -301,7 +301,7 @@ func initializeSingletonMetadata(entityType reflect.Type, singletonName string) 
 // initializeVirtualEntityMetadata creates a new EntityMetadata struct for a virtual entity
 func initializeVirtualEntityMetadata(entityType reflect.Type) *EntityMetadata {
 	entityName := entityType.Name()
-	entitySetName := pluralize(entityName)
+	entitySetName := getEntitySetName(entityType)
 
 	return &EntityMetadata{
 		EntityType:    entityType,
@@ -703,6 +703,47 @@ func isVowel(r rune) bool {
 	default:
 		return false
 	}
+}
+
+// getEntitySetName determines the entity set name for an entity type.
+// It first checks if the entity implements an EntitySetName() method,
+// similar to how GORM's TableName() works. If not, it falls back to
+// pluralizing the entity name.
+func getEntitySetName(entityType reflect.Type) string {
+	// Check for both value and pointer receivers
+	valueType := entityType
+	ptrType := reflect.PointerTo(entityType)
+
+	// Check if EntitySetName method exists on value receiver
+	if method, found := valueType.MethodByName("EntitySetName"); found {
+		// Verify the method signature: func() string
+		methodType := method.Type
+		if methodType.NumIn() == 1 && methodType.NumOut() == 1 && methodType.Out(0).Kind() == reflect.String {
+			// Create a zero value instance and call the method
+			zeroVal := reflect.New(entityType).Elem()
+			result := zeroVal.MethodByName("EntitySetName").Call(nil)
+			if len(result) > 0 {
+				return result[0].String()
+			}
+		}
+	}
+
+	// Check if EntitySetName method exists on pointer receiver
+	if method, found := ptrType.MethodByName("EntitySetName"); found {
+		// Verify the method signature: func() string
+		methodType := method.Type
+		if methodType.NumIn() == 1 && methodType.NumOut() == 1 && methodType.Out(0).Kind() == reflect.String {
+			// Create a zero value pointer instance and call the method
+			zeroVal := reflect.New(entityType)
+			result := zeroVal.MethodByName("EntitySetName").Call(nil)
+			if len(result) > 0 {
+				return result[0].String()
+			}
+		}
+	}
+
+	// Fall back to pluralization
+	return pluralize(entityType.Name())
 }
 
 // detectMediaEntity checks if the entity implements HasStream() method

@@ -808,3 +808,116 @@ func TestAnalyzeEntity_AutoTag(t *testing.T) {
 		}
 	})
 }
+
+func TestEntitySetNameInterface(t *testing.T) {
+	// Test case 1: Entity with EntitySetName method using value receiver
+	t.Run("EntitySetName method with value receiver", func(t *testing.T) {
+		meta, err := AnalyzeEntity(TestNewsEntity{})
+		if err != nil {
+			t.Fatalf("AnalyzeEntity(TestNewsEntity) error = %v", err)
+		}
+
+		if meta.EntityName != "TestNewsEntity" {
+			t.Errorf("EntityName = %v, want TestNewsEntity", meta.EntityName)
+		}
+		if meta.EntitySetName != "News" {
+			t.Errorf("EntitySetName = %v, want News", meta.EntitySetName)
+		}
+	})
+
+	// Test case 2: Entity with EntitySetName method using pointer receiver
+	t.Run("EntitySetName method with pointer receiver", func(t *testing.T) {
+		meta, err := AnalyzeEntity(TestSeriesEntity{})
+		if err != nil {
+			t.Fatalf("AnalyzeEntity(TestSeriesEntity) error = %v", err)
+		}
+
+		if meta.EntityName != "TestSeriesEntity" {
+			t.Errorf("EntityName = %v, want TestSeriesEntity", meta.EntityName)
+		}
+		if meta.EntitySetName != "Series" {
+			t.Errorf("EntitySetName = %v, want Series", meta.EntitySetName)
+		}
+	})
+
+	// Test case 3: Entity without EntitySetName method (falls back to pluralization)
+	t.Run("Entity without EntitySetName method", func(t *testing.T) {
+		type Product struct {
+			ID   int    `json:"id" odata:"key"`
+			Name string `json:"name"`
+		}
+
+		meta, err := AnalyzeEntity(Product{})
+		if err != nil {
+			t.Fatalf("AnalyzeEntity(Product) error = %v", err)
+		}
+
+		if meta.EntityName != "Product" {
+			t.Errorf("EntityName = %v, want Product", meta.EntityName)
+		}
+		if meta.EntitySetName != "Products" {
+			t.Errorf("EntitySetName = %v, want Products (pluralized)", meta.EntitySetName)
+		}
+	})
+
+	// Test case 4: More examples of irregular plurals handled via EntitySetName
+	t.Run("Species entity with EntitySetName", func(t *testing.T) {
+		meta, err := AnalyzeEntity(TestSpeciesEntity{})
+		if err != nil {
+			t.Fatalf("AnalyzeEntity(TestSpeciesEntity) error = %v", err)
+		}
+
+		if meta.EntitySetName != "Species" {
+			t.Errorf("EntitySetName = %v, want Species", meta.EntitySetName)
+		}
+	})
+
+	t.Run("Headquarters entity with EntitySetName", func(t *testing.T) {
+		meta, err := AnalyzeEntity(TestHeadquartersEntity{})
+		if err != nil {
+			t.Fatalf("AnalyzeEntity(TestHeadquartersEntity) error = %v", err)
+		}
+
+		if meta.EntitySetName != "Headquarters" {
+			t.Errorf("EntitySetName = %v, want Headquarters", meta.EntitySetName)
+		}
+	})
+}
+
+// Test entities with EntitySetName methods for testing
+type TestSeriesEntity struct {
+	ID    int    `json:"id" odata:"key"`
+	Title string `json:"title"`
+}
+
+func (TestSeriesEntity) EntitySetName() string {
+	return "Series"
+}
+
+type TestSpeciesEntity struct {
+	ID   int    `json:"id" odata:"key"`
+	Name string `json:"name"`
+}
+
+func (*TestSpeciesEntity) EntitySetName() string {
+	return "Species"
+}
+
+type TestHeadquartersEntity struct {
+	ID      int    `json:"id" odata:"key"`
+	Address string `json:"address"`
+}
+
+func (TestHeadquartersEntity) EntitySetName() string {
+	return "Headquarters"
+}
+
+type TestNewsEntity struct {
+	ID      int    `json:"id" odata:"key"`
+	Title   string `json:"title"`
+	Content string `json:"content"`
+}
+
+func (TestNewsEntity) EntitySetName() string {
+	return "News"
+}
