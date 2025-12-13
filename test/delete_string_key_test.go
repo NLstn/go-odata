@@ -21,6 +21,9 @@ type UserSession struct {
 	AccessToken string `json:"accessToken"`
 }
 
+// Global variables to track hook calls
+// Note: These are safe in sequential test execution (Go's default).
+// Tests using these variables reset them at the start of each test.
 var (
 	capturedSessionID string
 	hookWasCalled     bool
@@ -159,12 +162,8 @@ func TestDeleteEntity_CompositeKeyWithQuotes_ValuesClean(t *testing.T) {
 		Name        string `json:"name"`
 	}
 
-	var capturedProductID int
-	var capturedLanguageKey string
-	compositeHookCalled := false
-
-	// We can't add methods to the local type, so we'll test the URL parsing directly
-	// through a GET request to verify the keys are parsed correctly
+	// We test the URL parsing directly through a GET request to verify
+	// the keys are parsed correctly without quotes
 
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
@@ -215,9 +214,4 @@ func TestDeleteEntity_CompositeKeyWithQuotes_ValuesClean(t *testing.T) {
 			t.Error("BUG: languageKey still contains quotes")
 		}
 	}
-
-	// Prevent unused variable errors
-	_ = capturedProductID
-	_ = capturedLanguageKey
-	_ = compositeHookCalled
 }
