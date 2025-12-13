@@ -393,7 +393,7 @@ func ResourcePath() *framework.TestSuite {
 
 			// OData spec: empty path segments are invalid and should return 404, 400, or 301 (redirect)
 			if resp.StatusCode == 200 {
-				return fmt.Errorf("server accepted invalid URL with empty path segments (should return 400 or 404)")
+				return fmt.Errorf("server accepted invalid URL with empty path segments (should return 400, 404, or 301)")
 			}
 			if resp.StatusCode != 404 && resp.StatusCode != 400 && resp.StatusCode != 301 {
 				return fmt.Errorf("empty path segments must return 404, 400, or 301 per OData spec (got %d)", resp.StatusCode)
