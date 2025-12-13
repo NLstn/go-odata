@@ -20,10 +20,9 @@ services:
     restart: unless-stopped
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
     environment:
-      POSTGRES_USER: odata
-      POSTGRES_PASSWORD: odata_dev
-      POSTGRES_DB: odata_test
+      POSTGRES_PASSWORD: postgres
     ports:
       - "5432:5432"
 
