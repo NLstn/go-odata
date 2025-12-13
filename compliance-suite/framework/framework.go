@@ -125,20 +125,21 @@ func (s *TestSuite) Run() error {
 		fmt.Printf("Running %d tests... ", len(s.Tests))
 	}
 
+	// Reseed the database once at the beginning of the suite to ensure clean state
+	// Tests within a suite may depend on data created by previous tests
+	if err := s.reseedDatabase(); err != nil {
+		if s.Verbose {
+			fmt.Printf("\n⚠ WARNING: Failed to reseed database before suite '%s': %v\n", s.Name, err)
+			fmt.Println("Continuing with existing data...")
+		}
+	}
+
 	for i, test := range s.Tests {
 		s.Results.Total++
 		ctx := &TestContext{
 			suite:  s,
 			name:   test.Name,
 			buffer: &bytes.Buffer{},
-		}
-
-		// Reseed the database before each test to ensure clean state and isolation
-		if err := s.reseedDatabase(); err != nil {
-			if s.Verbose {
-				fmt.Printf("\n⚠ WARNING: Failed to reseed database before test '%s': %v\n", test.Description, err)
-				fmt.Println("Continuing with existing data...")
-			}
 		}
 
 		err := test.Fn(ctx)
