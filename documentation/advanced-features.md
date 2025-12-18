@@ -482,10 +482,10 @@ Read hooks let you shape read behavior without forking handlers:
 Hook signatures:
 
 ```go
-func (Product) BeforeReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error)
-func (Product) AfterReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions, results interface{}) (interface{}, error)
-func (Product) BeforeReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error)
-func (Product) AfterReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions, entity interface{}) (interface{}, error)
+func (Product) ODataBeforeReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error)
+func (Product) ODataAfterReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions, results interface{}) (interface{}, error)
+func (Product) ODataBeforeReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error)
+func (Product) ODataAfterReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions, entity interface{}) (interface{}, error)
 ```
 
 Each hook receives the active HTTP request, context, and parsed OData query options. Returning an error aborts the request and surfaces the error to the client.
@@ -509,7 +509,7 @@ func (Product) tenantScope(tenantID string) func(*gorm.DB) *gorm.DB {
     }
 }
 
-func (Product) BeforeReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
+func (Product) ODataBeforeReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
     tenantID := r.Header.Get("X-Tenant-ID")
     if tenantID == "" {
         return nil, fmt.Errorf("missing tenant header")
@@ -517,7 +517,7 @@ func (Product) BeforeReadCollection(ctx context.Context, r *http.Request, opts *
     return []func(*gorm.DB) *gorm.DB{Product{}.tenantScope(tenantID)}, nil
 }
 
-func (Product) BeforeReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
+func (Product) ODataBeforeReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
     tenantID := r.Header.Get("X-Tenant-ID")
     if tenantID == "" {
         return nil, fmt.Errorf("missing tenant header")

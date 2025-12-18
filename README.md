@@ -126,8 +126,8 @@ type Product struct {
     CreatedAt time.Time `json:"CreatedAt"`
 }
 
-// BeforeCreate validates input before creating
-func (p *Product) BeforeCreate(ctx context.Context, r *http.Request) error {
+// ODataBeforeCreate validates input before creating
+func (p *Product) ODataBeforeCreate(ctx context.Context, r *http.Request) error {
     if p.Price < 0 {
         return fmt.Errorf("price cannot be negative")
     }
@@ -135,13 +135,13 @@ func (p *Product) BeforeCreate(ctx context.Context, r *http.Request) error {
     return nil
 }
 
-// AfterCreate logs the creation
-func (p *Product) AfterCreate(ctx context.Context, r *http.Request) error {
+// ODataAfterCreate logs the creation
+func (p *Product) ODataAfterCreate(ctx context.Context, r *http.Request) error {
     log.Printf("Product created: %s", p.Name)
     return nil
 }
 
-// Also available: BeforeUpdate, AfterUpdate, BeforeDelete, AfterDelete
+// Also available: ODataBeforeUpdate, ODataAfterUpdate, ODataBeforeDelete, ODataAfterDelete
 ```
 
 ### Read Hooks
@@ -150,7 +150,7 @@ Customize queries with tenant filters and redact sensitive data:
 
 ```go
 // Apply tenant filter before querying
-func (p Product) BeforeReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
+func (p Product) ODataBeforeReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
     tenantID := r.Header.Get("X-Tenant-ID")
     if tenantID == "" {
         return nil, fmt.Errorf("missing tenant header")
@@ -161,7 +161,7 @@ func (p Product) BeforeReadCollection(ctx context.Context, r *http.Request, opts
 }
 
 // Redact sensitive fields before returning
-func (p Product) AfterReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions, entity interface{}) (interface{}, error) {
+func (p Product) ODataAfterReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions, entity interface{}) (interface{}, error) {
     product, ok := entity.(*Product)
     if !ok || isPrivileged(r) {
         return entity, nil

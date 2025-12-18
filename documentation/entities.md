@@ -398,7 +398,7 @@ Example multi-tenant hook that preserves pagination and `$count` alignment:
 
 ```go
 // Requires: import "fmt" and "gorm.io/gorm"
-func (Order) BeforeReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
+func (Order) ODataBeforeReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
     tenantID := r.Header.Get("X-Tenant-ID")
     if tenantID == "" {
         return nil, fmt.Errorf("missing tenant header")
