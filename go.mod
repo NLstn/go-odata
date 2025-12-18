@@ -1,7 +1,7 @@
 // Module github.com/nlstn/go-odata implements the OData v4.01 specification.
 module github.com/nlstn/go-odata
 
-go 1.24
+go 1.24.0
 
 require (
 	gorm.io/driver/postgres v1.6.0
@@ -17,7 +17,7 @@ require (
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/mattn/go-sqlite3 v1.14.22 // indirect
-	golang.org/x/crypto v0.31.0 // indirect
-	golang.org/x/sync v0.10.0 // indirect
-	golang.org/x/text v0.21.0 // indirect
+	golang.org/x/crypto v0.45.0 // indirect
+	golang.org/x/sync v0.18.0 // indirect
+	golang.org/x/text v0.31.0 // indirect
 )
