@@ -183,10 +183,10 @@ type EntityHook interface {
 //
 // # Before Read Hooks
 //
-// BeforeReadCollection is called before fetching a collection. It returns GORM scopes
+// ODataBeforeReadCollection is called before fetching a collection. It returns GORM scopes
 // that are applied before OData query options ($filter, $orderby, $top, $skip).
 //
-//	func (p Product) BeforeReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
+//	func (p Product) ODataBeforeReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
 //	    // Apply tenant filter
 //	    tenantID := r.Header.Get("X-Tenant-ID")
 //	    if tenantID == "" {
@@ -197,17 +197,17 @@ type EntityHook interface {
 //	    }, nil
 //	}
 //
-// BeforeReadEntity is called before fetching a single entity. It works the same as
-// BeforeReadCollection but for individual entity reads. Return scopes for authorization
+// ODataBeforeReadEntity is called before fetching a single entity. It works the same as
+// ODataBeforeReadCollection but for individual entity reads. Return scopes for authorization
 // filters or eager-loading related data.
 //
 // # After Read Hooks
 //
-// AfterReadCollection is called after fetching a collection. It receives the results
+// ODataAfterReadCollection is called after fetching a collection. It receives the results
 // after all query processing and can redact sensitive data or transform the response.
 // Return nil, nil to keep the original response.
 //
-//	func (p Product) AfterReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions, results interface{}) (interface{}, error) {
+//	func (p Product) ODataAfterReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions, results interface{}) (interface{}, error) {
 //	    products, ok := results.([]Product)
 //	    if !ok {
 //	        return results, nil
@@ -221,8 +221,8 @@ type EntityHook interface {
 //	    return products, nil
 //	}
 //
-// AfterReadEntity is called after fetching a single entity. It works the same as
-// AfterReadCollection but for individual entity reads.
+// ODataAfterReadEntity is called after fetching a single entity. It works the same as
+// ODataAfterReadCollection but for individual entity reads.
 //
 // # Hook Execution Order
 //
