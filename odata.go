@@ -233,24 +233,24 @@ type EntityHook interface {
 //	Delete: ODataBeforeDelete -> DELETE -> ODataAfterDelete
 //	Read:   ODataBeforeReadCollection/ODataBeforeReadEntity -> SELECT + OData options -> ODataAfterReadCollection/ODataAfterReadEntity
 type ReadHook interface {
-	// BeforeReadCollection is called before fetching a collection.
+	// ODataBeforeReadCollection is called before fetching a collection.
 	// Return GORM scopes to apply before OData options ($filter, $orderby, etc).
 	// These scopes are ideal for authorization filters and eager-loading.
-	BeforeReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error)
+	ODataBeforeReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error)
 
-	// AfterReadCollection is called after fetching a collection.
+	// ODataAfterReadCollection is called after fetching a collection.
 	// It receives the results after all query processing and can redact or transform them.
 	// Return nil, nil to keep the original response.
-	AfterReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions, results interface{}) (interface{}, error)
+	ODataAfterReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions, results interface{}) (interface{}, error)
 
-	// BeforeReadEntity is called before fetching a single entity.
+	// ODataBeforeReadEntity is called before fetching a single entity.
 	// Return GORM scopes to apply before OData options. Ideal for authorization and eager-loading.
-	BeforeReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error)
+	ODataBeforeReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error)
 
-	// AfterReadEntity is called after fetching a single entity.
+	// ODataAfterReadEntity is called after fetching a single entity.
 	// It receives the entity after all query processing and can redact or transform it.
 	// Return nil, nil to keep the original response.
-	AfterReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions, entity interface{}) (interface{}, error)
+	ODataAfterReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions, entity interface{}) (interface{}, error)
 }
 
 // ServiceConfig controls optional service behaviours.
