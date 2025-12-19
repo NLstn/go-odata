@@ -16,7 +16,7 @@ func applyExpand(db *gorm.DB, expand []ExpandOption, entityMetadata *metadata.En
 		}
 
 		if expandOpt.Select != nil || expandOpt.Filter != nil || expandOpt.OrderBy != nil ||
-			expandOpt.Top != nil || expandOpt.Skip != nil {
+			expandOpt.Top != nil || expandOpt.Skip != nil || len(expandOpt.Expand) > 0 {
 			db = db.Preload(navProp.Name, func(db *gorm.DB) *gorm.DB {
 				if expandOpt.Filter != nil {
 					db = applyFilterForExpand(db, expandOpt.Filter)
@@ -40,10 +40,63 @@ func applyExpand(db *gorm.DB, expand []ExpandOption, entityMetadata *metadata.En
 					db = db.Limit(*expandOpt.Top)
 				}
 
+				// Apply nested expand options recursively
+				if len(expandOpt.Expand) > 0 {
+					// We need the target entity metadata to apply nested expands
+					// For now, we'll apply them without metadata validation
+					db = applyExpandWithoutMetadata(db, expandOpt.Expand)
+				}
+
 				return db
 			})
 		} else {
 			db = db.Preload(navProp.Name)
+		}
+	}
+	return db
+}
+
+// applyExpandWithoutMetadata applies expand options without entity metadata
+// This is used for nested expand levels where we don't have easy access to target entity metadata
+func applyExpandWithoutMetadata(db *gorm.DB, expand []ExpandOption) *gorm.DB {
+	for _, expandOpt := range expand {
+		// Use the navigation property name directly since we don't have metadata
+		navPropName := expandOpt.NavigationProperty
+
+		if expandOpt.Select != nil || expandOpt.Filter != nil || expandOpt.OrderBy != nil ||
+			expandOpt.Top != nil || expandOpt.Skip != nil || len(expandOpt.Expand) > 0 {
+			db = db.Preload(navPropName, func(db *gorm.DB) *gorm.DB {
+				if expandOpt.Filter != nil {
+					db = applyFilterForExpand(db, expandOpt.Filter)
+				}
+
+				if len(expandOpt.OrderBy) > 0 {
+					for _, item := range expandOpt.OrderBy {
+						direction := "ASC"
+						if item.Descending {
+							direction = "DESC"
+						}
+						columnName := toSnakeCase(item.Property)
+						db = db.Order(fmt.Sprintf("%s %s", columnName, direction))
+					}
+				}
+
+				if expandOpt.Skip != nil {
+					db = db.Offset(*expandOpt.Skip)
+				}
+				if expandOpt.Top != nil {
+					db = db.Limit(*expandOpt.Top)
+				}
+
+				// Recursively apply nested expand options
+				if len(expandOpt.Expand) > 0 {
+					db = applyExpandWithoutMetadata(db, expandOpt.Expand)
+				}
+
+				return db
+			})
+		} else {
+			db = db.Preload(navPropName)
 		}
 	}
 	return db
