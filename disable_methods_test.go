@@ -199,6 +199,91 @@ func TestDisableHTTPMethods_GET(t *testing.T) {
 	}
 }
 
+func TestDisableHTTPMethods_HEAD_BlockedWhenGETDisabled(t *testing.T) {
+	db := setupDisableMethodsTestDB(t)
+	service := NewService(db)
+
+	if err := service.RegisterEntity(&User{}); err != nil {
+		t.Fatalf("Failed to register entity: %v", err)
+	}
+
+	// Disable GET for Users
+	if err := service.DisableHTTPMethods("Users", "GET"); err != nil {
+		t.Fatalf("Failed to disable GET method: %v", err)
+	}
+
+	// Test that HEAD returns 405 for collection (should be blocked when GET is disabled)
+	req := httptest.NewRequest(http.MethodHead, "/Users", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("Expected status 405 for HEAD collection when GET is disabled, got %d", w.Code)
+	}
+
+	// Test that HEAD returns 405 for single entity
+	req = httptest.NewRequest(http.MethodHead, "/Users(1)", nil)
+	w = httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("Expected status 405 for HEAD entity when GET is disabled, got %d", w.Code)
+	}
+
+	// Test that HEAD returns 405 for $count
+	req = httptest.NewRequest(http.MethodHead, "/Users/$count", nil)
+	w = httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("Expected status 405 for HEAD $count when GET is disabled, got %d", w.Code)
+	}
+}
+
+func TestDisableHTTPMethods_HEAD_AllowedWhenGETEnabled(t *testing.T) {
+	db := setupDisableMethodsTestDB(t)
+	service := NewService(db)
+
+	if err := service.RegisterEntity(&User{}); err != nil {
+		t.Fatalf("Failed to register entity: %v", err)
+	}
+
+	// Don't disable GET - HEAD should work
+
+	// Test that HEAD returns 200 for collection
+	req := httptest.NewRequest(http.MethodHead, "/Users", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200 for HEAD collection when GET is enabled, got %d", w.Code)
+	}
+
+	// Test that HEAD returns 200 for single entity
+	req = httptest.NewRequest(http.MethodHead, "/Users(1)", nil)
+	w = httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200 for HEAD entity when GET is enabled, got %d", w.Code)
+	}
+
+	// Test that HEAD returns 200 for $count
+	req = httptest.NewRequest(http.MethodHead, "/Users/$count", nil)
+	w = httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200 for HEAD $count when GET is enabled, got %d", w.Code)
+	}
+}
+
 func TestDisableHTTPMethods_Multiple(t *testing.T) {
 	db := setupDisableMethodsTestDB(t)
 	service := NewService(db)
