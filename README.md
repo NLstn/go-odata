@@ -19,6 +19,7 @@ A Go library for building services that expose OData v4 APIs with automatic hand
 - 🔒 **Optimistic concurrency** - Built-in ETag support
 - 🧰 **Lifecycle & read hooks** - Inject business logic, tenant filters, and response redaction
 - 🎯 **Custom operations** - Easy registration of actions and functions
+- 🔐 **HTTP method restrictions** - Easily disable HTTP methods (POST, DELETE, etc.) for specific entities
 - 📊 **Data aggregation** - Supports $apply transformations
 - 🧪 **Fully tested** - 85+ compliance tests ensuring OData v4 adherence
 - 🔑 **Server-side key generation** - Validate directives during metadata analysis and plug in custom generators
