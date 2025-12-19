@@ -1,11 +1,12 @@
 # Advanced Features
 
-This guide covers advanced features of go-odata including singletons, ETags, and lifecycle hooks.
+This guide covers advanced features of go-odata including singletons, ETags, lifecycle hooks, and HTTP method restrictions.
 
 ## Table of Contents
 
 - [Singletons](#singletons)
 - [ETags (Optimistic Concurrency Control)](#etags-optimistic-concurrency-control)
+- [Disabling HTTP Methods](#disabling-http-methods)
 - [Lifecycle Hooks](#lifecycle-hooks)
   - [Read Hooks](#read-hooks)
   - [Tenant Filtering Example](#tenant-filtering-example)
@@ -234,6 +235,143 @@ Per OData v4 specification, ETags are included in:
 2. **Use timestamps** when you need to track when entities were last modified
 3. **Always check for 412 responses** in your client code
 4. **Refresh data** when receiving a 412 response before retrying
+
+## Disabling HTTP Methods
+
+You can easily restrict specific HTTP methods for entities without needing to implement hooks. This is useful when you want to make entities read-only, prevent creation, or disable deletion.
+
+### When to Use Method Restrictions
+
+Use method restrictions when you want to:
+- Make entities read-only (disable POST, PUT, PATCH, DELETE)
+- Prevent creation of new entities (disable POST)
+- Prevent deletion (disable DELETE)
+- Prevent modifications (disable PUT, PATCH)
+- Control access at the endpoint level for specific entities
+
+### Disabling Methods
+
+```go
+service := odata.NewService(db)
+
+// Register entity
+if err := service.RegisterEntity(&User{}); err != nil {
+    log.Fatal(err)
+}
+
+// Disable POST for Users - prevents creating new users
+if err := service.DisableHTTPMethods("Users", "POST"); err != nil {
+    log.Fatal(err)
+}
+```
+
+### Supported HTTP Methods
+
+You can disable any of the following methods:
+- `GET` - Read operations (collections, single entities, $count)
+- `POST` - Create operations
+- `PUT` - Full replacement update
+- `PATCH` - Partial update
+- `DELETE` - Delete operations
+
+### Examples
+
+**Read-Only Entity**
+```go
+// Make Products read-only
+service.DisableHTTPMethods("Products", "POST", "PUT", "PATCH", "DELETE")
+```
+
+**Prevent Creation and Deletion**
+```go
+// Allow updates but not creation or deletion
+service.DisableHTTPMethods("Categories", "POST", "DELETE")
+```
+
+**Disable Single Method**
+```go
+// Prevent deletion only
+service.DisableHTTPMethods("Orders", "DELETE")
+```
+
+### HTTP Response
+
+When a disabled method is called, the service returns HTTP 405 Method Not Allowed:
+
+```bash
+POST /Users
+Content-Type: application/json
+{"name": "John"}
+```
+
+Response:
+```
+HTTP/1.1 405 Method Not Allowed
+Content-Type: application/json
+{
+  "error": {
+    "code": "405",
+    "message": "Method not allowed",
+    "details": [{
+      "message": "Method POST is not allowed for this entity"
+    }]
+  }
+}
+```
+
+### Method Checking
+
+The method restriction is checked before any other processing, including:
+- Request body parsing
+- Hook execution
+- Database operations
+- Authorization checks (from hooks)
+
+This means disabled methods are rejected immediately, minimizing processing overhead.
+
+### Combining with Hooks
+
+You can still use hooks with entities that have disabled methods. For example, you might disable POST but use hooks for authorization checks on GET requests:
+
+```go
+// Disable POST
+service.DisableHTTPMethods("Users", "POST")
+
+// Add authorization hook for GET
+type User struct {
+    ID   int    `json:"id" odata:"key"`
+    Name string `json:"name"`
+}
+
+func (u User) ODataBeforeReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
+    // Add tenant filter
+    tenantID := r.Header.Get("X-Tenant-ID")
+    if tenantID == "" {
+        return nil, fmt.Errorf("missing tenant header")
+    }
+    return []func(*gorm.DB) *gorm.DB{
+        func(db *gorm.DB) *gorm.DB {
+            return db.Where("tenant_id = ?", tenantID)
+        },
+    }, nil
+}
+```
+
+### Error Cases
+
+The method returns an error if:
+- The entity set is not registered
+- An unsupported HTTP method is specified
+
+```go
+// Error: entity not registered
+err := service.DisableHTTPMethods("NonExistent", "POST")
+// Returns: "entity set 'NonExistent' is not registered"
+
+// Error: invalid method
+err := service.DisableHTTPMethods("Users", "INVALID")
+// Returns: "unsupported HTTP method 'INVALID'; supported methods are GET, POST, PUT, PATCH, DELETE"
+```
 
 ## Lifecycle Hooks
 
