@@ -153,9 +153,45 @@ func (h *EntityHandler) handlePutMediaEntityValue(w http.ResponseWriter, r *http
 	}
 
 	// Save the updated entity back to the database
-	// Since we fetched the entity with First(), it has the primary key set,
-	// so Save() will perform an UPDATE instead of INSERT
-	if err := h.db.Save(entity).Error; err != nil {
+	// Reuse the existing db query with key-based WHERE clause
+	// Use UpdateColumn for specific fields to avoid UNIQUE constraint issues
+	// Extract the values we need to update
+	entityVal := reflect.ValueOf(entity).Elem()
+	updates := make(map[string]interface{})
+	
+	// Update Content, ContentType, Size, and ModifiedAt
+	for i := 0; i < entityVal.NumField(); i++ {
+		field := entityVal.Type().Field(i)
+		jsonTag := field.Tag.Get("json")
+		fieldValue := entityVal.Field(i).Interface()
+		
+		// Only update specific media-related fields
+		if jsonTag == "Content" || jsonTag == "ContentType" || jsonTag == "Size" || jsonTag == "ModifiedAt" {
+			colName := toSnakeCase(jsonTag)
+			updates[colName] = fieldValue
+		}
+	}
+	
+	if len(updates) == 0 {
+		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgInternalError,
+			"No fields to update"); writeErr != nil {
+			h.logger.Error("Error writing error response", "error", writeErr)
+		}
+		return
+	}
+	
+	// Rebuild key query for update operation and specify table
+	updateDB, updateErr := h.buildKeyQuery(h.db, entityKey)
+	if updateErr != nil {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidKey, updateErr.Error()); writeErr != nil {
+			h.logger.Error("Error writing error response", "error", writeErr)
+		}
+		return
+	}
+	
+	// Must specify Model() or Table() to establish the table for the update
+	tableName := h.metadata.EntitySetName
+	if err := updateDB.Table(tableName).UpdateColumns(updates).Error; err != nil {
 		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgInternalError,
 			fmt.Sprintf("Failed to update media entity: %v", err)); writeErr != nil {
 			h.logger.Error("Error writing error response", "error", writeErr)
