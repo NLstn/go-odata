@@ -30,6 +30,7 @@ type QueryOptions struct {
 type ExpandOption struct {
 	NavigationProperty string
 	Select             []string          // Nested $select
+	Expand             []ExpandOption    // Nested $expand
 	Filter             *FilterExpression // Nested $filter
 	OrderBy            []OrderByItem     // Nested $orderby
 	Top                *int              // Nested $top

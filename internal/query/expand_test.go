@@ -545,6 +545,12 @@ func TestParseExpandWithMultipleLevels(t *testing.T) {
 			expectErr:   false,
 			description: "Should support filters on multiple expanded properties",
 		},
+		{
+			name:        "Nested expand - Books with nested Author expand",
+			expandQuery: "Books($expand=Author)",
+			expectErr:   false,
+			description: "Should support nested $expand",
+		},
 	}
 
 	for _, tt := range tests {
@@ -562,6 +568,137 @@ func TestParseExpandWithMultipleLevels(t *testing.T) {
 				t.Error("Expected at least one expand option")
 			}
 		})
+	}
+}
+
+// TestParseNestedExpand tests parsing of nested $expand syntax
+func TestParseNestedExpand(t *testing.T) {
+	authorMeta, _ := metadata.AnalyzeEntity(&TestAuthor{})
+
+	params := url.Values{}
+	params.Set("$expand", "Books($expand=Author)")
+
+	options, err := ParseQueryOptions(params, authorMeta)
+	if err != nil {
+		t.Fatalf("Failed to parse query options: %v", err)
+	}
+
+	if len(options.Expand) != 1 {
+		t.Fatalf("Expected 1 expand option, got %d", len(options.Expand))
+	}
+
+	// Check the first level expand
+	firstLevel := options.Expand[0]
+	if firstLevel.NavigationProperty != "Books" {
+		t.Errorf("Expected navigation property 'Books', got '%s'", firstLevel.NavigationProperty)
+	}
+
+	// Check the nested expand
+	if len(firstLevel.Expand) != 1 {
+		t.Fatalf("Expected 1 nested expand option, got %d", len(firstLevel.Expand))
+	}
+
+	nestedExpand := firstLevel.Expand[0]
+	if nestedExpand.NavigationProperty != "Author" {
+		t.Errorf("Expected nested navigation property 'Author', got '%s'", nestedExpand.NavigationProperty)
+	}
+}
+
+// TestParseNestedExpandWithOptions tests nested expand with additional query options
+func TestParseNestedExpandWithOptions(t *testing.T) {
+	authorMeta, _ := metadata.AnalyzeEntity(&TestAuthor{})
+
+	params := url.Values{}
+	params.Set("$expand", "Books($expand=Author($select=Name);$top=5)")
+
+	options, err := ParseQueryOptions(params, authorMeta)
+	if err != nil {
+		t.Fatalf("Failed to parse query options: %v", err)
+	}
+
+	if len(options.Expand) != 1 {
+		t.Fatalf("Expected 1 expand option, got %d", len(options.Expand))
+	}
+
+	firstLevel := options.Expand[0]
+	if firstLevel.NavigationProperty != "Books" {
+		t.Errorf("Expected navigation property 'Books', got '%s'", firstLevel.NavigationProperty)
+	}
+
+	// Check $top on Books
+	if firstLevel.Top == nil || *firstLevel.Top != 5 {
+		t.Error("Expected $top=5 on Books expand")
+	}
+
+	// Check nested expand
+	if len(firstLevel.Expand) != 1 {
+		t.Fatalf("Expected 1 nested expand option, got %d", len(firstLevel.Expand))
+	}
+
+	nestedExpand := firstLevel.Expand[0]
+	if nestedExpand.NavigationProperty != "Author" {
+		t.Errorf("Expected nested navigation property 'Author', got '%s'", nestedExpand.NavigationProperty)
+	}
+
+	// Check $select on nested Author
+	if len(nestedExpand.Select) != 1 || nestedExpand.Select[0] != "Name" {
+		t.Error("Expected $select=Name on nested Author expand")
+	}
+}
+
+// TestParseMultiLevelNestedExpand tests deeply nested expand syntax
+func TestParseMultiLevelNestedExpand(t *testing.T) {
+	// Define entities with multi-level relationships
+	type Club struct {
+		ID   string `json:"ID" gorm:"primaryKey" odata:"key"`
+		Name string `json:"Name"`
+	}
+
+	type Member struct {
+		ID     string `json:"ID" gorm:"primaryKey" odata:"key"`
+		UserID string `json:"UserID"`
+		ClubID string `json:"ClubID"`
+		Role   string `json:"Role"`
+		Club   *Club  `json:"Club,omitempty" gorm:"foreignKey:ClubID" odata:"nav"`
+	}
+
+	type User struct {
+		ID      string   `json:"ID" gorm:"primaryKey" odata:"key"`
+		Name    string   `json:"Name"`
+		Members []Member `gorm:"foreignKey:UserID" json:"Members,omitempty" odata:"nav"`
+	}
+
+	userMeta, err := metadata.AnalyzeEntity(&User{})
+	if err != nil {
+		t.Fatalf("Failed to analyze entity: %v", err)
+	}
+
+	params := url.Values{}
+	params.Set("$expand", "Members($expand=Club)")
+
+	options, err := ParseQueryOptions(params, userMeta)
+	if err != nil {
+		t.Fatalf("Failed to parse query options: %v", err)
+	}
+
+	if len(options.Expand) != 1 {
+		t.Fatalf("Expected 1 expand option, got %d", len(options.Expand))
+	}
+
+	// Check first level (Members)
+	firstLevel := options.Expand[0]
+	if firstLevel.NavigationProperty != "Members" {
+		t.Errorf("Expected navigation property 'Members', got '%s'", firstLevel.NavigationProperty)
+	}
+
+	// Check nested expand (Club)
+	if len(firstLevel.Expand) != 1 {
+		t.Fatalf("Expected 1 nested expand option, got %d", len(firstLevel.Expand))
+	}
+
+	nestedExpand := firstLevel.Expand[0]
+	if nestedExpand.NavigationProperty != "Club" {
+		t.Errorf("Expected nested navigation property 'Club', got '%s'", nestedExpand.NavigationProperty)
 	}
 }
 
