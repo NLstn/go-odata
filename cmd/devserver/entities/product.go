@@ -55,9 +55,23 @@ type Product struct {
 
 // ODataBeforeCreate is a lifecycle hook that is called before a Product is created.
 // This hook enforces that only admins can create products.
+//
+// ⚠️  SECURITY WARNING: This is an example implementation only!
+// This checks the X-User-Role header which is completely insecure because:
+// 1. HTTP headers are client-controlled and can be easily forged
+// 2. Any attacker can add "X-User-Role: admin" to their request
+// 3. This provides NO real authorization protection
+//
+// In production, you MUST:
+// - Get user roles from authenticated context (not headers!)
+// - Verify roles against a database or validated JWT claims
+// - Never trust client-provided role/permission headers
+//
+// See SECURITY.md for secure authorization examples.
 func (p Product) ODataBeforeCreate(ctx context.Context, r *http.Request) error {
-	// Check if the user is an admin
-	// In a real application, you would extract this from authentication tokens/session
+	// ⚠️  INSECURE: Do NOT use header-based authorization in production!
+	// In a real application, you would extract this from authenticated context:
+	// isAdmin, ok := r.Context().Value("isAdmin").(bool)
 	isAdmin := r.Header.Get("X-User-Role") == "admin"
 
 	if !isAdmin {
@@ -69,9 +83,13 @@ func (p Product) ODataBeforeCreate(ctx context.Context, r *http.Request) error {
 
 // ODataBeforeUpdate is a lifecycle hook that is called before a Product is updated.
 // This hook enforces that only admins can update products.
+//
+// ⚠️  SECURITY WARNING: This is an example implementation only!
+// See ODataBeforeCreate for security considerations. The same vulnerabilities apply.
 func (p Product) ODataBeforeUpdate(ctx context.Context, r *http.Request) error {
-	// Check if the user is an admin
-	// In a real application, you would extract this from authentication tokens/session
+	// ⚠️  INSECURE: Do NOT use header-based authorization in production!
+	// In a real application, you would extract this from authenticated context:
+	// isAdmin, ok := r.Context().Value("isAdmin").(bool)
 	isAdmin := r.Header.Get("X-User-Role") == "admin"
 
 	if !isAdmin {

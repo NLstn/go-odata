@@ -5,6 +5,21 @@
 
 A Go library for building services that expose OData v4 APIs with automatic handling of OData protocol logic.
 
+## ⚠️ Security Notice
+
+**The example code in `cmd/devserver` is for development and demonstration purposes only and contains intentionally simplified authentication that is NOT SECURE for production use.**
+
+Before deploying to production:
+1. Read [SECURITY.md](SECURITY.md) for comprehensive security best practices
+2. Implement proper authentication (JWT, OAuth2, etc.)
+3. Never use the dummy authentication middleware from examples
+4. Hash all passwords and API keys before storage
+5. Use HTTPS/TLS for all connections
+
+See [SECURITY.md](SECURITY.md) and [SECURITY_AUDIT_REPORT.md](SECURITY_AUDIT_REPORT.md) for detailed security guidance.
+
+---
+
 ## Overview
 
 `go-odata` allows you to define Go structs representing entities and automatically handles the necessary OData protocol logic, making it easy to build OData-compliant APIs.
