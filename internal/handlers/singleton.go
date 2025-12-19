@@ -15,7 +15,12 @@ import (
 // Singletons are single instances of an entity type accessed directly by name (e.g., /Me)
 func (h *EntityHandler) HandleSingleton(w http.ResponseWriter, r *http.Request) {
 	// Check if the method is disabled
-	if h.isMethodDisabled(r.Method) {
+	// Map HEAD to GET for method checking since HEAD is semantically equivalent to GET
+	methodToCheck := r.Method
+	if r.Method == http.MethodHead {
+		methodToCheck = http.MethodGet
+	}
+	if h.isMethodDisabled(methodToCheck) {
 		if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
 			fmt.Sprintf("Method %s is not allowed for this entity", r.Method)); err != nil {
 			h.logger.Error("Error writing error response", "error", err)

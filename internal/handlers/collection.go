@@ -10,7 +10,12 @@ import (
 // HandleCollection handles GET, HEAD, POST, and OPTIONS requests for entity collections
 func (h *EntityHandler) HandleCollection(w http.ResponseWriter, r *http.Request) {
 	// Check if the method is disabled
-	if h.isMethodDisabled(r.Method) {
+	// Map HEAD to GET for method checking since HEAD is semantically equivalent to GET
+	methodToCheck := r.Method
+	if r.Method == http.MethodHead {
+		methodToCheck = http.MethodGet
+	}
+	if h.isMethodDisabled(methodToCheck) {
 		WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
 			fmt.Sprintf("Method %s is not allowed for this entity", r.Method))
 		return
