@@ -118,11 +118,9 @@ func main() {
 		log.Fatal("Failed to enable async processing:", err)
 	}
 
-	// Create HTTP mux and register the OData service
-	mux := http.NewServeMux()
-	mux.Handle("/", service)
-
-	// Start the HTTP server (no middleware for compliance server)
+	// Start the HTTP server with the OData service directly (not through ServeMux)
+	// This prevents http.ServeMux from normalizing paths (removing duplicate slashes)
+	// which is important for OData compliance testing
 	fmt.Println("🚀 Compliance server starting...")
 	fmt.Println("Service endpoints:")
 	fmt.Printf("  Service Document:     http://localhost:%s/\n", *port)
@@ -142,7 +140,7 @@ func main() {
 	fmt.Println("  Status monitors available at /$async/jobs/{jobID}")
 	fmt.Println()
 
-	if err := http.ListenAndServe(":"+*port, mux); err != nil {
+	if err := http.ListenAndServe(":"+*port, service); err != nil {
 		log.Fatal("Server failed:", err)
 	}
 }

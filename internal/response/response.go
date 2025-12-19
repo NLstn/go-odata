@@ -208,6 +208,22 @@ func ParseODataURLComponents(path string) (*ODataURLComponents, error) {
 	}
 
 	pathParts := strings.Split(u.Path, "/")
+	
+	// Filter out empty path segments (from consecutive slashes like /Products//)
+	// Per OData spec, empty path segments are invalid
+	filteredParts := make([]string, 0, len(pathParts))
+	for _, part := range pathParts {
+		if part != "" {
+			filteredParts = append(filteredParts, part)
+		}
+	}
+	
+	// Reject URLs with empty segments by checking if filtering removed any parts
+	if len(filteredParts) != len(pathParts) {
+		return nil, fmt.Errorf("invalid URL: empty path segments are not allowed per OData specification")
+	}
+	
+	pathParts = filteredParts
 	if len(pathParts) > 0 {
 		entitySet := pathParts[0]
 
