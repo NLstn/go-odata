@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"strings"
 
 	"github.com/nlstn/go-odata/internal/response"
 	"gorm.io/gorm"
@@ -163,11 +164,13 @@ func (h *EntityHandler) handlePutMediaEntityValue(w http.ResponseWriter, r *http
 	for i := 0; i < entityVal.NumField(); i++ {
 		field := entityVal.Type().Field(i)
 		jsonTag := field.Tag.Get("json")
+		// Parse JSON tag to get field name (handle options like json:"field,omitempty")
+		fieldName := strings.Split(jsonTag, ",")[0]
 		fieldValue := entityVal.Field(i).Interface()
 		
-		// Only update specific media-related fields
-		if jsonTag == "Content" || jsonTag == "ContentType" || jsonTag == "Size" || jsonTag == "ModifiedAt" {
-			colName := toSnakeCase(jsonTag)
+		// Only update specific media-related fields (case-sensitive match)
+		if fieldName == "Content" || fieldName == "ContentType" || fieldName == "Size" || fieldName == "ModifiedAt" {
+			colName := toSnakeCase(fieldName)
 			updates[colName] = fieldValue
 		}
 	}
@@ -180,18 +183,10 @@ func (h *EntityHandler) handlePutMediaEntityValue(w http.ResponseWriter, r *http
 		return
 	}
 	
-	// Rebuild key query for update operation and specify table
-	updateDB, updateErr := h.buildKeyQuery(h.db, entityKey)
-	if updateErr != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidKey, updateErr.Error()); writeErr != nil {
-			h.logger.Error("Error writing error response", "error", writeErr)
-		}
-		return
-	}
-	
-	// Must specify Model() or Table() to establish the table for the update
-	tableName := h.metadata.EntitySetName
-	if err := updateDB.Table(tableName).UpdateColumns(updates).Error; err != nil {
+	// Reuse the existing db (with the correct WHERE clause) to perform the update  
+	// Use Session with FullSaveAssociations=false to avoid association issues
+	// and Omit to skip the primary key in the update
+	if err := db.Session(&gorm.Session{FullSaveAssociations: false}).Omit("id").Updates(updates).Error; err != nil {
 		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgInternalError,
 			fmt.Sprintf("Failed to update media entity: %v", err)); writeErr != nil {
 			h.logger.Error("Error writing error response", "error", writeErr)
