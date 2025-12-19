@@ -9,6 +9,13 @@ import (
 
 // HandleCollection handles GET, HEAD, POST, and OPTIONS requests for entity collections
 func (h *EntityHandler) HandleCollection(w http.ResponseWriter, r *http.Request) {
+	// Check if the method is disabled
+	if h.isMethodDisabled(r.Method) {
+		WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+			fmt.Sprintf("Method %s is not allowed for this entity", r.Method))
+		return
+	}
+
 	switch r.Method {
 	case http.MethodGet, http.MethodHead:
 		h.handleGetCollection(w, r)
@@ -30,6 +37,15 @@ func (h *EntityHandler) handleOptionsCollection(w http.ResponseWriter) {
 
 // HandleCount handles GET, HEAD, and OPTIONS requests for entity collection count (e.g., /Products/$count)
 func (h *EntityHandler) HandleCount(w http.ResponseWriter, r *http.Request) {
+	// Check if GET method is disabled (applies to both GET and HEAD)
+	if r.Method == http.MethodGet || r.Method == http.MethodHead {
+		if h.isMethodDisabled(http.MethodGet) {
+			WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+				fmt.Sprintf("Method %s is not allowed for this entity", r.Method))
+			return
+		}
+	}
+
 	switch r.Method {
 	case http.MethodGet, http.MethodHead:
 		h.handleGetCount(w, r)

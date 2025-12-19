@@ -1311,6 +1311,62 @@ func (s *Service) SetGetCountOverwrite(entitySetName string, handler GetCountHan
 	return nil
 }
 
+// DisableHTTPMethods disables specific HTTP methods for an entity set.
+// This allows you to restrict certain operations on entities without needing hooks.
+//
+// Supported methods: GET, POST, PUT, PATCH, DELETE
+//
+// # Example - Disable POST for Users
+//
+//	err := service.DisableHTTPMethods("Users", "POST")
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
+//
+// After this, POST requests to /Users will return HTTP 405 Method Not Allowed.
+// Other methods like GET, PUT, PATCH, DELETE will continue to work normally.
+//
+// # Example - Disable Multiple Methods
+//
+//	err := service.DisableHTTPMethods("Products", "POST", "DELETE")
+//
+// This disables both creating and deleting products while allowing read and update operations.
+func (s *Service) DisableHTTPMethods(entitySetName string, methods ...string) error {
+	handler, exists := s.handlers[entitySetName]
+	if !exists {
+		return fmt.Errorf("entity set '%s' is not registered", entitySetName)
+	}
+
+	metadata, exists := s.entities[entitySetName]
+	if !exists {
+		return fmt.Errorf("entity metadata for '%s' not found", entitySetName)
+	}
+
+	if metadata.DisabledMethods == nil {
+		metadata.DisabledMethods = make(map[string]bool)
+	}
+
+	// Validate and normalize methods
+	for _, method := range methods {
+		normalized := strings.ToUpper(strings.TrimSpace(method))
+		switch normalized {
+		case http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+			metadata.DisabledMethods[normalized] = true
+		default:
+			return fmt.Errorf("unsupported HTTP method '%s'; supported methods are GET, POST, PUT, PATCH, DELETE", method)
+		}
+	}
+
+	s.logger.Debug("Disabled HTTP methods",
+		"entitySet", entitySetName,
+		"methods", methods)
+
+	// Keep handler in sync (handlers reference the same metadata)
+	_ = handler
+
+	return nil
+}
+
 func parameterDefinitionsCompatible(existing, derived []actions.ParameterDefinition) bool {
 	if len(existing) != len(derived) {
 		return false

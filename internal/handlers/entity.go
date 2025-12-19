@@ -87,6 +87,14 @@ func (h *EntityHandler) SetDeltaTracker(tracker *trackchanges.Tracker) {
 	h.tracker = tracker
 }
 
+// isMethodDisabled checks if a given HTTP method is disabled for this entity
+func (h *EntityHandler) isMethodDisabled(method string) bool {
+	if h.metadata == nil || h.metadata.DisabledMethods == nil {
+		return false
+	}
+	return h.metadata.DisabledMethods[method]
+}
+
 // EnableChangeTracking turns on change tracking for this entity handler.
 // It registers the entity set with the configured tracker so that delta tokens can be issued.
 func (h *EntityHandler) EnableChangeTracking() error {

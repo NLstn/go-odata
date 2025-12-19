@@ -14,6 +14,15 @@ import (
 // HandleSingleton handles GET, PATCH, PUT, and OPTIONS requests for singleton entities
 // Singletons are single instances of an entity type accessed directly by name (e.g., /Me)
 func (h *EntityHandler) HandleSingleton(w http.ResponseWriter, r *http.Request) {
+	// Check if the method is disabled
+	if h.isMethodDisabled(r.Method) {
+		if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+			fmt.Sprintf("Method %s is not allowed for this entity", r.Method)); err != nil {
+			h.logger.Error("Error writing error response", "error", err)
+		}
+		return
+	}
+
 	switch r.Method {
 	case http.MethodGet, http.MethodHead:
 		h.handleGetSingleton(w, r)
