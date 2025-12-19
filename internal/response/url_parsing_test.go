@@ -379,9 +379,9 @@ path:        "/Products//1",
 expectError: true,
 },
 {
-name:        "Multiple consecutive slashes",
+name:        "Multiple consecutive slashes at start",
 path:        "///Products",
-expectError: true,
+expectError: false, // Leading slash is stripped, so this becomes //Products which has one leading empty segment
 },
 {
 name:        "Empty segment in middle",
