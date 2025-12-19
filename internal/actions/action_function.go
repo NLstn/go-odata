@@ -21,13 +21,13 @@ import (
 // Fields:
 //   - Name: The parameter name as it appears in the request (JSON body for actions, URL for functions)
 //   - Type: The expected Go type (obtained via reflect.TypeOf). Common types include:
-//     - reflect.TypeOf("") for string
-//     - reflect.TypeOf(int64(0)) for int64
-//     - reflect.TypeOf(float64(0)) for float64
-//     - reflect.TypeOf(false) for bool
-//     - reflect.TypeOf(MyStruct{}) for complex types
-//     - reflect.TypeOf([]MyStruct{}) for slices
-//     - reflect.TypeOf(map[string]interface{}{}) for maps
+//   - reflect.TypeOf("") for string
+//   - reflect.TypeOf(int64(0)) for int64
+//   - reflect.TypeOf(float64(0)) for float64
+//   - reflect.TypeOf(false) for bool
+//   - reflect.TypeOf(MyStruct{}) for complex types
+//   - reflect.TypeOf([]MyStruct{}) for slices
+//   - reflect.TypeOf(map[string]interface{}{}) for maps
 //   - Required: If true, the parameter must be present in the request. If false, the parameter
 //     is optional and may be omitted.
 //

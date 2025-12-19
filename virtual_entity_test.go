@@ -91,7 +91,7 @@ func TestVirtualEntity_GetCollection_WithoutOverwrite(t *testing.T) {
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
-	
+
 	if resp.StatusCode != http.StatusMethodNotAllowed {
 		t.Fatalf("Expected status 405, got %d: %s", resp.StatusCode, body)
 	}
