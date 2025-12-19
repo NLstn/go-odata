@@ -13,6 +13,15 @@ import (
 
 // HandleEntity handles GET, HEAD, DELETE, PATCH, PUT, and OPTIONS requests for individual entities
 func (h *EntityHandler) HandleEntity(w http.ResponseWriter, r *http.Request, entityKey string) {
+	// Check if the method is disabled
+	if h.isMethodDisabled(r.Method) {
+		if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+			fmt.Sprintf("Method %s is not allowed for this entity", r.Method)); err != nil {
+			h.logger.Error("Error writing error response", "error", err)
+		}
+		return
+	}
+
 	switch r.Method {
 	case http.MethodGet, http.MethodHead:
 		h.handleGetEntity(w, r, entityKey)

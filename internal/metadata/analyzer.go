@@ -22,6 +22,8 @@ type EntityMetadata struct {
 	// ChangeTrackingEnabled indicates whether $deltatoken and change tracking responses are enabled for this entity set
 	ChangeTrackingEnabled bool
 	StreamProperties      []PropertyMetadata // Named stream properties on this entity
+	// DisabledMethods contains HTTP methods that are not allowed for this entity
+	DisabledMethods map[string]bool
 	// Hooks defines which lifecycle hooks are available on this entity
 	Hooks struct {
 		HasODataBeforeCreate         bool
