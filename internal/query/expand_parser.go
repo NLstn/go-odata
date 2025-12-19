@@ -19,7 +19,7 @@ func parseExpand(expandStr string, entityMetadata *metadata.EntityMetadata) ([]E
 			continue
 		}
 
-		expand, err := parseSingleExpand(trimmed, entityMetadata)
+		expand, err := parseSingleExpandCore(trimmed, entityMetadata, true)
 		if err != nil {
 			return nil, err
 		}
@@ -59,8 +59,8 @@ func splitExpandParts(expandStr string) []string {
 	return result
 }
 
-// parseSingleExpand parses a single expand option with potential nested query options
-func parseSingleExpand(expandStr string, entityMetadata *metadata.EntityMetadata) (ExpandOption, error) {
+// parseSingleExpandCore parses a single expand option with optional metadata validation
+func parseSingleExpandCore(expandStr string, entityMetadata *metadata.EntityMetadata, validateMetadata bool) (ExpandOption, error) {
 	expand := ExpandOption{}
 
 	// Check for nested query options: NavigationProp($select=...,...)
@@ -72,24 +72,24 @@ func parseSingleExpand(expandStr string, entityMetadata *metadata.EntityMetadata
 		expand.NavigationProperty = strings.TrimSpace(expandStr[:idx])
 		nestedOptions := expandStr[idx+1 : len(expandStr)-1]
 
-		// Parse nested options (simplified - doesn't handle complex nested cases)
-		if err := parseNestedExpandOptions(&expand, nestedOptions, entityMetadata); err != nil {
+		// Parse nested options
+		if err := parseNestedExpandOptionsCore(&expand, nestedOptions, entityMetadata, validateMetadata); err != nil {
 			return expand, err
 		}
 	} else {
 		expand.NavigationProperty = strings.TrimSpace(expandStr)
 	}
 
-	// Validate navigation property exists
-	if !isNavigationProperty(expand.NavigationProperty, entityMetadata) {
+	// Validate navigation property exists only if metadata validation is enabled
+	if validateMetadata && entityMetadata != nil && !isNavigationProperty(expand.NavigationProperty, entityMetadata) {
 		return expand, fmt.Errorf("'%s' is not a valid navigation property", expand.NavigationProperty)
 	}
 
 	return expand, nil
 }
 
-// parseNestedExpandOptions parses nested query options within an expand
-func parseNestedExpandOptions(expand *ExpandOption, optionsStr string, entityMetadata *metadata.EntityMetadata) error {
+// parseNestedExpandOptionsCore parses nested query options with optional metadata validation
+func parseNestedExpandOptionsCore(expand *ExpandOption, optionsStr string, entityMetadata *metadata.EntityMetadata, validateMetadata bool) error {
 	// Split by semicolon for different query options
 	parts := strings.Split(optionsStr, ";")
 
@@ -112,8 +112,7 @@ func parseNestedExpandOptions(expand *ExpandOption, optionsStr string, entityMet
 		case "$select":
 			expand.Select = parseSelect(value)
 		case "$expand":
-			// Parse nested $expand recursively
-			// Note: We parse without metadata validation for nested levels
+			// Parse nested $expand recursively without metadata validation
 			// as we don't have easy access to the target entity metadata
 			nestedExpand, err := parseExpandWithoutMetadata(value)
 			if err != nil {
@@ -121,15 +120,14 @@ func parseNestedExpandOptions(expand *ExpandOption, optionsStr string, entityMet
 			}
 			expand.Expand = nestedExpand
 		case "$filter":
-			// Get the navigation property metadata to find the target entity type
-			navProp := findNavigationProperty(expand.NavigationProperty, entityMetadata)
-			if navProp == nil {
-				return fmt.Errorf("navigation property '%s' not found", expand.NavigationProperty)
+			if validateMetadata && entityMetadata != nil {
+				// Get the navigation property metadata to find the target entity type
+				navProp := findNavigationProperty(expand.NavigationProperty, entityMetadata)
+				if navProp == nil {
+					return fmt.Errorf("navigation property '%s' not found", expand.NavigationProperty)
+				}
 			}
-
-			// Create a temporary entity metadata for the target type
-			// We need to find the target entity type in the metadata
-			// For now, we'll parse without metadata validation
+			// Parse without metadata validation for both cases
 			filter, err := parseFilterWithoutMetadata(value)
 			if err != nil {
 				return fmt.Errorf("invalid nested $filter: %w", err)
@@ -173,7 +171,7 @@ func parseExpandWithoutMetadata(expandStr string) ([]ExpandOption, error) {
 			continue
 		}
 
-		expand, err := parseSingleExpandWithoutMetadata(trimmed)
+		expand, err := parseSingleExpandCore(trimmed, nil, false)
 		if err != nil {
 			return nil, err
 		}
@@ -183,86 +181,4 @@ func parseExpandWithoutMetadata(expandStr string) ([]ExpandOption, error) {
 	return result, nil
 }
 
-// parseSingleExpandWithoutMetadata parses a single expand without metadata validation
-func parseSingleExpandWithoutMetadata(expandStr string) (ExpandOption, error) {
-	expand := ExpandOption{}
 
-	// Check for nested query options: NavigationProp($select=...,...)
-	if idx := strings.Index(expandStr, "("); idx != -1 {
-		if !strings.HasSuffix(expandStr, ")") {
-			return expand, fmt.Errorf("invalid expand syntax: %s", expandStr)
-		}
-
-		expand.NavigationProperty = strings.TrimSpace(expandStr[:idx])
-		nestedOptions := expandStr[idx+1 : len(expandStr)-1]
-
-		// Parse nested options without metadata
-		if err := parseNestedExpandOptionsWithoutMetadata(&expand, nestedOptions); err != nil {
-			return expand, err
-		}
-	} else {
-		expand.NavigationProperty = strings.TrimSpace(expandStr)
-	}
-
-	return expand, nil
-}
-
-// parseNestedExpandOptionsWithoutMetadata parses nested query options without metadata validation
-func parseNestedExpandOptionsWithoutMetadata(expand *ExpandOption, optionsStr string) error {
-	// Split by semicolon for different query options
-	parts := strings.Split(optionsStr, ";")
-
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			continue
-		}
-
-		// Find the equals sign
-		eqIdx := strings.Index(part, "=")
-		if eqIdx == -1 {
-			continue
-		}
-
-		key := strings.TrimSpace(part[:eqIdx])
-		value := strings.TrimSpace(part[eqIdx+1:])
-
-		switch strings.ToLower(key) {
-		case "$select":
-			expand.Select = parseSelect(value)
-		case "$expand":
-			// Recursively parse nested expand
-			nestedExpand, err := parseExpandWithoutMetadata(value)
-			if err != nil {
-				return fmt.Errorf("invalid nested $expand: %w", err)
-			}
-			expand.Expand = nestedExpand
-		case "$filter":
-			filter, err := parseFilterWithoutMetadata(value)
-			if err != nil {
-				return fmt.Errorf("invalid nested $filter: %w", err)
-			}
-			expand.Filter = filter
-		case "$orderby":
-			orderBy, err := parseOrderByWithoutMetadata(value)
-			if err != nil {
-				return fmt.Errorf("invalid nested $orderby: %w", err)
-			}
-			expand.OrderBy = orderBy
-		case "$top":
-			var top int
-			if _, err := fmt.Sscanf(value, "%d", &top); err != nil {
-				return fmt.Errorf("invalid nested $top: %w", err)
-			}
-			expand.Top = &top
-		case "$skip":
-			var skip int
-			if _, err := fmt.Sscanf(value, "%d", &skip); err != nil {
-				return fmt.Errorf("invalid nested $skip: %w", err)
-			}
-			expand.Skip = &skip
-		}
-	}
-
-	return nil
-}

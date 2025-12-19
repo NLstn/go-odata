@@ -186,12 +186,13 @@ func TestNestedExpandIntegration(t *testing.T) {
 				continue
 			}
 
-			if clubName == "Chess Club" {
+			switch clubName {
+			case "Chess Club":
 				foundChessClub = true
 				if clubMap["ID"] != "club-789" {
 					t.Errorf("Expected Chess Club ID 'club-789', got %v", clubMap["ID"])
 				}
-			} else if clubName == "Book Club" {
+			case "Book Club":
 				foundBookClub = true
 				if clubMap["ID"] != "club-101" {
 					t.Errorf("Expected Book Club ID 'club-101', got %v", clubMap["ID"])
