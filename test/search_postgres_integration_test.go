@@ -168,14 +168,14 @@ func TestPostgresIntegrationSearch_WithSearchableFields(t *testing.T) {
 			path:           "/PostgresSearchTestProducts?$search=laptop%20OR%20wireless",
 			expectedStatus: http.StatusOK,
 			// plainto_tsquery treats OR as a regular word, not an operator
-			description:    "Should handle OR as text, not SQL operator",
+			description: "Should handle OR as text, not SQL operator",
 		},
 		{
 			name:           "Search with AND operator",
 			path:           "/PostgresSearchTestProducts?$search=laptop%20AND%20professional",
 			expectedStatus: http.StatusOK,
 			// plainto_tsquery treats AND as a regular word, not an operator
-			description:    "Should handle AND as text, not SQL operator",
+			description: "Should handle AND as text, not SQL operator",
 		},
 	}
 

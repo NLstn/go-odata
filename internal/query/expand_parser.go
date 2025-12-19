@@ -180,5 +180,3 @@ func parseExpandWithoutMetadata(expandStr string) ([]ExpandOption, error) {
 
 	return result, nil
 }
-
-

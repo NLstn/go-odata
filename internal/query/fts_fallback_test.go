@@ -44,21 +44,21 @@ func TestFTSFallback_NoFTSAvailable(t *testing.T) {
 
 	// Try to apply FTS search - should not panic even if FTS setup fails
 	query := db.Table("fallback_test_entities")
-	
+
 	// Even if ApplyFTSSearch returns an error, it should not panic
 	resultQuery, err := manager.ApplyFTSSearch(query, "fallback_test_entities", "laptop", meta)
-	
+
 	// The query should still be valid (either with FTS or ready for fallback)
 	if err != nil {
 		// If FTS is not available, that's okay - the in-memory fallback will handle it
 		t.Logf("FTS not available (expected): %v", err)
-		
+
 		// Verify we can still query without FTS
 		var results []FallbackTestEntity
 		if err := query.Find(&results).Error; err != nil {
 			t.Fatalf("Failed to execute fallback query: %v", err)
 		}
-		
+
 		// Should get all results before in-memory filtering
 		if len(results) != 2 {
 			t.Errorf("Expected 2 results from fallback query, got %d", len(results))
@@ -69,7 +69,7 @@ func TestFTSFallback_NoFTSAvailable(t *testing.T) {
 		if err := resultQuery.Find(&results).Error; err != nil {
 			t.Fatalf("Failed to execute FTS query: %v", err)
 		}
-		
+
 		if len(results) != 1 {
 			t.Errorf("Expected 1 result from FTS query, got %d", len(results))
 		}
@@ -84,13 +84,13 @@ func TestFTSFallback_ErrorHandling(t *testing.T) {
 	}
 
 	manager := NewFTSManager(db)
-	
+
 	// Try to apply FTS search with invalid inputs - should not panic
 	_, err = manager.ApplyFTSSearch(db, "", "", nil)
 	if err == nil {
 		t.Log("ApplyFTSSearch handled empty inputs gracefully")
 	}
-	
+
 	// Try with nil metadata - should not panic
 	_, err = manager.ApplyFTSSearch(db, "test_table", "search", nil)
 	if err == nil {
@@ -108,14 +108,14 @@ func TestFTSManager_UnsupportedDatabase(t *testing.T) {
 	}
 
 	manager := NewFTSManager(db)
-	
+
 	// For SQLite, FTS should be detected
 	// For other databases, FTS should gracefully report as not available
 	isAvailable := manager.IsFTSAvailable()
 	version := manager.GetFTSVersion()
-	
+
 	t.Logf("FTS Available: %v, Version: %s", isAvailable, version)
-	
+
 	// The manager should always be created without panic
 	if manager == nil {
 		t.Error("Manager should always be created, even if FTS is not available")
@@ -142,14 +142,14 @@ func TestFTSManager_EmptySearchQuery(t *testing.T) {
 	// Apply FTS search with empty query - should return all results
 	query := db.Table("fallback_test_entities")
 	resultQuery, err := manager.ApplyFTSSearch(query, "fallback_test_entities", "", meta)
-	
+
 	// Empty search should not fail
 	if err != nil && !manager.IsFTSAvailable() {
 		t.Logf("FTS not available, empty search handled: %v", err)
 	} else if err != nil {
 		t.Errorf("Unexpected error with empty search: %v", err)
 	}
-	
+
 	// Query should still be valid
 	if resultQuery != nil {
 		var results []FallbackTestEntity

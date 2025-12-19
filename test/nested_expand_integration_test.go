@@ -13,26 +13,26 @@ import (
 
 // NestedExpandUser represents a user entity for testing nested expand
 type NestedExpandUser struct {
-	ID      string                 `json:"ID" gorm:"primaryKey" odata:"key"`
-	Name    string                 `json:"Name"`
-	Members []NestedExpandMember   `gorm:"foreignKey:UserID" json:"Members,omitempty" odata:"nav"`
+	ID      string               `json:"ID" gorm:"primaryKey" odata:"key"`
+	Name    string               `json:"Name"`
+	Members []NestedExpandMember `gorm:"foreignKey:UserID" json:"Members,omitempty" odata:"nav"`
 }
 
 // NestedExpandMember represents a member entity
 type NestedExpandMember struct {
-	ID     string             `json:"ID" gorm:"primaryKey" odata:"key"`
-	UserID string             `json:"UserID"`
-	ClubID string             `json:"ClubID"`
-	Role   string             `json:"Role"`
-	User   *NestedExpandUser  `gorm:"foreignKey:UserID" json:"User,omitempty" odata:"nav"`
-	Club   *NestedExpandClub  `gorm:"foreignKey:ClubID" json:"Club,omitempty" odata:"nav"`
+	ID     string            `json:"ID" gorm:"primaryKey" odata:"key"`
+	UserID string            `json:"UserID"`
+	ClubID string            `json:"ClubID"`
+	Role   string            `json:"Role"`
+	User   *NestedExpandUser `gorm:"foreignKey:UserID" json:"User,omitempty" odata:"nav"`
+	Club   *NestedExpandClub `gorm:"foreignKey:ClubID" json:"Club,omitempty" odata:"nav"`
 }
 
 // NestedExpandClub represents a club entity
 type NestedExpandClub struct {
-	ID      string                 `json:"ID" gorm:"primaryKey" odata:"key"`
-	Name    string                 `json:"Name"`
-	Members []NestedExpandMember   `gorm:"foreignKey:ClubID" json:"Members,omitempty" odata:"nav"`
+	ID      string               `json:"ID" gorm:"primaryKey" odata:"key"`
+	Name    string               `json:"Name"`
+	Members []NestedExpandMember `gorm:"foreignKey:ClubID" json:"Members,omitempty" odata:"nav"`
 }
 
 func setupNestedExpandTestDB(t *testing.T) *gorm.DB {
@@ -167,7 +167,7 @@ func TestNestedExpandIntegration(t *testing.T) {
 		foundBookClub := false
 		for _, m := range members {
 			member := m.(map[string]interface{})
-			
+
 			club, hasClub := member["Club"]
 			if !hasClub {
 				t.Error("Club should be expanded with nested $expand")

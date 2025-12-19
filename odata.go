@@ -1332,7 +1332,7 @@ func (s *Service) SetGetCountOverwrite(entitySetName string, handler GetCountHan
 //
 // This disables both creating and deleting products while allowing read and update operations.
 func (s *Service) DisableHTTPMethods(entitySetName string, methods ...string) error {
-	handler, exists := s.handlers[entitySetName]
+	_, exists := s.handlers[entitySetName]
 	if !exists {
 		return fmt.Errorf("entity set '%s' is not registered", entitySetName)
 	}
@@ -1360,9 +1360,6 @@ func (s *Service) DisableHTTPMethods(entitySetName string, methods ...string) er
 	s.logger.Debug("Disabled HTTP methods",
 		"entitySet", entitySetName,
 		"methods", methods)
-
-	// Keep handler in sync (handlers reference the same metadata)
-	_ = handler
 
 	return nil
 }
