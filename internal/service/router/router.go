@@ -107,6 +107,22 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// Check for empty path segments in the original RequestURI
+	// Per OData spec, empty path segments are invalid (e.g., /Products//)
+	// Note: req.URL.Path may be normalized by http.ServeMux, but RequestURI contains the original
+	// Extract just the path part (before any query string)
+	requestPath := req.RequestURI
+	if idx := strings.IndexByte(requestPath, '?'); idx >= 0 {
+		requestPath = requestPath[:idx]
+	}
+	if strings.Contains(requestPath, "//") {
+		if err := response.WriteError(w, http.StatusBadRequest, "Invalid URL",
+			"Empty path segments are not allowed per OData specification"); err != nil {
+			r.logger.Error("Error writing error response", "error", err)
+		}
+		return
+	}
+
 	if r.tryServeAsyncMonitor(w, req) {
 		return
 	}

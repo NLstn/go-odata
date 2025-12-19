@@ -152,7 +152,9 @@ func (h *EntityHandler) handlePutMediaEntityValue(w http.ResponseWriter, r *http
 		method.Call([]reflect.Value{reflect.ValueOf(contentType)})
 	}
 
-	// Save the entity
+	// Save the updated entity back to the database
+	// Since we fetched the entity with First(), it has the primary key set,
+	// so Save() will perform an UPDATE instead of INSERT
 	if err := h.db.Save(entity).Error; err != nil {
 		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgInternalError,
 			fmt.Sprintf("Failed to update media entity: %v", err)); writeErr != nil {
