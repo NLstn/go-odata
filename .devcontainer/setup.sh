@@ -11,10 +11,6 @@ go mod download
 echo "🔍 Installing golangci-lint..."
 curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b "$(go env GOPATH)/bin" v2.5.0
 
-# Install air for hot-reload
-echo "🔥 Installing air..."
-go install github.com/air-verse/air@latest
-
 # Install wrk for load testing
 echo "⚡ Installing wrk..."
 sudo apt-get update
