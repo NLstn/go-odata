@@ -381,7 +381,7 @@ expectError: true,
 {
 name:        "Multiple consecutive slashes at start",
 path:        "///Products",
-expectError: false, // Leading slash is stripped, so this becomes //Products which has one leading empty segment
+expectError: true, // After stripping leading slash, //Products splits to ["", "", "Products"] - consecutive empty segments
 },
 {
 name:        "Empty segment in middle",
