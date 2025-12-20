@@ -19,10 +19,16 @@ func HeaderLocation() *framework.TestSuite {
 		"test_location_header",
 		"Location header for created entity",
 		func(ctx *framework.TestContext) error {
+			// Fetch a valid Category ID first (Products require a CategoryID that is a UUID)
+			categoryID, err := firstEntityID(ctx, "Categories")
+			if err != nil {
+				return fmt.Errorf("failed to fetch Category ID: %w", err)
+			}
+
 			resp, err := ctx.POST("/Products", map[string]interface{}{
 				"Name":       "Location Test",
 				"Price":      99.99,
-				"CategoryID": 1,
+				"CategoryID": categoryID,
 			})
 			if err != nil {
 				return err
