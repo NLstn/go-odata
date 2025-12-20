@@ -150,6 +150,21 @@ func (m metadataModel) collectEnumDefinitions() map[string]*enumTypeInfo {
 	return enumDefinitions
 }
 
+// getEntitySetNameForType looks up the entity set name for a given entity type name.
+// This respects custom EntitySetName() methods by searching through registered entities.
+// If the entity type is not found, it falls back to pluralization.
+func (m metadataModel) getEntitySetNameForType(entityTypeName string) string {
+	// Search through all registered entities to find one with matching EntityName
+	for entitySetName, entityMeta := range m.entities {
+		if entityMeta.EntityName == entityTypeName {
+			return entitySetName
+		}
+	}
+
+	// Fall back to pluralization if entity not found
+	return pluralize(entityTypeName)
+}
+
 // getEdmType converts a Go type to an EDM (Entity Data Model) type
 func getEdmType(goType reflect.Type) string {
 	// Handle pointer types

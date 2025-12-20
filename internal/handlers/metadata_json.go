@@ -215,7 +215,7 @@ func (h *MetadataHandler) buildJSONEntityContainer(model metadataModel) map[stri
 				"$Type": model.qualifiedTypeName(entityMeta.EntityName),
 			}
 
-			navigationBindings := h.buildNavigationBindings(entityMeta)
+			navigationBindings := h.buildNavigationBindings(model, entityMeta)
 			if len(navigationBindings) > 0 {
 				singleton["$NavigationPropertyBinding"] = navigationBindings
 			}
@@ -227,7 +227,7 @@ func (h *MetadataHandler) buildJSONEntityContainer(model metadataModel) map[stri
 				"$Type":       model.qualifiedTypeName(entityMeta.EntityName),
 			}
 
-			navigationBindings := h.buildNavigationBindings(entityMeta)
+			navigationBindings := h.buildNavigationBindings(model, entityMeta)
 			if len(navigationBindings) > 0 {
 				entitySet["$NavigationPropertyBinding"] = navigationBindings
 			}
@@ -239,11 +239,11 @@ func (h *MetadataHandler) buildJSONEntityContainer(model metadataModel) map[stri
 	return container
 }
 
-func (h *MetadataHandler) buildNavigationBindings(entityMeta *metadata.EntityMetadata) map[string]string {
+func (h *MetadataHandler) buildNavigationBindings(model metadataModel, entityMeta *metadata.EntityMetadata) map[string]string {
 	navigationBindings := make(map[string]string)
 	for _, prop := range entityMeta.Properties {
 		if prop.IsNavigationProp {
-			targetEntitySet := pluralize(prop.NavigationTarget)
+			targetEntitySet := model.getEntitySetNameForType(prop.NavigationTarget)
 			navigationBindings[prop.JsonName] = targetEntitySet
 		}
 	}
