@@ -166,6 +166,10 @@ func (h *EntityHandler) handlePutMediaEntityValue(w http.ResponseWriter, r *http
 		jsonTag := field.Tag.Get("json")
 		// Parse JSON tag to get field name (handle options like json:"field,omitempty")
 		fieldName := strings.Split(jsonTag, ",")[0]
+		// If JSON tag is "-" or empty, use the struct field name
+		if fieldName == "-" || fieldName == "" {
+			fieldName = field.Name
+		}
 		fieldValue := entityVal.Field(i).Interface()
 		
 		// Only update specific media-related fields (case-sensitive match)
@@ -183,10 +187,19 @@ func (h *EntityHandler) handlePutMediaEntityValue(w http.ResponseWriter, r *http
 		return
 	}
 	
-	// Reuse the existing db (with the correct WHERE clause) to perform the update  
+	// Build a fresh key query for the update to avoid any state from previous queries
+	// This creates a new DB instance with only the WHERE clause for the entity key
+	updateDB, err := h.buildKeyQuery(h.db.Model(entity), entityKey)
+	if err != nil {
+		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgInternalError,
+			fmt.Sprintf("Failed to build update query: %v", err)); writeErr != nil {
+			h.logger.Error("Error writing error response", "error", writeErr)
+		}
+		return
+	}
+	
 	// Use Session with FullSaveAssociations=false to avoid association issues
-	// and Omit to skip the primary key in the update
-	if err := db.Session(&gorm.Session{FullSaveAssociations: false}).Omit("id").Updates(updates).Error; err != nil {
+	if err := updateDB.Session(&gorm.Session{FullSaveAssociations: false}).Updates(updates).Error; err != nil {
 		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgInternalError,
 			fmt.Sprintf("Failed to update media entity: %v", err)); writeErr != nil {
 			h.logger.Error("Error writing error response", "error", writeErr)
