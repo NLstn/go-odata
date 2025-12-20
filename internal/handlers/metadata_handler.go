@@ -99,15 +99,18 @@ func (h *MetadataHandler) handleOptionsMetadata(w http.ResponseWriter) {
 }
 
 func (h *MetadataHandler) newMetadataModel() metadataModel {
-	return metadataModel{
+	model := metadataModel{
 		namespace: h.namespaceOrDefault(),
 		entities:  h.entities,
 	}
+	model.buildEntityTypeToSetNameMap()
+	return model
 }
 
 type metadataModel struct {
-	namespace string
-	entities  map[string]*metadata.EntityMetadata
+	namespace              string
+	entities               map[string]*metadata.EntityMetadata
+	entityTypeToSetNameMap map[string]string // Cache for EntityName -> EntitySetName lookups
 }
 
 type enumTypeInfo struct {
@@ -150,15 +153,22 @@ func (m metadataModel) collectEnumDefinitions() map[string]*enumTypeInfo {
 	return enumDefinitions
 }
 
+// buildEntityTypeToSetNameMap creates a reverse lookup map from EntityName to EntitySetName
+// for efficient navigation property binding resolution.
+func (m *metadataModel) buildEntityTypeToSetNameMap() {
+	m.entityTypeToSetNameMap = make(map[string]string, len(m.entities))
+	for entitySetName, entityMeta := range m.entities {
+		m.entityTypeToSetNameMap[entityMeta.EntityName] = entitySetName
+	}
+}
+
 // getEntitySetNameForType looks up the entity set name for a given entity type name.
-// This respects custom EntitySetName() methods by searching through registered entities.
+// This respects custom EntitySetName() methods by using the cached lookup map.
 // If the entity type is not found, it falls back to pluralization.
 func (m metadataModel) getEntitySetNameForType(entityTypeName string) string {
-	// Search through all registered entities to find one with matching EntityName
-	for entitySetName, entityMeta := range m.entities {
-		if entityMeta.EntityName == entityTypeName {
-			return entitySetName
-		}
+	// Use cached lookup map for O(1) performance
+	if entitySetName, exists := m.entityTypeToSetNameMap[entityTypeName]; exists {
+		return entitySetName
 	}
 
 	// Fall back to pluralization if entity not found
