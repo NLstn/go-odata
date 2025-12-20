@@ -166,7 +166,9 @@ func (h *EntityHandler) handlePutMediaEntityValue(w http.ResponseWriter, r *http
 		jsonTag := field.Tag.Get("json")
 		// Parse JSON tag to get field name (handle options like json:"field,omitempty")
 		fieldName := strings.Split(jsonTag, ",")[0]
-		// If JSON tag is "-" or empty, use the struct field name
+		// If JSON tag is "-" (excluded from JSON) or empty (no tag defined), use the struct field name.
+		// This is important for fields like "Content" that have json:"-" to exclude them from serialization
+		// but still need to be included in database updates.
 		if fieldName == "-" || fieldName == "" {
 			fieldName = field.Name
 		}
@@ -187,8 +189,10 @@ func (h *EntityHandler) handlePutMediaEntityValue(w http.ResponseWriter, r *http
 		return
 	}
 	
-	// Build a fresh key query for the update to avoid any state from previous queries
-	// This creates a new DB instance with only the WHERE clause for the entity key
+	// Build a fresh key query for the update to avoid any state from previous queries.
+	// We use h.db.Model(entity) to specify the table and then build the WHERE clause.
+	// Note: We cannot use h.db.Session(&gorm.Session{NewDB: true}) here because that would
+	// lose the Model context and cause "WHERE conditions required" errors.
 	updateDB, err := h.buildKeyQuery(h.db.Model(entity), entityKey)
 	if err != nil {
 		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgInternalError,
