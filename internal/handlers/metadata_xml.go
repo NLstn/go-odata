@@ -241,7 +241,7 @@ func (h *MetadataHandler) buildEntityContainer(model metadataModel) string {
 `, entityMeta.SingletonName, model.qualifiedTypeName(entityMeta.EntityName))
 			for _, prop := range entityMeta.Properties {
 				if prop.IsNavigationProp {
-					targetEntitySet := pluralize(prop.NavigationTarget)
+					targetEntitySet := model.getEntitySetNameForType(prop.NavigationTarget)
 					result += fmt.Sprintf(`          <NavigationPropertyBinding Path="%s" Target="%s" />
 `, prop.JsonName, targetEntitySet)
 				}
@@ -253,7 +253,7 @@ func (h *MetadataHandler) buildEntityContainer(model metadataModel) string {
 `, entitySetName, model.qualifiedTypeName(entityMeta.EntityName))
 			for _, prop := range entityMeta.Properties {
 				if prop.IsNavigationProp {
-					targetEntitySet := pluralize(prop.NavigationTarget)
+					targetEntitySet := model.getEntitySetNameForType(prop.NavigationTarget)
 					result += fmt.Sprintf(`          <NavigationPropertyBinding Path="%s" Target="%s" />
 `, prop.JsonName, targetEntitySet)
 				}
