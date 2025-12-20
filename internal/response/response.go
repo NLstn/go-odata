@@ -198,6 +198,13 @@ func ParseODataURLComponents(path string) (*ODataURLComponents, error) {
 		path = path[1:]
 	}
 
+	// Reject URLs with consecutive slashes before parsing
+	// url.Parse treats //path as scheme-relative URL with "path" as host, not path
+	// This would cause ///Products to be incorrectly accepted
+	if strings.Contains(path, "//") {
+		return nil, fmt.Errorf("invalid URL: empty path segments are not allowed per OData specification")
+	}
+
 	u, err := url.Parse(path)
 	if err != nil {
 		return nil, err
@@ -209,23 +216,14 @@ func ParseODataURLComponents(path string) (*ODataURLComponents, error) {
 
 	pathParts := strings.Split(u.Path, "/")
 	
-	// Normalize path by removing leading/trailing empty segments coming from
-	// leading/trailing slashes, but reject empty segments in the middle,
-	// which arise from consecutive slashes like /Products//Details or ///Products.
+	// Remove leading/trailing empty segments from leading/trailing slashes
+	// We already rejected consecutive slashes above, so any empty segments here
+	// are just from single leading/trailing slashes
 	filteredParts := make([]string, 0, len(pathParts))
-	for i, part := range pathParts {
-		if part == "" {
-			// Reject consecutive empty segments: check if previous part was also empty
-			if i > 0 && pathParts[i-1] == "" {
-				return nil, fmt.Errorf("invalid URL: empty path segments are not allowed per OData specification")
-			}
-			// Allow single empty segment at start or end (from leading/trailing slash)
-			if i != 0 && i != len(pathParts)-1 {
-				return nil, fmt.Errorf("invalid URL: empty path segments are not allowed per OData specification")
-			}
-			continue
+	for _, part := range pathParts {
+		if part != "" {
+			filteredParts = append(filteredParts, part)
 		}
-		filteredParts = append(filteredParts, part)
 	}
 	
 	pathParts = filteredParts
