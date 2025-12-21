@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   app:
-    image: mcr.microsoft.com/devcontainers/go:1.25-bookworm
+    image: mcr.microsoft.com/devcontainers/go:1.25
     volumes:
       - ../..:/workspaces:cached
     command: sleep infinity

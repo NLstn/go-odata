@@ -4,7 +4,7 @@ This directory contains the development container configuration for GitHub Codes
 
 ## What's Included
 
-- **Go 1.24**: Latest Go development environment
+- **Go 1.25**: Latest Go development environment
 - **VS Code Extensions**:
   - Go language support with IntelliSense
   - GitHub Copilot for AI-assisted coding
