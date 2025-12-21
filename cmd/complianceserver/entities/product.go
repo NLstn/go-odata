@@ -47,8 +47,12 @@ type Product struct {
 	SpecialProperty *string       `json:"SpecialProperty,omitempty" odata:"nullable,maxlength=200"`            // Property for SpecialProduct derived type
 	SpecialFeature  *string       `json:"SpecialFeature,omitempty" odata:"nullable,maxlength=100"`             // Property for SpecialProduct derived type
 	// Complex type properties
-	ShippingAddress *Address    `json:"ShippingAddress,omitempty" gorm:"embedded;embeddedPrefix:shipping_" odata:"nullable"`
+	ShippingAddress *Address `json:"ShippingAddress,omitempty" gorm:"embedded;embeddedPrefix:shipping_" odata:"nullable"`
 	Dimensions      *Dimensions `json:"Dimensions,omitempty" gorm:"embedded;embeddedPrefix:dim_" odata:"nullable"`
+	// Geospatial properties (stored as WKT strings for compatibility)
+	Location *string `json:"Location,omitempty" odata:"nullable"` // Geography Point in WKT format
+	Route    *string `json:"Route,omitempty" odata:"nullable"`    // Geography LineString in WKT format
+	Area     *string `json:"Area,omitempty" odata:"nullable"`     // Geography Polygon in WKT format
 	// Stream properties
 	Photo            struct{} `json:"-" gorm:"-" odata:"stream"`  // Photo stream property (logical property, no storage)
 	PhotoContentType string   `json:"-" gorm:"type:varchar(100)"` // Content type for Photo stream
@@ -111,6 +115,9 @@ func GetSampleProducts() []Product {
 				Height: 2.5,
 				Unit:   "cm",
 			},
+			Location: stringPtr("POINT(-122.3321 47.6062)"),                                 // Seattle
+			Route:    stringPtr("LINESTRING(-122.3321 47.6062, -122.4194 47.2529)"),         // Seattle to Tacoma
+			Area:     stringPtr("POLYGON((-122.5 47.5, -122.0 47.5, -122.0 47.8, -122.5 47.8, -122.5 47.5))"), // Seattle area
 		},
 		{
 			Name:        "Wireless Mouse",
@@ -133,6 +140,9 @@ func GetSampleProducts() []Product {
 				Height: 4.0,
 				Unit:   "cm",
 			},
+			Location: stringPtr("POINT(-122.4194 37.7749)"),                                 // San Francisco
+			Route:    stringPtr("LINESTRING(-122.4194 37.7749, -122.2711 37.8044)"),         // SF to Oakland
+			Area:     stringPtr("POLYGON((-122.5 37.7, -122.3 37.7, -122.3 37.9, -122.5 37.9, -122.5 37.7))"), // SF Bay area
 		},
 		{
 			Name:        "Coffee Mug",
@@ -155,6 +165,9 @@ func GetSampleProducts() []Product {
 				Height: 10.0,
 				Unit:   "cm",
 			},
+			Location: stringPtr("POINT(-122.6765 45.5231)"),                                 // Portland
+			Route:    stringPtr("LINESTRING(-122.6765 45.5231, -122.6587 45.5152)"),         // Portland downtown
+			Area:     stringPtr("POLYGON((-122.8 45.4, -122.5 45.4, -122.5 45.7, -122.8 45.7, -122.8 45.4))"), // Portland area
 		},
 		{
 			Name:        "Office Chair",
@@ -189,6 +202,9 @@ func GetSampleProducts() []Product {
 				Height: 0.8,
 				Unit:   "cm",
 			},
+			Location: stringPtr("POINT(-97.7431 30.2672)"),                                 // Austin
+			Route:    stringPtr("LINESTRING(-97.7431 30.2672, -97.7426 30.2849)"),         // Austin downtown
+			Area:     stringPtr("POLYGON((-98.0 30.1, -97.5 30.1, -97.5 30.5, -98.0 30.5, -98.0 30.1))"), // Austin area
 		},
 		// Special Products (derived type)
 		{
@@ -214,6 +230,9 @@ func GetSampleProducts() []Product {
 				Height: 2.0,
 				Unit:   "cm",
 			},
+			Location: stringPtr("POINT(-74.0060 40.7128)"),                                 // New York City
+			Route:    stringPtr("LINESTRING(-74.0060 40.7128, -73.9352 40.7306)"),         // Manhattan to Queens
+			Area:     stringPtr("POLYGON((-74.1 40.6, -73.8 40.6, -73.8 40.9, -74.1 40.9, -74.1 40.6))"), // NYC area
 		},
 		{
 			Name:            "Gaming Mouse Ultra",
@@ -238,6 +257,9 @@ func GetSampleProducts() []Product {
 				Height: 4.5,
 				Unit:   "cm",
 			},
+			Location: stringPtr("POINT(-118.2437 34.0522)"),                                 // Los Angeles
+			Route:    stringPtr("LINESTRING(-118.2437 34.0522, -118.3687 34.1016)"),         // LA to Beverly Hills
+			Area:     stringPtr("POLYGON((-118.5 33.9, -118.0 33.9, -118.0 34.3, -118.5 34.3, -118.5 33.9))"), // LA area
 		},
 	}
 }
