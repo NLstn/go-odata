@@ -1091,6 +1091,37 @@ func (property *PropertyMetadata) FindComplexField(name string) *PropertyMetadat
 	return nil
 }
 
+// IsSingleEntityNavigationPath checks if a property path represents a single-entity navigation property path.
+// For example, "Team/ClubID" where Team is a single-entity (not collection) navigation property.
+// Returns true if the first segment is a single-entity navigation property and subsequent segments exist.
+// Per OData v4 spec 5.1.1.15, properties of entities related with cardinality 0..1 or 1 can be accessed directly.
+func (metadata *EntityMetadata) IsSingleEntityNavigationPath(path string) bool {
+	if metadata == nil {
+		return false
+	}
+
+	trimmedPath := strings.TrimSpace(path)
+	if trimmedPath == "" || !strings.Contains(trimmedPath, "/") {
+		return false
+	}
+
+	segments := strings.Split(trimmedPath, "/")
+	if len(segments) < 2 {
+		return false
+	}
+
+	// Check if the first segment is a navigation property
+	firstSegment := strings.TrimSpace(segments[0])
+	navProp := metadata.FindNavigationProperty(firstSegment)
+	if navProp == nil {
+		return false
+	}
+
+	// Check if it's a single-entity navigation property (not a collection)
+	// NavigationIsArray == false means it's a single-entity navigation (cardinality 0..1 or 1)
+	return !navProp.NavigationIsArray
+}
+
 // dereferenceType unwraps pointer types to obtain the underlying type.
 func dereferenceType(t reflect.Type) reflect.Type {
 	for t.Kind() == reflect.Ptr {
