@@ -13,7 +13,8 @@ func getDatabaseDialect(db *gorm.DB) string {
 	if db == nil || db.Dialector == nil {
 		return "sqlite"
 	}
-	return db.Dialector.Name()
+	dialector := db.Dialector
+	return dialector.Name()
 }
 
 // quoteIdent safely quotes identifiers in a portable way (double quotes work for sqlite and postgres).
@@ -55,7 +56,7 @@ func addNavigationJoins(db *gorm.DB, filter *FilterExpression, entityMetadata *m
 	joinedNavProps := make(map[string]bool)
 	
 	// Recursively collect all navigation property paths used in the filter
-	collectAndJoinNavigationProperties(db, filter, entityMetadata, joinedNavProps)
+	collectAndJoinNavigationProperties(filter, entityMetadata, joinedNavProps)
 	
 	// Apply the collected joins
 	for navPropName := range joinedNavProps {
@@ -66,7 +67,7 @@ func addNavigationJoins(db *gorm.DB, filter *FilterExpression, entityMetadata *m
 }
 
 // collectAndJoinNavigationProperties recursively finds navigation property paths in filter expressions
-func collectAndJoinNavigationProperties(db *gorm.DB, filter *FilterExpression, entityMetadata *metadata.EntityMetadata, joinedNavProps map[string]bool) {
+func collectAndJoinNavigationProperties(filter *FilterExpression, entityMetadata *metadata.EntityMetadata, joinedNavProps map[string]bool) {
 	if filter == nil {
 		return
 	}
@@ -81,10 +82,10 @@ func collectAndJoinNavigationProperties(db *gorm.DB, filter *FilterExpression, e
 
 	// Recursively process child filters
 	if filter.Left != nil {
-		collectAndJoinNavigationProperties(db, filter.Left, entityMetadata, joinedNavProps)
+		collectAndJoinNavigationProperties(filter.Left, entityMetadata, joinedNavProps)
 	}
 	if filter.Right != nil {
-		collectAndJoinNavigationProperties(db, filter.Right, entityMetadata, joinedNavProps)
+		collectAndJoinNavigationProperties(filter.Right, entityMetadata, joinedNavProps)
 	}
 }
 
