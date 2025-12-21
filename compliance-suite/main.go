@@ -665,6 +665,14 @@ func main() {
 	failedTests := 0
 	skippedTests := 0
 
+	// Collect all failed tests for final summary
+	type FailedTestInfo struct {
+		SuiteName string
+		TestName  string
+		Error     string
+	}
+	var allFailedTests []FailedTestInfo
+
 	if !*verbose {
 		fmt.Printf("Running %d suites (%d total tests)\n", totalSuites, totalPlannedTests)
 		fmt.Println()
@@ -684,6 +692,17 @@ func main() {
 		passedTests += suite.Results.Passed
 		failedTests += suite.Results.Failed
 		skippedTests += suite.Results.Skipped
+
+		// Collect failed tests from this suite
+		for _, detail := range suite.Results.Details {
+			if detail.Status == framework.StatusFail {
+				allFailedTests = append(allFailedTests, FailedTestInfo{
+					SuiteName: prepared.info.Name,
+					TestName:  detail.Name,
+					Error:     detail.Error,
+				})
+			}
+		}
 
 		if err == nil {
 			passedSuites++
@@ -723,6 +742,18 @@ func main() {
 		fmt.Printf("  - Pass Rate: %.0f%%\n", float64(passedTests)/float64(totalTests)*100)
 	}
 	fmt.Println()
+
+	// Print list of failed tests if any
+	if len(allFailedTests) > 0 {
+		fmt.Println("Failed Tests:")
+		for _, failed := range allFailedTests {
+			fmt.Printf("  ✗ [%s] %s\n", failed.SuiteName, failed.TestName)
+			if failed.Error != "" {
+				fmt.Printf("    Error: %s\n", failed.Error)
+			}
+		}
+		fmt.Println()
+	}
 
 	if passedSuites == totalSuites {
 		fmt.Println("\033[0;32m✓ ALL TESTS PASSED\033[0m")
