@@ -307,6 +307,8 @@ type Service struct {
 	// keyGenerators maintains registered key generator functions by name
 	keyGenerators   map[string]KeyGenerator
 	keyGeneratorsMu sync.RWMutex
+	// defaultMaxTop is the default maximum number of results to return if no explicit $top is set
+	defaultMaxTop *int
 }
 
 // NewService creates a new OData service instance with database connection.
@@ -593,6 +595,10 @@ func (s *Service) RegisterEntity(entity interface{}) error {
 		}
 		return generator, true
 	})
+	// Set service-level default max top if configured
+	if s.defaultMaxTop != nil {
+		handler.SetDefaultMaxTop(s.defaultMaxTop)
+	}
 	s.handlers[entityMetadata.EntitySetName] = handler
 
 	s.logger.Debug("Registered entity",
@@ -652,6 +658,10 @@ func (s *Service) RegisterSingleton(entity interface{}, singletonName string) er
 		}
 		return generator, true
 	})
+	// Set service-level default max top if configured
+	if s.defaultMaxTop != nil {
+		handler.SetDefaultMaxTop(s.defaultMaxTop)
+	}
 	s.handlers[singletonName] = handler
 
 	s.logger.Debug("Registered singleton",
@@ -717,6 +727,10 @@ func (s *Service) RegisterVirtualEntity(entity interface{}) error {
 		}
 		return generator, true
 	})
+	// Set service-level default max top if configured
+	if s.defaultMaxTop != nil {
+		handler.SetDefaultMaxTop(s.defaultMaxTop)
+	}
 	s.handlers[entityMetadata.EntitySetName] = handler
 
 	s.logger.Debug("Registered virtual entity",
@@ -1360,6 +1374,55 @@ func (s *Service) DisableHTTPMethods(entitySetName string, methods ...string) er
 	s.logger.Debug("Disabled HTTP methods",
 		"entitySet", entitySetName,
 		"methods", methods)
+
+	return nil
+}
+
+// SetDefaultMaxTop sets the default maximum number of results to return when no explicit $top is provided.
+// This applies to all entity sets in the service unless overridden at the entity level.
+// Pass 0 or a negative value to remove the default limit.
+//
+// # Example
+//
+//	service.SetDefaultMaxTop(100) // Default limit of 100 results for all entities
+func (s *Service) SetDefaultMaxTop(maxTop int) {
+	if maxTop <= 0 {
+		s.defaultMaxTop = nil
+		s.logger.Debug("Removed default max top for service")
+		return
+	}
+	s.defaultMaxTop = &maxTop
+	s.logger.Debug("Set default max top for service", "maxTop", maxTop)
+}
+
+// SetEntityDefaultMaxTop sets the default maximum number of results for a specific entity set.
+// This overrides the service-level default for this entity set.
+// Pass 0 or a negative value to remove the entity-level default (falls back to service default).
+//
+// # Example
+//
+//	service.SetEntityDefaultMaxTop("Products", 50) // Products limited to 50 by default
+//	service.SetEntityDefaultMaxTop("Orders", 200)  // Orders limited to 200 by default
+func (s *Service) SetEntityDefaultMaxTop(entitySetName string, maxTop int) error {
+	handler, exists := s.handlers[entitySetName]
+	if !exists {
+		return fmt.Errorf("entity set '%s' is not registered", entitySetName)
+	}
+
+	metadata, exists := s.entities[entitySetName]
+	if !exists {
+		return fmt.Errorf("entity metadata for '%s' not found", entitySetName)
+	}
+
+	if maxTop <= 0 {
+		metadata.DefaultMaxTop = nil
+		handler.SetDefaultMaxTop(nil)
+		s.logger.Debug("Removed default max top for entity", "entitySet", entitySetName)
+	} else {
+		metadata.DefaultMaxTop = &maxTop
+		handler.SetDefaultMaxTop(&maxTop)
+		s.logger.Debug("Set default max top for entity", "entitySet", entitySetName, "maxTop", maxTop)
+	}
 
 	return nil
 }

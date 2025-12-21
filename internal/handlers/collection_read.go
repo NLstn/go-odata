@@ -69,6 +69,9 @@ func (h *EntityHandler) handleGetCollectionOverwrite(w http.ResponseWriter, r *h
 		queryOptions = h.applyMaxPageSize(queryOptions, *pref.MaxPageSize)
 	}
 
+	// Apply default max top if no explicit $top is set
+	queryOptions = h.applyDefaultMaxTop(queryOptions)
+
 	// Create overwrite context
 	ctx := &OverwriteContext{
 		QueryOptions: queryOptions,
@@ -123,6 +126,9 @@ func (h *EntityHandler) parseCollectionQueryOptions(w http.ResponseWriter, r *ht
 		if pref.MaxPageSize != nil {
 			queryOptions = h.applyMaxPageSize(queryOptions, *pref.MaxPageSize)
 		}
+
+		// Apply default max top if no explicit $top is set
+		queryOptions = h.applyDefaultMaxTop(queryOptions)
 
 		return queryOptions, nil
 	}
@@ -350,6 +356,28 @@ func (h *EntityHandler) applyMaxPageSize(queryOptions *query.QueryOptions, maxPa
 	if queryOptions.Top == nil || *queryOptions.Top > maxPageSize {
 		queryOptions.Top = &maxPageSize
 	}
+	return queryOptions
+}
+
+// applyDefaultMaxTop applies the default max top limit if no explicit $top is set
+// Priority: entity-level default > service-level default
+func (h *EntityHandler) applyDefaultMaxTop(queryOptions *query.QueryOptions) *query.QueryOptions {
+	// If $top is already explicitly set, don't override it
+	if queryOptions.Top != nil {
+		return queryOptions
+	}
+
+	// Try entity-level default first (from metadata)
+	if h.metadata != nil && h.metadata.DefaultMaxTop != nil {
+		queryOptions.Top = h.metadata.DefaultMaxTop
+		return queryOptions
+	}
+
+	// Fall back to handler-level default (from service)
+	if h.defaultMaxTop != nil {
+		queryOptions.Top = h.defaultMaxTop
+	}
+
 	return queryOptions
 }
 

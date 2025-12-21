@@ -24,6 +24,8 @@ type EntityMetadata struct {
 	StreamProperties      []PropertyMetadata // Named stream properties on this entity
 	// DisabledMethods contains HTTP methods that are not allowed for this entity
 	DisabledMethods map[string]bool
+	// DefaultMaxTop is the default maximum number of results to return if no explicit $top is set
+	DefaultMaxTop *int
 	// Hooks defines which lifecycle hooks are available on this entity
 	Hooks struct {
 		HasODataBeforeCreate         bool
