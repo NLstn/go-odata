@@ -93,6 +93,11 @@ func (h *EntityHandler) SetDefaultMaxTop(maxTop *int) {
 	h.defaultMaxTop = maxTop
 }
 
+// HasEntityLevelDefaultMaxTop returns true if this handler has an entity-level default max top set
+func (h *EntityHandler) HasEntityLevelDefaultMaxTop() bool {
+	return h.metadata != nil && h.metadata.DefaultMaxTop != nil
+}
+
 // isMethodDisabled checks if a given HTTP method is disabled for this entity
 func (h *EntityHandler) isMethodDisabled(method string) bool {
 	if h.metadata == nil || h.metadata.DisabledMethods == nil {

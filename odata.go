@@ -1389,10 +1389,24 @@ func (s *Service) SetDefaultMaxTop(maxTop int) {
 	if maxTop <= 0 {
 		s.defaultMaxTop = nil
 		s.logger.Debug("Removed default max top for service")
+		// Update all existing handlers that don't have entity-level defaults
+		for _, handler := range s.handlers {
+			// Only update if there's no entity-level default set
+			if !handler.HasEntityLevelDefaultMaxTop() {
+				handler.SetDefaultMaxTop(nil)
+			}
+		}
 		return
 	}
 	s.defaultMaxTop = &maxTop
 	s.logger.Debug("Set default max top for service", "maxTop", maxTop)
+	// Update all existing handlers that don't have entity-level defaults
+	for _, handler := range s.handlers {
+		// Only update if there's no entity-level default set
+		if !handler.HasEntityLevelDefaultMaxTop() {
+			handler.SetDefaultMaxTop(&maxTop)
+		}
+	}
 }
 
 // SetEntityDefaultMaxTop sets the default maximum number of results for a specific entity set.
@@ -1415,8 +1429,9 @@ func (s *Service) SetEntityDefaultMaxTop(entitySetName string, maxTop int) error
 	}
 
 	if maxTop <= 0 {
+		// Remove entity-level default and fall back to service default
 		metadata.DefaultMaxTop = nil
-		handler.SetDefaultMaxTop(nil)
+		handler.SetDefaultMaxTop(s.defaultMaxTop)
 		s.logger.Debug("Removed default max top for entity", "entitySet", entitySetName)
 	} else {
 		metadata.DefaultMaxTop = &maxTop
