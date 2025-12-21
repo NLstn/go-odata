@@ -404,10 +404,17 @@ func testGeoCombinedFilter(ctx *framework.TestContext) error {
 			
 			// If Price is present, verify it meets the filter condition (> 100)
 			if price, ok := product["Price"]; ok {
-				if priceVal, ok := price.(float64); ok {
-					if priceVal <= 100 {
-						return fmt.Errorf("product at index %d has Price %f, expected > 100", i, priceVal)
-					}
+				var priceVal float64
+				switch v := price.(type) {
+				case float64:
+					priceVal = v
+				case int:
+					priceVal = float64(v)
+				default:
+					return fmt.Errorf("product at index %d has unexpected Price type: %T", i, price)
+				}
+				if priceVal <= 100 {
+					return fmt.Errorf("product at index %d has Price %f, expected > 100", i, priceVal)
 				}
 			}
 		}
