@@ -45,9 +45,20 @@ func getFieldIndex(t reflect.Type, fieldName string) (int, bool) {
 	}
 
 	// Check cache size limit to prevent unbounded growth
+	// If limit reached, clear half the cache to avoid complete cache thrashing
 	if len(globalFieldIndexCache.cache) >= globalFieldIndexCache.maxTypes {
-		// Clear cache when limit is reached (simple eviction strategy)
-		globalFieldIndexCache.cache = make(map[reflect.Type]map[string]int)
+		// Clear approximately half the cache by recreating with reduced size
+		// This is a simple strategy that avoids complete performance degradation
+		newCache := make(map[reflect.Type]map[string]int, globalFieldIndexCache.maxTypes/2)
+		count := 0
+		for k, v := range globalFieldIndexCache.cache {
+			if count >= globalFieldIndexCache.maxTypes/2 {
+				break
+			}
+			newCache[k] = v
+			count++
+		}
+		globalFieldIndexCache.cache = newCache
 	}
 
 	// Build cache for this type
