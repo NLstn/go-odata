@@ -220,7 +220,7 @@ func TestBuildAggregateSQL_ColumnNames(t *testing.T) {
 				Method:   AggregationCountDistinct,
 				Alias:    "UniqueCategories",
 			},
-			expected: "COUNT(DISTINCT category) as `UniqueCategories`",
+			expected: "COUNT(DISTINCT category) as \"UniqueCategories\"",
 		},
 		{
 			name: "Sum uses snake_case column",
@@ -229,7 +229,7 @@ func TestBuildAggregateSQL_ColumnNames(t *testing.T) {
 				Method:   AggregationSum,
 				Alias:    "TotalPrice",
 			},
-			expected: "SUM(price) as `TotalPrice`",
+			expected: "SUM(price) as \"TotalPrice\"",
 		},
 		{
 			name: "Average uses snake_case column",
@@ -238,7 +238,7 @@ func TestBuildAggregateSQL_ColumnNames(t *testing.T) {
 				Method:   AggregationAvg,
 				Alias:    "AvgQty",
 			},
-			expected: "AVG(quantity) as `AvgQty`",
+			expected: "AVG(quantity) as \"AvgQty\"",
 		},
 		{
 			name: "Min uses snake_case column",
@@ -247,7 +247,7 @@ func TestBuildAggregateSQL_ColumnNames(t *testing.T) {
 				Method:   AggregationMin,
 				Alias:    "MinPrice",
 			},
-			expected: "MIN(price) as `MinPrice`",
+			expected: "MIN(price) as \"MinPrice\"",
 		},
 		{
 			name: "Max uses snake_case column",
@@ -256,7 +256,7 @@ func TestBuildAggregateSQL_ColumnNames(t *testing.T) {
 				Method:   AggregationMax,
 				Alias:    "MaxPrice",
 			},
-			expected: "MAX(price) as `MaxPrice`",
+			expected: "MAX(price) as \"MaxPrice\"",
 		},
 		{
 			name: "$count special case",
@@ -265,7 +265,7 @@ func TestBuildAggregateSQL_ColumnNames(t *testing.T) {
 				Method:   AggregationCount,
 				Alias:    "Total",
 			},
-			expected: "COUNT(*) as `Total`",
+			expected: "COUNT(*) as \"Total\"",
 		},
 	}
 

@@ -619,7 +619,7 @@ func TestStringFunctions_SQLGeneration(t *testing.T) {
 				return
 			}
 
-			sql, args := buildFilterCondition(filterExpr, meta)
+			sql, args := buildFilterCondition("sqlite", filterExpr, meta)
 			if sql != tt.expectedSQL {
 				t.Errorf("Expected SQL: %s, got: %s", tt.expectedSQL, sql)
 			}

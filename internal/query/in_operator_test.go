@@ -222,7 +222,7 @@ func TestInOperator_SQLGeneration(t *testing.T) {
 				return
 			}
 
-			sql, args := buildFilterCondition(filterExpr, meta)
+			sql, args := buildFilterCondition("sqlite", filterExpr, meta)
 			if tt.expectErr {
 				if sql != "" {
 					t.Error("Expected error but got SQL")
@@ -381,7 +381,7 @@ func TestInOperator_Integration(t *testing.T) {
 			}
 
 			// Also verify SQL generation works
-			sql, _ := buildFilterCondition(filterExpr, meta)
+			sql, _ := buildFilterCondition("sqlite", filterExpr, meta)
 			if sql == "" {
 				t.Error("Failed to generate SQL for filter expression")
 			}

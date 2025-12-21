@@ -88,6 +88,8 @@ func applyFilterForExpand(db *gorm.DB, filter *FilterExpression) *gorm.DB {
 		return db
 	}
 
+	dialect := getDatabaseDialect(db)
+
 	if filter.Logical != "" {
 		leftDB := applyFilterForExpand(db, filter.Left)
 		rightDB := applyFilterForExpand(db, filter.Right)
@@ -96,27 +98,27 @@ func applyFilterForExpand(db *gorm.DB, filter *FilterExpression) *gorm.DB {
 		case LogicalAnd:
 			return leftDB.Where(rightDB)
 		case LogicalOr:
-			leftQuery, leftArgs := buildSimpleFilterCondition(filter.Left)
-			rightQuery, rightArgs := buildSimpleFilterCondition(filter.Right)
+			leftQuery, leftArgs := buildSimpleFilterCondition(dialect, filter.Left)
+			rightQuery, rightArgs := buildSimpleFilterCondition(dialect, filter.Right)
 			combinedQuery := fmt.Sprintf("(%s) OR (%s)", leftQuery, rightQuery)
 			combinedArgs := append(leftArgs, rightArgs...)
 			return db.Where(combinedQuery, combinedArgs...)
 		}
 	}
 
-	query, args := buildSimpleFilterCondition(filter)
+	query, args := buildSimpleFilterCondition(dialect, filter)
 	return db.Where(query, args...)
 }
 
 // buildSimpleFilterCondition builds a filter condition without metadata
-func buildSimpleFilterCondition(filter *FilterExpression) (string, []interface{}) {
+func buildSimpleFilterCondition(dialect string, filter *FilterExpression) (string, []interface{}) {
 	if filter == nil {
 		return "", nil
 	}
 
 	if filter.Logical != "" {
-		leftQuery, leftArgs := buildSimpleFilterCondition(filter.Left)
-		rightQuery, rightArgs := buildSimpleFilterCondition(filter.Right)
+		leftQuery, leftArgs := buildSimpleFilterCondition(dialect, filter.Left)
+		rightQuery, rightArgs := buildSimpleFilterCondition(dialect, filter.Right)
 
 		switch filter.Logical {
 		case LogicalAnd:
@@ -131,7 +133,7 @@ func buildSimpleFilterCondition(filter *FilterExpression) (string, []interface{}
 	}
 
 	if filter.Left != nil && filter.Left.Operator != "" {
-		return buildSimpleFunctionComparison(filter)
+		return buildSimpleFunctionComparison(dialect, filter)
 	}
 
 	fieldName := toSnakeCase(filter.Property)
@@ -167,11 +169,11 @@ func buildSimpleOperatorCondition(op FilterOperator, fieldName string, value int
 }
 
 // buildSimpleFunctionComparison builds a comparison with a function on the left side (without metadata)
-func buildSimpleFunctionComparison(filter *FilterExpression) (string, []interface{}) {
+func buildSimpleFunctionComparison(dialect string, filter *FilterExpression) (string, []interface{}) {
 	funcExpr := filter.Left
 	fieldName := toSnakeCase(funcExpr.Property)
 
-	funcSQL, funcArgs := buildFunctionSQL(funcExpr.Operator, fieldName, funcExpr.Value)
+	funcSQL, funcArgs := buildFunctionSQL(dialect, funcExpr.Operator, fieldName, funcExpr.Value)
 	if funcSQL == "" {
 		return "", nil
 	}

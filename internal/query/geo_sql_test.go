@@ -56,7 +56,7 @@ func TestGeoFunctionSQLGeneration(t *testing.T) {
 			}
 
 			// Build the SQL condition
-			sql, args := buildFilterCondition(filter, meta)
+			sql, args := buildFilterCondition("sqlite", filter, meta)
 
 			if sql == "" {
 				t.Errorf("Expected SQL but got empty string")
