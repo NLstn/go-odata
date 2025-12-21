@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/nlstn/go-odata"
@@ -71,6 +72,11 @@ func TestSingleEntityNavigationPropertyFilter(t *testing.T) {
 	service.RegisterEntity(&Team{})
 	service.RegisterEntity(&TeamMember{})
 
+	// Helper to build filter URLs
+	buildFilterURL := func(path, filter string) string {
+		return path + "?$filter=" + url.QueryEscape(filter)
+	}
+
 	tests := []struct {
 		name           string
 		url            string
@@ -80,7 +86,7 @@ func TestSingleEntityNavigationPropertyFilter(t *testing.T) {
 	}{
 		{
 			name:           "Filter by single-entity navigation property - Team/ClubID",
-			url:            "/TeamMembers?$filter=Team/ClubID%20eq%20'club-1'",
+			url:            buildFilterURL("/TeamMembers", "Team/ClubID eq 'club-1'"),
 			expectedStatus: http.StatusOK,
 			expectedCount:  2, // Alice and Charlie are in teams that belong to club-1
 			validate: func(t *testing.T, body []byte) {
@@ -96,7 +102,7 @@ func TestSingleEntityNavigationPropertyFilter(t *testing.T) {
 		},
 		{
 			name:           "Filter by single-entity navigation property - nested path",
-			url:            "/TeamMembers?$filter=Team/Name%20eq%20'Team%20A'",
+			url:            buildFilterURL("/TeamMembers", "Team/Name eq 'Team A'"),
 			expectedStatus: http.StatusOK,
 			expectedCount:  1, // Only Alice is in Team A
 			validate: func(t *testing.T, body []byte) {
@@ -118,7 +124,7 @@ func TestSingleEntityNavigationPropertyFilter(t *testing.T) {
 		},
 		{
 			name:           "Filter with expand - both filter and expand navigation property",
-			url:            "/TeamMembers?$filter=Team/ClubID%20eq%20'club-2'&$expand=Team",
+			url:            "/TeamMembers?$filter=" + url.QueryEscape("Team/ClubID eq 'club-2'") + "&$expand=Team",
 			expectedStatus: http.StatusOK,
 			expectedCount:  1, // Only Bob is in a team that belongs to club-2
 			validate: func(t *testing.T, body []byte) {
@@ -194,7 +200,8 @@ func TestCollectionNavigationPropertyStillRequiresLambda(t *testing.T) {
 	service.RegisterEntity(&ProductDescription{})
 
 	// Test that collection navigation properties still require lambda operators
-	req := httptest.NewRequest(http.MethodGet, "/Products?$filter=Descriptions/LanguageKey%20eq%20'EN'", nil)
+	testURL := "/Products?$filter=" + url.QueryEscape("Descriptions/LanguageKey eq 'EN'")
+	req := httptest.NewRequest(http.MethodGet, testURL, nil)
 	w := httptest.NewRecorder()
 
 	service.ServeHTTP(w, req)
