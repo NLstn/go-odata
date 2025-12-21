@@ -14,8 +14,8 @@ type OrderedMap struct {
 // NewOrderedMap creates a new OrderedMap
 func NewOrderedMap() *OrderedMap {
 	return &OrderedMap{
-		keys:   make([]string, 0, 8), // Pre-allocate for typical entity size
-		values: make(map[string]interface{}, 8),
+		keys:   make([]string, 0, 16), // Pre-allocate for typical entity size (increased from 8)
+		values: make(map[string]interface{}, 16),
 	}
 }
 
@@ -87,8 +87,9 @@ func (om *OrderedMap) MarshalJSON() ([]byte, error) {
 		return []byte("{}"), nil
 	}
 
-	// Estimate buffer size: average 50 bytes per field (key + value + formatting)
-	estimatedSize := len(om.keys) * 50
+	// Estimate buffer size: average 100 bytes per field (increased from 50 for better accuracy)
+	// This reduces the likelihood of buffer reallocations during marshaling
+	estimatedSize := len(om.keys) * 100
 	buf := make([]byte, 0, estimatedSize)
 	buf = append(buf, '{')
 

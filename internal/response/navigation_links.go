@@ -17,6 +17,15 @@ func addNavigationLinks(data interface{}, metadata EntityMetadataProvider, expan
 	}
 
 	result := make([]interface{}, dataValue.Len())
+	
+	// Fast path for "none" metadata level - no processing needed
+	if metadataLevel == "none" {
+		for i := 0; i < dataValue.Len(); i++ {
+			result[i] = dataValue.Index(i).Interface()
+		}
+		return result
+	}
+
 	baseURL := buildBaseURL(r)
 
 	for i := 0; i < dataValue.Len(); i++ {
@@ -43,6 +52,7 @@ func processMapEntity(entity reflect.Value, metadata EntityMetadataProvider, exp
 		return nil
 	}
 
+	// Add ETag if present and metadata level is not "none"
 	if fullMetadata != nil && fullMetadata.ETagProperty != nil && metadataLevel != "none" {
 		etagValue := etag.Generate(entityMap, fullMetadata)
 		if etagValue != "" {
@@ -50,22 +60,21 @@ func processMapEntity(entity reflect.Value, metadata EntityMetadataProvider, exp
 		}
 	}
 
-	keySegment := buildKeySegmentFromMap(entityMap, metadata)
-	if keySegment != "" {
-		entityID := fmt.Sprintf("%s/%s(%s)", baseURL, entitySetName, keySegment)
-
-		switch metadataLevel {
-		case "full", "minimal":
+	// Add @odata.id for "full" and "minimal" metadata levels
+	if metadataLevel == "full" || metadataLevel == "minimal" {
+		keySegment := buildKeySegmentFromMap(entityMap, metadata)
+		if keySegment != "" {
+			entityID := fmt.Sprintf("%s/%s(%s)", baseURL, entitySetName, keySegment)
 			entityMap["@odata.id"] = entityID
 		}
 	}
 
+	// Add @odata.type for "full" metadata level
 	if metadataLevel == "full" {
 		entityTypeName := getEntityTypeFromSetName(entitySetName)
 		entityMap["@odata.type"] = "#" + metadata.GetNamespace() + "." + entityTypeName
-	}
-
-	if metadataLevel == "full" {
+		
+		// Add navigation links for unexpanded navigation properties in "full" mode
 		for _, prop := range metadata.GetProperties() {
 			if !prop.IsNavigationProp {
 				continue
@@ -92,6 +101,7 @@ func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataPro
 	entityMap := NewOrderedMap()
 	entityType := entity.Type()
 
+	// Add ETag if present and metadata level is not "none"
 	if fullMetadata != nil && fullMetadata.ETagProperty != nil && metadataLevel != "none" {
 		var entityInterface interface{}
 		if entity.Kind() == reflect.Ptr {
@@ -109,8 +119,8 @@ func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataPro
 		}
 	}
 
-	switch metadataLevel {
-	case "full", "minimal":
+	// Add @odata.id for "full" and "minimal" metadata levels
+	if metadataLevel == "full" || metadataLevel == "minimal" {
 		keySegment := BuildKeySegmentFromEntity(entity, metadata)
 		if keySegment != "" {
 			var entityID strings.Builder
@@ -125,6 +135,7 @@ func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataPro
 		}
 	}
 
+	// Add @odata.type for "full" metadata level
 	if metadataLevel == "full" {
 		entityTypeName := getEntityTypeFromSetName(entitySetName)
 		namespace := metadata.GetNamespace()
@@ -137,6 +148,7 @@ func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataPro
 		entityMap.Set("@odata.type", typeStr.String())
 	}
 
+	// Process entity fields
 	fieldInfos := getFieldInfos(entityType)
 	for j := 0; j < entity.NumField(); j++ {
 		info := fieldInfos[j]
@@ -149,6 +161,11 @@ func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataPro
 		propMeta := getCachedPropertyMetadata(field.Name, metadata)
 
 		if propMeta != nil && propMeta.IsNavigationProp {
+			// For minimal metadata, skip navigation properties unless they're expanded
+			if metadataLevel == "minimal" && !isPropertyExpanded(*propMeta, expandedProps) {
+				// Skip unexpanded navigation properties for minimal metadata
+				continue
+			}
 			processNavigationPropertyOrderedWithMetadata(entityMap, entity, propMeta, fieldValue, info.JsonName, expandedProps, baseURL, entitySetName, metadata, metadataLevel)
 		} else {
 			entityMap.Set(info.JsonName, fieldValue.Interface())
