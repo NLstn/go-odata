@@ -769,6 +769,9 @@ func main() {
 func startComplianceServer() (*exec.Cmd, error) {
 	fmt.Println("Starting compliance server...")
 
+	// Kill any existing process on port 9090 to ensure clean state
+	killExistingServerOnPort()
+
 	// Find the project root
 	projectRoot, err := findProjectRoot()
 	if err != nil {
@@ -867,6 +870,36 @@ func checkServerConnectivity() bool {
 	//nolint:errcheck
 	defer func() { _ = resp.Body.Close() }()
 	return resp.StatusCode == 200
+}
+
+func killExistingServerOnPort() {
+	// Try to kill any existing process on port 9090
+	// Extract port from serverURL
+	port := "9090"
+	if strings.Contains(*serverURL, ":") {
+		parts := strings.Split(*serverURL, ":")
+		if len(parts) > 0 {
+			port = strings.TrimPrefix(parts[len(parts)-1], "/")
+		}
+	}
+
+	// Use lsof to find process on port
+	cmd := exec.Command("lsof", "-ti", fmt.Sprintf(":%s", port))
+	output, err := cmd.Output()
+	if err != nil {
+		// No process found or lsof not available, which is fine
+		return
+	}
+
+	// Kill the process
+	pidStr := strings.TrimSpace(string(output))
+	if pidStr != "" {
+		killCmd := exec.Command("kill", "-9", pidStr)
+		//nolint:errcheck
+		_ = killCmd.Run()
+		// Give it a moment to actually die
+		time.Sleep(500 * time.Millisecond)
+	}
 }
 
 func findProjectRoot() (string, error) {
