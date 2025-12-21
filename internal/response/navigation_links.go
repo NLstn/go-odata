@@ -98,8 +98,20 @@ func processMapEntity(entity reflect.Value, metadata EntityMetadataProvider, exp
 }
 
 func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataProvider, expandedProps []string, baseURL, entitySetName string, metadataLevel string, fullMetadata *metadata.EntityMetadata) *OrderedMap {
-	entityMap := NewOrderedMap()
 	entityType := entity.Type()
+	fieldInfos := getFieldInfos(entityType)
+	
+	// Pre-calculate capacity: fields + potential metadata annotations (etag, id, type)
+	capacity := entity.NumField() + 3
+	entityMap := NewOrderedMapWithCapacity(capacity)
+
+	// Pre-compute key segment and entity ID if needed (reuse across annotations)
+	var keySegment string
+	needsKeySegment := (metadataLevel == "full" || metadataLevel == "minimal")
+	
+	if needsKeySegment {
+		keySegment = buildKeySegmentFromEntityCached(entity, metadata, fieldInfos)
+	}
 
 	// Add ETag if present and metadata level is not "none"
 	if fullMetadata != nil && fullMetadata.ETagProperty != nil && metadataLevel != "none" {
@@ -120,19 +132,16 @@ func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataPro
 	}
 
 	// Add @odata.id for "full" and "minimal" metadata levels
-	if metadataLevel == "full" || metadataLevel == "minimal" {
-		keySegment := BuildKeySegmentFromEntity(entity, metadata)
-		if keySegment != "" {
-			var entityID strings.Builder
-			entityID.Grow(len(baseURL) + len(entitySetName) + len(keySegment) + 3)
-			entityID.WriteString(baseURL)
-			entityID.WriteByte('/')
-			entityID.WriteString(entitySetName)
-			entityID.WriteByte('(')
-			entityID.WriteString(keySegment)
-			entityID.WriteByte(')')
-			entityMap.Set("@odata.id", entityID.String())
-		}
+	if needsKeySegment && keySegment != "" {
+		var entityID strings.Builder
+		entityID.Grow(len(baseURL) + len(entitySetName) + len(keySegment) + 3)
+		entityID.WriteString(baseURL)
+		entityID.WriteByte('/')
+		entityID.WriteString(entitySetName)
+		entityID.WriteByte('(')
+		entityID.WriteString(keySegment)
+		entityID.WriteByte(')')
+		entityMap.Set("@odata.id", entityID.String())
 	}
 
 	// Add @odata.type for "full" metadata level
@@ -148,8 +157,10 @@ func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataPro
 		entityMap.Set("@odata.type", typeStr.String())
 	}
 
-	// Process entity fields
-	fieldInfos := getFieldInfos(entityType)
+	// Process entity fields - optimized to reduce reflection calls
+	// Cache property metadata lookups per entity type
+	propMetaMap := getCachedPropertyMetadataMap(metadata)
+	
 	for j := 0; j < entity.NumField(); j++ {
 		info := fieldInfos[j]
 		if !info.IsExported {
@@ -157,8 +168,7 @@ func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataPro
 		}
 
 		field := entityType.Field(j)
-		fieldValue := entity.Field(j)
-		propMeta := getCachedPropertyMetadata(field.Name, metadata)
+		propMeta := propMetaMap[field.Name]
 
 		if propMeta != nil && propMeta.IsNavigationProp {
 			// For minimal metadata, skip navigation properties unless they're expanded
@@ -166,8 +176,12 @@ func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataPro
 				// Skip unexpanded navigation properties for minimal metadata
 				continue
 			}
-			processNavigationPropertyOrderedWithMetadata(entityMap, entity, propMeta, fieldValue, info.JsonName, expandedProps, baseURL, entitySetName, metadata, metadataLevel)
+			// Only get fieldValue when we actually need it
+			fieldValue := entity.Field(j)
+			processNavigationPropertyOrderedWithMetadata(entityMap, entity, propMeta, fieldValue, info.JsonName, expandedProps, baseURL, entitySetName, metadata, metadataLevel, keySegment)
 		} else {
+			// Get field value once and reuse
+			fieldValue := entity.Field(j)
 			entityMap.Set(info.JsonName, fieldValue.Interface())
 		}
 	}
@@ -184,11 +198,13 @@ func isPropertyExpanded(prop PropertyMetadata, expandedProps []string) bool {
 	return false
 }
 
-func processNavigationPropertyOrderedWithMetadata(entityMap *OrderedMap, entity reflect.Value, propMeta *PropertyMetadata, fieldValue reflect.Value, jsonName string, expandedProps []string, baseURL, entitySetName string, metadata EntityMetadataProvider, metadataLevel string) {
+func processNavigationPropertyOrderedWithMetadata(entityMap *OrderedMap, entity reflect.Value, propMeta *PropertyMetadata, fieldValue reflect.Value, jsonName string, expandedProps []string, baseURL, entitySetName string, metadata EntityMetadataProvider, metadataLevel string, keySegment string) {
 	if isPropertyExpanded(*propMeta, expandedProps) {
 		entityMap.Set(jsonName, fieldValue.Interface())
 	} else if metadataLevel == "full" {
-		keySegment := BuildKeySegmentFromEntity(entity, metadata)
+		if keySegment == "" {
+			keySegment = BuildKeySegmentFromEntity(entity, metadata)
+		}
 		if keySegment != "" {
 			navLink := fmt.Sprintf("%s/%s(%s)/%s", baseURL, entitySetName, keySegment, propMeta.JsonName)
 			entityMap.Set(jsonName+"@odata.navigationLink", navLink)
@@ -198,6 +214,11 @@ func processNavigationPropertyOrderedWithMetadata(entityMap *OrderedMap, entity 
 
 // BuildKeySegmentFromEntity builds the key segment for URLs from an entity and metadata.
 func BuildKeySegmentFromEntity(entity reflect.Value, metadata EntityMetadataProvider) string {
+	return buildKeySegmentFromEntityCached(entity, metadata, nil)
+}
+
+// buildKeySegmentFromEntityCached is an optimized version that reuses fieldInfos if available
+func buildKeySegmentFromEntityCached(entity reflect.Value, metadata EntityMetadataProvider, _ []fieldInfo) string {
 	keyProps := metadata.GetKeyProperties()
 	if len(keyProps) == 0 {
 		return ""
@@ -211,6 +232,7 @@ func BuildKeySegmentFromEntity(entity reflect.Value, metadata EntityMetadataProv
 		return ""
 	}
 
+	// For composite keys, build the key segment
 	var parts []string
 	for _, keyProp := range keyProps {
 		keyFieldValue := entity.FieldByName(keyProp.Name)
