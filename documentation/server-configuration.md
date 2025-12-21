@@ -6,6 +6,7 @@ This guide covers how to configure and integrate the go-odata service into your 
 
 - [Basic Setup](#basic-setup)
 - [Customizing the Metadata Namespace](#customizing-the-metadata-namespace)
+- [Default Max Top Configuration](#default-max-top-configuration)
 - [Service as Handler](#service-as-handler)
 - [Custom Path Mounting](#custom-path-mounting)
 - [Adding Middleware](#adding-middleware)
@@ -76,6 +77,84 @@ if err := service.SetNamespace("Contoso.Sales"); err != nil {
 
 // Register entities after the namespace is set
 service.RegisterEntity(&Product{})
+```
+
+## Default Max Top Configuration
+
+You can configure default limits on the number of results returned when no explicit `$top` is provided by the client. This is useful to prevent clients from requesting large result sets that could impact performance.
+
+### Service-Level Default
+
+Set a default maximum number of results for all entity sets:
+
+```go
+service := odata.NewService(db)
+service.RegisterEntity(&Product{})
+service.RegisterEntity(&Order{})
+
+// Set service-level default: all entity sets limited to 100 results by default
+service.SetDefaultMaxTop(100)
+```
+
+### Entity-Level Default
+
+Override the service-level default for specific entity sets:
+
+```go
+// Set service-level default
+service.SetDefaultMaxTop(100)
+
+// Override for specific entity sets
+service.SetEntityDefaultMaxTop("Products", 50)  // Products limited to 50
+service.SetEntityDefaultMaxTop("Orders", 200)   // Orders limited to 200
+```
+
+### Priority Order
+
+The library applies limits in the following priority order (highest to lowest):
+
+1. **Explicit `$top` in the request** - Always takes precedence
+2. **`Prefer: odata.maxpagesize` header** - Client preference
+3. **Entity-level default** - Set via `SetEntityDefaultMaxTop()`
+4. **Service-level default** - Set via `SetDefaultMaxTop()`
+5. **No limit** - If none of the above are set
+
+### Removing Defaults
+
+Pass `0` or a negative value to remove a default limit:
+
+```go
+// Remove service-level default
+service.SetDefaultMaxTop(0)
+
+// Remove entity-level default (falls back to service-level)
+service.SetEntityDefaultMaxTop("Products", 0)
+```
+
+### Example
+
+```go
+service := odata.NewService(db)
+service.RegisterEntity(&Product{})
+service.RegisterEntity(&Order{})
+
+// Set service-level default
+service.SetDefaultMaxTop(100)
+
+// Override for Products
+service.SetEntityDefaultMaxTop("Products", 25)
+
+// Request: GET /Products
+// Returns: 25 results (entity-level default)
+
+// Request: GET /Orders
+// Returns: 100 results (service-level default)
+
+// Request: GET /Products?$top=10
+// Returns: 10 results (explicit $top overrides defaults)
+
+// Request: GET /Products with Prefer: odata.maxpagesize=5
+// Returns: 5 results (maxpagesize preference overrides defaults)
 ```
 
 ## Service as Handler
