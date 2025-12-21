@@ -451,3 +451,47 @@ func TestSetDefaultMaxTop_WithSkipAndTop(t *testing.T) {
 		t.Errorf("Expected first product ID to be 6, got %d", firstID)
 	}
 }
+
+func TestSetEntityDefaultMaxTop_ServiceDefaultChangesAfterEntitySet(t *testing.T) {
+	service, _ := setupTestServiceWithProducts(t, 50)
+
+	// Step 1: Set service-level default
+	service.SetDefaultMaxTop(20)
+
+	// Step 2: Set entity-level default
+	if err := service.SetEntityDefaultMaxTop("TestProducts", 10); err != nil {
+		t.Fatalf("Failed to set entity default max top: %v", err)
+	}
+
+	// Step 3: Change service-level default
+	service.SetDefaultMaxTop(30)
+
+	// Step 4: Remove entity-level default - should fall back to current service default (30)
+	if err := service.SetEntityDefaultMaxTop("TestProducts", 0); err != nil {
+		t.Fatalf("Failed to remove entity default max top: %v", err)
+	}
+
+	// Test - should return 30 results (current service default, not the old 20)
+	req := httptest.NewRequest(http.MethodGet, "/TestProducts", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected status 200, got %d", w.Code)
+	}
+
+	var response map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	value, ok := response["value"].([]interface{})
+	if !ok {
+		t.Fatal("value field is not an array")
+	}
+
+	if len(value) != 30 {
+		t.Errorf("Expected 30 results (should use current service default), got %d", len(value))
+	}
+}

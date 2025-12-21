@@ -1433,8 +1433,9 @@ func (s *Service) SetEntityDefaultMaxTop(entitySetName string, maxTop int) error
 		handler.SetDefaultMaxTop(s.defaultMaxTop)
 		s.logger.Debug("Removed default max top for entity", "entitySet", entitySetName)
 	} else {
+		// Store entity-level default in metadata
+		// Note: handler.defaultMaxTop continues to hold the service-level default as fallback
 		metadata.DefaultMaxTop = &maxTop
-		handler.SetDefaultMaxTop(&maxTop)
 		s.logger.Debug("Set default max top for entity", "entitySet", entitySetName, "maxTop", maxTop)
 	}
 
