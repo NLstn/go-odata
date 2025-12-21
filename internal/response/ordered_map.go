@@ -10,7 +10,9 @@ import (
 // bufferPool is a sync.Pool for reusing bytes.Buffer instances
 var bufferPool = sync.Pool{
 	New: func() interface{} {
-		return new(bytes.Buffer)
+		buf := new(bytes.Buffer)
+		buf.Grow(512) // Pre-allocate reasonable capacity for typical JSON responses
+		return buf
 	},
 }
 
