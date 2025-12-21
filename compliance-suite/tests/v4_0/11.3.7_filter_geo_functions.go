@@ -77,19 +77,19 @@ func validateGeoResponse(respBody []byte) error {
 	if err := json.Unmarshal(respBody, &result); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
-	
+
 	// Validate response structure
 	value, ok := result["value"]
 	if !ok {
 		return fmt.Errorf("response missing 'value' array")
 	}
-	
+
 	// Value must be an array (empty is ok if no products match)
 	products, ok := value.([]interface{})
 	if !ok {
 		return fmt.Errorf("'value' is not an array")
 	}
-	
+
 	// If there are products, validate they have required properties
 	for i, p := range products {
 		product, ok := p.(map[string]interface{})
@@ -101,7 +101,7 @@ func validateGeoResponse(respBody []byte) error {
 			return fmt.Errorf("product at index %d missing ID", i)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -278,13 +278,13 @@ func testGeoCombinedFilter(ctx *framework.TestContext) error {
 		if err := validateGeoResponse(resp.Body); err != nil {
 			return err
 		}
-		
+
 		// Additional validation for the combined filter: verify Price filter was applied
 		var result map[string]interface{}
 		if err := json.Unmarshal(resp.Body, &result); err != nil {
 			return fmt.Errorf("failed to parse response: %w", err)
 		}
-		
+
 		if value, ok := result["value"].([]interface{}); ok {
 			for i, p := range value {
 				if product, ok := p.(map[string]interface{}); ok {
@@ -306,7 +306,7 @@ func testGeoCombinedFilter(ctx *framework.TestContext) error {
 				}
 			}
 		}
-		
+
 		return nil
 	case 400, 500:
 		// Database doesn't support geospatial functions or combined filters
