@@ -12,7 +12,7 @@ import (
 // Per OData v4.01 spec 5.1.1.15, properties of entities related with cardinality 0..1 or 1 can be accessed directly
 func FilterOnSingleEntityNavigationProperties() *framework.TestSuite {
 	suite := framework.NewTestSuite(
-		"11.3.9 Filter on Single-Entity Navigation Properties",
+		"11.3.10 Filter on Single-Entity Navigation Properties",
 		"Tests filtering on single-entity (cardinality 0..1 or 1) navigation properties",
 		"https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part2-url-conventions.html#sec_PathExpressions",
 	)

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/nlstn/go-odata"
@@ -210,5 +211,65 @@ func TestCollectionNavigationPropertyStillRequiresLambda(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("Expected status %d for collection navigation property without lambda, got %d. Body: %s",
 			http.StatusBadRequest, w.Code, w.Body.String())
+	}
+}
+
+// TestMultiLevelNavigationPathRejection ensures multi-level navigation paths are rejected with clear error
+func TestMultiLevelNavigationPathRejection(t *testing.T) {
+	// Setup database
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("Failed to connect to database: %v", err)
+	}
+
+	// Define test entities with multi-level navigation
+	type Country struct {
+		ID   string `json:"ID" gorm:"primaryKey;type:varchar(36)" odata:"key"`
+		Name string `json:"Name" gorm:"not null" odata:"required"`
+	}
+
+	type Club struct {
+		ID        string   `json:"ID" gorm:"primaryKey;type:varchar(36)" odata:"key"`
+		Name      string   `json:"Name" gorm:"not null" odata:"required"`
+		CountryID string   `json:"CountryID" gorm:"type:varchar(36);not null" odata:"required"`
+		Country   *Country `json:"Country" gorm:"foreignKey:CountryID;references:ID"`
+	}
+
+	type Team struct {
+		ID     string `json:"ID" gorm:"primaryKey;type:varchar(36)" odata:"key"`
+		Name   string `json:"Name" gorm:"not null" odata:"required"`
+		ClubID string `json:"ClubID" gorm:"type:varchar(36);not null" odata:"required"`
+		Club   *Club  `json:"Club" gorm:"foreignKey:ClubID;references:ID"`
+	}
+
+	// Migrate
+	if err := db.AutoMigrate(&Country{}, &Club{}, &Team{}); err != nil {
+		t.Fatalf("Failed to migrate: %v", err)
+	}
+
+	// Create OData service
+	service := odata.NewService(db)
+	service.RegisterEntity(&Country{})
+	service.RegisterEntity(&Club{})
+	service.RegisterEntity(&Team{})
+
+	// Test multi-level navigation path (Team -> Club -> Country)
+	testURL := "/Teams?$filter=" + url.QueryEscape("Club/Country/Name eq 'USA'")
+	req := httptest.NewRequest(http.MethodGet, testURL, nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	// This should return an error because multi-level paths are not supported
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d for multi-level navigation path, got %d. Body: %s",
+			http.StatusBadRequest, w.Code, w.Body.String())
+	}
+
+	// The error message will say "property does not exist" which is acceptable
+	// since multi-level paths are validated by only accepting exactly 2 segments
+	bodyStr := w.Body.String()
+	if !strings.Contains(bodyStr, "does not exist") && !strings.Contains(bodyStr, "not supported") {
+		t.Errorf("Error message should indicate the path is invalid. Body: %s", bodyStr)
 	}
 }

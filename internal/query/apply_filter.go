@@ -18,11 +18,14 @@ func getDatabaseDialect(db *gorm.DB) string {
 }
 
 // quoteIdent safely quotes identifiers in a portable way (double quotes work for sqlite and postgres).
+// Embedded double quotes are escaped by doubling them per SQL standard.
 func quoteIdent(_ string, ident string) string {
 	if ident == "" {
 		return ident
 	}
-	return fmt.Sprintf("\"%s\"", ident)
+	// Escape any embedded double quotes by doubling them
+	escaped := strings.ReplaceAll(ident, "\"", "\"\"")
+	return fmt.Sprintf("\"%s\"", escaped)
 }
 
 // applyFilter applies filter expressions to the GORM query
@@ -47,6 +50,8 @@ func applyFilter(db *gorm.DB, filter *FilterExpression, entityMetadata *metadata
 
 // addNavigationJoins adds JOIN clauses for single-entity navigation properties used in filters
 // Per OData v4 spec 5.1.1.15, properties of entities related with cardinality 0..1 or 1 can be accessed directly
+// Note: If the same navigation property is also in $expand, GORM will handle both the JOIN (for filtering)
+// and Preload (for expanding) efficiently without duplicate data loading.
 func addNavigationJoins(db *gorm.DB, filter *FilterExpression, entityMetadata *metadata.EntityMetadata) *gorm.DB {
 	if filter == nil || entityMetadata == nil {
 		return db

@@ -1095,6 +1095,8 @@ func (property *PropertyMetadata) FindComplexField(name string) *PropertyMetadat
 // For example, "Team/ClubID" where Team is a single-entity (not collection) navigation property.
 // Returns true if the first segment is a single-entity navigation property and subsequent segments exist.
 // Per OData v4 spec 5.1.1.15, properties of entities related with cardinality 0..1 or 1 can be accessed directly.
+// Note: This validates only single-level navigation paths (e.g., "Team/ClubID"). Multi-level paths
+// (e.g., "Team/Club/Name") are not currently supported and will return false.
 func (metadata *EntityMetadata) IsSingleEntityNavigationPath(path string) bool {
 	if metadata == nil {
 		return false
@@ -1106,7 +1108,9 @@ func (metadata *EntityMetadata) IsSingleEntityNavigationPath(path string) bool {
 	}
 
 	segments := strings.Split(trimmedPath, "/")
-	if len(segments) < 2 {
+	// Currently only support single-level navigation (e.g., "Team/ClubID")
+	// Multi-level paths (e.g., "Team/Club/Name") would require multiple JOINs
+	if len(segments) != 2 {
 		return false
 	}
 
@@ -1119,7 +1123,14 @@ func (metadata *EntityMetadata) IsSingleEntityNavigationPath(path string) bool {
 
 	// Check if it's a single-entity navigation property (not a collection)
 	// NavigationIsArray == false means it's a single-entity navigation (cardinality 0..1 or 1)
-	return !navProp.NavigationIsArray
+	if navProp.NavigationIsArray {
+		return false
+	}
+
+	// Note: We don't validate that the second segment is a valid property on the target entity
+	// because we don't have access to the related entity's metadata here.
+	// Validation will occur during query execution, resulting in a database error if invalid.
+	return true
 }
 
 // dereferenceType unwraps pointer types to obtain the underlying type.

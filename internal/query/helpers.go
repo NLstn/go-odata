@@ -70,6 +70,8 @@ func GetColumnName(propertyName string, entityMetadata *metadata.EntityMetadata)
 
 	// Check if this is a single-entity navigation property path (e.g., "Team/ClubID")
 	// Per OData v4 spec 5.1.1.15, properties of entities with cardinality 0..1 or 1 can be accessed directly
+	// Note: IsSingleEntityNavigationPath validates the navigation property but not the target property.
+	// If the target property doesn't exist, the database will return an error with the column name.
 	if entityMetadata.IsSingleEntityNavigationPath(propertyName) {
 		segments := strings.Split(propertyName, "/")
 		if len(segments) >= 2 {
