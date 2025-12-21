@@ -77,6 +77,35 @@ func seedDatabase(db *gorm.DB) error {
 		return fmt.Errorf("failed to seed API keys: %w", err)
 	}
 
+	// For PostgreSQL, reset sequence values to match the max ID in each table
+	// This ensures that the next auto-generated ID doesn't conflict with existing IDs
+	// Only reset sequences for tables that have auto-increment integer primary keys
+	if dialectName == "postgres" {
+		// Map of table names to their sequence names and column names
+		// Only includes tables with auto-increment IDs
+		sequenceResets := map[string]struct {
+			sequence string
+			column   string
+		}{
+			"categories":    {sequence: "categories_id_seq", column: "id"},
+			"products":      {sequence: "products_id_seq", column: "id"},
+			"company_infos": {sequence: "company_infos_id_seq", column: "id"},
+			"users":         {sequence: "users_user_id_seq", column: "user_id"},
+		}
+
+		for table, info := range sequenceResets {
+			// Set sequence value to MAX(column) + 1 from the table
+			resetSQL := fmt.Sprintf(
+				"SELECT setval('%s', COALESCE((SELECT MAX(%s) FROM %s), 0) + 1, false)",
+				info.sequence, info.column, table,
+			)
+			if err := db.Exec(resetSQL).Error; err != nil {
+				// Log but don't fail - just a warning
+				fmt.Printf("Warning: Could not reset sequence %s: %v\n", info.sequence, err)
+			}
+		}
+	}
+
 	fmt.Printf("Database seeded with %d categories, %d products, %d descriptions, %d users, %d API keys, and company info\n",
 		len(sampleCategories), len(sampleProducts), len(sampleDescriptions), len(sampleUsers), len(sampleAPIKeys))
 	return nil
