@@ -144,12 +144,19 @@ func addNavigationJoin(db *gorm.DB, navPropName string, entityMetadata *metadata
 
 	// Build the JOIN clause
 	// LEFT JOIN to handle nullable navigation properties (cardinality 0..1)
+	// Use GORM's quote mechanism to safely quote identifiers
+	dialect := getDatabaseDialect(db)
+	quotedRelatedTable := quoteIdent(dialect, relatedTableName)
+	quotedParentTable := quoteIdent(dialect, parentTableName)
+	quotedForeignKey := quoteIdent(dialect, foreignKeyColumn)
+	quotedPrimaryKey := quoteIdent(dialect, relatedPrimaryKey)
+	
 	joinClause := fmt.Sprintf("LEFT JOIN %s ON %s.%s = %s.%s",
-		relatedTableName,
-		parentTableName,
-		foreignKeyColumn,
-		relatedTableName,
-		relatedPrimaryKey)
+		quotedRelatedTable,
+		quotedParentTable,
+		quotedForeignKey,
+		quotedRelatedTable,
+		quotedPrimaryKey)
 
 	return db.Joins(joinClause)
 }
