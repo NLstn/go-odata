@@ -25,9 +25,11 @@ func seedDatabase(db *gorm.DB, extensive bool) error {
 
 	// For PostgreSQL, explicitly reset sequences after dropping tables
 	// This ensures auto-increment columns start from 1 after reseeding
+	// Only drop sequences for tables that have auto-increment integer primary keys
 	if dialectName == "postgres" {
 		// List of table names that need sequence resets (tables with auto-increment primary keys)
-		tables := []string{"categories", "products", "product_descriptions", "company_infos", "api_keys"}
+		// Excludes tables with composite keys (product_descriptions) or UUID keys (api_keys)
+		tables := []string{"categories", "products", "company_infos"}
 		for _, table := range tables {
 			// PostgreSQL convention: sequence name is table_column_seq
 			// GORM uses lowercase table names and "id" for primary key columns by default
