@@ -24,6 +24,7 @@ type EntityHandler struct {
 	ftsManager           *query.FTSManager
 	keyGeneratorResolver func(string) (func(context.Context) (interface{}, error), bool)
 	overwrite            *entityOverwriteHandlers
+	defaultMaxTop        *int
 }
 
 // NewEntityHandler creates a new entity handler
@@ -85,6 +86,11 @@ func (h *EntityHandler) qualifiedTypeName(typeName string) string {
 // SetDeltaTracker configures the change tracker used for odata.track-changes support.
 func (h *EntityHandler) SetDeltaTracker(tracker *trackchanges.Tracker) {
 	h.tracker = tracker
+}
+
+// SetDefaultMaxTop sets the default maximum number of results for this entity handler.
+func (h *EntityHandler) SetDefaultMaxTop(maxTop *int) {
+	h.defaultMaxTop = maxTop
 }
 
 // isMethodDisabled checks if a given HTTP method is disabled for this entity
