@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -842,27 +843,41 @@ func checkServerConnectivity() bool {
 }
 
 func killExistingServerOnPort() {
-	// Try to kill any existing process on port 9090
-	// Extract port from serverURL
-	port := "9090"
-	if strings.Contains(*serverURL, ":") {
-		parts := strings.Split(*serverURL, ":")
-		if len(parts) > 0 {
-			port = strings.TrimPrefix(parts[len(parts)-1], "/")
-		}
-	}
-
-	// Use lsof to find process on port
-	cmd := exec.Command("lsof", "-ti", fmt.Sprintf(":%s", port))
-	output, err := cmd.Output()
+	// Try to kill any existing process on the server port
+	// Extract port from serverURL using proper URL parsing
+	parsedURL, err := url.Parse(*serverURL)
 	if err != nil {
-		// No process found or lsof not available, which is fine
 		return
 	}
 
-	// Kill the process
+	port := parsedURL.Port()
+	if port == "" {
+		// Default ports based on scheme
+		if parsedURL.Scheme == "https" {
+			port = "443"
+		} else {
+			port = "80"
+		}
+	}
+
+	// Use lsof to find process on port (Unix-like systems only)
+	cmd := exec.Command("lsof", "-ti", fmt.Sprintf(":%s", port))
+	output, err := cmd.Output()
+	if err != nil {
+		// No process found or lsof not available (e.g., Windows), which is fine
+		return
+	}
+
+	// Validate and sanitize PID - must be numeric only
 	pidStr := strings.TrimSpace(string(output))
 	if pidStr != "" {
+		// Ensure PID is numeric to prevent command injection
+		for _, c := range pidStr {
+			if c < '0' || c > '9' {
+				// Invalid PID format, skip
+				return
+			}
+		}
 		killCmd := exec.Command("kill", "-9", pidStr)
 		//nolint:errcheck
 		_ = killCmd.Run()
