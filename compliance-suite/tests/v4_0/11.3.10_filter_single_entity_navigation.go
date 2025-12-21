@@ -80,9 +80,9 @@ func testNavigationPropertyPathComparison(ctx *framework.TestContext) error {
 	// Test various comparison operators with navigation property paths
 	// This tests the spec requirement that navigation property paths work like regular properties
 	
-	resp, err := ctx.GET("/Products?$filter=Supplier/Country eq 'USA'")
+	resp, err := ctx.GET("/Products?$filter=Category/Name eq 'Electronics'")
 	if err != nil {
-		ctx.Skip("Products entity set not available or doesn't have Supplier navigation property")
+		ctx.Skip("Products entity set not available or doesn't have Category navigation property")
 		return nil
 	}
 
@@ -122,10 +122,10 @@ func testCombineFilterAndExpandNavigation(ctx *framework.TestContext) error {
 	// Test that we can both filter on and expand the same navigation property
 	// Per spec, this should work seamlessly
 	
-	escapedFilter := url.QueryEscape("Team/ClubID eq 'club-1'")
-	resp, err := ctx.GET("/TeamMembers?$filter=" + escapedFilter + "&$expand=Team")
+	escapedFilter := url.QueryEscape("Category/Name eq 'Electronics'")
+	resp, err := ctx.GET("/Products?$filter=" + escapedFilter + "&$expand=Category")
 	if err != nil {
-		ctx.Skip("TeamMembers entity set not available")
+		ctx.Skip("Products entity set not available")
 		return nil
 	}
 
@@ -146,8 +146,8 @@ func testCombineFilterAndExpandNavigation(ctx *framework.TestContext) error {
 	// Check that expanded navigation properties are included
 	if len(values) > 0 {
 		firstItem := values[0].(map[string]interface{})
-		if _, hasTeam := firstItem["Team"]; !hasTeam {
-			return fmt.Errorf("expected Team property to be expanded in response")
+		if _, hasCategory := firstItem["Category"]; !hasCategory {
+			return fmt.Errorf("expected Category property to be expanded in response")
 		}
 	}
 
