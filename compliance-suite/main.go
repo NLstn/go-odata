@@ -805,6 +805,11 @@ func startComplianceServer() (*exec.Cmd, error) {
 			// Using /tmp ensures a clean state for each test run
 			dsn = "/tmp/go-odata-compliance.db"
 		}
+		// Clean up any existing database file to ensure fresh state
+		if dsn != ":memory:" {
+			//nolint:errcheck
+			_ = os.Remove(dsn)
+		}
 		dbArgs = append(dbArgs, "-db", "sqlite", "-dsn", dsn)
 	}
 
@@ -844,6 +849,13 @@ func stopComplianceServer(cmd *exec.Cmd) {
 		//nolint:errcheck
 		_ = cmd.Wait()
 		fmt.Println("Server stopped.")
+	}
+	
+	// Clean up SQLite database file if using file-based storage
+	if *dbType == "sqlite" && *dbDSN == "" {
+		dbFile := "/tmp/go-odata-compliance.db"
+		//nolint:errcheck
+		_ = os.Remove(dbFile)
 	}
 }
 
