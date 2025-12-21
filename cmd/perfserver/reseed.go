@@ -15,9 +15,28 @@ import (
 // seedDatabase initializes the database with extensive sample data for performance testing
 // This function drops and recreates all tables to ensure a clean state
 func seedDatabase(db *gorm.DB, extensive bool) error {
+	// Get the database dialect name to determine the database type
+	dialectName := db.Name()
+
 	// Drop all tables (GORM handles the correct order based on foreign keys)
 	if err := db.Migrator().DropTable(&entities.ProductDescription{}, &entities.Product{}, &entities.Category{}, &entities.CompanyInfo{}, &entities.APIKey{}); err != nil {
 		return fmt.Errorf("failed to drop tables: %w", err)
+	}
+
+	// For PostgreSQL, explicitly reset sequences after dropping tables
+	// This ensures auto-increment columns start from 1 after reseeding
+	if dialectName == "postgres" {
+		// List of table names that need sequence resets (tables with auto-increment primary keys)
+		tables := []string{"categories", "products", "product_descriptions", "company_infos", "api_keys"}
+		for _, table := range tables {
+			// PostgreSQL convention: sequence name is table_column_seq
+			// GORM uses lowercase table names and "id" for primary key columns by default
+			sequenceName := table + "_id_seq"
+			if err := db.Exec(fmt.Sprintf("DROP SEQUENCE IF EXISTS %s CASCADE", sequenceName)).Error; err != nil {
+				// Log but don't fail - sequence might not exist
+				fmt.Printf("Note: Could not drop sequence %s: %v\n", sequenceName, err)
+			}
+		}
 	}
 
 	// Recreate tables with fresh schema (auto-increment counters are automatically reset)
