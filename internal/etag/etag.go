@@ -15,12 +15,14 @@ import (
 
 // fieldIndexCache caches field indices by type and field name
 type fieldIndexCache struct {
-	mu    sync.RWMutex
-	cache map[reflect.Type]map[string]int
+	mu       sync.RWMutex
+	cache    map[reflect.Type]map[string]int
+	maxTypes int
 }
 
 var globalFieldIndexCache = &fieldIndexCache{
-	cache: make(map[reflect.Type]map[string]int),
+	cache:    make(map[reflect.Type]map[string]int),
+	maxTypes: 1000, // Limit cache to 1000 types to prevent unbounded growth
 }
 
 // getFieldIndex returns the cached field index for a type and field name
@@ -40,6 +42,12 @@ func getFieldIndex(t reflect.Type, fieldName string) (int, bool) {
 	if typeCache, ok := globalFieldIndexCache.cache[t]; ok {
 		idx, found := typeCache[fieldName]
 		return idx, found
+	}
+
+	// Check cache size limit to prevent unbounded growth
+	if len(globalFieldIndexCache.cache) >= globalFieldIndexCache.maxTypes {
+		// Clear cache when limit is reached (simple eviction strategy)
+		globalFieldIndexCache.cache = make(map[reflect.Type]map[string]int)
 	}
 
 	// Build cache for this type
@@ -115,10 +123,16 @@ func Generate(entity interface{}, meta *metadata.EntityMetadata) string {
 	hash := sha256.Sum256([]byte(etagSource))
 	
 	// Use strings.Builder from pool for efficient string concatenation
-	sb := stringBuilderPool.Get().(*strings.Builder)
+	sb := stringBuilderPool.Get().(*strings.Builder) //nolint:errcheck // sync.Pool.Get() doesn't return error
 	sb.Reset()
 	sb.Grow(68) // Pre-allocate for "W/\"" + 64 hex chars + "\"" = 68 bytes
-	defer stringBuilderPool.Put(sb)
+	defer func() {
+		// Only return builders to pool if they're not too large (< 1KB)
+		// This prevents unbounded memory growth from large strings
+		if sb.Cap() < 1024 {
+			stringBuilderPool.Put(sb)
+		}
+	}()
 	
 	sb.WriteString("W/\"")
 	sb.WriteString(hex.EncodeToString(hash[:]))

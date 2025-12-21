@@ -99,9 +99,15 @@ func (om *OrderedMap) MarshalJSON() ([]byte, error) {
 	}
 
 	// Get buffer from pool
-	buf := bufferPool.Get().(*bytes.Buffer)
+	buf := bufferPool.Get().(*bytes.Buffer) //nolint:errcheck // sync.Pool.Get() doesn't return error
 	buf.Reset()
-	defer bufferPool.Put(buf)
+	defer func() {
+		// Only return buffers to pool if they're not too large (< 64KB)
+		// This prevents unbounded memory growth from large responses
+		if buf.Cap() < 65536 {
+			bufferPool.Put(buf)
+		}
+	}()
 	
 	// Estimate initial capacity
 	estimatedSize := len(om.keys) * 100
