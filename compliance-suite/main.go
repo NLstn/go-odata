@@ -899,22 +899,40 @@ func killExistingServerOnPort() {
 		return
 	}
 
-	// Validate and sanitize PID - must be numeric only
-	pidStr := strings.TrimSpace(string(output))
-	if pidStr != "" {
-		// Ensure PID is numeric to prevent command injection
+	// Split by newline to handle multiple PIDs
+	pidsStr := strings.TrimSpace(string(output))
+	if pidsStr == "" {
+		return
+	}
+
+	pids := strings.Split(pidsStr, "\n")
+	for _, pidStr := range pids {
+		pidStr = strings.TrimSpace(pidStr)
+		if pidStr == "" {
+			continue
+		}
+
+		// Validate PID is numeric to prevent command injection
+		isValid := true
 		for _, c := range pidStr {
 			if c < '0' || c > '9' {
-				// Invalid PID format, skip
-				return
+				isValid = false
+				break
 			}
 		}
+
+		if !isValid {
+			continue
+		}
+
+		// Kill the process
 		killCmd := exec.Command("kill", "-9", pidStr)
 		//nolint:errcheck
 		_ = killCmd.Run()
-		// Give it a moment to actually die
-		time.Sleep(500 * time.Millisecond)
 	}
+
+	// Give processes a moment to actually die
+	time.Sleep(500 * time.Millisecond)
 }
 
 func findProjectRoot() (string, error) {
