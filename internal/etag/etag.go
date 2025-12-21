@@ -56,7 +56,9 @@ func getFieldIndex(t reflect.Type, fieldName string) (int, bool) {
 // stringBuilderPool is a sync.Pool for reusing strings.Builder instances
 var stringBuilderPool = sync.Pool{
 	New: func() interface{} {
-		return &strings.Builder{}
+		sb := &strings.Builder{}
+		sb.Grow(68) // Pre-allocate for "W/\"" + 64 hex chars + "\"" = 68 bytes
+		return sb
 	},
 }
 
@@ -115,6 +117,7 @@ func Generate(entity interface{}, meta *metadata.EntityMetadata) string {
 	// Use strings.Builder from pool for efficient string concatenation
 	sb := stringBuilderPool.Get().(*strings.Builder)
 	sb.Reset()
+	sb.Grow(68) // Pre-allocate for "W/\"" + 64 hex chars + "\"" = 68 bytes
 	defer stringBuilderPool.Put(sb)
 	
 	sb.WriteString("W/\"")
