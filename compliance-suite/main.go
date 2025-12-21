@@ -483,14 +483,14 @@ func main() {
 			Suite:   v4_0.FilterExpandedProperties,
 		})
 		testSuites = append(testSuites, TestSuiteInfo{
-			Name:    "11.3.9_filter_single_entity_navigation",
-			Version: "4.0",
-			Suite:   v4_0.FilterOnSingleEntityNavigationProperties,
-		})
-		testSuites = append(testSuites, TestSuiteInfo{
 			Name:    "11.3.9_string_function_edge_cases",
 			Version: "4.0",
 			Suite:   v4_0.StringFunctionEdgeCases,
+		})
+		testSuites = append(testSuites, TestSuiteInfo{
+			Name:    "11.3.10_filter_single_entity_navigation",
+			Version: "4.0",
+			Suite:   v4_0.FilterOnSingleEntityNavigationProperties,
 		})
 		testSuites = append(testSuites, TestSuiteInfo{
 			Name:    "11.4.1_requesting_entities",

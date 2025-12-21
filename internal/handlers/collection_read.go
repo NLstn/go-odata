@@ -548,6 +548,25 @@ func (h *EntityHandler) validateFilterForComplexTypes(filter *query.FilterExpres
 			goto validateChildren
 		}
 
+		// Check if this looks like a navigation property path but wasn't validated above
+		// This provides better error messages for invalid navigation paths
+		if strings.Contains(filter.Property, "/") {
+			segments := strings.Split(filter.Property, "/")
+			if len(segments) >= 2 {
+				firstSegment := strings.TrimSpace(segments[0])
+				navProp := h.metadata.FindNavigationProperty(firstSegment)
+				if navProp != nil {
+					if navProp.NavigationIsArray {
+						return fmt.Errorf("filtering by collection navigation property '%s' requires lambda operators (use any/all)", firstSegment)
+					}
+					// Multi-level navigation paths are not currently supported
+					if len(segments) > 2 {
+						return fmt.Errorf("multi-level navigation paths like '%s' are not currently supported (only single-level paths like 'NavProp/Property')", filter.Property)
+					}
+				}
+			}
+		}
+
 		prop, _, err := h.metadata.ResolvePropertyPath(filter.Property)
 		if err != nil {
 			return fmt.Errorf("property path '%s' is not supported", filter.Property)
