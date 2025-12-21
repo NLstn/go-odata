@@ -115,7 +115,7 @@ func TestCastFunctions_EndToEnd(t *testing.T) {
 			}
 
 			// Build SQL
-			sql, args := buildFilterCondition(filterExpr, meta)
+			sql, args := buildFilterCondition("sqlite", filterExpr, meta)
 
 			if sql != tt.expectSQL {
 				t.Errorf("Expected SQL:\n%s\nGot:\n%s", tt.expectSQL, sql)
@@ -189,7 +189,7 @@ func TestCastFunctions_Integration(t *testing.T) {
 			}
 
 			// Build SQL
-			sql, args := buildFilterCondition(filterExpr, meta)
+			sql, args := buildFilterCondition("sqlite", filterExpr, meta)
 
 			if sql != tt.expectSQL {
 				t.Errorf("Expected SQL:\n%s\nGot:\n%s", tt.expectSQL, sql)

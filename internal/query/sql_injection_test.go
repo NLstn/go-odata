@@ -146,7 +146,7 @@ func TestSQLInjection_ComputedFilter(t *testing.T) {
 			}
 
 			// Build the filter condition - this should sanitize the property
-			sql, args := buildComparisonCondition(filter, meta)
+			sql, args := buildComparisonCondition("sqlite", filter, meta)
 
 			t.Logf("Property: %s", tt.property)
 			t.Logf("SQL: %s", sql)

@@ -94,7 +94,7 @@ func TestIsOfFunction_EntityTypeWithAnd(t *testing.T) {
 				return
 			}
 
-			sql, args := buildFilterCondition(filterExpr, meta)
+			sql, args := buildFilterCondition("sqlite", filterExpr, meta)
 			t.Logf("✓ OData: %s", tt.filter)
 			t.Logf("✓ SQL:   %s", sql)
 			t.Logf("✓ Args:  %v", args)

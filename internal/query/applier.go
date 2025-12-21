@@ -21,6 +21,8 @@ func ApplyQueryOptionsWithFTS(db *gorm.DB, options *QueryOptions, entityMetadata
 		return db
 	}
 
+	dialect := getDatabaseDialect(db)
+
 	// Try to apply search at database level using FTS if available
 	searchAppliedAtDB := false
 	if options.Search != "" && ftsManager != nil && ftsManager.IsFTSAvailable() && tableName != "" {
@@ -61,7 +63,7 @@ func ApplyQueryOptionsWithFTS(db *gorm.DB, options *QueryOptions, entityMetadata
 
 	// Apply standalone compute transformation (before select)
 	if options.Compute != nil {
-		db = applyCompute(db, options.Compute, entityMetadata)
+		db = applyCompute(db, dialect, options.Compute, entityMetadata)
 	}
 
 	// Apply select at database level to fetch only needed columns
