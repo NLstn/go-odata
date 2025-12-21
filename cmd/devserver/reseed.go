@@ -23,13 +23,20 @@ func seedDatabase(db *gorm.DB) error {
 
 	// For PostgreSQL, explicitly reset sequences after dropping tables
 	// This ensures auto-increment columns start from 1 after reseeding
+	// Only drop sequences for tables that have auto-increment integer primary keys
 	if dialectName == "postgres" {
 		// List of table names that need sequence resets (tables with auto-increment primary keys)
-		tables := []string{"categories", "products", "product_descriptions", "company_infos", "users", "api_keys"}
+		// Excludes tables with composite keys (product_descriptions) or UUID keys (api_keys)
+		tables := []string{"categories", "products", "company_infos", "users"}
 		for _, table := range tables {
 			// PostgreSQL convention: sequence name is table_column_seq
 			// GORM uses lowercase table names and "id" for primary key columns by default
-			sequenceName := table + "_id_seq"
+			var sequenceName string
+			if table == "users" {
+				sequenceName = table + "_user_id_seq" // Users table has user_id column
+			} else {
+				sequenceName = table + "_id_seq"
+			}
 			if err := db.Exec(fmt.Sprintf("DROP SEQUENCE IF EXISTS %s CASCADE", sequenceName)).Error; err != nil {
 				// Log but don't fail - sequence might not exist
 				fmt.Printf("Note: Could not drop sequence %s: %v\n", sequenceName, err)
