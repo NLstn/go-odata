@@ -1389,22 +1389,21 @@ func (s *Service) SetDefaultMaxTop(maxTop int) {
 	if maxTop <= 0 {
 		s.defaultMaxTop = nil
 		s.logger.Debug("Removed default max top for service")
-		// Update all existing handlers that don't have entity-level defaults
-		for _, handler := range s.handlers {
-			// Only update if there's no entity-level default set
-			if !handler.HasEntityLevelDefaultMaxTop() {
-				handler.SetDefaultMaxTop(nil)
-			}
-		}
-		return
+	} else {
+		s.defaultMaxTop = &maxTop
+		s.logger.Debug("Set default max top for service", "maxTop", maxTop)
 	}
-	s.defaultMaxTop = &maxTop
-	s.logger.Debug("Set default max top for service", "maxTop", maxTop)
 	// Update all existing handlers that don't have entity-level defaults
+	s.updateHandlersDefaultMaxTop()
+}
+
+// updateHandlersDefaultMaxTop updates all handlers with the service-level default,
+// unless they have an entity-level default set
+func (s *Service) updateHandlersDefaultMaxTop() {
 	for _, handler := range s.handlers {
 		// Only update if there's no entity-level default set
 		if !handler.HasEntityLevelDefaultMaxTop() {
-			handler.SetDefaultMaxTop(&maxTop)
+			handler.SetDefaultMaxTop(s.defaultMaxTop)
 		}
 	}
 }
