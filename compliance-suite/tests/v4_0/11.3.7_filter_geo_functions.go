@@ -70,6 +70,41 @@ func RegisterFilterGeoFunctionsTests(suite *framework.TestSuite) {
 	)
 }
 
+// validateGeoResponse validates the structure of a geospatial query response
+// Returns nil if validation passes, error otherwise
+func validateGeoResponse(respBody []byte) error {
+	var result map[string]interface{}
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+	
+	// Validate response structure
+	value, ok := result["value"]
+	if !ok {
+		return fmt.Errorf("response missing 'value' array")
+	}
+	
+	// Value must be an array (empty is ok if no products match)
+	products, ok := value.([]interface{})
+	if !ok {
+		return fmt.Errorf("'value' is not an array")
+	}
+	
+	// If there are products, validate they have required properties
+	for i, p := range products {
+		product, ok := p.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("product at index %d is not an object", i)
+		}
+		// Each product should have standard properties
+		if _, ok := product["ID"]; !ok {
+			return fmt.Errorf("product at index %d missing ID", i)
+		}
+	}
+	
+	return nil
+}
+
 func testGeoDistance(ctx *framework.TestContext) error {
 	// Geospatial functions are optional OData features
 	// Test geo.distance to find products within 10000 meters of origin
@@ -80,43 +115,17 @@ func testGeoDistance(ctx *framework.TestContext) error {
 	}
 
 	// 200 OK = database supports geospatial, validate response
-	// 400/500 = database doesn't support geospatial (SQLite without SpatiaLite), skip test
-	// 404/501 = feature not implemented by library, skip test
+	// 400 = bad request due to malformed query or database doesn't support geospatial
+	// 404/501 = feature not implemented by library
+	// 500 = internal server error, often from SQL error when database lacks spatial functions
+	//       (e.g., SQLite without SpatiaLite extension) - treat as "not supported" for optional features
 	switch resp.StatusCode {
 	case 200:
 		// Database supports geospatial - validate proper filtering occurred
-		var result map[string]interface{}
-		if err := json.Unmarshal(resp.Body, &result); err != nil {
-			return fmt.Errorf("failed to parse response: %w", err)
-		}
-		
-		// Validate response structure
-		value, ok := result["value"]
-		if !ok {
-			return fmt.Errorf("response missing 'value' array")
-		}
-		
-		// Value must be an array (empty is ok if no products match)
-		products, ok := value.([]interface{})
-		if !ok {
-			return fmt.Errorf("'value' is not an array")
-		}
-		
-		// If there are products, validate they have the Location property
-		for i, p := range products {
-			product, ok := p.(map[string]interface{})
-			if !ok {
-				return fmt.Errorf("product at index %d is not an object", i)
-			}
-			// Each product should have standard properties
-			if _, ok := product["ID"]; !ok {
-				return fmt.Errorf("product at index %d missing ID", i)
-			}
-		}
-		
-		return nil
+		return validateGeoResponse(resp.Body)
 	case 400, 500:
 		// Database doesn't support geospatial functions (e.g., SQLite without SpatiaLite)
+		// 500 occurs when SQL functions like ST_Distance are not available, causing SQL errors
 		return ctx.Skip("Database doesn't support geospatial functions (optional feature)")
 	case 404, 501:
 		// Library feature not implemented
@@ -137,37 +146,10 @@ func testGeoLength(ctx *framework.TestContext) error {
 	switch resp.StatusCode {
 	case 200:
 		// Database supports geospatial - validate proper filtering occurred
-		var result map[string]interface{}
-		if err := json.Unmarshal(resp.Body, &result); err != nil {
-			return fmt.Errorf("failed to parse response: %w", err)
-		}
-		
-		// Validate response structure
-		value, ok := result["value"]
-		if !ok {
-			return fmt.Errorf("response missing 'value' array")
-		}
-		
-		// Value must be an array (empty is ok if no products match)
-		products, ok := value.([]interface{})
-		if !ok {
-			return fmt.Errorf("'value' is not an array")
-		}
-		
-		// If there are products, validate structure
-		for i, p := range products {
-			product, ok := p.(map[string]interface{})
-			if !ok {
-				return fmt.Errorf("product at index %d is not an object", i)
-			}
-			if _, ok := product["ID"]; !ok {
-				return fmt.Errorf("product at index %d missing ID", i)
-			}
-		}
-		
-		return nil
+		return validateGeoResponse(resp.Body)
 	case 400, 500:
 		// Database doesn't support geospatial functions
+		// 500 occurs when SQL functions like ST_Length are not available
 		return ctx.Skip("Database doesn't support geospatial functions (optional feature)")
 	case 404, 501:
 		// Library feature not implemented
@@ -188,37 +170,10 @@ func testGeoIntersects(ctx *framework.TestContext) error {
 	switch resp.StatusCode {
 	case 200:
 		// Database supports geospatial - validate proper filtering occurred
-		var result map[string]interface{}
-		if err := json.Unmarshal(resp.Body, &result); err != nil {
-			return fmt.Errorf("failed to parse response: %w", err)
-		}
-		
-		// Validate response structure
-		value, ok := result["value"]
-		if !ok {
-			return fmt.Errorf("response missing 'value' array")
-		}
-		
-		// Value must be an array (empty is ok if no products match)
-		products, ok := value.([]interface{})
-		if !ok {
-			return fmt.Errorf("'value' is not an array")
-		}
-		
-		// If there are products, validate structure
-		for i, p := range products {
-			product, ok := p.(map[string]interface{})
-			if !ok {
-				return fmt.Errorf("product at index %d is not an object", i)
-			}
-			if _, ok := product["ID"]; !ok {
-				return fmt.Errorf("product at index %d missing ID", i)
-			}
-		}
-		
-		return nil
+		return validateGeoResponse(resp.Body)
 	case 400, 500:
 		// Database doesn't support geospatial functions
+		// 500 occurs when SQL functions like ST_Intersects are not available
 		return ctx.Skip("Database doesn't support geospatial functions (optional feature)")
 	case 404, 501:
 		// Library feature not implemented
@@ -269,37 +224,10 @@ func testGeoLiteralFormat(ctx *framework.TestContext) error {
 	switch resp.StatusCode {
 	case 200:
 		// Database supports geospatial and literal format is accepted
-		var result map[string]interface{}
-		if err := json.Unmarshal(resp.Body, &result); err != nil {
-			return fmt.Errorf("failed to parse response: %w", err)
-		}
-		
-		// Validate response structure
-		value, ok := result["value"]
-		if !ok {
-			return fmt.Errorf("response missing 'value' array")
-		}
-		
-		// Value must be an array
-		products, ok := value.([]interface{})
-		if !ok {
-			return fmt.Errorf("'value' is not an array")
-		}
-		
-		// If there are products, validate structure
-		for i, p := range products {
-			product, ok := p.(map[string]interface{})
-			if !ok {
-				return fmt.Errorf("product at index %d is not an object", i)
-			}
-			if _, ok := product["ID"]; !ok {
-				return fmt.Errorf("product at index %d missing ID", i)
-			}
-		}
-		
-		return nil
+		return validateGeoResponse(resp.Body)
 	case 400, 500:
 		// Database doesn't support geospatial functions
+		// 500 occurs when SQL spatial functions are not available
 		return ctx.Skip("Database doesn't support geospatial functions (optional feature)")
 	case 404, 501:
 		// Library feature not implemented
@@ -321,37 +249,10 @@ func testGeometryVsGeography(ctx *framework.TestContext) error {
 	switch resp.StatusCode {
 	case 200:
 		// Database supports geometry type
-		var result map[string]interface{}
-		if err := json.Unmarshal(resp.Body, &result); err != nil {
-			return fmt.Errorf("failed to parse response: %w", err)
-		}
-		
-		// Validate response structure
-		value, ok := result["value"]
-		if !ok {
-			return fmt.Errorf("response missing 'value' array")
-		}
-		
-		// Value must be an array
-		products, ok := value.([]interface{})
-		if !ok {
-			return fmt.Errorf("'value' is not an array")
-		}
-		
-		// If there are products, validate structure
-		for i, p := range products {
-			product, ok := p.(map[string]interface{})
-			if !ok {
-				return fmt.Errorf("product at index %d is not an object", i)
-			}
-			if _, ok := product["ID"]; !ok {
-				return fmt.Errorf("product at index %d missing ID", i)
-			}
-		}
-		
-		return nil
+		return validateGeoResponse(resp.Body)
 	case 400, 500:
 		// Database doesn't support geospatial or geometry type
+		// 500 occurs when SQL spatial functions are not available
 		return ctx.Skip("Database doesn't support geometry type (optional feature)")
 	case 404, 501:
 		// Library feature not implemented
@@ -373,48 +274,35 @@ func testGeoCombinedFilter(ctx *framework.TestContext) error {
 	switch resp.StatusCode {
 	case 200:
 		// Database supports combined filters with geospatial
+		// First validate basic response structure
+		if err := validateGeoResponse(resp.Body); err != nil {
+			return err
+		}
+		
+		// Additional validation for the combined filter: verify Price filter was applied
 		var result map[string]interface{}
 		if err := json.Unmarshal(resp.Body, &result); err != nil {
 			return fmt.Errorf("failed to parse response: %w", err)
 		}
 		
-		// Validate response structure
-		value, ok := result["value"]
-		if !ok {
-			return fmt.Errorf("response missing 'value' array")
-		}
-		
-		// Value must be an array
-		products, ok := value.([]interface{})
-		if !ok {
-			return fmt.Errorf("'value' is not an array")
-		}
-		
-		// If there are products, validate that both filters were applied
-		for i, p := range products {
-			product, ok := p.(map[string]interface{})
-			if !ok {
-				return fmt.Errorf("product at index %d is not an object", i)
-			}
-			
-			// Validate required properties exist
-			if _, ok := product["ID"]; !ok {
-				return fmt.Errorf("product at index %d missing ID", i)
-			}
-			
-			// If Price is present, verify it meets the filter condition (> 100)
-			if price, ok := product["Price"]; ok {
-				var priceVal float64
-				switch v := price.(type) {
-				case float64:
-					priceVal = v
-				case int:
-					priceVal = float64(v)
-				default:
-					return fmt.Errorf("product at index %d has unexpected Price type: %T", i, price)
-				}
-				if priceVal <= 100 {
-					return fmt.Errorf("product at index %d has Price %f, expected > 100", i, priceVal)
+		if value, ok := result["value"].([]interface{}); ok {
+			for i, p := range value {
+				if product, ok := p.(map[string]interface{}); ok {
+					// If Price is present, verify it meets the filter condition (> 100)
+					if price, ok := product["Price"]; ok {
+						var priceVal float64
+						switch v := price.(type) {
+						case float64:
+							priceVal = v
+						case int:
+							priceVal = float64(v)
+						default:
+							return fmt.Errorf("product at index %d has unexpected Price type: %T", i, price)
+						}
+						if priceVal <= 100 {
+							return fmt.Errorf("product at index %d has Price %f, expected > 100", i, priceVal)
+						}
+					}
 				}
 			}
 		}
@@ -422,6 +310,7 @@ func testGeoCombinedFilter(ctx *framework.TestContext) error {
 		return nil
 	case 400, 500:
 		// Database doesn't support geospatial functions or combined filters
+		// 500 occurs when SQL spatial functions are not available
 		return ctx.Skip("Database doesn't support combined geospatial filters (optional feature)")
 	case 404, 501:
 		// Library feature not implemented
