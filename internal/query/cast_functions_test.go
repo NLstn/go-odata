@@ -344,7 +344,7 @@ func TestCastFunction_SQLGeneration(t *testing.T) {
 				return
 			}
 
-			sql, args := buildFilterCondition(filterExpr, meta)
+			sql, args := buildFilterCondition("sqlite", filterExpr, meta)
 			if sql != tt.expectedSQL {
 				t.Errorf("Expected SQL:\n%s\nGot:\n%s", tt.expectedSQL, sql)
 			}

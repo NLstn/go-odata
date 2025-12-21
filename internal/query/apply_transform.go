@@ -17,6 +17,8 @@ func applyTransformations(db *gorm.DB, transformations []ApplyTransformation, en
 		db = db.Model(modelInstance)
 	}
 
+	dialect := getDatabaseDialect(db)
+
 	hasGrouping := false
 
 	for _, transformation := range transformations {
@@ -34,7 +36,7 @@ func applyTransformations(db *gorm.DB, transformations []ApplyTransformation, en
 				db = applyFilter(db, transformation.Filter, entityMetadata)
 			}
 		case ApplyTypeCompute:
-			db = applyCompute(db, transformation.Compute, entityMetadata)
+			db = applyCompute(db, dialect, transformation.Compute, entityMetadata)
 		}
 	}
 	return db
@@ -72,7 +74,7 @@ func applyGroupBy(db *gorm.DB, groupBy *GroupByTransformation, entityMetadata *m
 			}
 		}
 	} else {
-		selectColumns = append(selectColumns, "COUNT(*) as `$count`")
+		selectColumns = append(selectColumns, "COUNT(*) as \"$count\"")
 	}
 
 	if len(groupByColumns) > 0 {
@@ -110,7 +112,7 @@ func applyAggregate(db *gorm.DB, aggregate *AggregateTransformation, entityMetad
 // buildAggregateSQL builds the SQL for an aggregate expression
 func buildAggregateSQL(aggExpr AggregateExpression, entityMetadata *metadata.EntityMetadata) string {
 	if aggExpr.Property == "$count" {
-		return fmt.Sprintf("COUNT(*) as `%s`", aggExpr.Alias)
+		return fmt.Sprintf("COUNT(*) as \"%s\"", aggExpr.Alias)
 	}
 
 	prop := findProperty(aggExpr.Property, entityMetadata)
@@ -133,16 +135,16 @@ func buildAggregateSQL(aggExpr AggregateExpression, entityMetadata *metadata.Ent
 	case AggregationCount:
 		sqlFunc = "COUNT"
 	case AggregationCountDistinct:
-		return fmt.Sprintf("COUNT(DISTINCT %s) as `%s`", columnName, aggExpr.Alias)
+		return fmt.Sprintf("COUNT(DISTINCT %s) as \"%s\"", columnName, aggExpr.Alias)
 	default:
 		return ""
 	}
 
-	return fmt.Sprintf("%s(%s) as `%s`", sqlFunc, columnName, aggExpr.Alias)
+	return fmt.Sprintf("%s(%s) as \"%s\"", sqlFunc, columnName, aggExpr.Alias)
 }
 
 // applyCompute applies a compute transformation to the GORM query
-func applyCompute(db *gorm.DB, compute *ComputeTransformation, entityMetadata *metadata.EntityMetadata) *gorm.DB {
+func applyCompute(db *gorm.DB, dialect string, compute *ComputeTransformation, entityMetadata *metadata.EntityMetadata) *gorm.DB {
 	if compute == nil || len(compute.Expressions) == 0 {
 		return db
 	}
@@ -172,7 +174,7 @@ func applyCompute(db *gorm.DB, compute *ComputeTransformation, entityMetadata *m
 	}
 
 	for _, computeExpr := range compute.Expressions {
-		computeSQL := buildComputeSQL(computeExpr, entityMetadata)
+		computeSQL := buildComputeSQL(dialect, computeExpr, entityMetadata)
 		if computeSQL != "" {
 			selectColumns = append(selectColumns, computeSQL)
 		}
@@ -186,7 +188,7 @@ func applyCompute(db *gorm.DB, compute *ComputeTransformation, entityMetadata *m
 }
 
 // buildComputeSQL builds the SQL for a compute expression
-func buildComputeSQL(computeExpr ComputeExpression, entityMetadata *metadata.EntityMetadata) string {
+func buildComputeSQL(dialect string, computeExpr ComputeExpression, entityMetadata *metadata.EntityMetadata) string {
 	if computeExpr.Expression == nil {
 		return ""
 	}
@@ -200,7 +202,7 @@ func buildComputeSQL(computeExpr ComputeExpression, entityMetadata *metadata.Ent
 		}
 
 		columnName := toSnakeCase(prop.Name)
-		funcSQL, _ := buildFunctionSQL(expr.Operator, columnName, nil)
+		funcSQL, _ := buildFunctionSQL(dialect, expr.Operator, columnName, nil)
 		if funcSQL == "" {
 			return ""
 		}
@@ -209,12 +211,12 @@ func buildComputeSQL(computeExpr ComputeExpression, entityMetadata *metadata.Ent
 	}
 
 	if expr.Left != nil && expr.Right != nil && expr.Logical != "" {
-		leftSQL := buildComputeExpressionSQL(expr.Left, entityMetadata)
+		leftSQL := buildComputeExpressionSQL(dialect, expr.Left, entityMetadata)
 		if leftSQL == "" {
 			return ""
 		}
 
-		rightSQL := buildComputeExpressionSQL(expr.Right, entityMetadata)
+		rightSQL := buildComputeExpressionSQL(dialect, expr.Right, entityMetadata)
 		if rightSQL == "" {
 			return ""
 		}
@@ -242,7 +244,7 @@ func buildComputeSQL(computeExpr ComputeExpression, entityMetadata *metadata.Ent
 }
 
 // buildComputeExpressionSQL builds SQL for a sub-expression in a compute
-func buildComputeExpressionSQL(expr *FilterExpression, entityMetadata *metadata.EntityMetadata) string {
+func buildComputeExpressionSQL(dialect string, expr *FilterExpression, entityMetadata *metadata.EntityMetadata) string {
 	if expr == nil {
 		return ""
 	}
@@ -275,13 +277,13 @@ func buildComputeExpressionSQL(expr *FilterExpression, entityMetadata *metadata.
 			return ""
 		}
 		columnName := toSnakeCase(prop.Name)
-		funcSQL, _ := buildFunctionSQL(expr.Operator, columnName, expr.Value)
+		funcSQL, _ := buildFunctionSQL(dialect, expr.Operator, columnName, expr.Value)
 		return funcSQL
 	}
 
 	if expr.Left != nil && expr.Right != nil && expr.Operator != "" {
-		leftSQL := buildComputeExpressionSQL(expr.Left, entityMetadata)
-		rightSQL := buildComputeExpressionSQL(expr.Right, entityMetadata)
+		leftSQL := buildComputeExpressionSQL(dialect, expr.Left, entityMetadata)
+		rightSQL := buildComputeExpressionSQL(dialect, expr.Right, entityMetadata)
 		if leftSQL == "" || rightSQL == "" {
 			return ""
 		}
@@ -306,8 +308,8 @@ func buildComputeExpressionSQL(expr *FilterExpression, entityMetadata *metadata.
 	}
 
 	if expr.Left != nil && expr.Right != nil && expr.Logical != "" {
-		leftSQL := buildComputeExpressionSQL(expr.Left, entityMetadata)
-		rightSQL := buildComputeExpressionSQL(expr.Right, entityMetadata)
+		leftSQL := buildComputeExpressionSQL(dialect, expr.Left, entityMetadata)
+		rightSQL := buildComputeExpressionSQL(dialect, expr.Right, entityMetadata)
 		if leftSQL == "" || rightSQL == "" {
 			return ""
 		}
