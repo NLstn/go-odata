@@ -1,9 +1,18 @@
 package response
 
 import (
+	"bytes"
 	"encoding/json"
+	"sync"
 	"unicode/utf8"
 )
+
+// bufferPool is a sync.Pool for reusing bytes.Buffer instances
+var bufferPool = sync.Pool{
+	New: func() interface{} {
+		return new(bytes.Buffer)
+	},
+}
 
 // OrderedMap maintains insertion order of keys
 type OrderedMap struct {
@@ -81,21 +90,26 @@ func (om *OrderedMap) ToMap() map[string]interface{} {
 }
 
 // MarshalJSON implements json.Marshaler to maintain field order
-// Optimized version that pre-allocates buffer and avoids unnecessary marshaling
+// Optimized version using sync.Pool for buffer reuse
 func (om *OrderedMap) MarshalJSON() ([]byte, error) {
 	if len(om.keys) == 0 {
 		return []byte("{}"), nil
 	}
 
-	// Estimate buffer size: average 100 bytes per field (increased from 50 for better accuracy)
-	// This reduces the likelihood of buffer reallocations during marshaling
+	// Get buffer from pool
+	buf := bufferPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer bufferPool.Put(buf)
+	
+	// Estimate initial capacity
 	estimatedSize := len(om.keys) * 100
-	buf := make([]byte, 0, estimatedSize)
-	buf = append(buf, '{')
+	buf.Grow(estimatedSize)
+	
+	buf.WriteByte('{')
 
 	for i, key := range om.keys {
 		if i > 0 {
-			buf = append(buf, ',')
+			buf.WriteByte(',')
 		}
 
 		// Optimize for simple string keys (no special characters)
@@ -106,26 +120,30 @@ func (om *OrderedMap) MarshalJSON() ([]byte, error) {
 			if err != nil {
 				return nil, err
 			}
-			buf = append(buf, keyBytes...)
+			buf.Write(keyBytes)
 		} else {
 			// Fast path: write key directly with quotes
-			buf = append(buf, '"')
-			buf = append(buf, key...)
-			buf = append(buf, '"')
+			buf.WriteByte('"')
+			buf.WriteString(key)
+			buf.WriteByte('"')
 		}
 
-		buf = append(buf, ':')
+		buf.WriteByte(':')
 
 		// Marshal the value
 		valueBytes, err := json.Marshal(om.values[key])
 		if err != nil {
 			return nil, err
 		}
-		buf = append(buf, valueBytes...)
+		buf.Write(valueBytes)
 	}
 
-	buf = append(buf, '}')
-	return buf, nil
+	buf.WriteByte('}')
+	
+	// Create a copy of the buffer contents since we're reusing the buffer
+	result := make([]byte, buf.Len())
+	copy(result, buf.Bytes())
+	return result, nil
 }
 
 // needsEscaping checks if a string needs JSON escaping
