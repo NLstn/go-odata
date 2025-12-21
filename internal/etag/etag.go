@@ -6,10 +6,59 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/nlstn/go-odata/internal/metadata"
 )
+
+// fieldIndexCache caches field indices by type and field name
+type fieldIndexCache struct {
+	mu    sync.RWMutex
+	cache map[reflect.Type]map[string]int
+}
+
+var globalFieldIndexCache = &fieldIndexCache{
+	cache: make(map[reflect.Type]map[string]int),
+}
+
+// getFieldIndex returns the cached field index for a type and field name
+func getFieldIndex(t reflect.Type, fieldName string) (int, bool) {
+	globalFieldIndexCache.mu.RLock()
+	if typeCache, ok := globalFieldIndexCache.cache[t]; ok {
+		idx, found := typeCache[fieldName]
+		globalFieldIndexCache.mu.RUnlock()
+		return idx, found
+	}
+	globalFieldIndexCache.mu.RUnlock()
+
+	globalFieldIndexCache.mu.Lock()
+	defer globalFieldIndexCache.mu.Unlock()
+
+	// Double-check after acquiring write lock
+	if typeCache, ok := globalFieldIndexCache.cache[t]; ok {
+		idx, found := typeCache[fieldName]
+		return idx, found
+	}
+
+	// Build cache for this type
+	typeCache := make(map[string]int)
+	for i := 0; i < t.NumField(); i++ {
+		typeCache[t.Field(i).Name] = i
+	}
+	globalFieldIndexCache.cache[t] = typeCache
+
+	idx, found := typeCache[fieldName]
+	return idx, found
+}
+
+// stringBuilderPool is a sync.Pool for reusing strings.Builder instances
+var stringBuilderPool = sync.Pool{
+	New: func() interface{} {
+		return &strings.Builder{}
+	},
+}
 
 // Generate creates an ETag value for an entity based on its ETag property
 // Returns an empty string if no ETag property is defined
@@ -29,8 +78,13 @@ func Generate(entity interface{}, meta *metadata.EntityMetadata) string {
 		return generateFromMap(entity, meta)
 	}
 
-	// Get the ETag field value
-	fieldValue := entityValue.FieldByName(meta.ETagProperty.FieldName)
+	// Use cached field index instead of FieldByName
+	idx, found := getFieldIndex(entityValue.Type(), meta.ETagProperty.FieldName)
+	if !found {
+		return ""
+	}
+	
+	fieldValue := entityValue.Field(idx)
 	if !fieldValue.IsValid() {
 		return ""
 	}
@@ -57,10 +111,17 @@ func Generate(entity interface{}, meta *metadata.EntityMetadata) string {
 
 	// Generate SHA256 hash of the ETag source
 	hash := sha256.Sum256([]byte(etagSource))
-	hashStr := hex.EncodeToString(hash[:])
-
-	// Return as quoted ETag (weak ETag format: W/"hash")
-	return fmt.Sprintf("W/\"%s\"", hashStr)
+	
+	// Use strings.Builder from pool for efficient string concatenation
+	sb := stringBuilderPool.Get().(*strings.Builder)
+	sb.Reset()
+	defer stringBuilderPool.Put(sb)
+	
+	sb.WriteString("W/\"")
+	sb.WriteString(hex.EncodeToString(hash[:]))
+	sb.WriteString("\"")
+	
+	return sb.String()
 }
 
 // generateFromMap generates an ETag from a map entity (from $select operations)
