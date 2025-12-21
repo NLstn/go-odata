@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -881,22 +882,15 @@ func killExistingServerOnPort() {
 			continue
 		}
 
-		// Validate PID is numeric to prevent command injection
-		isValid := true
-		for _, c := range pidStr {
-			if c < '0' || c > '9' {
-				isValid = false
-				break
-			}
-		}
-
-		if !isValid {
+		// Validate PID is numeric using strconv
+		if _, err := strconv.Atoi(pidStr); err != nil {
+			// Invalid PID format, skip to prevent command injection
 			continue
 		}
 
-		// Kill the process
+		// Kill the process - errors are intentionally ignored during cleanup
 		killCmd := exec.Command("kill", "-9", pidStr)
-		//nolint:errcheck
+		//nolint:errcheck // Cleanup operation; process may already be dead
 		_ = killCmd.Run()
 	}
 
