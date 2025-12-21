@@ -34,13 +34,13 @@ func (ProductStatus) EnumMembers() map[string]int {
 // Product represents a product entity for the compliance server
 type Product struct {
 	ID          uint          `json:"ID" gorm:"primaryKey" odata:"key"`
-	Name        string        `json:"Name" gorm:"not null" odata:"required,maxlength=100,searchable"`
+	Name        string        `json:"Name" gorm:"not null;index:idx_products_name" odata:"required,maxlength=100,searchable"`
 	Description *string       `json:"Description" odata:"nullable,maxlength=500"` // Nullable description field
-	Price       float64       `json:"Price" gorm:"not null" odata:"required,precision=10,scale=2"`
-	CategoryID  *uint         `json:"CategoryID" odata:"nullable"` // Foreign key for Category navigation property
+	Price       float64       `json:"Price" gorm:"not null;index:idx_products_price" odata:"required,precision=10,scale=2"`
+	CategoryID  *uint         `json:"CategoryID" gorm:"index:idx_products_category_id" odata:"nullable"` // Foreign key for Category navigation property
 	Status      ProductStatus `json:"Status" gorm:"not null" odata:"enum=ProductStatus,flags"`
 	Version     int           `json:"Version" gorm:"default:1" odata:"etag"` // Version field used for optimistic concurrency control via ETag
-	CreatedAt   time.Time     `json:"CreatedAt" gorm:"not null"`
+	CreatedAt   time.Time     `json:"CreatedAt" gorm:"not null;index:idx_products_created_at"`
 	// Complex type properties
 	ShippingAddress *Address    `json:"ShippingAddress,omitempty" gorm:"embedded;embeddedPrefix:shipping_" odata:"nullable"`
 	Dimensions      *Dimensions `json:"Dimensions,omitempty" gorm:"embedded;embeddedPrefix:dim_" odata:"nullable"`

@@ -3,7 +3,7 @@ package entities
 // Category represents a product category entity
 type Category struct {
 	ID          uint   `json:"ID" gorm:"primaryKey" odata:"key"`
-	Name        string `json:"Name" gorm:"not null;unique" odata:"required,maxlength=100"`
+	Name        string `json:"Name" gorm:"not null;uniqueIndex:idx_categories_name" odata:"required,maxlength=100"`
 	Description string `json:"Description" odata:"maxlength=500"`
 	// Navigation property for Products
 	Products []Product `json:"Products,omitempty" gorm:"foreignKey:CategoryID;references:ID"`
