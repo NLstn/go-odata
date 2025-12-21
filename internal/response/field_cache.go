@@ -92,6 +92,8 @@ var globalPropMetaCache = &propertyMetadataCache{
 }
 
 // getCachedPropertyMetadata gets cached property metadata for a field name
+//
+//nolint:unused // Kept for backward compatibility, use getCachedPropertyMetadataMap for better performance
 func getCachedPropertyMetadata(fieldName string, metadata EntityMetadataProvider) *PropertyMetadata {
 	// Fast path: read lock for cache hit
 	globalPropMetaCache.mu.RLock()
@@ -120,4 +122,35 @@ func getCachedPropertyMetadata(fieldName string, metadata EntityMetadataProvider
 	globalPropMetaCache.cache[metadata] = fieldMap
 
 	return fieldMap[fieldName]
+}
+
+// getCachedPropertyMetadataMap returns the entire property metadata map for a metadata provider
+// This is more efficient than calling getCachedPropertyMetadata repeatedly
+func getCachedPropertyMetadataMap(metadata EntityMetadataProvider) map[string]*PropertyMetadata {
+	// Fast path: read lock for cache hit
+	globalPropMetaCache.mu.RLock()
+	if fieldMap, ok := globalPropMetaCache.cache[metadata]; ok {
+		globalPropMetaCache.mu.RUnlock()
+		return fieldMap
+	}
+	globalPropMetaCache.mu.RUnlock()
+
+	// Slow path: build cache for this metadata provider
+	globalPropMetaCache.mu.Lock()
+	defer globalPropMetaCache.mu.Unlock()
+
+	// Double-check after acquiring write lock
+	if fieldMap, ok := globalPropMetaCache.cache[metadata]; ok {
+		return fieldMap
+	}
+
+	// Build cache for this metadata provider
+	props := metadata.GetProperties()
+	fieldMap := make(map[string]*PropertyMetadata, len(props))
+	for i := range props {
+		fieldMap[props[i].Name] = &props[i]
+	}
+	globalPropMetaCache.cache[metadata] = fieldMap
+
+	return fieldMap
 }
