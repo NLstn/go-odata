@@ -541,12 +541,25 @@ func (h *EntityHandler) validateFilterForComplexTypes(filter *query.FilterExpres
 			goto validateChildren
 		}
 
+		// Check if this is a single-entity navigation property path (e.g., "Team/ClubID")
+		// Per OData v4 spec 5.1.1.15, single-entity navigation properties support direct property access
+		if h.metadata.IsSingleEntityNavigationPath(filter.Property) {
+			// This is valid - single-entity navigation property paths are allowed
+			goto validateChildren
+		}
+
 		prop, _, err := h.metadata.ResolvePropertyPath(filter.Property)
 		if err != nil {
 			return fmt.Errorf("property path '%s' is not supported", filter.Property)
 		}
 		if prop.IsNavigationProp {
-			return fmt.Errorf("filtering by navigation property '%s' is not supported (use any/all operators)", filter.Property)
+			// Only collection navigation properties require any/all operators
+			if prop.NavigationIsArray {
+				return fmt.Errorf("filtering by collection navigation property '%s' is not supported (use any/all operators)", filter.Property)
+			}
+			// Single-entity navigation properties are not allowed as terminal values
+			// (e.g., "Team eq null" is not currently supported, but "Team/ClubID eq 'xyz'" is)
+			return fmt.Errorf("filtering by navigation property '%s' requires a property path (e.g., '%s/PropertyName')", filter.Property, filter.Property)
 		}
 		if prop.IsComplexType {
 			return fmt.Errorf("filtering by complex type property '%s' is not supported", filter.Property)

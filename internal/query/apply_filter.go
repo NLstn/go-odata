@@ -30,6 +30,9 @@ func applyFilter(db *gorm.DB, filter *FilterExpression, entityMetadata *metadata
 		return db
 	}
 
+	// First, add any necessary JOINs for single-entity navigation properties
+	db = addNavigationJoins(db, filter, entityMetadata)
+
 	dialect := getDatabaseDialect(db)
 
 	if filter.Logical != "" {
@@ -39,6 +42,116 @@ func applyFilter(db *gorm.DB, filter *FilterExpression, entityMetadata *metadata
 
 	query, args := buildFilterCondition(dialect, filter, entityMetadata)
 	return db.Where(query, args...)
+}
+
+// addNavigationJoins adds JOIN clauses for single-entity navigation properties used in filters
+// Per OData v4 spec 5.1.1.15, properties of entities related with cardinality 0..1 or 1 can be accessed directly
+func addNavigationJoins(db *gorm.DB, filter *FilterExpression, entityMetadata *metadata.EntityMetadata) *gorm.DB {
+	if filter == nil || entityMetadata == nil {
+		return db
+	}
+
+	// Track which navigation properties we've already joined to avoid duplicates
+	joinedNavProps := make(map[string]bool)
+	
+	// Recursively collect all navigation property paths used in the filter
+	collectAndJoinNavigationProperties(db, filter, entityMetadata, joinedNavProps)
+	
+	// Apply the collected joins
+	for navPropName := range joinedNavProps {
+		db = addNavigationJoin(db, navPropName, entityMetadata)
+	}
+	
+	return db
+}
+
+// collectAndJoinNavigationProperties recursively finds navigation property paths in filter expressions
+func collectAndJoinNavigationProperties(db *gorm.DB, filter *FilterExpression, entityMetadata *metadata.EntityMetadata, joinedNavProps map[string]bool) {
+	if filter == nil {
+		return
+	}
+
+	// Check if this filter's property is a navigation property path
+	if filter.Property != "" && entityMetadata.IsSingleEntityNavigationPath(filter.Property) {
+		// Extract the navigation property name (first segment)
+		segments := strings.Split(filter.Property, "/")
+		navPropName := strings.TrimSpace(segments[0])
+		joinedNavProps[navPropName] = true
+	}
+
+	// Recursively process child filters
+	if filter.Left != nil {
+		collectAndJoinNavigationProperties(db, filter.Left, entityMetadata, joinedNavProps)
+	}
+	if filter.Right != nil {
+		collectAndJoinNavigationProperties(db, filter.Right, entityMetadata, joinedNavProps)
+	}
+}
+
+// addNavigationJoin adds a JOIN clause for a single-entity navigation property
+func addNavigationJoin(db *gorm.DB, navPropName string, entityMetadata *metadata.EntityMetadata) *gorm.DB {
+	navProp := entityMetadata.FindNavigationProperty(navPropName)
+	if navProp == nil || navProp.NavigationIsArray {
+		// Only join single-entity navigation properties
+		return db
+	}
+
+	// Get the related entity name and table name
+	relatedEntityName := navProp.NavigationTarget
+	if relatedEntityName == "" {
+		relatedEntityName = navProp.JsonName
+	}
+	// Convert to snake_case for the actual table name
+	relatedTableName := toSnakeCase(pluralize(relatedEntityName))
+
+	// Get the parent table name in snake_case
+	parentTableName := toSnakeCase(pluralize(entityMetadata.EntityName))
+
+	// Determine the foreign key column
+	// By default, GORM uses <parent_entity>_id for belongs-to relationships
+	// We need to parse the GORM tag to get the actual foreign key
+	foreignKeyColumn := toSnakeCase(navProp.Name) + "_id"
+	
+	// Check GORM tag for explicit foreignKey
+	if navProp.GormTag != "" {
+		parts := strings.Split(navProp.GormTag, ";")
+		for _, part := range parts {
+			part = strings.TrimSpace(part)
+			if strings.HasPrefix(part, "foreignKey:") {
+				fkField := strings.TrimPrefix(part, "foreignKey:")
+				foreignKeyColumn = toSnakeCase(fkField)
+				break
+			}
+		}
+	}
+
+	// Determine the primary key column of the related table
+	// Default to "id" but should check the related entity's key properties
+	relatedPrimaryKey := "id"
+	
+	// Check GORM tag for explicit references
+	if navProp.GormTag != "" {
+		parts := strings.Split(navProp.GormTag, ";")
+		for _, part := range parts {
+			part = strings.TrimSpace(part)
+			if strings.HasPrefix(part, "references:") {
+				refField := strings.TrimPrefix(part, "references:")
+				relatedPrimaryKey = toSnakeCase(refField)
+				break
+			}
+		}
+	}
+
+	// Build the JOIN clause
+	// LEFT JOIN to handle nullable navigation properties (cardinality 0..1)
+	joinClause := fmt.Sprintf("LEFT JOIN %s ON %s.%s = %s.%s",
+		relatedTableName,
+		parentTableName,
+		foreignKeyColumn,
+		relatedTableName,
+		relatedPrimaryKey)
+
+	return db.Joins(joinClause)
 }
 
 // applyHavingFilter applies a HAVING clause filter for post-aggregation filtering
