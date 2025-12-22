@@ -17,13 +17,19 @@ func getDatabaseDialect(db *gorm.DB) string {
 	return dialector.Name()
 }
 
-// quoteIdent safely quotes identifiers in a portable way (double quotes work for sqlite and postgres).
-// Embedded double quotes are escaped by doubling them per SQL standard.
-func quoteIdent(_ string, ident string) string {
+// quoteIdent safely quotes identifiers based on the database dialect.
+// MySQL/MariaDB use backticks, while PostgreSQL/SQLite use double quotes (SQL standard).
+// Embedded quotes are escaped by doubling them.
+func quoteIdent(dialect string, ident string) string {
 	if ident == "" {
 		return ident
 	}
-	// Escape any embedded double quotes by doubling them
+	// MySQL and MariaDB use backticks for identifier quoting
+	if dialect == "mysql" {
+		escaped := strings.ReplaceAll(ident, "`", "``")
+		return fmt.Sprintf("`%s`", escaped)
+	}
+	// PostgreSQL and SQLite use double quotes (SQL standard)
 	escaped := strings.ReplaceAll(ident, "\"", "\"\"")
 	return fmt.Sprintf("\"%s\"", escaped)
 }
