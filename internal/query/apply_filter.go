@@ -59,15 +59,15 @@ func addNavigationJoins(db *gorm.DB, filter *FilterExpression, entityMetadata *m
 
 	// Track which navigation properties we've already joined to avoid duplicates
 	joinedNavProps := make(map[string]bool)
-	
+
 	// Recursively collect all navigation property paths used in the filter
 	collectAndJoinNavigationProperties(filter, entityMetadata, joinedNavProps)
-	
+
 	// Apply the collected joins
 	for navPropName := range joinedNavProps {
 		db = addNavigationJoin(db, navPropName, entityMetadata)
 	}
-	
+
 	return db
 }
 
@@ -105,15 +105,15 @@ func addNavigationJoin(db *gorm.DB, navPropName string, entityMetadata *metadata
 	// Get the related entity's table name from cached metadata
 	// This was computed once during entity registration and respects custom TableName() methods
 	relatedTableName := navProp.NavigationTargetTableName
-	
+
 	// Get the parent entity's table name from cached metadata
 	parentTableName := entityMetadata.TableName
-	
+
 	// Determine the foreign key column
 	// By default, GORM uses <parent_entity>_id for belongs-to relationships
 	// We need to parse the GORM tag to get the actual foreign key
 	foreignKeyColumn := toSnakeCase(navProp.Name) + "_id"
-	
+
 	// Check GORM tag for explicit foreignKey
 	if navProp.GormTag != "" {
 		parts := strings.Split(navProp.GormTag, ";")
@@ -130,7 +130,7 @@ func addNavigationJoin(db *gorm.DB, navPropName string, entityMetadata *metadata
 	// Determine the primary key column of the related table
 	// Default to "id" but should check the related entity's key properties
 	relatedPrimaryKey := "id"
-	
+
 	// Check GORM tag for explicit references
 	if navProp.GormTag != "" {
 		parts := strings.Split(navProp.GormTag, ";")
@@ -152,7 +152,7 @@ func addNavigationJoin(db *gorm.DB, navPropName string, entityMetadata *metadata
 	quotedParentTable := quoteIdent(dialect, parentTableName)
 	quotedForeignKey := quoteIdent(dialect, foreignKeyColumn)
 	quotedPrimaryKey := quoteIdent(dialect, relatedPrimaryKey)
-	
+
 	joinClause := fmt.Sprintf("LEFT JOIN %s ON %s.%s = %s.%s",
 		quotedRelatedTable,
 		quotedParentTable,
