@@ -16,9 +16,9 @@ echo "⚡ Installing wrk..."
 sudo apt-get update
 sudo apt-get install -y --no-install-recommends wrk
 
-# Install MySQL client for debugging
-echo "🐬 Installing MySQL client..."
-sudo apt-get install -y --no-install-recommends mysql-client
+# Install MySQL-compatible client for debugging (Debian provides MariaDB client)
+echo "🐬 Installing MySQL-compatible client..."
+sudo apt-get install -y --no-install-recommends mariadb-client-compat
 
 echo "✅ Development environment setup complete!"
 echo ""
