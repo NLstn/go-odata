@@ -169,8 +169,7 @@ func fuzzyContains(text, pattern string, fuzziness int) bool {
 	return false
 }
 
-// levenshteinDistance calculates the Levenshtein distance between two strings
-// levenshteinDistance calculates the Levenshtein distance between two strings
+// levenshteinDistance calculates the Levenshtein distance between two strings.
 // Optimized to use only two rows instead of a full 2D matrix, reducing memory
 // allocations from O(m*n) to O(n) where n is the length of the shorter string.
 func levenshteinDistance(s1, s2 string) int {

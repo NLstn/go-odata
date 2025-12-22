@@ -50,7 +50,9 @@ func (h *EntityHandler) initPropertyMap() {
 	if h.metadata == nil || len(h.metadata.Properties) == 0 {
 		return
 	}
-	// Create map with capacity for all properties (Name and FieldName might differ)
+	// Create map with capacity for all properties.
+	// Each property can be looked up by both Name and FieldName (when different),
+	// so we allocate 2x capacity to avoid map resizing.
 	h.propertyMap = make(map[string]*metadata.PropertyMetadata, len(h.metadata.Properties)*2)
 	for i := range h.metadata.Properties {
 		prop := &h.metadata.Properties[i]
