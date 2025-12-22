@@ -83,6 +83,11 @@ func (m *FTSManager) isFTSVersionAvailable(version string) bool {
 
 	// Try to create a temporary FTS table to test availability
 	testTableName := fmt.Sprintf("_test_fts_%s", version)
+	// Validate the constructed table name as well
+	if !isValidSQLIdentifier(testTableName) {
+		return false
+	}
+
 	err := m.db.Exec(fmt.Sprintf("CREATE VIRTUAL TABLE IF NOT EXISTS %s USING %s(content)", testTableName, version)).Error
 	if err != nil {
 		return false
