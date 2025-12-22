@@ -1,10 +1,11 @@
-# Dev Container Configuration
+# PostgreSQL Dev Container Configuration
 
-This directory contains the development container configuration for GitHub Codespaces and VS Code Dev Containers.
+This directory contains the PostgreSQL-based development container configuration for GitHub Codespaces and VS Code Dev Containers.
 
 ## What's Included
 
 - **Go 1.25**: Latest Go development environment
+- **PostgreSQL 16**: PostgreSQL database for local development
 - **VS Code Extensions**:
   - Go language support with IntelliSense
   - GitHub Copilot for AI-assisted coding
@@ -75,4 +76,8 @@ The container is configured to automatically:
 
 ## Customization
 
-You can customize the dev container by editing `.devcontainer/devcontainer.json`. See the [Dev Containers specification](https://containers.dev/) for more options.
+You can customize the dev container by editing `postgres-devcontainer/devcontainer.json`. See the [Dev Containers specification](https://containers.dev/) for more options.
+
+## Alternative Dev Containers
+
+This project also provides a MariaDB-based devcontainer in the `mariadb-devcontainer` directory for testing with MariaDB.
