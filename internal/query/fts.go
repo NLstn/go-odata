@@ -1,7 +1,6 @@
 package query
 
 import (
-	"database/sql"
 	"fmt"
 	"reflect"
 	"strings"
@@ -76,43 +75,27 @@ func (m *FTSManager) detectFTS() {
 
 // isFTSVersionAvailable checks if a specific FTS version is available
 func (m *FTSManager) isFTSVersionAvailable(version string) bool {
-	var sqlDB *sql.DB
-	var err error
-
-	sqlDB, err = m.db.DB()
-	if err != nil {
-		return false
-	}
-
 	// Try to create a temporary FTS table to test availability
 	testTableName := fmt.Sprintf("_test_fts_%s", version)
-	_, err = sqlDB.Exec(fmt.Sprintf("CREATE VIRTUAL TABLE IF NOT EXISTS %s USING %s(content)", testTableName, version))
+	err := m.db.Exec(fmt.Sprintf("CREATE VIRTUAL TABLE IF NOT EXISTS %s USING %s(content)", testTableName, version)).Error
 	if err != nil {
 		return false
 	}
 
 	// Clean up test table - ignore error as cleanup is best-effort
-	_, _ = sqlDB.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %s", testTableName)) //nolint:errcheck
+	_ = m.db.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %s", testTableName)).Error //nolint:errcheck
 
 	return true
 }
 
 // isPostgresFTSAvailable checks if PostgreSQL full-text search is available
 func (m *FTSManager) isPostgresFTSAvailable() bool {
-	var sqlDB *sql.DB
-	var err error
-
-	sqlDB, err = m.db.DB()
-	if err != nil {
-		return false
-	}
-
 	// Test if we can use to_tsvector and to_tsquery functions
 	// These are built-in to PostgreSQL and should always be available
 	var result int
-	err = sqlDB.QueryRow("SELECT 1 WHERE to_tsvector('english', 'test') @@ to_tsquery('english', 'test')").Scan(&result)
+	err := m.db.Raw("SELECT 1 WHERE to_tsvector('english', 'test') @@ to_tsquery('english', 'test')").Scan(&result).Error
 	// If query executes without error (even if no rows), FTS is available
-	if err != nil && err != sql.ErrNoRows {
+	if err != nil && err != gorm.ErrRecordNotFound {
 		return false
 	}
 
@@ -219,14 +202,6 @@ func (m *FTSManager) createFTSTable(tableName, ftsTableName string, searchableCo
 
 // createSQLiteFTSTable creates SQLite FTS virtual table
 func (m *FTSManager) createSQLiteFTSTable(tableName, ftsTableName string, allCols []string, keyCol string) error {
-	var sqlDB *sql.DB
-	var err error
-
-	sqlDB, err = m.db.DB()
-	if err != nil {
-		return fmt.Errorf("failed to get SQL DB: %w", err)
-	}
-
 	// Validate identifiers to prevent SQL injection
 	if !isValidSQLIdentifier(tableName) || !isValidSQLIdentifier(ftsTableName) || !isValidSQLIdentifier(keyCol) {
 		return fmt.Errorf("invalid SQL identifier in table or column name")
@@ -246,7 +221,7 @@ func (m *FTSManager) createSQLiteFTSTable(tableName, ftsTableName string, allCol
 		strings.Join(allCols, ", "),
 	)
 
-	_, err = sqlDB.Exec(createSQL)
+	err := m.db.Exec(createSQL).Error
 	if err != nil {
 		return fmt.Errorf("failed to create FTS table: %w", err)
 	}
@@ -266,14 +241,6 @@ func (m *FTSManager) createSQLiteFTSTable(tableName, ftsTableName string, allCol
 
 // createPostgresFTSTable creates PostgreSQL FTS table with tsvector column and GIN index
 func (m *FTSManager) createPostgresFTSTable(tableName, ftsTableName string, searchableCols []string, keyCol string, entityMetadata *metadata.EntityMetadata) error {
-	var sqlDB *sql.DB
-	var err error
-
-	sqlDB, err = m.db.DB()
-	if err != nil {
-		return fmt.Errorf("failed to get SQL DB: %w", err)
-	}
-
 	// Validate identifiers to prevent SQL injection
 	if !isValidSQLIdentifier(tableName) || !isValidSQLIdentifier(ftsTableName) || !isValidSQLIdentifier(keyCol) {
 		return fmt.Errorf("invalid SQL identifier in table or column name")
@@ -300,7 +267,7 @@ func (m *FTSManager) createPostgresFTSTable(tableName, ftsTableName string, sear
 		)
 	`, ftsTableName, keyCol, keyType)
 
-	_, err = sqlDB.Exec(createSQL)
+	err := m.db.Exec(createSQL).Error
 	if err != nil {
 		return fmt.Errorf("failed to create FTS table: %w", err)
 	}
@@ -311,7 +278,7 @@ func (m *FTSManager) createPostgresFTSTable(tableName, ftsTableName string, sear
 		ON %s USING GIN(search_vector)
 	`, ftsTableName, ftsTableName)
 
-	_, err = sqlDB.Exec(indexSQL)
+	err = m.db.Exec(indexSQL).Error
 	if err != nil {
 		return fmt.Errorf("failed to create GIN index: %w", err)
 	}
@@ -331,14 +298,6 @@ func (m *FTSManager) createPostgresFTSTable(tableName, ftsTableName string, sear
 
 // createFTSTriggers creates triggers to keep FTS table in sync with the main table
 func (m *FTSManager) createFTSTriggers(tableName, ftsTableName string, cols []string, keyCol string) error {
-	var sqlDB *sql.DB
-	var err error
-
-	sqlDB, err = m.db.DB()
-	if err != nil {
-		return err
-	}
-
 	colsList := strings.Join(cols, ", ")
 	newColsList := "NEW." + strings.Join(cols, ", NEW.")
 
@@ -365,7 +324,7 @@ func (m *FTSManager) createFTSTriggers(tableName, ftsTableName string, cols []st
 
 	triggers := []string{insertTrigger, deleteTrigger, updateTrigger}
 	for _, trigger := range triggers {
-		if _, err := sqlDB.Exec(trigger); err != nil {
+		if err := m.db.Exec(trigger).Error; err != nil {
 			return fmt.Errorf("failed to create trigger: %w", err)
 		}
 	}
@@ -384,21 +343,13 @@ func (m *FTSManager) buildUpdateSetClause(cols []string, prefix string) string {
 
 // populateFTSTable populates the FTS table with existing data from the main table
 func (m *FTSManager) populateFTSTable(tableName, ftsTableName string, cols []string) error {
-	var sqlDB *sql.DB
-	var err error
-
-	sqlDB, err = m.db.DB()
-	if err != nil {
-		return err
-	}
-
 	colsList := strings.Join(cols, ", ")
 	insertSQL := fmt.Sprintf(
 		"INSERT INTO %s(%s) SELECT %s FROM %s",
 		ftsTableName, colsList, colsList, tableName,
 	)
 
-	_, err = sqlDB.Exec(insertSQL)
+	err := m.db.Exec(insertSQL).Error
 	if err != nil {
 		return fmt.Errorf("failed to populate FTS table: %w", err)
 	}
@@ -408,14 +359,6 @@ func (m *FTSManager) populateFTSTable(tableName, ftsTableName string, cols []str
 
 // createPostgresFTSTriggers creates PostgreSQL triggers to keep FTS table in sync
 func (m *FTSManager) createPostgresFTSTriggers(tableName, ftsTableName string, searchableCols []string, keyCol string) error {
-	var sqlDB *sql.DB
-	var err error
-
-	sqlDB, err = m.db.DB()
-	if err != nil {
-		return err
-	}
-
 	// Build tsvector expression combining all searchable columns
 	tsvectorExpr := m.buildPostgresTSVectorExpr(searchableCols)
 
@@ -441,7 +384,7 @@ func (m *FTSManager) createPostgresFTSTriggers(tableName, ftsTableName string, s
 		ftsTableName, tsvectorExpr, keyCol, keyCol,
 		ftsTableName, keyCol, keyCol)
 
-	_, err = sqlDB.Exec(functionSQL)
+	err := m.db.Exec(functionSQL).Error
 	if err != nil {
 		return fmt.Errorf("failed to create trigger function: %w", err)
 	}
@@ -455,7 +398,7 @@ func (m *FTSManager) createPostgresFTSTriggers(tableName, ftsTableName string, s
 
 	for _, dropSQL := range dropTriggers {
 		// Ignore errors for non-existent triggers - this is expected on first run
-		_, _ = sqlDB.Exec(dropSQL) //nolint:errcheck
+		_ = m.db.Exec(dropSQL).Error //nolint:errcheck
 	}
 
 	// Create triggers for INSERT, UPDATE, DELETE
@@ -482,7 +425,7 @@ func (m *FTSManager) createPostgresFTSTriggers(tableName, ftsTableName string, s
 
 	triggers := []string{insertTrigger, updateTrigger, deleteTrigger}
 	for _, trigger := range triggers {
-		if _, err := sqlDB.Exec(trigger); err != nil {
+		if err := m.db.Exec(trigger).Error; err != nil {
 			return fmt.Errorf("failed to create trigger: %w", err)
 		}
 	}
@@ -511,14 +454,6 @@ func (m *FTSManager) buildPostgresTSVectorExpr(cols []string) string {
 
 // populatePostgresFTSTable populates the PostgreSQL FTS table with existing data
 func (m *FTSManager) populatePostgresFTSTable(tableName, ftsTableName string, searchableCols []string, keyCol string) error {
-	var sqlDB *sql.DB
-	var err error
-
-	sqlDB, err = m.db.DB()
-	if err != nil {
-		return err
-	}
-
 	// Validate identifiers for defense in depth
 	if !isValidSQLIdentifier(tableName) || !isValidSQLIdentifier(ftsTableName) || !isValidSQLIdentifier(keyCol) {
 		return fmt.Errorf("invalid SQL identifier in table or column name")
@@ -542,7 +477,7 @@ func (m *FTSManager) populatePostgresFTSTable(tableName, ftsTableName string, se
 		ftsTableName, keyCol, keyCol, tsvectorExpr, tableName,
 	)
 
-	_, err = sqlDB.Exec(insertSQL)
+	err := m.db.Exec(insertSQL).Error
 	if err != nil {
 		return fmt.Errorf("failed to populate FTS table: %w", err)
 	}
