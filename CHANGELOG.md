@@ -35,6 +35,7 @@ rely on version numbers to reason about compatibility.
   - Improved discoverability: hooks are now prominent in main package documentation
 
 ### Fixed
+- **Ambiguous column reference error when combining `$select` with navigation filters**: Fixed PostgreSQL error "column reference is ambiguous" that occurred when using `$select` with `$filter` on navigation properties. The `applySelect` function now qualifies column names with table names (e.g., `members.id` instead of `id`) to prevent ambiguity when JOINs are present. This fix ensures compatibility with both PostgreSQL and SQLite.
 - Data race in async monitor configuration resolved by synchronizing access in the router, fixing `-race` CI test failures in `internal/service/runtime.TestServiceRespondAsyncFlow`.
 - Compliance test flakiness eliminated by implementing per-test database reseeding instead of per-suite reseeding
   - Async processing tests now pass consistently (previously failed 5/6 tests on first run, 0/6 on second run)
