@@ -68,18 +68,16 @@ func (h *EntityHandler) buildKeyQuery(db *gorm.DB, entityKey string) (*gorm.DB, 
 			if !found {
 				return nil, fmt.Errorf("missing key property: %s", keyProp.JsonName)
 			}
-			// Use snake_case for database column name (GORM convention)
-			columnName := toSnakeCase(keyProp.JsonName)
-			db = db.Where(fmt.Sprintf("%s = ?", columnName), keyValue)
+			// Use cached column name from metadata
+			db = db.Where(fmt.Sprintf("%s = ?", keyProp.ColumnName), keyValue)
 		}
 	} else {
 		// Single key - use backwards compatible logic
 		if len(h.metadata.KeyProperties) != 1 {
 			return nil, fmt.Errorf("entity has composite keys, please use composite key format: key1=value1,key2=value2")
 		}
-		// Use snake_case for database column name (GORM convention)
-		columnName := toSnakeCase(h.metadata.KeyProperties[0].JsonName)
-		db = db.Where(fmt.Sprintf("%s = ?", columnName), entityKey)
+		// Use cached column name from metadata
+		db = db.Where(fmt.Sprintf("%s = ?", h.metadata.KeyProperties[0].ColumnName), entityKey)
 	}
 
 	return db, nil

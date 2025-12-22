@@ -47,6 +47,7 @@ type PropertyMetadata struct {
 	Name                      string
 	Type                      reflect.Type
 	FieldName                 string
+	ColumnName                string // Database column name (computed once, respects GORM column: tags)
 	IsKey                     bool
 	KeyGenerator              string
 	DatabaseGenerated         bool
@@ -56,6 +57,7 @@ type PropertyMetadata struct {
 	IsNavigationProp          bool
 	NavigationTarget          string // Entity type name for navigation properties
 	NavigationTargetTableName string // Database table name for navigation target (computed once)
+	ForeignKeyColumnName      string // Foreign key column name for navigation properties (computed once)
 	NavigationIsArray         bool   // True for collection navigation properties
 	IsETag                    bool   // True if this property should be used for ETag generation
 	IsComplexType             bool   // True if this property is a complex type (embedded struct)
@@ -337,6 +339,9 @@ func analyzeField(field reflect.StructField, metadata *EntityMetadata) (Property
 	// Check if this is a navigation property
 	analyzeNavigationProperty(&property, field)
 
+	// Compute and cache the column name (respects GORM column: tags)
+	property.ColumnName = getColumnNameFromProperty(&property)
+
 	// Check for OData tags
 	if err := analyzeODataTags(&property, field, metadata); err != nil {
 		return PropertyMetadata{}, err
@@ -405,6 +410,9 @@ func analyzeNavigationProperty(property *PropertyMetadata, field reflect.StructF
 			property.NavigationTargetTableName = getTableNameFromReflectType(fieldType)
 			property.NavigationIsArray = isSlice
 
+			// Compute and cache the foreign key column name (respects GORM foreignKey: tags)
+			property.ForeignKeyColumnName = getForeignKeyColumnName(property)
+
 			// Extract referential constraints from GORM tags (only for foreignKey/references)
 			if strings.Contains(gormTag, "foreignKey") || strings.Contains(gormTag, "references") {
 				property.ReferentialConstraints = extractReferentialConstraints(gormTag)
@@ -449,6 +457,10 @@ func analyzeComplexTypeFields(property *PropertyMetadata, fieldType reflect.Type
 		}
 
 		analyzeNavigationProperty(&nestedProp, field)
+		
+		// Compute and cache the column name for complex type fields
+		nestedProp.ColumnName = getColumnNameFromProperty(&nestedProp)
+		
 		if nestedProp.IsComplexType {
 			nestedProp.EmbeddedPrefix = extractEmbeddedPrefix(nestedProp.GormTag)
 			analyzeComplexTypeFields(&nestedProp, field.Type)
@@ -1172,6 +1184,51 @@ func getTableNameFromReflectType(entityType reflect.Type) string {
 
 	// Fallback to default GORM naming (snake_case pluralization)
 	return toSnakeCase(pluralize(entityType.Name()))
+}
+
+// getColumnNameFromProperty computes the database column name for a property
+// This respects GORM column: tags and falls back to snake_case conversion
+func getColumnNameFromProperty(prop *PropertyMetadata) string {
+	if prop == nil {
+		return ""
+	}
+
+	// Check GORM tag for explicit column name
+	if prop.GormTag != "" {
+		parts := strings.Split(prop.GormTag, ";")
+		for _, part := range parts {
+			part = strings.TrimSpace(part)
+			if strings.HasPrefix(part, "column:") {
+				return strings.TrimPrefix(part, "column:")
+			}
+		}
+	}
+
+	// Fall back to snake_case conversion
+	return toSnakeCase(prop.Name)
+}
+
+// getForeignKeyColumnName computes the foreign key column name for a navigation property
+// This respects GORM foreignKey: tags and falls back to <navigation_property_name>_id convention
+func getForeignKeyColumnName(prop *PropertyMetadata) string {
+	if prop == nil || !prop.IsNavigationProp {
+		return ""
+	}
+
+	// Check GORM tag for explicit foreignKey
+	if prop.GormTag != "" {
+		parts := strings.Split(prop.GormTag, ";")
+		for _, part := range parts {
+			part = strings.TrimSpace(part)
+			if strings.HasPrefix(part, "foreignKey:") {
+				fkField := strings.TrimPrefix(part, "foreignKey:")
+				return toSnakeCase(fkField)
+			}
+		}
+	}
+
+	// Fall back to convention: <navigation_property_name>_id
+	return toSnakeCase(prop.Name) + "_id"
 }
 
 // toSnakeCase converts a camelCase or PascalCase string to snake_case

@@ -395,18 +395,8 @@ func (h *EntityHandler) typeDiscriminatorColumn() string {
 		return column
 	}
 
-	name := strings.TrimSpace(prop.JsonName)
-	if name == "" || name == "-" {
-		name = prop.FieldName
-	}
-	if name == "" {
-		name = prop.Name
-	}
-	if name == "" {
-		return ""
-	}
-
-	return toSnakeCase(name)
+	// Use cached column name from metadata
+	return prop.ColumnName
 }
 
 func parseGORMColumn(tag string) string {
