@@ -1,0 +1,45 @@
+name: SQLite Compliance Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  sqlite-compliance:
+    name: SQLite Compliance Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v6
+
+    - name: Set up Go
+      uses: actions/setup-go@v6
+      with:
+        go-version: '1.24'
+
+    - name: Cache Go modules
+      uses: actions/cache@v5
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-1.24-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-1.24-
+
+    - name: Download dependencies
+      run: |
+        go mod download
+        cd compliance-suite
+        go mod download
+
+    - name: Run compliance tests (SQLite)
+      run: |
+        cd compliance-suite
+        go run . -db sqlite
