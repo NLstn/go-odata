@@ -24,13 +24,13 @@ func propertyExists(propertyName string, entityMetadata *metadata.EntityMetadata
 	if entityMetadata == nil {
 		return false
 	}
-	
+
 	// Check if this is a single-entity navigation property path
 	// Per OData v4 spec 5.1.1.15, single-entity navigation properties can be accessed directly
 	if entityMetadata.IsSingleEntityNavigationPath(propertyName) {
 		return true
 	}
-	
+
 	_, _, err := entityMetadata.ResolvePropertyPath(propertyName)
 	return err == nil
 }
@@ -77,13 +77,13 @@ func GetColumnName(propertyName string, entityMetadata *metadata.EntityMetadata)
 		if len(segments) >= 2 {
 			navPropName := strings.TrimSpace(segments[0])
 			targetPropertyName := strings.TrimSpace(segments[1])
-			
+
 			navProp := entityMetadata.FindNavigationProperty(navPropName)
 			if navProp != nil {
 				// Get the related table name from cached metadata
 				// This was computed once during entity registration and respects custom TableName() methods
 				relatedTableName := navProp.NavigationTargetTableName
-				
+
 				// Return qualified column name: related_table.column_name
 				return relatedTableName + "." + toSnakeCase(targetPropertyName)
 			}

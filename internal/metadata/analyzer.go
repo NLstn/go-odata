@@ -11,7 +11,7 @@ type EntityMetadata struct {
 	EntityType    reflect.Type
 	EntityName    string
 	EntitySetName string
-	TableName     string             // Database table name (computed once, respects custom TableName() methods)
+	TableName     string // Database table name (computed once, respects custom TableName() methods)
 	Properties    []PropertyMetadata
 	KeyProperties []PropertyMetadata // Support for composite keys
 	KeyProperty   *PropertyMetadata  // Deprecated: Use KeyProperties for single or composite keys, kept for backwards compatibility
@@ -44,23 +44,23 @@ type EntityMetadata struct {
 
 // PropertyMetadata holds metadata information about an entity property
 type PropertyMetadata struct {
-	Name              string
-	Type              reflect.Type
-	FieldName         string
-	IsKey             bool
-	KeyGenerator      string
-	DatabaseGenerated bool
-	IsRequired        bool
-	JsonName          string
-	GormTag           string
-	IsNavigationProp  bool
-	NavigationTarget  string // Entity type name for navigation properties
+	Name                      string
+	Type                      reflect.Type
+	FieldName                 string
+	IsKey                     bool
+	KeyGenerator              string
+	DatabaseGenerated         bool
+	IsRequired                bool
+	JsonName                  string
+	GormTag                   string
+	IsNavigationProp          bool
+	NavigationTarget          string // Entity type name for navigation properties
 	NavigationTargetTableName string // Database table name for navigation target (computed once)
-	NavigationIsArray bool   // True for collection navigation properties
-	IsETag            bool   // True if this property should be used for ETag generation
-	IsComplexType     bool   // True if this property is a complex type (embedded struct)
-	EmbeddedPrefix    string
-	ComplexTypeFields map[string]*PropertyMetadata
+	NavigationIsArray         bool   // True for collection navigation properties
+	IsETag                    bool   // True if this property should be used for ETag generation
+	IsComplexType             bool   // True if this property is a complex type (embedded struct)
+	EmbeddedPrefix            string
+	ComplexTypeFields         map[string]*PropertyMetadata
 	// Facets
 	MaxLength    int    // Maximum length for string properties
 	Precision    int    // Precision for decimal/numeric properties
@@ -1161,15 +1161,15 @@ func getTableNameFromReflectType(entityType reflect.Type) string {
 	if entityType.Kind() == reflect.Ptr {
 		entityType = entityType.Elem()
 	}
-	
+
 	// Create a zero value instance and check if it implements TableName()
 	instance := reflect.New(entityType).Interface()
-	
+
 	// Check if the entity implements the TableName() method
 	if tabler, ok := instance.(interface{ TableName() string }); ok {
 		return tabler.TableName()
 	}
-	
+
 	// Fallback to default GORM naming (snake_case pluralization)
 	return toSnakeCase(pluralize(entityType.Name()))
 }
