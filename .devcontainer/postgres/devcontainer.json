@@ -34,7 +34,7 @@
 			]
 		}
 	},
-	"postCreateCommand": "bash postgres-devcontainer/setup.sh",
+	"postCreateCommand": "bash .devcontainer/postgres/setup.sh",
 	"remoteUser": "vscode",
 	"forwardPorts": [
 		8080

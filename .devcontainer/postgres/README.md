@@ -76,8 +76,8 @@ The container is configured to automatically:
 
 ## Customization
 
-You can customize the dev container by editing `postgres-devcontainer/devcontainer.json`. See the [Dev Containers specification](https://containers.dev/) for more options.
+You can customize the dev container by editing `.devcontainer/postgres/devcontainer.json`. See the [Dev Containers specification](https://containers.dev/) for more options.
 
 ## Alternative Dev Containers
 
-This project also provides a MariaDB-based devcontainer in the `mariadb-devcontainer` directory for testing with MariaDB.
+This project also provides a MariaDB-based devcontainer in the `.devcontainer/mariadb` directory for testing with MariaDB.
