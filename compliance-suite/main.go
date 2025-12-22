@@ -385,6 +385,11 @@ func main() {
 			Suite:   v4_0.QueryOptionCombinations,
 		})
 		testSuites = append(testSuites, TestSuiteInfo{
+			Name:    "11.2.5.11_query_select_with_navigation_filter",
+			Version: "4.0",
+			Suite:   v4_0.QuerySelectWithNavigationFilter,
+		})
+		testSuites = append(testSuites, TestSuiteInfo{
 			Name:    "11.2.5.12_pagination_edge_cases",
 			Version: "4.0",
 			Suite:   v4_0.PaginationEdgeCases,
