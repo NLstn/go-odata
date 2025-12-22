@@ -241,7 +241,13 @@ func buildBaseURL(r *http.Request) string {
 		host = "localhost:8080"
 	}
 
-	return scheme + "://" + host
+	// Use strings.Builder to avoid string concatenation allocations
+	var b strings.Builder
+	b.Grow(len(scheme) + 3 + len(host)) // "://" is 3 chars
+	b.WriteString(scheme)
+	b.WriteString("://")
+	b.WriteString(host)
+	return b.String()
 }
 
 // BuildNextLink builds the next link URL for pagination using $skip

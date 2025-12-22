@@ -170,40 +170,48 @@ func fuzzyContains(text, pattern string, fuzziness int) bool {
 }
 
 // levenshteinDistance calculates the Levenshtein distance between two strings
+// levenshteinDistance calculates the Levenshtein distance between two strings
+// Optimized to use only two rows instead of a full 2D matrix, reducing memory
+// allocations from O(m*n) to O(n) where n is the length of the shorter string.
 func levenshteinDistance(s1, s2 string) int {
 	len1 := len(s1)
 	len2 := len(s2)
 
-	// Create a 2D array for dynamic programming
-	dp := make([][]int, len1+1)
-	for i := range dp {
-		dp[i] = make([]int, len2+1)
+	// Ensure s1 is the shorter string to minimize memory usage
+	if len1 > len2 {
+		s1, s2 = s2, s1
+		len1, len2 = len2, len1
 	}
 
-	// Initialize base cases
+	// Only need two rows: previous and current
+	// This reduces memory from O(m*n) to O(min(m,n))
+	prev := make([]int, len1+1)
+	curr := make([]int, len1+1)
+
+	// Initialize the first row (base case: distance from empty string)
 	for i := 0; i <= len1; i++ {
-		dp[i][0] = i
-	}
-	for j := 0; j <= len2; j++ {
-		dp[0][j] = j
+		prev[i] = i
 	}
 
-	// Fill the DP table
-	for i := 1; i <= len1; i++ {
-		for j := 1; j <= len2; j++ {
+	// Fill the DP table row by row
+	for j := 1; j <= len2; j++ {
+		curr[0] = j // Base case: distance to empty string
+		for i := 1; i <= len1; i++ {
 			if s1[i-1] == s2[j-1] {
-				dp[i][j] = dp[i-1][j-1]
+				curr[i] = prev[i-1]
 			} else {
-				dp[i][j] = min3(
-					dp[i-1][j]+1,   // deletion
-					dp[i][j-1]+1,   // insertion
-					dp[i-1][j-1]+1, // substitution
+				curr[i] = min3(
+					prev[i]+1,   // deletion
+					curr[i-1]+1, // insertion
+					prev[i-1]+1, // substitution
 				)
 			}
 		}
+		// Swap rows: current becomes previous for next iteration
+		prev, curr = curr, prev
 	}
 
-	return dp[len1][len2]
+	return prev[len1]
 }
 
 // min3 returns the minimum of three integers

@@ -25,6 +25,8 @@ type EntityHandler struct {
 	keyGeneratorResolver func(string) (func(context.Context) (interface{}, error), bool)
 	overwrite            *entityOverwriteHandlers
 	defaultMaxTop        *int
+	// propertyMap provides O(1) property lookup by field name instead of O(n) iteration
+	propertyMap map[string]*metadata.PropertyMetadata
 }
 
 // NewEntityHandler creates a new entity handler
@@ -32,11 +34,30 @@ func NewEntityHandler(db *gorm.DB, entityMetadata *metadata.EntityMetadata, logg
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &EntityHandler{
+	h := &EntityHandler{
 		db:        db,
 		metadata:  entityMetadata,
 		namespace: defaultNamespace,
 		logger:    logger,
+	}
+	// Initialize property map for O(1) lookups
+	h.initPropertyMap()
+	return h
+}
+
+// initPropertyMap initializes the property lookup map for O(1) property lookups
+func (h *EntityHandler) initPropertyMap() {
+	if h.metadata == nil || len(h.metadata.Properties) == 0 {
+		return
+	}
+	// Create map with capacity for all properties (Name and FieldName might differ)
+	h.propertyMap = make(map[string]*metadata.PropertyMetadata, len(h.metadata.Properties)*2)
+	for i := range h.metadata.Properties {
+		prop := &h.metadata.Properties[i]
+		h.propertyMap[prop.Name] = prop
+		if prop.FieldName != "" && prop.FieldName != prop.Name {
+			h.propertyMap[prop.FieldName] = prop
+		}
 	}
 }
 
