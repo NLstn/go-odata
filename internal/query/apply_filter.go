@@ -28,6 +28,37 @@ func quoteIdent(_ string, ident string) string {
 	return fmt.Sprintf("\"%s\"", escaped)
 }
 
+// getQuotedColumnName returns a properly quoted column name for use in SQL queries.
+// For navigation property paths (e.g., "Category/Name"), it returns a fully qualified
+// and quoted reference like "Categories"."name" to ensure PostgreSQL compatibility.
+func getQuotedColumnName(dialect string, property string, entityMetadata *metadata.EntityMetadata) string {
+	if entityMetadata == nil {
+		// Quote the column name for PostgreSQL compatibility even without metadata
+		return quoteIdent(dialect, toSnakeCase(property))
+	}
+
+	// Check if this is a navigation property path
+	if entityMetadata.IsSingleEntityNavigationPath(property) {
+		segments := strings.Split(property, "/")
+		if len(segments) >= 2 {
+			navPropName := strings.TrimSpace(segments[0])
+			targetPropertyName := strings.TrimSpace(segments[1])
+
+			navProp := entityMetadata.FindNavigationProperty(navPropName)
+			if navProp != nil {
+				// Get the related table name from cached metadata
+				relatedTableName := navProp.NavigationTargetTableName
+				columnName := toSnakeCase(targetPropertyName)
+				// Return fully quoted reference for proper PostgreSQL case handling
+				return quoteIdent(dialect, relatedTableName) + "." + quoteIdent(dialect, columnName)
+			}
+		}
+	}
+
+	// For regular properties, use the standard GetColumnName
+	return GetColumnName(property, entityMetadata)
+}
+
 // applyFilter applies filter expressions to the GORM query
 func applyFilter(db *gorm.DB, filter *FilterExpression, entityMetadata *metadata.EntityMetadata) *gorm.DB {
 	if filter == nil {
@@ -215,7 +246,8 @@ func buildComparisonCondition(dialect string, filter *FilterExpression, entityMe
 
 	var columnName string
 	if propertyExists(filter.Property, entityMetadata) {
-		columnName = GetColumnName(filter.Property, entityMetadata)
+		// Use getQuotedColumnName for proper PostgreSQL handling of navigation paths
+		columnName = getQuotedColumnName(dialect, filter.Property, entityMetadata)
 	} else {
 		rawName := sanitizeIdentifier(filter.Property)
 		if rawName == "" {
@@ -228,7 +260,9 @@ func buildComparisonCondition(dialect string, filter *FilterExpression, entityMe
 		} else if len(rawName) > 0 && rawName[0] == '$' {
 			columnName = quoteIdent(dialect, rawName)
 		} else {
-			columnName = rawName
+			// Quote computed aliases and unknown identifiers for PostgreSQL compatibility
+			// This ensures aliases from $apply (like "Total" from groupby/aggregate) work correctly
+			columnName = quoteIdent(dialect, rawName)
 		}
 	}
 
@@ -237,7 +271,7 @@ func buildComparisonCondition(dialect string, filter *FilterExpression, entityMe
 		if err == nil && rightExpr != nil {
 			rightColumnName := ""
 			if rightExpr.Property != "" {
-				rightColumnName = GetColumnName(rightExpr.Property, entityMetadata)
+				rightColumnName = getQuotedColumnName(dialect, rightExpr.Property, entityMetadata)
 			}
 			rightSQL, rightArgs := buildFunctionSQL(dialect, rightExpr.Operator, rightColumnName, rightExpr.Value)
 			if rightSQL != "" {
@@ -471,7 +505,7 @@ func buildFunctionComparisonForLambda(dialect string, filter *FilterExpression, 
 // buildFunctionComparison builds a comparison with a function on the left side
 func buildFunctionComparison(dialect string, filter *FilterExpression, entityMetadata *metadata.EntityMetadata) (string, []interface{}) {
 	funcExpr := filter.Left
-	columnName := GetColumnName(funcExpr.Property, entityMetadata)
+	columnName := getQuotedColumnName(dialect, funcExpr.Property, entityMetadata)
 
 	funcSQL, funcArgs := buildFunctionSQL(dialect, funcExpr.Operator, columnName, funcExpr.Value)
 	if funcSQL == "" {
@@ -489,7 +523,7 @@ func buildFunctionComparison(dialect string, filter *FilterExpression, entityMet
 			return compSQL, allArgs
 		}
 
-		rightColumnName := GetColumnName(rightFuncExpr.Property, entityMetadata)
+		rightColumnName := getQuotedColumnName(dialect, rightFuncExpr.Property, entityMetadata)
 		rightFuncSQL, rightFuncArgs := buildFunctionSQL(dialect, rightFuncExpr.Operator, rightColumnName, rightFuncExpr.Value)
 		if rightFuncSQL == "" {
 			return "", nil
@@ -515,6 +549,30 @@ func buildFunctionComparison(dialect string, filter *FilterExpression, entityMet
 
 		allArgs := append(funcArgs, rightFuncArgs...)
 		return compSQL, allArgs
+	}
+
+	// Check if the right side is a property name (for property-to-property comparison like "Price add 0.01 gt Price")
+	if rightPropertyName, ok := filter.Value.(string); ok && propertyExists(rightPropertyName, entityMetadata) {
+		// This is a property-to-property comparison
+		rightColumnName := getQuotedColumnName(dialect, rightPropertyName, entityMetadata)
+		var compSQL string
+		switch filter.Operator {
+		case OpEqual:
+			compSQL = fmt.Sprintf("%s = %s", funcSQL, rightColumnName)
+		case OpNotEqual:
+			compSQL = fmt.Sprintf("%s != %s", funcSQL, rightColumnName)
+		case OpGreaterThan:
+			compSQL = fmt.Sprintf("%s > %s", funcSQL, rightColumnName)
+		case OpGreaterThanOrEqual:
+			compSQL = fmt.Sprintf("%s >= %s", funcSQL, rightColumnName)
+		case OpLessThan:
+			compSQL = fmt.Sprintf("%s < %s", funcSQL, rightColumnName)
+		case OpLessThanOrEqual:
+			compSQL = fmt.Sprintf("%s <= %s", funcSQL, rightColumnName)
+		default:
+			return "", nil
+		}
+		return compSQL, funcArgs
 	}
 
 	compSQL := buildComparisonSQL(filter.Operator, funcSQL)
@@ -543,6 +601,8 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 		}
 		return fmt.Sprintf("INSTR(%s, ?) - 1", columnName), []interface{}{value}
 	case OpConcat:
+		// PostgreSQL uses || operator, SQLite supports both CONCAT() and ||
+		// For maximum compatibility, use || for PostgreSQL and CONCAT() for SQLite
 		if args, ok := value.([]interface{}); ok && len(args) == 2 {
 			firstArg := args[0]
 			secondArg := args[1]
@@ -578,7 +638,8 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 				}
 			} else if strVal, ok := secondArg.(string); ok {
 				if len(strVal) > 0 && (strVal[0] >= 'A' && strVal[0] <= 'Z' || strings.Contains(strVal, "_")) {
-					rightSQL = toSnakeCase(strVal)
+					// Quote the column name for PostgreSQL compatibility
+					rightSQL = quoteIdent(dialect, toSnakeCase(strVal))
 					rightArgs = nil
 				} else {
 					rightSQL = "?"
@@ -590,26 +651,45 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 			}
 
 			allArgs := append(leftArgs, rightArgs...)
+			if dialect == "postgres" {
+				return fmt.Sprintf("(%s || %s)", leftSQL, rightSQL), allArgs
+			}
 			return fmt.Sprintf("CONCAT(%s, %s)", leftSQL, rightSQL), allArgs
 		}
 
 		if funcCall, ok := value.(*FunctionCallExpr); ok {
 			rightExpr, err := convertFunctionCallExpr(funcCall, nil)
 			if err != nil {
+				if dialect == "postgres" {
+					return fmt.Sprintf("(%s || ?)", columnName), []interface{}{value}
+				}
 				return fmt.Sprintf("CONCAT(%s, ?)", columnName), []interface{}{value}
 			}
 			rightColumnName := rightExpr.Property
 			rightSQL, rightArgs := buildFunctionSQL(dialect, rightExpr.Operator, rightColumnName, rightExpr.Value)
 			if rightSQL == "" {
+				if dialect == "postgres" {
+					return fmt.Sprintf("(%s || ?)", columnName), []interface{}{value}
+				}
 				return fmt.Sprintf("CONCAT(%s, ?)", columnName), []interface{}{value}
+			}
+			if dialect == "postgres" {
+				return fmt.Sprintf("(%s || %s)", columnName, rightSQL), rightArgs
 			}
 			return fmt.Sprintf("CONCAT(%s, %s)", columnName, rightSQL), rightArgs
 		}
 		if strVal, ok := value.(string); ok {
 			if len(strVal) > 0 && (strVal[0] >= 'A' && strVal[0] <= 'Z' || strings.Contains(strVal, "_")) {
-				columnName2 := toSnakeCase(strVal)
+				// Quote the column name for PostgreSQL compatibility
+				columnName2 := quoteIdent(dialect, toSnakeCase(strVal))
+				if dialect == "postgres" {
+					return fmt.Sprintf("(%s || %s)", columnName, columnName2), nil
+				}
 				return fmt.Sprintf("CONCAT(%s, %s)", columnName, columnName2), nil
 			}
+		}
+		if dialect == "postgres" {
+			return fmt.Sprintf("(%s || ?)", columnName), []interface{}{value}
 		}
 		return fmt.Sprintf("CONCAT(%s, ?)", columnName), []interface{}{value}
 	case OpHas:
