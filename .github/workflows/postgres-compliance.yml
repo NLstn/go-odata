@@ -1,0 +1,60 @@
+name: PostgreSQL Compliance Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  postgres-compliance:
+    name: PostgreSQL Compliance Tests
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: odata
+          POSTGRES_PASSWORD: odata_test
+          POSTGRES_DB: odata_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v6
+
+    - name: Set up Go
+      uses: actions/setup-go@v6
+      with:
+        go-version: '1.24'
+
+    - name: Cache Go modules
+      uses: actions/cache@v5
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-1.24-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-1.24-
+
+    - name: Download dependencies
+      run: |
+        go mod download
+        cd compliance-suite
+        go mod download
+
+    - name: Run compliance tests (PostgreSQL)
+      run: |
+        cd compliance-suite
+        go run . -db postgres -dsn "postgresql://odata:odata_test@localhost:5432/odata_test?sslmode=disable"
