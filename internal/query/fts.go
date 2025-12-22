@@ -75,6 +75,12 @@ func (m *FTSManager) detectFTS() {
 
 // isFTSVersionAvailable checks if a specific FTS version is available
 func (m *FTSManager) isFTSVersionAvailable(version string) bool {
+	// Validate version string to prevent SQL injection (defense in depth)
+	// Version is called with hardcoded values internally, but validate anyway
+	if !isValidSQLIdentifier(version) {
+		return false
+	}
+
 	// Try to create a temporary FTS table to test availability
 	testTableName := fmt.Sprintf("_test_fts_%s", version)
 	err := m.db.Exec(fmt.Sprintf("CREATE VIRTUAL TABLE IF NOT EXISTS %s USING %s(content)", testTableName, version)).Error
@@ -92,8 +98,9 @@ func (m *FTSManager) isFTSVersionAvailable(version string) bool {
 func (m *FTSManager) isPostgresFTSAvailable() bool {
 	// Test if we can use to_tsvector and to_tsquery functions
 	// These are built-in to PostgreSQL and should always be available
+	// Use a subquery to make the test more robust
 	var result int
-	err := m.db.Raw("SELECT 1 WHERE to_tsvector('english', 'test') @@ to_tsquery('english', 'test')").Scan(&result).Error
+	err := m.db.Raw("SELECT 1 FROM (SELECT to_tsvector('english', 'test') @@ to_tsquery('english', 'test') AS matched) AS test WHERE matched").Scan(&result).Error
 	// If query executes without error (even if no rows), FTS is available
 	if err != nil && err != gorm.ErrRecordNotFound {
 		return false
