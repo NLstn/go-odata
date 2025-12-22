@@ -17,6 +17,7 @@ func applySelect(db *gorm.DB, selectedProperties []string, entityMetadata *metad
 	columns := make([]string, 0, len(selectedProperties))
 	selectedPropMap := make(map[string]bool)
 	tableName := entityMetadata.TableName
+	dialect := getDatabaseDialect(db)
 
 	for _, propName := range selectedProperties {
 		propName = strings.TrimSpace(propName)
@@ -24,9 +25,10 @@ func applySelect(db *gorm.DB, selectedProperties []string, entityMetadata *metad
 			if (prop.JsonName == propName || prop.Name == propName) && !prop.IsNavigationProp && !prop.IsComplexType && !prop.IsStream {
 				// Use GetColumnName for proper column name resolution (handles GORM tags and metadata)
 				columnName := GetColumnName(prop.Name, entityMetadata)
-				// Qualify with table name to avoid ambiguous column references when JOINs are present
+				// Qualify with quoted table and column names to avoid ambiguous column references when JOINs are present
 				// This is necessary for PostgreSQL and also helps with SQLite when multiple tables have the same column names
-				qualifiedColumn := tableName + "." + columnName
+				// quoteIdent properly quotes identifiers for both PostgreSQL and SQLite
+				qualifiedColumn := quoteIdent(dialect, tableName) + "." + quoteIdent(dialect, columnName)
 				columns = append(columns, qualifiedColumn)
 				selectedPropMap[prop.Name] = true
 				break
@@ -38,8 +40,8 @@ func applySelect(db *gorm.DB, selectedProperties []string, entityMetadata *metad
 		if !selectedPropMap[keyProp.Name] {
 			// Use GetColumnName for proper column name resolution (handles GORM tags and metadata)
 			columnName := GetColumnName(keyProp.Name, entityMetadata)
-			// Qualify with table name to avoid ambiguous column references when JOINs are present
-			qualifiedColumn := tableName + "." + columnName
+			// Qualify with quoted table and column names to avoid ambiguous column references when JOINs are present
+			qualifiedColumn := quoteIdent(dialect, tableName) + "." + quoteIdent(dialect, columnName)
 			columns = append(columns, qualifiedColumn)
 		}
 	}
