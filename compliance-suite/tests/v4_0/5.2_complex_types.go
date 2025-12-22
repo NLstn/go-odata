@@ -20,7 +20,8 @@ func ComplexTypes() *framework.TestSuite {
 		"test_complex_type_retrieval",
 		"Retrieve entity with complex type property",
 		func(ctx *framework.TestContext) error {
-			prodPath, err := firstEntityPath(ctx, "Products")
+			// Find a product that has a ShippingAddress (not all products have one)
+			prodPath, err := entityPathByFilter(ctx, "Products", "ShippingAddress/City ne null")
 			if err != nil {
 				return err
 			}
@@ -49,7 +50,8 @@ func ComplexTypes() *framework.TestSuite {
 		"test_complex_nested_property",
 		"Access nested property of complex type",
 		func(ctx *framework.TestContext) error {
-			prodPath, err := firstEntityPath(ctx, "Products")
+			// Find a product that has a ShippingAddress (not all products have one)
+			prodPath, err := entityPathByFilter(ctx, "Products", "ShippingAddress/City ne null")
 			if err != nil {
 				return err
 			}
@@ -171,7 +173,8 @@ func ComplexTypes() *framework.TestSuite {
 		"test_access_complex_type",
 		"Access complex type property directly",
 		func(ctx *framework.TestContext) error {
-			prodPath, err := firstEntityPath(ctx, "Products")
+			// Find a product that has a ShippingAddress (not all products have one)
+			prodPath, err := entityPathByFilter(ctx, "Products", "ShippingAddress/City ne null")
 			if err != nil {
 				return err
 			}
