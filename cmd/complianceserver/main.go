@@ -21,8 +21,8 @@ var Db *gorm.DB
 
 func main() {
 	// Parse command-line flags
-	dbType := flag.String("db", "sqlite", "Database type: sqlite, postgres, or mariadb")
-	dbDSN := flag.String("dsn", "", "Database DSN (connection string). For postgres, use postgresql://... format. For mariadb, use username:password@tcp(host:port)/dbname. For sqlite, use file path")
+	dbType := flag.String("db", "sqlite", "Database type: sqlite, postgres, mariadb, or mysql")
+	dbDSN := flag.String("dsn", "", "Database DSN (connection string). For postgres, use postgresql://... format. For mariadb/mysql, use username:password@tcp(host:port)/dbname. For sqlite, use file path")
 	port := flag.String("port", "9090", "Port to listen on")
 	flag.Parse()
 
@@ -75,8 +75,24 @@ func main() {
 		}
 		fmt.Println("🐬 Using MariaDB database")
 
+	case "mysql":
+		dsn := *dbDSN
+		if dsn == "" {
+			// Check for environment variable as fallback
+			dsn = os.Getenv("MYSQL_DSN")
+			if dsn == "" {
+				log.Fatal("MySQL DSN required. Use -dsn flag or set MYSQL_DSN environment variable")
+			}
+		}
+
+		Db, err = gorm.Open(mysql.Open(dsn), &gorm.Config{})
+		if err != nil {
+			log.Fatal("Failed to connect to MySQL database:", err)
+		}
+		fmt.Println("🐬 Using MySQL database")
+
 	default:
-		log.Fatalf("Unsupported database type: %s. Use 'sqlite', 'postgres', or 'mariadb'", *dbType)
+		log.Fatalf("Unsupported database type: %s. Use 'sqlite', 'postgres', 'mariadb', or 'mysql'", *dbType)
 	}
 
 	// Initialize database with sample data

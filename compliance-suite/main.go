@@ -17,7 +17,7 @@ import (
 
 var (
 	serverURL      = flag.String("server", "http://localhost:9090", "OData server URL")
-	dbType         = flag.String("db", "sqlite", "Database type (sqlite, postgres, or mariadb)")
+	dbType         = flag.String("db", "sqlite", "Database type (sqlite, postgres, mariadb, or mysql)")
 	dbDSN          = flag.String("dsn", "", "Database DSN/connection string")
 	version        = flag.String("version", "all", "OData version to test (4.0, 4.01, or all)")
 	pattern        = flag.String("pattern", "", "Run only tests matching pattern")
@@ -817,6 +817,15 @@ func startComplianceServer() (*exec.Cmd, error) {
 			}
 		}
 		dbArgs = append(dbArgs, "-db", "mariadb", "-dsn", dsn)
+	} else if *dbType == "mysql" {
+		dsn := *dbDSN
+		if dsn == "" {
+			dsn = os.Getenv("MYSQL_DSN")
+			if dsn == "" {
+				dsn = "odata:odata_dev@tcp(localhost:3306)/odata_test?parseTime=true"
+			}
+		}
+		dbArgs = append(dbArgs, "-db", "mysql", "-dsn", dsn)
 	} else {
 		dsn := *dbDSN
 		if dsn == "" {

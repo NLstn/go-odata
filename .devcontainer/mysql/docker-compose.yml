@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  app:
+    image: mcr.microsoft.com/devcontainers/go:1.25
+    volumes:
+      - ../..:/workspaces/go-odata:cached
+    command: sleep infinity
+    network_mode: service:db
+    environment:
+      # MySQL connection environment variables
+      MYSQL_HOST: localhost
+      MYSQL_PORT: 3306
+      MYSQL_USER: odata
+      MYSQL_PASSWORD: odata_dev
+      MYSQL_DATABASE: odata_test
+      # Also set MYSQL_DSN for easy connection
+      MYSQL_DSN: "odata:odata_dev@tcp(localhost:3306)/odata_test?parseTime=true"
+
+  db:
+    image: mysql:8
+    restart: unless-stopped
+    volumes:
+      - mysql-data:/var/lib/mysql
+    environment:
+      MYSQL_USER: odata
+      MYSQL_PASSWORD: odata_dev
+      MYSQL_DATABASE: odata_test
+      MYSQL_ROOT_PASSWORD: root_password
+    ports:
+      - "3306:3306"
+
+volumes:
+  mysql-data:
