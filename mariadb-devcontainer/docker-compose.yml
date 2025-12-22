@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  app:
+    image: mcr.microsoft.com/devcontainers/go:1.25
+    volumes:
+      - ../..:/workspaces:cached
+    command: sleep infinity
+    network_mode: service:db
+    environment:
+      # MariaDB connection environment variables
+      MARIADB_HOST: localhost
+      MARIADB_PORT: 3306
+      MARIADB_USER: odata
+      MARIADB_PASSWORD: odata_dev
+      MARIADB_DATABASE: odata_test
+      # Also set MARIADB_DSN for easy connection
+      MARIADB_DSN: "odata:odata_dev@tcp(localhost:3306)/odata_test?parseTime=true"
+
+  db:
+    image: mariadb:11
+    restart: unless-stopped
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    environment:
+      MARIADB_USER: odata
+      MARIADB_PASSWORD: odata_dev
+      MARIADB_DATABASE: odata_test
+      MARIADB_ROOT_PASSWORD: root_password
+    ports:
+      - "3306:3306"
+
+volumes:
+  mariadb-data:
