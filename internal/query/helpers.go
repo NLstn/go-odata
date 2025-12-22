@@ -181,7 +181,8 @@ func isVowel(r rune) bool {
 }
 
 // getTableNameFromReflectType returns the table name for a given entity type
-// This respects custom TableName() methods on the entity without requiring a db connection
+// This respects custom TableName() methods on the entity by using reflection
+// to create a zero-value instance and checking if it implements the TableName() interface
 func getTableNameFromReflectType(entityType reflect.Type) string {
 	// Handle pointer types
 	if entityType.Kind() == reflect.Ptr {

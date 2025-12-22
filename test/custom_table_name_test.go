@@ -98,8 +98,7 @@ func TestCustomTableNameWithNavigationFilter(t *testing.T) {
 	service.RegisterEntity(&CustomTeamMember{})
 
 	// Test: Filter by navigation property with custom table names
-	// This should generate: LEFT JOIN "Teams" ON "TeamMembers"."team_id" = "Teams"."id"
-	// NOT: LEFT JOIN "teams" ON "team_members"."team_id" = "teams"."id"
+	// This ensures proper table name resolution in JOIN and ON clauses
 	testURL := "/CustomTeamMembers?$filter=" + url.QueryEscape("UserID eq 'user-1' and Team/ClubID eq 'club-1'")
 	req := httptest.NewRequest(http.MethodGet, testURL, nil)
 	w := httptest.NewRecorder()
