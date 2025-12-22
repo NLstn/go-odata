@@ -11,6 +11,7 @@ type EntityMetadata struct {
 	EntityType    reflect.Type
 	EntityName    string
 	EntitySetName string
+	TableName     string             // Database table name (computed once, respects custom TableName() methods)
 	Properties    []PropertyMetadata
 	KeyProperties []PropertyMetadata // Support for composite keys
 	KeyProperty   *PropertyMetadata  // Deprecated: Use KeyProperties for single or composite keys, kept for backwards compatibility
@@ -54,6 +55,7 @@ type PropertyMetadata struct {
 	GormTag           string
 	IsNavigationProp  bool
 	NavigationTarget  string // Entity type name for navigation properties
+	NavigationTargetTableName string // Database table name for navigation target (computed once)
 	NavigationIsArray bool   // True for collection navigation properties
 	IsETag            bool   // True if this property should be used for ETag generation
 	IsComplexType     bool   // True if this property is a complex type (embedded struct)
@@ -278,11 +280,13 @@ func AnalyzeVirtualEntity(entity interface{}) (*EntityMetadata, error) {
 func initializeMetadata(entityType reflect.Type) *EntityMetadata {
 	entityName := entityType.Name()
 	entitySetName := getEntitySetName(entityType)
+	tableName := getTableNameFromReflectType(entityType)
 
 	return &EntityMetadata{
 		EntityType:    entityType,
 		EntityName:    entityName,
 		EntitySetName: entitySetName,
+		TableName:     tableName,
 		Properties:    make([]PropertyMetadata, 0),
 		IsSingleton:   false,
 	}
@@ -291,12 +295,14 @@ func initializeMetadata(entityType reflect.Type) *EntityMetadata {
 // initializeSingletonMetadata creates a new EntityMetadata struct for a singleton
 func initializeSingletonMetadata(entityType reflect.Type, singletonName string) *EntityMetadata {
 	entityName := entityType.Name()
+	tableName := getTableNameFromReflectType(entityType)
 
 	return &EntityMetadata{
 		EntityType:    entityType,
 		EntityName:    entityName,
 		EntitySetName: singletonName, // For singletons, we use the singleton name
 		SingletonName: singletonName,
+		TableName:     tableName,
 		Properties:    make([]PropertyMetadata, 0),
 		IsSingleton:   true,
 	}
@@ -306,11 +312,13 @@ func initializeSingletonMetadata(entityType reflect.Type, singletonName string) 
 func initializeVirtualEntityMetadata(entityType reflect.Type) *EntityMetadata {
 	entityName := entityType.Name()
 	entitySetName := getEntitySetName(entityType)
+	tableName := getTableNameFromReflectType(entityType)
 
 	return &EntityMetadata{
 		EntityType:    entityType,
 		EntityName:    entityName,
 		EntitySetName: entitySetName,
+		TableName:     tableName,
 		Properties:    make([]PropertyMetadata, 0),
 		IsVirtual:     true,
 	}
@@ -393,6 +401,8 @@ func analyzeNavigationProperty(property *PropertyMetadata, field reflect.StructF
 		if strings.Contains(gormTag, "foreignKey") || strings.Contains(gormTag, "references") || strings.Contains(gormTag, "many2many") {
 			property.IsNavigationProp = true
 			property.NavigationTarget = fieldType.Name()
+			// Use fieldType (already dereferenced) to get the table name for the target entity
+			property.NavigationTargetTableName = getTableNameFromReflectType(fieldType)
 			property.NavigationIsArray = isSlice
 
 			// Extract referential constraints from GORM tags (only for foreignKey/references)
@@ -1141,4 +1151,48 @@ func dereferenceType(t reflect.Type) reflect.Type {
 		t = t.Elem()
 	}
 	return t
+}
+
+// getTableNameFromReflectType returns the table name for a given entity type
+// This respects custom TableName() methods on the entity by using reflection
+// to create a zero-value instance and checking if it implements the TableName() interface
+func getTableNameFromReflectType(entityType reflect.Type) string {
+	// Handle pointer types
+	if entityType.Kind() == reflect.Ptr {
+		entityType = entityType.Elem()
+	}
+	
+	// Create a zero value instance and check if it implements TableName()
+	instance := reflect.New(entityType).Interface()
+	
+	// Check if the entity implements the TableName() method
+	if tabler, ok := instance.(interface{ TableName() string }); ok {
+		return tabler.TableName()
+	}
+	
+	// Fallback to default GORM naming (snake_case pluralization)
+	return toSnakeCase(pluralize(entityType.Name()))
+}
+
+// toSnakeCase converts a camelCase or PascalCase string to snake_case
+func toSnakeCase(s string) string {
+	var result strings.Builder
+	for i, r := range s {
+		if i > 0 && r >= 'A' && r <= 'Z' {
+			// Check if the previous character was lowercase or if this is the start of a new word
+			// For "ProductID", we want "product_id" not "product_i_d"
+			prevRune := rune(s[i-1])
+			if prevRune >= 'a' && prevRune <= 'z' {
+				result.WriteRune('_')
+			} else if i < len(s)-1 {
+				// Check if next character is lowercase (e.g., "XMLParser" -> "xml_parser")
+				nextRune := rune(s[i+1])
+				if nextRune >= 'a' && nextRune <= 'z' {
+					result.WriteRune('_')
+				}
+			}
+		}
+		result.WriteRune(r)
+	}
+	return strings.ToLower(result.String())
 }
