@@ -30,7 +30,7 @@ func quoteIdent(_ string, ident string) string {
 
 // getQuotedColumnName returns a properly quoted column name for use in SQL queries.
 // For navigation property paths (e.g., "Category/Name"), it returns a fully qualified
-// and quoted reference like "Categories"."name" to ensure PostgreSQL compatibility.
+// and quoted reference like "<TargetTableFromMetadata>"."column_name" to ensure PostgreSQL compatibility.
 func getQuotedColumnName(dialect string, property string, entityMetadata *metadata.EntityMetadata) string {
 	if entityMetadata == nil {
 		// Quote the column name for PostgreSQL compatibility even without metadata
@@ -55,7 +55,10 @@ func getQuotedColumnName(dialect string, property string, entityMetadata *metada
 		}
 	}
 
-	// For regular properties, use the standard GetColumnName
+	// For regular properties, use the standard GetColumnName.
+	// Note: Regular properties are not quoted here as GORM handles quoting internally
+	// when executing queries. Only navigation property paths (above) are explicitly quoted
+	// to ensure correct table aliasing for JOIN operations in PostgreSQL.
 	return GetColumnName(property, entityMetadata)
 }
 
@@ -529,21 +532,8 @@ func buildFunctionComparison(dialect string, filter *FilterExpression, entityMet
 			return "", nil
 		}
 
-		var compSQL string
-		switch filter.Operator {
-		case OpEqual:
-			compSQL = fmt.Sprintf("%s = %s", funcSQL, rightFuncSQL)
-		case OpNotEqual:
-			compSQL = fmt.Sprintf("%s != %s", funcSQL, rightFuncSQL)
-		case OpGreaterThan:
-			compSQL = fmt.Sprintf("%s > %s", funcSQL, rightFuncSQL)
-		case OpGreaterThanOrEqual:
-			compSQL = fmt.Sprintf("%s >= %s", funcSQL, rightFuncSQL)
-		case OpLessThan:
-			compSQL = fmt.Sprintf("%s < %s", funcSQL, rightFuncSQL)
-		case OpLessThanOrEqual:
-			compSQL = fmt.Sprintf("%s <= %s", funcSQL, rightFuncSQL)
-		default:
+		compSQL := buildTwoOperandComparisonSQL(filter.Operator, funcSQL, rightFuncSQL)
+		if compSQL == "" {
 			return "", nil
 		}
 
@@ -555,21 +545,8 @@ func buildFunctionComparison(dialect string, filter *FilterExpression, entityMet
 	if rightPropertyName, ok := filter.Value.(string); ok && propertyExists(rightPropertyName, entityMetadata) {
 		// This is a property-to-property comparison
 		rightColumnName := getQuotedColumnName(dialect, rightPropertyName, entityMetadata)
-		var compSQL string
-		switch filter.Operator {
-		case OpEqual:
-			compSQL = fmt.Sprintf("%s = %s", funcSQL, rightColumnName)
-		case OpNotEqual:
-			compSQL = fmt.Sprintf("%s != %s", funcSQL, rightColumnName)
-		case OpGreaterThan:
-			compSQL = fmt.Sprintf("%s > %s", funcSQL, rightColumnName)
-		case OpGreaterThanOrEqual:
-			compSQL = fmt.Sprintf("%s >= %s", funcSQL, rightColumnName)
-		case OpLessThan:
-			compSQL = fmt.Sprintf("%s < %s", funcSQL, rightColumnName)
-		case OpLessThanOrEqual:
-			compSQL = fmt.Sprintf("%s <= %s", funcSQL, rightColumnName)
-		default:
+		compSQL := buildTwoOperandComparisonSQL(filter.Operator, funcSQL, rightColumnName)
+		if compSQL == "" {
 			return "", nil
 		}
 		return compSQL, funcArgs
@@ -637,6 +614,9 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 					rightArgs = []interface{}{secondArg}
 				}
 			} else if strVal, ok := secondArg.(string); ok {
+				// Note: This heuristic (starts with uppercase or contains underscore) may incorrectly
+				// treat some literal strings as column references. A proper fix would require passing
+				// entityMetadata to buildFunctionSQL and using propertyExists(), which is a larger refactor.
 				if len(strVal) > 0 && (strVal[0] >= 'A' && strVal[0] <= 'Z' || strings.Contains(strVal, "_")) {
 					// Quote the column name for PostgreSQL compatibility
 					rightSQL = quoteIdent(dialect, toSnakeCase(strVal))
@@ -679,6 +659,9 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 			return fmt.Sprintf("CONCAT(%s, %s)", columnName, rightSQL), rightArgs
 		}
 		if strVal, ok := value.(string); ok {
+			// Note: This heuristic (starts with uppercase or contains underscore) may incorrectly
+			// treat some literal strings as column references. A proper fix would require passing
+			// entityMetadata to buildFunctionSQL and using propertyExists(), which is a larger refactor.
 			if len(strVal) > 0 && (strVal[0] >= 'A' && strVal[0] <= 'Z' || strings.Contains(strVal, "_")) {
 				// Quote the column name for PostgreSQL compatibility
 				columnName2 := quoteIdent(dialect, toSnakeCase(strVal))
@@ -886,6 +869,27 @@ func buildComparisonSQL(op FilterOperator, leftSQL string) string {
 		return fmt.Sprintf("%s < ?", leftSQL)
 	case OpLessThanOrEqual:
 		return fmt.Sprintf("%s <= ?", leftSQL)
+	default:
+		return ""
+	}
+}
+
+// buildTwoOperandComparisonSQL constructs a SQL comparison expression between two operands
+// based on the given filter operator. Returns an empty string for unsupported operators.
+func buildTwoOperandComparisonSQL(op FilterOperator, leftSQL string, rightSQL string) string {
+	switch op {
+	case OpEqual:
+		return fmt.Sprintf("%s = %s", leftSQL, rightSQL)
+	case OpNotEqual:
+		return fmt.Sprintf("%s != %s", leftSQL, rightSQL)
+	case OpGreaterThan:
+		return fmt.Sprintf("%s > %s", leftSQL, rightSQL)
+	case OpGreaterThanOrEqual:
+		return fmt.Sprintf("%s >= %s", leftSQL, rightSQL)
+	case OpLessThan:
+		return fmt.Sprintf("%s < %s", leftSQL, rightSQL)
+	case OpLessThanOrEqual:
+		return fmt.Sprintf("%s <= %s", leftSQL, rightSQL)
 	default:
 		return ""
 	}
