@@ -37,7 +37,7 @@ This directory contains the MariaDB-based development container configuration fo
 1. Install the [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
 2. Open the repository in VS Code
 3. Press `F1` and select "Dev Containers: Open Folder in Container"
-4. Select the `mariadb-devcontainer` folder
+4. Select the `.devcontainer/mariadb` folder
 5. Wait for the container to build and start
 
 ## Database Connection
@@ -156,11 +156,11 @@ The container is configured to automatically:
 
 ## Customization
 
-You can customize the dev container by editing `mariadb-devcontainer/devcontainer.json`. See the [Dev Containers specification](https://containers.dev/) for more options.
+You can customize the dev container by editing `.devcontainer/mariadb/devcontainer.json`. See the [Dev Containers specification](https://containers.dev/) for more options.
 
 ## Alternative Dev Containers
 
-This project also provides a PostgreSQL-based devcontainer in the `postgres-devcontainer` directory for testing with PostgreSQL.
+This project also provides a PostgreSQL-based devcontainer in the `.devcontainer/postgres` directory for testing with PostgreSQL.
 
 ## Troubleshooting
 
