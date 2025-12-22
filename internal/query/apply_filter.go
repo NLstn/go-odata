@@ -102,17 +102,13 @@ func addNavigationJoin(db *gorm.DB, navPropName string, entityMetadata *metadata
 		return db
 	}
 
-	// Get the related entity name and table name
-	relatedEntityName := navProp.NavigationTarget
-	if relatedEntityName == "" {
-		relatedEntityName = navProp.JsonName
-	}
-	// Convert to snake_case for the actual table name
-	relatedTableName := toSnakeCase(pluralize(relatedEntityName))
-
-	// Get the parent table name in snake_case
-	parentTableName := toSnakeCase(pluralize(entityMetadata.EntityName))
-
+	// Get the related entity's table name using GORM's naming conventions
+	// This respects custom TableName() methods
+	relatedTableName := getTableNameFromReflectType(navProp.Type)
+	
+	// Get the parent entity's table name using GORM's naming conventions
+	parentTableName := getTableNameFromReflectType(entityMetadata.EntityType)
+	
 	// Determine the foreign key column
 	// By default, GORM uses <parent_entity>_id for belongs-to relationships
 	// We need to parse the GORM tag to get the actual foreign key

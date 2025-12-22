@@ -1,6 +1,7 @@
 package query
 
 import (
+	"reflect"
 	"strings"
 
 	"github.com/nlstn/go-odata/internal/metadata"
@@ -80,12 +81,9 @@ func GetColumnName(propertyName string, entityMetadata *metadata.EntityMetadata)
 			
 			navProp := entityMetadata.FindNavigationProperty(navPropName)
 			if navProp != nil {
-				// Get the related table name in snake_case
-				relatedEntityName := navProp.NavigationTarget
-				if relatedEntityName == "" {
-					relatedEntityName = navProp.JsonName
-				}
-				relatedTableName := toSnakeCase(pluralize(relatedEntityName))
+				// Get the related table name using the entity type
+				// This respects custom TableName() methods
+				relatedTableName := getTableNameFromReflectType(navProp.Type)
 				
 				// Return qualified column name: related_table.column_name
 				return relatedTableName + "." + toSnakeCase(targetPropertyName)
@@ -180,4 +178,24 @@ func pluralize(word string) string {
 func isVowel(r rune) bool {
 	lower := strings.ToLower(string(r))
 	return lower == "a" || lower == "e" || lower == "i" || lower == "o" || lower == "u"
+}
+
+// getTableNameFromReflectType returns the table name for a given entity type
+// This respects custom TableName() methods on the entity without requiring a db connection
+func getTableNameFromReflectType(entityType reflect.Type) string {
+	// Handle pointer types
+	if entityType.Kind() == reflect.Ptr {
+		entityType = entityType.Elem()
+	}
+	
+	// Create a zero value instance and check if it implements TableName()
+	instance := reflect.New(entityType).Interface()
+	
+	// Check if the entity implements the TableName() method
+	if tabler, ok := instance.(interface{ TableName() string }); ok {
+		return tabler.TableName()
+	}
+	
+	// Fallback to default GORM naming (snake_case pluralization)
+	return toSnakeCase(pluralize(entityType.Name()))
 }
