@@ -462,7 +462,14 @@ func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{
 }
 
 // findPropertyMetadata finds metadata for a property by field name
+// Uses the pre-computed property map for O(1) lookup instead of O(n) iteration
 func (h *EntityHandler) findPropertyMetadata(fieldName string) *metadata.PropertyMetadata {
+	if h.propertyMap != nil {
+		if prop, ok := h.propertyMap[fieldName]; ok {
+			return prop
+		}
+	}
+	// Fallback to linear search if map not initialized (shouldn't happen normally)
 	for i := range h.metadata.Properties {
 		if h.metadata.Properties[i].Name == fieldName || h.metadata.Properties[i].FieldName == fieldName {
 			return &h.metadata.Properties[i]
