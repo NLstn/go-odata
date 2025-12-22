@@ -10,6 +10,7 @@ import (
 
 	"github.com/nlstn/go-odata"
 	"github.com/nlstn/go-odata/cmd/complianceserver/entities"
+	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -20,8 +21,8 @@ var Db *gorm.DB
 
 func main() {
 	// Parse command-line flags
-	dbType := flag.String("db", "sqlite", "Database type: sqlite or postgres")
-	dbDSN := flag.String("dsn", "", "Database DSN (connection string). For postgres, use postgresql://... format. For sqlite, use file path")
+	dbType := flag.String("db", "sqlite", "Database type: sqlite, postgres, or mariadb")
+	dbDSN := flag.String("dsn", "", "Database DSN (connection string). For postgres, use postgresql://... format. For mariadb, use username:password@tcp(host:port)/dbname. For sqlite, use file path")
 	port := flag.String("port", "9090", "Port to listen on")
 	flag.Parse()
 
@@ -58,8 +59,24 @@ func main() {
 		}
 		fmt.Println("🐘 Using PostgreSQL database")
 
+	case "mariadb":
+		dsn := *dbDSN
+		if dsn == "" {
+			// Check for environment variable as fallback
+			dsn = os.Getenv("MARIADB_DSN")
+			if dsn == "" {
+				log.Fatal("MariaDB DSN required. Use -dsn flag or set MARIADB_DSN environment variable")
+			}
+		}
+
+		Db, err = gorm.Open(mysql.Open(dsn), &gorm.Config{})
+		if err != nil {
+			log.Fatal("Failed to connect to MariaDB database:", err)
+		}
+		fmt.Println("🐬 Using MariaDB database")
+
 	default:
-		log.Fatalf("Unsupported database type: %s. Use 'sqlite' or 'postgres'", *dbType)
+		log.Fatalf("Unsupported database type: %s. Use 'sqlite', 'postgres', or 'mariadb'", *dbType)
 	}
 
 	// Initialize database with sample data
