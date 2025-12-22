@@ -110,8 +110,8 @@ func addNavigationJoin(db *gorm.DB, navPropName string, entityMetadata *metadata
 	parentTableName := entityMetadata.TableName
 
 	// Determine the foreign key column
-	// By default, GORM uses <parent_entity>_id for belongs-to relationships
-	// We need to parse the GORM tag to get the actual foreign key
+	// By default, this uses <navigation_property_name>_id (foreign key column on the parent table)
+	// We then parse the GORM tag to get the actual foreign key if explicitly specified
 	foreignKeyColumn := toSnakeCase(navProp.Name) + "_id"
 
 	// Check GORM tag for explicit foreignKey
@@ -349,7 +349,19 @@ func buildLambdaCondition(dialect string, filter *FilterExpression, entityMetada
 	// Use cached table name from parent entity metadata
 	parentTableName := entityMetadata.TableName
 
-	foreignKeyColumn := toSnakeCase(entityMetadata.EntityName) + "_id"
+	// Prefer foreign key column name from navigation metadata, fall back to convention
+	foreignKeyColumn := toSnakeCase(navProp.Name) + "_id"
+	if navProp.GormTag != "" {
+		parts := strings.Split(navProp.GormTag, ";")
+		for _, part := range parts {
+			part = strings.TrimSpace(part)
+			if strings.HasPrefix(part, "foreignKey:") {
+				fkField := strings.TrimPrefix(part, "foreignKey:")
+				foreignKeyColumn = toSnakeCase(fkField)
+				break
+			}
+		}
+	}
 
 	parentPrimaryKey := "id"
 	if len(entityMetadata.KeyProperties) > 0 {
