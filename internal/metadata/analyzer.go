@@ -1175,6 +1175,8 @@ func getTableNameFromReflectType(entityType reflect.Type) string {
 }
 
 // toSnakeCase converts a camelCase or PascalCase string to snake_case
+// NOTE: This is duplicated in internal/query/helpers.go and internal/handlers/helpers.go
+// A future refactor could extract this to a shared utility package
 func toSnakeCase(s string) string {
 	var result strings.Builder
 	for i, r := range s {
