@@ -16,6 +16,7 @@ func applySelect(db *gorm.DB, selectedProperties []string, entityMetadata *metad
 
 	columns := make([]string, 0, len(selectedProperties))
 	selectedPropMap := make(map[string]bool)
+	tableName := entityMetadata.TableName
 
 	for _, propName := range selectedProperties {
 		propName = strings.TrimSpace(propName)
@@ -23,7 +24,10 @@ func applySelect(db *gorm.DB, selectedProperties []string, entityMetadata *metad
 			if (prop.JsonName == propName || prop.Name == propName) && !prop.IsNavigationProp && !prop.IsComplexType && !prop.IsStream {
 				// Use GetColumnName for proper column name resolution (handles GORM tags and metadata)
 				columnName := GetColumnName(prop.Name, entityMetadata)
-				columns = append(columns, columnName)
+				// Qualify with table name to avoid ambiguous column references when JOINs are present
+				// This is necessary for PostgreSQL and also helps with SQLite when multiple tables have the same column names
+				qualifiedColumn := tableName + "." + columnName
+				columns = append(columns, qualifiedColumn)
 				selectedPropMap[prop.Name] = true
 				break
 			}
@@ -34,7 +38,9 @@ func applySelect(db *gorm.DB, selectedProperties []string, entityMetadata *metad
 		if !selectedPropMap[keyProp.Name] {
 			// Use GetColumnName for proper column name resolution (handles GORM tags and metadata)
 			columnName := GetColumnName(keyProp.Name, entityMetadata)
-			columns = append(columns, columnName)
+			// Qualify with table name to avoid ambiguous column references when JOINs are present
+			qualifiedColumn := tableName + "." + columnName
+			columns = append(columns, qualifiedColumn)
 		}
 	}
 
