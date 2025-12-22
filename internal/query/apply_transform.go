@@ -168,8 +168,8 @@ func applyCompute(db *gorm.DB, dialect string, compute *ComputeTransformation, e
 
 	for _, prop := range entityMetadata.Properties {
 		if !prop.IsNavigationProp && !prop.IsComplexType && !prop.IsStream && !streamAuxFields[prop.FieldName] {
-			columnName := toSnakeCase(prop.Name)
-			selectColumns = append(selectColumns, fmt.Sprintf("%s as %s", columnName, prop.JsonName))
+			// Use cached column name from metadata
+			selectColumns = append(selectColumns, fmt.Sprintf("%s as %s", prop.ColumnName, prop.JsonName))
 		}
 	}
 
@@ -201,8 +201,8 @@ func buildComputeSQL(dialect string, computeExpr ComputeExpression, entityMetada
 			return ""
 		}
 
-		columnName := toSnakeCase(prop.Name)
-		funcSQL, _ := buildFunctionSQL(dialect, expr.Operator, columnName, nil)
+		// Use cached column name from metadata
+		funcSQL, _ := buildFunctionSQL(dialect, expr.Operator, prop.ColumnName, nil)
 		if funcSQL == "" {
 			return ""
 		}
@@ -254,7 +254,8 @@ func buildComputeExpressionSQL(dialect string, expr *FilterExpression, entityMet
 		if prop == nil {
 			return ""
 		}
-		return toSnakeCase(prop.Name)
+		// Use cached column name from metadata
+		return prop.ColumnName
 	}
 
 	if expr.Value != nil && expr.Property == "" && expr.Left == nil && expr.Right == nil {
@@ -276,8 +277,8 @@ func buildComputeExpressionSQL(dialect string, expr *FilterExpression, entityMet
 		if prop == nil {
 			return ""
 		}
-		columnName := toSnakeCase(prop.Name)
-		funcSQL, _ := buildFunctionSQL(dialect, expr.Operator, columnName, expr.Value)
+		// Use cached column name from metadata
+		funcSQL, _ := buildFunctionSQL(dialect, expr.Operator, prop.ColumnName, expr.Value)
 		return funcSQL
 	}
 

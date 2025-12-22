@@ -406,16 +406,17 @@ func (h *EntityHandler) applySkipTokenFilter(db *gorm.DB, queryOptions *query.Qu
 
 		var orderByColumnName string
 		if orderByMetadata := h.metadata.FindProperty(orderByProp.Property); orderByMetadata != nil {
-			orderByColumnName = toSnakeCase(orderByMetadata.Name)
+			// Use cached column name from metadata
+			orderByColumnName = orderByMetadata.ColumnName
 		}
-
 		if orderByColumnName == "" {
 			return db
 		}
 
 		var keyColumnName string
 		for _, keyProp := range h.metadata.KeyProperties {
-			keyColumnName = toSnakeCase(keyProp.Name)
+			// Use cached column name from metadata
+			keyColumnName = keyProp.ColumnName
 			break
 		}
 
@@ -432,7 +433,8 @@ func (h *EntityHandler) applySkipTokenFilter(db *gorm.DB, queryOptions *query.Qu
 		var keyColumnName string
 		var keyValue interface{}
 		for _, keyProp := range h.metadata.KeyProperties {
-			keyColumnName = toSnakeCase(keyProp.Name)
+			// Use cached column name from metadata
+			keyColumnName = keyProp.ColumnName
 			keyValue = token.KeyValues[keyProp.JsonName]
 			break
 		}

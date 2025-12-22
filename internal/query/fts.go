@@ -166,7 +166,8 @@ func (m *FTSManager) getSearchableColumns(entityMetadata *metadata.EntityMetadat
 	var cols []string
 	for _, prop := range entityMetadata.Properties {
 		if prop.IsSearchable && !prop.IsNavigationProp {
-			cols = append(cols, toSnakeCase(prop.Name))
+			// Use cached column name from metadata
+			cols = append(cols, prop.ColumnName)
 		}
 	}
 	return cols
@@ -177,7 +178,8 @@ func (m *FTSManager) getAllStringColumns(entityMetadata *metadata.EntityMetadata
 	var cols []string
 	for _, prop := range entityMetadata.Properties {
 		if prop.Type.String() == "string" && !prop.IsNavigationProp {
-			cols = append(cols, toSnakeCase(prop.Name))
+			// Use cached column name from metadata
+			cols = append(cols, prop.ColumnName)
 		}
 	}
 	return cols
@@ -191,7 +193,8 @@ func (m *FTSManager) createFTSTable(tableName, ftsTableName string, searchableCo
 	// For composite keys, the FTS table uses the first key component as the primary key.
 	var keyCol string
 	if len(entityMetadata.KeyProperties) > 0 {
-		keyCol = toSnakeCase(entityMetadata.KeyProperties[0].Name)
+		// Use cached column name from metadata
+		keyCol = entityMetadata.KeyProperties[0].ColumnName
 	} else {
 		return fmt.Errorf("entity has no key properties")
 	}
@@ -526,7 +529,8 @@ func (m *FTSManager) ApplyFTSSearch(db *gorm.DB, tableName string, searchQuery s
 	}
 
 	ftsTableName := m.getFTSTableName(tableName)
-	keyCol := toSnakeCase(entityMetadata.KeyProperties[0].Name)
+	// Use cached column name from metadata
+	keyCol := entityMetadata.KeyProperties[0].ColumnName
 
 	// Validate identifiers to prevent SQL injection
 	if !isValidSQLIdentifier(tableName) || !isValidSQLIdentifier(ftsTableName) || !isValidSQLIdentifier(keyCol) {

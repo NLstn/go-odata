@@ -100,25 +100,8 @@ func GetColumnName(propertyName string, entityMetadata *metadata.EntityMetadata)
 		return toSnakeCase(propertyName)
 	}
 
-	if column := extractColumnFromGormTag(prop.GormTag); column != "" {
-		return prefix + column
-	}
-
-	return prefix + toSnakeCase(prop.Name)
-}
-
-func extractColumnFromGormTag(gormTag string) string {
-	if gormTag == "" {
-		return ""
-	}
-	parts := strings.Split(gormTag, ";")
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		if strings.HasPrefix(part, "column:") {
-			return strings.TrimPrefix(part, "column:")
-		}
-	}
-	return ""
+	// Use cached column name from metadata
+	return prefix + prop.ColumnName
 }
 
 // findNavigationProperty finds a navigation property in the entity metadata

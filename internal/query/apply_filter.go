@@ -109,23 +109,9 @@ func addNavigationJoin(db *gorm.DB, navPropName string, entityMetadata *metadata
 	// Get the parent entity's table name from cached metadata
 	parentTableName := entityMetadata.TableName
 
-	// Determine the foreign key column
-	// By default, this uses <navigation_property_name>_id (foreign key column on the parent table)
-	// We then parse the GORM tag to get the actual foreign key if explicitly specified
-	foreignKeyColumn := toSnakeCase(navProp.Name) + "_id"
-
-	// Check GORM tag for explicit foreignKey
-	if navProp.GormTag != "" {
-		parts := strings.Split(navProp.GormTag, ";")
-		for _, part := range parts {
-			part = strings.TrimSpace(part)
-			if strings.HasPrefix(part, "foreignKey:") {
-				fkField := strings.TrimPrefix(part, "foreignKey:")
-				foreignKeyColumn = toSnakeCase(fkField)
-				break
-			}
-		}
-	}
+	// Get the foreign key column from cached metadata
+	// This was computed once during entity registration and respects GORM foreignKey: tags
+	foreignKeyColumn := navProp.ForeignKeyColumnName
 
 	// Determine the primary key column of the related table
 	// Default to "id" but should check the related entity's key properties
@@ -349,19 +335,9 @@ func buildLambdaCondition(dialect string, filter *FilterExpression, entityMetada
 	// Use cached table name from parent entity metadata
 	parentTableName := entityMetadata.TableName
 
-	// Prefer foreign key column name from navigation metadata, fall back to convention
-	foreignKeyColumn := toSnakeCase(navProp.Name) + "_id"
-	if navProp.GormTag != "" {
-		parts := strings.Split(navProp.GormTag, ";")
-		for _, part := range parts {
-			part = strings.TrimSpace(part)
-			if strings.HasPrefix(part, "foreignKey:") {
-				fkField := strings.TrimPrefix(part, "foreignKey:")
-				foreignKeyColumn = toSnakeCase(fkField)
-				break
-			}
-		}
-	}
+	// Use cached foreign key column name from metadata
+	// This was computed once during entity registration and respects GORM foreignKey: tags
+	foreignKeyColumn := navProp.ForeignKeyColumnName
 
 	parentPrimaryKey := "id"
 	if len(entityMetadata.KeyProperties) > 0 {
