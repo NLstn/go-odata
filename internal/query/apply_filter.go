@@ -344,14 +344,20 @@ func buildLambdaCondition(dialect string, filter *FilterExpression, entityMetada
 		parentPrimaryKey = toSnakeCase(entityMetadata.KeyProperties[0].Name)
 	}
 
+	// Quote identifiers for database compatibility (especially PostgreSQL)
+	quotedRelatedTable := quoteIdent(dialect, relatedTableName)
+	quotedParentTable := quoteIdent(dialect, parentTableName)
+	quotedForeignKey := quoteIdent(dialect, foreignKeyColumn)
+	quotedParentPK := quoteIdent(dialect, parentPrimaryKey)
+
 	if filter.Value == nil || filter.Left == nil {
 		if filter.Operator == OpAny {
 			return fmt.Sprintf("EXISTS (SELECT 1 FROM %s WHERE %s.%s = %s.%s)",
-				relatedTableName, relatedTableName, foreignKeyColumn, parentTableName, parentPrimaryKey), []interface{}{}
+				quotedRelatedTable, quotedRelatedTable, quotedForeignKey, quotedParentTable, quotedParentPK), []interface{}{}
 		}
 		return fmt.Sprintf("NOT EXISTS (SELECT 1 FROM %s WHERE %s.%s = %s.%s) OR EXISTS (SELECT 1 FROM %s WHERE %s.%s = %s.%s)",
-			relatedTableName, relatedTableName, foreignKeyColumn, parentTableName, parentPrimaryKey,
-			relatedTableName, relatedTableName, foreignKeyColumn, parentTableName, parentPrimaryKey), []interface{}{}
+			quotedRelatedTable, quotedRelatedTable, quotedForeignKey, quotedParentTable, quotedParentPK,
+			quotedRelatedTable, quotedRelatedTable, quotedForeignKey, quotedParentTable, quotedParentPK), []interface{}{}
 	}
 
 	predicate := filter.Left
@@ -367,10 +373,10 @@ func buildLambdaCondition(dialect string, filter *FilterExpression, entityMetada
 	var sql string
 	if filter.Operator == OpAny {
 		sql = fmt.Sprintf("EXISTS (SELECT 1 FROM %s WHERE %s.%s = %s.%s AND %s)",
-			relatedTableName, relatedTableName, foreignKeyColumn, parentTableName, parentPrimaryKey, predicateSQL)
+			quotedRelatedTable, quotedRelatedTable, quotedForeignKey, quotedParentTable, quotedParentPK, predicateSQL)
 	} else {
 		sql = fmt.Sprintf("NOT EXISTS (SELECT 1 FROM %s WHERE %s.%s = %s.%s AND NOT (%s))",
-			relatedTableName, relatedTableName, foreignKeyColumn, parentTableName, parentPrimaryKey, predicateSQL)
+			quotedRelatedTable, quotedRelatedTable, quotedForeignKey, quotedParentTable, quotedParentPK, predicateSQL)
 	}
 
 	return sql, predicateArgs
@@ -390,7 +396,8 @@ func buildFilterConditionForLambda(dialect string, filter *FilterExpression, nav
 		return buildFunctionComparisonForLambda(dialect, filter, navProp)
 	}
 
-	columnName := toSnakeCase(filter.Property)
+	// Quote the column name for proper database compatibility
+	columnName := quoteIdent(dialect, toSnakeCase(filter.Property))
 
 	switch filter.Operator {
 	case OpEqual:
@@ -444,7 +451,8 @@ func buildLogicalConditionForLambda(dialect string, filter *FilterExpression, na
 // buildFunctionComparisonForLambda builds a function comparison for lambda predicates
 func buildFunctionComparisonForLambda(dialect string, filter *FilterExpression, _ *metadata.PropertyMetadata) (string, []interface{}) {
 	funcExpr := filter.Left
-	columnName := toSnakeCase(funcExpr.Property)
+	// Quote the column name for proper database compatibility
+	columnName := quoteIdent(dialect, toSnakeCase(funcExpr.Property))
 
 	funcSQL, funcArgs := buildFunctionSQL(dialect, funcExpr.Operator, columnName, funcExpr.Value)
 	if funcSQL == "" {
