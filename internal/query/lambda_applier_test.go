@@ -75,23 +75,11 @@ func setupTestDB(t *testing.T) *gorm.DB {
 
 // getTestProductMetadata creates test metadata for TestProduct
 func getTestProductMetadata() *metadata.EntityMetadata {
-	return &metadata.EntityMetadata{
-		EntityName: "TestProduct",
-		Properties: []metadata.PropertyMetadata{
-			{Name: "ID", JsonName: "ID"},
-			{Name: "Name", JsonName: "Name"},
-			{Name: "Price", JsonName: "Price"},
-			{
-				Name:             "Descriptions",
-				JsonName:         "Descriptions",
-				IsNavigationProp: true,
-				NavigationTarget: "TestProductDescription",
-			},
-		},
-		KeyProperties: []metadata.PropertyMetadata{
-			{Name: "ID", JsonName: "ID"},
-		},
+	meta, err := metadata.AnalyzeEntity(TestProduct{})
+	if err != nil {
+		panic(err)
 	}
+	return meta
 }
 
 func TestLambdaApplier_SimpleAny(t *testing.T) {

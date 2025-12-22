@@ -102,12 +102,12 @@ func addNavigationJoin(db *gorm.DB, navPropName string, entityMetadata *metadata
 		return db
 	}
 
-	// Get the related entity's table name using GORM's naming conventions
-	// This respects custom TableName() methods
-	relatedTableName := getTableNameFromReflectType(navProp.Type)
+	// Get the related entity's table name from cached metadata
+	// This was computed once during entity registration and respects custom TableName() methods
+	relatedTableName := navProp.NavigationTargetTableName
 	
-	// Get the parent entity's table name using GORM's naming conventions
-	parentTableName := getTableNameFromReflectType(entityMetadata.EntityType)
+	// Get the parent entity's table name from cached metadata
+	parentTableName := entityMetadata.TableName
 	
 	// Determine the foreign key column
 	// By default, GORM uses <parent_entity>_id for belongs-to relationships
@@ -343,15 +343,11 @@ func buildLambdaCondition(dialect string, filter *FilterExpression, entityMetada
 		return "", nil
 	}
 
-	relatedEntityName := navProp.NavigationTarget
-	if relatedEntityName == "" {
-		relatedEntityName = navProp.JsonName
-	}
-	// Use PascalCase for table names (e.g., "ProductDescriptions", "Products")
-	relatedTableName := pluralize(relatedEntityName)
+	// Use cached table name from metadata (computed once during entity registration)
+	relatedTableName := navProp.NavigationTargetTableName
 
-	// Use PascalCase for parent table name (e.g., "Products", "Categories")
-	parentTableName := pluralize(entityMetadata.EntityName)
+	// Use cached table name from parent entity metadata
+	parentTableName := entityMetadata.TableName
 
 	foreignKeyColumn := toSnakeCase(entityMetadata.EntityName) + "_id"
 

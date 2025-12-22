@@ -1,7 +1,6 @@
 package query
 
 import (
-	"reflect"
 	"strings"
 
 	"github.com/nlstn/go-odata/internal/metadata"
@@ -81,9 +80,9 @@ func GetColumnName(propertyName string, entityMetadata *metadata.EntityMetadata)
 			
 			navProp := entityMetadata.FindNavigationProperty(navPropName)
 			if navProp != nil {
-				// Get the related table name using the entity type
-				// This respects custom TableName() methods
-				relatedTableName := getTableNameFromReflectType(navProp.Type)
+				// Get the related table name from cached metadata
+				// This was computed once during entity registration and respects custom TableName() methods
+				relatedTableName := navProp.NavigationTargetTableName
 				
 				// Return qualified column name: related_table.column_name
 				return relatedTableName + "." + toSnakeCase(targetPropertyName)
@@ -151,52 +150,4 @@ func toSnakeCase(s string) string {
 		result.WriteRune(r)
 	}
 	return strings.ToLower(result.String())
-}
-
-// pluralize creates a simple pluralized form of a word
-// This follows the same rules as GORM's default table naming
-func pluralize(word string) string {
-	if word == "" {
-		return word
-	}
-
-	// Simple pluralization rules
-	switch {
-	case strings.HasSuffix(word, "y") && len(word) > 1 && !isVowel(rune(word[len(word)-2])):
-		// Only change y to ies if preceded by a consonant (e.g., "Category" -> "Categories")
-		// If preceded by a vowel, just add s (e.g., "Key" -> "Keys")
-		return word[:len(word)-1] + "ies"
-	case strings.HasSuffix(word, "s") || strings.HasSuffix(word, "x") || strings.HasSuffix(word, "z") ||
-		strings.HasSuffix(word, "ch") || strings.HasSuffix(word, "sh"):
-		return word + "es"
-	default:
-		return word + "s"
-	}
-}
-
-// isVowel checks if a rune is a vowel
-func isVowel(r rune) bool {
-	lower := strings.ToLower(string(r))
-	return lower == "a" || lower == "e" || lower == "i" || lower == "o" || lower == "u"
-}
-
-// getTableNameFromReflectType returns the table name for a given entity type
-// This respects custom TableName() methods on the entity by using reflection
-// to create a zero-value instance and checking if it implements the TableName() interface
-func getTableNameFromReflectType(entityType reflect.Type) string {
-	// Handle pointer types
-	if entityType.Kind() == reflect.Ptr {
-		entityType = entityType.Elem()
-	}
-	
-	// Create a zero value instance and check if it implements TableName()
-	instance := reflect.New(entityType).Interface()
-	
-	// Check if the entity implements the TableName() method
-	if tabler, ok := instance.(interface{ TableName() string }); ok {
-		return tabler.TableName()
-	}
-	
-	// Fallback to default GORM naming (snake_case pluralization)
-	return toSnakeCase(pluralize(entityType.Name()))
 }
