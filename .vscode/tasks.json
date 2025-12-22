@@ -349,6 +349,139 @@
                 "reveal": "always",
                 "panel": "shared"
             }
+        },
+        {
+            "label": "Start Dev Server (MySQL)",
+            "type": "shell",
+            "command": "air",
+            "options": {
+                "cwd": "${workspaceFolder}",
+                "env": {
+                    "DB_ARGS": "-db mysql -dsn odata:odata_dev@tcp\\(localhost:3306\\)/odata_test?parseTime=true"
+                }
+            },
+            "group": "build",
+            "isBackground": true,
+            "problemMatcher": [
+                {
+                    "fileLocation": [
+                        "relative",
+                        "${workspaceFolder}"
+                    ],
+                    "pattern": {
+                        "regexp": "^(.*):(\\d+):(\\d+):\\s+(warning|error):\\s+(.*)$",
+                        "file": 1,
+                        "line": 2,
+                        "column": 3,
+                        "severity": 4,
+                        "message": 5
+                    },
+                    "background": {
+                        "activeOnStart": true,
+                        "beginsPattern": "^.*building.*$",
+                        "endsPattern": "^.*running.*$|^.*Service endpoints:.*$"
+                    }
+                }
+            ],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": false
+            }
+        },
+        {
+            "label": "Run compliance tests (MySQL)",
+            "type": "shell",
+            "command": "go",
+            "args": [
+                "run",
+                ".",
+                "-db",
+                "mysql",
+                "-dsn",
+                "odata:odata_dev@tcp\\(localhost:3306\\)/odata_test?parseTime=true",
+                "-output",
+                "${workspaceFolder}/compliance-report.md"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}/compliance-suite"
+            },
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "Run load tests (MySQL)",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "-lc",
+                "./cmd/perfserver/run_load_tests.sh --db mysql --dsn odata:odata_dev@tcp\\(localhost:3306\\)/odata_test?parseTime=true -d 30s -t 10 -C 100 -o ${workspaceFolder}/load-test-results"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "Run load tests with CPU profiling (MySQL)",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "-lc",
+                "./cmd/perfserver/run_load_tests.sh --db mysql --dsn odata:odata_dev@tcp\\(localhost:3306\\)/odata_test?parseTime=true -d 30s -t 10 -C 100 --cpu-profile -o ${workspaceFolder}/load-test-results"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "Run load tests with SQL tracing (MySQL)",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "-lc",
+                "./cmd/perfserver/run_load_tests.sh --db mysql --dsn odata:odata_dev@tcp\\(localhost:3306\\)/odata_test?parseTime=true -d 30s -t 10 -C 100 --sql-trace -o ${workspaceFolder}/load-test-results"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "Run load tests with full profiling (MySQL)",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "-lc",
+                "./cmd/perfserver/run_load_tests.sh --db mysql --dsn odata:odata_dev@tcp\\(localhost:3306\\)/odata_test?parseTime=true -d 30s -t 10 -C 100 --cpu-profile --sql-trace -o ${workspaceFolder}/load-test-results"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
         }
     ]
 }
