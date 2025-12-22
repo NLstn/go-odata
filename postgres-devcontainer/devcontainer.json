@@ -1,5 +1,5 @@
 {
-	"name": "Go OData Development",
+	"name": "Go OData Development (PostgreSQL)",
 	"dockerComposeFile": "docker-compose.yml",
 	"service": "app",
 	"workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
@@ -34,7 +34,7 @@
 			]
 		}
 	},
-	"postCreateCommand": "bash .devcontainer/setup.sh",
+	"postCreateCommand": "bash postgres-devcontainer/setup.sh",
 	"remoteUser": "vscode",
 	"forwardPorts": [
 		8080
