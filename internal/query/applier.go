@@ -54,7 +54,7 @@ func ApplyQueryOptionsWithFTS(db *gorm.DB, options *QueryOptions, entityMetadata
 			db = db.Offset(*options.Skip)
 			// If no explicit top is set, use a very large limit for MySQL/MariaDB compatibility
 			if options.Top == nil {
-				dialect := getDatabaseDialect(db)
+				dialect = getDatabaseDialect(db)
 				if dialect == "mysql" {
 					// MySQL/MariaDB require LIMIT when OFFSET is used
 					// Use max int32 value which is effectively unlimited
@@ -103,7 +103,7 @@ func ApplyQueryOptionsWithFTS(db *gorm.DB, options *QueryOptions, entityMetadata
 		db = db.Offset(*options.Skip)
 		// If no explicit top is set, use a very large limit for MySQL/MariaDB compatibility
 		if options.Top == nil {
-			dialect := getDatabaseDialect(db)
+			dialect = getDatabaseDialect(db)
 			if dialect == "mysql" {
 				// MySQL/MariaDB require LIMIT when OFFSET is used
 				// Use max int32 value which is effectively unlimited
