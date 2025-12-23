@@ -68,17 +68,7 @@ func applyExpandCallback(db *gorm.DB, expandOpt ExpandOption) *gorm.DB {
 	}
 
 	if expandOpt.Skip != nil {
-		db = db.Offset(*expandOpt.Skip)
-		// If no explicit top is set, use a very large limit for MySQL/MariaDB compatibility
-		if expandOpt.Top == nil {
-			dialect := getDatabaseDialect(db)
-			if dialect == "mysql" {
-				// MySQL/MariaDB require LIMIT when OFFSET is used
-				// Use max int32 value which is effectively unlimited
-				maxLimit := 2147483647
-				db = db.Limit(maxLimit)
-			}
-		}
+		db = applyOffsetWithLimit(db, *expandOpt.Skip, expandOpt.Top)
 	}
 	if expandOpt.Top != nil {
 		db = db.Limit(*expandOpt.Top)

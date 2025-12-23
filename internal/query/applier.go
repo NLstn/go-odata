@@ -5,6 +5,23 @@ import (
 	"gorm.io/gorm"
 )
 
+// applyOffsetWithLimit applies OFFSET to the query and adds a LIMIT for MySQL/MariaDB compatibility
+// when no explicit top limit is provided
+func applyOffsetWithLimit(db *gorm.DB, skip int, top *int) *gorm.DB {
+	db = db.Offset(skip)
+	// If no explicit top is set, use a very large limit for MySQL/MariaDB compatibility
+	if top == nil {
+		dialect := getDatabaseDialect(db)
+		if dialect == "mysql" {
+			// MySQL/MariaDB require LIMIT when OFFSET is used
+			// Use max int32 value which is effectively unlimited
+			maxLimit := 2147483647
+			db = db.Limit(maxLimit)
+		}
+	}
+	return db
+}
+
 // ShouldUseMapResults returns true if the query options require map results instead of entity results
 func ShouldUseMapResults(options *QueryOptions) bool {
 	return options != nil && (len(options.Apply) > 0 || options.Compute != nil)
@@ -51,17 +68,7 @@ func ApplyQueryOptionsWithFTS(db *gorm.DB, options *QueryOptions, entityMetadata
 		}
 
 		if options.Skip != nil {
-			db = db.Offset(*options.Skip)
-			// If no explicit top is set, use a very large limit for MySQL/MariaDB compatibility
-			if options.Top == nil {
-				dialect = getDatabaseDialect(db)
-				if dialect == "mysql" {
-					// MySQL/MariaDB require LIMIT when OFFSET is used
-					// Use max int32 value which is effectively unlimited
-					maxLimit := 2147483647
-					db = db.Limit(maxLimit)
-				}
-			}
+			db = applyOffsetWithLimit(db, *options.Skip, options.Top)
 		}
 
 		if options.Top != nil {
@@ -100,17 +107,7 @@ func ApplyQueryOptionsWithFTS(db *gorm.DB, options *QueryOptions, entityMetadata
 	// Apply top and skip (for pagination)
 	// MySQL/MariaDB require LIMIT when using OFFSET, so we ensure a LIMIT is always present
 	if options.Skip != nil {
-		db = db.Offset(*options.Skip)
-		// If no explicit top is set, use a very large limit for MySQL/MariaDB compatibility
-		if options.Top == nil {
-			dialect = getDatabaseDialect(db)
-			if dialect == "mysql" {
-				// MySQL/MariaDB require LIMIT when OFFSET is used
-				// Use max int32 value which is effectively unlimited
-				maxLimit := 2147483647
-				db = db.Limit(maxLimit)
-			}
-		}
+		db = applyOffsetWithLimit(db, *options.Skip, options.Top)
 	}
 
 	if options.Top != nil {
