@@ -284,13 +284,32 @@ func buildComparisonCondition(dialect string, filter *FilterExpression, entityMe
 		if rawName == "$it" {
 			columnName = rawName
 		} else if rawName == "$count" {
-			columnName = quoteIdent(dialect, rawName)
+			// For PostgreSQL HAVING clauses, use COUNT(*) expression instead of alias
+			// because PostgreSQL doesn't support referencing SELECT aliases in HAVING
+			if dialect == "postgres" {
+				if expr, ok := aggregateAliasExprs["$count"]; ok {
+					columnName = expr
+				} else {
+					columnName = "COUNT(*)"
+				}
+			} else {
+				columnName = quoteIdent(dialect, rawName)
+			}
 		} else if len(rawName) > 0 && rawName[0] == '$' {
 			columnName = quoteIdent(dialect, rawName)
 		} else {
-			// Quote computed aliases and unknown identifiers for PostgreSQL compatibility
-			// This ensures aliases from $apply (like "Total" from groupby/aggregate) work correctly
-			columnName = quoteIdent(dialect, rawName)
+			// Check if this is an aggregate alias that needs to be resolved for PostgreSQL HAVING
+			if dialect == "postgres" {
+				if expr, ok := aggregateAliasExprs[rawName]; ok {
+					// Use the aggregate expression instead of the alias for PostgreSQL HAVING
+					columnName = expr
+				} else {
+					columnName = quoteIdent(dialect, rawName)
+				}
+			} else {
+				// Quote computed aliases and unknown identifiers for other databases
+				columnName = quoteIdent(dialect, rawName)
+			}
 		}
 	}
 
@@ -370,7 +389,8 @@ func buildComparisonCondition(dialect string, filter *FilterExpression, entityMe
 		if funcSQL == "" {
 			return "", nil
 		}
-		return fmt.Sprintf("%s = ?", funcSQL), append(funcArgs, true)
+		// Use integer 1 instead of boolean true for database compatibility (PostgreSQL)
+		return fmt.Sprintf("%s = ?", funcSQL), append(funcArgs, 1)
 	case OpGeoIntersects:
 		funcSQL, funcArgs := buildFunctionSQL(dialect, OpGeoIntersects, columnName, filter.Value)
 		if funcSQL == "" {
@@ -582,7 +602,20 @@ func buildFunctionComparison(dialect string, filter *FilterExpression, entityMet
 		return "", nil
 	}
 
-	allArgs := append(funcArgs, filter.Value)
+	// Convert boolean values to integers for isof() function comparisons
+	// This is needed because isof() returns 1/0 and PostgreSQL can't compare int with boolean
+	rightValue := filter.Value
+	if funcExpr.Operator == OpIsOf {
+		if boolVal, ok := rightValue.(bool); ok {
+			if boolVal {
+				rightValue = 1
+			} else {
+				rightValue = 0
+			}
+		}
+	}
+
+	allArgs := append(funcArgs, rightValue)
 	return compSQL, allArgs
 }
 

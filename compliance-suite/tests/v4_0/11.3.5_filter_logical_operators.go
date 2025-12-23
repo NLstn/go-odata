@@ -102,7 +102,8 @@ func FilterLogicalOperators() *framework.TestSuite {
 		"test_complex_and_or",
 		"Complex expression with AND and OR",
 		func(ctx *framework.TestContext) error {
-			filter := url.QueryEscape("(Price lt 10 or Price gt 100) and CategoryID eq 1")
+			// Use Status (integer) instead of CategoryID (UUID) for type-safe comparison across databases
+			filter := url.QueryEscape("(Price lt 10 or Price gt 100) and Status eq 1")
 			resp, err := ctx.GET("/Products?$filter=" + filter)
 			if err != nil {
 				return err
@@ -136,7 +137,8 @@ func FilterLogicalOperators() *framework.TestSuite {
 		"test_multiple_or",
 		"Multiple OR operators chain correctly",
 		func(ctx *framework.TestContext) error {
-			filter := url.QueryEscape("CategoryID eq 1 or CategoryID eq 2 or CategoryID eq 3")
+			// Use Status (integer flags enum) instead of CategoryID (UUID) for type-safe comparison across databases
+			filter := url.QueryEscape("Status eq 1 or Status eq 2 or Status eq 3")
 			resp, err := ctx.GET("/Products?$filter=" + filter)
 			if err != nil {
 				return err
@@ -170,7 +172,8 @@ func FilterLogicalOperators() *framework.TestSuite {
 		"test_parentheses_precedence",
 		"Parentheses control operator precedence",
 		func(ctx *framework.TestContext) error {
-			filter := url.QueryEscape("Price gt 10 and (CategoryID eq 1 or CategoryID eq 2)")
+			// Use Status (integer) instead of CategoryID (UUID) for type-safe comparison across databases
+			filter := url.QueryEscape("Price gt 10 and (Status eq 1 or Status eq 2)")
 			resp, err := ctx.GET("/Products?$filter=" + filter)
 			if err != nil {
 				return err

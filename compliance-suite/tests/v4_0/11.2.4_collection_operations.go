@@ -144,7 +144,8 @@ func CollectionOperations() *framework.TestSuite {
 		"Empty collection returns valid structure with empty array",
 		func(ctx *framework.TestContext) error {
 			// Use a filter that should return no results
-			filter := url.QueryEscape("ID eq -999999")
+			// Use string comparison with a non-existent name (works across all databases)
+			filter := url.QueryEscape("Name eq 'NON_EXISTENT_PRODUCT_NAME_12345'")
 			resp, err := ctx.GET("/Products?$filter=" + filter)
 			if err != nil {
 				return err

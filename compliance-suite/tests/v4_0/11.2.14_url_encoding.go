@@ -116,7 +116,8 @@ func URLEncoding() *framework.TestSuite {
 		"test_parentheses_encoding",
 		"Filter with URL-encoded parentheses",
 		func(ctx *framework.TestContext) error {
-			path := "/Products?$filter=" + url.QueryEscape("(Price gt 100) and (ID lt 10)")
+			// Use Status (integer) instead of ID (UUID) for type-safe comparison across databases
+			path := "/Products?$filter=" + url.QueryEscape("(Price gt 100) and (Status lt 10)")
 			resp, err := ctx.GET(path)
 			if err != nil {
 				return err
