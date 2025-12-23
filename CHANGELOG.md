@@ -35,6 +35,10 @@ rely on version numbers to reason about compatibility.
   - Improved discoverability: hooks are now prominent in main package documentation
 
 ### Fixed
+- **MySQL/MariaDB compatibility for OData query functions**: Added database-specific SQL generation for date extraction functions (YEAR, MONTH, DAY, HOUR, MINUTE, SECOND), arithmetic functions (CEILING, FLOOR), and the NOW function. MySQL compliance tests improved from 95% to 97% pass rate (21 failures reduced to 7).
+  - Date extraction functions now use MySQL's native YEAR(), MONTH(), etc. instead of PostgreSQL's EXTRACT()
+  - CEILING and FLOOR use MySQL's native functions instead of SQLite's CASE expressions
+  - Type conversion functions (CAST, ISOF) now use MySQL-appropriate type names (SIGNED, CHAR, DATETIME, etc.)
 - **Ambiguous column reference error when combining `$select` with navigation filters**: Fixed PostgreSQL error "column reference is ambiguous" that occurred when using `$select` with `$filter` on navigation properties. The `applySelect` function now qualifies column names with table names (e.g., `members.id` instead of `id`) to prevent ambiguity when JOINs are present. This fix ensures compatibility with both PostgreSQL and SQLite.
 - **Dialect-aware quoting for `$apply` aggregations (issue #343)**: `groupby` and `aggregate` SQL builders now qualify and quote identifiers using the active database dialect, preventing case-folding and reserved-word conflicts in PostgreSQL and ensuring compatibility across SQLite/MySQL. `GetColumnName` continues to return unquoted names by design; callers that generate raw SQL now apply proper quoting.
 - Data race in async monitor configuration resolved by synchronizing access in the router, fixing `-race` CI test failures in `internal/service/runtime.TestServiceRespondAsyncFlow`.

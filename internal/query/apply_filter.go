@@ -715,56 +715,106 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 	case OpMod:
 		return fmt.Sprintf("(%s %% ?)", columnName), []interface{}{value}
 	case OpYear:
-		if dialect == "postgres" {
+		switch dialect {
+		case "postgres":
 			return fmt.Sprintf("(EXTRACT(YEAR FROM %s)::INT)", columnName), nil
+		case "mysql":
+			return fmt.Sprintf("YEAR(%s)", columnName), nil
+		default: // sqlite
+			return fmt.Sprintf("CAST(strftime('%%Y', %s) AS INTEGER)", columnName), nil
 		}
-		return fmt.Sprintf("CAST(strftime('%%Y', %s) AS INTEGER)", columnName), nil
 	case OpMonth:
-		if dialect == "postgres" {
+		switch dialect {
+		case "postgres":
 			return fmt.Sprintf("(EXTRACT(MONTH FROM %s)::INT)", columnName), nil
+		case "mysql":
+			return fmt.Sprintf("MONTH(%s)", columnName), nil
+		default: // sqlite
+			return fmt.Sprintf("CAST(strftime('%%m', %s) AS INTEGER)", columnName), nil
 		}
-		return fmt.Sprintf("CAST(strftime('%%m', %s) AS INTEGER)", columnName), nil
 	case OpDay:
-		if dialect == "postgres" {
+		switch dialect {
+		case "postgres":
 			return fmt.Sprintf("(EXTRACT(DAY FROM %s)::INT)", columnName), nil
+		case "mysql":
+			return fmt.Sprintf("DAY(%s)", columnName), nil
+		default: // sqlite
+			return fmt.Sprintf("CAST(strftime('%%d', %s) AS INTEGER)", columnName), nil
 		}
-		return fmt.Sprintf("CAST(strftime('%%d', %s) AS INTEGER)", columnName), nil
 	case OpHour:
-		if dialect == "postgres" {
+		switch dialect {
+		case "postgres":
 			return fmt.Sprintf("(EXTRACT(HOUR FROM %s)::INT)", columnName), nil
+		case "mysql":
+			return fmt.Sprintf("HOUR(%s)", columnName), nil
+		default: // sqlite
+			return fmt.Sprintf("CAST(strftime('%%H', %s) AS INTEGER)", columnName), nil
 		}
-		return fmt.Sprintf("CAST(strftime('%%H', %s) AS INTEGER)", columnName), nil
 	case OpMinute:
-		if dialect == "postgres" {
+		switch dialect {
+		case "postgres":
 			return fmt.Sprintf("(EXTRACT(MINUTE FROM %s)::INT)", columnName), nil
+		case "mysql":
+			return fmt.Sprintf("MINUTE(%s)", columnName), nil
+		default: // sqlite
+			return fmt.Sprintf("CAST(strftime('%%M', %s) AS INTEGER)", columnName), nil
 		}
-		return fmt.Sprintf("CAST(strftime('%%M', %s) AS INTEGER)", columnName), nil
 	case OpSecond:
-		if dialect == "postgres" {
+		switch dialect {
+		case "postgres":
 			return fmt.Sprintf("(EXTRACT(SECOND FROM %s)::INT)", columnName), nil
+		case "mysql":
+			return fmt.Sprintf("SECOND(%s)", columnName), nil
+		default: // sqlite
+			return fmt.Sprintf("CAST(strftime('%%S', %s) AS INTEGER)", columnName), nil
 		}
-		return fmt.Sprintf("CAST(strftime('%%S', %s) AS INTEGER)", columnName), nil
 	case OpDate:
-		if dialect == "postgres" {
+		switch dialect {
+		case "postgres":
 			return fmt.Sprintf("(CAST(%s AS DATE))", columnName), nil
+		case "mysql":
+			return fmt.Sprintf("DATE(%s)", columnName), nil
+		default: // sqlite
+			return fmt.Sprintf("DATE(%s)", columnName), nil
 		}
-		return fmt.Sprintf("DATE(%s)", columnName), nil
 	case OpTime:
-		if dialect == "postgres" {
+		switch dialect {
+		case "postgres":
 			return fmt.Sprintf("(CAST(%s AS TIME))", columnName), nil
+		case "mysql":
+			return fmt.Sprintf("TIME(%s)", columnName), nil
+		default: // sqlite
+			return fmt.Sprintf("TIME(%s)", columnName), nil
 		}
-		return fmt.Sprintf("TIME(%s)", columnName), nil
 	case OpNow:
-		if dialect == "postgres" {
+		switch dialect {
+		case "postgres":
 			return "NOW()", nil
+		case "mysql":
+			return "NOW()", nil
+		default: // sqlite
+			return "datetime('now')", nil
 		}
-		return "datetime('now')", nil
 	case OpCeiling:
-		return fmt.Sprintf("CASE WHEN %s = CAST(%s AS INTEGER) THEN %s ELSE CAST(%s AS INTEGER) + (CASE WHEN %s > 0 THEN 1 ELSE 0 END) END",
-			columnName, columnName, columnName, columnName, columnName), nil
+		switch dialect {
+		case "postgres":
+			return fmt.Sprintf("CEILING(%s)", columnName), nil
+		case "mysql":
+			return fmt.Sprintf("CEILING(%s)", columnName), nil
+		default: // sqlite
+			return fmt.Sprintf("CASE WHEN %s = CAST(%s AS INTEGER) THEN %s ELSE CAST(%s AS INTEGER) + (CASE WHEN %s > 0 THEN 1 ELSE 0 END) END",
+				columnName, columnName, columnName, columnName, columnName), nil
+		}
 	case OpFloor:
-		return fmt.Sprintf("CASE WHEN %s = CAST(%s AS INTEGER) THEN %s ELSE CAST(%s AS INTEGER) - (CASE WHEN %s < 0 THEN 1 ELSE 0 END) END",
-			columnName, columnName, columnName, columnName, columnName), nil
+		switch dialect {
+		case "postgres":
+			return fmt.Sprintf("FLOOR(%s)", columnName), nil
+		case "mysql":
+			return fmt.Sprintf("FLOOR(%s)", columnName), nil
+		default: // sqlite
+			return fmt.Sprintf("CASE WHEN %s = CAST(%s AS INTEGER) THEN %s ELSE CAST(%s AS INTEGER) - (CASE WHEN %s < 0 THEN 1 ELSE 0 END) END",
+				columnName, columnName, columnName, columnName, columnName), nil
+		}
 	case OpRound:
 		return fmt.Sprintf("ROUND(%s)", columnName), nil
 	case OpCast:
@@ -804,7 +854,7 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 	}
 }
 
-// edmTypeToSQLType converts OData EDM types to SQLite types
+// edmTypeToSQLType converts OData EDM types to database-specific SQL types
 func edmTypeToSQLType(dialect string, edmType string) string {
 	switch dialect {
 	case "postgres":
@@ -833,6 +883,33 @@ func edmTypeToSQLType(dialect string, edmType string) string {
 			return "BYTEA"
 		default:
 			return "TEXT"
+		}
+	case "mysql":
+		switch edmType {
+		case "Edm.String":
+			return "CHAR"
+		case "Edm.Int32", "Edm.Int16", "Edm.Byte", "Edm.SByte":
+			return "SIGNED"
+		case "Edm.Int64":
+			return "SIGNED"
+		case "Edm.Decimal":
+			return "DECIMAL"
+		case "Edm.Double", "Edm.Single":
+			return "DECIMAL"
+		case "Edm.Boolean":
+			return "SIGNED"
+		case "Edm.DateTimeOffset":
+			return "DATETIME"
+		case "Edm.Date":
+			return "DATE"
+		case "Edm.TimeOfDay":
+			return "TIME"
+		case "Edm.Guid":
+			return "CHAR"
+		case "Edm.Binary":
+			return "BINARY"
+		default:
+			return "CHAR"
 		}
 	default: // sqlite and fallback
 		switch edmType {
