@@ -347,12 +347,7 @@ func (h *EntityHandler) handlePutEntity(w http.ResponseWriter, r *http.Request, 
 		}
 
 		// Preserve server-managed timestamp fields (like CreatedAt) to avoid MySQL zero datetime issues
-		if err := h.preserveTimestampFields(entity, replacementEntity); err != nil {
-			if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgInternalError, err.Error()); writeErr != nil {
-				h.logger.Error("Error writing error response", "error", writeErr)
-			}
-			return newTransactionHandledError(err)
-		}
+		h.preserveTimestampFields(entity, replacementEntity)
 
 		if err := h.callBeforeUpdate(entity, hookReq); err != nil {
 			if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", err.Error()); writeErr != nil {
@@ -421,7 +416,7 @@ func (h *EntityHandler) preserveKeyProperties(source, destination interface{}) e
 
 // preserveTimestampFields copies time.Time fields from source to destination if destination has zero value
 // This prevents MySQL/MariaDB errors with zero datetime values ('0000-00-00')
-func (h *EntityHandler) preserveTimestampFields(source, destination interface{}) error {
+func (h *EntityHandler) preserveTimestampFields(source, destination interface{}) {
 	sourceVal := reflect.ValueOf(source).Elem()
 	destVal := reflect.ValueOf(destination).Elem()
 
@@ -432,21 +427,21 @@ func (h *EntityHandler) preserveTimestampFields(source, destination interface{})
 
 		// Only preserve time.Time fields
 		if destField.Type() == reflect.TypeOf(time.Time{}) && destField.CanSet() {
-			// Check if destination field is zero
-			if destField.Interface().(time.Time).IsZero() {
+			// Check if destination field is zero (safe type assertion)
+			destTime, ok := destField.Interface().(time.Time)
+			if ok && destTime.IsZero() {
 				// Get corresponding source field
 				sourceField := sourceVal.FieldByName(fieldType.Name)
 				if sourceField.IsValid() && sourceField.Type() == reflect.TypeOf(time.Time{}) {
-					// Copy the non-zero value from source
-					if !sourceField.Interface().(time.Time).IsZero() {
+					// Copy the non-zero value from source (safe type assertion)
+					sourceTime, ok := sourceField.Interface().(time.Time)
+					if ok && !sourceTime.IsZero() {
 						destField.Set(sourceField)
 					}
 				}
 			}
 		}
 	}
-
-	return nil
 }
 
 // parsePatchRequestBody parses the JSON request body for PATCH operations
