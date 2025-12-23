@@ -27,6 +27,8 @@ rely on version numbers to reason about compatibility.
 
 ### Added
 - PostgreSQL is now fully supported alongside SQLite with all 105 compliance test suites passing on both databases
+- MariaDB is now fully supported with all compliance test suites passing on MariaDB 11
+- MySQL is now fully supported with all compliance test suites passing on MySQL 8
 - CI/CD pipeline now runs compliance tests on both SQLite and PostgreSQL to ensure cross-database compatibility
 - **Public hook interfaces**: `EntityHook` and `ReadHook` are now exported in the public API, making hooks discoverable via `go doc` and `pkg.go.dev`
   - Hook interface documentation includes comprehensive examples for lifecycle hooks (BeforeCreate, AfterCreate, etc.)

@@ -327,8 +327,8 @@ The library works with any GORM-compatible database, but testing and active supp
 
 - ✅ **SQLite** - Fully supported and tested. All features work reliably. Includes native FTS (FTS3/4/5) for `$search`.
 - ✅ **PostgreSQL** - Fully supported and tested. All compliance tests pass on PostgreSQL 17. Includes native full-text search with `tsvector` and GIN indexes for `$search`.
-- 🚧 **MariaDB** - Under development. Basic GORM compatibility is expected to work, with full compliance testing in progress.
-- 🚧 **MySQL** - Under development. Basic GORM compatibility is expected to work, with full compliance testing in progress.
+- ✅ **MariaDB** - Fully supported and tested. All compliance tests pass on MariaDB 11. `$search` falls back to in-memory filtering.
+- ✅ **MySQL** - Fully supported and tested. All compliance tests pass on MySQL 8. `$search` falls back to in-memory filtering.
 - ❓ **Other databases** (SQL Server, etc.) - Should work through GORM compatibility, but not actively tested. `$search` falls back to in-memory filtering.
 
 ### Using Other Databases
@@ -339,7 +339,7 @@ If you'd like to use a database that isn't listed above or encounter issues:
 2. Share your use case and any errors you encounter
 3. We'll work with you to add official support
 
-While the library is designed to work with any GORM-compatible database through GORM's abstraction layer, we focus our testing efforts on SQLite and PostgreSQL to ensure the best experience.
+While the library is designed to work with any GORM-compatible database through GORM's abstraction layer, we focus our testing efforts on SQLite, PostgreSQL, MariaDB, and MySQL to ensure the best experience.
 
 ## Testing
 
