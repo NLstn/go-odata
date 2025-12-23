@@ -387,7 +387,8 @@ func buildComparisonCondition(dialect string, filter *FilterExpression, entityMe
 	case OpIsOf:
 		typeName, ok := filter.Value.(string)
 		if !ok {
-			return "", nil
+			// isof() requires a string type name argument
+			return "1 = 0", nil // Return always-false condition for invalid type
 		}
 
 		// Check if this is an entity type check (columnName == "$it")
