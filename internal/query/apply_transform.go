@@ -10,6 +10,10 @@ import (
 	"gorm.io/gorm/clause"
 )
 
+// aggregateAliasExprs maps aggregate aliases to their SQL expressions (without the "as alias" part)
+// This is used for PostgreSQL HAVING clauses which cannot reference SELECT aliases
+var aggregateAliasExprs map[string]string
+
 // applyTransformations applies apply transformations to the GORM query
 func applyTransformations(db *gorm.DB, transformations []ApplyTransformation, entityMetadata *metadata.EntityMetadata) *gorm.DB {
 	if db.Statement != nil && db.Statement.Dest == nil {
@@ -20,6 +24,8 @@ func applyTransformations(db *gorm.DB, transformations []ApplyTransformation, en
 	dialect := getDatabaseDialect(db)
 
 	hasGrouping := false
+	// Reset and build aggregate alias expressions map for HAVING clause support
+	aggregateAliasExprs = make(map[string]string)
 
 	for _, transformation := range transformations {
 		switch transformation.Type {
@@ -80,8 +86,11 @@ func applyGroupBy(db *gorm.DB, groupBy *GroupByTransformation, entityMetadata *m
 			}
 		}
 	} else {
+		// Default to COUNT(*) when no aggregate is specified with groupby
 		// Quote alias per dialect
 		selectColumns = append(selectColumns, fmt.Sprintf("COUNT(*) as %s", quoteIdent(dialect, "$count")))
+		// Record $count alias for HAVING clause support in PostgreSQL
+		aggregateAliasExprs["$count"] = "COUNT(*)"
 	}
 
 	if len(groupByColumns) > 0 {
@@ -120,6 +129,8 @@ func applyAggregate(db *gorm.DB, aggregate *AggregateTransformation, entityMetad
 // buildAggregateSQL builds the SQL for an aggregate expression
 func buildAggregateSQL(dialect string, aggExpr AggregateExpression, entityMetadata *metadata.EntityMetadata) string {
 	if aggExpr.Property == "$count" {
+		// Record for HAVING clause support in PostgreSQL
+		aggregateAliasExprs[aggExpr.Alias] = "COUNT(*)"
 		return fmt.Sprintf("COUNT(*) as %s", quoteIdent(dialect, aggExpr.Alias))
 	}
 
@@ -145,12 +156,18 @@ func buildAggregateSQL(dialect string, aggExpr AggregateExpression, entityMetada
 	case AggregationCount:
 		sqlFunc = "COUNT"
 	case AggregationCountDistinct:
-		return fmt.Sprintf("COUNT(DISTINCT %s) as %s", qualified, quoteIdent(dialect, aggExpr.Alias))
+		expr := fmt.Sprintf("COUNT(DISTINCT %s)", qualified)
+		// Record for HAVING clause support in PostgreSQL
+		aggregateAliasExprs[aggExpr.Alias] = expr
+		return fmt.Sprintf("%s as %s", expr, quoteIdent(dialect, aggExpr.Alias))
 	default:
 		return ""
 	}
 
-	return fmt.Sprintf("%s(%s) as %s", sqlFunc, qualified, quoteIdent(dialect, aggExpr.Alias))
+	expr := fmt.Sprintf("%s(%s)", sqlFunc, qualified)
+	// Record for HAVING clause support in PostgreSQL
+	aggregateAliasExprs[aggExpr.Alias] = expr
+	return fmt.Sprintf("%s as %s", expr, quoteIdent(dialect, aggExpr.Alias))
 }
 
 // applyCompute applies a compute transformation to the GORM query
@@ -353,20 +370,32 @@ func buildComputeExpressionSQL(dialect string, expr *FilterExpression, entityMet
 
 // applyOrderBy applies order by clauses to the GORM query
 func applyOrderBy(db *gorm.DB, orderBy []OrderByItem, entityMetadata *metadata.EntityMetadata) *gorm.DB {
+	dialect := getDatabaseDialect(db)
 	for _, item := range orderBy {
+		var columnName string
 		if propertyExists(item.Property, entityMetadata) {
-			columnName := GetColumnName(item.Property, entityMetadata)
-			db = db.Order(clause.OrderByColumn{
-				Column: clause.Column{Name: columnName},
-				Desc:   item.Descending,
-			})
+			columnName = GetColumnName(item.Property, entityMetadata)
 		} else {
 			sanitizedAlias := sanitizeIdentifier(item.Property)
 			if sanitizedAlias == "" {
 				continue
 			}
+			// For aggregate aliases and computed properties, quote the identifier for PostgreSQL
+			columnName = quoteIdent(dialect, sanitizedAlias)
+		}
+
+		// For PostgreSQL, add NULLS LAST to ensure consistent null ordering across databases
+		// OData v4 spec expects nulls to be sorted last
+		if dialect == "postgres" {
+			direction := "ASC"
+			if item.Descending {
+				direction = "DESC"
+			}
+			// Use raw SQL string to include NULLS LAST
+			db = db.Order(columnName + " " + direction + " NULLS LAST")
+		} else {
 			db = db.Order(clause.OrderByColumn{
-				Column: clause.Column{Name: sanitizedAlias},
+				Column: clause.Column{Name: columnName},
 				Desc:   item.Descending,
 			})
 		}
