@@ -426,10 +426,27 @@ func applyOrderBy(db *gorm.DB, orderBy []OrderByItem, entityMetadata *metadata.E
 		if dialect == "postgres" {
 			if item.Descending {
 				// Descending: non-NULLs first, then NULLs
-				db = db.Order(columnName + " DESC NULLS LAST")
+				db = db.Order(clause.OrderByColumn{
+					Column: clause.Column{
+						// Use an expression to append NULLS LAST while keeping the identifier structured
+						Expr: clause.Expr{
+							SQL:  "? NULLS LAST",
+							Vars: []interface{}{clause.Column{Name: columnName}},
+						},
+					},
+					Desc: true,
+				})
 			} else {
 				// Ascending: NULLs first, then non-NULLs
-				db = db.Order(columnName + " ASC NULLS FIRST")
+				db = db.Order(clause.OrderByColumn{
+					Column: clause.Column{
+						Expr: clause.Expr{
+							SQL:  "? NULLS FIRST",
+							Vars: []interface{}{clause.Column{Name: columnName}},
+						},
+					},
+					Desc: false,
+				})
 			}
 		} else {
 			db = db.Order(clause.OrderByColumn{
