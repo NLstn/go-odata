@@ -423,22 +423,16 @@ func applyOrderBy(db *gorm.DB, orderBy []OrderByItem, entityMetadata *metadata.E
 		// For PostgreSQL, explicitly control NULL ordering to match OData v4.0:
 		// - Ascending: NULLs come before non-NULLs (NULLS FIRST)
 		// - Descending: NULLs come after non-NULLs (NULLS LAST)
+		// Note: columnName is already sanitized via sanitizeIdentifier() or GetColumnName()
+		// and quoted via quoteIdent() (which escapes embedded quotes), so SQL injection is prevented.
 		if dialect == "postgres" {
+			direction := " ASC NULLS FIRST"
 			if item.Descending {
-				// Descending: non-NULLs first, then NULLs
-				// Use clause.Expr with parameterized column to prevent SQL injection
-				db = db.Order(clause.Expr{
-					SQL:  "? DESC NULLS LAST",
-					Vars: []interface{}{clause.Column{Name: columnName, Raw: true}},
-				})
-			} else {
-				// Ascending: NULLs first, then non-NULLs
-				// Use clause.Expr with parameterized column to prevent SQL injection
-				db = db.Order(clause.Expr{
-					SQL:  "? ASC NULLS FIRST",
-					Vars: []interface{}{clause.Column{Name: columnName, Raw: true}},
-				})
+				direction = " DESC NULLS LAST"
 			}
+			db = db.Clauses(clause.OrderBy{
+				Expression: clause.Expr{SQL: columnName + direction},
+			})
 		} else {
 			db = db.Order(clause.OrderByColumn{
 				Column: clause.Column{Name: columnName},
