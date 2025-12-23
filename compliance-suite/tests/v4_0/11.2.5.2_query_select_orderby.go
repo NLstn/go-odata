@@ -245,7 +245,7 @@ func QuerySelectOrderby() *framework.TestSuite {
 		"test_orderby_multiple",
 		"$orderby with multiple properties",
 		func(ctx *framework.TestContext) error {
-			orderby := url.QueryEscape("CategoryID,Price desc")
+			orderby := url.QueryEscape("Name,Price desc")
 			resp, err := ctx.GET("/Products?$orderby=" + orderby)
 			if err != nil {
 				return err
@@ -271,8 +271,8 @@ func QuerySelectOrderby() *framework.TestSuite {
 
 			// Extract items and verify multi-level ordering
 			type item struct {
-				CategoryID string
-				Price      float64
+				Name  string
+				Price float64
 			}
 			var items []item
 			for i, v := range value {
@@ -280,31 +280,30 @@ func QuerySelectOrderby() *framework.TestSuite {
 				if !ok {
 					return fmt.Errorf("item %d is not an object", i)
 				}
-				categoryID, ok := obj["CategoryID"].(string)
+				name, ok := obj["Name"].(string)
 				if !ok {
-					// CategoryID might be null, treat as empty string
-					categoryID = ""
+					return fmt.Errorf("item %d missing Name field or not a string", i)
 				}
 				price, ok := obj["Price"].(float64)
 				if !ok {
 					return fmt.Errorf("item %d missing Price field or not a number", i)
 				}
-				items = append(items, item{CategoryID: categoryID, Price: price})
+				items = append(items, item{Name: name, Price: price})
 			}
 
-			// Verify ordering: first by CategoryID asc, then by Price desc
+			// Verify ordering: first by Name asc, then by Price desc
 			for i := 1; i < len(items); i++ {
 				prev := items[i-1]
 				curr := items[i]
 
-				// Compare CategoryID first
-				if curr.CategoryID < prev.CategoryID {
-					return fmt.Errorf("results not ordered by CategoryID: found %s after %s", curr.CategoryID, prev.CategoryID)
+				// Compare Name first
+				if curr.Name < prev.Name {
+					return fmt.Errorf("results not ordered by Name: found %s after %s", curr.Name, prev.Name)
 				}
 
-				// If CategoryID is the same, verify Price descending
-				if curr.CategoryID == prev.CategoryID && curr.Price > prev.Price {
-					return fmt.Errorf("results not ordered by Price desc within same CategoryID: found %.2f after %.2f", curr.Price, prev.Price)
+				// If Name is the same, verify Price descending
+				if curr.Name == prev.Name && curr.Price > prev.Price {
+					return fmt.Errorf("results not ordered by Price desc within same Name: found %.2f after %.2f", curr.Price, prev.Price)
 				}
 			}
 
