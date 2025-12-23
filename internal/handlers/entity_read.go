@@ -71,7 +71,7 @@ func (h *EntityHandler) handleGetEntity(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	// Validate that $top and $skip are not used on individual entities
+	// Validate that $top, $skip, and $index are not used on individual entities
 	// Per OData v4 spec, these query options only apply to collections
 	if queryOptions.Top != nil {
 		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions,
@@ -83,6 +83,13 @@ func (h *EntityHandler) handleGetEntity(w http.ResponseWriter, r *http.Request, 
 	if queryOptions.Skip != nil {
 		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions,
 			"$skip query option is not applicable to individual entities"); writeErr != nil {
+			h.logger.Error("Error writing error response", "error", writeErr)
+		}
+		return
+	}
+	if queryOptions.Index {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions,
+			"$index query option is not applicable to individual entities"); writeErr != nil {
 			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return
@@ -161,7 +168,7 @@ func (h *EntityHandler) handleGetEntityOverwrite(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// Validate that $top and $skip are not used on individual entities
+	// Validate that $top, $skip, and $index are not used on individual entities
 	if queryOptions.Top != nil {
 		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions,
 			"$top query option is not applicable to individual entities"); writeErr != nil {
@@ -172,6 +179,13 @@ func (h *EntityHandler) handleGetEntityOverwrite(w http.ResponseWriter, r *http.
 	if queryOptions.Skip != nil {
 		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions,
 			"$skip query option is not applicable to individual entities"); writeErr != nil {
+			h.logger.Error("Error writing error response", "error", writeErr)
+		}
+		return
+	}
+	if queryOptions.Index {
+		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions,
+			"$index query option is not applicable to individual entities"); writeErr != nil {
 			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return

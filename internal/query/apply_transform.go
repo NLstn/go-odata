@@ -11,11 +11,11 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// aggregateAliasExprs maps aggregate aliases to their SQL expressions (without the "as alias" part)
-// This is used for PostgreSQL HAVING clauses which cannot reference SELECT aliases.
-// Protected by aggregateAliasExprsMu for concurrent access safety.
-var aggregateAliasExprs map[string]string
-var aggregateAliasExprsMu sync.RWMutex
+// aliasExprs maps aggregate and compute aliases to their SQL expressions (without the "as alias" part)
+// This is used for PostgreSQL WHERE/HAVING clauses which cannot reference SELECT aliases.
+// Protected by aliasExprsMu for concurrent access safety.
+var aliasExprs map[string]string
+var aliasExprsMu sync.RWMutex
 
 // applyTransformations applies apply transformations to the GORM query
 func applyTransformations(db *gorm.DB, transformations []ApplyTransformation, entityMetadata *metadata.EntityMetadata) *gorm.DB {
@@ -27,10 +27,8 @@ func applyTransformations(db *gorm.DB, transformations []ApplyTransformation, en
 	dialect := getDatabaseDialect(db)
 
 	hasGrouping := false
-	// Reset and build aggregate alias expressions map for HAVING clause support
-	aggregateAliasExprsMu.Lock()
-	aggregateAliasExprs = make(map[string]string)
-	aggregateAliasExprsMu.Unlock()
+	// Reset and build alias expressions map for HAVING/WHERE clause support
+	resetAliasExprs()
 
 	for _, transformation := range transformations {
 		switch transformation.Type {
@@ -131,24 +129,47 @@ func applyAggregate(db *gorm.DB, aggregate *AggregateTransformation, entityMetad
 	return db
 }
 
-// setAggregateAliasExpr safely sets an aggregate alias expression with mutex protection
-func setAggregateAliasExpr(alias, expr string) {
-	aggregateAliasExprsMu.Lock()
-	defer aggregateAliasExprsMu.Unlock()
-	if aggregateAliasExprs != nil {
-		aggregateAliasExprs[alias] = expr
+// setAliasExpr safely sets an alias expression with mutex protection
+// This is used for both aggregate and compute aliases
+func setAliasExpr(alias, expr string) {
+	aliasExprsMu.Lock()
+	defer aliasExprsMu.Unlock()
+	if aliasExprs == nil {
+		aliasExprs = make(map[string]string)
 	}
+	aliasExprs[alias] = expr
+}
+
+// getAliasExpr safely gets an alias expression with mutex protection
+// This is used for both aggregate and compute aliases
+func getAliasExpr(alias string) (string, bool) {
+	aliasExprsMu.RLock()
+	defer aliasExprsMu.RUnlock()
+	if aliasExprs == nil {
+		return "", false
+	}
+	expr, ok := aliasExprs[alias]
+	return expr, ok
+}
+
+// resetAliasExprs resets the alias expressions map
+// This is called before processing a new query to avoid stale data
+func resetAliasExprs() {
+	aliasExprsMu.Lock()
+	defer aliasExprsMu.Unlock()
+	aliasExprs = make(map[string]string)
+}
+
+// setAggregateAliasExpr safely sets an aggregate alias expression with mutex protection
+// Deprecated: use setAliasExpr instead
+func setAggregateAliasExpr(alias, expr string) {
+	setAliasExpr(alias, expr)
 }
 
 // getAggregateAliasExpr safely gets an aggregate alias expression with mutex protection
+// Deprecated: use getAliasExpr instead
 func getAggregateAliasExpr(alias string) (string, bool) {
-	aggregateAliasExprsMu.RLock()
-	defer aggregateAliasExprsMu.RUnlock()
-	if aggregateAliasExprs == nil {
-		return "", false
-	}
-	expr, ok := aggregateAliasExprs[alias]
-	return expr, ok
+	return getAliasExpr(alias)
 }
 
 // buildAggregateSQL builds the SQL for an aggregate expression
@@ -262,6 +283,9 @@ func buildComputeSQL(dialect string, computeExpr ComputeExpression, entityMetada
 			return ""
 		}
 
+		// Register the compute expression for PostgreSQL WHERE clause support
+		setAliasExpr(computeExpr.Alias, funcSQL)
+
 		return fmt.Sprintf("%s as %s", funcSQL, quoteIdent(dialect, computeExpr.Alias))
 	}
 
@@ -292,7 +316,12 @@ func buildComputeSQL(dialect string, computeExpr ComputeExpression, entityMetada
 			return ""
 		}
 
-		return fmt.Sprintf("(%s %s %s) as %s", leftSQL, sqlOp, rightSQL, quoteIdent(dialect, computeExpr.Alias))
+		// Build the expression without alias for registration
+		exprSQL := fmt.Sprintf("(%s %s %s)", leftSQL, sqlOp, rightSQL)
+		// Register the compute expression for PostgreSQL WHERE clause support
+		setAliasExpr(computeExpr.Alias, exprSQL)
+
+		return fmt.Sprintf("%s as %s", exprSQL, quoteIdent(dialect, computeExpr.Alias))
 	}
 
 	return ""

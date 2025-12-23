@@ -226,3 +226,49 @@ func ApplySelectToEntity(entity interface{}, selectedProperties []string, entity
 
 	return filteredEntity
 }
+
+// ApplySelectToMapResults filters map results to only include selected properties
+// This is used when $compute is present and results are returned as []map[string]interface{}
+// The computedAliases parameter specifies which properties are computed
+func ApplySelectToMapResults(results []map[string]interface{}, selectedProperties []string, entityMetadata *metadata.EntityMetadata, computedAliases map[string]bool) []map[string]interface{} {
+	if len(selectedProperties) == 0 {
+		return results
+	}
+
+	// Build a map of selected properties (including navigation paths)
+	selectedPropMap := make(map[string]bool)
+	for _, propName := range selectedProperties {
+		propName = strings.TrimSpace(propName)
+		selectedPropMap[propName] = true
+	}
+
+	// Build a map of key properties that must always be included
+	keyPropMap := make(map[string]bool)
+	for _, keyProp := range entityMetadata.KeyProperties {
+		keyPropMap[keyProp.JsonName] = true
+	}
+
+	filteredResults := make([]map[string]interface{}, len(results))
+
+	for i, result := range results {
+		filteredItem := make(map[string]interface{})
+
+		for key, value := range result {
+			isSelected := selectedPropMap[key]
+			isKey := keyPropMap[key]
+			isComputedAndNotSelected := computedAliases[key] && !isSelected
+
+			// Include the property if:
+			// 1. It's explicitly selected, OR
+			// 2. It's a key property (always included), OR
+			// 3. It's a regular property (not computed) and no explicit selection for it
+			if isSelected || isKey || (!isComputedAndNotSelected && !computedAliases[key]) {
+				filteredItem[key] = value
+			}
+		}
+
+		filteredResults[i] = filteredItem
+	}
+
+	return filteredResults
+}

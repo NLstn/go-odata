@@ -47,7 +47,8 @@ func applyExpandWithoutMetadata(db *gorm.DB, expand []ExpandOption) *gorm.DB {
 // needsPreloadCallback checks if an expand option requires a preload callback
 func needsPreloadCallback(expandOpt ExpandOption) bool {
 	return expandOpt.Select != nil || expandOpt.Filter != nil || expandOpt.OrderBy != nil ||
-		expandOpt.Top != nil || expandOpt.Skip != nil || len(expandOpt.Expand) > 0
+		expandOpt.Top != nil || expandOpt.Skip != nil || len(expandOpt.Expand) > 0 ||
+		expandOpt.Compute != nil
 }
 
 // applyExpandCallback applies the expand options within a GORM preload callback

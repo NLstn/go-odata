@@ -527,6 +527,60 @@ func parseComputeExpression(exprStr string, entityMetadata *metadata.EntityMetad
 	}, nil
 }
 
+// parseComputeWithoutMetadata parses $compute expressions without entity metadata validation
+// This is used for nested $compute within $expand where we don't have access to the target entity metadata
+func parseComputeWithoutMetadata(computeStr string) (*ComputeTransformation, error) {
+	computeStr = strings.TrimSpace(computeStr)
+	if computeStr == "" {
+		return nil, fmt.Errorf("empty compute expression")
+	}
+
+	// Parse individual compute expressions
+	exprStrs := splitComputeExpressions(computeStr)
+	expressions := make([]ComputeExpression, 0, len(exprStrs))
+
+	for _, exprStr := range exprStrs {
+		expr, err := parseComputeExpressionWithoutMetadata(exprStr)
+		if err != nil {
+			return nil, err
+		}
+		expressions = append(expressions, *expr)
+	}
+
+	if len(expressions) == 0 {
+		return nil, fmt.Errorf("no valid compute expressions found")
+	}
+
+	return &ComputeTransformation{
+		Expressions: expressions,
+	}, nil
+}
+
+// parseComputeExpressionWithoutMetadata parses a single compute expression without metadata validation
+func parseComputeExpressionWithoutMetadata(exprStr string) (*ComputeExpression, error) {
+	exprStr = strings.TrimSpace(exprStr)
+
+	// Split by " as " to get expression and alias
+	asIdx := strings.Index(exprStr, " as ")
+	if asIdx == -1 {
+		return nil, fmt.Errorf("invalid compute expression format, expected 'expression as alias'")
+	}
+
+	expressionStr := strings.TrimSpace(exprStr[:asIdx])
+	alias := strings.TrimSpace(exprStr[asIdx+4:]) // Skip " as "
+
+	// Parse the expression without metadata validation
+	expression, err := parseFilterWithoutMetadata(expressionStr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse compute expression: %w", err)
+	}
+
+	return &ComputeExpression{
+		Expression: expression,
+		Alias:      alias,
+	}, nil
+}
+
 // findMatchingCloseParen finds the index of the closing parenthesis that matches the opening one at startIdx
 func findMatchingCloseParen(s string, startIdx int) int {
 	if startIdx >= len(s) || s[startIdx] != '(' {

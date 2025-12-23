@@ -152,6 +152,13 @@ func parseNestedExpandOptionsCore(expand *ExpandOption, optionsStr string, entit
 				return fmt.Errorf("invalid nested $skip: %w", err)
 			}
 			expand.Skip = &skip
+		case "$compute":
+			// Parse compute without metadata validation since we don't have the target entity metadata
+			compute, err := parseComputeWithoutMetadata(value)
+			if err != nil {
+				return fmt.Errorf("invalid nested $compute: %w", err)
+			}
+			expand.Compute = compute
 		}
 	}
 
