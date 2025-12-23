@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/nlstn/go-odata/internal/etag"
 	"github.com/nlstn/go-odata/internal/preference"
@@ -345,6 +346,14 @@ func (h *EntityHandler) handlePutEntity(w http.ResponseWriter, r *http.Request, 
 			return newTransactionHandledError(err)
 		}
 
+		// Preserve server-managed timestamp fields (like CreatedAt) to avoid MySQL zero datetime issues
+		if err := h.preserveTimestampFields(entity, replacementEntity); err != nil {
+			if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgInternalError, err.Error()); writeErr != nil {
+				h.logger.Error("Error writing error response", "error", writeErr)
+			}
+			return newTransactionHandledError(err)
+		}
+
 		if err := h.callBeforeUpdate(entity, hookReq); err != nil {
 			if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", err.Error()); writeErr != nil {
 				h.logger.Error("Error writing error response", "error", writeErr)
@@ -405,6 +414,36 @@ func (h *EntityHandler) preserveKeyProperties(source, destination interface{}) e
 		}
 
 		destField.Set(sourceField)
+	}
+
+	return nil
+}
+
+// preserveTimestampFields copies time.Time fields from source to destination if destination has zero value
+// This prevents MySQL/MariaDB errors with zero datetime values ('0000-00-00')
+func (h *EntityHandler) preserveTimestampFields(source, destination interface{}) error {
+	sourceVal := reflect.ValueOf(source).Elem()
+	destVal := reflect.ValueOf(destination).Elem()
+
+	// Iterate over all fields in the destination struct
+	for i := 0; i < destVal.NumField(); i++ {
+		destField := destVal.Field(i)
+		fieldType := destVal.Type().Field(i)
+
+		// Only preserve time.Time fields
+		if destField.Type() == reflect.TypeOf(time.Time{}) && destField.CanSet() {
+			// Check if destination field is zero
+			if destField.Interface().(time.Time).IsZero() {
+				// Get corresponding source field
+				sourceField := sourceVal.FieldByName(fieldType.Name)
+				if sourceField.IsValid() && sourceField.Type() == reflect.TypeOf(time.Time{}) {
+					// Copy the non-zero value from source
+					if !sourceField.Interface().(time.Time).IsZero() {
+						destField.Set(sourceField)
+					}
+				}
+			}
+		}
 	}
 
 	return nil
