@@ -287,7 +287,7 @@ func buildComparisonCondition(dialect string, filter *FilterExpression, entityMe
 			// For PostgreSQL HAVING clauses, use COUNT(*) expression instead of alias
 			// because PostgreSQL doesn't support referencing SELECT aliases in HAVING
 			if dialect == "postgres" {
-				if expr, ok := aggregateAliasExprs["$count"]; ok {
+				if expr, ok := getAggregateAliasExpr("$count"); ok {
 					columnName = expr
 				} else {
 					columnName = "COUNT(*)"
@@ -300,7 +300,7 @@ func buildComparisonCondition(dialect string, filter *FilterExpression, entityMe
 		} else {
 			// Check if this is an aggregate alias that needs to be resolved for PostgreSQL HAVING
 			if dialect == "postgres" {
-				if expr, ok := aggregateAliasExprs[rawName]; ok {
+				if expr, ok := getAggregateAliasExpr(rawName); ok {
 					// Use the aggregate expression instead of the alias for PostgreSQL HAVING
 					columnName = expr
 				} else {
