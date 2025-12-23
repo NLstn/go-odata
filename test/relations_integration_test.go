@@ -2,10 +2,11 @@ package odata_test
 
 import (
 	"encoding/json"
-	odata "github.com/nlstn/go-odata"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	odata "github.com/nlstn/go-odata"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -527,4 +528,64 @@ func findSubstring(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+// TestIntegrationExpandEntityEmptyCollection tests $expand on single entity with empty collection
+func TestIntegrationExpandEntityEmptyCollection(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("Failed to connect to database: %v", err)
+	}
+
+	if err := db.AutoMigrate(&Department{}, &Employee{}); err != nil {
+		t.Fatalf("Failed to migrate database: %v", err)
+	}
+
+	// Seed test data - department with no employees
+	departments := []Department{
+		{ID: 1, Name: "EmptyDepartment"},
+		{ID: 2, Name: "NonEmptyDepartment"},
+	}
+	db.Create(&departments)
+
+	employees := []Employee{
+		{ID: 1, Name: "Alice", DepartmentID: 2},
+	}
+	db.Create(&employees)
+
+	service := odata.NewService(db)
+	_ = service.RegisterEntity(&Department{})
+	_ = service.RegisterEntity(&Employee{})
+
+	// Test expanding empty collection
+	req := httptest.NewRequest(http.MethodGet, "/Departments(1)?$expand=Employees", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+
+	// The key assertion: Employees field MUST be present even when empty
+	employeesField, ok := response["Employees"]
+	if !ok {
+		t.Fatal("Expected Employees field to be present in response when expanded, even if empty")
+	}
+
+	// Verify it's an array
+	employeesArray, ok := employeesField.([]interface{})
+	if !ok {
+		t.Fatalf("Expected Employees to be an array, got %T", employeesField)
+	}
+
+	// Verify it's empty
+	if len(employeesArray) != 0 {
+		t.Errorf("Expected 0 employees, got %d", len(employeesArray))
+	}
 }
