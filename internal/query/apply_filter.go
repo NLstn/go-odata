@@ -284,9 +284,9 @@ func buildComparisonCondition(dialect string, filter *FilterExpression, entityMe
 		if rawName == "$it" {
 			columnName = rawName
 		} else if rawName == "$count" {
-			// For PostgreSQL HAVING clauses, use COUNT(*) expression instead of alias
-			// because PostgreSQL doesn't support referencing SELECT aliases in HAVING
-			if dialect == "postgres" {
+			// For PostgreSQL/MySQL/MariaDB HAVING clauses, use COUNT(*) expression instead of alias
+			// because these databases don't support referencing SELECT aliases in HAVING/WHERE
+			if dialect == "postgres" || dialect == "mysql" || dialect == "mariadb" {
 				if expr, ok := getAggregateAliasExpr("$count"); ok {
 					columnName = expr
 				} else {
@@ -298,10 +298,11 @@ func buildComparisonCondition(dialect string, filter *FilterExpression, entityMe
 		} else if len(rawName) > 0 && rawName[0] == '$' {
 			columnName = quoteIdent(dialect, rawName)
 		} else {
-			// Check if this is an aggregate alias that needs to be resolved for PostgreSQL HAVING
-			if dialect == "postgres" {
+			// Check if this is an aggregate/compute alias that needs to be resolved
+			// PostgreSQL, MySQL, and MariaDB don't support referencing SELECT aliases in WHERE/HAVING
+			if dialect == "postgres" || dialect == "mysql" || dialect == "mariadb" {
 				if expr, ok := getAggregateAliasExpr(rawName); ok {
-					// Use the aggregate expression instead of the alias for PostgreSQL HAVING
+					// Use the aggregate/compute expression instead of the alias
 					columnName = expr
 				} else {
 					columnName = quoteIdent(dialect, rawName)

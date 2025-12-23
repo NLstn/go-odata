@@ -12,7 +12,10 @@ import (
 )
 
 // aliasExprs maps aggregate and compute aliases to their SQL expressions (without the "as alias" part)
-// This is used for PostgreSQL WHERE/HAVING clauses which cannot reference SELECT aliases.
+// This is used for PostgreSQL:
+// - In WHERE clauses when $compute is used with $filter on the same level
+// - In HAVING clauses when aggregation is used with filtering in $apply transformations
+// PostgreSQL enforces the SQL standard which prevents referencing SELECT aliases in WHERE/HAVING.
 // Protected by aliasExprsMu for concurrent access safety.
 var aliasExprs map[string]string
 var aliasExprsMu sync.RWMutex

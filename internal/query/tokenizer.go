@@ -369,7 +369,10 @@ func (t *Tokenizer) tokenizeString(pos int) *Token {
 // tokenizeNumber tokenizes numeric literals, date/time literals, or GUID literals
 func (t *Tokenizer) tokenizeNumber(pos int) *Token {
 	if unicode.IsDigit(t.ch) {
-		// Check for GUID first (must be before datetime/date checks since they share similar patterns)
+		// Check for GUID first using strict validation (8-4-4-4-12 hex pattern)
+		// GUIDs are validated strictly to prevent confusion with dates
+		// e.g., "12345678-1234-1234-1234-123456789012" is a valid GUID
+		// e.g., "2024-01-01" will fail GUID check and be handled as a date
 		if t.isGUIDLiteral() {
 			value := t.readGUIDLiteral()
 			return &Token{Type: TokenGUID, Value: value, Pos: pos}
