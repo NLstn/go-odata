@@ -35,11 +35,11 @@ func (ProductStatus) EnumMembers() map[string]int {
 
 // Product represents a product entity for the compliance server
 type Product struct {
-	ID              uuid.UUID     `json:"ID" gorm:"type:uuid;primaryKey" odata:"key,generate=uuid"`
+	ID              uuid.UUID     `json:"ID" gorm:"type:char(36);primaryKey" odata:"key,generate=uuid"`
 	Name            string        `json:"Name" gorm:"not null" odata:"required,maxlength=100,searchable"`
 	Description     *string       `json:"Description" odata:"nullable,maxlength=500"` // Nullable description field
 	Price           float64       `json:"Price" gorm:"not null" odata:"required,precision=10,scale=2"`
-	CategoryID      *uuid.UUID    `json:"CategoryID" gorm:"type:uuid" odata:"nullable"` // Foreign key for Category navigation property
+	CategoryID      *uuid.UUID    `json:"CategoryID" gorm:"type:char(36)" odata:"nullable"` // Foreign key for Category navigation property
 	Status          ProductStatus `json:"Status" gorm:"not null" odata:"enum=ProductStatus,flags"`
 	Version         int           `json:"Version" gorm:"default:1" odata:"etag"` // Version field used for optimistic concurrency control via ETag
 	CreatedAt       time.Time     `json:"CreatedAt" gorm:"not null"`
@@ -47,7 +47,7 @@ type Product struct {
 	SpecialProperty *string       `json:"SpecialProperty,omitempty" odata:"nullable,maxlength=200"`            // Property for SpecialProduct derived type
 	SpecialFeature  *string       `json:"SpecialFeature,omitempty" odata:"nullable,maxlength=100"`             // Property for SpecialProduct derived type
 	// Complex type properties
-	ShippingAddress *Address `json:"ShippingAddress,omitempty" gorm:"embedded;embeddedPrefix:shipping_" odata:"nullable"`
+	ShippingAddress *Address    `json:"ShippingAddress,omitempty" gorm:"embedded;embeddedPrefix:shipping_" odata:"nullable"`
 	Dimensions      *Dimensions `json:"Dimensions,omitempty" gorm:"embedded;embeddedPrefix:dim_" odata:"nullable"`
 	// Geospatial properties (stored as WKT strings for compatibility)
 	Location *string `json:"Location,omitempty" odata:"nullable"` // Geography Point in WKT format
@@ -115,8 +115,8 @@ func GetSampleProducts() []Product {
 				Height: 2.5,
 				Unit:   "cm",
 			},
-			Location: stringPtr("POINT(-122.3321 47.6062)"),                                 // Seattle
-			Route:    stringPtr("LINESTRING(-122.3321 47.6062, -122.4194 47.2529)"),         // Seattle to Tacoma
+			Location: stringPtr("POINT(-122.3321 47.6062)"),                                                   // Seattle
+			Route:    stringPtr("LINESTRING(-122.3321 47.6062, -122.4194 47.2529)"),                           // Seattle to Tacoma
 			Area:     stringPtr("POLYGON((-122.5 47.5, -122.0 47.5, -122.0 47.8, -122.5 47.8, -122.5 47.5))"), // Seattle area
 		},
 		{
@@ -140,8 +140,8 @@ func GetSampleProducts() []Product {
 				Height: 4.0,
 				Unit:   "cm",
 			},
-			Location: stringPtr("POINT(-122.4194 37.7749)"),                                 // San Francisco
-			Route:    stringPtr("LINESTRING(-122.4194 37.7749, -122.2711 37.8044)"),         // SF to Oakland
+			Location: stringPtr("POINT(-122.4194 37.7749)"),                                                   // San Francisco
+			Route:    stringPtr("LINESTRING(-122.4194 37.7749, -122.2711 37.8044)"),                           // SF to Oakland
 			Area:     stringPtr("POLYGON((-122.5 37.7, -122.3 37.7, -122.3 37.9, -122.5 37.9, -122.5 37.7))"), // SF Bay area
 		},
 		{
@@ -165,8 +165,8 @@ func GetSampleProducts() []Product {
 				Height: 10.0,
 				Unit:   "cm",
 			},
-			Location: stringPtr("POINT(-122.6765 45.5231)"),                                 // Portland
-			Route:    stringPtr("LINESTRING(-122.6765 45.5231, -122.6587 45.5152)"),         // Portland downtown
+			Location: stringPtr("POINT(-122.6765 45.5231)"),                                                   // Portland
+			Route:    stringPtr("LINESTRING(-122.6765 45.5231, -122.6587 45.5152)"),                           // Portland downtown
 			Area:     stringPtr("POLYGON((-122.8 45.4, -122.5 45.4, -122.5 45.7, -122.8 45.7, -122.8 45.4))"), // Portland area
 		},
 		{
@@ -202,8 +202,8 @@ func GetSampleProducts() []Product {
 				Height: 0.8,
 				Unit:   "cm",
 			},
-			Location: stringPtr("POINT(-97.7431 30.2672)"),                                 // Austin
-			Route:    stringPtr("LINESTRING(-97.7431 30.2672, -97.7426 30.2849)"),         // Austin downtown
+			Location: stringPtr("POINT(-97.7431 30.2672)"),                                               // Austin
+			Route:    stringPtr("LINESTRING(-97.7431 30.2672, -97.7426 30.2849)"),                        // Austin downtown
 			Area:     stringPtr("POLYGON((-98.0 30.1, -97.5 30.1, -97.5 30.5, -98.0 30.5, -98.0 30.1))"), // Austin area
 		},
 		// Special Products (derived type)
@@ -230,8 +230,8 @@ func GetSampleProducts() []Product {
 				Height: 2.0,
 				Unit:   "cm",
 			},
-			Location: stringPtr("POINT(-74.0060 40.7128)"),                                 // New York City
-			Route:    stringPtr("LINESTRING(-74.0060 40.7128, -73.9352 40.7306)"),         // Manhattan to Queens
+			Location: stringPtr("POINT(-74.0060 40.7128)"),                                               // New York City
+			Route:    stringPtr("LINESTRING(-74.0060 40.7128, -73.9352 40.7306)"),                        // Manhattan to Queens
 			Area:     stringPtr("POLYGON((-74.1 40.6, -73.8 40.6, -73.8 40.9, -74.1 40.9, -74.1 40.6))"), // NYC area
 		},
 		{
@@ -257,8 +257,8 @@ func GetSampleProducts() []Product {
 				Height: 4.5,
 				Unit:   "cm",
 			},
-			Location: stringPtr("POINT(-118.2437 34.0522)"),                                 // Los Angeles
-			Route:    stringPtr("LINESTRING(-118.2437 34.0522, -118.3687 34.1016)"),         // LA to Beverly Hills
+			Location: stringPtr("POINT(-118.2437 34.0522)"),                                                   // Los Angeles
+			Route:    stringPtr("LINESTRING(-118.2437 34.0522, -118.3687 34.1016)"),                           // LA to Beverly Hills
 			Area:     stringPtr("POLYGON((-118.5 33.9, -118.0 33.9, -118.0 34.3, -118.5 34.3, -118.5 33.9))"), // LA area
 		},
 	}

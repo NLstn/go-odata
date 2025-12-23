@@ -108,11 +108,11 @@ func (om *OrderedMap) MarshalJSON() ([]byte, error) {
 			bufferPool.Put(buf)
 		}
 	}()
-	
+
 	// Estimate initial capacity
 	estimatedSize := len(om.keys) * 100
 	buf.Grow(estimatedSize)
-	
+
 	buf.WriteByte('{')
 
 	for i, key := range om.keys {
@@ -147,7 +147,7 @@ func (om *OrderedMap) MarshalJSON() ([]byte, error) {
 	}
 
 	buf.WriteByte('}')
-	
+
 	// Create a copy of the buffer contents since we're reusing the buffer
 	result := make([]byte, buf.Len())
 	copy(result, buf.Bytes())

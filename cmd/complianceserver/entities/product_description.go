@@ -4,7 +4,7 @@ import "github.com/google/uuid"
 
 // ProductDescription represents a multilingual product description entity
 type ProductDescription struct {
-	ProductID   uuid.UUID `json:"ProductID" gorm:"type:uuid;primaryKey" odata:"key"`
+	ProductID   uuid.UUID `json:"ProductID" gorm:"type:char(36);primaryKey" odata:"key"`
 	LanguageKey string    `json:"LanguageKey" gorm:"primaryKey;size:2" odata:"key,maxlength=2"`
 	Description string    `json:"Description" gorm:"not null" odata:"required,maxlength=500,searchable"`
 	LongText    *string   `json:"LongText" gorm:"type:text" odata:"maxlength=2000,nullable,searchable"`

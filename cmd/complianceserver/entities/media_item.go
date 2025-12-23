@@ -9,7 +9,7 @@ import (
 // MediaItem represents a media entity (media link entry) for compliance testing
 // Media entities have a binary stream as their primary content
 type MediaItem struct {
-	ID          uuid.UUID `json:"ID" gorm:"type:uuid;primaryKey" odata:"key,generate=uuid"`
+	ID          uuid.UUID `json:"ID" gorm:"type:char(36);primaryKey" odata:"key,generate=uuid"`
 	Name        string    `json:"Name" gorm:"not null" odata:"required,maxlength=100"`
 	ContentType string    `json:"ContentType" gorm:"not null" odata:"required,maxlength=100"` // MIME type of the media
 	Size        *int64    `json:"Size" odata:"nullable"`                                      // Size in bytes

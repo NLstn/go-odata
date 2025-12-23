@@ -51,7 +51,7 @@ func testFilterBySingleEntityNavigationProperty(ctx *framework.TestContext) erro
 	// Test filtering by a property of a single-entity navigation property
 	// Example based on OData v4.01 spec section 5.1.1.15
 	// This simulates: /TeamMembers?$filter=Team/ClubID eq 'some-guid'
-	
+
 	// Try with a generic entity set that likely has navigation properties
 	resp, err := ctx.GET("/Products?$filter=Category/Name eq 'Electronics'")
 	if err != nil {
@@ -79,7 +79,7 @@ func testFilterBySingleEntityNavigationProperty(ctx *framework.TestContext) erro
 func testNavigationPropertyPathComparison(ctx *framework.TestContext) error {
 	// Test various comparison operators with navigation property paths
 	// This tests the spec requirement that navigation property paths work like regular properties
-	
+
 	resp, err := ctx.GET("/Products?$filter=Category/Name eq 'Electronics'")
 	if err != nil {
 		ctx.Skip("Products entity set not available or doesn't have Category navigation property")
@@ -96,7 +96,7 @@ func testNavigationPropertyPathComparison(ctx *framework.TestContext) error {
 func testCollectionNavigationRequiresLambda(ctx *framework.TestContext) error {
 	// Verify that collection navigation properties still require any/all operators
 	// This ensures we maintain spec compliance for collection-valued navigation properties
-	
+
 	// Try to filter by a collection navigation property without lambda operator
 	// This should return a 400 Bad Request error
 	resp, err := ctx.GET("/Products?$filter=Descriptions/LanguageKey eq 'EN'")
@@ -121,7 +121,7 @@ func testCollectionNavigationRequiresLambda(ctx *framework.TestContext) error {
 func testCombineFilterAndExpandNavigation(ctx *framework.TestContext) error {
 	// Test that we can both filter on and expand the same navigation property
 	// Per spec, this should work seamlessly
-	
+
 	escapedFilter := url.QueryEscape("Category/Name eq 'Electronics'")
 	resp, err := ctx.GET("/Products?$filter=" + escapedFilter + "&$expand=Category")
 	if err != nil {

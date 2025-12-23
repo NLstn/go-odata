@@ -25,8 +25,8 @@ func (MemberPrivacySettings) EntitySetName() string {
 
 // Member has a navigation property to MemberPrivacySettings
 type Member struct {
-	ID              string                  `json:"ID" odata:"key"`
-	Name            string                  `json:"Name"`
+	ID              string                 `json:"ID" odata:"key"`
+	Name            string                 `json:"Name"`
 	PrivacySettings *MemberPrivacySettings `json:"PrivacySettings,omitempty" gorm:"foreignKey:MemberID;references:ID"`
 }
 

@@ -51,6 +51,10 @@ func applyGroupBy(db *gorm.DB, groupBy *GroupByTransformation, entityMetadata *m
 	groupByColumns := make([]string, 0, len(groupBy.Properties))
 	selectColumns := make([]string, 0, len(groupBy.Properties))
 
+	// Determine dialect and table name for proper identifier quoting
+	dialect := getDatabaseDialect(db)
+	tableName := entityMetadata.TableName
+
 	for _, propName := range groupBy.Properties {
 		prop := findProperty(propName, entityMetadata)
 		if prop == nil {
@@ -58,15 +62,17 @@ func applyGroupBy(db *gorm.DB, groupBy *GroupByTransformation, entityMetadata *m
 		}
 
 		columnName := GetColumnName(propName, entityMetadata)
-		groupByColumns = append(groupByColumns, columnName)
-		selectColumns = append(selectColumns, fmt.Sprintf("%s as %s", columnName, prop.JsonName))
+		// Qualify and quote to avoid ambiguity and preserve case-sensitivity
+		qualified := quoteIdent(dialect, tableName) + "." + quoteIdent(dialect, columnName)
+		groupByColumns = append(groupByColumns, qualified)
+		selectColumns = append(selectColumns, fmt.Sprintf("%s as %s", qualified, quoteIdent(dialect, prop.JsonName)))
 	}
 
 	if len(groupBy.Transform) > 0 {
 		for _, trans := range groupBy.Transform {
 			if trans.Type == ApplyTypeAggregate && trans.Aggregate != nil {
 				for _, aggExpr := range trans.Aggregate.Expressions {
-					aggSQL := buildAggregateSQL(aggExpr, entityMetadata)
+					aggSQL := buildAggregateSQL(dialect, aggExpr, entityMetadata)
 					if aggSQL != "" {
 						selectColumns = append(selectColumns, aggSQL)
 					}
@@ -74,7 +80,8 @@ func applyGroupBy(db *gorm.DB, groupBy *GroupByTransformation, entityMetadata *m
 			}
 		}
 	} else {
-		selectColumns = append(selectColumns, "COUNT(*) as \"$count\"")
+		// Quote alias per dialect
+		selectColumns = append(selectColumns, fmt.Sprintf("COUNT(*) as %s", quoteIdent(dialect, "$count")))
 	}
 
 	if len(groupByColumns) > 0 {
@@ -95,8 +102,9 @@ func applyAggregate(db *gorm.DB, aggregate *AggregateTransformation, entityMetad
 	}
 
 	selectColumns := make([]string, 0, len(aggregate.Expressions))
+	dialect := getDatabaseDialect(db)
 	for _, aggExpr := range aggregate.Expressions {
-		aggSQL := buildAggregateSQL(aggExpr, entityMetadata)
+		aggSQL := buildAggregateSQL(dialect, aggExpr, entityMetadata)
 		if aggSQL != "" {
 			selectColumns = append(selectColumns, aggSQL)
 		}
@@ -110,9 +118,9 @@ func applyAggregate(db *gorm.DB, aggregate *AggregateTransformation, entityMetad
 }
 
 // buildAggregateSQL builds the SQL for an aggregate expression
-func buildAggregateSQL(aggExpr AggregateExpression, entityMetadata *metadata.EntityMetadata) string {
+func buildAggregateSQL(dialect string, aggExpr AggregateExpression, entityMetadata *metadata.EntityMetadata) string {
 	if aggExpr.Property == "$count" {
-		return fmt.Sprintf("COUNT(*) as \"%s\"", aggExpr.Alias)
+		return fmt.Sprintf("COUNT(*) as %s", quoteIdent(dialect, aggExpr.Alias))
 	}
 
 	prop := findProperty(aggExpr.Property, entityMetadata)
@@ -121,6 +129,8 @@ func buildAggregateSQL(aggExpr AggregateExpression, entityMetadata *metadata.Ent
 	}
 
 	columnName := GetColumnName(aggExpr.Property, entityMetadata)
+	// Qualify with table name to avoid ambiguity and quote identifiers
+	qualified := quoteIdent(dialect, entityMetadata.TableName) + "." + quoteIdent(dialect, columnName)
 
 	var sqlFunc string
 	switch aggExpr.Method {
@@ -135,12 +145,12 @@ func buildAggregateSQL(aggExpr AggregateExpression, entityMetadata *metadata.Ent
 	case AggregationCount:
 		sqlFunc = "COUNT"
 	case AggregationCountDistinct:
-		return fmt.Sprintf("COUNT(DISTINCT %s) as \"%s\"", columnName, aggExpr.Alias)
+		return fmt.Sprintf("COUNT(DISTINCT %s) as %s", qualified, quoteIdent(dialect, aggExpr.Alias))
 	default:
 		return ""
 	}
 
-	return fmt.Sprintf("%s(%s) as \"%s\"", sqlFunc, columnName, aggExpr.Alias)
+	return fmt.Sprintf("%s(%s) as %s", sqlFunc, qualified, quoteIdent(dialect, aggExpr.Alias))
 }
 
 // applyCompute applies a compute transformation to the GORM query
@@ -155,6 +165,7 @@ func applyCompute(db *gorm.DB, dialect string, compute *ComputeTransformation, e
 	}
 
 	selectColumns := make([]string, 0)
+	tableName := entityMetadata.TableName
 
 	streamAuxFields := make(map[string]bool)
 	for _, streamProp := range entityMetadata.StreamProperties {
@@ -168,8 +179,9 @@ func applyCompute(db *gorm.DB, dialect string, compute *ComputeTransformation, e
 
 	for _, prop := range entityMetadata.Properties {
 		if !prop.IsNavigationProp && !prop.IsComplexType && !prop.IsStream && !streamAuxFields[prop.FieldName] {
-			// Use cached column name from metadata
-			selectColumns = append(selectColumns, fmt.Sprintf("%s as %s", prop.ColumnName, prop.JsonName))
+			// Qualify and quote identifiers for compatibility across dialects
+			qualified := quoteIdent(dialect, tableName) + "." + quoteIdent(dialect, prop.ColumnName)
+			selectColumns = append(selectColumns, fmt.Sprintf("%s as %s", qualified, quoteIdent(dialect, prop.JsonName)))
 		}
 	}
 
@@ -201,13 +213,14 @@ func buildComputeSQL(dialect string, computeExpr ComputeExpression, entityMetada
 			return ""
 		}
 
-		// Use cached column name from metadata
-		funcSQL, _ := buildFunctionSQL(dialect, expr.Operator, prop.ColumnName, nil)
+		// Use qualified and quoted column name
+		qualified := quoteIdent(dialect, entityMetadata.TableName) + "." + quoteIdent(dialect, prop.ColumnName)
+		funcSQL, _ := buildFunctionSQL(dialect, expr.Operator, qualified, nil)
 		if funcSQL == "" {
 			return ""
 		}
 
-		return fmt.Sprintf("%s as %s", funcSQL, computeExpr.Alias)
+		return fmt.Sprintf("%s as %s", funcSQL, quoteIdent(dialect, computeExpr.Alias))
 	}
 
 	if expr.Left != nil && expr.Right != nil && expr.Logical != "" {
@@ -237,7 +250,7 @@ func buildComputeSQL(dialect string, computeExpr ComputeExpression, entityMetada
 			return ""
 		}
 
-		return fmt.Sprintf("(%s %s %s) as %s", leftSQL, sqlOp, rightSQL, computeExpr.Alias)
+		return fmt.Sprintf("(%s %s %s) as %s", leftSQL, sqlOp, rightSQL, quoteIdent(dialect, computeExpr.Alias))
 	}
 
 	return ""
@@ -254,8 +267,8 @@ func buildComputeExpressionSQL(dialect string, expr *FilterExpression, entityMet
 		if prop == nil {
 			return ""
 		}
-		// Use cached column name from metadata
-		return prop.ColumnName
+		// Return qualified and quoted column
+		return quoteIdent(dialect, entityMetadata.TableName) + "." + quoteIdent(dialect, prop.ColumnName)
 	}
 
 	if expr.Value != nil && expr.Property == "" && expr.Left == nil && expr.Right == nil {
@@ -277,8 +290,9 @@ func buildComputeExpressionSQL(dialect string, expr *FilterExpression, entityMet
 		if prop == nil {
 			return ""
 		}
-		// Use cached column name from metadata
-		funcSQL, _ := buildFunctionSQL(dialect, expr.Operator, prop.ColumnName, expr.Value)
+		// Use qualified and quoted column name
+		qualified := quoteIdent(dialect, entityMetadata.TableName) + "." + quoteIdent(dialect, prop.ColumnName)
+		funcSQL, _ := buildFunctionSQL(dialect, expr.Operator, qualified, expr.Value)
 		return funcSQL
 	}
 

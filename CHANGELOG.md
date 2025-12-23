@@ -36,6 +36,7 @@ rely on version numbers to reason about compatibility.
 
 ### Fixed
 - **Ambiguous column reference error when combining `$select` with navigation filters**: Fixed PostgreSQL error "column reference is ambiguous" that occurred when using `$select` with `$filter` on navigation properties. The `applySelect` function now qualifies column names with table names (e.g., `members.id` instead of `id`) to prevent ambiguity when JOINs are present. This fix ensures compatibility with both PostgreSQL and SQLite.
+- **Dialect-aware quoting for `$apply` aggregations (issue #343)**: `groupby` and `aggregate` SQL builders now qualify and quote identifiers using the active database dialect, preventing case-folding and reserved-word conflicts in PostgreSQL and ensuring compatibility across SQLite/MySQL. `GetColumnName` continues to return unquoted names by design; callers that generate raw SQL now apply proper quoting.
 - Data race in async monitor configuration resolved by synchronizing access in the router, fixing `-race` CI test failures in `internal/service/runtime.TestServiceRespondAsyncFlow`.
 - Compliance test flakiness eliminated by implementing per-test database reseeding instead of per-suite reseeding
   - Async processing tests now pass consistently (previously failed 5/6 tests on first run, 0/6 on second run)

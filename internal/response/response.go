@@ -215,7 +215,7 @@ func ParseODataURLComponents(path string) (*ODataURLComponents, error) {
 	}
 
 	pathParts := strings.Split(u.Path, "/")
-	
+
 	// Remove leading/trailing empty segments from leading/trailing slashes
 	// We already rejected consecutive slashes above, so any empty segments here
 	// are just from single leading/trailing slashes
@@ -225,7 +225,7 @@ func ParseODataURLComponents(path string) (*ODataURLComponents, error) {
 			filteredParts = append(filteredParts, part)
 		}
 	}
-	
+
 	pathParts = filteredParts
 	if len(pathParts) > 0 {
 		entitySet := pathParts[0]

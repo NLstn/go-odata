@@ -159,7 +159,7 @@ func (h *EntityHandler) handlePutMediaEntityValue(w http.ResponseWriter, r *http
 	// Extract the values we need to update
 	entityVal := reflect.ValueOf(entity).Elem()
 	updates := make(map[string]interface{})
-	
+
 	// Update Content, ContentType, Size, and ModifiedAt
 	for i := 0; i < entityVal.NumField(); i++ {
 		field := entityVal.Type().Field(i)
@@ -173,14 +173,14 @@ func (h *EntityHandler) handlePutMediaEntityValue(w http.ResponseWriter, r *http
 			fieldName = field.Name
 		}
 		fieldValue := entityVal.Field(i).Interface()
-		
+
 		// Only update specific media-related fields (case-sensitive match)
 		if fieldName == "Content" || fieldName == "ContentType" || fieldName == "Size" || fieldName == "ModifiedAt" {
 			colName := toSnakeCase(fieldName)
 			updates[colName] = fieldValue
 		}
 	}
-	
+
 	if len(updates) == 0 {
 		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgInternalError,
 			"No fields to update"); writeErr != nil {
@@ -188,7 +188,7 @@ func (h *EntityHandler) handlePutMediaEntityValue(w http.ResponseWriter, r *http
 		}
 		return
 	}
-	
+
 	// Build a fresh key query for the update to avoid any state from previous queries.
 	// We use h.db.Model(entity) to specify the table and then build the WHERE clause.
 	// Note: We cannot use h.db.Session(&gorm.Session{NewDB: true}) here because that would
@@ -201,7 +201,7 @@ func (h *EntityHandler) handlePutMediaEntityValue(w http.ResponseWriter, r *http
 		}
 		return
 	}
-	
+
 	// Use Session with FullSaveAssociations=false to avoid association issues
 	if err := updateDB.Session(&gorm.Session{FullSaveAssociations: false}).Updates(updates).Error; err != nil {
 		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgInternalError,
