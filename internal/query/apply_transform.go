@@ -396,7 +396,7 @@ func buildComputeExpressionSQL(dialect string, expr *FilterExpression, entityMet
 // applyOrderBy applies order by clauses to the GORM query
 func applyOrderBy(db *gorm.DB, orderBy []OrderByItem, entityMetadata *metadata.EntityMetadata) *gorm.DB {
 	dialect := getDatabaseDialect(db)
-	
+
 	// For PostgreSQL, we need to build all ORDER BY expressions in a single Clauses() call
 	// to ensure they're all preserved in the final SQL query
 	if dialect == "postgres" {
@@ -419,12 +419,12 @@ func applyOrderBy(db *gorm.DB, orderBy []OrderByItem, entityMetadata *metadata.E
 			if item.Descending {
 				direction = " DESC NULLS LAST"
 			}
-			
+
 			orderExprs = append(orderExprs, clause.OrderByColumn{
 				Column: clause.Column{Raw: true, Name: columnName + direction},
 			})
 		}
-		
+
 		if len(orderExprs) > 0 {
 			db = db.Clauses(clause.OrderBy{Columns: orderExprs})
 		}
@@ -448,6 +448,6 @@ func applyOrderBy(db *gorm.DB, orderBy []OrderByItem, entityMetadata *metadata.E
 			})
 		}
 	}
-	
+
 	return db
 }

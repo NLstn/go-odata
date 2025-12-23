@@ -385,6 +385,18 @@ func buildComparisonCondition(dialect string, filter *FilterExpression, entityMe
 	case OpHas:
 		return fmt.Sprintf("(%s & ?) = ?", columnName), []interface{}{filter.Value, filter.Value}
 	case OpIsOf:
+		typeName, ok := filter.Value.(string)
+		if !ok {
+			return "", nil
+		}
+
+		// Check if this is an entity type check (columnName == "$it")
+		// For entity type checks, we need to use the discriminator column
+		if columnName == "$it" {
+			return buildEntityTypeFilter(dialect, typeName, entityMetadata)
+		}
+
+		// For property type checks, use the standard buildFunctionSQL approach
 		funcSQL, funcArgs := buildFunctionSQL(dialect, OpIsOf, columnName, filter.Value)
 		if funcSQL == "" {
 			return "", nil
@@ -402,6 +414,28 @@ func buildComparisonCondition(dialect string, filter *FilterExpression, entityMe
 	default:
 		return "", nil
 	}
+}
+
+// buildEntityTypeFilter builds SQL for filtering by entity type using the discriminator column
+// For isof('Namespace.EntityType'), this creates a filter on the discriminator column
+func buildEntityTypeFilter(dialect string, typeName string, entityMetadata *metadata.EntityMetadata) (string, []interface{}) {
+	if entityMetadata == nil || entityMetadata.TypeDiscriminator == nil {
+		// If no discriminator is configured, we can't filter by entity type
+		// Return "1 = 1" to match all entities (fall back to allowing all types)
+		return "1 = 1", nil
+	}
+
+	// Extract the simple type name from the qualified name (e.g., "Namespace.SpecialProduct" -> "SpecialProduct")
+	simpleTypeName := typeName
+	if idx := strings.LastIndex(typeName, "."); idx != -1 {
+		simpleTypeName = typeName[idx+1:]
+	}
+
+	// Quote the discriminator column name
+	quotedColumn := quoteIdent(dialect, entityMetadata.TypeDiscriminator.ColumnName)
+
+	// Return the filter condition
+	return fmt.Sprintf("%s = ?", quotedColumn), []interface{}{simpleTypeName}
 }
 
 // buildLambdaCondition builds SQL for lambda operators (any/all) using EXISTS subquery

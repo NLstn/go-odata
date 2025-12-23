@@ -1,15 +1,19 @@
 package v4_0
 
 import (
+	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/nlstn/go-odata/compliance-suite/framework"
 )
 
 var (
-	derivedTypesChecked bool
-	derivedTypesPresent bool
+	derivedTypesChecked   bool
+	derivedTypesPresent   bool
+	detectedNamespace     string
+	specialProductTypeRef string // Full qualified type name e.g., "ComplianceService.SpecialProduct"
 )
 
 // TypeCasting creates the 11.2.13 Type Casting and Type Inheritance test suite
@@ -31,7 +35,7 @@ func TypeCasting() *framework.TestSuite {
 			if err := skipIfDerivedTypesUnavailable(ctx); err != nil {
 				return err
 			}
-			resp, err := ctx.GET("/Products?$filter=isof('Namespace.SpecialProduct')")
+			resp, err := ctx.GET("/Products?$filter=isof('" + specialProductTypeRef + "')")
 			if err != nil {
 				return err
 			}
@@ -56,11 +60,11 @@ func TypeCasting() *framework.TestSuite {
 			if err := skipIfDerivedTypesUnavailable(ctx); err != nil {
 				return err
 			}
-			productPath, err := firstEntityPath(ctx, "Products")
+			productPath, err := firstSpecialProductPath(ctx)
 			if err != nil {
 				return err
 			}
-			resp, err := ctx.GET(productPath + "/Namespace.SpecialProduct")
+			resp, err := ctx.GET(productPath + "/" + specialProductTypeRef)
 			if err != nil {
 				return err
 			}
@@ -85,7 +89,7 @@ func TypeCasting() *framework.TestSuite {
 			if err := skipIfDerivedTypesUnavailable(ctx); err != nil {
 				return err
 			}
-			resp, err := ctx.GET("/Products/Namespace.SpecialProduct")
+			resp, err := ctx.GET("/Products/" + specialProductTypeRef)
 			if err != nil {
 				return err
 			}
@@ -135,11 +139,11 @@ func TypeCasting() *framework.TestSuite {
 			if err := skipIfDerivedTypesUnavailable(ctx); err != nil {
 				return err
 			}
-			productPath, err := firstEntityPath(ctx, "Products")
+			productPath, err := firstSpecialProductPath(ctx)
 			if err != nil {
 				return err
 			}
-			resp, err := ctx.GET(productPath + "/Namespace.SpecialProduct/SpecialProperty")
+			resp, err := ctx.GET(productPath + "/" + specialProductTypeRef + "/SpecialProperty")
 			if err != nil {
 				return err
 			}
@@ -164,7 +168,7 @@ func TypeCasting() *framework.TestSuite {
 			if err := skipIfDerivedTypesUnavailable(ctx); err != nil {
 				return err
 			}
-			resp, err := ctx.GET("/Products?$filter=isof('Namespace.SpecialProduct') and Price gt 100")
+			resp, err := ctx.GET("/Products?$filter=isof('" + specialProductTypeRef + "') and Price gt 100")
 			if err != nil {
 				return err
 			}
@@ -269,9 +273,11 @@ func TypeCasting() *framework.TestSuite {
 				return err
 			}
 			resp, err := ctx.POST("/Products", map[string]interface{}{
-				"@odata.type": "Namespace.SpecialProduct",
-				"Name":        "Test",
-				"Price":       100,
+				"@odata.type":     "#" + specialProductTypeRef,
+				"Name":            "Test Special Product",
+				"Price":           100,
+				"ProductType":     "SpecialProduct",
+				"SpecialProperty": "Test special property",
 			})
 			if err != nil {
 				return err
@@ -297,16 +303,21 @@ func TypeCasting() *framework.TestSuite {
 			if err := skipIfDerivedTypesUnavailable(ctx); err != nil {
 				return err
 			}
-			productPath, err := firstEntityPath(ctx, "Products")
+			productPath, err := firstSpecialProductPath(ctx)
 			if err != nil {
 				return err
 			}
-			resp, err := ctx.GET(productPath + "/Namespace.SpecialProduct/Category")
+			resp, err := ctx.GET(productPath + "/" + specialProductTypeRef + "/Category")
 			if err != nil {
 				return err
 			}
 
 			if resp.StatusCode == 200 {
+				return nil
+			}
+
+			// 204 No Content is acceptable if the navigation property is null
+			if resp.StatusCode == 204 {
 				return nil
 			}
 
@@ -330,7 +341,7 @@ func TypeCasting() *framework.TestSuite {
 			if err != nil {
 				return err
 			}
-			resp, err := ctx.GET(productPath + "/Namespace.InvalidType")
+			resp, err := ctx.GET(productPath + "/" + detectedNamespace + ".InvalidType")
 			if err != nil {
 				return err
 			}
@@ -357,7 +368,7 @@ func skipIfDerivedTypesUnavailable(ctx *framework.TestContext) error {
 		return err
 	}
 	if !supported {
-		return ctx.Skip("Service metadata does not declare derived type Namespace.SpecialProduct")
+		return ctx.Skip("Service metadata does not declare derived type with ProductType discriminator")
 	}
 	return nil
 }
@@ -375,6 +386,71 @@ func ensureDerivedTypeSupport(ctx *framework.TestContext) (bool, error) {
 	}
 	body := string(resp.Body)
 	derivedTypesChecked = true
-	derivedTypesPresent = strings.Contains(body, "Namespace.SpecialProduct")
+
+	// Extract the namespace from metadata (e.g., ComplianceService)
+	// Look for <Schema xmlns="http://docs.oasis-open.org/odata/ns/edm" Namespace="...">
+	namespaceRegex := regexp.MustCompile(`Namespace="([^"]+)"`)
+	matches := namespaceRegex.FindStringSubmatch(body)
+	if len(matches) > 1 {
+		detectedNamespace = matches[1]
+	} else {
+		detectedNamespace = "ODataService" // default fallback
+	}
+
+	// Check if the Products entity has a ProductType property (discriminator)
+	// which indicates type inheritance is being used
+	hasProductType := strings.Contains(body, `Name="ProductType"`)
+	hasProduct := strings.Contains(body, `EntityType Name="Product"`)
+
+	// The service supports derived types if it has both the Product entity and ProductType discriminator
+	derivedTypesPresent = hasProductType && hasProduct
+
+	if derivedTypesPresent {
+		// Set the qualified type reference for SpecialProduct
+		specialProductTypeRef = detectedNamespace + ".SpecialProduct"
+	}
+
 	return derivedTypesPresent, nil
+}
+
+// firstSpecialProductPath returns the path to a product with ProductType="SpecialProduct"
+func firstSpecialProductPath(ctx *framework.TestContext) (string, error) {
+	// Query for products with ProductType = SpecialProduct to find a valid special product
+	resp, err := ctx.GET("/Products?$filter=ProductType eq 'SpecialProduct'&$top=1")
+	if err != nil {
+		return "", err
+	}
+
+	if resp.StatusCode != 200 {
+		// Fallback to getting any product if filtering fails
+		return firstEntityPath(ctx, "Products")
+	}
+
+	var data map[string]interface{}
+	if err := json.Unmarshal(resp.Body, &data); err != nil {
+		return firstEntityPath(ctx, "Products")
+	}
+
+	values, ok := data["value"].([]interface{})
+	if !ok || len(values) == 0 {
+		return firstEntityPath(ctx, "Products")
+	}
+
+	first := values[0].(map[string]interface{})
+	id := first["ID"]
+	return fmt.Sprintf("/Products(%v)", formatKeyValue(id)), nil
+}
+
+func formatKeyValue(v interface{}) string {
+	switch val := v.(type) {
+	case string:
+		// The server accepts raw UUID values without the guid prefix
+		// Check if it looks like a GUID
+		if len(val) == 36 && strings.Count(val, "-") == 4 {
+			return val // Return raw UUID without prefix
+		}
+		return fmt.Sprintf("'%s'", val)
+	default:
+		return fmt.Sprintf("%v", v)
+	}
 }

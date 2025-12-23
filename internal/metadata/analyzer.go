@@ -27,6 +27,9 @@ type EntityMetadata struct {
 	DisabledMethods map[string]bool
 	// DefaultMaxTop is the default maximum number of results to return if no explicit $top is set
 	DefaultMaxTop *int
+	// TypeDiscriminator holds information about the type discriminator property for polymorphic entities
+	// This is used for isof() filter function and type casting in URLs
+	TypeDiscriminator *TypeDiscriminatorInfo
 	// Hooks defines which lifecycle hooks are available on this entity
 	Hooks struct {
 		HasODataBeforeCreate         bool
@@ -40,6 +43,13 @@ type EntityMetadata struct {
 		HasODataBeforeReadEntity     bool
 		HasODataAfterReadEntity      bool
 	}
+}
+
+// TypeDiscriminatorInfo holds metadata about the type discriminator property
+type TypeDiscriminatorInfo struct {
+	ColumnName string // Database column name for the discriminator
+	JsonName   string // JSON field name for the discriminator
+	FieldName  string // Go struct field name
 }
 
 // PropertyMetadata holds metadata information about an entity property
@@ -149,6 +159,9 @@ func AnalyzeEntity(entity interface{}) (*EntityMetadata, error) {
 
 	// Detect stream properties
 	detectStreamProperties(metadata)
+
+	// Detect type discriminator property for polymorphic entities
+	detectTypeDiscriminator(metadata)
 
 	// Detect available lifecycle hooks
 	detectHooks(metadata)
@@ -850,6 +863,48 @@ func detectStreamProperties(metadata *EntityMetadata) {
 
 			// Add to stream properties list
 			metadata.StreamProperties = append(metadata.StreamProperties, *prop)
+		}
+	}
+}
+
+// detectTypeDiscriminator finds a type discriminator property in the entity metadata.
+// The discriminator is used for polymorphic entities to distinguish between base and derived types.
+// Common discriminator property names include: <EntityName>Type, ProductType, Type, EntityType
+func detectTypeDiscriminator(metadata *EntityMetadata) {
+	if metadata == nil {
+		return
+	}
+
+	// Candidate property names to check for discriminator
+	// Priority: EntityName + "Type" (e.g., ProductType for Product entity), then common names
+	candidates := []string{
+		metadata.EntityName + "Type", // e.g., ProductType for Product entity
+		"ProductType",                // Common discriminator name for products
+		"Type",
+		"EntityType",
+		"Discriminator",
+	}
+
+	for _, candidate := range candidates {
+		for i := range metadata.Properties {
+			prop := &metadata.Properties[i]
+
+			// Discriminator must be a string type
+			if prop.Type.Kind() != reflect.String {
+				continue
+			}
+
+			// Check if the property name matches any candidate (case-insensitive)
+			if strings.EqualFold(prop.FieldName, candidate) ||
+				strings.EqualFold(prop.Name, candidate) ||
+				strings.EqualFold(prop.JsonName, candidate) {
+				metadata.TypeDiscriminator = &TypeDiscriminatorInfo{
+					ColumnName: prop.ColumnName,
+					JsonName:   prop.JsonName,
+					FieldName:  prop.FieldName,
+				}
+				return
+			}
 		}
 	}
 }

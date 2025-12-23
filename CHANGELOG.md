@@ -33,6 +33,13 @@ rely on version numbers to reason about compatibility.
   - Read hook documentation with examples for tenant filtering and data redaction
   - Added "Hooks: Inject Custom Logic" section to README with quick-start examples
   - Improved discoverability: hooks are now prominent in main package documentation
+- **Type inheritance support (OData v4 spec 11.2.13)**: Implemented type discriminator detection and entity type filtering
+  - Auto-detection of type discriminator properties (`ProductType`, `EntityType`, `Type`, etc.)
+  - `isof('Namespace.EntityType')` filter function now correctly filters by entity type using the discriminator column
+  - Type casting in URL paths (`/Products/Namespace.SpecialProduct`) for collection filtering
+  - Type casting on single entities (`/Products(id)/Namespace.SpecialProduct`) for type verification
+  - Access to derived type properties through type cast (`/Products(id)/Namespace.SpecialProduct/SpecialProperty`)
+  - Type cast with navigation properties (`/Products(id)/Namespace.SpecialProduct/Category`)
 
 ### Fixed
 - **MySQL/MariaDB compatibility for OData query functions**: Added database-specific SQL generation for date extraction functions (YEAR, MONTH, DAY, HOUR, MINUTE, SECOND), arithmetic functions (CEILING, FLOOR), and the NOW function. MySQL compliance tests improved from 95% to 97% pass rate (21 failures reduced to 7).
