@@ -256,13 +256,11 @@ func ApplySelectToMapResults(results []map[string]interface{}, selectedPropertie
 		for key, value := range result {
 			isSelected := selectedPropMap[key]
 			isKey := keyPropMap[key]
-			isComputedAndNotSelected := computedAliases[key] && !isSelected
 
 			// Include the property if:
 			// 1. It's explicitly selected, OR
-			// 2. It's a key property (always included), OR
-			// 3. It's a regular property (not computed) and no explicit selection for it
-			if isSelected || isKey || (!isComputedAndNotSelected && !computedAliases[key]) {
+			// 2. It's a key property (always included)
+			if isSelected || isKey {
 				filteredItem[key] = value
 			}
 		}

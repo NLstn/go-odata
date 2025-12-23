@@ -560,8 +560,9 @@ func parseComputeWithoutMetadata(computeStr string) (*ComputeTransformation, err
 func parseComputeExpressionWithoutMetadata(exprStr string) (*ComputeExpression, error) {
 	exprStr = strings.TrimSpace(exprStr)
 
-	// Split by " as " to get expression and alias
-	asIdx := strings.Index(exprStr, " as ")
+	// Split by " as " (case-insensitive) to get expression and alias
+	lowerExprStr := strings.ToLower(exprStr)
+	asIdx := strings.Index(lowerExprStr, " as ")
 	if asIdx == -1 {
 		return nil, fmt.Errorf("invalid compute expression format, expected 'expression as alias'")
 	}
