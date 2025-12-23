@@ -412,8 +412,8 @@ func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{
 				// For pointer types, check if not nil
 				isExpanded = !fieldValue.IsNil()
 			} else if fieldValue.Kind() == reflect.Slice {
-				// For slices, check if not nil and not empty
-				isExpanded = !fieldValue.IsNil() && fieldValue.Len() > 0
+				// For slices, check if not nil (empty slices are valid expanded data)
+				isExpanded = !fieldValue.IsNil()
 			}
 
 			if isExpanded {
