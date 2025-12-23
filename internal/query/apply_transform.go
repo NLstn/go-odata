@@ -396,49 +396,58 @@ func buildComputeExpressionSQL(dialect string, expr *FilterExpression, entityMet
 // applyOrderBy applies order by clauses to the GORM query
 func applyOrderBy(db *gorm.DB, orderBy []OrderByItem, entityMetadata *metadata.EntityMetadata) *gorm.DB {
 	dialect := getDatabaseDialect(db)
-	for _, item := range orderBy {
-		var columnName string
-		if propertyExists(item.Property, entityMetadata) {
-			col := GetColumnName(item.Property, entityMetadata)
-			// For PostgreSQL, quote the column name to handle case-sensitivity
-			if dialect == "postgres" {
+	
+	// For PostgreSQL, we need to build all ORDER BY expressions in a single Clauses() call
+	// to ensure they're all preserved in the final SQL query
+	if dialect == "postgres" {
+		var orderExprs []clause.OrderByColumn
+		for _, item := range orderBy {
+			var columnName string
+			if propertyExists(item.Property, entityMetadata) {
+				col := GetColumnName(item.Property, entityMetadata)
 				columnName = quoteIdent(dialect, col)
 			} else {
-				columnName = col
-			}
-		} else {
-			sanitizedAlias := sanitizeIdentifier(item.Property)
-			if sanitizedAlias == "" {
-				continue
-			}
-			// For PostgreSQL, quote the identifier to handle case-sensitive aliases
-			// SQLite and MySQL don't require quoting for ORDER BY alias references
-			if dialect == "postgres" {
+				sanitizedAlias := sanitizeIdentifier(item.Property)
+				if sanitizedAlias == "" {
+					continue
+				}
 				columnName = quoteIdent(dialect, sanitizedAlias)
-			} else {
-				columnName = sanitizedAlias
 			}
-		}
 
-		// For PostgreSQL, explicitly control NULL ordering to match OData v4.0:
-		// - Ascending: NULLs come before non-NULLs (NULLS FIRST)
-		// - Descending: NULLs come after non-NULLs (NULLS LAST)
-		// Note: columnName is already sanitized via sanitizeIdentifier() or GetColumnName()
-		// and quoted via quoteIdent() (which escapes embedded quotes), so SQL injection is prevented.
-		if dialect == "postgres" {
+			// Build the ORDER BY expression with NULL handling
 			direction := " ASC NULLS FIRST"
 			if item.Descending {
 				direction = " DESC NULLS LAST"
 			}
-			db = db.Clauses(clause.OrderBy{
-				Expression: clause.Expr{SQL: columnName + direction},
+			
+			orderExprs = append(orderExprs, clause.OrderByColumn{
+				Column: clause.Column{Raw: true, Name: columnName + direction},
 			})
-		} else {
+		}
+		
+		if len(orderExprs) > 0 {
+			db = db.Clauses(clause.OrderBy{Columns: orderExprs})
+		}
+	} else {
+		// For other databases, use the simple approach
+		for _, item := range orderBy {
+			var columnName string
+			if propertyExists(item.Property, entityMetadata) {
+				columnName = GetColumnName(item.Property, entityMetadata)
+			} else {
+				sanitizedAlias := sanitizeIdentifier(item.Property)
+				if sanitizedAlias == "" {
+					continue
+				}
+				columnName = sanitizedAlias
+			}
+
 			db = db.Order(clause.OrderByColumn{
 				Column: clause.Column{Name: columnName},
 				Desc:   item.Descending,
 			})
 		}
 	}
+	
 	return db
 }
