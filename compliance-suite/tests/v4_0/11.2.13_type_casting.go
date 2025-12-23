@@ -445,12 +445,33 @@ func formatKeyValue(v interface{}) string {
 	switch val := v.(type) {
 	case string:
 		// The server accepts raw UUID values without the guid prefix
-		// Check if it looks like a GUID
-		if len(val) == 36 && strings.Count(val, "-") == 4 {
+		// Check if it matches UUID format (8-4-4-4-12 hex characters)
+		if isUUID(val) {
 			return val // Return raw UUID without prefix
 		}
 		return fmt.Sprintf("'%s'", val)
 	default:
 		return fmt.Sprintf("%v", v)
 	}
+}
+
+// isUUID checks if a string matches the UUID format (8-4-4-4-12 hex characters)
+func isUUID(s string) bool {
+	if len(s) != 36 {
+		return false
+	}
+	// Check format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+	if s[8] != '-' || s[13] != '-' || s[18] != '-' || s[23] != '-' {
+		return false
+	}
+	// Check that all other characters are hex digits
+	for i, c := range s {
+		if i == 8 || i == 13 || i == 18 || i == 23 {
+			continue // Skip dashes
+		}
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return false
+		}
+	}
+	return true
 }
