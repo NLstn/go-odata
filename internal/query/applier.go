@@ -80,6 +80,8 @@ func ApplyQueryOptionsWithFTS(db *gorm.DB, options *QueryOptions, entityMetadata
 
 	// Apply standalone compute transformation (before select)
 	if options.Compute != nil {
+		// Reset alias expressions map for compute aliases used in $filter
+		resetAliasExprs()
 		db = applyCompute(db, dialect, options.Compute, entityMetadata)
 	}
 

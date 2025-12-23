@@ -217,6 +217,14 @@ func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.Qu
 		if err := db.Find(&results).Error; err != nil {
 			return nil, err
 		}
+		// If $select is specified, filter out computed properties that aren't selected
+		if len(queryOptions.Select) > 0 && queryOptions.Compute != nil {
+			computedAliases := make(map[string]bool)
+			for _, expr := range queryOptions.Compute.Expressions {
+				computedAliases[expr.Alias] = true
+			}
+			results = query.ApplySelectToMapResults(results, queryOptions.Select, h.metadata, computedAliases)
+		}
 		return results, nil
 	}
 
@@ -232,6 +240,11 @@ func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.Qu
 	// Only apply in-memory search if it wasn't already applied at database level
 	if queryOptions.Search != "" && !searchAppliedAtDB {
 		sliceValue = query.ApplySearch(sliceValue, queryOptions.Search, h.metadata)
+	}
+
+	// Apply compute transformations to expanded entities
+	if len(queryOptions.Expand) > 0 {
+		sliceValue = query.ApplyExpandComputeToResults(sliceValue, queryOptions.Expand)
 	}
 
 	if len(queryOptions.Select) > 0 {

@@ -92,7 +92,7 @@ func (p *ASTParser) parseGroupedExpression() (ASTNode, error) {
 	return &GroupExpr{Expr: expr}, nil
 }
 
-// parseLiteral parses literal values (string, number, boolean, null, date, time)
+// parseLiteral parses literal values (string, number, boolean, null, date, time, GUID)
 func (p *ASTParser) parseLiteral(token *Token) ASTNode {
 	switch token.Type {
 	case TokenString:
@@ -117,6 +117,9 @@ func (p *ASTParser) parseLiteral(token *Token) ASTNode {
 	case TokenDateTime:
 		p.advance()
 		return &LiteralExpr{Value: token.Value, Type: "datetime"}
+	case TokenGUID:
+		p.advance()
+		return &LiteralExpr{Value: token.Value, Type: "guid"}
 	default:
 		return nil
 	}

@@ -27,6 +27,7 @@ const (
 	TokenDate
 	TokenTime
 	TokenDateTime
+	TokenGUID
 )
 
 // Token represents a single token in the filter expression
@@ -269,7 +270,64 @@ func (t *Tokenizer) readTimeLiteral() string {
 	return result.String()
 }
 
-// NextToken returns the next token
+// isGUIDLiteral checks if current position starts a GUID literal (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+// GUID format: 8 hex chars, dash, 4 hex chars, dash, 4 hex chars, dash, 4 hex chars, dash, 12 hex chars
+func (t *Tokenizer) isGUIDLiteral() bool {
+	// Look ahead to check for GUID pattern: 8-4-4-4-12 = 36 characters total
+	if t.pos+36 > len(t.input) {
+		return false
+	}
+
+	str := t.input[t.pos : t.pos+36]
+	if len(str) != 36 {
+		return false
+	}
+
+	// Check for proper GUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+	// Positions of dashes: 8, 13, 18, 23
+	for i, ch := range str {
+		if i == 8 || i == 13 || i == 18 || i == 23 {
+			if ch != '-' {
+				return false
+			}
+		} else {
+			// Must be a hex digit
+			if !isHexDigit(byte(ch)) {
+				return false
+			}
+		}
+	}
+
+	// Check that the character after the GUID is not alphanumeric (to avoid partial matches)
+	if t.pos+36 < len(t.input) {
+		nextChar := t.input[t.pos+36]
+		if isHexDigit(nextChar) || nextChar == '-' {
+			return false
+		}
+	}
+
+	return true
+}
+
+// isHexDigit checks if a byte is a valid hexadecimal digit
+func isHexDigit(ch byte) bool {
+	return (ch >= '0' && ch <= '9') ||
+		(ch >= 'a' && ch <= 'f') ||
+		(ch >= 'A' && ch <= 'F')
+}
+
+// readGUIDLiteral reads a GUID literal (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+func (t *Tokenizer) readGUIDLiteral() string {
+	var result strings.Builder
+
+	// Read the 36 character GUID
+	for i := 0; i < 36 && t.ch != 0; i++ {
+		result.WriteRune(t.ch)
+		t.advance()
+	}
+
+	return result.String()
+}
 func (t *Tokenizer) NextToken() (*Token, error) {
 	t.skipWhitespace()
 
@@ -308,9 +366,14 @@ func (t *Tokenizer) tokenizeString(pos int) *Token {
 	return nil
 }
 
-// tokenizeNumber tokenizes numeric literals, or date/time literals
+// tokenizeNumber tokenizes numeric literals, date/time literals, or GUID literals
 func (t *Tokenizer) tokenizeNumber(pos int) *Token {
 	if unicode.IsDigit(t.ch) {
+		// Check for GUID first (must be before datetime/date checks since they share similar patterns)
+		if t.isGUIDLiteral() {
+			value := t.readGUIDLiteral()
+			return &Token{Type: TokenGUID, Value: value, Pos: pos}
+		}
 		if literal, ok := t.readDateTimeLiteralIfPresent(); ok {
 			return &Token{Type: TokenDateTime, Value: literal, Pos: pos}
 		}
@@ -416,6 +479,13 @@ func (t *Tokenizer) tokenizeIdentifierOrKeyword(pos int) *Token {
 	// Allow identifiers starting with letters or $ (for special properties like $count)
 	if !unicode.IsLetter(t.ch) && t.ch != '$' {
 		return nil
+	}
+
+	// Check if this could be a GUID starting with a hex letter (a-f, A-F)
+	// GUIDs can start with letters and look like: abcdef12-3456-7890-abcd-ef1234567890
+	if t.isGUIDLiteral() {
+		value := t.readGUIDLiteral()
+		return &Token{Type: TokenGUID, Value: value, Pos: pos}
 	}
 
 	value := t.readIdentifier()

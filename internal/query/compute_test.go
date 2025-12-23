@@ -2,6 +2,7 @@ package query
 
 import (
 	"net/url"
+	"strings"
 	"testing"
 )
 
@@ -434,6 +435,117 @@ func TestCompute_ParseFromQueryOptions(t *testing.T) {
 
 			if options.Compute == nil {
 				t.Error("Expected non-nil compute option")
+			}
+		})
+	}
+}
+
+// TestCompute_AliasExpression tests that compute aliases are properly registered for PostgreSQL filter resolution
+func TestCompute_AliasExpression(t *testing.T) {
+	meta := getTestMetadata(t)
+
+	tests := []struct {
+		name          string
+		compute       string
+		expectedAlias string
+	}{
+		{
+			name:          "arithmetic compute alias",
+			compute:       "Price mul 1.1 as PriceWithTax",
+			expectedAlias: "PriceWithTax",
+		},
+		{
+			name:          "division compute alias",
+			compute:       "Price div 2 as HalfPrice",
+			expectedAlias: "HalfPrice",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Reset alias map before test
+			resetAliasExprs()
+
+			// Parse the compute expression
+			result, err := parseCompute("compute("+tt.compute+")", meta)
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+				return
+			}
+
+			if result == nil || result.Compute == nil {
+				t.Error("Expected non-nil compute transformation")
+				return
+			}
+
+			// Build the compute SQL to register the alias
+			for _, expr := range result.Compute.Expressions {
+				buildComputeSQL("postgres", expr, meta)
+			}
+
+			// Verify the alias was registered
+			aliasExpr, ok := getAliasExpr(tt.expectedAlias)
+			if !ok {
+				t.Errorf("Expected alias '%s' to be registered", tt.expectedAlias)
+				return
+			}
+
+			if aliasExpr == "" {
+				t.Errorf("Expected non-empty expression for alias '%s'", tt.expectedAlias)
+			}
+		})
+	}
+}
+
+// TestCompute_FilterWithComputedAlias tests that filters referencing computed aliases work on PostgreSQL
+func TestCompute_FilterWithComputedAlias(t *testing.T) {
+	meta := getTestMetadata(t)
+
+	tests := []struct {
+		name              string
+		compute           string
+		filter            string
+		expectedInclusion string // A substring that should appear in the generated SQL
+	}{
+		{
+			name:              "filter on computed alias",
+			compute:           "Price mul 1.1 as PriceWithTax",
+			filter:            "PriceWithTax gt 100",
+			expectedInclusion: "*", // The expression should include the multiplication
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Reset alias map before test
+			resetAliasExprs()
+
+			// Parse the compute expression
+			computeResult, err := parseCompute("compute("+tt.compute+")", meta)
+			if err != nil {
+				t.Errorf("Unexpected error parsing compute: %v", err)
+				return
+			}
+
+			// Build the compute SQL to register aliases
+			for _, expr := range computeResult.Compute.Expressions {
+				buildComputeSQL("postgres", expr, meta)
+			}
+
+			// Parse and build the filter
+			filterExpr, err := parseFilter(tt.filter, meta, map[string]bool{"PriceWithTax": true})
+			if err != nil {
+				t.Errorf("Unexpected error parsing filter: %v", err)
+				return
+			}
+
+			// Build the filter condition for PostgreSQL
+			query, _ := buildFilterCondition("postgres", filterExpr, meta)
+
+			// For PostgreSQL, the filter should use the expression, not the alias
+			// The query should contain the actual expression (with multiplication operator)
+			if tt.expectedInclusion == "*" && !strings.Contains(query, "*") {
+				t.Errorf("Expected filter SQL to contain multiplication expression, got: %s", query)
 			}
 		})
 	}

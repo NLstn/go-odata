@@ -29,12 +29,13 @@ type QueryOptions struct {
 // ExpandOption represents a single $expand clause
 type ExpandOption struct {
 	NavigationProperty string
-	Select             []string          // Nested $select
-	Expand             []ExpandOption    // Nested $expand
-	Filter             *FilterExpression // Nested $filter
-	OrderBy            []OrderByItem     // Nested $orderby
-	Top                *int              // Nested $top
-	Skip               *int              // Nested $skip
+	Select             []string               // Nested $select
+	Expand             []ExpandOption         // Nested $expand
+	Filter             *FilterExpression      // Nested $filter
+	OrderBy            []OrderByItem          // Nested $orderby
+	Top                *int                   // Nested $top
+	Skip               *int                   // Nested $skip
+	Compute            *ComputeTransformation // Nested $compute
 }
 
 // OrderByItem represents a single orderby clause

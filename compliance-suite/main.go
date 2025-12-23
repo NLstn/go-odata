@@ -13,6 +13,7 @@ import (
 
 	"github.com/nlstn/go-odata/compliance-suite/framework"
 	v4_0 "github.com/nlstn/go-odata/compliance-suite/tests/v4_0"
+	v4_01 "github.com/nlstn/go-odata/compliance-suite/tests/v4_01"
 )
 
 var (
@@ -616,10 +617,29 @@ func main() {
 		})
 	}
 
-	// TODO: Register v4.01 tests when implemented
-	// if *version == "all" || *version == "4.01" {
-	//     testSuites = append(testSuites, ...)
-	// }
+	// Register v4.01 tests
+	if *version == "all" || *version == "4.01" {
+		testSuites = append(testSuites, TestSuiteInfo{
+			Name:    "11.2.5.8_query_compute",
+			Version: "4.01",
+			Suite:   v4_01.QueryCompute,
+		})
+		testSuites = append(testSuites, TestSuiteInfo{
+			Name:    "11.2.5.11_orderby_computed_properties",
+			Version: "4.01",
+			Suite:   v4_01.OrderByComputedProperties,
+		})
+		testSuites = append(testSuites, TestSuiteInfo{
+			Name:    "11.2.5.13_query_index",
+			Version: "4.01",
+			Suite:   v4_01.QueryIndex,
+		})
+		testSuites = append(testSuites, TestSuiteInfo{
+			Name:    "12.2_function_action_overloading",
+			Version: "4.01",
+			Suite:   v4_01.FunctionActionOverloading,
+		})
+	}
 
 	if len(testSuites) == 0 {
 		fmt.Println("No test suites found for version:", *version)
