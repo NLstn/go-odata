@@ -162,6 +162,14 @@ func (h *EntityHandler) handlePostMediaEntity(w http.ResponseWriter, r *http.Req
 
 	entity := reflect.New(h.metadata.EntityType).Interface()
 
+	// Initialize entity keys (e.g., generate UUID for key properties)
+	if err := h.initializeEntityKeys(ctx, entity); err != nil {
+		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgInternalError, err.Error()); writeErr != nil {
+			h.logger.Error("Error writing error response", "error", writeErr)
+		}
+		return
+	}
+
 	entityValue := reflect.ValueOf(entity)
 
 	if method := entityValue.MethodByName("SetMediaContent"); method.IsValid() {
