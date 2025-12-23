@@ -414,7 +414,7 @@ func (h *EntityHandler) preserveKeyProperties(source, destination interface{}) e
 	return nil
 }
 
-// preserveTimestampFields copies time.Time fields from source to destination if destination has zero value
+// preserveTimestampFields copies time.Time and *time.Time fields from source to destination if destination has zero value
 // This prevents MySQL/MariaDB errors with zero datetime values ('0000-00-00')
 func (h *EntityHandler) preserveTimestampFields(source, destination interface{}) {
 	sourceVal := reflect.ValueOf(source).Elem()
@@ -425,7 +425,7 @@ func (h *EntityHandler) preserveTimestampFields(source, destination interface{})
 		destField := destVal.Field(i)
 		fieldType := destVal.Type().Field(i)
 
-		// Only preserve time.Time fields
+		// Handle time.Time fields
 		if destField.Type() == reflect.TypeOf(time.Time{}) && destField.CanSet() {
 			// Check if destination field is zero (safe type assertion)
 			destTime, ok := destField.Interface().(time.Time)
@@ -437,6 +437,34 @@ func (h *EntityHandler) preserveTimestampFields(source, destination interface{})
 					sourceTime, ok := sourceField.Interface().(time.Time)
 					if ok && !sourceTime.IsZero() {
 						destField.Set(sourceField)
+					}
+				}
+			}
+		}
+
+		// Handle *time.Time fields
+		if destField.Type() == reflect.TypeOf((*time.Time)(nil)) && destField.CanSet() {
+			// Check if destination field is nil or points to zero time
+			shouldPreserve := false
+			if destField.IsNil() {
+				shouldPreserve = true
+			} else {
+				destTimePtr, ok := destField.Interface().(*time.Time)
+				if ok && destTimePtr != nil && destTimePtr.IsZero() {
+					shouldPreserve = true
+				}
+			}
+
+			if shouldPreserve {
+				// Get corresponding source field
+				sourceField := sourceVal.FieldByName(fieldType.Name)
+				if sourceField.IsValid() && sourceField.Type() == reflect.TypeOf((*time.Time)(nil)) {
+					// Copy the non-nil, non-zero value from source
+					if !sourceField.IsNil() {
+						sourceTimePtr, ok := sourceField.Interface().(*time.Time)
+						if ok && sourceTimePtr != nil && !sourceTimePtr.IsZero() {
+							destField.Set(sourceField)
+						}
 					}
 				}
 			}
