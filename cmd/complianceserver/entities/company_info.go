@@ -8,7 +8,7 @@ import (
 
 // CompanyInfo represents a singleton entity for company information
 type CompanyInfo struct {
-	ID          uuid.UUID `json:"ID" gorm:"type:uuid;primaryKey" odata:"key,generate=uuid"`
+	ID          uuid.UUID `json:"ID" gorm:"type:char(36);primaryKey" odata:"key,generate=uuid"`
 	Name        string    `json:"Name" gorm:"not null" odata:"required,maxlength=200"`
 	CEO         string    `json:"CEO" gorm:"not null" odata:"required,maxlength=100"`
 	Founded     int       `json:"Founded" gorm:"not null"`

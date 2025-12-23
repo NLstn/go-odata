@@ -18,20 +18,39 @@ func getDatabaseDialect(db *gorm.DB) string {
 }
 
 // quoteIdent safely quotes identifiers based on the database dialect.
-// MySQL/MariaDB use backticks, while PostgreSQL/SQLite use double quotes (SQL standard).
-// Embedded quotes are escaped by doubling them.
+// Each database uses different quoting conventions for identifiers.
+// Embedded quotes are escaped by doubling them per each dialect's standard.
 func quoteIdent(dialect string, ident string) string {
 	if ident == "" {
 		return ident
 	}
-	// MySQL and MariaDB use backticks for identifier quoting
-	if dialect == "mysql" {
+
+	switch dialect {
+	case "mysql":
+		// MySQL/MariaDB uses backticks
 		escaped := strings.ReplaceAll(ident, "`", "``")
 		return fmt.Sprintf("`%s`", escaped)
+
+	case "postgres", "postgresql":
+		// PostgreSQL uses double quotes
+		escaped := strings.ReplaceAll(ident, "\"", "\"\"")
+		return fmt.Sprintf("\"%s\"", escaped)
+
+	case "sqlite", "sqlite3":
+		// SQLite supports double quotes (SQL standard)
+		escaped := strings.ReplaceAll(ident, "\"", "\"\"")
+		return fmt.Sprintf("\"%s\"", escaped)
+
+	case "sqlserver", "mssql":
+		// SQL Server uses square brackets (preferred) or double quotes
+		escaped := strings.ReplaceAll(ident, "]", "]]")
+		return fmt.Sprintf("[%s]", escaped)
+
+	default:
+		// Default to double quotes (SQL standard)
+		escaped := strings.ReplaceAll(ident, "\"", "\"\"")
+		return fmt.Sprintf("\"%s\"", escaped)
 	}
-	// PostgreSQL and SQLite use double quotes (SQL standard)
-	escaped := strings.ReplaceAll(ident, "\"", "\"\"")
-	return fmt.Sprintf("\"%s\"", escaped)
 }
 
 // getQuotedColumnName returns a properly quoted column name for use in SQL queries.

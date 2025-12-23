@@ -51,10 +51,10 @@ func testSelectWithNavigationFilter(ctx *framework.TestContext) error {
 	// Test: /Products?$select=Name&$filter=Category/Name eq 'Electronics'
 	// This ensures that when a JOIN is added for the filter, the SELECT clause
 	// uses qualified column names to avoid ambiguous references
-	
+
 	filter := url.QueryEscape("Category/Name eq 'Electronics'")
 	select_ := url.QueryEscape("Name")
-	
+
 	resp, err := ctx.GET("/Products?$select=" + select_ + "&$filter=" + filter)
 	if err != nil {
 		return err
@@ -105,10 +105,10 @@ func testSelectWithNavigationFilter(ctx *framework.TestContext) error {
 
 func testSelectMultipleWithNavigationFilter(ctx *framework.TestContext) error {
 	// Test: /Products?$select=Name,Price&$filter=Category/Name eq 'Electronics'
-	
+
 	filter := url.QueryEscape("Category/Name eq 'Electronics'")
 	select_ := url.QueryEscape("Name,Price")
-	
+
 	resp, err := ctx.GET("/Products?$select=" + select_ + "&$filter=" + filter)
 	if err != nil {
 		return err
@@ -191,11 +191,11 @@ func testSelectWithVariousNavigationFilters(ctx *framework.TestContext) error {
 func testSelectWithNavigationFilterAndExpand(ctx *framework.TestContext) error {
 	// Test: /Products?$select=Name,Category&$filter=Category/Name eq 'Electronics'&$expand=Category
 	// This tests that $select, $filter, and $expand can all work together with navigation properties
-	
+
 	filter := url.QueryEscape("Category/Name eq 'Electronics'")
 	select_ := url.QueryEscape("Name,Category")
 	expand := url.QueryEscape("Category")
-	
+
 	resp, err := ctx.GET("/Products?$select=" + select_ + "&$filter=" + filter + "&$expand=" + expand)
 	if err != nil {
 		return err

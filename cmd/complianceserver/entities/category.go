@@ -4,7 +4,7 @@ import "github.com/google/uuid"
 
 // Category represents a product category entity
 type Category struct {
-	ID          uuid.UUID `json:"ID" gorm:"type:uuid;primaryKey" odata:"key,generate=uuid"`
+	ID          uuid.UUID `json:"ID" gorm:"type:char(36);primaryKey" odata:"key,generate=uuid"`
 	Name        string    `json:"Name" gorm:"not null;unique" odata:"required,maxlength=100"`
 	Description string    `json:"Description" odata:"maxlength=500"`
 	// Navigation property for Products

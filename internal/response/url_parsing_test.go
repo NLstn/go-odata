@@ -363,62 +363,62 @@ func TestParseODataURLComponentsTypeCast(t *testing.T) {
 }
 
 func TestParseODataURLComponentsEmptyPathSegments(t *testing.T) {
-tests := []struct {
-name        string
-path        string
-expectError bool
-}{
-{
-name:        "Consecutive slashes in path",
-path:        "/Products//",
-expectError: true,
-},
-{
-name:        "Consecutive slashes with entity key",
-path:        "/Products//1",
-expectError: true,
-},
-{
-name:        "Multiple consecutive slashes at start",
-path:        "///Products",
-expectError: true, // After stripping leading slash, //Products splits to ["", "", "Products"] - consecutive empty segments
-},
-{
-name:        "Empty segment in middle",
-path:        "/Products//Details",
-expectError: true,
-},
-{
-name:        "Valid path with trailing slash",
-path:        "/Products/",
-expectError: false,
-},
-{
-name:        "Valid path with leading slash",
-path:        "/Products",
-expectError: false,
-},
-{
-name:        "Valid path without slashes",
-path:        "Products",
-expectError: false,
-},
-{
-name:        "Valid path with entity key",
-path:        "/Products(1)",
-expectError: false,
-},
-}
+	tests := []struct {
+		name        string
+		path        string
+		expectError bool
+	}{
+		{
+			name:        "Consecutive slashes in path",
+			path:        "/Products//",
+			expectError: true,
+		},
+		{
+			name:        "Consecutive slashes with entity key",
+			path:        "/Products//1",
+			expectError: true,
+		},
+		{
+			name:        "Multiple consecutive slashes at start",
+			path:        "///Products",
+			expectError: true, // After stripping leading slash, //Products splits to ["", "", "Products"] - consecutive empty segments
+		},
+		{
+			name:        "Empty segment in middle",
+			path:        "/Products//Details",
+			expectError: true,
+		},
+		{
+			name:        "Valid path with trailing slash",
+			path:        "/Products/",
+			expectError: false,
+		},
+		{
+			name:        "Valid path with leading slash",
+			path:        "/Products",
+			expectError: false,
+		},
+		{
+			name:        "Valid path without slashes",
+			path:        "Products",
+			expectError: false,
+		},
+		{
+			name:        "Valid path with entity key",
+			path:        "/Products(1)",
+			expectError: false,
+		},
+	}
 
-for _, tt := range tests {
-t.Run(tt.name, func(t *testing.T) {
-_, err := ParseODataURLComponents(tt.path)
-if tt.expectError && err == nil {
-t.Errorf("Expected error for path %s, but got none", tt.path)
-}
-if !tt.expectError && err != nil {
-t.Errorf("Expected no error for path %s, but got: %v", tt.path, err)
-}
-})
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := ParseODataURLComponents(tt.path)
+			if tt.expectError && err == nil {
+				t.Errorf("Expected error for path %s, but got none", tt.path)
+			}
+			if !tt.expectError && err != nil {
+				t.Errorf("Expected no error for path %s, but got: %v", tt.path, err)
+			}
+		})
+	}
 }

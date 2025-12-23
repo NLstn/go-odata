@@ -883,7 +883,7 @@ func stopComplianceServer(cmd *exec.Cmd) {
 		_ = cmd.Wait()
 		fmt.Println("Server stopped.")
 	}
-	
+
 	// Clean up SQLite database file if using file-based storage
 	if *dbType == "sqlite" && *dbDSN == "" {
 		dbFile := "/tmp/go-odata-compliance.db"

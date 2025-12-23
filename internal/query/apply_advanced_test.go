@@ -220,7 +220,7 @@ func TestBuildAggregateSQL_ColumnNames(t *testing.T) {
 				Method:   AggregationCountDistinct,
 				Alias:    "UniqueCategories",
 			},
-			expected: "COUNT(DISTINCT category) as \"UniqueCategories\"",
+			expected: "COUNT(DISTINCT \"apply_test_entities\".\"category\") as \"UniqueCategories\"",
 		},
 		{
 			name: "Sum uses snake_case column",
@@ -229,7 +229,7 @@ func TestBuildAggregateSQL_ColumnNames(t *testing.T) {
 				Method:   AggregationSum,
 				Alias:    "TotalPrice",
 			},
-			expected: "SUM(price) as \"TotalPrice\"",
+			expected: "SUM(\"apply_test_entities\".\"price\") as \"TotalPrice\"",
 		},
 		{
 			name: "Average uses snake_case column",
@@ -238,7 +238,7 @@ func TestBuildAggregateSQL_ColumnNames(t *testing.T) {
 				Method:   AggregationAvg,
 				Alias:    "AvgQty",
 			},
-			expected: "AVG(quantity) as \"AvgQty\"",
+			expected: "AVG(\"apply_test_entities\".\"quantity\") as \"AvgQty\"",
 		},
 		{
 			name: "Min uses snake_case column",
@@ -247,7 +247,7 @@ func TestBuildAggregateSQL_ColumnNames(t *testing.T) {
 				Method:   AggregationMin,
 				Alias:    "MinPrice",
 			},
-			expected: "MIN(price) as \"MinPrice\"",
+			expected: "MIN(\"apply_test_entities\".\"price\") as \"MinPrice\"",
 		},
 		{
 			name: "Max uses snake_case column",
@@ -256,7 +256,7 @@ func TestBuildAggregateSQL_ColumnNames(t *testing.T) {
 				Method:   AggregationMax,
 				Alias:    "MaxPrice",
 			},
-			expected: "MAX(price) as \"MaxPrice\"",
+			expected: "MAX(\"apply_test_entities\".\"price\") as \"MaxPrice\"",
 		},
 		{
 			name: "$count special case",
@@ -271,7 +271,7 @@ func TestBuildAggregateSQL_ColumnNames(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := buildAggregateSQL(tt.expr, meta)
+			result := buildAggregateSQL("sqlite", tt.expr, meta)
 			if result != tt.expected {
 				t.Errorf("Expected '%s', got '%s'", tt.expected, result)
 			}

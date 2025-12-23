@@ -441,7 +441,7 @@ func registerActions(service *odata.Service, db *gorm.DB) {
 			// We don't just save sample products because they don't have IDs set
 			// Instead, we return success to indicate the action is available
 			// Tests should use the Reseed action for full database reset
-			
+
 			// Return 204 No Content
 			w.WriteHeader(http.StatusNoContent)
 			return nil

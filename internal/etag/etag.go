@@ -104,7 +104,7 @@ func Generate(entity interface{}, meta *metadata.EntityMetadata) string {
 	if !found {
 		return ""
 	}
-	
+
 	fieldValue := entityValue.Field(idx)
 	if !fieldValue.IsValid() {
 		return ""
@@ -132,7 +132,7 @@ func Generate(entity interface{}, meta *metadata.EntityMetadata) string {
 
 	// Generate SHA256 hash of the ETag source
 	hash := sha256.Sum256([]byte(etagSource))
-	
+
 	// Use strings.Builder from pool for efficient string concatenation
 	sb := stringBuilderPool.Get().(*strings.Builder) //nolint:errcheck // sync.Pool.Get() doesn't return error
 	sb.Reset()
@@ -144,11 +144,11 @@ func Generate(entity interface{}, meta *metadata.EntityMetadata) string {
 			stringBuilderPool.Put(sb)
 		}
 	}()
-	
+
 	sb.WriteString("W/\"")
 	sb.WriteString(hex.EncodeToString(hash[:]))
 	sb.WriteString("\"")
-	
+
 	return sb.String()
 }
 

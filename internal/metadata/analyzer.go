@@ -457,10 +457,10 @@ func analyzeComplexTypeFields(property *PropertyMetadata, fieldType reflect.Type
 		}
 
 		analyzeNavigationProperty(&nestedProp, field)
-		
+
 		// Compute and cache the column name for complex type fields
 		nestedProp.ColumnName = getColumnNameFromProperty(&nestedProp)
-		
+
 		if nestedProp.IsComplexType {
 			nestedProp.EmbeddedPrefix = extractEmbeddedPrefix(nestedProp.GormTag)
 			analyzeComplexTypeFields(&nestedProp, field.Type)

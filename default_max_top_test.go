@@ -19,8 +19,8 @@ type TestProduct struct {
 }
 
 type TestOrder struct {
-	ID         int    `json:"id" gorm:"primarykey" odata:"key"`
-	CustomerID int    `json:"customerId"`
+	ID         int     `json:"id" gorm:"primarykey" odata:"key"`
+	CustomerID int     `json:"customerId"`
 	Total      float64 `json:"total"`
 }
 
