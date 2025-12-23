@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"sync"
 
 	"github.com/nlstn/go-odata/internal/metadata"
 	"gorm.io/gorm"
@@ -11,8 +12,10 @@ import (
 )
 
 // aggregateAliasExprs maps aggregate aliases to their SQL expressions (without the "as alias" part)
-// This is used for PostgreSQL HAVING clauses which cannot reference SELECT aliases
+// This is used for PostgreSQL HAVING clauses which cannot reference SELECT aliases.
+// Protected by aggregateAliasExprsMu for concurrent access safety.
 var aggregateAliasExprs map[string]string
+var aggregateAliasExprsMu sync.RWMutex
 
 // applyTransformations applies apply transformations to the GORM query
 func applyTransformations(db *gorm.DB, transformations []ApplyTransformation, entityMetadata *metadata.EntityMetadata) *gorm.DB {
@@ -25,7 +28,9 @@ func applyTransformations(db *gorm.DB, transformations []ApplyTransformation, en
 
 	hasGrouping := false
 	// Reset and build aggregate alias expressions map for HAVING clause support
+	aggregateAliasExprsMu.Lock()
 	aggregateAliasExprs = make(map[string]string)
+	aggregateAliasExprsMu.Unlock()
 
 	for _, transformation := range transformations {
 		switch transformation.Type {
@@ -89,10 +94,8 @@ func applyGroupBy(db *gorm.DB, groupBy *GroupByTransformation, entityMetadata *m
 		// Default to COUNT(*) when no aggregate is specified with groupby
 		// Quote alias per dialect
 		selectColumns = append(selectColumns, fmt.Sprintf("COUNT(*) as %s", quoteIdent(dialect, "$count")))
-		// Record $count alias for HAVING clause support in PostgreSQL (only if map is initialized)
-		if aggregateAliasExprs != nil {
-			aggregateAliasExprs["$count"] = "COUNT(*)"
-		}
+		// Record $count alias for HAVING clause support in PostgreSQL
+		setAggregateAliasExpr("$count", "COUNT(*)")
 	}
 
 	if len(groupByColumns) > 0 {
@@ -128,13 +131,31 @@ func applyAggregate(db *gorm.DB, aggregate *AggregateTransformation, entityMetad
 	return db
 }
 
+// setAggregateAliasExpr safely sets an aggregate alias expression with mutex protection
+func setAggregateAliasExpr(alias, expr string) {
+	aggregateAliasExprsMu.Lock()
+	defer aggregateAliasExprsMu.Unlock()
+	if aggregateAliasExprs != nil {
+		aggregateAliasExprs[alias] = expr
+	}
+}
+
+// getAggregateAliasExpr safely gets an aggregate alias expression with mutex protection
+func getAggregateAliasExpr(alias string) (string, bool) {
+	aggregateAliasExprsMu.RLock()
+	defer aggregateAliasExprsMu.RUnlock()
+	if aggregateAliasExprs == nil {
+		return "", false
+	}
+	expr, ok := aggregateAliasExprs[alias]
+	return expr, ok
+}
+
 // buildAggregateSQL builds the SQL for an aggregate expression
 func buildAggregateSQL(dialect string, aggExpr AggregateExpression, entityMetadata *metadata.EntityMetadata) string {
 	if aggExpr.Property == "$count" {
-		// Record for HAVING clause support in PostgreSQL (only if map is initialized)
-		if aggregateAliasExprs != nil {
-			aggregateAliasExprs[aggExpr.Alias] = "COUNT(*)"
-		}
+		// Record for HAVING clause support in PostgreSQL
+		setAggregateAliasExpr(aggExpr.Alias, "COUNT(*)")
 		return fmt.Sprintf("COUNT(*) as %s", quoteIdent(dialect, aggExpr.Alias))
 	}
 
@@ -161,20 +182,16 @@ func buildAggregateSQL(dialect string, aggExpr AggregateExpression, entityMetada
 		sqlFunc = "COUNT"
 	case AggregationCountDistinct:
 		expr := fmt.Sprintf("COUNT(DISTINCT %s)", qualified)
-		// Record for HAVING clause support in PostgreSQL (only if map is initialized)
-		if aggregateAliasExprs != nil {
-			aggregateAliasExprs[aggExpr.Alias] = expr
-		}
+		// Record for HAVING clause support in PostgreSQL
+		setAggregateAliasExpr(aggExpr.Alias, expr)
 		return fmt.Sprintf("%s as %s", expr, quoteIdent(dialect, aggExpr.Alias))
 	default:
 		return ""
 	}
 
 	expr := fmt.Sprintf("%s(%s)", sqlFunc, qualified)
-	// Record for HAVING clause support in PostgreSQL (only if map is initialized)
-	if aggregateAliasExprs != nil {
-		aggregateAliasExprs[aggExpr.Alias] = expr
-	}
+	// Record for HAVING clause support in PostgreSQL
+	setAggregateAliasExpr(aggExpr.Alias, expr)
 	return fmt.Sprintf("%s as %s", expr, quoteIdent(dialect, aggExpr.Alias))
 }
 
@@ -382,7 +399,13 @@ func applyOrderBy(db *gorm.DB, orderBy []OrderByItem, entityMetadata *metadata.E
 	for _, item := range orderBy {
 		var columnName string
 		if propertyExists(item.Property, entityMetadata) {
-			columnName = GetColumnName(item.Property, entityMetadata)
+			col := GetColumnName(item.Property, entityMetadata)
+			// For PostgreSQL, quote the column name to handle case-sensitivity
+			if dialect == "postgres" {
+				columnName = quoteIdent(dialect, col)
+			} else {
+				columnName = col
+			}
 		} else {
 			sanitizedAlias := sanitizeIdentifier(item.Property)
 			if sanitizedAlias == "" {
@@ -397,15 +420,17 @@ func applyOrderBy(db *gorm.DB, orderBy []OrderByItem, entityMetadata *metadata.E
 			}
 		}
 
-		// For PostgreSQL, add NULLS LAST to ensure consistent null ordering across databases
-		// OData v4 spec expects nulls to be sorted last
+		// For PostgreSQL, explicitly control NULL ordering to match OData v4.0:
+		// - Ascending: NULLs come before non-NULLs (NULLS FIRST)
+		// - Descending: NULLs come after non-NULLs (NULLS LAST)
 		if dialect == "postgres" {
-			direction := "ASC"
 			if item.Descending {
-				direction = "DESC"
+				// Descending: non-NULLs first, then NULLs
+				db = db.Order(columnName + " DESC NULLS LAST")
+			} else {
+				// Ascending: NULLs first, then non-NULLs
+				db = db.Order(columnName + " ASC NULLS FIRST")
 			}
-			// Use raw SQL string to include NULLS LAST
-			db = db.Order(columnName + " " + direction + " NULLS LAST")
 		} else {
 			db = db.Order(clause.OrderByColumn{
 				Column: clause.Column{Name: columnName},
