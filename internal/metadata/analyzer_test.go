@@ -314,11 +314,9 @@ func TestAnalyzeEntityEnumMembers(t *testing.T) {
 	prop := meta.FindProperty("Value")
 	if prop == nil {
 		t.Fatalf("expected to find enum property")
-	}
-	if !prop.IsEnum {
+	} else if !prop.IsEnum {
 		t.Fatalf("expected property to be enum")
-	}
-	if len(prop.EnumMembers) != 2 {
+	} else if len(prop.EnumMembers) != 2 {
 		t.Fatalf("expected 2 enum members, got %d", len(prop.EnumMembers))
 	}
 	if prop.EnumUnderlyingType != "Edm.Int32" {
