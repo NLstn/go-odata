@@ -634,3 +634,33 @@ func TestResolveActionOverload_TypedParameters(t *testing.T) {
 		}
 	})
 }
+
+func TestParseActionParameters_WithStructBinding(t *testing.T) {
+	type actionInput struct {
+		Name  string  `mapstructure:"name"`
+		Count int64   `mapstructure:"count"`
+		Note  *string `mapstructure:"note,omitempty"`
+	}
+
+	body := `{"name":"Widget","count":5}`
+	req := httptest.NewRequest(http.MethodPost, "/Apply", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	defs, err := ParameterDefinitionsFromStruct(reflect.TypeOf(actionInput{}))
+	if err != nil {
+		t.Fatalf("ParameterDefinitionsFromStruct() unexpected error: %v", err)
+	}
+
+	params, err := ParseActionParameters(req, defs, reflect.TypeOf(actionInput{}))
+	if err != nil {
+		t.Fatalf("ParseActionParameters() unexpected error: %v", err)
+	}
+
+	// Verify the params were populated correctly (struct binding happens during parse)
+	if _, ok := params["name"]; !ok {
+		t.Fatal("ParseActionParameters() missing 'name' parameter")
+	}
+	if _, ok := params["count"]; !ok {
+		t.Fatal("ParseActionParameters() missing 'count' parameter")
+	}
+}
