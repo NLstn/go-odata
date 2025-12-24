@@ -635,6 +635,95 @@ func TestResolveActionOverload_TypedParameters(t *testing.T) {
 	})
 }
 
+func TestBindParams_StructAndPointer(t *testing.T) {
+	note := "seasonal"
+	params := map[string]interface{}{
+		"percentage": 12.5,
+		"note":       &note,
+	}
+
+	bound, err := BindParams[discountInput](params)
+	if err != nil {
+		t.Fatalf("BindParams() unexpected error: %v", err)
+	}
+
+	if bound.Percentage != 12.5 {
+		t.Fatalf("BindParams() percentage = %v, want 12.5", bound.Percentage)
+	}
+	if bound.Note == nil || *bound.Note != note {
+		t.Fatalf("BindParams() note = %#v, want %q", bound.Note, note)
+	}
+
+	ptrResult, err := BindParams[*discountInput](params)
+	if err != nil {
+		t.Fatalf("BindParams() pointer unexpected error: %v", err)
+	}
+
+	if ptrResult == nil {
+		t.Fatal("BindParams() pointer result is nil")
+	} else if ptrResult.Percentage != 12.5 {
+		t.Fatalf("BindParams() pointer percentage = %v, want 12.5", ptrResult.Percentage)
+	}
+	if ptrResult.Note == nil || *ptrResult.Note != note {
+		t.Fatalf("BindParams() pointer note = %#v, want %q", ptrResult.Note, note)
+	}
+}
+
+func TestBindParams_OptionalAndRequiredValidation(t *testing.T) {
+	params := map[string]interface{}{
+		"percentage": 30.0,
+	}
+
+	bound, err := BindParams[discountInput](params)
+	if err != nil {
+		t.Fatalf("BindParams() unexpected error for optional field: %v", err)
+	}
+
+	if bound.Note != nil {
+		t.Fatalf("BindParams() expected nil optional field, got %#v", bound.Note)
+	}
+
+	_, err = BindParams[discountInput](map[string]interface{}{"note": "hello"})
+	if err == nil {
+		t.Fatal("BindParams() expected error for missing required field, got nil")
+	}
+	if got := err.Error(); !strings.Contains(got, "required parameter 'percentage' is missing") {
+		t.Fatalf("BindParams() error = %q, want missing required message", got)
+	}
+}
+
+func TestBindParams_TypeMismatch(t *testing.T) {
+	params := map[string]interface{}{
+		"percentage": "not-a-number",
+	}
+
+	if _, err := BindParams[discountInput](params); err == nil {
+		t.Fatal("BindParams() expected error for type mismatch, got nil")
+	}
+}
+
+func TestBindParams_UsesExistingBinding(t *testing.T) {
+	params := map[string]interface{}{
+		boundStructKey: &discountInput{Percentage: 55},
+	}
+
+	result, err := BindParams[discountInput](params)
+	if err != nil {
+		t.Fatalf("BindParams() unexpected error: %v", err)
+	}
+	if result.Percentage != 55 {
+		t.Fatalf("BindParams() percentage = %v, want 55", result.Percentage)
+	}
+
+	ptrResult, err := BindParams[*discountInput](params)
+	if err != nil {
+		t.Fatalf("BindParams() pointer unexpected error: %v", err)
+	}
+	if ptrResult == nil || ptrResult.Percentage != 55 {
+		t.Fatalf("BindParams() pointer = %#v, want percentage 55", ptrResult)
+	}
+}
+
 func TestParseActionParameters_WithStructBinding(t *testing.T) {
 	type actionInput struct {
 		Name  string  `mapstructure:"name"`
