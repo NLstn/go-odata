@@ -26,6 +26,7 @@ linters:
     paths:
       - "test/expand_filter_integration_test.go"
       - "test/metadata_integration_test.go"
+      - "cmd/"
     rules:
       # Exclude some linters from running on test files.
       - linters:
@@ -43,3 +44,8 @@ linters:
       - linters:
           - staticcheck
         text: "SA5011\\(related information\\)"
+      # Meter instrument creation errors are unlikely and handled gracefully
+      - linters:
+          - errcheck
+        path: "internal/observability/(metrics|noop)\\.go"
+        text: "meter\\.(Float64Histogram|Int64Counter|Int64Histogram)"

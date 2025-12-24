@@ -14,6 +14,7 @@ import (
 	"github.com/nlstn/go-odata/internal/query"
 	"github.com/nlstn/go-odata/internal/response"
 	"github.com/nlstn/go-odata/internal/trackchanges"
+	"go.opentelemetry.io/otel/trace"
 	"gorm.io/gorm"
 )
 
@@ -21,6 +22,17 @@ var errETagMismatch = errors.New("etag mismatch")
 
 // handleDeleteEntity handles DELETE requests for individual entities
 func (h *EntityHandler) handleDeleteEntity(w http.ResponseWriter, r *http.Request, entityKey string) {
+	ctx := r.Context()
+
+	// Start tracing span for delete operation
+	var span trace.Span
+	if h.observability != nil {
+		tracer := h.observability.Tracer()
+		ctx, span = tracer.StartEntityDelete(ctx, h.metadata.EntitySetName, entityKey)
+		defer span.End()
+		r = r.WithContext(ctx)
+	}
+
 	// Check if there's an overwrite handler
 	if h.overwrite.hasDelete() {
 		h.handleDeleteEntityOverwrite(w, r, entityKey)
@@ -36,7 +48,6 @@ func (h *EntityHandler) handleDeleteEntity(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	ctx := r.Context()
 	var (
 		entity       interface{}
 		changeEvents []changeEvent
@@ -95,6 +106,17 @@ func (h *EntityHandler) handleDeleteEntity(w http.ResponseWriter, r *http.Reques
 
 // handlePatchEntity handles PATCH requests for individual entities
 func (h *EntityHandler) handlePatchEntity(w http.ResponseWriter, r *http.Request, entityKey string) {
+	ctx := r.Context()
+
+	// Start tracing span for patch operation
+	var span trace.Span
+	if h.observability != nil {
+		tracer := h.observability.Tracer()
+		ctx, span = tracer.StartEntityPatch(ctx, h.metadata.EntitySetName, entityKey)
+		defer span.End()
+		r = r.WithContext(ctx)
+	}
+
 	// Check if there's an overwrite handler
 	if h.overwrite.hasUpdate() {
 		h.handleUpdateEntityOverwrite(w, r, entityKey, false)
@@ -122,7 +144,6 @@ func (h *EntityHandler) handlePatchEntity(w http.ResponseWriter, r *http.Request
 		changeEvents []changeEvent
 	)
 
-	ctx := r.Context()
 	if err := h.runInTransaction(ctx, r, func(tx *gorm.DB, hookReq *http.Request) error {
 		entity = reflect.New(h.metadata.EntityType).Interface()
 
