@@ -292,8 +292,8 @@ func (r *statusRecorder) WriteHeader(statusCode int) {
 	if !r.written {
 		r.statusCode = statusCode
 		r.written = true
+		r.ResponseWriter.WriteHeader(statusCode)
 	}
-	r.ResponseWriter.WriteHeader(statusCode)
 }
 
 func (r *statusRecorder) Write(b []byte) (int, error) {

@@ -43,3 +43,8 @@ linters:
       - linters:
           - staticcheck
         text: "SA5011\\(related information\\)"
+      # Meter instrument creation errors are unlikely and handled gracefully
+      - linters:
+          - errcheck
+        path: "internal/observability/(metrics|noop)\\.go"
+        text: "meter\\.(Float64Histogram|Int64Counter|Int64Histogram)"

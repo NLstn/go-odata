@@ -171,8 +171,9 @@ func (h *BatchHandler) HandleBatch(w http.ResponseWriter, r *http.Request) {
 	// Write batch response
 	h.writeBatchResponse(w, responses)
 
-	// Record batch metrics
+	// Update batch span with actual size and record batch metrics
 	if h.observability != nil {
+		batchSpan.SetAttributes(observability.BatchSizeAttr(len(responses)))
 		h.observability.Metrics().RecordBatchSize(ctx, len(responses))
 	}
 }
