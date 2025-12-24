@@ -98,6 +98,7 @@ rely on version numbers to reason about compatibility.
 - Async job managers now apply a 24-hour default retention window when no
   duration is provided and continue purging expired rows in the background.
 - Compliance suite default output is now concise (overall progress and summary only); use `-verbose` for per-suite and per-test details.
+- Documentation now aligns database support statements with CI coverage and clarifies `$search` behavior per database.
 
 ### Fixed
 
@@ -142,4 +143,3 @@ rely on version numbers to reason about compatibility.
 - This is the first documented release in the changelog. Subsequent releases
   will increment the version following semantic versioning rules and will be
   recorded in this changelog alongside Git tags.
-

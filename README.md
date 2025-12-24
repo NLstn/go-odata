@@ -325,11 +325,11 @@ release plan so downstream integrations can assess compatibility expectations.
 
 The library works with any GORM-compatible database, but testing and active support vary by database:
 
-- ✅ **SQLite** - Fully supported and tested. All features work reliably. Includes native FTS (FTS3/4/5) for `$search`.
-- ✅ **PostgreSQL** - Fully supported and tested. All compliance tests pass on PostgreSQL 17. Includes native full-text search with `tsvector` and GIN indexes for `$search`.
-- ✅ **MariaDB** - Fully supported and tested. All compliance tests pass on MariaDB 11. `$search` falls back to in-memory filtering.
-- ✅ **MySQL** - Fully supported and tested. All compliance tests pass on MySQL 8. `$search` falls back to in-memory filtering.
-- ❓ **Other databases** (SQL Server, etc.) - Should work through GORM compatibility, but not actively tested. `$search` falls back to in-memory filtering.
+- ✅ **SQLite** - Fully supported and tested in CI. All features work reliably. Includes native FTS (FTS3/4/5) for `$search`.
+- ✅ **PostgreSQL** - Fully supported and tested in CI (PostgreSQL 17). Includes native full-text search with `tsvector` and GIN indexes for `$search`.
+- ✅ **MariaDB** - Fully supported and tested in CI (MariaDB 11). `$search` falls back to in-memory filtering.
+- ✅ **MySQL** - Fully supported and tested in CI (MySQL 8). `$search` falls back to in-memory filtering.
+- ❓ **Other databases** (SQL Server, etc.) - Support is in progress and not covered by CI. `$search` falls back to in-memory filtering.
 
 ### Using Other Databases
 
