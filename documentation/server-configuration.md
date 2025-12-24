@@ -469,9 +469,11 @@ The go-odata library works with GORM-compatible databases. Below are configurati
 
 ### Supported Databases
 
-- **SQLite** - Fully supported and tested
-- **PostgreSQL** - Support in progress (most features work)
-- **Other databases** - May work through GORM, but not actively tested. [Open an issue](https://github.com/NLstn/go-odata/issues) if you need support for a specific database.
+- **SQLite** - Fully supported and tested in CI. Includes native FTS (FTS3/4/5) for `$search`.
+- **PostgreSQL** - Fully supported and tested in CI (PostgreSQL 17). Includes native full-text search with `tsvector` and GIN indexes for `$search`.
+- **MariaDB** - Fully supported and tested in CI (MariaDB 11). `$search` falls back to in-memory filtering.
+- **MySQL** - Fully supported and tested in CI (MySQL 8). `$search` falls back to in-memory filtering.
+- **Other databases** - Support is in progress and not covered by CI. `$search` falls back to in-memory filtering. [Open an issue](https://github.com/NLstn/go-odata/issues) if you need support for a specific database.
 
 ### SQLite (In-Memory)
 
