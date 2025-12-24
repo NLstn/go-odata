@@ -11,11 +11,23 @@ import (
 	"github.com/nlstn/go-odata/internal/query"
 	"github.com/nlstn/go-odata/internal/response"
 	"github.com/nlstn/go-odata/internal/skiptoken"
+	"go.opentelemetry.io/otel/trace"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
 func (h *EntityHandler) handleGetCollection(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	// Start tracing span for collection read
+	var span trace.Span
+	if h.observability != nil {
+		tracer := h.observability.Tracer()
+		ctx, span = tracer.StartEntityRead(ctx, h.metadata.EntitySetName, "", h.metadata.IsSingleton)
+		defer span.End()
+		r = r.WithContext(ctx)
+	}
+
 	// Check if there's an overwrite handler
 	if h.overwrite.hasGetCollection() {
 		h.handleGetCollectionOverwrite(w, r)
@@ -32,7 +44,6 @@ func (h *EntityHandler) handleGetCollection(w http.ResponseWriter, r *http.Reque
 	}
 
 	pref := preference.ParsePrefer(r)
-	ctx := r.Context()
 
 	h.executeCollectionQuery(w, &collectionExecutionContext{
 		Metadata:          h.metadata,

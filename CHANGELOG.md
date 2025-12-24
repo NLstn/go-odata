@@ -26,6 +26,23 @@ rely on version numbers to reason about compatibility.
   - See migration guide for detailed update instructions
 
 ### Added
+- **OpenTelemetry-based Observability Support**: Comprehensive observability infrastructure using OpenTelemetry standards
+  - **Tracing**: Full distributed tracing with proper span hierarchy for request lifecycle
+    - HTTP request spans with method, path, status code attributes
+    - Entity operation spans (Read, Create, Update, Delete) with entity set and key info
+    - Batch operation spans with changeset correlation
+    - Database query tracing via GORM callbacks (opt-in)
+    - Query option tracing for $filter, $select, $expand, etc. (opt-in)
+  - **Metrics**: OData-specific metrics for monitoring and alerting
+    - `odata.request.duration` - Request duration histogram by entity set, operation, status
+    - `odata.request.count` - Request counter by entity set, operation, status
+    - `odata.result.count` - Result set size histogram for collection queries
+    - `odata.db.query.duration` - Database query duration histogram
+    - `odata.batch.size` - Batch request size histogram
+    - `odata.error.count` - Error counter by type
+  - **Zero-overhead when disabled**: No-op implementations ensure zero performance impact when observability is not configured
+  - **Flexible configuration**: Functional options pattern for easy setup with any OpenTelemetry-compatible backend (Jaeger, Tempo, Datadog, AWS X-Ray, etc.)
+  - See [documentation/observability.md](documentation/observability.md) for detailed usage guide
 - PostgreSQL is now fully supported alongside SQLite with all 105 compliance test suites passing on both databases
 - MariaDB is now fully supported with all compliance test suites passing on MariaDB 11
 - MySQL is now fully supported with all compliance test suites passing on MySQL 8

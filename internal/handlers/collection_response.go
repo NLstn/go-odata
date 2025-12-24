@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"reflect"
 
 	"github.com/nlstn/go-odata/internal/preference"
 	"github.com/nlstn/go-odata/internal/query"
@@ -10,6 +11,19 @@ import (
 
 func (h *EntityHandler) collectionResponseWriter(w http.ResponseWriter, r *http.Request, pref *preference.Preference) func(*query.QueryOptions, interface{}, *int64, *string) error {
 	return func(queryOptions *query.QueryOptions, results interface{}, totalCount *int64, nextLink *string) error {
+		// Record result count in metrics
+		if h.observability != nil {
+			ctx := r.Context()
+			count := int64(0)
+			if results != nil {
+				rv := reflect.ValueOf(results)
+				if rv.Kind() == reflect.Slice {
+					count = int64(rv.Len())
+				}
+			}
+			h.observability.Metrics().RecordResultCount(ctx, h.metadata.EntitySetName, count)
+		}
+
 		var deltaLink *string
 		if pref.TrackChangesRequested {
 			if !h.supportsTrackChanges() {
