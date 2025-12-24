@@ -95,7 +95,6 @@ func main() {
 | `ServiceName` | `string` | Service name for telemetry. Defaults to "odata-service". |
 | `ServiceVersion` | `string` | Service version for telemetry attributes. |
 | `EnableDetailedDBTracing` | `bool` | Enable per-query database spans. Can be verbose. |
-| `EnableQueryOptionTracing` | `bool` | Enable spans for query option processing. |
 
 ### Minimal Configuration (Tracing Only)
 
@@ -115,7 +114,6 @@ service.SetObservability(odata.ObservabilityConfig{
     ServiceName:              "my-odata-api",
     ServiceVersion:           "1.0.0",
     EnableDetailedDBTracing:  true,  // Enables per-query DB spans
-    EnableQueryOptionTracing: true,  // Enables spans for $filter, $expand, etc.
 })
 ```
 
@@ -133,8 +131,9 @@ odata.request                          # Root span for HTTP request
 ├── odata.update                       # Update entity
 ├── odata.patch                        # Patch entity
 ├── odata.delete                       # Delete entity
-├── odata.batch                        # Batch operation
-└── Other operations                   # metadata, service document, etc.
+└── odata.batch                        # Batch operation
+    └── odata.changeset                # Changeset within batch
+```
 
 ### Span Attributes
 
@@ -182,7 +181,7 @@ Each span includes relevant attributes following OpenTelemetry semantic conventi
 | `odata.request.duration` | Histogram | ms | Request duration by entity set and operation |
 | `odata.request.count` | Counter | 1 | Total requests by entity set, operation, and status |
 | `odata.result.count` | Histogram | 1 | Number of entities returned per request |
-| `odata.db.query.duration` | Histogram | ms | Database query duration |
+| `odata.db.query.duration` | Histogram | ms | Database query duration (when detailed DB tracing is enabled) |
 | `odata.batch.size` | Histogram | 1 | Number of operations per batch |
 | `odata.error.count` | Counter | 1 | Errors by type and entity set |
 
@@ -234,8 +233,9 @@ This adds spans for:
 - DELETE operations
 
 Each database span includes:
+- `db.system`: Database system ("gorm")
+- `db.sql.table`: Table name (when available)
 - `db.rows_affected`: Number of rows affected
-- `db.sql.table`: Table name
 
 **Note**: Detailed DB tracing can generate significant trace data. Use it judiciously in production.
 
@@ -355,7 +355,6 @@ Enable detailed DB tracing only when debugging specific issues:
 // In development or when debugging
 service.SetObservability(odata.ObservabilityConfig{
     EnableDetailedDBTracing:  os.Getenv("ENABLE_DB_TRACING") == "true",
-    EnableQueryOptionTracing: os.Getenv("ENABLE_QUERY_TRACING") == "true",
 })
 ```
 
@@ -429,7 +428,6 @@ type ObservabilityConfig struct {
     ServiceName              string
     ServiceVersion           string
     EnableDetailedDBTracing  bool
-    EnableQueryOptionTracing bool
 }
 ```
 
