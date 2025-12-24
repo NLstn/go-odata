@@ -73,6 +73,7 @@ rely on version numbers to reason about compatibility.
 - MariaDB is now fully supported with all compliance test suites passing on MariaDB 11
 - MySQL is now fully supported with all compliance test suites passing on MySQL 8
 - CI/CD pipeline now runs compliance tests on SQLite, PostgreSQL, MariaDB, and MySQL to ensure cross-database compatibility
+- Added `ApplyQueryOptionsToSlice` helper for applying `$orderby`, `$skip`, and `$top` to in-memory slices with a `$filter` evaluation hook, along with public query option type aliases to simplify handler usage.
 - **Public hook interfaces**: `EntityHook` and `ReadHook` are now exported in the public API, making hooks discoverable via `go doc` and `pkg.go.dev`
   - Hook interface documentation includes comprehensive examples for lifecycle hooks (BeforeCreate, AfterCreate, etc.)
   - Read hook documentation with examples for tenant filtering and data redaction
@@ -126,8 +127,9 @@ rely on version numbers to reason about compatibility.
 - `AsyncConfig.DisableRetention` allows services to opt out of automatic async
   job cleanup when stricter audit retention is required.
 - Support deriving action/function parameters from a struct by setting
-  `ParameterStructType`, and expose an `actions.BindParams` helper so handlers can
-  consume strongly typed inputs without manual map assertions.
+  `ParameterStructType`, and expose an `actions.BindParams` helper in the public
+  `github.com/nlstn/go-odata/actions` package so handlers can consume strongly
+  typed inputs without manual map assertions.
 - Public `Service.Close` helper to stop async processing and release resources.
 - Service-level key generator registry with metadata validation powers server-generated keys
   (including built-in UUIDs) and generalized entity key initialization.
@@ -141,7 +143,7 @@ rely on version numbers to reason about compatibility.
 - Async job managers now apply a 24-hour default retention window when no
   duration is provided and continue purging expired rows in the background.
 - Compliance suite default output is now concise (overall progress and summary only); use `-verbose` for per-suite and per-test details.
-- Documentation now aligns database support statements with CI coverage and clarifies `$search` behavior per database.
+- Documentation now clarifies full-text search support for SQLite/PostgreSQL, along with fallback behavior and operational constraints.
 
 ## [v0.4.0] - 2025-11-08
 

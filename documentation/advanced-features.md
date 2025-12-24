@@ -12,7 +12,7 @@ This guide covers advanced features of go-odata including singletons, ETags, lif
   - [Tenant Filtering Example](#tenant-filtering-example)
   - [Redacting Sensitive Data](#redacting-sensitive-data)
 - [Asynchronous Processing](#asynchronous-processing)
-- [Full-Text Search with SQLite FTS](#full-text-search-with-sqlite-fts)
+- [Full-Text Search with Database FTS](#full-text-search-with-database-fts)
 
 ## Singletons
 
@@ -987,13 +987,17 @@ The library automatically detects and uses the best available version.
 
 ### Limitations
 
-1. **SQLite Only**: FTS integration only works with SQLite databases. Other databases automatically use in-memory search.
+1. **Database Support**: Automatic FTS integration is available for SQLite (FTS3/4/5) and PostgreSQL only. All other database backends automatically fall back to the in-memory `$search` implementation.
 
-2. **Simple Queries**: FTS is optimized for simple full-text queries. Complex boolean expressions or advanced fuzzy matching may fall back to in-memory processing.
+2. **PostgreSQL Language Configuration**: PostgreSQL uses the built-in `english` text search configuration (`to_tsvector('english', ...)` and `plainto_tsquery('english', ...)`). If you need a different language or custom dictionary, you must modify the FTS implementation to change the configuration.
 
-3. **Storage Overhead**: FTS virtual tables require additional disk space (approximately 30-50% of indexed text).
+3. **PostgreSQL Trigger Requirements**: PostgreSQL FTS relies on helper tables, a GIN index, a `plpgsql` trigger function, and triggers to keep the search vectors in sync. The database user must have privileges to create tables, indexes, functions, and triggers; locked-down roles will prevent FTS initialization.
 
-4. **Write Performance**: FTS triggers add minimal overhead to INSERT/UPDATE/DELETE operations.
+4. **SQLite Build Requirements**: SQLite FTS requires FTS3/4/5 support to be compiled into the SQLite build (some minimal builds disable it). If none of the FTS modules are available, the library falls back to in-memory search.
+
+5. **Simple Queries**: FTS is optimized for simple full-text queries. Complex boolean expressions or advanced fuzzy matching may fall back to in-memory processing.
+
+6. **Storage/Write Overhead**: FTS tables require additional disk space (approximately 30-50% of indexed text), and triggers add some overhead to INSERT/UPDATE/DELETE operations.
 
 ### Best Practices
 

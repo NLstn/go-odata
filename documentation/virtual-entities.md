@@ -237,10 +237,25 @@ func main() {
             if err != nil {
                 return nil, err
             }
-            
-            // Apply OData query options if needed
-            // For this example, we're returning all products
-            return &odata.CollectionResult{Items: products}, nil
+
+            // Apply basic OData query options in-memory for external data sources.
+            filtered, err := odata.ApplyQueryOptionsToSlice(products, ctx.QueryOptions, func(item ExternalProduct, filter *odata.FilterExpression) (bool, error) {
+                if filter == nil {
+                    return true, nil
+                }
+                if filter.Property == "name" && filter.Operator == "eq" {
+                    if value, ok := filter.Value.(string); ok {
+                        return item.Name == value, nil
+                    }
+                }
+                // Unsupported filter expression; let the caller decide how to handle it.
+                return false, nil
+            })
+            if err != nil {
+                return nil, err
+            }
+
+            return &odata.CollectionResult{Items: filtered}, nil
         },
         
         GetEntity: func(ctx *odata.OverwriteContext) (interface{}, error) {
