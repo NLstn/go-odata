@@ -198,7 +198,7 @@ All standard OData v4 query options are supported:
 - `$orderby` - Sort results
 - `$top` / `$skip` - Pagination
 - `$count` - Include total count
-- `$search` - Full-text search (with database-native FTS support for SQLite and PostgreSQL)
+- `$search` - Full-text search (database-native FTS for SQLite/PostgreSQL; other backends fall back to in-memory search)
 - `$apply` - Data aggregation
 - `$deltatoken` - Change tracking (enable per entity with `EnableChangeTracking`)
 

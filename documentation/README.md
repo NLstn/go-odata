@@ -61,6 +61,7 @@ Leverage powerful OData v4 features:
 - **Singletons**: Single-instance entities accessible by name
 - **ETags**: Optimistic concurrency control for safe updates
 - **Lifecycle & Read Hooks**: Execute custom logic at specific points in entity lifecycle, add tenant filters, or redact responses before returning data
+- **Full-Text Search**: Database-native FTS for SQLite/PostgreSQL with automatic in-memory fallback on other backends
 - **Geospatial Functions**: Query geographic data using geo.distance, geo.length, and geo.intersects
 
 ### Testing
