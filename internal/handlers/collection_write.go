@@ -14,10 +14,22 @@ import (
 	"github.com/nlstn/go-odata/internal/query"
 	"github.com/nlstn/go-odata/internal/response"
 	"github.com/nlstn/go-odata/internal/trackchanges"
+	"go.opentelemetry.io/otel/trace"
 	"gorm.io/gorm"
 )
 
 func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	// Start tracing span for create operation
+	var span trace.Span
+	if h.observability != nil {
+		tracer := h.observability.Tracer()
+		ctx, span = tracer.StartEntityCreate(ctx, h.metadata.EntitySetName)
+		defer span.End()
+		r = r.WithContext(ctx)
+	}
+
 	// Check if there's an overwrite handler
 	if h.overwrite.hasCreate() {
 		h.handlePostEntityOverwrite(w, r)
@@ -37,7 +49,6 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	ctx := r.Context()
 	contentType := r.Header.Get("Content-Type")
 	if h.metadata.HasStream && !strings.Contains(contentType, "application/json") {
 		h.handlePostMediaEntity(w, r)

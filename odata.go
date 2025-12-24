@@ -60,11 +60,14 @@ import (
 	"github.com/nlstn/go-odata/internal/auth"
 	"github.com/nlstn/go-odata/internal/handlers"
 	"github.com/nlstn/go-odata/internal/metadata"
+	"github.com/nlstn/go-odata/internal/observability"
 	"github.com/nlstn/go-odata/internal/query"
 	"github.com/nlstn/go-odata/internal/service/operations"
 	servrouter "github.com/nlstn/go-odata/internal/service/router"
 	servruntime "github.com/nlstn/go-odata/internal/service/runtime"
 	"github.com/nlstn/go-odata/internal/trackchanges"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 	"gorm.io/gorm"
 )
 
@@ -312,6 +315,8 @@ type Service struct {
 	keyGeneratorsMu sync.RWMutex
 	// defaultMaxTop is the default maximum number of results to return if no explicit $top is set
 	defaultMaxTop *int
+	// observability holds the observability configuration (tracing, metrics)
+	observability *observability.Config
 }
 
 // NewService creates a new OData service instance with database connection.
@@ -435,6 +440,132 @@ func (s *Service) SetLogger(logger *slog.Logger) {
 	for _, handler := range s.handlers {
 		handler.SetLogger(logger)
 	}
+}
+
+// ObservabilityConfig configures observability features (tracing, metrics) for the service.
+// All providers are optional; when nil, the corresponding feature is disabled with zero overhead.
+type ObservabilityConfig struct {
+	// TracerProvider provides the OpenTelemetry tracer for distributed tracing.
+	// If nil, tracing is disabled.
+	TracerProvider trace.TracerProvider
+
+	// MeterProvider provides the OpenTelemetry meter for metrics collection.
+	// If nil, metrics collection is disabled.
+	MeterProvider metric.MeterProvider
+
+	// ServiceName identifies this service in telemetry data.
+	// Defaults to "go-odata" if not specified.
+	ServiceName string
+
+	// ServiceVersion is reported in telemetry attributes.
+	ServiceVersion string
+
+	// EnableDetailedDBTracing enables per-query database spans.
+	// This can generate significant trace data; disabled by default.
+	EnableDetailedDBTracing bool
+
+	// EnableQueryOptionTracing adds spans for individual query option processing.
+	// Useful for debugging complex queries; disabled by default.
+	EnableQueryOptionTracing bool
+}
+
+// SetObservability configures OpenTelemetry-based observability for the service.
+// This enables distributed tracing, metrics collection, and enhanced structured logging.
+//
+// When observability is configured:
+//   - HTTP requests are automatically instrumented with traces and metrics
+//   - Entity operations (CRUD) create spans with relevant attributes
+//   - Database queries can optionally be traced (when EnableDetailedDBTracing is true)
+//   - Batch operations and async jobs are instrumented
+//   - Errors are recorded on spans and counted in metrics
+//
+// Example:
+//
+//	import (
+//	    "go.opentelemetry.io/otel"
+//	    "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+//	    sdktrace "go.opentelemetry.io/otel/sdk/trace"
+//	)
+//
+//	// Set up tracing
+//	exporter, _ := otlptracehttp.New(ctx)
+//	tp := sdktrace.NewTracerProvider(sdktrace.WithBatcher(exporter))
+//	defer tp.Shutdown(ctx)
+//
+//	// Configure OData service
+//	service := odata.NewService(db)
+//	service.SetObservability(odata.ObservabilityConfig{
+//	    TracerProvider: tp,
+//	    ServiceName:    "my-odata-api",
+//	    ServiceVersion: "1.0.0",
+//	})
+func (s *Service) SetObservability(cfg ObservabilityConfig) error {
+	opts := []observability.Option{}
+
+	if cfg.TracerProvider != nil {
+		opts = append(opts, observability.WithTracerProvider(cfg.TracerProvider))
+	}
+	if cfg.MeterProvider != nil {
+		opts = append(opts, observability.WithMeterProvider(cfg.MeterProvider))
+	}
+	if cfg.ServiceName != "" {
+		opts = append(opts, observability.WithServiceName(cfg.ServiceName))
+	}
+	if cfg.ServiceVersion != "" {
+		opts = append(opts, observability.WithServiceVersion(cfg.ServiceVersion))
+	}
+	if s.logger != nil {
+		opts = append(opts, observability.WithLogger(s.logger))
+	}
+	if cfg.EnableDetailedDBTracing {
+		opts = append(opts, observability.WithDetailedDBTracing())
+	}
+	if cfg.EnableQueryOptionTracing {
+		opts = append(opts, observability.WithQueryOptionTracing())
+	}
+
+	obsCfg := observability.NewConfig(opts...)
+	if err := obsCfg.Initialize(); err != nil {
+		return fmt.Errorf("failed to initialize observability: %w", err)
+	}
+
+	s.observability = obsCfg
+
+	// Configure runtime with observability
+	if s.runtime != nil {
+		s.runtime.SetObservability(obsCfg)
+	}
+
+	// Configure handlers with observability
+	for _, handler := range s.handlers {
+		handler.SetObservability(obsCfg)
+	}
+
+	// Configure batch handler with observability
+	if s.batchHandler != nil {
+		s.batchHandler.SetObservability(obsCfg)
+	}
+
+	// Register GORM callbacks for detailed DB tracing if enabled
+	if cfg.EnableDetailedDBTracing {
+		if err := observability.RegisterGORMCallbacks(s.db, obsCfg); err != nil {
+			return fmt.Errorf("failed to register GORM callbacks: %w", err)
+		}
+	}
+
+	s.logger.Info("Observability configured",
+		"tracing_enabled", cfg.TracerProvider != nil,
+		"metrics_enabled", cfg.MeterProvider != nil,
+		"service_name", cfg.ServiceName,
+	)
+
+	return nil
+}
+
+// Observability returns the current observability configuration.
+// Returns nil if observability is not configured.
+func (s *Service) Observability() *observability.Config {
+	return s.observability
 }
 
 // AsyncConfig controls asynchronous request processing behaviour for a Service.
@@ -605,6 +736,10 @@ func (s *Service) RegisterEntity(entity interface{}) error {
 	if s.defaultMaxTop != nil {
 		handler.SetDefaultMaxTop(s.defaultMaxTop)
 	}
+	// Set observability configuration if enabled
+	if s.observability != nil {
+		handler.SetObservability(s.observability)
+	}
 	s.handlers[entityMetadata.EntitySetName] = handler
 
 	s.logger.Debug("Registered entity",
@@ -668,6 +803,10 @@ func (s *Service) RegisterSingleton(entity interface{}, singletonName string) er
 	// Set service-level default max top if configured
 	if s.defaultMaxTop != nil {
 		handler.SetDefaultMaxTop(s.defaultMaxTop)
+	}
+	// Set observability configuration if enabled
+	if s.observability != nil {
+		handler.SetObservability(s.observability)
 	}
 	s.handlers[singletonName] = handler
 
@@ -738,6 +877,10 @@ func (s *Service) RegisterVirtualEntity(entity interface{}) error {
 	// Set service-level default max top if configured
 	if s.defaultMaxTop != nil {
 		handler.SetDefaultMaxTop(s.defaultMaxTop)
+	}
+	// Set observability configuration if enabled
+	if s.observability != nil {
+		handler.SetObservability(s.observability)
 	}
 	s.handlers[entityMetadata.EntitySetName] = handler
 

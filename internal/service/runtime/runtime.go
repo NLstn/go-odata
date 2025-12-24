@@ -11,8 +11,10 @@ import (
 	"time"
 
 	"github.com/nlstn/go-odata/internal/async"
+	"github.com/nlstn/go-odata/internal/observability"
 	"github.com/nlstn/go-odata/internal/preference"
 	servrouter "github.com/nlstn/go-odata/internal/service/router"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // Logger captures the subset of slog.Logger functionality required by the runtime.
@@ -30,6 +32,9 @@ type Runtime struct {
 	asyncQueue           chan struct{}
 	asyncMonitorPrefix   string
 	defaultRetryInterval time.Duration
+
+	// observability holds the OpenTelemetry configuration
+	observability *observability.Config
 }
 
 // New creates a new Runtime.
@@ -48,6 +53,11 @@ func (rt *Runtime) SetRouter(router *servrouter.Router) {
 // SetLogger updates the logger used for error reporting.
 func (rt *Runtime) SetLogger(logger Logger) {
 	rt.logger = logger
+}
+
+// SetObservability configures observability for the runtime.
+func (rt *Runtime) SetObservability(cfg *observability.Config) {
+	rt.observability = cfg
 }
 
 // ConfigureAsync configures asynchronous request processing dependencies.
@@ -75,11 +85,47 @@ func (rt *Runtime) ServeHTTP(w http.ResponseWriter, r *http.Request, allowAsync 
 		return
 	}
 
+	ctx := r.Context()
+	start := time.Now()
+
+	// Start tracing span if observability is configured
+	var tracer *observability.Tracer
+	var metrics *observability.Metrics
+	var span trace.Span
+	if rt.observability != nil {
+		tracer = rt.observability.Tracer()
+		metrics = rt.observability.Metrics()
+
+		ctx, span = tracer.StartRequest(ctx, r)
+		defer span.End()
+
+		// Record request start in metrics
+		metrics.RecordRequestStart(ctx)
+		r = r.WithContext(ctx)
+	}
+
 	if allowAsync && rt.tryHandleAsync(w, r) {
 		return
 	}
 
-	rt.router.ServeHTTP(w, r)
+	// Wrap response writer to capture status code for metrics
+	wrapped := &statusRecorder{ResponseWriter: w, statusCode: http.StatusOK}
+	rt.router.ServeHTTP(wrapped, r)
+
+	// Record metrics if observability is configured
+	if rt.observability != nil {
+		duration := time.Since(start)
+		entitySet := extractEntitySetFromPath(r.URL.Path)
+		operation := extractOperationType(r)
+		metrics.RecordRequestEnd(ctx, duration, wrapped.statusCode)
+		if wrapped.statusCode >= 400 {
+			metrics.RecordError(ctx, entitySet, operation, http.StatusText(wrapped.statusCode))
+		}
+		tracer.SetHTTPStatus(ctx, wrapped.statusCode)
+		if entitySet != "" && operation != "" {
+			metrics.RecordRequestDuration(ctx, duration, entitySet, operation, wrapped.statusCode)
+		}
+	}
 }
 
 func (rt *Runtime) tryHandleAsync(w http.ResponseWriter, r *http.Request) bool {
@@ -233,4 +279,88 @@ func isAsyncEligiblePath(path string) bool {
 		return false
 	}
 	return true
+}
+
+// statusRecorder wraps http.ResponseWriter to capture the status code.
+type statusRecorder struct {
+	http.ResponseWriter
+	statusCode int
+	written    bool
+}
+
+func (r *statusRecorder) WriteHeader(statusCode int) {
+	if !r.written {
+		r.statusCode = statusCode
+		r.written = true
+	}
+	r.ResponseWriter.WriteHeader(statusCode)
+}
+
+func (r *statusRecorder) Write(b []byte) (int, error) {
+	if !r.written {
+		r.written = true
+	}
+	return r.ResponseWriter.Write(b)
+}
+
+// extractEntitySetFromPath extracts the entity set name from a URL path.
+func extractEntitySetFromPath(path string) string {
+	path = strings.TrimPrefix(path, "/")
+
+	if path == "" || path == "$metadata" || path == "$batch" {
+		return ""
+	}
+
+	parts := strings.SplitN(path, "/", 2)
+	if len(parts) == 0 {
+		return ""
+	}
+
+	entitySet := parts[0]
+	if idx := strings.Index(entitySet, "("); idx > 0 {
+		entitySet = entitySet[:idx]
+	}
+
+	return entitySet
+}
+
+// extractOperationType determines the OData operation type from the request.
+func extractOperationType(r *http.Request) string {
+	path := strings.TrimPrefix(r.URL.Path, "/")
+
+	if path == "$metadata" {
+		return observability.OpMetadata
+	}
+	if path == "" {
+		return observability.OpServiceDoc
+	}
+	if path == "$batch" || strings.HasSuffix(path, "/$batch") {
+		return observability.OpBatch
+	}
+	if strings.HasSuffix(path, "/$count") {
+		return observability.OpCount
+	}
+	if strings.Contains(path, "/$ref") {
+		return observability.OpRef
+	}
+
+	hasKey := strings.Contains(path, "(") && strings.Contains(path, ")")
+
+	switch r.Method {
+	case http.MethodGet, http.MethodHead:
+		if hasKey {
+			return observability.OpReadEntity
+		}
+		return observability.OpReadCollection
+	case http.MethodPost:
+		return observability.OpCreate
+	case http.MethodPatch:
+		return observability.OpPatch
+	case http.MethodPut:
+		return observability.OpUpdate
+	case http.MethodDelete:
+		return observability.OpDelete
+	}
+
+	return ""
 }

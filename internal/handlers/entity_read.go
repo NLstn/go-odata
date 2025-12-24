@@ -9,6 +9,7 @@ import (
 	"github.com/nlstn/go-odata/internal/etag"
 	"github.com/nlstn/go-odata/internal/query"
 	"github.com/nlstn/go-odata/internal/response"
+	"go.opentelemetry.io/otel/trace"
 	"gorm.io/gorm"
 )
 
@@ -55,6 +56,17 @@ func (h *EntityHandler) HandleEntity(w http.ResponseWriter, r *http.Request, ent
 
 // handleGetEntity handles GET requests for individual entities
 func (h *EntityHandler) handleGetEntity(w http.ResponseWriter, r *http.Request, entityKey string) {
+	ctx := r.Context()
+
+	// Start tracing span for entity read
+	var span trace.Span
+	if h.observability != nil {
+		tracer := h.observability.Tracer()
+		ctx, span = tracer.StartEntityRead(ctx, h.metadata.EntitySetName, entityKey, h.metadata.IsSingleton)
+		defer span.End()
+		r = r.WithContext(ctx)
+	}
+
 	// Check if there's an overwrite handler
 	if h.overwrite.hasGetEntity() {
 		h.handleGetEntityOverwrite(w, r, entityKey)
@@ -70,7 +82,6 @@ func (h *EntityHandler) handleGetEntity(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	ctx := r.Context()
 	// Parse query options for $expand and $select
 	queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata)
 	if err != nil {
