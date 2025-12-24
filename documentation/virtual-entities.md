@@ -310,34 +310,6 @@ GetCollection: func(ctx *odata.OverwriteContext) (*odata.CollectionResult, error
 }
 ```
 
-For external data sources where you load everything into memory first, you can use `odata.ApplyQueryOptionsToSlice` to handle `$orderby`, `$skip`, and `$top` while providing your own `$filter` evaluator.
-
-```go
-GetCollection: func(ctx *odata.OverwriteContext) (*odata.CollectionResult, error) {
-    items, err := externalAPI.GetProducts()
-    if err != nil {
-        return nil, err
-    }
-
-    filtered, err := odata.ApplyQueryOptionsToSlice(items, ctx.QueryOptions, func(item ExternalProduct, filter *odata.FilterExpression) (bool, error) {
-        if filter == nil {
-            return true, nil
-        }
-        if filter.Property == "name" && filter.Operator == "eq" {
-            if value, ok := filter.Value.(string); ok {
-                return item.Name == value, nil
-            }
-        }
-        return false, nil
-    })
-    if err != nil {
-        return nil, err
-    }
-
-    return &odata.CollectionResult{Items: filtered}, nil
-}
-```
-
 The library validates the query syntax before calling your handler, so you can trust that the query options are well-formed.
 
 ## Use Cases
