@@ -26,6 +26,7 @@ linters:
     paths:
       - "test/expand_filter_integration_test.go"
       - "test/metadata_integration_test.go"
+      - "cmd/"
     rules:
       # Exclude some linters from running on test files.
       - linters:
