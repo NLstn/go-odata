@@ -9,6 +9,11 @@ rely on version numbers to reason about compatibility.
 
 ## [Unreleased]
 
+### Fixed
+- **Compliance test suite fixes**: Resolved missing go.sum entries in compliance-suite and complianceserver modules that prevented tests from running
+- **Linting errors**: Fixed ineffectual variable assignments in observability_test.go
+- **Code safety documentation**: Added clarifying comments to request path extraction functions to document that extracted values are used only in metrics/logging contexts and do not require HTML escaping
+
 ### Breaking Changes
 - **Hook method names renamed with "OData" prefix**: All EntityHook interface methods have been renamed to avoid conflicts with GORM's hook detection logic
   - `BeforeCreate` → `ODataBeforeCreate`
