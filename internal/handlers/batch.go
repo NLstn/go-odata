@@ -16,16 +16,19 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nlstn/go-odata/internal/observability"
 	"github.com/nlstn/go-odata/internal/response"
+	"go.opentelemetry.io/otel/trace"
 	"gorm.io/gorm"
 )
 
 // BatchHandler handles $batch requests for OData v4
 type BatchHandler struct {
-	db       *gorm.DB
-	handlers map[string]*EntityHandler
-	service  http.Handler
-	logger   *slog.Logger
+	db            *gorm.DB
+	handlers      map[string]*EntityHandler
+	service       http.Handler
+	logger        *slog.Logger
+	observability *observability.Config
 }
 
 // NewBatchHandler creates a new batch handler
@@ -46,6 +49,11 @@ func (h *BatchHandler) SetLogger(logger *slog.Logger) {
 	h.logger = logger
 }
 
+// SetObservability configures observability for the batch handler.
+func (h *BatchHandler) SetObservability(cfg *observability.Config) {
+	h.observability = cfg
+}
+
 // batchRequest represents a single request within a batch
 type batchRequest struct {
 	Method  string
@@ -63,6 +71,17 @@ type batchResponse struct {
 
 // HandleBatch handles the $batch endpoint
 func (h *BatchHandler) HandleBatch(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	// Start tracing span for batch operation
+	var batchSpan trace.Span
+	if h.observability != nil {
+		tracer := h.observability.Tracer()
+		ctx, batchSpan = tracer.StartBatch(ctx, 0) // Size will be updated later
+		defer batchSpan.End()
+		r = r.WithContext(ctx)
+	}
+
 	if r.Method != http.MethodPost {
 		if err := response.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
 			"Only POST method is supported for $batch requests"); err != nil {
@@ -151,6 +170,11 @@ func (h *BatchHandler) HandleBatch(w http.ResponseWriter, r *http.Request) {
 
 	// Write batch response
 	h.writeBatchResponse(w, responses)
+
+	// Record batch metrics
+	if h.observability != nil {
+		h.observability.Metrics().RecordBatchSize(ctx, len(responses))
+	}
 }
 
 // processChangeset processes a changeset (atomic operations)

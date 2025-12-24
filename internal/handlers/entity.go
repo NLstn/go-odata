@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/nlstn/go-odata/internal/metadata"
+	"github.com/nlstn/go-odata/internal/observability"
 	"github.com/nlstn/go-odata/internal/query"
 	"github.com/nlstn/go-odata/internal/trackchanges"
 	"gorm.io/gorm"
@@ -27,6 +28,8 @@ type EntityHandler struct {
 	defaultMaxTop        *int
 	// propertyMap provides O(1) property lookup by field name instead of O(n) iteration
 	propertyMap map[string]*metadata.PropertyMetadata
+	// observability holds the OpenTelemetry configuration for tracing and metrics
+	observability *observability.Config
 }
 
 // NewEntityHandler creates a new entity handler
@@ -114,6 +117,11 @@ func (h *EntityHandler) SetDeltaTracker(tracker *trackchanges.Tracker) {
 // SetDefaultMaxTop sets the default maximum number of results for this entity handler.
 func (h *EntityHandler) SetDefaultMaxTop(maxTop *int) {
 	h.defaultMaxTop = maxTop
+}
+
+// SetObservability configures observability (tracing and metrics) for this handler.
+func (h *EntityHandler) SetObservability(cfg *observability.Config) {
+	h.observability = cfg
 }
 
 // HasEntityLevelDefaultMaxTop returns true if this handler has an entity-level default max top set
