@@ -34,7 +34,7 @@ func NewMetrics(mp metric.MeterProvider) *Metrics {
 		metric.WithUnit("ms"),
 	)
 	if err != nil {
-		m.requestDuration, _ = meter.Float64Histogram("odata.request.duration") //nolint:errcheck
+		m.requestDuration, _ = meter.Float64Histogram("odata.request.duration")
 	}
 
 	m.requestCount, err = meter.Int64Counter(
@@ -43,7 +43,7 @@ func NewMetrics(mp metric.MeterProvider) *Metrics {
 		metric.WithUnit("{request}"),
 	)
 	if err != nil {
-		m.requestCount, _ = meter.Int64Counter("odata.request.count") //nolint:errcheck
+		m.requestCount, _ = meter.Int64Counter("odata.request.count")
 	}
 
 	m.resultCount, err = meter.Int64Histogram(
@@ -52,7 +52,7 @@ func NewMetrics(mp metric.MeterProvider) *Metrics {
 		metric.WithUnit("{entity}"),
 	)
 	if err != nil {
-		m.resultCount, _ = meter.Int64Histogram("odata.result.count") //nolint:errcheck
+		m.resultCount, _ = meter.Int64Histogram("odata.result.count")
 	}
 
 	m.dbQueryDuration, err = meter.Float64Histogram(
@@ -61,7 +61,7 @@ func NewMetrics(mp metric.MeterProvider) *Metrics {
 		metric.WithUnit("ms"),
 	)
 	if err != nil {
-		m.dbQueryDuration, _ = meter.Float64Histogram("odata.db.query.duration") //nolint:errcheck
+		m.dbQueryDuration, _ = meter.Float64Histogram("odata.db.query.duration")
 	}
 
 	m.batchSize, err = meter.Int64Histogram(
@@ -70,7 +70,7 @@ func NewMetrics(mp metric.MeterProvider) *Metrics {
 		metric.WithUnit("{request}"),
 	)
 	if err != nil {
-		m.batchSize, _ = meter.Int64Histogram("odata.batch.size") //nolint:errcheck
+		m.batchSize, _ = meter.Int64Histogram("odata.batch.size")
 	}
 
 	m.errorCount, err = meter.Int64Counter(
@@ -79,7 +79,7 @@ func NewMetrics(mp metric.MeterProvider) *Metrics {
 		metric.WithUnit("{error}"),
 	)
 	if err != nil {
-		m.errorCount, _ = meter.Int64Counter("odata.error.count") //nolint:errcheck
+		m.errorCount, _ = meter.Int64Counter("odata.error.count")
 	}
 
 	return m
