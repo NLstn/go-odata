@@ -10,6 +10,14 @@ rely on version numbers to reason about compatibility.
 ## [Unreleased]
 
 ### Fixed
+- **Observability documentation and implementation cleanup**: 
+  - Added nil check for logger before calling Info in SetObservability to prevent panic
+  - Marked `EnableQueryOptionTracing` as not yet implemented with clear documentation
+  - Fixed ServiceName default documentation to match actual value ("odata-service")
+  - Updated span hierarchy documentation to reflect actual implementation (removed non-existent spans)
+  - Clarified that `odata.db.query.duration` metric requires detailed DB tracing to be enabled
+  - Updated database span attributes documentation to include `db.system` and reorder attributes correctly
+  - Removed `EnableQueryOptionTracing` from documentation examples since the feature is not implemented
 - **Compliance test suite fixes**: Resolved missing go.sum entries in compliance-suite and complianceserver modules that prevented tests from running
 - **Linting errors**: Fixed ineffectual variable assignments in observability_test.go
 - **Code safety documentation**: Added clarifying comments to request path extraction functions to document that extracted values are used only in metrics/logging contexts and do not require HTML escaping
