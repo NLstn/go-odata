@@ -14,6 +14,90 @@ type structFieldBinding struct {
 	Required bool
 }
 
+// BindParams converts the provided parameter map into the requested struct type.
+// It reuses any pre-bound struct stored alongside the map to avoid duplicate decoding
+// and validates that required parameters are present.
+func BindParams[T any](params map[string]interface{}) (T, error) {
+	var zero T
+
+	if params == nil {
+		return zero, fmt.Errorf("parameters map cannot be nil")
+	}
+
+	if bound, ok := params[boundStructKey]; ok {
+		if converted, ok := tryConvertBound[T](bound); ok {
+			return converted, nil
+		}
+	}
+
+	var target T
+	targetVal := reflect.ValueOf(&target).Elem()
+	targetType := targetVal.Type()
+
+	bindings, err := collectFieldBindings(targetType)
+	if err != nil {
+		return zero, err
+	}
+
+	for _, binding := range bindings {
+		if binding.Required {
+			if _, exists := params[binding.Name]; !exists {
+				return zero, fmt.Errorf("required parameter '%s' is missing", binding.Name)
+			}
+		}
+	}
+
+	storedValue, err := newDecodeTarget(targetType)
+	if err != nil {
+		return zero, err
+	}
+
+	if err := applyBindings(storedValue, bindings, params); err != nil {
+		return zero, err
+	}
+
+	resultVal := storedValue
+	if targetType.Kind() != reflect.Ptr {
+		resultVal = storedValue.Elem()
+	}
+
+	if params != nil {
+		params[boundStructKey] = storedValue.Interface()
+	}
+
+	if !resultVal.Type().AssignableTo(targetVal.Type()) {
+		return zero, fmt.Errorf("unable to bind parameters to target type %s", targetType)
+	}
+
+	targetVal.Set(resultVal)
+	return target, nil
+}
+
+func tryConvertBound[T any](bound interface{}) (T, bool) {
+	var target T
+	boundVal := reflect.ValueOf(bound)
+	if !boundVal.IsValid() {
+		return target, false
+	}
+
+	targetVal := reflect.ValueOf(&target).Elem()
+
+	if boundVal.Type().AssignableTo(targetVal.Type()) {
+		targetVal.Set(boundVal)
+		return target, true
+	}
+
+	if boundVal.Kind() == reflect.Ptr && !boundVal.IsNil() {
+		elem := boundVal.Elem()
+		if elem.Type().AssignableTo(targetVal.Type()) {
+			targetVal.Set(elem)
+			return target, true
+		}
+	}
+
+	return target, false
+}
+
 func newDecodeTarget(targetType reflect.Type) (reflect.Value, error) {
 	if targetType.Kind() == reflect.Ptr {
 		elem := targetType.Elem()
@@ -229,26 +313,6 @@ func assignValue(fieldVal reflect.Value, value interface{}) error {
 	return fmt.Errorf("cannot assign value of type %s to field of type %s", val.Type(), fieldVal.Type())
 }
 
-// ParameterDefinitionsFromStruct derives parameter definitions for the provided struct type.
-// The type may be either a struct or a pointer to struct.
-func ParameterDefinitionsFromStruct(t reflect.Type) ([]ParameterDefinition, error) {
-	bindings, err := collectFieldBindings(t)
-	if err != nil {
-		return nil, err
-	}
-
-	defs := make([]ParameterDefinition, 0, len(bindings))
-	for _, binding := range bindings {
-		defs = append(defs, ParameterDefinition{
-			Name:     binding.Name,
-			Type:     binding.Field.Type,
-			Required: binding.Required,
-		})
-	}
-
-	return defs, nil
-}
-
 func extractFieldName(field reflect.StructField) (string, map[string]struct{}) {
 	tags := []string{field.Tag.Get("mapstructure"), field.Tag.Get("json")}
 	var merged map[string]struct{}
@@ -304,35 +368,4 @@ func ensureOptionsMap(options map[string]struct{}) map[string]struct{} {
 		return map[string]struct{}{}
 	}
 	return options
-}
-
-func bindStructToParams(params map[string]interface{}, structType reflect.Type) error {
-	if structType == nil {
-		return nil
-	}
-
-	bindings, err := collectFieldBindings(structType)
-	if err != nil {
-		return err
-	}
-
-	for _, binding := range bindings {
-		if binding.Required {
-			if _, exists := params[binding.Name]; !exists {
-				return fmt.Errorf("required parameter '%s' is missing", binding.Name)
-			}
-		}
-	}
-
-	storedValue, err := newDecodeTarget(structType)
-	if err != nil {
-		return err
-	}
-
-	if err := applyBindings(storedValue, bindings, params); err != nil {
-		return err
-	}
-
-	params[boundStructKey] = storedValue.Interface()
-	return nil
 }

@@ -83,8 +83,9 @@ rely on version numbers to reason about compatibility.
 - `AsyncConfig.DisableRetention` allows services to opt out of automatic async
   job cleanup when stricter audit retention is required.
 - Support deriving action/function parameters from a struct by setting
-  `ParameterStructType`, and expose an `actions.BindParams` helper so handlers can
-  consume strongly typed inputs without manual map assertions.
+  `ParameterStructType`, and expose an `actions.BindParams` helper in the public
+  `github.com/nlstn/go-odata/actions` package so handlers can consume strongly
+  typed inputs without manual map assertions.
 - Public `Service.Close` helper to stop async processing and release resources.
 - Service-level key generator registry with metadata validation powers server-generated keys
   (including built-in UUIDs) and generalized entity key initialization.
@@ -142,4 +143,3 @@ rely on version numbers to reason about compatibility.
 - This is the first documented release in the changelog. Subsequent releases
   will increment the version following semantic versioning rules and will be
   recorded in this changelog alongside Git tags.
-
