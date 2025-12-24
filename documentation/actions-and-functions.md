@@ -374,7 +374,7 @@ struct without repetitive type assertions:
 ```go
 import (
     odata "github.com/nlstn/go-odata"
-    "github.com/nlstn/go-odata/internal/actions"
+    "github.com/nlstn/go-odata/actions"
 )
 
 type ApplyDiscountInput struct {
