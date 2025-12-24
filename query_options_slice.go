@@ -2,6 +2,7 @@ package odata
 
 import (
 	"fmt"
+	"math"
 	"reflect"
 	"sort"
 	"strings"
@@ -68,14 +69,22 @@ func ApplyQueryOptionsToSlice[T any](items []T, options *QueryOptions, filterFun
 	}
 
 	if options.Skip != nil {
+		if *options.Skip < 0 {
+			return nil, fmt.Errorf("skip must be non-negative")
+		}
 		if *options.Skip >= len(result) {
 			return []T{}, nil
 		}
 		result = result[*options.Skip:]
 	}
 
-	if options.Top != nil && *options.Top < len(result) {
-		result = result[:*options.Top]
+	if options.Top != nil {
+		if *options.Top < 0 {
+			return nil, fmt.Errorf("top must be non-negative")
+		}
+		if *options.Top < len(result) {
+			result = result[:*options.Top]
+		}
 	}
 
 	return result, nil
@@ -106,6 +115,18 @@ func lookupPropertyValue(item interface{}, property string) (reflect.Value, bool
 	switch value.Kind() {
 	case reflect.Struct:
 		itemType := value.Type()
+		// First pass: look for exact JSON tag match
+		for i := 0; i < value.NumField(); i++ {
+			field := itemType.Field(i)
+			if !field.IsExported() {
+				continue
+			}
+			jsonName := jsonFieldName(field)
+			if jsonName == property {
+				return value.Field(i), true
+			}
+		}
+		// Second pass: look for field name match
 		for i := 0; i < value.NumField(); i++ {
 			field := itemType.Field(i)
 			if !field.IsExported() {
@@ -115,10 +136,7 @@ func lookupPropertyValue(item interface{}, property string) (reflect.Value, bool
 			if jsonName == "-" {
 				continue
 			}
-			if jsonName == "" {
-				jsonName = field.Name
-			}
-			if jsonName == property || field.Name == property {
+			if field.Name == property {
 				return value.Field(i), true
 			}
 		}
@@ -141,10 +159,7 @@ func jsonFieldName(field reflect.StructField) string {
 		return ""
 	}
 	parts := strings.Split(jsonTag, ",")
-	if len(parts) > 0 {
-		return parts[0]
-	}
-	return ""
+	return parts[0]
 }
 
 func compareValues(left, right reflect.Value) (int, error) {
@@ -212,7 +227,16 @@ func compareValues(left, right reflect.Value) (int, error) {
 	case reflect.Float32, reflect.Float64:
 		leftFloat := leftValue.Float()
 		rightFloat := rightValue.Float()
+		// Handle NaN values: NaN is not equal to, less than, or greater than any value
+		leftNaN := math.IsNaN(leftFloat)
+		rightNaN := math.IsNaN(rightFloat)
 		switch {
+		case leftNaN && rightNaN:
+			return 0, nil
+		case leftNaN:
+			return -1, nil
+		case rightNaN:
+			return 1, nil
 		case leftFloat < rightFloat:
 			return -1, nil
 		case leftFloat > rightFloat:
@@ -223,8 +247,14 @@ func compareValues(left, right reflect.Value) (int, error) {
 	case reflect.Struct:
 		timeType := reflect.TypeOf(time.Time{})
 		if leftValue.Type() == timeType && rightValue.Type() == timeType {
-			leftTime := leftValue.Interface().(time.Time)
-			rightTime := rightValue.Interface().(time.Time)
+			leftTime, ok := leftValue.Interface().(time.Time)
+			if !ok {
+				return 0, fmt.Errorf("failed to convert left value to time.Time")
+			}
+			rightTime, ok := rightValue.Interface().(time.Time)
+			if !ok {
+				return 0, fmt.Errorf("failed to convert right value to time.Time")
+			}
 			switch {
 			case leftTime.Before(rightTime):
 				return -1, nil
