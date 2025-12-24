@@ -454,7 +454,7 @@ type ObservabilityConfig struct {
 	MeterProvider metric.MeterProvider
 
 	// ServiceName identifies this service in telemetry data.
-	// Defaults to "go-odata" if not specified.
+	// Defaults to "odata-service" if not specified.
 	ServiceName string
 
 	// ServiceVersion is reported in telemetry attributes.
