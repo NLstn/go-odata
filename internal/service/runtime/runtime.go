@@ -304,6 +304,8 @@ func (r *statusRecorder) Write(b []byte) (int, error) {
 }
 
 // extractEntitySetFromPath extracts the entity set name from a URL path.
+// The returned value is extracted from the URL path and used only for metrics/logging.
+// The value is not written to HTTP responses and does not require HTML escaping.
 func extractEntitySetFromPath(path string) string {
 	path = strings.TrimPrefix(path, "/")
 
@@ -325,6 +327,8 @@ func extractEntitySetFromPath(path string) string {
 }
 
 // extractOperationType determines the OData operation type from the request.
+// The returned value is a constant string matching the operation type and is used only for metrics/logging.
+// The value is not written to HTTP responses and does not require HTML escaping.
 func extractOperationType(r *http.Request) string {
 	path := strings.TrimPrefix(r.URL.Path, "/")
 

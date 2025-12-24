@@ -97,7 +97,7 @@ func TestNoopTracer(t *testing.T) {
 	span.End()
 
 	req := httptest.NewRequest(http.MethodGet, "/Products", nil)
-	ctx, span = tracer.StartRequest(ctx, req)
+	_, span = tracer.StartRequest(ctx, req)
 	span.End()
 }
 
@@ -141,7 +141,7 @@ func TestTracerAddQueryOptions(t *testing.T) {
 	tracer := NewNoopTracer()
 
 	ctx := context.Background()
-	ctx, span := tracer.StartSpan(ctx, "test")
+	_, span := tracer.StartSpan(ctx, "test")
 
 	// Should not panic
 	tracer.AddQueryOptions(span, "Price gt 100", "Category", "Name,Price", "Name asc", 10, 20)
@@ -152,7 +152,7 @@ func TestTracerRecordError(t *testing.T) {
 	tracer := NewNoopTracer()
 
 	ctx := context.Background()
-	ctx, span := tracer.StartSpan(ctx, "test")
+	_, span := tracer.StartSpan(ctx, "test")
 
 	// Should not panic
 	tracer.RecordError(span, nil)

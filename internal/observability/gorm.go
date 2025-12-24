@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	gormSpanKey     = "odata:gorm:span"
+	gormSpanKey      = "odata:gorm:span"
 	gormStartTimeKey = "odata:gorm:start"
 )
 
