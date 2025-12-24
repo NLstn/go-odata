@@ -465,7 +465,7 @@ type ObservabilityConfig struct {
 	EnableDetailedDBTracing bool
 
 	// EnableQueryOptionTracing adds spans for individual query option processing.
-	// Useful for debugging complex queries; disabled by default.
+	// Note: This feature is not yet implemented and is reserved for future use.
 	EnableQueryOptionTracing bool
 }
 
@@ -553,11 +553,13 @@ func (s *Service) SetObservability(cfg ObservabilityConfig) error {
 		}
 	}
 
-	s.logger.Info("Observability configured",
-		"tracing_enabled", cfg.TracerProvider != nil,
-		"metrics_enabled", cfg.MeterProvider != nil,
-		"service_name", cfg.ServiceName,
-	)
+	if s.logger != nil {
+		s.logger.Info("Observability configured",
+			"tracing_enabled", cfg.TracerProvider != nil,
+			"metrics_enabled", cfg.MeterProvider != nil,
+			"service_name", cfg.ServiceName,
+		)
+	}
 
 	return nil
 }
