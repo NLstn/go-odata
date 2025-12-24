@@ -92,7 +92,7 @@ func main() {
 |-------|------|-------------|
 | `TracerProvider` | `trace.TracerProvider` | OpenTelemetry tracer provider. If nil, tracing is disabled. |
 | `MeterProvider` | `metric.MeterProvider` | OpenTelemetry meter provider. If nil, metrics are disabled. |
-| `ServiceName` | `string` | Service name for telemetry. Defaults to "go-odata". |
+| `ServiceName` | `string` | Service name for telemetry. Defaults to "odata-service". |
 | `ServiceVersion` | `string` | Service version for telemetry attributes. |
 | `EnableDetailedDBTracing` | `bool` | Enable per-query database spans. Can be verbose. |
 | `EnableQueryOptionTracing` | `bool` | Enable spans for query option processing. |
@@ -127,12 +127,14 @@ When a request is processed, spans are created in a hierarchical structure:
 
 ```
 odata.request                          # Root span for HTTP request
-├── odata.entity.read                  # Entity operation
-│   ├── odata.query.filter            # Query option processing (if enabled)
-│   ├── odata.query.expand            # 
-│   └── odata.db.query                # Database query (if detailed DB tracing enabled)
-└── odata.response                     # Response serialization
-```
+├── odata.read                         # Read entity or collection
+│   └── db.query                       # Database query (if detailed DB tracing enabled)
+├── odata.create                       # Create entity
+├── odata.update                       # Update entity
+├── odata.patch                        # Patch entity
+├── odata.delete                       # Delete entity
+├── odata.batch                        # Batch operation
+└── Other operations                   # metadata, service document, etc.
 
 ### Span Attributes
 
@@ -179,15 +181,9 @@ Each span includes relevant attributes following OpenTelemetry semantic conventi
 |--------|------|------|-------------|
 | `odata.request.duration` | Histogram | ms | Request duration by entity set and operation |
 | `odata.request.count` | Counter | 1 | Total requests by entity set, operation, and status |
-| `odata.request.active` | UpDownCounter | 1 | Currently active requests |
 | `odata.result.count` | Histogram | 1 | Number of entities returned per request |
 | `odata.db.query.duration` | Histogram | ms | Database query duration |
-| `odata.db.query.count` | Counter | 1 | Total database queries |
 | `odata.batch.size` | Histogram | 1 | Number of operations per batch |
-| `odata.changeset.size` | Histogram | 1 | Number of operations per changeset |
-| `odata.changeset.count` | Counter | 1 | Total changesets processed |
-| `odata.async.job.duration` | Histogram | ms | Async job execution time |
-| `odata.async.job.count` | Counter | 1 | Total async jobs |
 | `odata.error.count` | Counter | 1 | Errors by type and entity set |
 
 ### Prometheus Integration
@@ -238,10 +234,8 @@ This adds spans for:
 - DELETE operations
 
 Each database span includes:
-- `db.statement`: The SQL query
 - `db.rows_affected`: Number of rows affected
-- `db.table`: Table name
-- `db.operation`: Operation type (SELECT, INSERT, etc.)
+- `db.sql.table`: Table name
 
 **Note**: Detailed DB tracing can generate significant trace data. Use it judiciously in production.
 
