@@ -25,8 +25,8 @@ type Config struct {
 	// This adds overhead but provides detailed insight into query performance.
 	EnableDetailedDBTracing bool
 
-	// EnableQueryOptionTracing adds query options ($filter, $select, etc.) as span attributes.
-	// This can expose query details in traces, which may have privacy implications.
+// EnableQueryOptionTracing is reserved for future implementation.
+// When implemented, it will add query options ($filter, $select, etc.) as span attributes.
 	EnableQueryOptionTracing bool
 
 	// tracer is the configured tracer instance.
