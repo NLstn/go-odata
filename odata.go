@@ -57,6 +57,7 @@ import (
 
 	"github.com/nlstn/go-odata/internal/actions"
 	"github.com/nlstn/go-odata/internal/async"
+	"github.com/nlstn/go-odata/internal/auth"
 	"github.com/nlstn/go-odata/internal/handlers"
 	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/query"
@@ -302,6 +303,8 @@ type Service struct {
 	asyncMonitorPrefix string
 	// logger is used for structured logging throughout the service
 	logger *slog.Logger
+	// policy handles authorization decisions when configured
+	policy auth.Policy
 	// ftsManager manages full-text search functionality for SQLite
 	ftsManager *query.FTSManager
 	// keyGenerators maintains registered key generator functions by name
