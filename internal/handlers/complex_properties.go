@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/nlstn/go-odata/internal/auth"
 	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/response"
 	"gorm.io/gorm"
@@ -20,10 +21,21 @@ func (h *EntityHandler) HandleComplexTypeProperty(w http.ResponseWriter, r *http
 		return
 	}
 
+	propertyPath := append([]string(nil), propertySegments...)
+	if isValue {
+		propertyPath = append(propertyPath, "$value")
+	}
+
 	switch r.Method {
 	case http.MethodGet, http.MethodHead:
+		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, entityKey, propertyPath), auth.OperationRead, h.logger) {
+			return
+		}
 		h.handleGetComplexTypeProperty(w, r, entityKey, propertySegments, isValue)
 	case http.MethodOptions:
+		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, entityKey, propertyPath), auth.OperationRead, h.logger) {
+			return
+		}
 		h.handleOptionsComplexTypeProperty(w)
 	default:
 		h.writeMethodNotAllowedError(w, r.Method, "complex property access")

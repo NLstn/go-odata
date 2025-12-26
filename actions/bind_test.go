@@ -111,4 +111,3 @@ func TestBindParams_RepeatCallsUseConsistentBinding(t *testing.T) {
 		t.Fatalf("BindParams() pointer result = %#v, want percentage 55", ptrResult)
 	}
 }
-

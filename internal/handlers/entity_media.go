@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/nlstn/go-odata/internal/auth"
 	"github.com/nlstn/go-odata/internal/response"
 	"gorm.io/gorm"
 )
@@ -21,12 +22,23 @@ func (h *EntityHandler) HandleMediaEntityValue(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	propertyPath := []string{"$value"}
+
 	switch r.Method {
 	case http.MethodGet, http.MethodHead:
+		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, entityKey, propertyPath), auth.OperationRead, h.logger) {
+			return
+		}
 		h.handleGetMediaEntityValue(w, r, entityKey)
 	case http.MethodPut:
+		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, entityKey, propertyPath), auth.OperationUpdate, h.logger) {
+			return
+		}
 		h.handlePutMediaEntityValue(w, r, entityKey)
 	case http.MethodOptions:
+		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, entityKey, propertyPath), auth.OperationRead, h.logger) {
+			return
+		}
 		h.handleOptionsMediaEntityValue(w)
 	default:
 		if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"reflect"
 
+	"github.com/nlstn/go-odata/internal/auth"
 	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/response"
 	"gorm.io/gorm"
@@ -14,10 +15,20 @@ import (
 // HandleStructuralProperty handles GET and OPTIONS requests for structural properties (e.g., Products(1)/Name)
 // When isValue is true, returns the raw property value without JSON wrapper (e.g., Products(1)/Name/$value)
 func (h *EntityHandler) HandleStructuralProperty(w http.ResponseWriter, r *http.Request, entityKey string, propertyName string, isValue bool) {
+	propertyPath := []string{propertyName}
+	if isValue {
+		propertyPath = append(propertyPath, "$value")
+	}
 	switch r.Method {
 	case http.MethodGet, http.MethodHead:
+		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, entityKey, propertyPath), auth.OperationRead, h.logger) {
+			return
+		}
 		h.handleGetStructuralProperty(w, r, entityKey, propertyName, isValue)
 	case http.MethodOptions:
+		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, entityKey, propertyPath), auth.OperationRead, h.logger) {
+			return
+		}
 		h.handleOptionsStructuralProperty(w)
 	default:
 		h.writeMethodNotAllowedError(w, r.Method, "property access")

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"reflect"
 
+	"github.com/nlstn/go-odata/internal/auth"
 	"github.com/nlstn/go-odata/internal/etag"
 	"github.com/nlstn/go-odata/internal/query"
 	"github.com/nlstn/go-odata/internal/response"
@@ -29,14 +30,29 @@ func (h *EntityHandler) HandleEntity(w http.ResponseWriter, r *http.Request, ent
 
 	switch r.Method {
 	case http.MethodGet, http.MethodHead:
+		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, entityKey, nil), auth.OperationRead, h.logger) {
+			return
+		}
 		h.handleGetEntity(w, r, entityKey)
 	case http.MethodDelete:
+		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, entityKey, nil), auth.OperationDelete, h.logger) {
+			return
+		}
 		h.handleDeleteEntity(w, r, entityKey)
 	case http.MethodPatch:
+		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, entityKey, nil), auth.OperationUpdate, h.logger) {
+			return
+		}
 		h.handlePatchEntity(w, r, entityKey)
 	case http.MethodPut:
+		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, entityKey, nil), auth.OperationUpdate, h.logger) {
+			return
+		}
 		h.handlePutEntity(w, r, entityKey)
 	case http.MethodOptions:
+		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, entityKey, nil), auth.OperationRead, h.logger) {
+			return
+		}
 		h.handleOptionsEntity(w)
 	default:
 		if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
@@ -232,6 +248,10 @@ func (h *EntityHandler) HandleEntityRef(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
+	if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, entityKey, []string{"$ref"}), auth.OperationRead, h.logger) {
+		return
+	}
+
 	// Validate that $expand and $select are not used with $ref
 	// According to OData v4 spec, $ref does not support $expand or $select
 	queryParams := r.URL.Query()
@@ -309,6 +329,10 @@ func (h *EntityHandler) HandleCollectionRef(w http.ResponseWriter, r *http.Reque
 			fmt.Sprintf("Method %s is not supported for collection references", r.Method)); err != nil {
 			h.logger.Error("Error writing error response", "error", err)
 		}
+		return
+	}
+
+	if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, "", []string{"$ref"}), auth.OperationQuery, h.logger) {
 		return
 	}
 

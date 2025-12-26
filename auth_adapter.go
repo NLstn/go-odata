@@ -43,4 +43,17 @@ func Deny(reason string) Decision {
 // SetPolicy registers an authorization policy for the service.
 func (s *Service) SetPolicy(policy Policy) {
 	s.policy = policy
+	if s.metadataHandler != nil {
+		s.metadataHandler.SetPolicy(policy)
+	}
+	if s.serviceDocumentHandler != nil {
+		s.serviceDocumentHandler.SetPolicy(policy)
+	}
+	if s.handlers != nil {
+		for _, handler := range s.handlers {
+			if handler != nil {
+				handler.SetPolicy(policy)
+			}
+		}
+	}
 }
