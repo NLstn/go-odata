@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/nlstn/go-odata/internal/auth"
 	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/query"
 	"github.com/nlstn/go-odata/internal/response"
@@ -15,10 +16,21 @@ import (
 
 // HandleNavigationProperty handles GET, HEAD, and OPTIONS requests for navigation properties (e.g., Products(1)/Descriptions)
 func (h *EntityHandler) HandleNavigationProperty(w http.ResponseWriter, r *http.Request, entityKey string, navigationProperty string, isRef bool) {
+	propertyPath := []string{navigationProperty}
+	if isRef {
+		propertyPath = append(propertyPath, "$ref")
+	}
+
 	switch r.Method {
 	case http.MethodGet, http.MethodHead:
+		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, entityKey, propertyPath), auth.OperationRead, h.logger) {
+			return
+		}
 		h.handleGetNavigationProperty(w, r, entityKey, navigationProperty, isRef)
 	case http.MethodPut:
+		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, entityKey, propertyPath), auth.OperationUpdate, h.logger) {
+			return
+		}
 		if isRef {
 			h.handlePutNavigationPropertyRef(w, r, entityKey, navigationProperty)
 		} else {
@@ -26,6 +38,9 @@ func (h *EntityHandler) HandleNavigationProperty(w http.ResponseWriter, r *http.
 				fmt.Sprintf("Method %s is not supported for navigation properties without $ref", r.Method))
 		}
 	case http.MethodPost:
+		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, entityKey, propertyPath), auth.OperationUpdate, h.logger) {
+			return
+		}
 		if isRef {
 			h.handlePostNavigationPropertyRef(w, r, entityKey, navigationProperty)
 		} else {
@@ -33,6 +48,9 @@ func (h *EntityHandler) HandleNavigationProperty(w http.ResponseWriter, r *http.
 				fmt.Sprintf("Method %s is not supported for navigation properties without $ref", r.Method))
 		}
 	case http.MethodDelete:
+		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, entityKey, propertyPath), auth.OperationUpdate, h.logger) {
+			return
+		}
 		if isRef {
 			h.handleDeleteNavigationPropertyRef(w, r, entityKey, navigationProperty)
 		} else {
@@ -40,6 +58,9 @@ func (h *EntityHandler) HandleNavigationProperty(w http.ResponseWriter, r *http.
 				fmt.Sprintf("Method %s is not supported for navigation properties without $ref", r.Method))
 		}
 	case http.MethodOptions:
+		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, entityKey, propertyPath), auth.OperationRead, h.logger) {
+			return
+		}
 		if isRef {
 			h.handleOptionsNavigationPropertyRef(w)
 		} else {
@@ -55,8 +76,14 @@ func (h *EntityHandler) HandleNavigationProperty(w http.ResponseWriter, r *http.
 func (h *EntityHandler) HandleNavigationPropertyCount(w http.ResponseWriter, r *http.Request, entityKey string, navigationProperty string) {
 	switch r.Method {
 	case http.MethodGet, http.MethodHead:
+		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, entityKey, []string{navigationProperty, "$count"}), auth.OperationQuery, h.logger) {
+			return
+		}
 		h.handleGetNavigationPropertyCount(w, r, entityKey, navigationProperty)
 	case http.MethodOptions:
+		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, entityKey, []string{navigationProperty, "$count"}), auth.OperationRead, h.logger) {
+			return
+		}
 		h.handleOptionsNavigationPropertyCount(w)
 	default:
 		WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"reflect"
 
+	"github.com/nlstn/go-odata/internal/auth"
 	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/response"
 	"gorm.io/gorm"
@@ -14,10 +15,20 @@ import (
 // HandleStreamProperty handles GET, PUT, and OPTIONS requests for stream properties (e.g., Products(1)/Photo)
 // When isValue is true, returns the binary stream content (e.g., Products(1)/Photo/$value)
 func (h *EntityHandler) HandleStreamProperty(w http.ResponseWriter, r *http.Request, entityKey string, propertyName string, isValue bool) {
+	propertyPath := []string{propertyName}
+	if isValue {
+		propertyPath = append(propertyPath, "$value")
+	}
 	switch r.Method {
 	case http.MethodGet, http.MethodHead:
+		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, entityKey, propertyPath), auth.OperationRead, h.logger) {
+			return
+		}
 		h.handleGetStreamProperty(w, r, entityKey, propertyName, isValue)
 	case http.MethodPut:
+		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, entityKey, propertyPath), auth.OperationUpdate, h.logger) {
+			return
+		}
 		if isValue {
 			h.handlePutStreamProperty(w, r, entityKey, propertyName)
 		} else {
@@ -27,6 +38,9 @@ func (h *EntityHandler) HandleStreamProperty(w http.ResponseWriter, r *http.Requ
 			}
 		}
 	case http.MethodOptions:
+		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, entityKey, propertyPath), auth.OperationRead, h.logger) {
+			return
+		}
 		h.handleOptionsStreamProperty(w, isValue)
 	default:
 		h.writeMethodNotAllowedError(w, r.Method, "stream property access")

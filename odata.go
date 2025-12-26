@@ -365,6 +365,8 @@ func NewServiceWithConfig(db *gorm.DB, cfg ServiceConfig) (*Service, error) {
 		keyGenerators:            make(map[string]KeyGenerator),
 	}
 	s.metadataHandler.SetNamespace(DefaultNamespace)
+	s.metadataHandler.SetPolicy(s.policy)
+	s.serviceDocumentHandler.SetPolicy(s.policy)
 	s.operationsHandler = operations.NewHandler(s.actions, s.functions, s.handlers, s.entities, s.namespace, logger)
 	// Initialize batch handler with reference to service
 	s.batchHandler = handlers.NewBatchHandler(db, handlersMap, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -591,6 +593,7 @@ func (s *Service) RegisterEntity(entity interface{}) error {
 	handler.SetEntitiesMetadata(s.entities)
 	handler.SetDeltaTracker(s.deltaTracker)
 	handler.SetFTSManager(s.ftsManager)
+	handler.SetPolicy(s.policy)
 	handler.SetKeyGeneratorResolver(func(name string) (func(context.Context) (interface{}, error), bool) {
 		generator, ok := s.resolveKeyGenerator(name)
 		if !ok {
@@ -654,6 +657,7 @@ func (s *Service) RegisterSingleton(entity interface{}, singletonName string) er
 	handler.SetNamespace(s.namespace)
 	handler.SetEntitiesMetadata(s.entities)
 	handler.SetFTSManager(s.ftsManager)
+	handler.SetPolicy(s.policy)
 	handler.SetKeyGeneratorResolver(func(name string) (func(context.Context) (interface{}, error), bool) {
 		generator, ok := s.resolveKeyGenerator(name)
 		if !ok {
@@ -723,6 +727,7 @@ func (s *Service) RegisterVirtualEntity(entity interface{}) error {
 	handler.SetNamespace(s.namespace)
 	handler.SetEntitiesMetadata(s.entities)
 	handler.SetFTSManager(s.ftsManager)
+	handler.SetPolicy(s.policy)
 	handler.SetKeyGeneratorResolver(func(name string) (func(context.Context) (interface{}, error), bool) {
 		generator, ok := s.resolveKeyGenerator(name)
 		if !ok {

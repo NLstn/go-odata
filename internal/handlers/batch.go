@@ -289,6 +289,7 @@ func (h *BatchHandler) executeRequestInTransaction(req *batchRequest, tx *gorm.D
 		txHandler := NewEntityHandler(tx, handler.metadata, handler.logger)
 		txHandler.SetNamespace(handler.namespace)
 		txHandler.SetDeltaTracker(handler.tracker)
+		txHandler.SetPolicy(handler.policy)
 		if handler.entitiesMetadata != nil {
 			txHandler.SetEntitiesMetadata(handler.entitiesMetadata)
 		}

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"reflect"
 
+	"github.com/nlstn/go-odata/internal/auth"
 	"github.com/nlstn/go-odata/internal/etag"
 	"github.com/nlstn/go-odata/internal/preference"
 	"github.com/nlstn/go-odata/internal/response"
@@ -30,12 +31,24 @@ func (h *EntityHandler) HandleSingleton(w http.ResponseWriter, r *http.Request) 
 
 	switch r.Method {
 	case http.MethodGet, http.MethodHead:
+		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, "", nil), auth.OperationRead, h.logger) {
+			return
+		}
 		h.handleGetSingleton(w, r)
 	case http.MethodPatch:
+		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, "", nil), auth.OperationUpdate, h.logger) {
+			return
+		}
 		h.handlePatchSingleton(w, r)
 	case http.MethodPut:
+		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, "", nil), auth.OperationUpdate, h.logger) {
+			return
+		}
 		h.handlePutSingleton(w, r)
 	case http.MethodOptions:
+		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, "", nil), auth.OperationRead, h.logger) {
+			return
+		}
 		h.handleOptionsSingleton(w)
 	default:
 		if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/nlstn/go-odata/internal/auth"
 	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/response"
 )
@@ -22,6 +23,7 @@ type MetadataHandler struct {
 	onceJSON   sync.Once
 	namespace  string
 	logger     *slog.Logger
+	policy     auth.Policy
 }
 
 const defaultNamespace = "ODataService"
@@ -41,6 +43,11 @@ func (h *MetadataHandler) SetLogger(logger *slog.Logger) {
 		logger = slog.Default()
 	}
 	h.logger = logger
+}
+
+// SetPolicy sets the authorization policy for the handler.
+func (h *MetadataHandler) SetPolicy(policy auth.Policy) {
+	h.policy = policy
 }
 
 // SetNamespace updates the namespace used for metadata generation and clears cached documents.
@@ -70,8 +77,14 @@ func (h *MetadataHandler) namespaceOrDefault() string {
 func (h *MetadataHandler) HandleMetadata(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet, http.MethodHead:
+		if !authorizeRequest(w, r, h.policy, auth.ResourceDescriptor{}, auth.OperationMetadata, h.logger) {
+			return
+		}
 		h.handleGetMetadata(w, r)
 	case http.MethodOptions:
+		if !authorizeRequest(w, r, h.policy, auth.ResourceDescriptor{}, auth.OperationMetadata, h.logger) {
+			return
+		}
 		h.handleOptionsMetadata(w)
 	default:
 		if err := response.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",

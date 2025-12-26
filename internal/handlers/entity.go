@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/nlstn/go-odata/internal/auth"
 	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/query"
 	"github.com/nlstn/go-odata/internal/trackchanges"
@@ -21,6 +22,7 @@ type EntityHandler struct {
 	namespace            string
 	tracker              *trackchanges.Tracker
 	logger               *slog.Logger
+	policy               auth.Policy
 	ftsManager           *query.FTSManager
 	keyGeneratorResolver func(string) (func(context.Context) (interface{}, error), bool)
 	overwrite            *entityOverwriteHandlers
@@ -74,6 +76,11 @@ func (h *EntityHandler) SetLogger(logger *slog.Logger) {
 		logger = slog.Default()
 	}
 	h.logger = logger
+}
+
+// SetPolicy sets the authorization policy for the handler.
+func (h *EntityHandler) SetPolicy(policy auth.Policy) {
+	h.policy = policy
 }
 
 // SetEntitiesMetadata sets the entities metadata registry for navigation property handling

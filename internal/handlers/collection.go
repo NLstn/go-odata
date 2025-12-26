@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/nlstn/go-odata/internal/auth"
 	"github.com/nlstn/go-odata/internal/query"
 )
 
@@ -23,10 +24,19 @@ func (h *EntityHandler) HandleCollection(w http.ResponseWriter, r *http.Request)
 
 	switch r.Method {
 	case http.MethodGet, http.MethodHead:
+		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, "", nil), auth.OperationQuery, h.logger) {
+			return
+		}
 		h.handleGetCollection(w, r)
 	case http.MethodPost:
+		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, "", nil), auth.OperationCreate, h.logger) {
+			return
+		}
 		h.handlePostEntity(w, r)
 	case http.MethodOptions:
+		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, "", nil), auth.OperationRead, h.logger) {
+			return
+		}
 		h.handleOptionsCollection(w)
 	default:
 		WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
@@ -53,8 +63,14 @@ func (h *EntityHandler) HandleCount(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet, http.MethodHead:
+		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, "", []string{"$count"}), auth.OperationQuery, h.logger) {
+			return
+		}
 		h.handleGetCount(w, r)
 	case http.MethodOptions:
+		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, "", []string{"$count"}), auth.OperationRead, h.logger) {
+			return
+		}
 		h.handleOptionsCount(w)
 	default:
 		WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,

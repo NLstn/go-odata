@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/nlstn/go-odata/internal/auth"
 	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/response"
 )
@@ -13,6 +14,7 @@ import (
 type ServiceDocumentHandler struct {
 	entities map[string]*metadata.EntityMetadata
 	logger   *slog.Logger
+	policy   auth.Policy
 }
 
 // NewServiceDocumentHandler creates a new service document handler.
@@ -34,12 +36,23 @@ func (h *ServiceDocumentHandler) SetLogger(logger *slog.Logger) {
 	h.logger = logger
 }
 
+// SetPolicy sets the authorization policy for the handler.
+func (h *ServiceDocumentHandler) SetPolicy(policy auth.Policy) {
+	h.policy = policy
+}
+
 // HandleServiceDocument handles the service document endpoint
 func (h *ServiceDocumentHandler) HandleServiceDocument(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet, http.MethodHead:
+		if !authorizeRequest(w, r, h.policy, auth.ResourceDescriptor{}, auth.OperationRead, h.logger) {
+			return
+		}
 		h.handleGetServiceDocument(w, r)
 	case http.MethodOptions:
+		if !authorizeRequest(w, r, h.policy, auth.ResourceDescriptor{}, auth.OperationRead, h.logger) {
+			return
+		}
 		h.handleOptionsServiceDocument(w)
 	default:
 		if err := response.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
