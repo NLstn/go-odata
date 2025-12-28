@@ -47,6 +47,7 @@ rely on version numbers to reason about compatibility.
   - Type cast with navigation properties (`/Products(id)/Namespace.SpecialProduct/Category`)
 
 ### Fixed
+- **Custom entity set names with $search**: Fixed incorrect table name resolution when entities use custom `EntitySetName()` methods. The code now properly uses the pre-computed `TableName` from metadata instead of deriving it from `EntitySetName`, which respects GORM's `TableName()` method and prevents "missing FROM-clause entry" SQL errors
 - **MySQL/MariaDB compatibility for OData query functions**: Added database-specific SQL generation for date extraction functions (YEAR, MONTH, DAY, HOUR, MINUTE, SECOND), arithmetic functions (CEILING, FLOOR), and the NOW function. MySQL compliance tests improved from 95% to 97% pass rate (21 failures reduced to 7).
   - Date extraction functions now use MySQL's native YEAR(), MONTH(), etc. instead of PostgreSQL's EXTRACT()
   - CEILING and FLOOR use MySQL's native functions instead of SQLite's CASE expressions
