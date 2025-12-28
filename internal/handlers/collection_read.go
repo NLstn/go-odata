@@ -198,8 +198,8 @@ func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.Qu
 		db = h.applySkipTokenFilter(db, queryOptions)
 	}
 
-	// Get the table name for FTS (convert EntitySetName to snake_case for table name)
-	tableName := toSnakeCase(h.metadata.EntitySetName)
+	// Get the table name for FTS from metadata (respects custom TableName() methods)
+	tableName := h.metadata.TableName
 
 	// Apply query options with FTS support
 	db = query.ApplyQueryOptionsWithFTS(db, &modifiedOptions, h.metadata, h.ftsManager, tableName)
