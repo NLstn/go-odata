@@ -839,16 +839,9 @@ func TestNavigationLinksWithSelect(t *testing.T) {
 		t.Error("Name should be present")
 	}
 
-	// Navigation link should still be present even with $select
-	navLink, hasNavLink := firstAuthor["Books@odata.navigationLink"]
-	if !hasNavLink {
-		t.Error("Expected Books@odata.navigationLink to be present even with $select")
-	}
-
-	// Validate the navigation link format
-	expectedPattern := "http://localhost:8080/Authors(1)/Books"
-	if navLink != expectedPattern {
-		t.Errorf("Expected navigation link to be %s, got %v", expectedPattern, navLink)
+	// Navigation link should be omitted when the navigation property is not selected
+	if _, hasNavLink := firstAuthor["Books@odata.navigationLink"]; hasNavLink {
+		t.Error("Did not expect Books@odata.navigationLink when not selected")
 	}
 
 	// Books property should not be present

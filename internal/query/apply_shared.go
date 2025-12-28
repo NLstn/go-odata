@@ -9,8 +9,11 @@ import (
 
 // applySelectToExpandedEntity applies select to an expanded navigation property (single entity or collection)
 // This is a simplified version that doesn't require full metadata - it works with reflection
-func applySelectToExpandedEntity(expandedValue interface{}, selectedProps []string) interface{} {
-	if len(selectedProps) == 0 || expandedValue == nil {
+func applySelectToExpandedEntity(expandedValue interface{}, selectedProps []string, selectSpecified bool) interface{} {
+	if expandedValue == nil {
+		return expandedValue
+	}
+	if !selectSpecified {
 		return expandedValue
 	}
 

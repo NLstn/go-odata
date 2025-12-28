@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nlstn/go-odata/internal/auth"
 	"github.com/nlstn/go-odata/internal/query"
 )
 
@@ -88,7 +89,7 @@ func TestEntityHandlerCount(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			helperReq := httptest.NewRequest(http.MethodGet, tt.url, nil)
-			queryOptions, err := query.ParseQueryOptions(helperReq.URL.Query(), handler.metadata)
+			queryOptions, err := query.ParseQueryOptions(helperReq.URL.Query(), handler.metadata, nil, auth.AuthContext{})
 			if err != nil {
 				t.Fatalf("failed to parse query options: %v", err)
 			}
@@ -200,7 +201,7 @@ func TestCountConsistencyAcrossEndpoints(t *testing.T) {
 			}
 
 			helperReq := httptest.NewRequest(http.MethodGet, countURL, nil)
-			queryOptions, err := query.ParseQueryOptions(helperReq.URL.Query(), handler.metadata)
+			queryOptions, err := query.ParseQueryOptions(helperReq.URL.Query(), handler.metadata, nil, auth.AuthContext{})
 			if err != nil {
 				t.Fatalf("failed to parse query options: %v", err)
 			}

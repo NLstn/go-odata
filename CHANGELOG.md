@@ -32,6 +32,7 @@ rely on version numbers to reason about compatibility.
 - CI/CD pipeline now runs compliance tests on SQLite, PostgreSQL, MariaDB, and MySQL to ensure cross-database compatibility
 - Authorization policy scaffolding with new auth types, operations, decisions, and service registration hook.
 - Authorization enforcement in entity, metadata, and service document handlers with request context/resource descriptors and OData-compliant 401/403 responses.
+- Property-level authorization filtering for `$select` and `$expand`, including projection-safe response shaping.
 - Added `ApplyQueryOptionsToSlice` helper for applying `$orderby`, `$skip`, and `$top` to in-memory slices with a `$filter` evaluation hook, along with public query option type aliases to simplify handler usage.
 - **Public hook interfaces**: `EntityHook` and `ReadHook` are now exported in the public API, making hooks discoverable via `go doc` and `pkg.go.dev`
   - Hook interface documentation includes comprehensive examples for lifecycle hooks (BeforeCreate, AfterCreate, etc.)

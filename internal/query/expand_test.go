@@ -4,6 +4,7 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/nlstn/go-odata/internal/auth"
 	"github.com/nlstn/go-odata/internal/metadata"
 )
 
@@ -28,7 +29,7 @@ func TestParseExpandSimple(t *testing.T) {
 	params := url.Values{}
 	params.Set("$expand", "Books")
 
-	options, err := ParseQueryOptions(params, authorMeta)
+	options, err := ParseQueryOptions(params, authorMeta, nil, auth.AuthContext{})
 	if err != nil {
 		t.Fatalf("Failed to parse query options: %v", err)
 	}
@@ -49,7 +50,7 @@ func TestParseExpandWithNestedTop(t *testing.T) {
 	params := url.Values{}
 	params.Set("$expand", "Books($top=5)")
 
-	options, err := ParseQueryOptions(params, authorMeta)
+	options, err := ParseQueryOptions(params, authorMeta, nil, auth.AuthContext{})
 	if err != nil {
 		t.Fatalf("Failed to parse query options: %v", err)
 	}
@@ -72,7 +73,7 @@ func TestParseExpandWithNestedSkip(t *testing.T) {
 	params := url.Values{}
 	params.Set("$expand", "Books($skip=2)")
 
-	options, err := ParseQueryOptions(params, authorMeta)
+	options, err := ParseQueryOptions(params, authorMeta, nil, auth.AuthContext{})
 	if err != nil {
 		t.Fatalf("Failed to parse query options: %v", err)
 	}
@@ -95,7 +96,7 @@ func TestParseExpandWithNestedSelect(t *testing.T) {
 	params := url.Values{}
 	params.Set("$expand", "Books($select=Title)")
 
-	options, err := ParseQueryOptions(params, authorMeta)
+	options, err := ParseQueryOptions(params, authorMeta, nil, auth.AuthContext{})
 	if err != nil {
 		t.Fatalf("Failed to parse query options: %v", err)
 	}
@@ -118,7 +119,7 @@ func TestParseExpandWithMultipleNestedOptions(t *testing.T) {
 	params := url.Values{}
 	params.Set("$expand", "Books($select=Title;$top=3;$skip=1)")
 
-	options, err := ParseQueryOptions(params, authorMeta)
+	options, err := ParseQueryOptions(params, authorMeta, nil, auth.AuthContext{})
 	if err != nil {
 		t.Fatalf("Failed to parse query options: %v", err)
 	}
@@ -149,7 +150,7 @@ func TestParseExpandInvalid(t *testing.T) {
 	params := url.Values{}
 	params.Set("$expand", "InvalidProperty")
 
-	_, err := ParseQueryOptions(params, authorMeta)
+	_, err := ParseQueryOptions(params, authorMeta, nil, auth.AuthContext{})
 	if err == nil {
 		t.Error("Expected error for invalid navigation property")
 	}
@@ -164,7 +165,7 @@ func TestParseExpandMultiple(t *testing.T) {
 	params := url.Values{}
 	params.Set("$expand", "Books")
 
-	options, err := ParseQueryOptions(params, authorMeta)
+	options, err := ParseQueryOptions(params, authorMeta, nil, auth.AuthContext{})
 	if err != nil {
 		t.Fatalf("Failed to parse query options: %v", err)
 	}
@@ -183,7 +184,7 @@ func TestParseExpandWithFilterAndOrderBy(t *testing.T) {
 	params.Set("$filter", "Name eq 'Test'")
 	params.Set("$orderby", "Name asc")
 
-	options, err := ParseQueryOptions(params, authorMeta)
+	options, err := ParseQueryOptions(params, authorMeta, nil, auth.AuthContext{})
 	if err != nil {
 		t.Fatalf("Failed to parse query options: %v", err)
 	}
@@ -209,7 +210,7 @@ func TestParseExpandWithCount(t *testing.T) {
 	params.Set("$expand", "Books")
 	params.Set("$count", "true")
 
-	options, err := ParseQueryOptions(params, authorMeta)
+	options, err := ParseQueryOptions(params, authorMeta, nil, auth.AuthContext{})
 	if err != nil {
 		t.Fatalf("Failed to parse query options: %v", err)
 	}
@@ -232,7 +233,7 @@ func TestParseExpandWithTopAndSkip(t *testing.T) {
 	params.Set("$top", "10")
 	params.Set("$skip", "5")
 
-	options, err := ParseQueryOptions(params, authorMeta)
+	options, err := ParseQueryOptions(params, authorMeta, nil, auth.AuthContext{})
 	if err != nil {
 		t.Fatalf("Failed to parse query options: %v", err)
 	}
@@ -257,7 +258,7 @@ func TestParseExpandWithNestedFilter(t *testing.T) {
 	params := url.Values{}
 	params.Set("$expand", "Books($filter=Title eq 'Test Book')")
 
-	options, err := ParseQueryOptions(params, authorMeta)
+	options, err := ParseQueryOptions(params, authorMeta, nil, auth.AuthContext{})
 	if err != nil {
 		t.Fatalf("Failed to parse query options: %v", err)
 	}
@@ -291,7 +292,7 @@ func TestParseExpandWithNestedOrderBy(t *testing.T) {
 	params := url.Values{}
 	params.Set("$expand", "Books($orderby=Title desc)")
 
-	options, err := ParseQueryOptions(params, authorMeta)
+	options, err := ParseQueryOptions(params, authorMeta, nil, auth.AuthContext{})
 	if err != nil {
 		t.Fatalf("Failed to parse query options: %v", err)
 	}
@@ -322,7 +323,7 @@ func TestParseExpandWithMultipleNestedFilters(t *testing.T) {
 	params := url.Values{}
 	params.Set("$expand", "Books($filter=Title eq 'Book A' or Title eq 'Book B')")
 
-	options, err := ParseQueryOptions(params, authorMeta)
+	options, err := ParseQueryOptions(params, authorMeta, nil, auth.AuthContext{})
 	if err != nil {
 		t.Fatalf("Failed to parse query options: %v", err)
 	}
@@ -352,7 +353,7 @@ func TestParseExpandWithAllNestedOptions(t *testing.T) {
 	params := url.Values{}
 	params.Set("$expand", "Books($filter=Title ne 'Archived';$select=Title;$orderby=Title;$top=5;$skip=2)")
 
-	options, err := ParseQueryOptions(params, authorMeta)
+	options, err := ParseQueryOptions(params, authorMeta, nil, auth.AuthContext{})
 	if err != nil {
 		t.Fatalf("Failed to parse query options: %v", err)
 	}
@@ -479,7 +480,7 @@ func TestParseExpandWithComplexFilter(t *testing.T) {
 			params := url.Values{}
 			params.Set("$expand", tt.expandQuery)
 
-			options, err := ParseQueryOptions(params, authorMeta)
+			options, err := ParseQueryOptions(params, authorMeta, nil, auth.AuthContext{})
 			if (err != nil) != tt.expectErr {
 				t.Errorf("Expected error: %v, got: %v", tt.expectErr, err)
 				return
@@ -558,7 +559,7 @@ func TestParseExpandWithMultipleLevels(t *testing.T) {
 			params := url.Values{}
 			params.Set("$expand", tt.expandQuery)
 
-			options, err := ParseQueryOptions(params, authorMeta)
+			options, err := ParseQueryOptions(params, authorMeta, nil, auth.AuthContext{})
 			if (err != nil) != tt.expectErr {
 				t.Errorf("Expected error: %v, got: %v", tt.expectErr, err)
 				return
@@ -578,7 +579,7 @@ func TestParseNestedExpand(t *testing.T) {
 	params := url.Values{}
 	params.Set("$expand", "Books($expand=Author)")
 
-	options, err := ParseQueryOptions(params, authorMeta)
+	options, err := ParseQueryOptions(params, authorMeta, nil, auth.AuthContext{})
 	if err != nil {
 		t.Fatalf("Failed to parse query options: %v", err)
 	}
@@ -611,7 +612,7 @@ func TestParseNestedExpandWithOptions(t *testing.T) {
 	params := url.Values{}
 	params.Set("$expand", "Books($expand=Author($select=Name);$top=5)")
 
-	options, err := ParseQueryOptions(params, authorMeta)
+	options, err := ParseQueryOptions(params, authorMeta, nil, auth.AuthContext{})
 	if err != nil {
 		t.Fatalf("Failed to parse query options: %v", err)
 	}
@@ -676,7 +677,7 @@ func TestParseMultiLevelNestedExpand(t *testing.T) {
 	params := url.Values{}
 	params.Set("$expand", "Members($expand=Club)")
 
-	options, err := ParseQueryOptions(params, userMeta)
+	options, err := ParseQueryOptions(params, userMeta, nil, auth.AuthContext{})
 	if err != nil {
 		t.Fatalf("Failed to parse query options: %v", err)
 	}
@@ -775,7 +776,7 @@ func TestComplexFilterCombinations(t *testing.T) {
 			params := url.Values{}
 			params.Set("$filter", tt.filter)
 
-			options, err := ParseQueryOptions(params, productMeta)
+			options, err := ParseQueryOptions(params, productMeta, nil, auth.AuthContext{})
 			if (err != nil) != tt.expectErr {
 				t.Errorf("Expected error: %v, got: %v (filter: %s)", tt.expectErr, err, tt.filter)
 				return
@@ -827,7 +828,7 @@ func TestParseOrderByWithMultipleProperties(t *testing.T) {
 			params := url.Values{}
 			params.Set("$orderby", tt.orderBy)
 
-			options, err := ParseQueryOptions(params, productMeta)
+			options, err := ParseQueryOptions(params, productMeta, nil, auth.AuthContext{})
 			if (err != nil) != tt.expectErr {
 				t.Errorf("Expected error: %v, got: %v", tt.expectErr, err)
 				return

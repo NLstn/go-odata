@@ -81,7 +81,7 @@ func (h *EntityHandler) handleGetEntity(w http.ResponseWriter, r *http.Request, 
 
 	ctx := r.Context()
 	// Parse query options for $expand and $select
-	queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata)
+	queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata, h.policy, buildAuthContext(r))
 	if err != nil {
 		h.writeInvalidQueryError(w, err)
 		return
@@ -167,8 +167,8 @@ func (h *EntityHandler) handleGetEntity(w http.ResponseWriter, r *http.Request, 
 	}
 
 	// Apply $select if specified (after ETag generation)
-	if len(queryOptions.Select) > 0 && !hasOverride {
-		result = query.ApplySelectToEntity(result, queryOptions.Select, h.metadata, queryOptions.Expand)
+	if queryOptions.SelectSpecified && !hasOverride {
+		result = query.ApplySelectToEntity(result, queryOptions.Select, h.metadata, queryOptions.Expand, queryOptions.SelectSpecified)
 	}
 
 	// Build and write response
@@ -178,7 +178,7 @@ func (h *EntityHandler) handleGetEntity(w http.ResponseWriter, r *http.Request, 
 // handleGetEntityOverwrite handles GET entity requests using the overwrite handler
 func (h *EntityHandler) handleGetEntityOverwrite(w http.ResponseWriter, r *http.Request, entityKey string) {
 	// Parse query options for $expand and $select
-	queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata)
+	queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata, h.policy, buildAuthContext(r))
 	if err != nil {
 		h.writeInvalidQueryError(w, err)
 		return
@@ -355,7 +355,7 @@ func (h *EntityHandler) HandleCollectionRef(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Parse query options (support filtering, ordering, pagination for references)
-	queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata)
+	queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata, h.policy, buildAuthContext(r))
 	if err != nil {
 		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions, err.Error()); writeErr != nil {
 			h.logger.Error("Error writing error response", "error", writeErr)

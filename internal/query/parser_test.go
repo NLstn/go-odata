@@ -4,6 +4,7 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/nlstn/go-odata/internal/auth"
 	"github.com/nlstn/go-odata/internal/metadata"
 )
 
@@ -306,7 +307,7 @@ func TestParseQueryOptions(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			queryValues, _ := url.ParseQuery(tt.query)
-			result, err := ParseQueryOptions(queryValues, meta)
+			result, err := ParseQueryOptions(queryValues, meta, nil, auth.AuthContext{})
 			if tt.expectErr {
 				if err == nil {
 					t.Error("Expected error but got none")
@@ -473,7 +474,7 @@ func TestParseQueryOptions_WithSearch(t *testing.T) {
 				t.Fatalf("Failed to parse query string: %v", err)
 			}
 
-			options, err := ParseQueryOptions(queryParams, meta)
+			options, err := ParseQueryOptions(queryParams, meta, nil, auth.AuthContext{})
 
 			if tt.expectError && err == nil {
 				t.Error("Expected error but got none")

@@ -5,31 +5,34 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/nlstn/go-odata/internal/auth"
 	"github.com/nlstn/go-odata/internal/metadata"
 )
 
 // QueryOptions represents parsed OData query options
 type QueryOptions struct {
-	Filter        *FilterExpression
-	Select        []string
-	Expand        []ExpandOption
-	OrderBy       []OrderByItem
-	Top           *int
-	Skip          *int
-	SkipToken     *string // Skip token for server-driven paging
-	DeltaToken    *string
-	Count         bool
-	Apply         []ApplyTransformation
-	Search        string                 // Search query string
-	Compute       *ComputeTransformation // Standalone $compute option
-	Index         bool                   // $index query option - adds @odata.index annotations
-	SchemaVersion *string                // $schemaversion query option - for metadata versioning
+	Filter          *FilterExpression
+	Select          []string
+	SelectSpecified bool
+	Expand          []ExpandOption
+	OrderBy         []OrderByItem
+	Top             *int
+	Skip            *int
+	SkipToken       *string // Skip token for server-driven paging
+	DeltaToken      *string
+	Count           bool
+	Apply           []ApplyTransformation
+	Search          string                 // Search query string
+	Compute         *ComputeTransformation // Standalone $compute option
+	Index           bool                   // $index query option - adds @odata.index annotations
+	SchemaVersion   *string                // $schemaversion query option - for metadata versioning
 }
 
 // ExpandOption represents a single $expand clause
 type ExpandOption struct {
 	NavigationProperty string
-	Select             []string               // Nested $select
+	Select             []string // Nested $select
+	SelectSpecified    bool
 	Expand             []ExpandOption         // Nested $expand
 	Filter             *FilterExpression      // Nested $filter
 	OrderBy            []OrderByItem          // Nested $orderby
@@ -216,7 +219,7 @@ func validateQueryOptions(queryParams url.Values) error {
 }
 
 // ParseQueryOptions parses OData query options from the URL
-func ParseQueryOptions(queryParams url.Values, entityMetadata *metadata.EntityMetadata) (*QueryOptions, error) {
+func ParseQueryOptions(queryParams url.Values, entityMetadata *metadata.EntityMetadata, policy auth.Policy, authCtx auth.AuthContext) (*QueryOptions, error) {
 	options := &QueryOptions{}
 
 	// Validate that all query parameters starting with $ are valid OData query options
@@ -232,12 +235,16 @@ func ParseQueryOptions(queryParams url.Values, entityMetadata *metadata.EntityMe
 		return nil, err
 	}
 
-	if err := parseSelectOption(queryParams, entityMetadata, options); err != nil {
+	if err := parseSelectOption(queryParams, entityMetadata, options, computedAliases, policy, authCtx); err != nil {
 		return nil, err
 	}
 
 	if err := parseExpandOption(queryParams, entityMetadata, options); err != nil {
 		return nil, err
+	}
+
+	if policy != nil {
+		options.Expand = filterExpandOptions(options.Expand, entityMetadata, policy, authCtx, nil)
 	}
 
 	if err := parseOrderByOption(queryParams, entityMetadata, options, computedAliases); err != nil {
@@ -303,29 +310,10 @@ func parseFilterOption(queryParams url.Values, entityMetadata *metadata.EntityMe
 }
 
 // parseSelectOption parses the $select query parameter
-func parseSelectOption(queryParams url.Values, entityMetadata *metadata.EntityMetadata, options *QueryOptions) error {
+func parseSelectOption(queryParams url.Values, entityMetadata *metadata.EntityMetadata, options *QueryOptions, computedAliases map[string]bool, policy auth.Policy, authCtx auth.AuthContext) error {
 	if selectStr := queryParams.Get("$select"); selectStr != "" {
+		options.SelectSpecified = true
 		selectedProps := parseSelect(selectStr)
-
-		// If $compute or $apply with compute is present, we need to extract computed property aliases
-		// to avoid validation errors for properties that will be computed
-		computedAliases := make(map[string]bool)
-
-		// Check for standalone $compute parameter
-		if computeStr := queryParams.Get("$compute"); computeStr != "" {
-			aliases := extractComputeAliasesFromString(computeStr)
-			for alias := range aliases {
-				computedAliases[alias] = true
-			}
-		}
-
-		// Check for compute within $apply
-		if applyStr := queryParams.Get("$apply"); applyStr != "" {
-			aliases := extractComputedAliases(applyStr)
-			for alias := range aliases {
-				computedAliases[alias] = true
-			}
-		}
 
 		// Validate that all selected properties exist (either as entity properties or computed properties)
 		for _, propName := range selectedProps {
@@ -350,6 +338,9 @@ func parseSelectOption(queryParams url.Values, entityMetadata *metadata.EntityMe
 					return fmt.Errorf("property '%s' does not exist in entity type", propName)
 				}
 			}
+		}
+		if policy != nil {
+			selectedProps = filterSelectedProperties(selectedProps, entityMetadata, policy, authCtx, computedAliases)
 		}
 		options.Select = selectedProps
 	}
@@ -693,6 +684,7 @@ func mergeNavigationSelects(options *QueryOptions, entityMetadata *metadata.Enti
 		for navProp, subProps := range navSelects {
 			if expandOpt, exists := expandMap[navProp]; exists {
 				// Merge with existing expand: combine select properties
+				expandOpt.SelectSpecified = true
 				if expandOpt.Select == nil {
 					expandOpt.Select = subProps
 				} else {
@@ -712,6 +704,7 @@ func mergeNavigationSelects(options *QueryOptions, entityMetadata *metadata.Enti
 				newExpand := ExpandOption{
 					NavigationProperty: navProp,
 					Select:             subProps,
+					SelectSpecified:    true,
 				}
 				options.Expand = append(options.Expand, newExpand)
 			}

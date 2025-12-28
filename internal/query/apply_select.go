@@ -9,8 +9,8 @@ import (
 )
 
 // applySelect applies select clause to fetch only specified columns at database level
-func applySelect(db *gorm.DB, selectedProperties []string, entityMetadata *metadata.EntityMetadata) *gorm.DB {
-	if len(selectedProperties) == 0 {
+func applySelect(db *gorm.DB, selectedProperties []string, entityMetadata *metadata.EntityMetadata, selectSpecified bool) *gorm.DB {
+	if len(selectedProperties) == 0 && !selectSpecified {
 		return db
 	}
 
@@ -55,8 +55,8 @@ func applySelect(db *gorm.DB, selectedProperties []string, entityMetadata *metad
 
 // ApplySelect converts struct results to map format with only selected properties
 // This is called after the query to convert the result to the correct format for OData responses
-func ApplySelect(results interface{}, selectedProperties []string, entityMetadata *metadata.EntityMetadata, expandOptions []ExpandOption) interface{} {
-	if len(selectedProperties) == 0 {
+func ApplySelect(results interface{}, selectedProperties []string, entityMetadata *metadata.EntityMetadata, expandOptions []ExpandOption, selectSpecified bool) interface{} {
+	if !selectSpecified {
 		return results
 	}
 
@@ -120,16 +120,20 @@ func ApplySelect(results interface{}, selectedProperties []string, entityMetadat
 						}
 
 						var nestedSelect []string
-						if expandOpt != nil && len(expandOpt.Select) > 0 {
+						nestedSelectSpecified := false
+						if expandOpt != nil && expandOpt.SelectSpecified {
 							nestedSelect = expandOpt.Select
+							nestedSelectSpecified = true
 						} else if len(navPropSelects[prop.JsonName]) > 0 {
 							nestedSelect = navPropSelects[prop.JsonName]
+							nestedSelectSpecified = true
 						} else if len(navPropSelects[prop.Name]) > 0 {
 							nestedSelect = navPropSelects[prop.Name]
+							nestedSelectSpecified = true
 						}
 
-						if len(nestedSelect) > 0 && fieldVal != nil {
-							fieldVal = applySelectToExpandedEntity(fieldVal, nestedSelect)
+						if nestedSelectSpecified && fieldVal != nil {
+							fieldVal = applySelectToExpandedEntity(fieldVal, nestedSelect, nestedSelectSpecified)
 						}
 					}
 
@@ -145,8 +149,8 @@ func ApplySelect(results interface{}, selectedProperties []string, entityMetadat
 }
 
 // ApplySelectToEntity applies the $select filter to a single entity
-func ApplySelectToEntity(entity interface{}, selectedProperties []string, entityMetadata *metadata.EntityMetadata, expandOptions []ExpandOption) interface{} {
-	if len(selectedProperties) == 0 {
+func ApplySelectToEntity(entity interface{}, selectedProperties []string, entityMetadata *metadata.EntityMetadata, expandOptions []ExpandOption, selectSpecified bool) interface{} {
+	if !selectSpecified {
 		return entity
 	}
 
@@ -206,16 +210,20 @@ func ApplySelectToEntity(entity interface{}, selectedProperties []string, entity
 					}
 
 					var nestedSelect []string
-					if expandOpt != nil && len(expandOpt.Select) > 0 {
+					nestedSelectSpecified := false
+					if expandOpt != nil && expandOpt.SelectSpecified {
 						nestedSelect = expandOpt.Select
+						nestedSelectSpecified = true
 					} else if len(navPropSelects[prop.JsonName]) > 0 {
 						nestedSelect = navPropSelects[prop.JsonName]
+						nestedSelectSpecified = true
 					} else if len(navPropSelects[prop.Name]) > 0 {
 						nestedSelect = navPropSelects[prop.Name]
+						nestedSelectSpecified = true
 					}
 
-					if len(nestedSelect) > 0 && fieldVal != nil {
-						fieldVal = applySelectToExpandedEntity(fieldVal, nestedSelect)
+					if nestedSelectSpecified && fieldVal != nil {
+						fieldVal = applySelectToExpandedEntity(fieldVal, nestedSelect, nestedSelectSpecified)
 					}
 				}
 
@@ -230,8 +238,8 @@ func ApplySelectToEntity(entity interface{}, selectedProperties []string, entity
 // ApplySelectToMapResults filters map results to only include selected properties
 // This is used when $compute is present and results are returned as []map[string]interface{}
 // The computedAliases parameter specifies which properties are computed
-func ApplySelectToMapResults(results []map[string]interface{}, selectedProperties []string, entityMetadata *metadata.EntityMetadata, computedAliases map[string]bool) []map[string]interface{} {
-	if len(selectedProperties) == 0 {
+func ApplySelectToMapResults(results []map[string]interface{}, selectedProperties []string, entityMetadata *metadata.EntityMetadata, computedAliases map[string]bool, selectSpecified bool) []map[string]interface{} {
+	if !selectSpecified {
 		return results
 	}
 

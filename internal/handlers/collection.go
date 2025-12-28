@@ -86,7 +86,7 @@ func (h *EntityHandler) handleGetCount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata)
+	queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata, h.policy, buildAuthContext(r))
 	if err != nil {
 		WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions, err.Error())
 		return
@@ -118,7 +118,7 @@ func (h *EntityHandler) handleGetCount(w http.ResponseWriter, r *http.Request) {
 
 // handleGetCountOverwrite handles GET count requests using the overwrite handler
 func (h *EntityHandler) handleGetCountOverwrite(w http.ResponseWriter, r *http.Request) {
-	queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata)
+	queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata, h.policy, buildAuthContext(r))
 	if err != nil {
 		WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions, err.Error())
 		return

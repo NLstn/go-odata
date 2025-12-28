@@ -51,7 +51,7 @@ func (h *EntityHandler) handleGetCollectionOverwrite(w http.ResponseWriter, r *h
 	pref := preference.ParsePrefer(r)
 
 	// Parse and validate query options
-	queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata)
+	queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata, h.policy, buildAuthContext(r))
 	if err != nil {
 		h.writeInvalidQueryError(w, err)
 		return
@@ -97,7 +97,7 @@ func (h *EntityHandler) handleGetCollectionOverwrite(w http.ResponseWriter, r *h
 
 func (h *EntityHandler) parseCollectionQueryOptions(w http.ResponseWriter, r *http.Request, pref *preference.Preference) func() (*query.QueryOptions, error) {
 	return func() (*query.QueryOptions, error) {
-		queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata)
+		queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata, h.policy, buildAuthContext(r))
 		if err != nil {
 			return nil, err
 		}
@@ -218,12 +218,12 @@ func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.Qu
 			return nil, err
 		}
 		// If $select is specified, filter out computed properties that aren't selected
-		if len(queryOptions.Select) > 0 && queryOptions.Compute != nil {
+		if queryOptions.SelectSpecified && queryOptions.Compute != nil {
 			computedAliases := make(map[string]bool)
 			for _, expr := range queryOptions.Compute.Expressions {
 				computedAliases[expr.Alias] = true
 			}
-			results = query.ApplySelectToMapResults(results, queryOptions.Select, h.metadata, computedAliases)
+			results = query.ApplySelectToMapResults(results, queryOptions.Select, h.metadata, computedAliases, queryOptions.SelectSpecified)
 		}
 		return results, nil
 	}
@@ -247,8 +247,8 @@ func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.Qu
 		sliceValue = query.ApplyExpandComputeToResults(sliceValue, queryOptions.Expand)
 	}
 
-	if len(queryOptions.Select) > 0 {
-		sliceValue = query.ApplySelect(sliceValue, queryOptions.Select, h.metadata, queryOptions.Expand)
+	if queryOptions.SelectSpecified {
+		sliceValue = query.ApplySelect(sliceValue, queryOptions.Select, h.metadata, queryOptions.Expand, queryOptions.SelectSpecified)
 	}
 
 	return sliceValue, nil

@@ -218,7 +218,7 @@ func (h *EntityHandler) handleNavigationCollectionWithQueryOptions(w http.Respon
 		Metadata: targetMetadata,
 
 		ParseQueryOptions: func() (*query.QueryOptions, error) {
-			return query.ParseQueryOptions(r.URL.Query(), targetMetadata)
+			return query.ParseQueryOptions(r.URL.Query(), targetMetadata, h.policy, buildAuthContext(r))
 		},
 
 		BeforeRead: func(queryOptions *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
@@ -280,8 +280,8 @@ func (h *EntityHandler) handleNavigationCollectionWithQueryOptions(w http.Respon
 				results = query.ApplySearch(results, queryOptions.Search, targetMetadata)
 			}
 
-			if len(queryOptions.Select) > 0 {
-				results = query.ApplySelect(results, queryOptions.Select, targetMetadata, queryOptions.Expand)
+			if queryOptions.SelectSpecified {
+				results = query.ApplySelect(results, queryOptions.Select, targetMetadata, queryOptions.Expand, queryOptions.SelectSpecified)
 			}
 
 			return results, nil

@@ -10,7 +10,7 @@ import (
 	"github.com/nlstn/go-odata/internal/metadata"
 )
 
-func addNavigationLinks(data interface{}, metadata EntityMetadataProvider, expandedProps []string, r *http.Request, entitySetName string, metadataLevel string, fullMetadata *metadata.EntityMetadata) []interface{} {
+func addNavigationLinks(data interface{}, metadata EntityMetadataProvider, expandedProps []string, r *http.Request, entitySetName string, metadataLevel string, fullMetadata *metadata.EntityMetadata, selectedProps []string, selectSpecified bool) []interface{} {
 	dataValue := reflect.ValueOf(data)
 	if dataValue.Kind() != reflect.Slice {
 		return []interface{}{}
@@ -33,9 +33,9 @@ func addNavigationLinks(data interface{}, metadata EntityMetadataProvider, expan
 		var entityMap interface{}
 
 		if entity.Kind() == reflect.Map {
-			entityMap = processMapEntity(entity, metadata, expandedProps, baseURL, entitySetName, metadataLevel, fullMetadata)
+			entityMap = processMapEntity(entity, metadata, expandedProps, baseURL, entitySetName, metadataLevel, fullMetadata, selectedProps, selectSpecified)
 		} else {
-			entityMap = processStructEntityOrdered(entity, metadata, expandedProps, baseURL, entitySetName, metadataLevel, fullMetadata)
+			entityMap = processStructEntityOrdered(entity, metadata, expandedProps, baseURL, entitySetName, metadataLevel, fullMetadata, selectedProps, selectSpecified)
 		}
 
 		if entityMap != nil {
@@ -46,7 +46,7 @@ func addNavigationLinks(data interface{}, metadata EntityMetadataProvider, expan
 	return result
 }
 
-func processMapEntity(entity reflect.Value, metadata EntityMetadataProvider, expandedProps []string, baseURL, entitySetName string, metadataLevel string, fullMetadata *metadata.EntityMetadata) map[string]interface{} {
+func processMapEntity(entity reflect.Value, metadata EntityMetadataProvider, expandedProps []string, baseURL, entitySetName string, metadataLevel string, fullMetadata *metadata.EntityMetadata, selectedProps []string, selectSpecified bool) map[string]interface{} {
 	entityMap, ok := entity.Interface().(map[string]interface{})
 	if !ok {
 		return nil
@@ -84,6 +84,10 @@ func processMapEntity(entity reflect.Value, metadata EntityMetadataProvider, exp
 				continue
 			}
 
+			if selectSpecified && !isPropertySelectedForNavigation(prop, selectedProps) {
+				continue
+			}
+
 			if _, exists := entityMap[prop.JsonName]; !exists {
 				keySegment := buildKeySegmentFromMap(entityMap, metadata)
 				if keySegment != "" {
@@ -97,7 +101,7 @@ func processMapEntity(entity reflect.Value, metadata EntityMetadataProvider, exp
 	return entityMap
 }
 
-func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataProvider, expandedProps []string, baseURL, entitySetName string, metadataLevel string, fullMetadata *metadata.EntityMetadata) *OrderedMap {
+func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataProvider, expandedProps []string, baseURL, entitySetName string, metadataLevel string, fullMetadata *metadata.EntityMetadata, selectedProps []string, selectSpecified bool) *OrderedMap {
 	entityType := entity.Type()
 	fieldInfos := getFieldInfos(entityType)
 
@@ -176,6 +180,9 @@ func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataPro
 				// Skip unexpanded navigation properties for minimal metadata
 				continue
 			}
+			if selectSpecified && !isPropertyExpanded(*propMeta, expandedProps) && !isPropertySelectedForNavigation(*propMeta, selectedProps) {
+				continue
+			}
 			// Only get fieldValue when we actually need it
 			fieldValue := entity.Field(j)
 			processNavigationPropertyOrderedWithMetadata(entityMap, entity, propMeta, fieldValue, info.JsonName, expandedProps, baseURL, entitySetName, metadata, metadataLevel, keySegment)
@@ -194,6 +201,27 @@ func isPropertyExpanded(prop PropertyMetadata, expandedProps []string) bool {
 			return true
 		}
 	}
+	return false
+}
+
+func isPropertySelectedForNavigation(prop PropertyMetadata, selectedProps []string) bool {
+	if len(selectedProps) == 0 {
+		return false
+	}
+
+	for _, selected := range selectedProps {
+		trimmed := strings.TrimSpace(selected)
+		if trimmed == "" {
+			continue
+		}
+		if trimmed == prop.Name || trimmed == prop.JsonName {
+			return true
+		}
+		if strings.HasPrefix(trimmed, prop.Name+"/") || strings.HasPrefix(trimmed, prop.JsonName+"/") {
+			return true
+		}
+	}
+
 	return false
 }
 

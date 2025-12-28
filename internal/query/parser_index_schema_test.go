@@ -3,6 +3,8 @@ package query
 import (
 	"net/url"
 	"testing"
+
+	"github.com/nlstn/go-odata/internal/auth"
 )
 
 func TestParseIndexOption(t *testing.T) {
@@ -53,7 +55,7 @@ func TestParseIndexOption(t *testing.T) {
 				t.Fatalf("Failed to parse query string: %v", err)
 			}
 
-			options, err := ParseQueryOptions(queryParams, meta)
+			options, err := ParseQueryOptions(queryParams, meta, nil, auth.AuthContext{})
 
 			if tt.expectError && err == nil {
 				t.Error("Expected error but got none")
@@ -123,7 +125,7 @@ func TestParseSchemaVersionOption(t *testing.T) {
 				t.Fatalf("Failed to parse query string: %v", err)
 			}
 
-			options, err := ParseQueryOptions(queryParams, meta)
+			options, err := ParseQueryOptions(queryParams, meta, nil, auth.AuthContext{})
 
 			if tt.expectError && err == nil {
 				t.Error("Expected error but got none")

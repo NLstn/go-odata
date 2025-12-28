@@ -4,6 +4,8 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+
+	"github.com/nlstn/go-odata/internal/auth"
 )
 
 // TestCompute_ArithmeticOperations tests $compute with arithmetic operations
@@ -217,7 +219,7 @@ func TestCompute_WithSelect(t *testing.T) {
 			queryParams.Set("$compute", tt.compute)
 			queryParams.Set("$select", tt.select_)
 
-			options, err := ParseQueryOptions(queryParams, meta)
+			options, err := ParseQueryOptions(queryParams, meta, nil, auth.AuthContext{})
 
 			if tt.expectErr {
 				if err == nil {
@@ -268,7 +270,7 @@ func TestCompute_WithFilter(t *testing.T) {
 			queryParams.Set("$compute", tt.compute)
 			queryParams.Set("$filter", tt.filter)
 
-			options, err := ParseQueryOptions(queryParams, meta)
+			options, err := ParseQueryOptions(queryParams, meta, nil, auth.AuthContext{})
 
 			if tt.expectErr {
 				if err == nil {
@@ -319,7 +321,7 @@ func TestCompute_WithOrderBy(t *testing.T) {
 			queryParams.Set("$compute", tt.compute)
 			queryParams.Set("$orderby", tt.orderby)
 
-			options, err := ParseQueryOptions(queryParams, meta)
+			options, err := ParseQueryOptions(queryParams, meta, nil, auth.AuthContext{})
 
 			if tt.expectErr {
 				if err == nil {
@@ -419,7 +421,7 @@ func TestCompute_ParseFromQueryOptions(t *testing.T) {
 			queryParams := url.Values{}
 			queryParams.Set("$compute", tt.compute)
 
-			options, err := ParseQueryOptions(queryParams, meta)
+			options, err := ParseQueryOptions(queryParams, meta, nil, auth.AuthContext{})
 
 			if tt.expectErr {
 				if err == nil {

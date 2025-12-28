@@ -110,6 +110,7 @@ func parseNestedExpandOptionsCore(expand *ExpandOption, optionsStr string, entit
 
 		switch strings.ToLower(key) {
 		case "$select":
+			expand.SelectSpecified = true
 			expand.Select = parseSelect(value)
 		case "$expand":
 			// Parse nested $expand recursively without metadata validation

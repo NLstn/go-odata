@@ -1152,6 +1152,25 @@ func (metadata *EntityMetadata) ResolvePropertyPath(path string) (*PropertyMetad
 	return currentProp, prefixBuilder.String(), nil
 }
 
+// SplitPropertyPath splits a property path into segments, trimming whitespace and removing empty segments.
+func (metadata *EntityMetadata) SplitPropertyPath(path string) []string {
+	trimmed := strings.TrimSpace(path)
+	if trimmed == "" {
+		return nil
+	}
+
+	parts := strings.Split(trimmed, "/")
+	segments := make([]string, 0, len(parts))
+	for _, part := range parts {
+		segment := strings.TrimSpace(part)
+		if segment == "" {
+			continue
+		}
+		segments = append(segments, segment)
+	}
+	return segments
+}
+
 // FindComplexField returns a nested property within a complex type by either struct field name or JSON name.
 func (property *PropertyMetadata) FindComplexField(name string) *PropertyMetadata {
 	if property == nil || !property.IsComplexType || property.ComplexTypeFields == nil {

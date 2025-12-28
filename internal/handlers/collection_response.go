@@ -44,7 +44,7 @@ func (h *EntityHandler) collectionResponseWriter(w http.ResponseWriter, r *http.
 		}
 
 		metadataProvider := newMetadataAdapter(h.metadata, h.namespace)
-		if err := response.WriteODataCollectionWithNavigationAndDelta(w, r, h.metadata.EntitySetName, results, totalCount, nextLink, deltaLink, metadataProvider, expandedProps, h.metadata); err != nil {
+		if err := response.WriteODataCollectionWithNavigationAndDelta(w, r, h.metadata.EntitySetName, results, totalCount, nextLink, deltaLink, metadataProvider, expandedProps, h.metadata, queryOptions.Select, queryOptions.SelectSpecified); err != nil {
 			h.logger.Error("Error writing OData response", "error", err)
 		}
 
