@@ -1,12 +1,15 @@
 package handlers
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/nlstn/go-odata/internal/auth"
 	"github.com/nlstn/go-odata/internal/metadata"
+	"github.com/nlstn/go-odata/internal/query"
 )
 
 type denyPolicy struct {
@@ -28,6 +31,18 @@ func (p *operationPolicy) Authorize(_ auth.AuthContext, _ auth.ResourceDescripto
 		return auth.Deny("unexpected operation")
 	}
 	return auth.Allow()
+}
+
+type filterPolicy struct {
+	filter *query.FilterExpression
+}
+
+func (p filterPolicy) Authorize(_ auth.AuthContext, _ auth.ResourceDescriptor, _ auth.Operation) auth.Decision {
+	return auth.Allow()
+}
+
+func (p filterPolicy) QueryFilter(_ auth.AuthContext, _ auth.ResourceDescriptor, _ auth.Operation) (*query.FilterExpression, error) {
+	return p.filter, nil
 }
 
 func TestEntityHandlerAuthorizationDenied(t *testing.T) {
@@ -105,5 +120,63 @@ func TestServiceDocumentAuthorizationUsesReadOperation(t *testing.T) {
 	}
 	if w.Code != http.StatusOK {
 		t.Errorf("Status = %v, want %v", w.Code, http.StatusOK)
+	}
+}
+
+func TestPolicyFilterConstrainsCollectionResults(t *testing.T) {
+	handler, db := setupTestHandler(t)
+
+	testData := []TestEntity{
+		{ID: 1, Name: "Allowed"},
+		{ID: 2, Name: "Denied"},
+	}
+	for _, entity := range testData {
+		db.Create(&entity)
+	}
+
+	handler.SetPolicy(filterPolicy{
+		filter: &query.FilterExpression{
+			Property: "id",
+			Operator: query.OpEqual,
+			Value:    1,
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/TestEntities", nil)
+	req.Header.Set("Authorization", "Bearer token")
+	w := httptest.NewRecorder()
+
+	handler.HandleCollection(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Status = %v, want %v", w.Code, http.StatusOK)
+	}
+
+	var response map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	value, ok := response["value"].([]interface{})
+	if !ok {
+		t.Fatal("value field is not an array")
+	}
+
+	if len(value) != 1 {
+		t.Fatalf("len(value) = %v, want 1", len(value))
+	}
+
+	countReq := httptest.NewRequest(http.MethodGet, "/TestEntities/$count", nil)
+	countReq.Header.Set("Authorization", "Bearer token")
+	countW := httptest.NewRecorder()
+
+	handler.HandleCount(countW, countReq)
+
+	if countW.Code != http.StatusOK {
+		t.Fatalf("Count status = %v, want %v", countW.Code, http.StatusOK)
+	}
+
+	if strings.TrimSpace(countW.Body.String()) != "1" {
+		t.Fatalf("Count body = %q, want %q", countW.Body.String(), "1")
 	}
 }

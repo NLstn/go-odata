@@ -72,6 +72,11 @@ func (h *EntityHandler) handleGetCollectionOverwrite(w http.ResponseWriter, r *h
 	// Apply default max top if no explicit $top is set
 	queryOptions = h.applyDefaultMaxTop(queryOptions)
 
+	if err := applyPolicyFilter(r, h.policy, buildEntityResourceDescriptor(h.metadata, "", nil), queryOptions); err != nil {
+		WriteError(w, http.StatusForbidden, "Authorization failed", err.Error())
+		return
+	}
+
 	// Create overwrite context
 	ctx := &OverwriteContext{
 		QueryOptions: queryOptions,
@@ -129,6 +134,14 @@ func (h *EntityHandler) parseCollectionQueryOptions(w http.ResponseWriter, r *ht
 
 		// Apply default max top if no explicit $top is set
 		queryOptions = h.applyDefaultMaxTop(queryOptions)
+
+		if err := applyPolicyFilter(r, h.policy, buildEntityResourceDescriptor(h.metadata, "", nil), queryOptions); err != nil {
+			return nil, &collectionRequestError{
+				StatusCode: http.StatusForbidden,
+				ErrorCode:  "Authorization failed",
+				Message:    err.Error(),
+			}
+		}
 
 		return queryOptions, nil
 	}

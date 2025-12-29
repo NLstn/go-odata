@@ -1,6 +1,10 @@
 package auth
 
-import "net/http"
+import (
+	"net/http"
+
+	"github.com/nlstn/go-odata/internal/query"
+)
 
 // AuthContext contains authentication and request metadata for authorization decisions.
 type AuthContext struct {
@@ -60,4 +64,11 @@ func Deny(reason string) Decision {
 // Policy defines the interface for authorization decisions.
 type Policy interface {
 	Authorize(ctx AuthContext, resource ResourceDescriptor, operation Operation) Decision
+}
+
+// QueryFilterProvider defines an optional extension point for providing additional
+// query filters based on authorization policy.
+type QueryFilterProvider interface {
+	Policy
+	QueryFilter(ctx AuthContext, resource ResourceDescriptor, operation Operation) (*query.FilterExpression, error)
 }

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nlstn/go-odata/internal/auth"
 	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/query"
 	"gorm.io/driver/sqlite"
@@ -71,6 +72,40 @@ func setupRelationTestDB(t *testing.T) *gorm.DB {
 	db.Create(&books)
 
 	return db
+}
+
+type targetSetDenyPolicy struct {
+	deniedSet string
+}
+
+func (p targetSetDenyPolicy) Authorize(_ auth.AuthContext, resource auth.ResourceDescriptor, _ auth.Operation) auth.Decision {
+	if resource.EntitySetName == p.deniedSet {
+		return auth.Deny("blocked")
+	}
+	return auth.Allow()
+}
+
+func TestNavigationPropertyRequiresTargetAuthorization(t *testing.T) {
+	db := setupRelationTestDB(t)
+	authorMeta := mustAnalyzeEntity(&Author{})
+	bookMeta := mustAnalyzeEntity(&Book{})
+
+	handler := NewEntityHandler(db, authorMeta, nil)
+	handler.SetEntitiesMetadata(map[string]*metadata.EntityMetadata{
+		authorMeta.EntitySetName: authorMeta,
+		bookMeta.EntitySetName:   bookMeta,
+	})
+	handler.SetPolicy(targetSetDenyPolicy{deniedSet: bookMeta.EntitySetName})
+
+	req := httptest.NewRequest(http.MethodGet, "/Authors(1)/Books", nil)
+	req.Header.Set("Authorization", "Bearer token")
+	w := httptest.NewRecorder()
+
+	handler.HandleNavigationProperty(w, req, "1", "Books", false)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("Status = %v, want %v", w.Code, http.StatusForbidden)
+	}
 }
 
 // TestExpandBasic tests basic $expand functionality
@@ -365,8 +400,10 @@ func TestExpandWithCount(t *testing.T) {
 func TestNavigationPropertyCount(t *testing.T) {
 	db := setupRelationTestDB(t)
 	authorMeta, _ := metadata.AnalyzeEntity(&Author{})
+	bookMeta, _ := metadata.AnalyzeEntity(&Book{})
 	entitiesMetadata := map[string]*metadata.EntityMetadata{
 		"Authors": authorMeta,
+		"Books":   bookMeta,
 	}
 	handler := NewEntityHandler(db, authorMeta, nil)
 	handler.SetEntitiesMetadata(entitiesMetadata)
@@ -431,7 +468,12 @@ func TestNavigationPropertyCount(t *testing.T) {
 func TestNavigationPropertyCountNotFound(t *testing.T) {
 	db := setupRelationTestDB(t)
 	authorMeta, _ := metadata.AnalyzeEntity(&Author{})
+	bookMeta, _ := metadata.AnalyzeEntity(&Book{})
 	handler := NewEntityHandler(db, authorMeta, nil)
+	handler.SetEntitiesMetadata(map[string]*metadata.EntityMetadata{
+		authorMeta.EntitySetName: authorMeta,
+		bookMeta.EntitySetName:   bookMeta,
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "/Authors(999)/Books/$count", nil)
 	w := httptest.NewRecorder()
@@ -464,6 +506,11 @@ func TestNavigationPropertyCountOnSingleValuedProperty(t *testing.T) {
 	db := setupRelationTestDB(t)
 	bookMeta, _ := metadata.AnalyzeEntity(&Book{})
 	handler := NewEntityHandler(db, bookMeta, nil)
+	authorMeta, _ := metadata.AnalyzeEntity(&Author{})
+	handler.SetEntitiesMetadata(map[string]*metadata.EntityMetadata{
+		authorMeta.EntitySetName: authorMeta,
+		bookMeta.EntitySetName:   bookMeta,
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "/Books(1)/Author/$count", nil)
 	w := httptest.NewRecorder()
@@ -480,6 +527,11 @@ func TestNavigationPropertyCountHEAD(t *testing.T) {
 	db := setupRelationTestDB(t)
 	authorMeta, _ := metadata.AnalyzeEntity(&Author{})
 	handler := NewEntityHandler(db, authorMeta, nil)
+	bookMeta, _ := metadata.AnalyzeEntity(&Book{})
+	handler.SetEntitiesMetadata(map[string]*metadata.EntityMetadata{
+		authorMeta.EntitySetName: authorMeta,
+		bookMeta.EntitySetName:   bookMeta,
+	})
 
 	req := httptest.NewRequest(http.MethodHead, "/Authors(1)/Books/$count", nil)
 	w := httptest.NewRecorder()
@@ -507,6 +559,11 @@ func TestNavigationPropertyCountOPTIONS(t *testing.T) {
 	db := setupRelationTestDB(t)
 	authorMeta, _ := metadata.AnalyzeEntity(&Author{})
 	handler := NewEntityHandler(db, authorMeta, nil)
+	bookMeta, _ := metadata.AnalyzeEntity(&Book{})
+	handler.SetEntitiesMetadata(map[string]*metadata.EntityMetadata{
+		authorMeta.EntitySetName: authorMeta,
+		bookMeta.EntitySetName:   bookMeta,
+	})
 
 	req := httptest.NewRequest(http.MethodOptions, "/Authors(1)/Books/$count", nil)
 	w := httptest.NewRecorder()
@@ -529,6 +586,11 @@ func TestNavigationPropertyPath(t *testing.T) {
 	db := setupRelationTestDB(t)
 	authorMeta, _ := metadata.AnalyzeEntity(&Author{})
 	handler := NewEntityHandler(db, authorMeta, nil)
+	bookMeta, _ := metadata.AnalyzeEntity(&Book{})
+	handler.SetEntitiesMetadata(map[string]*metadata.EntityMetadata{
+		authorMeta.EntitySetName: authorMeta,
+		bookMeta.EntitySetName:   bookMeta,
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "/Authors(1)/Books", nil)
 	w := httptest.NewRecorder()
@@ -559,6 +621,11 @@ func TestNavigationPropertyPathSingle(t *testing.T) {
 	db := setupRelationTestDB(t)
 	bookMeta, _ := metadata.AnalyzeEntity(&Book{})
 	handler := NewEntityHandler(db, bookMeta, nil)
+	authorMeta, _ := metadata.AnalyzeEntity(&Author{})
+	handler.SetEntitiesMetadata(map[string]*metadata.EntityMetadata{
+		authorMeta.EntitySetName: authorMeta,
+		bookMeta.EntitySetName:   bookMeta,
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "/Books(1)/Author", nil)
 	w := httptest.NewRecorder()

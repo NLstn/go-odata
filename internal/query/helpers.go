@@ -134,3 +134,23 @@ func toSnakeCase(s string) string {
 	}
 	return strings.ToLower(result.String())
 }
+
+// MergeFilterExpressions combines two filter expressions using a logical AND.
+func MergeFilterExpressions(left *FilterExpression, right *FilterExpression) *FilterExpression {
+	if left == nil {
+		return right
+	}
+	if right == nil {
+		return left
+	}
+	return &FilterExpression{
+		Left:    left,
+		Right:   right,
+		Logical: LogicalAnd,
+	}
+}
+
+// ParseFilterExpression parses a raw filter string into a filter expression with metadata validation.
+func ParseFilterExpression(filterStr string, entityMetadata *metadata.EntityMetadata) (*FilterExpression, error) {
+	return parseFilter(filterStr, entityMetadata, map[string]bool{})
+}
