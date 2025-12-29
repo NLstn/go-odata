@@ -45,6 +45,17 @@ func (p filterPolicy) QueryFilter(_ auth.AuthContext, _ auth.ResourceDescriptor,
 	return p.filter, nil
 }
 
+type capturePolicy struct {
+	resources  []auth.ResourceDescriptor
+	operations []auth.Operation
+}
+
+func (p *capturePolicy) Authorize(_ auth.AuthContext, resource auth.ResourceDescriptor, operation auth.Operation) auth.Decision {
+	p.resources = append(p.resources, resource)
+	p.operations = append(p.operations, operation)
+	return auth.Allow()
+}
+
 func TestEntityHandlerAuthorizationDenied(t *testing.T) {
 	handler, _ := setupTestHandler(t)
 	handler.SetPolicy(denyPolicy{reason: "blocked"})
@@ -178,5 +189,83 @@ func TestPolicyFilterConstrainsCollectionResults(t *testing.T) {
 
 	if strings.TrimSpace(countW.Body.String()) != "1" {
 		t.Fatalf("Count body = %q, want %q", countW.Body.String(), "1")
+	}
+}
+
+func TestEntityMutationAuthorizationIncludesEntityData(t *testing.T) {
+	handler, db := setupTestHandler(t)
+
+	db.Create(&TestEntity{ID: 1, Name: "Original"})
+	db.Create(&TestEntity{ID: 2, Name: "Delete Me"})
+
+	policy := &capturePolicy{}
+	handler.SetPolicy(policy)
+
+	t.Run("patch", func(t *testing.T) {
+		body := strings.NewReader(`{"name":"Updated"}`)
+		req := httptest.NewRequest(http.MethodPatch, "/TestEntities(1)", body)
+		req.Header.Set("Authorization", "Bearer token")
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		handler.HandleEntity(w, req, "1")
+
+		if w.Code != http.StatusNoContent && w.Code != http.StatusOK {
+			t.Fatalf("Status = %v, want %v or %v", w.Code, http.StatusNoContent, http.StatusOK)
+		}
+
+		resource := findAuthorizedResource(t, policy, auth.OperationUpdate)
+		assertResourceKey(t, resource, "id", 1)
+	})
+
+	t.Run("delete", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodDelete, "/TestEntities(2)", nil)
+		req.Header.Set("Authorization", "Bearer token")
+		w := httptest.NewRecorder()
+
+		handler.HandleEntity(w, req, "2")
+
+		if w.Code != http.StatusNoContent {
+			t.Fatalf("Status = %v, want %v", w.Code, http.StatusNoContent)
+		}
+
+		resource := findAuthorizedResource(t, policy, auth.OperationDelete)
+		assertResourceKey(t, resource, "id", 2)
+	})
+}
+
+func findAuthorizedResource(t *testing.T, policy *capturePolicy, operation auth.Operation) auth.ResourceDescriptor {
+	t.Helper()
+
+	for i := len(policy.operations) - 1; i >= 0; i-- {
+		if policy.operations[i] != operation {
+			continue
+		}
+		resource := policy.resources[i]
+		if resource.Entity != nil {
+			return resource
+		}
+	}
+
+	t.Fatalf("Expected authorization call with entity data for operation %v", operation)
+	return auth.ResourceDescriptor{}
+}
+
+func assertResourceKey(t *testing.T, resource auth.ResourceDescriptor, key string, expected int) {
+	t.Helper()
+
+	if resource.KeyValues == nil {
+		t.Fatalf("Expected key values on resource descriptor")
+	}
+	value, ok := resource.KeyValues[key]
+	if !ok {
+		t.Fatalf("Expected key %q on resource descriptor", key)
+	}
+	intValue, ok := value.(int)
+	if !ok {
+		t.Fatalf("Expected key %q to be int, got %T", key, value)
+	}
+	if intValue != expected {
+		t.Fatalf("Key %q = %v, want %v", key, intValue, expected)
 	}
 }

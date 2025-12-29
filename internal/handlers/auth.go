@@ -3,6 +3,7 @@ package handlers
 import (
 	"log/slog"
 	"net/http"
+	"reflect"
 
 	"github.com/nlstn/go-odata/internal/auth"
 	"github.com/nlstn/go-odata/internal/metadata"
@@ -90,6 +91,18 @@ func buildEntityResourceDescriptor(entityMetadata *metadata.EntityMetadata, enti
 	return resource
 }
 
+func buildEntityResourceDescriptorWithEntity(entityMetadata *metadata.EntityMetadata, entityKey string, entity interface{}, propertyPath []string) auth.ResourceDescriptor {
+	resource := buildEntityResourceDescriptor(entityMetadata, entityKey, propertyPath)
+	resource.Entity = entity
+	if resource.EntitySetName == "" || entityMetadata == nil || entity == nil {
+		return resource
+	}
+	if keyValues := buildKeyValuesFromEntity(entityMetadata, entity); len(keyValues) > 0 {
+		resource.KeyValues = keyValues
+	}
+	return resource
+}
+
 func buildKeyValues(entityMetadata *metadata.EntityMetadata, entityKey string) map[string]interface{} {
 	if entityMetadata == nil || entityKey == "" {
 		return nil
@@ -125,6 +138,41 @@ func buildKeyValues(entityMetadata *metadata.EntityMetadata, entityKey string) m
 	}
 	for key, value := range components.EntityKeyMap {
 		keyValues[key] = value
+	}
+	return keyValues
+}
+
+func buildKeyValuesFromEntity(entityMetadata *metadata.EntityMetadata, entity interface{}) map[string]interface{} {
+	if entityMetadata == nil || entity == nil {
+		return nil
+	}
+
+	value := reflect.ValueOf(entity)
+	if value.Kind() == reflect.Ptr {
+		if value.IsNil() {
+			return nil
+		}
+		value = value.Elem()
+	}
+	if value.Kind() != reflect.Struct {
+		return nil
+	}
+
+	keyValues := make(map[string]interface{}, len(entityMetadata.KeyProperties))
+	for _, keyProp := range entityMetadata.KeyProperties {
+		field := value.FieldByName(keyProp.Name)
+		if !field.IsValid() {
+			continue
+		}
+		if field.Kind() == reflect.Ptr && field.IsNil() {
+			keyValues[keyProp.JsonName] = nil
+			continue
+		}
+		keyValues[keyProp.JsonName] = field.Interface()
+	}
+
+	if len(keyValues) == 0 {
+		return nil
 	}
 	return keyValues
 }
