@@ -30,6 +30,7 @@ type ResourceDescriptor struct {
 	EntityType    string
 	KeyValues     map[string]interface{}
 	PropertyPath  []string
+	Entity        interface{}
 }
 
 // Operation defines the type of action being authorized.

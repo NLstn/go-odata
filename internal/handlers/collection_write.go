@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/nlstn/go-odata/internal/auth"
 	"github.com/nlstn/go-odata/internal/preference"
 	"github.com/nlstn/go-odata/internal/query"
 	"github.com/nlstn/go-odata/internal/response"
@@ -29,6 +30,10 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 			"Virtual entities require an overwrite handler for Create operation"); err != nil {
 			h.logger.Error("Error writing error response", "error", err)
 		}
+		return
+	}
+
+	if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, "", nil), auth.OperationCreate, h.logger) {
 		return
 	}
 
@@ -153,6 +158,10 @@ func (h *EntityHandler) handlePostMediaEntity(w http.ResponseWriter, r *http.Req
 		if err != nil {
 			break
 		}
+	}
+
+	if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, "", nil), auth.OperationCreate, h.logger) {
+		return
 	}
 
 	contentType := r.Header.Get("Content-Type")

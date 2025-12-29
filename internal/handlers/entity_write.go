@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nlstn/go-odata/internal/auth"
 	"github.com/nlstn/go-odata/internal/etag"
 	"github.com/nlstn/go-odata/internal/preference"
 	"github.com/nlstn/go-odata/internal/query"
@@ -18,6 +19,7 @@ import (
 )
 
 var errETagMismatch = errors.New("etag mismatch")
+var errAuthorizationDenied = errors.New("authorization denied")
 
 // handleDeleteEntity handles DELETE requests for individual entities
 func (h *EntityHandler) handleDeleteEntity(w http.ResponseWriter, r *http.Request, entityKey string) {
@@ -48,6 +50,10 @@ func (h *EntityHandler) handleDeleteEntity(w http.ResponseWriter, r *http.Reques
 			return newTransactionHandledError(err)
 		}
 		entity = fetched
+
+		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptorWithEntity(h.metadata, entityKey, entity, nil), auth.OperationDelete, h.logger) {
+			return newTransactionHandledError(errAuthorizationDenied)
+		}
 
 		if h.metadata.ETagProperty != nil {
 			ifMatch := r.Header.Get(HeaderIfMatch)
@@ -137,6 +143,10 @@ func (h *EntityHandler) handlePatchEntity(w http.ResponseWriter, r *http.Request
 		if err := db.First(entity).Error; err != nil {
 			h.handleFetchError(w, err, entityKey)
 			return newTransactionHandledError(err)
+		}
+
+		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptorWithEntity(h.metadata, entityKey, entity, nil), auth.OperationUpdate, h.logger) {
+			return newTransactionHandledError(errAuthorizationDenied)
 		}
 
 		if h.metadata.ETagProperty != nil {
@@ -315,6 +325,10 @@ func (h *EntityHandler) handlePutEntity(w http.ResponseWriter, r *http.Request, 
 		if err := db.First(entity).Error; err != nil {
 			h.handleFetchError(w, err, entityKey)
 			return newTransactionHandledError(err)
+		}
+
+		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptorWithEntity(h.metadata, entityKey, entity, nil), auth.OperationUpdate, h.logger) {
+			return newTransactionHandledError(errAuthorizationDenied)
 		}
 
 		if h.metadata.ETagProperty != nil {
