@@ -92,6 +92,11 @@ func (h *EntityHandler) handleGetCount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := applyPolicyFilter(r, h.policy, buildEntityResourceDescriptor(h.metadata, "", []string{"$count"}), queryOptions); err != nil {
+		WriteError(w, http.StatusForbidden, "Authorization failed", err.Error())
+		return
+	}
+
 	scopes, hookErr := callBeforeReadCollection(h.metadata, r, queryOptions)
 	if hookErr != nil {
 		WriteError(w, http.StatusForbidden, "Authorization failed", hookErr.Error())
@@ -121,6 +126,11 @@ func (h *EntityHandler) handleGetCountOverwrite(w http.ResponseWriter, r *http.R
 	queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata)
 	if err != nil {
 		WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions, err.Error())
+		return
+	}
+
+	if err := applyPolicyFilter(r, h.policy, buildEntityResourceDescriptor(h.metadata, "", []string{"$count"}), queryOptions); err != nil {
+		WriteError(w, http.StatusForbidden, "Authorization failed", err.Error())
 		return
 	}
 

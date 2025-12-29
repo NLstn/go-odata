@@ -104,6 +104,23 @@ func (h *EntityHandler) handleGetNavigationProperty(w http.ResponseWriter, r *ht
 		return
 	}
 
+	// Authorize access to the target entity set
+	targetMetadata, err := h.getTargetMetadata(navProp.NavigationTarget)
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, ErrMsgInternalError,
+			fmt.Sprintf("Failed to get target metadata: %v", err))
+		return
+	}
+
+	operation := auth.OperationRead
+	if navProp.NavigationIsArray && targetKey == "" {
+		operation = auth.OperationQuery
+	}
+
+	if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(targetMetadata, targetKey, nil), operation, h.logger) {
+		return
+	}
+
 	// If a target key is specified for a collection navigation property (e.g., RelatedProducts(2))
 	// this means we're accessing a specific item from the collection
 	if targetKey != "" && navProp.NavigationIsArray {
@@ -218,7 +235,18 @@ func (h *EntityHandler) handleNavigationCollectionWithQueryOptions(w http.Respon
 		Metadata: targetMetadata,
 
 		ParseQueryOptions: func() (*query.QueryOptions, error) {
-			return query.ParseQueryOptions(r.URL.Query(), targetMetadata)
+			queryOptions, err := query.ParseQueryOptions(r.URL.Query(), targetMetadata)
+			if err != nil {
+				return nil, err
+			}
+			if err := applyPolicyFilter(r, h.policy, buildEntityResourceDescriptor(targetMetadata, "", nil), queryOptions); err != nil {
+				return nil, &collectionRequestError{
+					StatusCode: http.StatusForbidden,
+					ErrorCode:  "Authorization failed",
+					Message:    err.Error(),
+				}
+			}
+			return queryOptions, nil
 		},
 
 		BeforeRead: func(queryOptions *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
@@ -464,6 +492,18 @@ func (h *EntityHandler) handleGetNavigationPropertyCount(w http.ResponseWriter, 
 	if navProp == nil {
 		WriteError(w, http.StatusNotFound, "Navigation property not found",
 			fmt.Sprintf("'%s' is not a valid navigation property for %s", navigationProperty, h.metadata.EntitySetName))
+		return
+	}
+
+	// Authorize access to the target entity set
+	targetMetadata, err := h.getTargetMetadata(navProp.NavigationTarget)
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, ErrMsgInternalError,
+			fmt.Sprintf("Failed to get target metadata: %v", err))
+		return
+	}
+
+	if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(targetMetadata, "", nil), auth.OperationQuery, h.logger) {
 		return
 	}
 
@@ -755,6 +795,17 @@ func (h *EntityHandler) handlePutNavigationPropertyRef(w http.ResponseWriter, r 
 		return
 	}
 
+	targetMetadata, err := h.getTargetMetadata(navProp.NavigationTarget)
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, ErrMsgInternalError,
+			fmt.Sprintf("Failed to get target metadata: %v", err))
+		return
+	}
+
+	if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(targetMetadata, "", nil), auth.OperationUpdate, h.logger) {
+		return
+	}
+
 	// Parse the request body to extract @odata.id
 	var requestBody map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
@@ -778,7 +829,7 @@ func (h *EntityHandler) handlePutNavigationPropertyRef(w http.ResponseWriter, r 
 	}
 
 	// Validate and extract the target entity key from @odata.id
-	targetKey, err := h.validateAndExtractEntityKey(odataIDStr, navProp.NavigationTarget)
+	targetKey, err = h.validateAndExtractEntityKey(odataIDStr, navProp.NavigationTarget)
 	if err != nil {
 		WriteError(w, http.StatusBadRequest, "Invalid @odata.id",
 			err.Error())
@@ -825,6 +876,17 @@ func (h *EntityHandler) handlePostNavigationPropertyRef(w http.ResponseWriter, r
 		return
 	}
 
+	targetMetadata, err := h.getTargetMetadata(navProp.NavigationTarget)
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, ErrMsgInternalError,
+			fmt.Sprintf("Failed to get target metadata: %v", err))
+		return
+	}
+
+	if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(targetMetadata, "", nil), auth.OperationUpdate, h.logger) {
+		return
+	}
+
 	// Parse the request body to extract @odata.id
 	var requestBody map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
@@ -848,7 +910,7 @@ func (h *EntityHandler) handlePostNavigationPropertyRef(w http.ResponseWriter, r
 	}
 
 	// Validate and extract the target entity key from @odata.id
-	targetKey, err := h.validateAndExtractEntityKey(odataIDStr, navProp.NavigationTarget)
+	targetKey, err = h.validateAndExtractEntityKey(odataIDStr, navProp.NavigationTarget)
 	if err != nil {
 		WriteError(w, http.StatusBadRequest, "Invalid @odata.id",
 			err.Error())
@@ -870,7 +932,7 @@ func (h *EntityHandler) handlePostNavigationPropertyRef(w http.ResponseWriter, r
 // handleDeleteNavigationPropertyRef handles DELETE requests to remove a navigation property reference
 // Example: DELETE Products(1)/Category/$ref (single-valued)
 // Example: DELETE Products(1)/RelatedProducts(2)/$ref (collection - handled here by extracting key from navigation property)
-func (h *EntityHandler) handleDeleteNavigationPropertyRef(w http.ResponseWriter, _ *http.Request, entityKey string, navigationProperty string) {
+func (h *EntityHandler) handleDeleteNavigationPropertyRef(w http.ResponseWriter, r *http.Request, entityKey string, navigationProperty string) {
 	// Check if the navigation property contains a key (e.g., RelatedProducts(2))
 	navPropName, targetKey := h.parseNavigationPropertyWithKey(navigationProperty)
 
@@ -884,6 +946,15 @@ func (h *EntityHandler) handleDeleteNavigationPropertyRef(w http.ResponseWriter,
 
 	// If this is a collection navigation property with a target key specified
 	if navProp.NavigationIsArray && targetKey != "" {
+		targetMetadata, err := h.getTargetMetadata(navProp.NavigationTarget)
+		if err != nil {
+			WriteError(w, http.StatusInternalServerError, ErrMsgInternalError,
+				fmt.Sprintf("Failed to get target metadata: %v", err))
+			return
+		}
+		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(targetMetadata, targetKey, nil), auth.OperationUpdate, h.logger) {
+			return
+		}
 		// DELETE specific reference from collection: EntitySet(key)/NavProp(targetKey)/$ref
 		if err := h.deleteCollectionNavigationPropertyReference(entityKey, navProp, targetKey); err != nil {
 			h.logger.Error("Failed to delete collection navigation property reference", "error", err, "entityKey", entityKey, "navProp", navProp.Name, "targetKey", targetKey)
@@ -897,6 +968,15 @@ func (h *EntityHandler) handleDeleteNavigationPropertyRef(w http.ResponseWriter,
 			"DELETE $ref on collection navigation properties requires specifying the target entity key. Use EntitySet(key)/NavigationProperty(targetKey)/$ref")
 		return
 	} else {
+		targetMetadata, err := h.getTargetMetadata(navProp.NavigationTarget)
+		if err != nil {
+			WriteError(w, http.StatusInternalServerError, ErrMsgInternalError,
+				fmt.Sprintf("Failed to get target metadata: %v", err))
+			return
+		}
+		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(targetMetadata, "", nil), auth.OperationUpdate, h.logger) {
+			return
+		}
 		// Single-valued navigation property
 		// Remove the reference by setting the navigation property to null
 		if err := h.deleteNavigationPropertyReference(entityKey, navProp); err != nil {

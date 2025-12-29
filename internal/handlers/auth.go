@@ -6,6 +6,7 @@ import (
 
 	"github.com/nlstn/go-odata/internal/auth"
 	"github.com/nlstn/go-odata/internal/metadata"
+	"github.com/nlstn/go-odata/internal/query"
 	"github.com/nlstn/go-odata/internal/response"
 )
 
@@ -48,6 +49,29 @@ func authorizeRequest(w http.ResponseWriter, r *http.Request, policy auth.Policy
 		logger.Error("Error writing authorization response", "error", err)
 	}
 	return false
+}
+
+func policyQueryFilter(r *http.Request, policy auth.Policy, resource auth.ResourceDescriptor, operation auth.Operation) (*query.FilterExpression, error) {
+	if policy == nil {
+		return nil, nil
+	}
+	filterProvider, ok := policy.(auth.QueryFilterProvider)
+	if !ok {
+		return nil, nil
+	}
+	return filterProvider.QueryFilter(buildAuthContext(r), resource, operation)
+}
+
+func applyPolicyFilter(r *http.Request, policy auth.Policy, resource auth.ResourceDescriptor, queryOptions *query.QueryOptions) error {
+	if queryOptions == nil {
+		return nil
+	}
+	filter, err := policyQueryFilter(r, policy, resource, auth.OperationQuery)
+	if err != nil {
+		return err
+	}
+	queryOptions.Filter = query.MergeFilterExpressions(queryOptions.Filter, filter)
+	return nil
 }
 
 func buildEntityResourceDescriptor(entityMetadata *metadata.EntityMetadata, entityKey string, propertyPath []string) auth.ResourceDescriptor {
