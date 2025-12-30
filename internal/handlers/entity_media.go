@@ -31,9 +31,6 @@ func (h *EntityHandler) HandleMediaEntityValue(w http.ResponseWriter, r *http.Re
 		}
 		h.handleGetMediaEntityValue(w, r, entityKey)
 	case http.MethodPut:
-		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, entityKey, propertyPath), auth.OperationUpdate, h.logger) {
-			return
-		}
 		h.handlePutMediaEntityValue(w, r, entityKey)
 	case http.MethodOptions:
 		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, entityKey, propertyPath), auth.OperationRead, h.logger) {
@@ -151,6 +148,12 @@ func (h *EntityHandler) handlePutMediaEntityValue(w http.ResponseWriter, r *http
 				h.logger.Error("Error writing error response", "error", writeErr)
 			}
 		}
+		return
+	}
+
+	// Authorize with entity data
+	propertyPath := []string{"$value"}
+	if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptorWithEntity(h.metadata, entityKey, entity, propertyPath), auth.OperationUpdate, h.logger) {
 		return
 	}
 

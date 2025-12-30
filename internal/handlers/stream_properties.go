@@ -26,9 +26,6 @@ func (h *EntityHandler) HandleStreamProperty(w http.ResponseWriter, r *http.Requ
 		}
 		h.handleGetStreamProperty(w, r, entityKey, propertyName, isValue)
 	case http.MethodPut:
-		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, entityKey, propertyPath), auth.OperationUpdate, h.logger) {
-			return
-		}
 		if isValue {
 			h.handlePutStreamProperty(w, r, entityKey, propertyName)
 		} else {
@@ -188,6 +185,12 @@ func (h *EntityHandler) handlePutStreamProperty(w http.ResponseWriter, r *http.R
 
 	if err := db.First(entity).Error; err != nil {
 		h.handlePropertyFetchError(w, err, entityKey)
+		return
+	}
+
+	// Authorize with entity data
+	propertyPath := []string{propertyName, "$value"}
+	if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptorWithEntity(h.metadata, entityKey, entity, propertyPath), auth.OperationUpdate, h.logger) {
 		return
 	}
 
