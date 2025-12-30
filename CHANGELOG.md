@@ -49,7 +49,7 @@ rely on version numbers to reason about compatibility.
 
 ### Fixed
 - **Custom entity set names with $search**: Fixed incorrect table name resolution when entities use custom `EntitySetName()` methods. The code now properly uses the pre-computed `TableName` from metadata instead of deriving it from `EntitySetName`, which respects GORM's `TableName()` method and prevents "missing FROM-clause entry" SQL errors
-- Authorization checks in entity mutation handlers now use entity-set level create validation and include key-based descriptors with original entity data for update/delete decisions, returning OData-compliant 401/403 errors on failure.
+- Authorization checks for CREATE operations use entity-set descriptors, while UPDATE/DELETE operations now include fetched entity data and derived key values in key-based resource descriptors for more granular authorization decisions, returning OData-compliant 401/403 errors on failure.
 - **MySQL/MariaDB compatibility for OData query functions**: Added database-specific SQL generation for date extraction functions (YEAR, MONTH, DAY, HOUR, MINUTE, SECOND), arithmetic functions (CEILING, FLOOR), and the NOW function. MySQL compliance tests improved from 95% to 97% pass rate (21 failures reduced to 7).
   - Date extraction functions now use MySQL's native YEAR(), MONTH(), etc. instead of PostgreSQL's EXTRACT()
   - CEILING and FLOOR use MySQL's native functions instead of SQLite's CASE expressions
