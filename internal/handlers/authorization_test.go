@@ -51,7 +51,16 @@ type capturePolicy struct {
 }
 
 func (p *capturePolicy) Authorize(_ auth.AuthContext, resource auth.ResourceDescriptor, operation auth.Operation) auth.Decision {
-	p.resources = append(p.resources, resource)
+	// Make a deep copy of the resource descriptor to capture entity state at authorization time
+	captured := resource
+	if resource.Entity != nil {
+		// Make a copy of the entity to preserve its state at authorization time
+		if testEntity, ok := resource.Entity.(*TestEntity); ok {
+			copy := *testEntity
+			captured.Entity = &copy
+		}
+	}
+	p.resources = append(p.resources, captured)
 	p.operations = append(p.operations, operation)
 	return auth.Allow()
 }
@@ -216,6 +225,21 @@ func TestEntityMutationAuthorizationIncludesEntityData(t *testing.T) {
 
 		resource := findAuthorizedResource(t, policy, auth.OperationUpdate)
 		assertResourceKey(t, resource, "id", 1)
+
+		// Verify entity data is included and has correct field values at authorization time
+		if resource.Entity == nil {
+			t.Fatal("Expected Entity to be present in resource descriptor")
+		}
+		entity, ok := resource.Entity.(*TestEntity)
+		if !ok {
+			t.Fatalf("Expected Entity to be *TestEntity, got %T", resource.Entity)
+		}
+		if entity.ID != 1 {
+			t.Errorf("Entity ID = %v, want 1", entity.ID)
+		}
+		if entity.Name != "Original" {
+			t.Errorf("Entity Name = %q, want %q (entity should have original data at authorization time)", entity.Name, "Original")
+		}
 	})
 
 	t.Run("delete", func(t *testing.T) {
@@ -231,6 +255,21 @@ func TestEntityMutationAuthorizationIncludesEntityData(t *testing.T) {
 
 		resource := findAuthorizedResource(t, policy, auth.OperationDelete)
 		assertResourceKey(t, resource, "id", 2)
+
+		// Verify entity data is included and has correct field values
+		if resource.Entity == nil {
+			t.Fatal("Expected Entity to be present in resource descriptor")
+		}
+		entity, ok := resource.Entity.(*TestEntity)
+		if !ok {
+			t.Fatalf("Expected Entity to be *TestEntity, got %T", resource.Entity)
+		}
+		if entity.ID != 2 {
+			t.Errorf("Entity ID = %v, want 2", entity.ID)
+		}
+		if entity.Name != "Delete Me" {
+			t.Errorf("Entity Name = %q, want %q", entity.Name, "Delete Me")
+		}
 	})
 }
 

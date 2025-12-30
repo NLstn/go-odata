@@ -29,9 +29,6 @@ func (h *EntityHandler) HandleCollection(w http.ResponseWriter, r *http.Request)
 		}
 		h.handleGetCollection(w, r)
 	case http.MethodPost:
-		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, "", nil), auth.OperationCreate, h.logger) {
-			return
-		}
 		h.handlePostEntity(w, r)
 	case http.MethodOptions:
 		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, "", nil), auth.OperationRead, h.logger) {
