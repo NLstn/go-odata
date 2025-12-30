@@ -35,19 +35,10 @@ func (h *EntityHandler) HandleEntity(w http.ResponseWriter, r *http.Request, ent
 		}
 		h.handleGetEntity(w, r, entityKey)
 	case http.MethodDelete:
-		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, entityKey, nil), auth.OperationDelete, h.logger) {
-			return
-		}
 		h.handleDeleteEntity(w, r, entityKey)
 	case http.MethodPatch:
-		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, entityKey, nil), auth.OperationUpdate, h.logger) {
-			return
-		}
 		h.handlePatchEntity(w, r, entityKey)
 	case http.MethodPut:
-		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, entityKey, nil), auth.OperationUpdate, h.logger) {
-			return
-		}
 		h.handlePutEntity(w, r, entityKey)
 	case http.MethodOptions:
 		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, entityKey, nil), auth.OperationRead, h.logger) {
