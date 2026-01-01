@@ -105,6 +105,7 @@ rely on version numbers to reason about compatibility.
   duration is provided and continue purging expired rows in the background.
 - Compliance suite default output is now concise (overall progress and summary only); use `-verbose` for per-suite and per-test details.
 - Documentation now clarifies full-text search support for SQLite/PostgreSQL, along with fallback behavior and operational constraints.
+- Metadata generation now shares common logic between JSON and XML outputs, and XML assembly uses builders to reduce allocations.
 
 ### Fixed
 
