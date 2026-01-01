@@ -82,34 +82,9 @@ func (h *EntityHandler) handleGetEntity(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	// Parse query options for $expand and $select
-	queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata)
+	queryOptions, err := h.parseSingleEntityQueryOptions(r)
 	if err != nil {
-		h.writeInvalidQueryError(w, err)
-		return
-	}
-
-	// Validate that $top, $skip, and $index are not used on individual entities
-	// Per OData v4 spec, these query options only apply to collections
-	if queryOptions.Top != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions,
-			"$top query option is not applicable to individual entities"); writeErr != nil {
-			h.logger.Error("Error writing error response", "error", writeErr)
-		}
-		return
-	}
-	if queryOptions.Skip != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions,
-			"$skip query option is not applicable to individual entities"); writeErr != nil {
-			h.logger.Error("Error writing error response", "error", writeErr)
-		}
-		return
-	}
-	if queryOptions.Index {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions,
-			"$index query option is not applicable to individual entities"); writeErr != nil {
-			h.logger.Error("Error writing error response", "error", writeErr)
-		}
+		h.writeRequestError(w, err, http.StatusBadRequest, ErrMsgInvalidQueryOptions)
 		return
 	}
 
@@ -179,33 +154,9 @@ func (h *EntityHandler) handleGetEntity(w http.ResponseWriter, r *http.Request, 
 
 // handleGetEntityOverwrite handles GET entity requests using the overwrite handler
 func (h *EntityHandler) handleGetEntityOverwrite(w http.ResponseWriter, r *http.Request, entityKey string) {
-	// Parse query options for $expand and $select
-	queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata)
+	queryOptions, err := h.parseSingleEntityQueryOptions(r)
 	if err != nil {
-		h.writeInvalidQueryError(w, err)
-		return
-	}
-
-	// Validate that $top, $skip, and $index are not used on individual entities
-	if queryOptions.Top != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions,
-			"$top query option is not applicable to individual entities"); writeErr != nil {
-			h.logger.Error("Error writing error response", "error", writeErr)
-		}
-		return
-	}
-	if queryOptions.Skip != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions,
-			"$skip query option is not applicable to individual entities"); writeErr != nil {
-			h.logger.Error("Error writing error response", "error", writeErr)
-		}
-		return
-	}
-	if queryOptions.Index {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions,
-			"$index query option is not applicable to individual entities"); writeErr != nil {
-			h.logger.Error("Error writing error response", "error", writeErr)
-		}
+		h.writeRequestError(w, err, http.StatusBadRequest, ErrMsgInvalidQueryOptions)
 		return
 	}
 

@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"reflect"
@@ -12,6 +13,86 @@ import (
 	"github.com/nlstn/go-odata/internal/response"
 	"gorm.io/gorm"
 )
+
+type requestError struct {
+	StatusCode int
+	ErrorCode  string
+	Message    string
+}
+
+func (e *requestError) Error() string {
+	return e.Message
+}
+
+func (h *EntityHandler) writeRequestError(w http.ResponseWriter, err error, defaultStatus int, defaultCode string) {
+	if err == nil {
+		return
+	}
+
+	var reqErr *requestError
+	if errors.As(err, &reqErr) {
+		status := reqErr.StatusCode
+		if status == 0 {
+			status = defaultStatus
+		}
+
+		code := reqErr.ErrorCode
+		if code == "" {
+			code = defaultCode
+		}
+
+		message := reqErr.Message
+		if message == "" {
+			message = err.Error()
+		}
+
+		if writeErr := response.WriteError(w, status, code, message); writeErr != nil {
+			h.logger.Error("Error writing error response", "error", writeErr)
+		}
+		return
+	}
+
+	if writeErr := response.WriteError(w, defaultStatus, defaultCode, err.Error()); writeErr != nil {
+		h.logger.Error("Error writing error response", "error", writeErr)
+	}
+}
+
+func (h *EntityHandler) parseSingleEntityQueryOptions(r *http.Request) (*query.QueryOptions, error) {
+	queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata)
+	if err != nil {
+		return nil, &requestError{
+			StatusCode: http.StatusBadRequest,
+			ErrorCode:  ErrMsgInvalidQueryOptions,
+			Message:    err.Error(),
+		}
+	}
+
+	if queryOptions.Top != nil {
+		return nil, &requestError{
+			StatusCode: http.StatusBadRequest,
+			ErrorCode:  ErrMsgInvalidQueryOptions,
+			Message:    "$top query option is not applicable to individual entities",
+		}
+	}
+
+	if queryOptions.Skip != nil {
+		return nil, &requestError{
+			StatusCode: http.StatusBadRequest,
+			ErrorCode:  ErrMsgInvalidQueryOptions,
+			Message:    "$skip query option is not applicable to individual entities",
+		}
+	}
+
+	if queryOptions.Index {
+		return nil, &requestError{
+			StatusCode: http.StatusBadRequest,
+			ErrorCode:  ErrMsgInvalidQueryOptions,
+			Message:    "$index query option is not applicable to individual entities",
+		}
+	}
+
+	return queryOptions, nil
+}
 
 // fetchEntityByKey fetches an entity by its key with optional expand
 func (h *EntityHandler) fetchEntityByKey(ctx context.Context, entityKey string, queryOptions *query.QueryOptions, scopes []func(*gorm.DB) *gorm.DB) (interface{}, error) {
