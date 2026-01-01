@@ -3,7 +3,6 @@ package handlers
 import (
 	"fmt"
 	"net/http"
-	"sort"
 	"strings"
 
 	"github.com/nlstn/go-odata/internal/metadata"
@@ -32,42 +31,33 @@ func (h *MetadataHandler) handleMetadataXML(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *MetadataHandler) buildMetadataDocument(model metadataModel) string {
-	metadata := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+	var builder strings.Builder
+	builder.WriteString(fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <edmx:Edmx xmlns:edmx="http://docs.oasis-open.org/odata/ns/edmx" Version="%s">
   <edmx:DataServices>
     <Schema xmlns="http://docs.oasis-open.org/odata/ns/edm" Namespace="%s">
-`, response.ODataVersionValue, model.namespace)
+`, response.ODataVersionValue, model.namespace))
 
-	metadata += h.buildEnumTypes(model)
-	metadata += h.buildEntityTypes(model)
-	metadata += h.buildEntityContainer(model)
+	builder.WriteString(h.buildEnumTypes(model))
+	builder.WriteString(h.buildEntityTypes(model))
+	builder.WriteString(h.buildEntityContainer(model))
 
-	metadata += `    </Schema>
+	builder.WriteString(`    </Schema>
   </edmx:DataServices>
-</edmx:Edmx>`
+</edmx:Edmx>`)
 
-	return metadata
+	return builder.String()
 }
 
 func (h *MetadataHandler) buildEnumTypes(model metadataModel) string {
-	enumDefinitions := model.collectEnumDefinitions()
+	enumDefinitions := h.sortedEnumDefinitions(model)
 	if len(enumDefinitions) == 0 {
 		return ""
 	}
 
-	enumNames := make([]string, 0, len(enumDefinitions))
-	for name := range enumDefinitions {
-		enumNames = append(enumNames, name)
-	}
-	sort.Strings(enumNames)
-
 	var builder strings.Builder
-	for _, name := range enumNames {
-		info := enumDefinitions[name]
-		if info == nil || len(info.Members) == 0 {
-			continue
-		}
-		builder.WriteString(h.buildEnumType(name, info))
+	for _, definition := range enumDefinitions {
+		builder.WriteString(h.buildEnumType(definition.name, definition.info))
 	}
 
 	return builder.String()
@@ -102,11 +92,11 @@ func (h *MetadataHandler) buildEnumType(enumTypeName string, info *enumTypeInfo)
 }
 
 func (h *MetadataHandler) buildEntityTypes(model metadataModel) string {
-	result := ""
+	var builder strings.Builder
 	for _, entityMeta := range model.entities {
-		result += h.buildEntityType(model, entityMeta)
+		builder.WriteString(h.buildEntityType(model, entityMeta))
 	}
-	return result
+	return builder.String()
 }
 
 func (h *MetadataHandler) buildEntityType(model metadataModel, entityMeta *metadata.EntityMetadata) string {
@@ -115,28 +105,29 @@ func (h *MetadataHandler) buildEntityType(model metadataModel, entityMeta *metad
 		hasStreamAttr = ` HasStream="true"`
 	}
 
-	result := fmt.Sprintf(`      <EntityType Name="%s"%s>
+	var builder strings.Builder
+	builder.WriteString(fmt.Sprintf(`      <EntityType Name="%s"%s>
         <Key>
-`, entityMeta.EntityName, hasStreamAttr)
+`, entityMeta.EntityName, hasStreamAttr))
 
 	for _, keyProp := range entityMeta.KeyProperties {
-		result += fmt.Sprintf(`          <PropertyRef Name="%s" />
-`, keyProp.JsonName)
+		builder.WriteString(fmt.Sprintf(`          <PropertyRef Name="%s" />
+`, keyProp.JsonName))
 	}
 
-	result += `        </Key>
-`
+	builder.WriteString(`        </Key>
+`)
 
-	result += h.buildRegularProperties(model, entityMeta)
-	result += h.buildNavigationProperties(model, entityMeta)
+	builder.WriteString(h.buildRegularProperties(model, entityMeta))
+	builder.WriteString(h.buildNavigationProperties(model, entityMeta))
 
-	result += `      </EntityType>
-`
-	return result
+	builder.WriteString(`      </EntityType>
+`)
+	return builder.String()
 }
 
 func (h *MetadataHandler) buildRegularProperties(model metadataModel, entityMeta *metadata.EntityMetadata) string {
-	result := ""
+	var builder strings.Builder
 	for _, prop := range entityMeta.Properties {
 		if prop.IsNavigationProp {
 			continue
@@ -155,21 +146,10 @@ func (h *MetadataHandler) buildRegularProperties(model metadataModel, entityMeta
 			}
 		}
 
-		var edmType string
-		if prop.IsEnum && prop.EnumTypeName != "" {
-			edmType = model.qualifiedTypeName(prop.EnumTypeName)
-		} else {
-			edmType = getEdmType(prop.Type)
-		}
-
+		edmType := h.propertyEdmType(model, &prop)
+		nullableValue, _ := h.propertyNullable(&prop)
 		nullable := "false"
-		if prop.Nullable != nil {
-			if *prop.Nullable {
-				nullable = "true"
-			} else {
-				nullable = "false"
-			}
-		} else if !prop.IsRequired && !prop.IsKey {
+		if nullableValue {
 			nullable = "true"
 		}
 
@@ -188,20 +168,20 @@ func (h *MetadataHandler) buildRegularProperties(model metadataModel, entityMeta
 			attrs += fmt.Sprintf(` DefaultValue="%s"`, prop.DefaultValue)
 		}
 
-		result += fmt.Sprintf(`        <Property %s />
-`, attrs)
+		builder.WriteString(fmt.Sprintf(`        <Property %s />
+`, attrs))
 	}
 
 	for _, streamProp := range entityMeta.StreamProperties {
-		result += fmt.Sprintf(`        <Property Name="%s" Type="Edm.Stream" />
-`, streamProp.Name)
+		builder.WriteString(fmt.Sprintf(`        <Property Name="%s" Type="Edm.Stream" />
+`, streamProp.Name))
 	}
 
-	return result
+	return builder.String()
 }
 
 func (h *MetadataHandler) buildNavigationProperties(model metadataModel, entityMeta *metadata.EntityMetadata) string {
-	result := ""
+	var builder strings.Builder
 	for _, prop := range entityMeta.Properties {
 		if !prop.IsNavigationProp {
 			continue
@@ -213,57 +193,53 @@ func (h *MetadataHandler) buildNavigationProperties(model metadataModel, entityM
 		}
 
 		if len(prop.ReferentialConstraints) > 0 {
-			result += fmt.Sprintf(`        <NavigationProperty Name="%s" Type="%s">
-`, prop.JsonName, typeName)
-			result += `          <ReferentialConstraint>
-`
+			builder.WriteString(fmt.Sprintf(`        <NavigationProperty Name="%s" Type="%s">
+`, prop.JsonName, typeName))
+			builder.WriteString(`          <ReferentialConstraint>
+`)
 			for dependent, principal := range prop.ReferentialConstraints {
-				result += fmt.Sprintf(`            <Property Name="%s" ReferencedProperty="%s" />
-`, dependent, principal)
+				builder.WriteString(fmt.Sprintf(`            <Property Name="%s" ReferencedProperty="%s" />
+`, dependent, principal))
 			}
-			result += `          </ReferentialConstraint>
+			builder.WriteString(`          </ReferentialConstraint>
         </NavigationProperty>
-`
+`)
 		} else {
-			result += fmt.Sprintf(`        <NavigationProperty Name="%s" Type="%s" />
-`, prop.JsonName, typeName)
+			builder.WriteString(fmt.Sprintf(`        <NavigationProperty Name="%s" Type="%s" />
+`, prop.JsonName, typeName))
 		}
 	}
-	return result
+	return builder.String()
 }
 
 func (h *MetadataHandler) buildEntityContainer(model metadataModel) string {
-	result := `      <EntityContainer Name="Container">
-`
+	var builder strings.Builder
+	builder.WriteString(`      <EntityContainer Name="Container">
+`)
 	for entitySetName, entityMeta := range model.entities {
+		navigationBindings := h.navigationBindings(model, entityMeta)
 		if entityMeta.IsSingleton {
-			result += fmt.Sprintf(`        <Singleton Name="%s" Type="%s">
-`, entityMeta.SingletonName, model.qualifiedTypeName(entityMeta.EntityName))
-			for _, prop := range entityMeta.Properties {
-				if prop.IsNavigationProp {
-					targetEntitySet := model.getEntitySetNameForType(prop.NavigationTarget)
-					result += fmt.Sprintf(`          <NavigationPropertyBinding Path="%s" Target="%s" />
-`, prop.JsonName, targetEntitySet)
-				}
+			builder.WriteString(fmt.Sprintf(`        <Singleton Name="%s" Type="%s">
+`, entityMeta.SingletonName, model.qualifiedTypeName(entityMeta.EntityName)))
+			for _, binding := range navigationBindings {
+				builder.WriteString(fmt.Sprintf(`          <NavigationPropertyBinding Path="%s" Target="%s" />
+`, binding.path, binding.target))
 			}
-			result += `        </Singleton>
-`
+			builder.WriteString(`        </Singleton>
+`)
 		} else {
-			result += fmt.Sprintf(`        <EntitySet Name="%s" EntityType="%s">
-`, entitySetName, model.qualifiedTypeName(entityMeta.EntityName))
-			for _, prop := range entityMeta.Properties {
-				if prop.IsNavigationProp {
-					targetEntitySet := model.getEntitySetNameForType(prop.NavigationTarget)
-					result += fmt.Sprintf(`          <NavigationPropertyBinding Path="%s" Target="%s" />
-`, prop.JsonName, targetEntitySet)
-				}
+			builder.WriteString(fmt.Sprintf(`        <EntitySet Name="%s" EntityType="%s">
+`, entitySetName, model.qualifiedTypeName(entityMeta.EntityName)))
+			for _, binding := range navigationBindings {
+				builder.WriteString(fmt.Sprintf(`          <NavigationPropertyBinding Path="%s" Target="%s" />
+`, binding.path, binding.target))
 			}
-			result += `        </EntitySet>
-`
+			builder.WriteString(`        </EntitySet>
+`)
 		}
 	}
 
-	result += `      </EntityContainer>
-`
-	return result
+	builder.WriteString(`      </EntityContainer>
+`)
+	return builder.String()
 }

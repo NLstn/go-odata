@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"sort"
 
 	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/response"
@@ -59,24 +58,10 @@ func (h *MetadataHandler) buildMetadataJSON(model metadataModel) []byte {
 }
 
 func (h *MetadataHandler) addJSONEnumTypes(model metadataModel, odataService map[string]interface{}) {
-	enumDefinitions := model.collectEnumDefinitions()
-	if len(enumDefinitions) == 0 {
-		return
-	}
-
-	enumNames := make([]string, 0, len(enumDefinitions))
-	for name := range enumDefinitions {
-		enumNames = append(enumNames, name)
-	}
-	sort.Strings(enumNames)
-
-	for _, name := range enumNames {
-		info := enumDefinitions[name]
-		if info == nil || len(info.Members) == 0 {
-			continue
-		}
-		enumType := h.buildJSONEnumType(info)
-		odataService[name] = enumType
+	enumDefinitions := h.sortedEnumDefinitions(model)
+	for _, definition := range enumDefinitions {
+		enumType := h.buildJSONEnumType(definition.info)
+		odataService[definition.name] = enumType
 	}
 }
 
@@ -136,16 +121,10 @@ func (h *MetadataHandler) addJSONRegularProperties(model metadataModel, entityTy
 func (h *MetadataHandler) buildJSONPropertyDefinition(model metadataModel, prop *metadata.PropertyMetadata) map[string]interface{} {
 	propDef := make(map[string]interface{})
 
-	if prop.IsEnum && prop.EnumTypeName != "" {
-		propDef["$Type"] = model.qualifiedTypeName(prop.EnumTypeName)
-	} else {
-		propDef["$Type"] = getEdmType(prop.Type)
-	}
+	propDef["$Type"] = h.propertyEdmType(model, prop)
 
-	if prop.Nullable != nil {
-		propDef["$Nullable"] = *prop.Nullable
-	} else if !prop.IsRequired && !prop.IsKey {
-		propDef["$Nullable"] = true
+	if value, include := h.propertyNullable(prop); include {
+		propDef["$Nullable"] = value
 	}
 
 	h.addJSONPropertyFacets(propDef, prop)
@@ -215,9 +194,9 @@ func (h *MetadataHandler) buildJSONEntityContainer(model metadataModel) map[stri
 				"$Type": model.qualifiedTypeName(entityMeta.EntityName),
 			}
 
-			navigationBindings := h.buildNavigationBindings(model, entityMeta)
+			navigationBindings := h.navigationBindings(model, entityMeta)
 			if len(navigationBindings) > 0 {
-				singleton["$NavigationPropertyBinding"] = navigationBindings
+				singleton["$NavigationPropertyBinding"] = h.navigationBindingsMap(navigationBindings)
 			}
 
 			container[entityMeta.SingletonName] = singleton
@@ -227,9 +206,9 @@ func (h *MetadataHandler) buildJSONEntityContainer(model metadataModel) map[stri
 				"$Type":       model.qualifiedTypeName(entityMeta.EntityName),
 			}
 
-			navigationBindings := h.buildNavigationBindings(model, entityMeta)
+			navigationBindings := h.navigationBindings(model, entityMeta)
 			if len(navigationBindings) > 0 {
-				entitySet["$NavigationPropertyBinding"] = navigationBindings
+				entitySet["$NavigationPropertyBinding"] = h.navigationBindingsMap(navigationBindings)
 			}
 
 			container[entitySetName] = entitySet
@@ -239,13 +218,10 @@ func (h *MetadataHandler) buildJSONEntityContainer(model metadataModel) map[stri
 	return container
 }
 
-func (h *MetadataHandler) buildNavigationBindings(model metadataModel, entityMeta *metadata.EntityMetadata) map[string]string {
-	navigationBindings := make(map[string]string)
-	for _, prop := range entityMeta.Properties {
-		if prop.IsNavigationProp {
-			targetEntitySet := model.getEntitySetNameForType(prop.NavigationTarget)
-			navigationBindings[prop.JsonName] = targetEntitySet
-		}
+func (h *MetadataHandler) navigationBindingsMap(bindings []navigationBinding) map[string]string {
+	navigationBindings := make(map[string]string, len(bindings))
+	for _, binding := range bindings {
+		navigationBindings[binding.path] = binding.target
 	}
 	return navigationBindings
 }
