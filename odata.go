@@ -579,6 +579,48 @@ func (s *Service) Observability() *observability.Config {
 	return s.observability
 }
 
+// ServerTimingMetric represents a Server-Timing metric that tracks the duration
+// of an operation for the Server-Timing HTTP response header.
+// Use StartServerTiming or StartServerTimingWithDesc to create metrics.
+type ServerTimingMetric = observability.ServerTimingMetric
+
+// StartServerTiming starts a Server-Timing metric with the given name.
+// The metric tracks the duration until Stop() is called, and appears in
+// the Server-Timing HTTP response header when EnableServerTiming is true.
+//
+// Returns a metric that should be stopped when the timed operation completes.
+// If server timing is not enabled or the context doesn't contain timing info,
+// returns a no-op metric that is safe to call Stop() on.
+//
+// Example:
+//
+//	func myHandler(ctx context.Context) {
+//	    metric := odata.StartServerTiming(ctx, "db-query")
+//	    defer metric.Stop()
+//	    // perform database operation
+//	}
+func StartServerTiming(ctx context.Context, name string) *ServerTimingMetric {
+	return observability.StartServerTiming(ctx, name)
+}
+
+// StartServerTimingWithDesc starts a Server-Timing metric with a name and description.
+// The description provides additional context in browser developer tools.
+//
+// Returns a metric that should be stopped when the timed operation completes.
+// If server timing is not enabled or the context doesn't contain timing info,
+// returns a no-op metric that is safe to call Stop() on.
+//
+// Example:
+//
+//	func myHandler(ctx context.Context) {
+//	    metric := odata.StartServerTimingWithDesc(ctx, "cache", "Cache lookup")
+//	    defer metric.Stop()
+//	    // perform cache operation
+//	}
+func StartServerTimingWithDesc(ctx context.Context, name, description string) *ServerTimingMetric {
+	return observability.StartServerTimingWithDesc(ctx, name, description)
+}
+
 // AsyncConfig controls asynchronous request processing behaviour for a Service.
 type AsyncConfig struct {
 	// MonitorPathPrefix is the URL path prefix where async job monitors are exposed.
