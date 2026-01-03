@@ -60,6 +60,12 @@ rely on version numbers to reason about compatibility.
   - See migration guide for detailed update instructions
 
 ### Added
+- **Server-Timing HTTP response header support**: Optional Server-Timing header for performance debugging in browser dev tools
+  - Enabled via `EnableServerTiming: true` in `ObservabilityConfig`
+  - Uses the [mitchellh/go-server-timing](https://github.com/mitchellh/go-server-timing) library
+  - Adds timing metrics to HTTP responses that are visible in browser developer tools (Chrome 65+, Firefox 71+)
+  - Records total request duration automatically
+  - Zero overhead when disabled (middleware is not applied)
 - **OpenTelemetry-based Observability Support**: Comprehensive observability infrastructure using OpenTelemetry standards
   - **Tracing**: Full distributed tracing with proper span hierarchy for request lifecycle
     - HTTP request spans with method, path, status code attributes

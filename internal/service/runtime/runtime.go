@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	servertiming "github.com/mitchellh/go-server-timing"
 	"github.com/nlstn/go-odata/internal/async"
 	"github.com/nlstn/go-odata/internal/observability"
 	"github.com/nlstn/go-odata/internal/preference"
@@ -85,6 +86,27 @@ func (rt *Runtime) ServeHTTP(w http.ResponseWriter, r *http.Request, allowAsync 
 		return
 	}
 
+	// If server timing is enabled, wrap the request handling with server-timing middleware
+	if rt.observability != nil && rt.observability.ServerTimingEnabled() {
+		rt.serveHTTPWithServerTiming(w, r, allowAsync)
+		return
+	}
+
+	rt.serveHTTPInternal(w, r, allowAsync)
+}
+
+// serveHTTPWithServerTiming wraps the request handling with the go-server-timing middleware.
+func (rt *Runtime) serveHTTPWithServerTiming(w http.ResponseWriter, r *http.Request, allowAsync bool) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rt.serveHTTPInternal(w, r, allowAsync)
+	})
+
+	// Wrap with server-timing middleware
+	servertiming.Middleware(handler, nil).ServeHTTP(w, r)
+}
+
+// serveHTTPInternal contains the core request handling logic.
+func (rt *Runtime) serveHTTPInternal(w http.ResponseWriter, r *http.Request, allowAsync bool) {
 	ctx := r.Context()
 	start := time.Now()
 
@@ -102,6 +124,15 @@ func (rt *Runtime) ServeHTTP(w http.ResponseWriter, r *http.Request, allowAsync 
 		// Record request start in metrics
 		metrics.RecordRequestStart(ctx)
 		r = r.WithContext(ctx)
+	}
+
+	// Record server timing for the total request duration
+	if rt.observability != nil && rt.observability.ServerTimingEnabled() {
+		timing := servertiming.FromContext(r.Context())
+		if timing != nil {
+			m := timing.NewMetric("total").WithDesc("Total request duration").Start()
+			defer m.Stop()
+		}
 	}
 
 	if allowAsync && rt.tryHandleAsync(w, r) {
