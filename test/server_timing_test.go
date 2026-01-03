@@ -193,8 +193,10 @@ func TestServerTimingWithOtherObservabilityOptions(t *testing.T) {
 	}
 }
 
-func TestServerTimingContainsDBMetric(t *testing.T) {
-	// Set up database and service
+// setupServerTimingService creates a service with server timing enabled for testing
+func setupServerTimingService(t *testing.T) *odata.Service {
+	t.Helper()
+
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("Failed to connect to database: %v", err)
@@ -221,6 +223,12 @@ func TestServerTimingContainsDBMetric(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("Failed to set observability: %v", err)
 	}
+
+	return service
+}
+
+func TestServerTimingContainsDBMetric(t *testing.T) {
+	service := setupServerTimingService(t)
 
 	// Create a test request to fetch the collection (which triggers DB query)
 	req := httptest.NewRequest(http.MethodGet, "/ServerTimingProducts", nil)
@@ -247,33 +255,7 @@ func TestServerTimingContainsDBMetric(t *testing.T) {
 }
 
 func TestServerTimingDBMetricForSingleEntityFetch(t *testing.T) {
-	// Set up database and service
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("Failed to connect to database: %v", err)
-	}
-
-	if err := db.AutoMigrate(&ServerTimingProduct{}); err != nil {
-		t.Fatalf("Failed to migrate database: %v", err)
-	}
-
-	// Create and insert test data
-	product := ServerTimingProduct{ID: 1, Name: "Test Product", Price: 9.99}
-	if err := db.Create(&product).Error; err != nil {
-		t.Fatalf("Failed to create test product: %v", err)
-	}
-
-	service := odata.NewService(db)
-	if err := service.RegisterEntity(&ServerTimingProduct{}); err != nil {
-		t.Fatalf("Failed to register entity: %v", err)
-	}
-
-	// Enable observability with server timing
-	if err := service.SetObservability(odata.ObservabilityConfig{
-		EnableServerTiming: true,
-	}); err != nil {
-		t.Fatalf("Failed to set observability: %v", err)
-	}
+	service := setupServerTimingService(t)
 
 	// Create a test request to fetch a single entity (which triggers DB query)
 	req := httptest.NewRequest(http.MethodGet, "/ServerTimingProducts(1)", nil)
