@@ -905,3 +905,193 @@ Accept: application/json
 		})
 	}
 }
+
+// TestBatchIntegration_SubRequestsGoThroughMiddleware verifies that batch sub-requests
+// pass through middleware when SetBatchSubRequestHandler is configured.
+// This ensures compliance with the OData spec that sub-requests should be treated
+// as independent requests.
+func TestBatchIntegration_SubRequestsGoThroughMiddleware(t *testing.T) {
+	service, db := setupBatchIntegrationTest(t)
+
+	// Insert test data
+	product := BatchIntegrationProduct{
+		ID:       1,
+		Name:     "Test Product",
+		Price:    99.99,
+		Category: "Electronics",
+	}
+	db.Create(&product)
+
+	// Track whether middleware was called for each request
+	var middlewareCalls int
+
+	// Create middleware that adds a header and tracks calls
+	middleware := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			middlewareCalls++
+			// Add a custom header to prove middleware ran
+			w.Header().Set("X-Middleware-Ran", "true")
+			next.ServeHTTP(w, r)
+		})
+	}
+
+	// Wrap the service with middleware
+	handler := middleware(service)
+
+	// Configure batch sub-requests to use the middleware-wrapped handler
+	service.SetBatchSubRequestHandler(handler)
+
+	// Create batch request with a single GET
+	boundary := "batch_middleware_test"
+	body := fmt.Sprintf(`--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+GET /BatchIntegrationProducts(1) HTTP/1.1
+Host: localhost
+Accept: application/json
+
+
+--%s--
+`, boundary, boundary)
+
+	// Reset middleware call count
+	middlewareCalls = 0
+
+	// Execute batch request through the middleware-wrapped handler
+	req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+	req.Header.Set("Content-Type", fmt.Sprintf("multipart/mixed; boundary=%s", boundary))
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	// Middleware should have been called at least twice:
+	// 1. For the outer batch request
+	// 2. For the inner sub-request
+	if middlewareCalls < 2 {
+		t.Errorf("Expected middleware to be called at least 2 times (batch + sub-request), got %d", middlewareCalls)
+	}
+
+	// Verify the sub-request succeeded
+	responseBody := w.Body.String()
+	if !strings.Contains(responseBody, "Test Product") {
+		t.Errorf("Response does not contain product name. Body: %s", responseBody)
+	}
+}
+
+// TestBatchIntegration_SubRequestsWithContextMiddleware verifies that batch sub-requests
+// can access context values set by middleware.
+func TestBatchIntegration_SubRequestsWithContextMiddleware(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("Failed to connect to database: %v", err)
+	}
+
+	if err := db.AutoMigrate(&BatchIntegrationProduct{}); err != nil {
+		t.Fatalf("Failed to migrate database: %v", err)
+	}
+
+	service := odata.NewService(db)
+	if err := service.RegisterEntity(&BatchIntegrationProduct{}); err != nil {
+		t.Fatalf("Failed to register entity: %v", err)
+	}
+
+	// Insert test data
+	product := BatchIntegrationProduct{
+		ID:       1,
+		Name:     "Test Product",
+		Price:    99.99,
+		Category: "Electronics",
+	}
+	db.Create(&product)
+
+	// Track whether the Authorization header was seen by the policy (proving sub-request went through middleware)
+	var authHeaderSeen bool
+
+	// Create a policy that checks for the Authorization header
+	// This proves that the sub-request headers are being processed
+	contextCheckPolicy := &batchAuthCheckPolicy{
+		onCheck: func(found bool) {
+			authHeaderSeen = found
+		},
+	}
+	service.SetPolicy(contextCheckPolicy)
+
+	// Create middleware that we'll verify sub-requests pass through
+	middlewareCallCount := 0
+	middleware := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			middlewareCallCount++
+			next.ServeHTTP(w, r)
+		})
+	}
+
+	// Wrap the service with middleware
+	handler := middleware(service)
+
+	// Configure batch sub-requests to use the middleware-wrapped handler
+	service.SetBatchSubRequestHandler(handler)
+
+	// Create batch request with Authorization header in the sub-request
+	boundary := "batch_context_test"
+	body := fmt.Sprintf(`--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+GET /BatchIntegrationProducts(1) HTTP/1.1
+Host: localhost
+Accept: application/json
+Authorization: Bearer test-token
+
+
+--%s--
+`, boundary, boundary)
+
+	// Reset tracking
+	authHeaderSeen = false
+	middlewareCallCount = 0
+
+	// Execute batch request
+	req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+	req.Header.Set("Content-Type", fmt.Sprintf("multipart/mixed; boundary=%s", boundary))
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	// Verify middleware was called for both batch request and sub-request
+	if middlewareCallCount < 2 {
+		t.Errorf("Expected middleware to be called at least 2 times, got %d", middlewareCallCount)
+	}
+
+	// Verify the Authorization header from sub-request was visible to the policy
+	if !authHeaderSeen {
+		t.Error("Authorization header from sub-request was not visible to policy")
+	}
+
+	// Verify the sub-request succeeded
+	responseBody := w.Body.String()
+	if !strings.Contains(responseBody, "Test Product") {
+		t.Errorf("Response does not contain product name. Body: %s", responseBody)
+	}
+}
+
+// batchAuthCheckPolicy is a test policy that checks for Authorization header in requests
+type batchAuthCheckPolicy struct {
+	onCheck func(found bool)
+}
+
+func (p *batchAuthCheckPolicy) Authorize(ctx odata.AuthContext, resource odata.ResourceDescriptor, operation odata.Operation) odata.Decision {
+	// Check if the Authorization header exists in the request
+	if ctx.Request.Headers != nil && ctx.Request.Headers.Get("Authorization") != "" {
+		p.onCheck(true)
+	}
+	return odata.Allow()
+}

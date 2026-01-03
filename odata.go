@@ -317,6 +317,10 @@ type Service struct {
 	defaultMaxTop *int
 	// observability holds the observability configuration (tracing, metrics)
 	observability *observability.Config
+	// batchSubRequestHandler holds the handler used for batch sub-requests.
+	// This is set by SetBatchSubRequestHandler and allows batch sub-requests
+	// to pass through middleware when users wrap the service.
+	batchSubRequestHandler http.Handler
 }
 
 // NewService creates a new OData service instance with database connection.
@@ -373,10 +377,18 @@ func NewServiceWithConfig(db *gorm.DB, cfg ServiceConfig) (*Service, error) {
 	s.metadataHandler.SetPolicy(s.policy)
 	s.serviceDocumentHandler.SetPolicy(s.policy)
 	s.operationsHandler = operations.NewHandler(s.actions, s.functions, s.handlers, s.entities, s.namespace, logger)
-	// Initialize batch handler with reference to service
+	// Initialize batch handler with reference to service's internal handler (for changesets)
 	s.batchHandler = handlers.NewBatchHandler(db, handlersMap, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		s.serveHTTP(w, r, false)
 	}))
+	// Configure batch sub-requests to go through the service's public ServeHTTP.
+	// This ensures sub-requests are treated as independent requests per the OData spec.
+	// By default, this points to the service itself, but users can update it via
+	// SetBatchSubRequestHandler to include middleware in the request chain.
+	s.batchSubRequestHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.ServeHTTP(w, r)
+	})
+	s.batchHandler.SetSubRequestHandler(&s.batchSubRequestHandler)
 	s.router = servrouter.NewRouter(
 		func(name string) (servrouter.EntityHandler, bool) {
 			handler, ok := s.handlers[name]
@@ -705,6 +717,39 @@ func (s *Service) AsyncManager() *async.Manager {
 // AsyncMonitorPrefix returns the configured monitor path prefix.
 func (s *Service) AsyncMonitorPrefix() string {
 	return s.asyncMonitorPrefix
+}
+
+// SetBatchSubRequestHandler configures the handler used for batch sub-requests.
+// Per the OData specification, each sub-request in a $batch should be treated as
+// an independent HTTP request. This method allows batch sub-requests to pass through
+// custom middleware (e.g., authentication middleware).
+//
+// By default, batch sub-requests go through Service.ServeHTTP. If you wrap the service
+// with middleware and want batch sub-requests to also pass through that middleware,
+// call this method with your middleware-wrapped handler.
+//
+// # Example - Using authentication middleware for batch sub-requests
+//
+//	service := odata.NewService(db)
+//	service.RegisterEntity(&Product{})
+//
+//	// Create the handler with middleware
+//	handler := authMiddleware(service)
+//
+//	// Configure batch sub-requests to use the same middleware
+//	service.SetBatchSubRequestHandler(handler)
+//
+//	// Start server with the middleware-wrapped handler
+//	http.ListenAndServe(":8080", handler)
+//
+// Note: This only affects non-transactional (non-changeset) sub-requests.
+// Changeset requests are processed using internal transaction handlers to maintain
+// atomicity, as they must execute within a single database transaction.
+func (s *Service) SetBatchSubRequestHandler(handler http.Handler) {
+	s.batchSubRequestHandler = handler
+	if s.batchHandler != nil {
+		s.batchHandler.SetSubRequestHandler(&s.batchSubRequestHandler)
+	}
 }
 
 // Close releases resources held by the service, including background managers.
