@@ -8,6 +8,8 @@ This guide covers advanced features of go-odata including singletons, ETags, lif
 - [ETags (Optimistic Concurrency Control)](#etags-optimistic-concurrency-control)
 - [Disabling HTTP Methods](#disabling-http-methods)
 - [Lifecycle Hooks](#lifecycle-hooks)
+- [Pre-Request Hook](#pre-request-hook)
+- [Change Tracking and Delta Tokens](#change-tracking-and-delta-tokens)
   - [Read Hooks](#read-hooks)
   - [Tenant Filtering Example](#tenant-filtering-example)
   - [Redacting Sensitive Data](#redacting-sensitive-data)
@@ -376,6 +378,111 @@ err := service.DisableHTTPMethods("Users", "INVALID")
 ## Lifecycle Hooks
 
 Lifecycle hooks allow you to execute custom logic at specific points in the entity lifecycle.
+
+## Pre-Request Hook
+
+The PreRequestHook provides a unified mechanism for request preprocessing that works consistently for both single requests and batch sub-requests. This eliminates the need for manual middleware configuration when you need authentication or context enrichment.
+
+### When to Use PreRequestHook
+
+Use PreRequestHook when you need to:
+- Load user information from JWT tokens into request context
+- Validate API keys and set tenant context
+- Log all requests (including batch sub-requests)
+- Set request-scoped values for downstream handlers
+
+### Setting Up PreRequestHook
+
+```go
+service := odata.NewService(db)
+service.RegisterEntity(&Product{})
+
+// Define a context key for storing user info
+type contextKey string
+const userContextKey contextKey = "user"
+
+// Set the pre-request hook
+service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
+    token := r.Header.Get("Authorization")
+    if token == "" {
+        return nil, nil // Allow anonymous access
+    }
+    
+    // Validate token and load user
+    user, err := validateAndParseToken(token)
+    if err != nil {
+        return nil, fmt.Errorf("authentication failed: %w", err)
+    }
+    
+    // Add user to context for downstream handlers
+    return context.WithValue(r.Context(), userContextKey, user), nil
+})
+```
+
+### Hook Return Values
+
+The hook can return:
+- `(nil, nil)`: Request proceeds with the original context
+- `(ctx, nil)`: Request proceeds with the returned context
+- `(_, err)`: Request is aborted with HTTP 403 Forbidden
+
+### Batch Sub-Request Support
+
+The hook is automatically called for:
+- Single HTTP requests to the service
+- Each batch sub-request (both changeset and non-changeset operations)
+
+This means authentication logic runs consistently regardless of how the request arrives:
+
+```go
+// Single request - hook is called
+GET /Products(1)
+Authorization: Bearer token123
+
+// Batch request - hook is called for outer request AND each sub-request
+POST /$batch
+Authorization: Bearer outer-token
+
+--batch_boundary
+Content-Type: application/http
+
+GET /Products(1) HTTP/1.1
+Authorization: Bearer sub-request-token
+--batch_boundary--
+```
+
+### Using Context Values in Hooks
+
+Values set in the PreRequestHook context are available in entity lifecycle hooks:
+
+```go
+service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
+    userID := r.Header.Get("X-User-ID")
+    return context.WithValue(r.Context(), userContextKey, userID), nil
+})
+
+func (p *Product) ODataBeforeCreate(ctx context.Context, r *http.Request) error {
+    // Access the user ID set by PreRequestHook
+    userID := ctx.Value(userContextKey).(string)
+    p.CreatedBy = userID
+    return nil
+}
+```
+
+### Comparison with SetBatchSubRequestHandler
+
+The `SetPreRequestHook` method is simpler and more reliable than `SetBatchSubRequestHandler` for most use cases:
+
+| Feature | PreRequestHook | SetBatchSubRequestHandler |
+|---------|---------------|---------------------------|
+| Works for single requests | ✅ | ❌ (middleware only) |
+| Works for batch sub-requests | ✅ | ✅ |
+| Works for changeset operations | ✅ | ❌ |
+| Requires middleware configuration | ❌ | ✅ |
+| Can abort with error | ✅ | Depends on middleware |
+| Can enrich context | ✅ | ✅ |
+
+Use `SetBatchSubRequestHandler` only when you need batch sub-requests to pass through complex middleware chains that cannot be replicated in a hook.
 
 ## Change Tracking and Delta Tokens
 

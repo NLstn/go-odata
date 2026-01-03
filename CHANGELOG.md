@@ -60,6 +60,13 @@ rely on version numbers to reason about compatibility.
   - See migration guide for detailed update instructions
 
 ### Added
+- **PreRequestHook for unified request preprocessing**: Introduced a service-level hook that is called before each request is processed
+  - Works uniformly for both single requests and batch sub-requests (including changesets)
+  - Eliminates the need for manual `SetBatchSubRequestHandler` configuration for common use cases
+  - Allows authentication, context enrichment, logging, and other preprocessing tasks
+  - Hook can return a modified context to pass values to downstream handlers
+  - Hook can return an error to abort the request with HTTP 403 Forbidden
+  - See `SetPreRequestHook` documentation for detailed usage examples
 - **Server-Timing database time metric**: When `EnableServerTiming` is enabled, the Server-Timing HTTP response header now includes a `db` metric that reports the total time spent in database queries during the request
   - The `db` metric shows accumulated time from all GORM database operations (queries, creates, updates, deletes)
   - Combined with the existing `total` metric, you can calculate server processing time (total - db) vs database time
