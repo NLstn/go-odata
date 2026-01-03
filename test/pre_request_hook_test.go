@@ -142,7 +142,7 @@ Host: localhost
 Accept: application/json
 Authorization: Bearer sub-request-token
 
- 
+
 --%s--
 `, boundary, boundary)
 
@@ -383,7 +383,7 @@ GET /PreRequestHookProducts(1) HTTP/1.1
 Host: localhost
 Accept: application/json
 
- 
+
 --%s
 Content-Type: application/http
 Content-Transfer-Encoding: binary
@@ -392,7 +392,7 @@ GET /PreRequestHookProducts(2) HTTP/1.1
 Host: localhost
 Accept: application/json
 
- 
+
 --%s--
 `, boundary, boundary, boundary)
 

@@ -843,6 +843,10 @@ func (s *Service) SetBatchSubRequestHandler(handler http.Handler) {
 func (s *Service) SetPreRequestHook(hook PreRequestHook) {
 	s.preRequestHook = hook
 	if s.batchHandler != nil {
+		// Wrap the hook for the batch handler. The wrapper is created once and captures
+		// the hook variable, so subsequent calls to SetPreRequestHook will update the
+		// service's preRequestHook but the batch handler will use its own copy.
+		// To update the batch handler's hook, call SetPreRequestHook again.
 		s.batchHandler.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
 			if hook == nil {
 				return nil, nil
