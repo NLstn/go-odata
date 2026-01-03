@@ -1089,9 +1089,11 @@ type batchAuthCheckPolicy struct {
 }
 
 func (p *batchAuthCheckPolicy) Authorize(ctx odata.AuthContext, resource odata.ResourceDescriptor, operation odata.Operation) odata.Decision {
-	// Check if the Authorization header exists in the request
+	// Check if the Authorization header exists in the request and notify the callback
 	if ctx.Request.Headers != nil && ctx.Request.Headers.Get("Authorization") != "" {
 		p.onCheck(true)
+	} else {
+		p.onCheck(false)
 	}
 	return odata.Allow()
 }
