@@ -561,6 +561,13 @@ func (s *Service) SetObservability(cfg ObservabilityConfig) error {
 		}
 	}
 
+	// Register GORM callbacks for server timing if enabled
+	if cfg.EnableServerTiming {
+		if err := observability.RegisterServerTimingCallbacks(s.db); err != nil {
+			return fmt.Errorf("failed to register server timing callbacks: %w", err)
+		}
+	}
+
 	if s.logger != nil {
 		s.logger.Info("Observability configured",
 			"tracing_enabled", cfg.TracerProvider != nil,

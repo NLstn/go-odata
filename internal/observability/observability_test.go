@@ -9,6 +9,8 @@ import (
 
 	"go.opentelemetry.io/otel/metric/noop"
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
 func TestNewConfig(t *testing.T) {
@@ -231,4 +233,148 @@ func TestServerTimingMetricEmptyStop(t *testing.T) {
 	// Test that Stop doesn't panic on empty metric
 	metric := &ServerTimingMetric{}
 	metric.Stop() // Should not panic
+}
+
+func TestDBTimeAccumulator(t *testing.T) {
+	// Test that DBTimeAccumulator tracks time correctly
+	acc := &DBTimeAccumulator{}
+
+	// Add some durations
+	acc.Add(time.Millisecond * 10)
+	acc.Add(time.Millisecond * 20)
+	acc.Add(time.Millisecond * 30)
+
+	// Check total
+	total := acc.Duration()
+	expected := time.Millisecond * 60
+	if total != expected {
+		t.Errorf("expected %v, got %v", expected, total)
+	}
+}
+
+func TestDBTimeAccumulatorConcurrent(t *testing.T) {
+	// Test that DBTimeAccumulator is safe for concurrent use
+	acc := &DBTimeAccumulator{}
+
+	// Launch multiple goroutines adding time
+	done := make(chan struct{})
+	for i := 0; i < 10; i++ {
+		go func() {
+			for j := 0; j < 100; j++ {
+				acc.Add(time.Millisecond)
+			}
+			done <- struct{}{}
+		}()
+	}
+
+	// Wait for all goroutines
+	for i := 0; i < 10; i++ {
+		<-done
+	}
+
+	// Check total
+	total := acc.Duration()
+	expected := time.Millisecond * 1000
+	if total != expected {
+		t.Errorf("expected %v, got %v", expected, total)
+	}
+}
+
+func TestWithDBTimeAccumulator(t *testing.T) {
+	// Test that WithDBTimeAccumulator adds an accumulator to context
+	ctx := context.Background()
+
+	// Without accumulator
+	acc := DBTimeAccumulatorFromContext(ctx)
+	if acc != nil {
+		t.Error("expected nil accumulator from background context")
+	}
+
+	// With accumulator
+	ctx = WithDBTimeAccumulator(ctx)
+	acc = DBTimeAccumulatorFromContext(ctx)
+	if acc == nil {
+		t.Error("expected non-nil accumulator after WithDBTimeAccumulator")
+	}
+}
+
+func TestAddDBTime(t *testing.T) {
+	// Test that AddDBTime adds to the accumulator
+	ctx := WithDBTimeAccumulator(context.Background())
+
+	// Add time
+	AddDBTime(ctx, time.Millisecond*50)
+	AddDBTime(ctx, time.Millisecond*100)
+
+	// Check
+	acc := DBTimeAccumulatorFromContext(ctx)
+	if acc == nil {
+		t.Fatal("accumulator should not be nil")
+	}
+
+	total := acc.Duration()
+	expected := time.Millisecond * 150
+	if total != expected {
+		t.Errorf("expected %v, got %v", expected, total)
+	}
+}
+
+func TestAddDBTimeNoAccumulator(t *testing.T) {
+	// Test that AddDBTime is a no-op without accumulator
+	ctx := context.Background()
+
+	// Should not panic
+	AddDBTime(ctx, time.Millisecond*50)
+}
+
+func TestServerTimingCallbacksIntegration(t *testing.T) {
+	// Test that GORM callbacks track time correctly
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("failed to connect to database: %v", err)
+	}
+
+	// Migrate test table
+	type TestProduct struct {
+		ID   int `gorm:"primarykey"`
+		Name string
+	}
+	if err := db.AutoMigrate(&TestProduct{}); err != nil {
+		t.Fatalf("failed to migrate: %v", err)
+	}
+
+	// Register server timing callbacks
+	if err := RegisterServerTimingCallbacks(db); err != nil {
+		t.Fatalf("failed to register callbacks: %v", err)
+	}
+
+	// Create context with accumulator
+	ctx := WithDBTimeAccumulator(context.Background())
+
+	// Perform database operations
+	if err := db.WithContext(ctx).Create(&TestProduct{ID: 1, Name: "Test"}).Error; err != nil {
+		t.Fatalf("failed to create: %v", err)
+	}
+
+	// Check accumulator
+	acc := DBTimeAccumulatorFromContext(ctx)
+	if acc == nil {
+		t.Fatal("accumulator should not be nil")
+	}
+
+	duration := acc.Duration()
+	if duration == 0 {
+		t.Error("expected non-zero database time after Create operation")
+	}
+
+	// Perform another operation
+	var products []TestProduct
+	if err := db.WithContext(ctx).Find(&products).Error; err != nil {
+		t.Fatalf("failed to find: %v", err)
+	}
+
+	duration2 := acc.Duration()
+	if duration2 <= duration {
+		t.Errorf("expected duration to increase after Find, got before=%v after=%v", duration, duration2)
+	}
 }
