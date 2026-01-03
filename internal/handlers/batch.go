@@ -3,6 +3,7 @@ package handlers
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -34,6 +35,9 @@ type BatchHandler struct {
 	// to pass through any middleware wrapping the service. The pointer indirection allows
 	// the handler to be updated after the batch handler is created.
 	subRequestHandler *http.Handler
+	// preRequestHook is called before each sub-request is processed (for changesets).
+	// Non-changeset sub-requests go through subRequestHandler which may call the hook.
+	preRequestHook func(r *http.Request) (context.Context, error)
 }
 
 // NewBatchHandler creates a new batch handler
@@ -64,6 +68,12 @@ func (h *BatchHandler) SetObservability(cfg *observability.Config) {
 // enabling batch sub-requests to pass through middleware that wraps the service.
 func (h *BatchHandler) SetSubRequestHandler(handler *http.Handler) {
 	h.subRequestHandler = handler
+}
+
+// SetPreRequestHook sets a hook that is called before each changeset sub-request is processed.
+// This enables authentication and context enrichment for changeset operations.
+func (h *BatchHandler) SetPreRequestHook(hook func(r *http.Request) (context.Context, error)) {
+	h.preRequestHook = hook
 }
 
 // batchRequest represents a single request within a batch
@@ -569,7 +579,19 @@ func (h *BatchHandler) executeRequestInTransaction(req *batchRequest, tx *gorm.D
 		}
 	}
 
-	httpReq = httpReq.WithContext(withTransactionAndEvents(httpReq.Context(), tx, pendingEvents))
+	// Call the pre-request hook if configured (for changeset sub-requests)
+	ctx := httpReq.Context()
+	if h.preRequestHook != nil {
+		hookCtx, err := h.preRequestHook(httpReq)
+		if err != nil {
+			return h.createErrorResponse(http.StatusForbidden, err.Error())
+		}
+		if hookCtx != nil {
+			ctx = hookCtx
+		}
+	}
+
+	httpReq = httpReq.WithContext(withTransactionAndEvents(ctx, tx, pendingEvents))
 
 	// Execute request
 	recorder := httptest.NewRecorder()

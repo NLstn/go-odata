@@ -74,6 +74,43 @@ import (
 // KeyGenerator describes a function that produces a key value for new entities.
 type KeyGenerator func(context.Context) (interface{}, error)
 
+// PreRequestHook is called before each request is processed, including batch sub-requests.
+// It allows injecting custom logic such as authentication, context enrichment, or logging.
+//
+// The hook receives the HTTP request and can modify it or extract information from it.
+// Return a modified context to pass values to downstream handlers, or nil to use the
+// original request context. Return an error to abort the request with HTTP 403 Forbidden.
+//
+// The PreRequestHook is called:
+//   - For each single HTTP request to the service
+//   - For each batch sub-request (both changeset and non-changeset operations)
+//
+// This provides a unified mechanism for request preprocessing that works consistently
+// across all request types, eliminating the need for manual setup with SetBatchSubRequestHandler
+// for common use cases like authentication.
+//
+// # Example - Authentication context loading
+//
+//	service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
+//	    token := r.Header.Get("Authorization")
+//	    if token == "" {
+//	        return nil, nil // Allow anonymous access
+//	    }
+//	    user, err := validateToken(token)
+//	    if err != nil {
+//	        return nil, fmt.Errorf("invalid token: %w", err)
+//	    }
+//	    return context.WithValue(r.Context(), userKey, user), nil
+//	})
+//
+// # Example - Request logging
+//
+//	service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
+//	    log.Printf("Processing %s %s", r.Method, r.URL.Path)
+//	    return nil, nil
+//	})
+type PreRequestHook func(r *http.Request) (context.Context, error)
+
 // EntityHook defines optional lifecycle hooks that entity types can implement to inject
 // custom business logic at specific points in the request lifecycle.
 //
@@ -321,6 +358,9 @@ type Service struct {
 	// This is set by SetBatchSubRequestHandler and allows batch sub-requests
 	// to pass through middleware when users wrap the service.
 	batchSubRequestHandler http.Handler
+	// preRequestHook is called before each request is processed (including batch sub-requests).
+	// It allows injecting custom logic such as authentication, context enrichment, or logging.
+	preRequestHook PreRequestHook
 }
 
 // NewService creates a new OData service instance with database connection.
@@ -749,6 +789,66 @@ func (s *Service) SetBatchSubRequestHandler(handler http.Handler) {
 	s.batchSubRequestHandler = handler
 	if s.batchHandler != nil {
 		s.batchHandler.SetSubRequestHandler(&s.batchSubRequestHandler)
+	}
+}
+
+// SetPreRequestHook registers a hook that is called before each request is processed.
+// The hook is called for all requests including batch sub-requests (both changeset and
+// non-changeset operations), providing a unified mechanism for request preprocessing.
+//
+// This is the recommended way to implement authentication and context enrichment that
+// works consistently for both single requests and batch operations. Unlike external
+// middleware, this hook is automatically invoked for batch sub-requests without any
+// additional configuration.
+//
+// # Return Values
+//
+// The hook can return:
+//   - (nil, nil): Request proceeds with the original context
+//   - (ctx, nil): Request proceeds with the returned context
+//   - (_, err): Request is aborted with HTTP 403 Forbidden
+//
+// # Use Cases
+//
+//   - Loading user information from JWT tokens into request context
+//   - Validating API keys and setting tenant context
+//   - Request logging and auditing
+//   - Setting request-scoped values for downstream handlers
+//
+// # Example - Loading user from JWT
+//
+//	service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
+//	    token := r.Header.Get("Authorization")
+//	    if token == "" {
+//	        return nil, nil // Allow anonymous access
+//	    }
+//	    user, err := validateAndParseToken(token)
+//	    if err != nil {
+//	        return nil, fmt.Errorf("authentication failed: %w", err)
+//	    }
+//	    return context.WithValue(r.Context(), userContextKey, user), nil
+//	})
+//
+// # Interaction with SetBatchSubRequestHandler
+//
+// When both PreRequestHook and SetBatchSubRequestHandler are configured:
+//   - For single requests: PreRequestHook is called first
+//   - For non-changeset batch sub-requests: If SetBatchSubRequestHandler points to middleware,
+//     the middleware is called first, then PreRequestHook
+//   - For changeset batch sub-requests: Only PreRequestHook is called (changesets use internal
+//     transaction handlers and don't go through SetBatchSubRequestHandler)
+//
+// For most authentication use cases, PreRequestHook alone is sufficient and simpler
+// than configuring SetBatchSubRequestHandler.
+func (s *Service) SetPreRequestHook(hook PreRequestHook) {
+	s.preRequestHook = hook
+	if s.batchHandler != nil {
+		s.batchHandler.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
+			if hook == nil {
+				return nil, nil
+			}
+			return hook(r)
+		})
 	}
 }
 
