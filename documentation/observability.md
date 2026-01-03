@@ -161,11 +161,16 @@ The metrics help identify whether performance issues are database-related or in 
 You can add custom timing metrics from your entity hooks using the public helper functions:
 
 ```go
-import "github.com/nlstn/go-odata/internal/observability"
+import (
+    "context"
+    "net/http"
+    
+    "github.com/nlstn/go-odata"
+)
 
 func (p *Product) ODataBeforeCreate(ctx context.Context, r *http.Request) error {
     // Start a custom timing metric
-    metric := observability.StartServerTimingWithDesc(ctx, "validation", "Input validation")
+    metric := odata.StartServerTimingWithDesc(ctx, "validation", "Input validation")
     defer metric.Stop()
     
     // Perform validation...
