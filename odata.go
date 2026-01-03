@@ -467,6 +467,11 @@ type ObservabilityConfig struct {
 	// EnableQueryOptionTracing adds spans for individual query option processing.
 	// Note: This feature is not yet implemented and is reserved for future use.
 	EnableQueryOptionTracing bool
+
+	// EnableServerTiming enables the Server-Timing HTTP response header.
+	// When enabled, timing metrics are added to responses for debugging in browser dev tools.
+	// This uses the mitchellh/go-server-timing library to add timing information to HTTP responses.
+	EnableServerTiming bool
 }
 
 // SetObservability configures OpenTelemetry-based observability for the service.
@@ -523,6 +528,9 @@ func (s *Service) SetObservability(cfg ObservabilityConfig) error {
 	if cfg.EnableQueryOptionTracing {
 		opts = append(opts, observability.WithQueryOptionTracing())
 	}
+	if cfg.EnableServerTiming {
+		opts = append(opts, observability.WithServerTiming())
+	}
 
 	obsCfg := observability.NewConfig(opts...)
 	if err := obsCfg.Initialize(); err != nil {
@@ -557,6 +565,7 @@ func (s *Service) SetObservability(cfg ObservabilityConfig) error {
 		s.logger.Info("Observability configured",
 			"tracing_enabled", cfg.TracerProvider != nil,
 			"metrics_enabled", cfg.MeterProvider != nil,
+			"server_timing_enabled", cfg.EnableServerTiming,
 			"service_name", cfg.ServiceName,
 		)
 	}

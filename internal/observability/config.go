@@ -29,6 +29,10 @@ type Config struct {
 // When implemented, it will add query options ($filter, $select, etc.) as span attributes.
 	EnableQueryOptionTracing bool
 
+	// EnableServerTiming enables the Server-Timing HTTP response header.
+	// When enabled, timing metrics are added to responses for debugging in browser dev tools.
+	EnableServerTiming bool
+
 	// tracer is the configured tracer instance.
 	tracer *Tracer
 
@@ -71,6 +75,13 @@ func WithDetailedDBTracing() Option {
 func WithQueryOptionTracing() Option {
 	return func(c *Config) {
 		c.EnableQueryOptionTracing = true
+	}
+}
+
+// WithServerTiming enables the Server-Timing HTTP response header.
+func WithServerTiming() Option {
+	return func(c *Config) {
+		c.EnableServerTiming = true
 	}
 }
 
@@ -138,4 +149,9 @@ func (c *Config) Metrics() *Metrics {
 // IsEnabled returns true if any observability features are configured.
 func (c *Config) IsEnabled() bool {
 	return c != nil && (c.TracerProvider != nil || c.MeterProvider != nil)
+}
+
+// ServerTimingEnabled returns true if Server-Timing header is enabled.
+func (c *Config) ServerTimingEnabled() bool {
+	return c != nil && c.EnableServerTiming
 }

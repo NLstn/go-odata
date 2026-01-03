@@ -175,3 +175,60 @@ func TestAttributes(t *testing.T) {
 	_ = BatchSizeAttr(5)
 	_ = ChangesetSizeAttr(3)
 }
+
+func TestServerTimingOption(t *testing.T) {
+	cfg := NewConfig(WithServerTiming())
+
+	if !cfg.EnableServerTiming {
+		t.Error("expected server timing to be enabled")
+	}
+
+	if !cfg.ServerTimingEnabled() {
+		t.Error("expected ServerTimingEnabled() to return true")
+	}
+}
+
+func TestServerTimingEnabledDefault(t *testing.T) {
+	cfg := NewConfig()
+
+	if cfg.EnableServerTiming {
+		t.Error("expected server timing to be disabled by default")
+	}
+
+	if cfg.ServerTimingEnabled() {
+		t.Error("expected ServerTimingEnabled() to return false by default")
+	}
+}
+
+func TestServerTimingEnabledNilConfig(t *testing.T) {
+	var cfg *Config
+	if cfg.ServerTimingEnabled() {
+		t.Error("expected ServerTimingEnabled() to return false for nil config")
+	}
+}
+
+func TestStartServerTimingNoContext(t *testing.T) {
+	// Test that StartServerTiming doesn't panic when timing is not in context
+	ctx := context.Background()
+	metric := StartServerTiming(ctx, "test")
+	metric.Stop() // Should not panic
+}
+
+func TestStartServerTimingWithDescNoContext(t *testing.T) {
+	// Test that StartServerTimingWithDesc doesn't panic when timing is not in context
+	ctx := context.Background()
+	metric := StartServerTimingWithDesc(ctx, "test", "Test description")
+	metric.Stop() // Should not panic
+}
+
+func TestServerTimingMetricNilStop(t *testing.T) {
+	// Test that Stop doesn't panic on nil metric
+	var metric *ServerTimingMetric
+	metric.Stop() // Should not panic
+}
+
+func TestServerTimingMetricEmptyStop(t *testing.T) {
+	// Test that Stop doesn't panic on empty metric
+	metric := &ServerTimingMetric{}
+	metric.Stop() // Should not panic
+}
