@@ -29,6 +29,11 @@ type BatchHandler struct {
 	service       http.Handler
 	logger        *slog.Logger
 	observability *observability.Config
+	// subRequestHandler points to the handler used for non-transactional batch sub-requests.
+	// When set, sub-requests are routed through the dereferenced handler, allowing them
+	// to pass through any middleware wrapping the service. The pointer indirection allows
+	// the handler to be updated after the batch handler is created.
+	subRequestHandler *http.Handler
 }
 
 // NewBatchHandler creates a new batch handler
@@ -52,6 +57,13 @@ func (h *BatchHandler) SetLogger(logger *slog.Logger) {
 // SetObservability configures observability for the batch handler.
 func (h *BatchHandler) SetObservability(cfg *observability.Config) {
 	h.observability = cfg
+}
+
+// SetSubRequestHandler sets a pointer to the handler used for batch sub-requests.
+// The pointer indirection allows the handler to be updated after the batch handler is created,
+// enabling batch sub-requests to pass through middleware that wraps the service.
+func (h *BatchHandler) SetSubRequestHandler(handler *http.Handler) {
+	h.subRequestHandler = handler
 }
 
 // batchRequest represents a single request within a batch
@@ -279,7 +291,10 @@ func (h *BatchHandler) parseHTTPRequest(r io.Reader) (*batchRequest, error) {
 	}, nil
 }
 
-// executeRequest executes a single batch request
+// executeRequest executes a single batch request.
+// Per the OData specification, each sub-request should be treated as an independent request.
+// When subRequestHandler is configured, sub-requests are routed through it to ensure
+// they pass through the same middleware stack as regular requests.
 func (h *BatchHandler) executeRequest(req *batchRequest) batchResponse {
 	// Ensure URL has a leading slash to avoid httptest.NewRequest panic
 	url := req.URL
@@ -295,9 +310,16 @@ func (h *BatchHandler) executeRequest(req *batchRequest) batchResponse {
 		}
 	}
 
-	// Execute request using the service handler
+	// Execute request using the appropriate handler.
+	// When subRequestHandler is configured, use it so sub-requests pass through
+	// any middleware wrapping the service (per OData specification requirement
+	// that sub-requests are treated as independent requests).
 	recorder := httptest.NewRecorder()
-	h.service.ServeHTTP(recorder, httpReq)
+	handler := h.service
+	if h.subRequestHandler != nil {
+		handler = *h.subRequestHandler
+	}
+	handler.ServeHTTP(recorder, httpReq)
 
 	return batchResponse{
 		StatusCode: recorder.Code,
