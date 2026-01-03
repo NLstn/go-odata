@@ -438,3 +438,210 @@ func TestEntityHooks_DeleteFailure(t *testing.T) {
 		t.Errorf("Entity should not have been deleted, found %d entities", count)
 	}
 }
+
+// TestEntityHooks_BatchCreate verifies that OData hooks are called for batch sub-requests
+func TestEntityHooks_BatchCreate(t *testing.T) {
+	resetHookTracking()
+
+	// Setup database
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("Failed to open database: %v", err)
+	}
+
+	if err := db.AutoMigrate(&TestEntity{}); err != nil {
+		t.Fatalf("Failed to migrate: %v", err)
+	}
+
+	// Create OData service
+	service := odata.NewService(db)
+	if err := service.RegisterEntity(TestEntity{}); err != nil {
+		t.Fatalf("Failed to register entity: %v", err)
+	}
+
+	// Create batch request with POST (create) operation
+	batchBoundary := "batch_hooks_test"
+	changesetBoundary := "changeset_hooks_test"
+	body := fmt.Sprintf(`--%s
+Content-Type: multipart/mixed; boundary=%s
+
+--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+POST /TestEntities HTTP/1.1
+Host: localhost
+Content-Type: application/json
+
+{"Name":"Batch Created Entity"}
+
+--%s--
+
+--%s--
+`, batchBoundary, changesetBoundary, changesetBoundary, changesetBoundary, batchBoundary)
+
+	req := httptest.NewRequest(http.MethodPost, "/$batch", bytes.NewReader([]byte(body)))
+	req.Header.Set("Content-Type", fmt.Sprintf("multipart/mixed; boundary=%s", batchBoundary))
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Batch request failed with status %d: %s", w.Code, w.Body.String())
+	}
+
+	// Verify hooks were called
+	if !beforeCreateCalled {
+		t.Error("BeforeCreate hook was not called for batch sub-request")
+	}
+	if !afterCreateCalled {
+		t.Error("AfterCreate hook was not called for batch sub-request")
+	}
+
+	// Verify entity was created
+	var count int64
+	db.Model(&TestEntity{}).Count(&count)
+	if count != 1 {
+		t.Errorf("Expected 1 entity in database, got %d", count)
+	}
+}
+
+// TestEntityHooks_BatchUpdate verifies that update hooks are called for batch sub-requests
+func TestEntityHooks_BatchUpdate(t *testing.T) {
+	resetHookTracking()
+
+	// Setup database
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("Failed to open database: %v", err)
+	}
+
+	if err := db.AutoMigrate(&TestEntity{}); err != nil {
+		t.Fatalf("Failed to migrate: %v", err)
+	}
+
+	// Create a test entity
+	testEntity := TestEntity{ID: 1, Name: "Original Name"}
+	db.Create(&testEntity)
+
+	// Create OData service
+	service := odata.NewService(db)
+	if err := service.RegisterEntity(TestEntity{}); err != nil {
+		t.Fatalf("Failed to register entity: %v", err)
+	}
+
+	// Create batch request with PATCH (update) operation
+	batchBoundary := "batch_update_hooks_test"
+	changesetBoundary := "changeset_update_hooks_test"
+	body := fmt.Sprintf(`--%s
+Content-Type: multipart/mixed; boundary=%s
+
+--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+PATCH /TestEntities(1) HTTP/1.1
+Host: localhost
+Content-Type: application/json
+
+{"Name":"Updated via Batch"}
+
+--%s--
+
+--%s--
+`, batchBoundary, changesetBoundary, changesetBoundary, changesetBoundary, batchBoundary)
+
+	req := httptest.NewRequest(http.MethodPost, "/$batch", bytes.NewReader([]byte(body)))
+	req.Header.Set("Content-Type", fmt.Sprintf("multipart/mixed; boundary=%s", batchBoundary))
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Batch request failed with status %d: %s", w.Code, w.Body.String())
+	}
+
+	// Verify hooks were called
+	if !beforeUpdateCalled {
+		t.Error("BeforeUpdate hook was not called for batch sub-request")
+	}
+	if !afterUpdateCalled {
+		t.Error("AfterUpdate hook was not called for batch sub-request")
+	}
+
+	// Verify entity was updated
+	var entity TestEntity
+	db.First(&entity, 1)
+	if entity.Name != "Updated via Batch" {
+		t.Errorf("Entity was not updated, got name: %s", entity.Name)
+	}
+}
+
+// TestEntityHooks_BatchDelete verifies that delete hooks are called for batch sub-requests
+func TestEntityHooks_BatchDelete(t *testing.T) {
+	resetHookTracking()
+
+	// Setup database
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("Failed to open database: %v", err)
+	}
+
+	if err := db.AutoMigrate(&TestEntity{}); err != nil {
+		t.Fatalf("Failed to migrate: %v", err)
+	}
+
+	// Create a test entity
+	testEntity := TestEntity{ID: 1, Name: "To Be Deleted"}
+	db.Create(&testEntity)
+
+	// Create OData service
+	service := odata.NewService(db)
+	if err := service.RegisterEntity(TestEntity{}); err != nil {
+		t.Fatalf("Failed to register entity: %v", err)
+	}
+
+	// Create batch request with DELETE operation
+	batchBoundary := "batch_delete_hooks_test"
+	changesetBoundary := "changeset_delete_hooks_test"
+	body := fmt.Sprintf(`--%s
+Content-Type: multipart/mixed; boundary=%s
+
+--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+DELETE /TestEntities(1) HTTP/1.1
+Host: localhost
+
+
+--%s--
+
+--%s--
+`, batchBoundary, changesetBoundary, changesetBoundary, changesetBoundary, batchBoundary)
+
+	req := httptest.NewRequest(http.MethodPost, "/$batch", bytes.NewReader([]byte(body)))
+	req.Header.Set("Content-Type", fmt.Sprintf("multipart/mixed; boundary=%s", batchBoundary))
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Batch request failed with status %d: %s", w.Code, w.Body.String())
+	}
+
+	// Verify hooks were called
+	if !beforeDeleteCalled {
+		t.Error("BeforeDelete hook was not called for batch sub-request")
+	}
+	if !afterDeleteCalled {
+		t.Error("AfterDelete hook was not called for batch sub-request")
+	}
+
+	// Verify entity was deleted
+	var count int64
+	db.Model(&TestEntity{}).Count(&count)
+	if count != 0 {
+		t.Errorf("Expected 0 entities in database, got %d", count)
+	}
+}
