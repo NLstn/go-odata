@@ -2,6 +2,8 @@ package observability
 
 import (
 	"context"
+	"sync"
+	"time"
 
 	servertiming "github.com/mitchellh/go-server-timing"
 )
@@ -43,5 +45,56 @@ func StartServerTimingWithDesc(ctx context.Context, name, description string) *S
 
 	return &ServerTimingMetric{
 		metric: timing.NewMetric(name).WithDesc(description).Start(),
+	}
+}
+
+// dbTimeAccumulatorKey is the context key for the database time accumulator.
+type dbTimeAccumulatorKey struct{}
+
+// DBTimeAccumulator tracks total database time during a request.
+// It is safe for concurrent use.
+type DBTimeAccumulator struct {
+	mu       sync.Mutex
+	duration time.Duration
+}
+
+// Add adds a duration to the accumulator.
+func (a *DBTimeAccumulator) Add(d time.Duration) {
+	a.mu.Lock()
+	a.duration += d
+	a.mu.Unlock()
+}
+
+// Duration returns the total accumulated duration.
+func (a *DBTimeAccumulator) Duration() time.Duration {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.duration
+}
+
+// WithDBTimeAccumulator returns a new context with a database time accumulator.
+func WithDBTimeAccumulator(ctx context.Context) context.Context {
+	return context.WithValue(ctx, dbTimeAccumulatorKey{}, &DBTimeAccumulator{})
+}
+
+// DBTimeAccumulatorFromContext retrieves the database time accumulator from the context.
+// Returns nil if no accumulator is present.
+func DBTimeAccumulatorFromContext(ctx context.Context) *DBTimeAccumulator {
+	val := ctx.Value(dbTimeAccumulatorKey{})
+	if val == nil {
+		return nil
+	}
+	acc, ok := val.(*DBTimeAccumulator)
+	if !ok {
+		return nil
+	}
+	return acc
+}
+
+// AddDBTime adds a database operation duration to the accumulator in the context.
+// This is a no-op if the context does not contain an accumulator.
+func AddDBTime(ctx context.Context, d time.Duration) {
+	if acc := DBTimeAccumulatorFromContext(ctx); acc != nil {
+		acc.Add(d)
 	}
 }

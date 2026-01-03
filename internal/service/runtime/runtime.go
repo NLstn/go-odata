@@ -123,15 +123,31 @@ func (rt *Runtime) serveHTTPInternal(w http.ResponseWriter, r *http.Request, all
 
 		// Record request start in metrics
 		metrics.RecordRequestStart(ctx)
-		r = r.WithContext(ctx)
 	}
 
-	// Record server timing for the total request duration
+	// Add database time accumulator to context for server timing
+	if rt.observability != nil && rt.observability.ServerTimingEnabled() {
+		ctx = observability.WithDBTimeAccumulator(ctx)
+	}
+
+	// Update request with context
+	r = r.WithContext(ctx)
+
+	// Record server timing for the total request duration and database time
 	if rt.observability != nil && rt.observability.ServerTimingEnabled() {
 		timing := servertiming.FromContext(r.Context())
 		if timing != nil {
-			m := timing.NewMetric("total").WithDesc("Total request duration").Start()
-			defer m.Stop()
+			// Total request duration metric
+			totalMetric := timing.NewMetric("total").WithDesc("Total request duration").Start()
+			defer totalMetric.Stop()
+
+			// Database time metric - we'll set the duration in a defer after all DB operations
+			dbMetric := timing.NewMetric("db").WithDesc("Database queries")
+			defer func() {
+				if acc := observability.DBTimeAccumulatorFromContext(r.Context()); acc != nil {
+					dbMetric.Duration = acc.Duration()
+				}
+			}()
 		}
 	}
 

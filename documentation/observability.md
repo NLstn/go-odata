@@ -95,6 +95,7 @@ func main() {
 | `ServiceName` | `string` | Service name for telemetry. Defaults to "odata-service". |
 | `ServiceVersion` | `string` | Service version for telemetry attributes. |
 | `EnableDetailedDBTracing` | `bool` | Enable per-query database spans. Can be verbose. |
+| `EnableServerTiming` | `bool` | Enable Server-Timing HTTP header with timing metrics. |
 
 ### Minimal Configuration (Tracing Only)
 
@@ -114,8 +115,65 @@ service.SetObservability(odata.ObservabilityConfig{
     ServiceName:              "my-odata-api",
     ServiceVersion:           "1.0.0",
     EnableDetailedDBTracing:  true,  // Enables per-query DB spans
+    EnableServerTiming:       true,  // Enables Server-Timing HTTP header
 })
 ```
+
+## Server-Timing Header
+
+The [Server-Timing](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Server-Timing) header provides server-side performance metrics that are visible in browser developer tools. When enabled, go-odata adds timing metrics to HTTP responses.
+
+### Enabling Server-Timing
+
+```go
+service.SetObservability(odata.ObservabilityConfig{
+    EnableServerTiming: true,
+})
+```
+
+### Included Metrics
+
+When Server-Timing is enabled, the following metrics are automatically included in every response:
+
+| Metric | Description |
+|--------|-------------|
+| `total` | Total request duration from start to finish |
+| `db` | Total time spent in database queries (accumulated across all GORM operations) |
+
+Example Server-Timing header:
+```
+Server-Timing: total;desc="Total request duration";dur=15.5, db;desc="Database queries";dur=3.2
+```
+
+This shows the request took 15.5ms total, with 3.2ms spent in database queries, meaning 12.3ms was spent in server processing (parsing, serialization, business logic, etc.).
+
+### Viewing in Browser DevTools
+
+1. Open Chrome DevTools (F12)
+2. Go to the Network tab
+3. Select a request to your OData API
+4. Look in the "Timing" section for "Server Timing" entries
+
+The metrics help identify whether performance issues are database-related or in application code.
+
+### Custom Timing Metrics in Hooks
+
+You can add custom timing metrics from your entity hooks using the public helper functions:
+
+```go
+import "github.com/nlstn/go-odata/internal/observability"
+
+func (p *Product) ODataBeforeCreate(ctx context.Context, r *http.Request) error {
+    // Start a custom timing metric
+    metric := observability.StartServerTimingWithDesc(ctx, "validation", "Input validation")
+    defer metric.Stop()
+    
+    // Perform validation...
+    return nil
+}
+```
+
+**Note**: Server-Timing adds minimal overhead and is safe for production use. The timing is only added to the HTTP header when enabled.
 
 ## Tracing
 

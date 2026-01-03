@@ -60,6 +60,11 @@ rely on version numbers to reason about compatibility.
   - See migration guide for detailed update instructions
 
 ### Added
+- **Server-Timing database time metric**: When `EnableServerTiming` is enabled, the Server-Timing HTTP response header now includes a `db` metric that reports the total time spent in database queries during the request
+  - The `db` metric shows accumulated time from all GORM database operations (queries, creates, updates, deletes)
+  - Combined with the existing `total` metric, you can calculate server processing time (total - db) vs database time
+  - Example header: `Server-Timing: total;desc="Total request duration";dur=15.5, db;desc="Database queries";dur=3.2`
+  - Useful for identifying whether performance issues are database-related or in application code
 - **Server-Timing HTTP response header support**: Optional Server-Timing header for performance debugging in browser dev tools
   - Enabled via `EnableServerTiming: true` in `ObservabilityConfig`
   - Uses the [mitchellh/go-server-timing](https://github.com/mitchellh/go-server-timing) library
