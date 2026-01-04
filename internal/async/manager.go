@@ -438,6 +438,10 @@ func (m *Manager) ServeMonitor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Sanitize the job ID before using it in log entries to prevent log forgery.
+	safeID := strings.ReplaceAll(id, "\n", "")
+	safeID = strings.ReplaceAll(safeID, "\r", "")
+
 	var record JobRecord
 	db := m.db
 	if r != nil {
@@ -449,14 +453,14 @@ func (m *Manager) ServeMonitor(w http.ResponseWriter, r *http.Request) {
 			http.NotFound(w, r)
 			return
 		}
-		log.Printf("async: failed to load job %s: %v", id, err)
+		log.Printf("async: failed to load job %s: %v", safeID, err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	snapshot, err := recordToSnapshot(&record)
 	if err != nil {
-		log.Printf("async: failed to deserialize job %s: %v", id, err)
+		log.Printf("async: failed to deserialize job %s: %v", safeID, err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
