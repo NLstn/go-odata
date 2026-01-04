@@ -30,20 +30,17 @@ func addNavigationLinks(data interface{}, metadata EntityMetadataProvider, expan
 
 	for i := 0; i < dataValue.Len(); i++ {
 		entity := dataValue.Index(i)
-		var entityMap map[string]interface{}
 
 		if entity.Kind() == reflect.Map {
-			entityMap = processMapEntity(entity, metadata, expandedProps, baseURL, entitySetName, metadataLevel, fullMetadata)
-		} else {
-			if v := processStructEntityOrdered(entity, metadata, expandedProps, baseURL, entitySetName, metadataLevel, fullMetadata); v != nil {
-				if m, ok := v.(map[string]interface{}); ok {
-					entityMap = m
-				}
+			entityMap := processMapEntity(entity, metadata, expandedProps, baseURL, entitySetName, metadataLevel, fullMetadata)
+			if entityMap != nil {
+				result[i] = entityMap
 			}
-		}
-
-		if entityMap != nil {
-			result[i] = entityMap
+		} else {
+			orderedMap := processStructEntityOrdered(entity, metadata, expandedProps, baseURL, entitySetName, metadataLevel, fullMetadata)
+			if orderedMap != nil {
+				result[i] = orderedMap
+			}
 		}
 	}
 
