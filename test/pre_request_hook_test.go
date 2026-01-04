@@ -15,8 +15,8 @@ import (
 
 // PreRequestHookProduct is a test entity for pre-request hook tests
 type PreRequestHookProduct struct {
-	ID    uint   `json:"ID" gorm:"primaryKey" odata:"key"`
-	Name  string `json:"Name"`
+	ID    uint    `json:"ID" gorm:"primaryKey" odata:"key"`
+	Name  string  `json:"Name"`
 	Price float64 `json:"Price"`
 }
 
