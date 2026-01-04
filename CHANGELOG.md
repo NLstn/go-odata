@@ -10,6 +10,7 @@ rely on version numbers to reason about compatibility.
 ## [Unreleased]
 
 ### Fixed
+- **Batch responses now echo Content-ID headers**: Per OData v4 spec section 11.7.4, Content-ID headers from batch request parts are now properly echoed back in the corresponding response parts. This enables clients to correlate batch responses with their requests, which is essential for batch request processing and changeset referencing.
 - Pre-request hook failures now return OData-formatted error responses for non-batch requests.
 - **Observability documentation and implementation cleanup**: 
   - Added nil check for logger before calling Info in SetObservability to prevent panic

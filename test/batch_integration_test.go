@@ -905,3 +905,144 @@ Accept: application/json
 		})
 	}
 }
+
+// TestBatchIntegration_ContentIDEcho verifies that Content-ID headers are echoed back
+// in batch responses per OData v4 spec section 11.7.4
+func TestBatchIntegration_ContentIDEcho(t *testing.T) {
+	service, db := setupBatchIntegrationTest(t)
+
+	// Insert test data
+	product := BatchIntegrationProduct{
+		ID:       1,
+		Name:     "Test Product",
+		Price:    99.99,
+		Category: "Electronics",
+	}
+	db.Create(&product)
+
+	t.Run("single request with Content-ID", func(t *testing.T) {
+		boundary := "batch_36d5c8c6"
+		body := fmt.Sprintf(`--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+Content-ID: myRequest1
+
+GET /BatchIntegrationProducts(1) HTTP/1.1
+Host: localhost
+Accept: application/json
+
+
+--%s--
+`, boundary, boundary)
+
+		req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+		req.Header.Set("Content-Type", fmt.Sprintf("multipart/mixed; boundary=%s", boundary))
+		w := httptest.NewRecorder()
+
+		service.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+		}
+
+		responseBody := w.Body.String()
+		if !strings.Contains(responseBody, "Content-ID: myRequest1") {
+			t.Errorf("Response does not contain echoed Content-ID header. Body: %s", responseBody)
+		}
+	})
+
+	t.Run("changeset with Content-IDs", func(t *testing.T) {
+		// Clean up and reset data
+		db.Exec("DELETE FROM batch_integration_products")
+
+		batchBoundary := "batch_36d5c8c6"
+		changesetBoundary := "changeset_77162fcd"
+		body := fmt.Sprintf(`--%s
+Content-Type: multipart/mixed; boundary=%s
+
+--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+Content-ID: 1
+
+POST /BatchIntegrationProducts HTTP/1.1
+Host: localhost
+Content-Type: application/json
+
+{"Name":"Product 1","Price":10.00,"Category":"Electronics"}
+
+--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+Content-ID: 2
+
+POST /BatchIntegrationProducts HTTP/1.1
+Host: localhost
+Content-Type: application/json
+
+{"Name":"Product 2","Price":20.00,"Category":"Books"}
+
+--%s--
+
+--%s--
+`, batchBoundary, changesetBoundary, changesetBoundary, changesetBoundary, changesetBoundary, batchBoundary)
+
+		req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+		req.Header.Set("Content-Type", fmt.Sprintf("multipart/mixed; boundary=%s", batchBoundary))
+		w := httptest.NewRecorder()
+
+		service.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+		}
+
+		responseBody := w.Body.String()
+		if !strings.Contains(responseBody, "Content-ID: 1") {
+			t.Errorf("Response does not contain first Content-ID header. Body: %s", responseBody)
+		}
+		if !strings.Contains(responseBody, "Content-ID: 2") {
+			t.Errorf("Response does not contain second Content-ID header. Body: %s", responseBody)
+		}
+	})
+
+	t.Run("no Content-ID when not provided", func(t *testing.T) {
+		// Insert test data
+		db.Exec("DELETE FROM batch_integration_products")
+		product := BatchIntegrationProduct{
+			ID:       1,
+			Name:     "Test Product",
+			Price:    99.99,
+			Category: "Electronics",
+		}
+		db.Create(&product)
+
+		boundary := "batch_36d5c8c6"
+		body := fmt.Sprintf(`--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+GET /BatchIntegrationProducts(1) HTTP/1.1
+Host: localhost
+Accept: application/json
+
+
+--%s--
+`, boundary, boundary)
+
+		req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+		req.Header.Set("Content-Type", fmt.Sprintf("multipart/mixed; boundary=%s", boundary))
+		w := httptest.NewRecorder()
+
+		service.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+		}
+
+		responseBody := w.Body.String()
+		if strings.Contains(responseBody, "Content-ID:") {
+			t.Errorf("Response should not contain Content-ID when none was provided. Body: %s", responseBody)
+		}
+	})
+}

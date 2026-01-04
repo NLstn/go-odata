@@ -65,10 +65,11 @@ func (h *BatchHandler) SetPreRequestHook(hook func(r *http.Request) (context.Con
 
 // batchRequest represents a single request within a batch
 type batchRequest struct {
-	Method  string
-	URL     string
-	Headers http.Header
-	Body    []byte
+	Method    string
+	URL       string
+	Headers   http.Header
+	Body      []byte
+	ContentID string // Content-ID from the MIME part envelope (to be echoed in response)
 }
 
 // batchResponse represents a single response within a batch
@@ -76,6 +77,7 @@ type batchResponse struct {
 	StatusCode int
 	Headers    http.Header
 	Body       []byte
+	ContentID  string // Content-ID to include in the response MIME part envelope
 }
 
 // HandleBatch handles the $batch endpoint
@@ -164,13 +166,20 @@ func (h *BatchHandler) HandleBatch(w http.ResponseWriter, r *http.Request) {
 			responses = append(responses, changesetResponses...)
 		} else if partMediaType == "application/http" {
 			// Process single request
+			// Capture Content-ID from MIME part envelope headers (per OData v4 spec, must be echoed in response)
+			contentID := part.Header.Get("Content-ID")
+
 			req, err := h.parseHTTPRequest(part)
 			if err != nil {
-				responses = append(responses, h.createErrorResponse(http.StatusBadRequest, fmt.Sprintf("Failed to parse request: %v", err)))
+				errResp := h.createErrorResponse(http.StatusBadRequest, fmt.Sprintf("Failed to parse request: %v", err))
+				errResp.ContentID = contentID
+				responses = append(responses, errResp)
 				continue
 			}
 
+			req.ContentID = contentID
 			resp := h.executeRequest(req)
+			resp.ContentID = req.ContentID // Echo Content-ID in response
 			responses = append(responses, resp)
 		} else {
 			responses = append(responses, h.createErrorResponse(http.StatusBadRequest, "Invalid part Content-Type"))
@@ -212,15 +221,23 @@ func (h *BatchHandler) processChangeset(r io.Reader, boundary string) []batchRes
 			break
 		}
 
+		// Capture Content-ID from MIME part envelope headers (per OData v4 spec, must be echoed in response)
+		contentID := part.Header.Get("Content-ID")
+
 		req, err := h.parseHTTPRequest(part)
 		if err != nil {
 			hasError = true
-			responses = append(responses, h.createErrorResponse(http.StatusBadRequest, fmt.Sprintf("Failed to parse request: %v", err)))
+			errResp := h.createErrorResponse(http.StatusBadRequest, fmt.Sprintf("Failed to parse request: %v", err))
+			errResp.ContentID = contentID
+			responses = append(responses, errResp)
 			break
 		}
 
+		req.ContentID = contentID
+
 		// Execute request within transaction
 		resp := h.executeRequestInTransaction(req, tx, &pendingEvents)
+		resp.ContentID = req.ContentID // Echo Content-ID in response
 		responses = append(responses, resp)
 
 		// If any request fails, mark as error
@@ -619,6 +636,14 @@ func (h *BatchHandler) writeBatchResponse(w http.ResponseWriter, responses []bat
 		if _, err := fmt.Fprintf(w, "Content-Transfer-Encoding: binary\r\n"); err != nil {
 			h.logger.Error("Error writing encoding", "error", err)
 			return
+		}
+		// Echo Content-ID in the response MIME part envelope if it was present in the request
+		// Per OData v4 spec section 11.7.4, the Content-ID MUST be echoed back
+		if resp.ContentID != "" {
+			if _, err := fmt.Fprintf(w, "Content-ID: %s\r\n", resp.ContentID); err != nil {
+				h.logger.Error("Error writing Content-ID", "error", err)
+				return
+			}
 		}
 		if _, err := fmt.Fprintf(w, "\r\n"); err != nil {
 			h.logger.Error("Error writing newline", "error", err)
