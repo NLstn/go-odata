@@ -30,13 +30,7 @@ type BatchHandler struct {
 	service       http.Handler
 	logger        *slog.Logger
 	observability *observability.Config
-	// subRequestHandler points to the handler used for non-transactional batch sub-requests.
-	// When set, sub-requests are routed through the dereferenced handler, allowing them
-	// to pass through any middleware wrapping the service. The pointer indirection allows
-	// the handler to be updated after the batch handler is created.
-	subRequestHandler *http.Handler
-	// preRequestHook is called before each sub-request is processed (for changesets).
-	// Non-changeset sub-requests go through subRequestHandler which may call the hook.
+	// preRequestHook is called before each sub-request is processed.
 	preRequestHook func(r *http.Request) (context.Context, error)
 }
 
@@ -63,15 +57,8 @@ func (h *BatchHandler) SetObservability(cfg *observability.Config) {
 	h.observability = cfg
 }
 
-// SetSubRequestHandler sets a pointer to the handler used for batch sub-requests.
-// The pointer indirection allows the handler to be updated after the batch handler is created,
-// enabling batch sub-requests to pass through middleware that wraps the service.
-func (h *BatchHandler) SetSubRequestHandler(handler *http.Handler) {
-	h.subRequestHandler = handler
-}
-
-// SetPreRequestHook sets a hook that is called before each changeset sub-request is processed.
-// This enables authentication and context enrichment for changeset operations.
+// SetPreRequestHook sets a hook that is called before each sub-request is processed.
+// This enables authentication and context enrichment for all batch operations.
 func (h *BatchHandler) SetPreRequestHook(hook func(r *http.Request) (context.Context, error)) {
 	h.preRequestHook = hook
 }
@@ -303,8 +290,7 @@ func (h *BatchHandler) parseHTTPRequest(r io.Reader) (*batchRequest, error) {
 
 // executeRequest executes a single batch request.
 // Per the OData specification, each sub-request should be treated as an independent request.
-// When subRequestHandler is configured, sub-requests are routed through it to ensure
-// they pass through the same middleware stack as regular requests.
+// Sub-requests are routed through the service handler which invokes the PreRequestHook.
 func (h *BatchHandler) executeRequest(req *batchRequest) batchResponse {
 	// Ensure URL has a leading slash to avoid httptest.NewRequest panic
 	url := req.URL
@@ -320,16 +306,10 @@ func (h *BatchHandler) executeRequest(req *batchRequest) batchResponse {
 		}
 	}
 
-	// Execute request using the appropriate handler.
-	// When subRequestHandler is configured, use it so sub-requests pass through
-	// any middleware wrapping the service (per OData specification requirement
-	// that sub-requests are treated as independent requests).
+	// Execute request using the service handler.
+	// The service handler invokes PreRequestHook for context enrichment.
 	recorder := httptest.NewRecorder()
-	handler := h.service
-	if h.subRequestHandler != nil {
-		handler = *h.subRequestHandler
-	}
-	handler.ServeHTTP(recorder, httpReq)
+	h.service.ServeHTTP(recorder, httpReq)
 
 	return batchResponse{
 		StatusCode: recorder.Code,

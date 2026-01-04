@@ -9,10 +9,10 @@ This guide covers advanced features of go-odata including singletons, ETags, lif
 - [Disabling HTTP Methods](#disabling-http-methods)
 - [Lifecycle Hooks](#lifecycle-hooks)
 - [Pre-Request Hook](#pre-request-hook)
-- [Change Tracking and Delta Tokens](#change-tracking-and-delta-tokens)
   - [Read Hooks](#read-hooks)
   - [Tenant Filtering Example](#tenant-filtering-example)
   - [Redacting Sensitive Data](#redacting-sensitive-data)
+- [Change Tracking and Delta Tokens](#change-tracking-and-delta-tokens)
 - [Asynchronous Processing](#asynchronous-processing)
 - [Full-Text Search with Database FTS](#full-text-search-with-database-fts)
 
@@ -468,21 +468,6 @@ func (p *Product) ODataBeforeCreate(ctx context.Context, r *http.Request) error 
     return nil
 }
 ```
-
-### Comparison with SetBatchSubRequestHandler
-
-The `SetPreRequestHook` method is simpler and more reliable than `SetBatchSubRequestHandler` for most use cases:
-
-| Feature | PreRequestHook | SetBatchSubRequestHandler |
-|---------|---------------|---------------------------|
-| Works for single requests | ✅ | ❌ (middleware only) |
-| Works for batch sub-requests | ✅ | ✅ |
-| Works for changeset operations | ✅ | ❌ |
-| Requires middleware configuration | ❌ | ✅ |
-| Can abort with error | ✅ | Depends on middleware |
-| Can enrich context | ✅ | ✅ |
-
-Use `SetBatchSubRequestHandler` only when you need batch sub-requests to pass through complex middleware chains that cannot be replicated in a hook.
 
 ## Change Tracking and Delta Tokens
 

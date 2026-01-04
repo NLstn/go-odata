@@ -86,8 +86,7 @@ type KeyGenerator func(context.Context) (interface{}, error)
 //   - For each batch sub-request (both changeset and non-changeset operations)
 //
 // This provides a unified mechanism for request preprocessing that works consistently
-// across all request types, eliminating the need for manual setup with SetBatchSubRequestHandler
-// for common use cases like authentication.
+// across all request types for common use cases like authentication.
 //
 // # Example - Authentication context loading
 //
@@ -354,10 +353,6 @@ type Service struct {
 	defaultMaxTop *int
 	// observability holds the observability configuration (tracing, metrics)
 	observability *observability.Config
-	// batchSubRequestHandler holds the handler used for batch sub-requests.
-	// This is set by SetBatchSubRequestHandler and allows batch sub-requests
-	// to pass through middleware when users wrap the service.
-	batchSubRequestHandler http.Handler
 	// preRequestHook is called before each request is processed (including batch sub-requests).
 	// It allows injecting custom logic such as authentication, context enrichment, or logging.
 	preRequestHook PreRequestHook
@@ -421,14 +416,6 @@ func NewServiceWithConfig(db *gorm.DB, cfg ServiceConfig) (*Service, error) {
 	s.batchHandler = handlers.NewBatchHandler(db, handlersMap, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		s.serveHTTP(w, r, false)
 	}))
-	// Configure batch sub-requests to go through the service's public ServeHTTP.
-	// This ensures sub-requests are treated as independent requests per the OData spec.
-	// By default, this points to the service itself, but users can update it via
-	// SetBatchSubRequestHandler to include middleware in the request chain.
-	s.batchSubRequestHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		s.ServeHTTP(w, r)
-	})
-	s.batchHandler.SetSubRequestHandler(&s.batchSubRequestHandler)
 	s.router = servrouter.NewRouter(
 		func(name string) (servrouter.EntityHandler, bool) {
 			handler, ok := s.handlers[name]
@@ -759,47 +746,13 @@ func (s *Service) AsyncMonitorPrefix() string {
 	return s.asyncMonitorPrefix
 }
 
-// SetBatchSubRequestHandler configures the handler used for batch sub-requests.
-// Per the OData specification, each sub-request in a $batch should be treated as
-// an independent HTTP request. This method allows batch sub-requests to pass through
-// custom middleware (e.g., authentication middleware).
-//
-// By default, batch sub-requests go through Service.ServeHTTP. If you wrap the service
-// with middleware and want batch sub-requests to also pass through that middleware,
-// call this method with your middleware-wrapped handler.
-//
-// # Example - Using authentication middleware for batch sub-requests
-//
-//	service := odata.NewService(db)
-//	service.RegisterEntity(&Product{})
-//
-//	// Create the handler with middleware
-//	handler := authMiddleware(service)
-//
-//	// Configure batch sub-requests to use the same middleware
-//	service.SetBatchSubRequestHandler(handler)
-//
-//	// Start server with the middleware-wrapped handler
-//	http.ListenAndServe(":8080", handler)
-//
-// Note: This only affects non-transactional (non-changeset) sub-requests.
-// Changeset requests are processed using internal transaction handlers to maintain
-// atomicity, as they must execute within a single database transaction.
-func (s *Service) SetBatchSubRequestHandler(handler http.Handler) {
-	s.batchSubRequestHandler = handler
-	if s.batchHandler != nil {
-		s.batchHandler.SetSubRequestHandler(&s.batchSubRequestHandler)
-	}
-}
-
 // SetPreRequestHook registers a hook that is called before each request is processed.
 // The hook is called for all requests including batch sub-requests (both changeset and
 // non-changeset operations), providing a unified mechanism for request preprocessing.
 //
 // This is the recommended way to implement authentication and context enrichment that
-// works consistently for both single requests and batch operations. Unlike external
-// middleware, this hook is automatically invoked for batch sub-requests without any
-// additional configuration.
+// works consistently for both single requests and batch operations. This hook is
+// automatically invoked for batch sub-requests without any additional configuration.
 //
 // # Return Values
 //
@@ -828,30 +781,16 @@ func (s *Service) SetBatchSubRequestHandler(handler http.Handler) {
 //	    }
 //	    return context.WithValue(r.Context(), userContextKey, user), nil
 //	})
-//
-// # Interaction with SetBatchSubRequestHandler
-//
-// When both PreRequestHook and SetBatchSubRequestHandler are configured:
-//   - For single requests: PreRequestHook is called first
-//   - For non-changeset batch sub-requests: If SetBatchSubRequestHandler points to middleware,
-//     the middleware is called first, then PreRequestHook
-//   - For changeset batch sub-requests: Only PreRequestHook is called (changesets use internal
-//     transaction handlers and don't go through SetBatchSubRequestHandler)
-//
-// For most authentication use cases, PreRequestHook alone is sufficient and simpler
-// than configuring SetBatchSubRequestHandler.
 func (s *Service) SetPreRequestHook(hook PreRequestHook) {
 	s.preRequestHook = hook
 	if s.batchHandler != nil {
-		// Wrap the hook for the batch handler. The wrapper is created once and captures
-		// the hook variable, so subsequent calls to SetPreRequestHook will update the
-		// service's preRequestHook but the batch handler will use its own copy.
-		// To update the batch handler's hook, call SetPreRequestHook again.
+		// Wrap the hook for the batch handler. The wrapper reads s.preRequestHook on each
+		// call so that subsequent calls to SetPreRequestHook are honored for batch requests.
 		s.batchHandler.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
-			if hook == nil {
+			if s.preRequestHook == nil {
 				return nil, nil
 			}
-			return hook(r)
+			return s.preRequestHook(r)
 		})
 	}
 }
