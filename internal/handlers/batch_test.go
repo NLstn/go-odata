@@ -674,6 +674,215 @@ func TestBatchHandler_WriteBatchResponse(t *testing.T) {
 	}
 }
 
+func TestBatchHandler_ContentIDEcho(t *testing.T) {
+	handler, db, _ := setupBatchTestHandler(t)
+
+	// Insert test data
+	product := BatchTestProduct{
+		ID:       1,
+		Name:     "Test Product",
+		Price:    99.99,
+		Category: "Electronics",
+	}
+	db.Create(&product)
+
+	// Create batch request with Content-ID header in the MIME part
+	boundary := "batch_boundary"
+	body := fmt.Sprintf(`--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+Content-ID: request1
+
+GET /BatchTestProducts(1) HTTP/1.1
+Host: localhost
+Accept: application/json
+
+
+--%s--
+`, boundary, boundary)
+
+	req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+	req.Header.Set("Content-Type", fmt.Sprintf("multipart/mixed; boundary=%s", boundary))
+	w := httptest.NewRecorder()
+
+	handler.HandleBatch(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	// Per OData v4 spec, Content-ID MUST be echoed back in the response MIME part envelope
+	responseBody := w.Body.String()
+	if !strings.Contains(responseBody, "Content-ID: request1") {
+		t.Errorf("Response does not contain echoed Content-ID header. Body: %s", responseBody)
+	}
+}
+
+func TestBatchHandler_ContentIDEcho_MultipleRequests(t *testing.T) {
+	handler, db, _ := setupBatchTestHandler(t)
+
+	// Insert test data
+	products := []BatchTestProduct{
+		{ID: 1, Name: "Product 1", Price: 10.00, Category: "Category A"},
+		{ID: 2, Name: "Product 2", Price: 20.00, Category: "Category B"},
+	}
+	for _, p := range products {
+		db.Create(&p)
+	}
+
+	// Create batch request with multiple Content-IDs
+	boundary := "batch_boundary"
+	body := fmt.Sprintf(`--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+Content-ID: getProduct1
+
+GET /BatchTestProducts(1) HTTP/1.1
+Host: localhost
+Accept: application/json
+
+
+--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+Content-ID: getProduct2
+
+GET /BatchTestProducts(2) HTTP/1.1
+Host: localhost
+Accept: application/json
+
+
+--%s--
+`, boundary, boundary, boundary)
+
+	req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+	req.Header.Set("Content-Type", fmt.Sprintf("multipart/mixed; boundary=%s", boundary))
+	w := httptest.NewRecorder()
+
+	handler.HandleBatch(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	// Per OData v4 spec, Content-ID MUST be echoed back in the response MIME part envelopes
+	responseBody := w.Body.String()
+	if !strings.Contains(responseBody, "Content-ID: getProduct1") {
+		t.Errorf("Response does not contain first Content-ID header. Body: %s", responseBody)
+	}
+	if !strings.Contains(responseBody, "Content-ID: getProduct2") {
+		t.Errorf("Response does not contain second Content-ID header. Body: %s", responseBody)
+	}
+}
+
+func TestBatchHandler_ContentIDEcho_Changeset(t *testing.T) {
+	handler, db, _ := setupBatchTestHandler(t)
+
+	// Create batch request with changeset containing Content-IDs
+	batchBoundary := "batch_boundary"
+	changesetBoundary := "changeset_boundary"
+	body := fmt.Sprintf(`--%s
+Content-Type: multipart/mixed; boundary=%s
+
+--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+Content-ID: 1
+
+POST /BatchTestProducts HTTP/1.1
+Host: localhost
+Content-Type: application/json
+
+{"Name":"Product 1","Price":10.00,"Category":"Electronics"}
+
+--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+Content-ID: 2
+
+POST /BatchTestProducts HTTP/1.1
+Host: localhost
+Content-Type: application/json
+
+{"Name":"Product 2","Price":20.00,"Category":"Books"}
+
+--%s--
+
+--%s--
+`, batchBoundary, changesetBoundary, changesetBoundary, changesetBoundary, changesetBoundary, batchBoundary)
+
+	req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+	req.Header.Set("Content-Type", fmt.Sprintf("multipart/mixed; boundary=%s", batchBoundary))
+	w := httptest.NewRecorder()
+
+	handler.HandleBatch(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	// Verify products were created
+	var count int64
+	db.Model(&BatchTestProduct{}).Count(&count)
+	if count != 2 {
+		t.Fatalf("Expected 2 products in database, got %d", count)
+	}
+
+	// Per OData v4 spec, Content-ID MUST be echoed back in changeset response parts
+	responseBody := w.Body.String()
+	if !strings.Contains(responseBody, "Content-ID: 1") {
+		t.Errorf("Response does not contain first Content-ID header. Body: %s", responseBody)
+	}
+	if !strings.Contains(responseBody, "Content-ID: 2") {
+		t.Errorf("Response does not contain second Content-ID header. Body: %s", responseBody)
+	}
+}
+
+func TestBatchHandler_ContentIDEcho_NoContentID(t *testing.T) {
+	handler, db, _ := setupBatchTestHandler(t)
+
+	// Insert test data
+	product := BatchTestProduct{
+		ID:       1,
+		Name:     "Test Product",
+		Price:    99.99,
+		Category: "Electronics",
+	}
+	db.Create(&product)
+
+	// Create batch request WITHOUT Content-ID header
+	boundary := "batch_boundary"
+	body := fmt.Sprintf(`--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+GET /BatchTestProducts(1) HTTP/1.1
+Host: localhost
+Accept: application/json
+
+
+--%s--
+`, boundary, boundary)
+
+	req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+	req.Header.Set("Content-Type", fmt.Sprintf("multipart/mixed; boundary=%s", boundary))
+	w := httptest.NewRecorder()
+
+	handler.HandleBatch(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	// When no Content-ID is provided, none should be in the response
+	responseBody := w.Body.String()
+
+	// Count occurrences of Content-ID in response - should only see Content-Type, not Content-ID
+	if strings.Contains(responseBody, "Content-ID:") {
+		t.Errorf("Response should not contain Content-ID header when none was provided. Body: %s", responseBody)
+	}
+}
+
 func TestBatchHandler_URLWithoutLeadingSlash(t *testing.T) {
 	handler, db, _ := setupBatchTestHandler(t)
 
