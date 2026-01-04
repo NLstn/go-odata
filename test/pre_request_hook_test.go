@@ -414,3 +414,137 @@ Accept: application/json
 		t.Errorf("Expected hook to be called at least 3 times, got %d", hookCallCount)
 	}
 }
+
+func TestPreRequestHook_MultipleHookUpdates(t *testing.T) {
+	service, db := setupPreRequestHookTest(t)
+
+	// Insert test data
+	product := PreRequestHookProduct{ID: 1, Name: "Test Product", Price: 99.99}
+	db.Create(&product)
+
+	// Track which hook was called
+	var hook1Called, hook2Called bool
+
+	// Set the first hook
+	service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
+		hook1Called = true
+		return nil, nil
+	})
+
+	// Make a request to verify hook 1 is called
+	req1 := httptest.NewRequest(http.MethodGet, "/PreRequestHookProducts(1)", nil)
+	w1 := httptest.NewRecorder()
+	service.ServeHTTP(w1, req1)
+
+	if !hook1Called {
+		t.Error("First hook was not called")
+	}
+	if hook2Called {
+		t.Error("Second hook was called before it was set")
+	}
+
+	// Reset tracking and set the second hook
+	hook1Called = false
+	hook2Called = false
+	service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
+		hook2Called = true
+		return nil, nil
+	})
+
+	// Make another request to verify hook 2 is now called
+	req2 := httptest.NewRequest(http.MethodGet, "/PreRequestHookProducts(1)", nil)
+	w2 := httptest.NewRecorder()
+	service.ServeHTTP(w2, req2)
+
+	if hook1Called {
+		t.Error("First hook was called after second hook was set")
+	}
+	if !hook2Called {
+		t.Error("Second hook was not called")
+	}
+}
+
+func TestPreRequestHook_MultipleHookUpdates_BatchChangeset(t *testing.T) {
+	service, _ := setupPreRequestHookTest(t)
+
+	// Track which hook was called
+	var hook1Called, hook2Called bool
+
+	// Set the first hook
+	service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
+		hook1Called = true
+		return nil, nil
+	})
+
+	// Create a batch request with changeset
+	batchBoundary := "batch_multi_hook"
+	changesetBoundary := "changeset_multi_hook"
+	body1 := fmt.Sprintf(`--%s
+Content-Type: multipart/mixed; boundary=%s
+
+--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+POST /PreRequestHookProducts HTTP/1.1
+Host: localhost
+Content-Type: application/json
+
+{"Name":"Product 1","Price":10.00}
+
+--%s--
+
+--%s--
+`, batchBoundary, changesetBoundary, changesetBoundary, changesetBoundary, batchBoundary)
+
+	req1 := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body1))
+	req1.Header.Set("Content-Type", fmt.Sprintf("multipart/mixed; boundary=%s", batchBoundary))
+	w1 := httptest.NewRecorder()
+	service.ServeHTTP(w1, req1)
+
+	if !hook1Called {
+		t.Error("First hook was not called for batch changeset")
+	}
+	if hook2Called {
+		t.Error("Second hook was called before it was set")
+	}
+
+	// Reset tracking and set the second hook
+	hook1Called = false
+	hook2Called = false
+	service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
+		hook2Called = true
+		return nil, nil
+	})
+
+	// Make another batch request with changeset
+	body2 := fmt.Sprintf(`--%s
+Content-Type: multipart/mixed; boundary=%s
+
+--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+POST /PreRequestHookProducts HTTP/1.1
+Host: localhost
+Content-Type: application/json
+
+{"Name":"Product 2","Price":20.00}
+
+--%s--
+
+--%s--
+`, batchBoundary, changesetBoundary, changesetBoundary, changesetBoundary, batchBoundary)
+
+	req2 := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body2))
+	req2.Header.Set("Content-Type", fmt.Sprintf("multipart/mixed; boundary=%s", batchBoundary))
+	w2 := httptest.NewRecorder()
+	service.ServeHTTP(w2, req2)
+
+	if hook1Called {
+		t.Error("First hook was called after second hook was set for batch changeset")
+	}
+	if !hook2Called {
+		t.Error("Second hook was not called for batch changeset")
+	}
+}
