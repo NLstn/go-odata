@@ -10,6 +10,7 @@ rely on version numbers to reason about compatibility.
 ## [Unreleased]
 
 ### Fixed
+- Pre-request hook failures now return OData-formatted error responses for non-batch requests.
 - **Observability documentation and implementation cleanup**: 
   - Added nil check for logger before calling Info in SetObservability to prevent panic
   - Marked `EnableQueryOptionTracing` as not yet implemented with clear documentation

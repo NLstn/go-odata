@@ -25,8 +25,8 @@ type Config struct {
 	// This adds overhead but provides detailed insight into query performance.
 	EnableDetailedDBTracing bool
 
-// EnableQueryOptionTracing is reserved for future implementation.
-// When implemented, it will add query options ($filter, $select, etc.) as span attributes.
+	// EnableQueryOptionTracing is reserved for future implementation.
+	// When implemented, it will add query options ($filter, $select, etc.) as span attributes.
 	EnableQueryOptionTracing bool
 
 	// EnableServerTiming enables the Server-Timing HTTP response header.
