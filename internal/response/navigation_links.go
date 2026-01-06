@@ -38,9 +38,7 @@ func addNavigationLinks(data interface{}, metadata EntityMetadataProvider, expan
 			}
 		} else {
 			orderedMap := processStructEntityOrdered(entity, metadata, expandedProps, baseURL, entitySetName, metadataLevel, fullMetadata)
-			if orderedMap != nil {
-				result[i] = orderedMap
-			}
+			result[i] = orderedMap
 		}
 	}
 
