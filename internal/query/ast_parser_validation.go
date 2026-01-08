@@ -6,34 +6,58 @@ import (
 	"github.com/nlstn/go-odata/internal/metadata"
 )
 
-// computedAliasesContext holds computed property aliases for validation during AST conversion
-var computedAliasesContext map[string]bool
+// conversionContext holds request-scoped state for AST to FilterExpression conversion.
+// This replaces the previous global variable approach to ensure thread-safety
+// when multiple requests are processed concurrently.
+type conversionContext struct {
+	computedAliases map[string]bool
+	entityMetadata  *metadata.EntityMetadata
+}
+
+// hasComputedAlias checks if an alias is registered as a computed property
+func (ctx *conversionContext) hasComputedAlias(alias string) bool {
+	if ctx == nil || ctx.computedAliases == nil {
+		return false
+	}
+	return ctx.computedAliases[alias]
+}
 
 // ASTToFilterExpressionWithComputed converts an AST to a FilterExpression with computed alias support
 func ASTToFilterExpressionWithComputed(node ASTNode, entityMetadata *metadata.EntityMetadata, computedAliases map[string]bool) (*FilterExpression, error) {
-	// Store computed aliases in context for use during conversion
-	computedAliasesContext = computedAliases
-	defer func() {
-		// Clear context after conversion
-		computedAliasesContext = nil
-	}()
-
-	return ASTToFilterExpression(node, entityMetadata)
+	ctx := &conversionContext{
+		computedAliases: computedAliases,
+		entityMetadata:  entityMetadata,
+	}
+	return astToFilterExpressionWithContext(node, ctx)
 }
 
 // ASTToFilterExpression converts an AST to a FilterExpression
 func ASTToFilterExpression(node ASTNode, entityMetadata *metadata.EntityMetadata) (*FilterExpression, error) {
+	ctx := &conversionContext{
+		computedAliases: nil,
+		entityMetadata:  entityMetadata,
+	}
+	return astToFilterExpressionWithContext(node, ctx)
+}
+
+// astToFilterExpressionWithContext converts an AST to a FilterExpression using the provided context
+func astToFilterExpressionWithContext(node ASTNode, ctx *conversionContext) (*FilterExpression, error) {
+	var entityMetadata *metadata.EntityMetadata
+	if ctx != nil {
+		entityMetadata = ctx.entityMetadata
+	}
+
 	switch n := node.(type) {
 	case *BinaryExpr:
-		return convertBinaryExpr(n, entityMetadata)
+		return convertBinaryExprWithContext(n, ctx)
 	case *UnaryExpr:
-		return convertUnaryExpr(n, entityMetadata)
+		return convertUnaryExprWithContext(n, ctx)
 	case *ComparisonExpr:
-		return convertComparisonExpr(n, entityMetadata)
+		return convertComparisonExprWithContext(n, ctx)
 	case *FunctionCallExpr:
-		return convertFunctionCallExpr(n, entityMetadata)
+		return convertFunctionCallExprWithContext(n, entityMetadata, ctx)
 	case *LambdaExpr:
-		return convertLambdaExpr(n, entityMetadata)
+		return convertLambdaExprWithContext(n, ctx)
 	case *IdentifierExpr:
 		// Standalone identifier (e.g., for boolean properties)
 		return &FilterExpression{
@@ -48,19 +72,19 @@ func ASTToFilterExpression(node ASTNode, entityMetadata *metadata.EntityMetadata
 			Operator: OpEqual,
 		}, nil
 	case *GroupExpr:
-		return ASTToFilterExpression(n.Expr, entityMetadata)
+		return astToFilterExpressionWithContext(n.Expr, ctx)
 	}
 
 	return nil, fmt.Errorf("unsupported AST node type")
 }
 
-// convertBinaryExpr converts a binary expression to a filter expression
-func convertBinaryExpr(n *BinaryExpr, entityMetadata *metadata.EntityMetadata) (*FilterExpression, error) {
-	left, err := ASTToFilterExpression(n.Left, entityMetadata)
+// convertBinaryExprWithContext converts a binary expression to a filter expression
+func convertBinaryExprWithContext(n *BinaryExpr, ctx *conversionContext) (*FilterExpression, error) {
+	left, err := astToFilterExpressionWithContext(n.Left, ctx)
 	if err != nil {
 		return nil, err
 	}
-	right, err := ASTToFilterExpression(n.Right, entityMetadata)
+	right, err := astToFilterExpressionWithContext(n.Right, ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -83,10 +107,10 @@ func convertBinaryExpr(n *BinaryExpr, entityMetadata *metadata.EntityMetadata) (
 	}, nil
 }
 
-// convertUnaryExpr converts a unary expression to a filter expression
-func convertUnaryExpr(n *UnaryExpr, entityMetadata *metadata.EntityMetadata) (*FilterExpression, error) {
+// convertUnaryExprWithContext converts a unary expression to a filter expression
+func convertUnaryExprWithContext(n *UnaryExpr, ctx *conversionContext) (*FilterExpression, error) {
 	if n.Operator == "not" {
-		operand, err := ASTToFilterExpression(n.Operand, entityMetadata)
+		operand, err := astToFilterExpressionWithContext(n.Operand, ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -97,12 +121,17 @@ func convertUnaryExpr(n *UnaryExpr, entityMetadata *metadata.EntityMetadata) (*F
 	return nil, fmt.Errorf("unsupported unary operator: %s", n.Operator)
 }
 
-// convertComparisonExpr converts a comparison expression to a filter expression
-func convertComparisonExpr(n *ComparisonExpr, entityMetadata *metadata.EntityMetadata) (*FilterExpression, error) {
+// convertComparisonExprWithContext converts a comparison expression to a filter expression
+func convertComparisonExprWithContext(n *ComparisonExpr, ctx *conversionContext) (*FilterExpression, error) {
+	var entityMetadata *metadata.EntityMetadata
+	if ctx != nil {
+		entityMetadata = ctx.entityMetadata
+	}
+
 	// Check if left side is a function call
 	if funcCall, ok := n.Left.(*FunctionCallExpr); ok {
 		// Handle function calls like tolower(Name) eq 'value'
-		funcExpr, err := convertFunctionCallExpr(funcCall, entityMetadata)
+		funcExpr, err := convertFunctionCallExprWithContext(funcCall, entityMetadata, ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -136,7 +165,7 @@ func convertComparisonExpr(n *ComparisonExpr, entityMetadata *metadata.EntityMet
 	// Check if left side is a binary expression (arithmetic operation)
 	if binExpr, ok := n.Left.(*BinaryExpr); ok {
 		// Handle arithmetic operations like Price mod 2 eq 1
-		arithExpr, err := convertBinaryArithmeticExpr(binExpr, entityMetadata)
+		arithExpr, err := convertBinaryArithmeticExprWithContext(binExpr, ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -163,12 +192,12 @@ func convertComparisonExpr(n *ComparisonExpr, entityMetadata *metadata.EntityMet
 			Operator: n.Operator,
 			Right:    n.Right,
 		}
-		return convertComparisonExpr(unwrappedComparison, entityMetadata)
+		return convertComparisonExprWithContext(unwrappedComparison, ctx)
 	}
 
 	// Handle 'in' operator with collection
 	if n.Operator == "in" {
-		property, err := extractPropertyFromComparison(n.Left, entityMetadata)
+		property, err := extractPropertyFromComparisonWithContext(n.Left, ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -196,7 +225,7 @@ func convertComparisonExpr(n *ComparisonExpr, entityMetadata *metadata.EntityMet
 		}, nil
 	}
 
-	property, err := extractPropertyFromComparison(n.Left, entityMetadata)
+	property, err := extractPropertyFromComparisonWithContext(n.Left, ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -213,31 +242,41 @@ func convertComparisonExpr(n *ComparisonExpr, entityMetadata *metadata.EntityMet
 	}, nil
 }
 
-// extractPropertyFromComparison extracts property name from the left side of a comparison
-func extractPropertyFromComparison(node ASTNode, entityMetadata *metadata.EntityMetadata) (string, error) {
+// extractPropertyFromComparisonWithContext extracts property name from the left side of a comparison
+func extractPropertyFromComparisonWithContext(node ASTNode, ctx *conversionContext) (string, error) {
+	var entityMetadata *metadata.EntityMetadata
+	if ctx != nil {
+		entityMetadata = ctx.entityMetadata
+	}
+
 	if ident, ok := node.(*IdentifierExpr); ok {
 		property := ident.Name
 		// Validate property exists (either in entity metadata or as a computed alias)
-		if entityMetadata != nil && !propertyExists(property, entityMetadata) && !computedAliasesContext[property] {
+		if entityMetadata != nil && !propertyExists(property, entityMetadata) && !ctx.hasComputedAlias(property) {
 			return "", fmt.Errorf("property '%s' does not exist", property)
 		}
 		return property, nil
 	}
 
 	if binExpr, ok := node.(*BinaryExpr); ok {
-		return extractPropertyFromArithmeticExpr(binExpr, entityMetadata)
+		return extractPropertyFromArithmeticExprWithContext(binExpr, ctx)
 	}
 
 	if groupExpr, ok := node.(*GroupExpr); ok {
 		// Unwrap grouped expression and try again
-		return extractPropertyFromComparison(groupExpr.Expr, entityMetadata)
+		return extractPropertyFromComparisonWithContext(groupExpr.Expr, ctx)
 	}
 
 	return "", fmt.Errorf("left side of comparison must be a property name or arithmetic expression")
 }
 
-// convertBinaryArithmeticExpr converts a binary arithmetic expression to a filter expression
-func convertBinaryArithmeticExpr(binExpr *BinaryExpr, entityMetadata *metadata.EntityMetadata) (*FilterExpression, error) {
+// convertBinaryArithmeticExprWithContext converts a binary arithmetic expression to a filter expression
+func convertBinaryArithmeticExprWithContext(binExpr *BinaryExpr, ctx *conversionContext) (*FilterExpression, error) {
+	var entityMetadata *metadata.EntityMetadata
+	if ctx != nil {
+		entityMetadata = ctx.entityMetadata
+	}
+
 	// Map operator to FilterOperator
 	var op FilterOperator
 	switch binExpr.Operator {
@@ -260,12 +299,12 @@ func convertBinaryArithmeticExpr(binExpr *BinaryExpr, entityMetadata *metadata.E
 	if leftIdent, ok := binExpr.Left.(*IdentifierExpr); ok {
 		property = leftIdent.Name
 		// Validate property exists (either in entity metadata or as a computed alias)
-		if entityMetadata != nil && !propertyExists(property, entityMetadata) && !computedAliasesContext[property] {
+		if entityMetadata != nil && !propertyExists(property, entityMetadata) && !ctx.hasComputedAlias(property) {
 			return nil, fmt.Errorf("property '%s' does not exist", property)
 		}
 	} else if leftBinExpr, ok := binExpr.Left.(*BinaryExpr); ok {
 		// Nested arithmetic expression - recursively convert it
-		leftFilterExpr, err := convertBinaryArithmeticExpr(leftBinExpr, entityMetadata)
+		leftFilterExpr, err := convertBinaryArithmeticExprWithContext(leftBinExpr, ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -286,7 +325,7 @@ func convertBinaryArithmeticExpr(binExpr *BinaryExpr, entityMetadata *metadata.E
 	} else if rightBinExpr, ok := binExpr.Right.(*BinaryExpr); ok {
 		// Nested arithmetic expression on right side - recursively convert it
 		// This handles cases like "Price add (10 mul 2)"
-		rightFilterExpr, err := convertBinaryArithmeticExpr(rightBinExpr, entityMetadata)
+		rightFilterExpr, err := convertBinaryArithmeticExprWithContext(rightBinExpr, ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -304,12 +343,17 @@ func convertBinaryArithmeticExpr(binExpr *BinaryExpr, entityMetadata *metadata.E
 	}, nil
 }
 
-// extractPropertyFromArithmeticExpr extracts property from arithmetic expression
-func extractPropertyFromArithmeticExpr(binExpr *BinaryExpr, entityMetadata *metadata.EntityMetadata) (string, error) {
+// extractPropertyFromArithmeticExprWithContext extracts property from arithmetic expression
+func extractPropertyFromArithmeticExprWithContext(binExpr *BinaryExpr, ctx *conversionContext) (string, error) {
+	var entityMetadata *metadata.EntityMetadata
+	if ctx != nil {
+		entityMetadata = ctx.entityMetadata
+	}
+
 	if leftIdent, ok := binExpr.Left.(*IdentifierExpr); ok {
 		property := leftIdent.Name
 		// Validate property exists (either in entity metadata or as a computed alias)
-		if entityMetadata != nil && !propertyExists(property, entityMetadata) && !computedAliasesContext[property] {
+		if entityMetadata != nil && !propertyExists(property, entityMetadata) && !ctx.hasComputedAlias(property) {
 			return "", fmt.Errorf("property '%s' does not exist", property)
 		}
 		return property, nil

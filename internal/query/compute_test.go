@@ -4,7 +4,19 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
+
+// setupTestDBWithoutFTS creates a simple in-memory SQLite database for testing
+func setupTestDBWithoutFTS(t *testing.T) *gorm.DB {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("Failed to connect to database: %v", err)
+	}
+	return db
+}
 
 // TestCompute_ArithmeticOperations tests $compute with arithmetic operations
 func TestCompute_ArithmeticOperations(t *testing.T) {
@@ -463,9 +475,6 @@ func TestCompute_AliasExpression(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Reset alias map before test
-			resetAliasExprs()
-
 			// Parse the compute expression
 			result, err := parseCompute("compute("+tt.compute+")", meta)
 			if err != nil {
@@ -478,20 +487,20 @@ func TestCompute_AliasExpression(t *testing.T) {
 				return
 			}
 
-			// Build the compute SQL to register the alias
+			// Build the compute SQL and verify alias is returned
+			var foundAlias bool
 			for _, expr := range result.Compute.Expressions {
-				buildComputeSQL("postgres", expr, meta)
+				_, alias, aliasExpr := buildComputeSQLWithDB("postgres", expr, meta)
+				if alias == tt.expectedAlias {
+					foundAlias = true
+					if aliasExpr == "" {
+						t.Errorf("Expected non-empty expression for alias '%s'", tt.expectedAlias)
+					}
+				}
 			}
 
-			// Verify the alias was registered
-			aliasExpr, ok := getAliasExpr(tt.expectedAlias)
-			if !ok {
-				t.Errorf("Expected alias '%s' to be registered", tt.expectedAlias)
-				return
-			}
-
-			if aliasExpr == "" {
-				t.Errorf("Expected non-empty expression for alias '%s'", tt.expectedAlias)
+			if !foundAlias {
+				t.Errorf("Expected alias '%s' to be returned from buildComputeSQLWithDB", tt.expectedAlias)
 			}
 		})
 	}
@@ -517,9 +526,6 @@ func TestCompute_FilterWithComputedAlias(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Reset alias map before test
-			resetAliasExprs()
-
 			// Parse the compute expression
 			computeResult, err := parseCompute("compute("+tt.compute+")", meta)
 			if err != nil {
@@ -527,9 +533,16 @@ func TestCompute_FilterWithComputedAlias(t *testing.T) {
 				return
 			}
 
-			// Build the compute SQL to register aliases
+			// Create a mock GORM db to store aliases (simulating the production path)
+			db := setupTestDBWithoutFTS(t)
+			db = setAliasExprsInDB(db, make(map[string]string))
+
+			// Build the compute SQL and register aliases in db context
 			for _, expr := range computeResult.Compute.Expressions {
-				buildComputeSQL("postgres", expr, meta)
+				_, alias, aliasExpr := buildComputeSQLWithDB("postgres", expr, meta)
+				if alias != "" && aliasExpr != "" {
+					db = setAliasExprInDB(db, alias, aliasExpr)
+				}
 			}
 
 			// Parse and build the filter
@@ -539,8 +552,8 @@ func TestCompute_FilterWithComputedAlias(t *testing.T) {
 				return
 			}
 
-			// Build the filter condition for PostgreSQL
-			query, _ := buildFilterCondition("postgres", filterExpr, meta)
+			// Build the filter condition for PostgreSQL with db context
+			query, _ := buildFilterConditionWithDB(db, "postgres", filterExpr, meta)
 
 			// For PostgreSQL, the filter should use the expression, not the alias
 			// The query should contain the actual expression (with multiplication operator)
