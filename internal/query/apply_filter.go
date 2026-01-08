@@ -221,9 +221,12 @@ func applyHavingFilter(db *gorm.DB, filter *FilterExpression, entityMetadata *me
 	return db.Having(query, args...)
 }
 
-// buildFilterCondition builds a WHERE condition string and arguments for a filter expression
+// buildFilterCondition builds a WHERE condition string and arguments for a filter expression.
+// This is a convenience wrapper around buildFilterConditionWithDB for callers that don't need
+// db context (e.g., for alias resolution). In production, the dialect parameter varies based
+// on the database (sqlite, postgres, mysql, etc.), but tests consistently use "sqlite".
 //
-//nolint:unparam // dialect varies in production, but tests consistently use "sqlite"
+//nolint:unparam // dialect varies in production based on database, tests use sqlite
 func buildFilterCondition(dialect string, filter *FilterExpression, entityMetadata *metadata.EntityMetadata) (string, []interface{}) {
 	return buildFilterConditionWithDB(nil, dialect, filter, entityMetadata)
 }

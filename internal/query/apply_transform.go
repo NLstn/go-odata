@@ -183,15 +183,18 @@ func buildAggregateSQLWithDB(db *gorm.DB, dialect string, aggExpr AggregateExpre
 
 // buildAggregateSQLInternal builds the SQL for an aggregate expression with optional db context
 func buildAggregateSQLInternal(db *gorm.DB, dialect string, aggExpr AggregateExpression, entityMetadata *metadata.EntityMetadata) string {
+	// Helper function to record alias in the db context's shared map.
+	// The map is stored by reference in GORM's context, so modifications
+	// are immediately visible to other readers of the same db instance.
+	// Thread safety is ensured because each HTTP request gets its own db session
+	// via GORM's Session() or WithContext(), so concurrent requests don't share state.
 	recordAlias := func(alias, expr string) {
 		if db != nil {
 			exprs := getAliasExprsFromDB(db)
-			if exprs == nil {
-				exprs = make(map[string]string)
+			if exprs != nil {
+				// Map is shared by reference, modifications are visible to all readers
+				exprs[alias] = expr
 			}
-			exprs[alias] = expr
-			// Note: We can't update db.Set here as the function doesn't return db
-			// The alias will be stored in the map which is passed by reference
 		}
 	}
 
