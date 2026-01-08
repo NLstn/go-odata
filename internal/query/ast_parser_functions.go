@@ -41,6 +41,11 @@ func (p *ASTParser) parseFunctionCall(functionName string) (ASTNode, error) {
 
 // convertFunctionCallExpr converts a function call expression to a filter expression
 func convertFunctionCallExpr(n *FunctionCallExpr, entityMetadata *metadata.EntityMetadata) (*FilterExpression, error) {
+	return convertFunctionCallExprWithContext(n, entityMetadata, nil)
+}
+
+// convertFunctionCallExprWithContext converts a function call expression to a filter expression using the provided context
+func convertFunctionCallExprWithContext(n *FunctionCallExpr, entityMetadata *metadata.EntityMetadata, ctx *conversionContext) (*FilterExpression, error) {
 	functionName := n.Function
 
 	// Handle zero-argument functions (now)
@@ -50,42 +55,42 @@ func convertFunctionCallExpr(n *FunctionCallExpr, entityMetadata *metadata.Entit
 
 	// Handle single-argument functions (tolower, toupper, trim, length)
 	if isSingleArgFunction(functionName) {
-		return convertSingleArgFunction(n, functionName, entityMetadata)
+		return convertSingleArgFunctionWithContext(n, functionName, entityMetadata, ctx)
 	}
 
 	// Handle concat specially (can have literals as first argument)
 	if functionName == "concat" {
-		return convertConcatFunction(n, entityMetadata)
+		return convertConcatFunctionWithContext(n, entityMetadata, ctx)
 	}
 
 	// Handle two-argument functions (contains, startswith, endswith, indexof)
 	if isTwoArgFunction(functionName) {
-		return convertTwoArgFunction(n, functionName, entityMetadata)
+		return convertTwoArgFunctionWithContext(n, functionName, entityMetadata, ctx)
 	}
 
 	// Handle arithmetic functions (add, sub, mul, div, mod)
 	if isArithmeticFunction(functionName) {
-		return convertArithmeticFunction(n, functionName, entityMetadata)
+		return convertArithmeticFunctionWithContext(n, functionName, entityMetadata, ctx)
 	}
 
 	// Handle substring function (2 or 3 arguments)
 	if functionName == "substring" {
-		return convertSubstringFunction(n, entityMetadata)
+		return convertSubstringFunctionWithContext(n, entityMetadata, ctx)
 	}
 
 	// Handle cast function (2 arguments)
 	if functionName == "cast" {
-		return convertCastFunction(n, entityMetadata)
+		return convertCastFunctionWithContext(n, entityMetadata, ctx)
 	}
 
 	// Handle isof function (1 or 2 arguments)
 	if functionName == "isof" {
-		return convertIsOfFunction(n, entityMetadata)
+		return convertIsOfFunctionWithContext(n, entityMetadata, ctx)
 	}
 
 	// Handle geospatial functions
 	if isGeospatialFunction(functionName) {
-		return convertGeospatialFunction(n, functionName, entityMetadata)
+		return convertGeospatialFunctionWithContext(n, functionName, entityMetadata, ctx)
 	}
 
 	return nil, fmt.Errorf("unsupported function: %s", functionName)
@@ -121,19 +126,20 @@ func isGeospatialFunction(name string) bool {
 	return name == "geo.distance" || name == "geo.length" || name == "geo.intersects"
 }
 
-// extractPropertyFromFunctionArg extracts property from function argument
-func extractPropertyFromFunctionArg(arg ASTNode, functionName string, entityMetadata *metadata.EntityMetadata) (string, error) {
+// extractPropertyFromFunctionArgWithContext extracts property from function argument using the provided context
+func extractPropertyFromFunctionArgWithContext(arg ASTNode, functionName string, entityMetadata *metadata.EntityMetadata, ctx *conversionContext) (string, error) {
 	if ident, ok := arg.(*IdentifierExpr); ok {
 		property := ident.Name
 		// Validate property exists (either in entity metadata or as a computed alias)
-		if entityMetadata != nil && !propertyExists(property, entityMetadata) && !computedAliasesContext[property] {
+		hasComputedAlias := ctx != nil && ctx.hasComputedAlias(property)
+		if entityMetadata != nil && !propertyExists(property, entityMetadata) && !hasComputedAlias {
 			return "", fmt.Errorf("property '%s' does not exist", property)
 		}
 		return property, nil
 	}
 
 	if funcCall, ok := arg.(*FunctionCallExpr); ok {
-		innerExpr, err := convertFunctionCallExpr(funcCall, entityMetadata)
+		innerExpr, err := convertFunctionCallExprWithContext(funcCall, entityMetadata, ctx)
 		if err != nil {
 			return "", err
 		}
@@ -156,13 +162,13 @@ func convertZeroArgFunction(n *FunctionCallExpr, functionName string) (*FilterEx
 	}, nil
 }
 
-// convertSingleArgFunction converts single-argument functions
-func convertSingleArgFunction(n *FunctionCallExpr, functionName string, entityMetadata *metadata.EntityMetadata) (*FilterExpression, error) {
+// convertSingleArgFunctionWithContext converts single-argument functions using the provided context
+func convertSingleArgFunctionWithContext(n *FunctionCallExpr, functionName string, entityMetadata *metadata.EntityMetadata, ctx *conversionContext) (*FilterExpression, error) {
 	if len(n.Args) != 1 {
 		return nil, fmt.Errorf("function %s requires 1 argument", functionName)
 	}
 
-	property, err := extractPropertyFromFunctionArg(n.Args[0], functionName, entityMetadata)
+	property, err := extractPropertyFromFunctionArgWithContext(n.Args[0], functionName, entityMetadata, ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -174,13 +180,13 @@ func convertSingleArgFunction(n *FunctionCallExpr, functionName string, entityMe
 	}, nil
 }
 
-// convertTwoArgFunction converts two-argument functions
-func convertTwoArgFunction(n *FunctionCallExpr, functionName string, entityMetadata *metadata.EntityMetadata) (*FilterExpression, error) {
+// convertTwoArgFunctionWithContext converts two-argument functions using the provided context
+func convertTwoArgFunctionWithContext(n *FunctionCallExpr, functionName string, entityMetadata *metadata.EntityMetadata, ctx *conversionContext) (*FilterExpression, error) {
 	if len(n.Args) != 2 {
 		return nil, fmt.Errorf("function %s requires 2 arguments", functionName)
 	}
 
-	property, err := extractPropertyFromFunctionArg(n.Args[0], functionName, entityMetadata)
+	property, err := extractPropertyFromFunctionArgWithContext(n.Args[0], functionName, entityMetadata, ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -208,8 +214,8 @@ func convertTwoArgFunction(n *FunctionCallExpr, functionName string, entityMetad
 	}, nil
 }
 
-// convertConcatFunction converts concat function which can have literals or properties as arguments
-func convertConcatFunction(n *FunctionCallExpr, entityMetadata *metadata.EntityMetadata) (*FilterExpression, error) {
+// convertConcatFunctionWithContext converts concat function using the provided context
+func convertConcatFunctionWithContext(n *FunctionCallExpr, entityMetadata *metadata.EntityMetadata, ctx *conversionContext) (*FilterExpression, error) {
 	if len(n.Args) != 2 {
 		return nil, fmt.Errorf("function concat requires 2 arguments")
 	}
@@ -226,13 +232,14 @@ func convertConcatFunction(n *FunctionCallExpr, entityMetadata *metadata.EntityM
 		// First argument is a property
 		property = ident.Name
 		// Validate property exists (either in entity metadata or as a computed alias)
-		if entityMetadata != nil && !propertyExists(property, entityMetadata) && !computedAliasesContext[property] {
+		hasComputedAlias := ctx != nil && ctx.hasComputedAlias(property)
+		if entityMetadata != nil && !propertyExists(property, entityMetadata) && !hasComputedAlias {
 			return nil, fmt.Errorf("property '%s' does not exist", property)
 		}
 		firstArg = nil // Property is stored in Property field
 	} else if funcCall, ok := n.Args[0].(*FunctionCallExpr); ok {
 		// First argument is a function call
-		innerExpr, err := convertFunctionCallExpr(funcCall, entityMetadata)
+		innerExpr, err := convertFunctionCallExprWithContext(funcCall, entityMetadata, ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -271,13 +278,13 @@ func convertConcatFunction(n *FunctionCallExpr, entityMetadata *metadata.EntityM
 	}, nil
 }
 
-// convertSubstringFunction converts substring function (2 or 3 arguments)
-func convertSubstringFunction(n *FunctionCallExpr, entityMetadata *metadata.EntityMetadata) (*FilterExpression, error) {
+// convertSubstringFunctionWithContext converts substring function using the provided context
+func convertSubstringFunctionWithContext(n *FunctionCallExpr, entityMetadata *metadata.EntityMetadata, ctx *conversionContext) (*FilterExpression, error) {
 	if len(n.Args) < 2 || len(n.Args) > 3 {
 		return nil, fmt.Errorf("function substring requires 2 or 3 arguments")
 	}
 
-	property, err := extractPropertyFromFunctionArg(n.Args[0], "substring", entityMetadata)
+	property, err := extractPropertyFromFunctionArgWithContext(n.Args[0], "substring", entityMetadata, ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -336,8 +343,8 @@ func convertSubstringFunction(n *FunctionCallExpr, entityMetadata *metadata.Enti
 	}, nil
 }
 
-// convertArithmeticFunction converts arithmetic functions (add, sub, mul, div, mod)
-func convertArithmeticFunction(n *FunctionCallExpr, functionName string, entityMetadata *metadata.EntityMetadata) (*FilterExpression, error) {
+// convertArithmeticFunctionWithContext converts arithmetic functions using the provided context
+func convertArithmeticFunctionWithContext(n *FunctionCallExpr, functionName string, entityMetadata *metadata.EntityMetadata, ctx *conversionContext) (*FilterExpression, error) {
 	if len(n.Args) != 2 {
 		return nil, fmt.Errorf("function %s requires 2 arguments", functionName)
 	}
@@ -349,7 +356,8 @@ func convertArithmeticFunction(n *FunctionCallExpr, functionName string, entityM
 	if ident, ok := n.Args[0].(*IdentifierExpr); ok {
 		property = ident.Name
 		// Validate property exists (either in entity metadata or as a computed alias)
-		if entityMetadata != nil && !propertyExists(property, entityMetadata) && !computedAliasesContext[property] {
+		hasComputedAlias := ctx != nil && ctx.hasComputedAlias(property)
+		if entityMetadata != nil && !propertyExists(property, entityMetadata) && !hasComputedAlias {
 			return nil, fmt.Errorf("property '%s' does not exist", property)
 		}
 	} else {
@@ -375,15 +383,14 @@ func convertArithmeticFunction(n *FunctionCallExpr, functionName string, entityM
 	}, nil
 }
 
-// convertCastFunction converts cast function
-// Format: cast(property, TypeName) or cast(property, 'TypeName')
-func convertCastFunction(n *FunctionCallExpr, entityMetadata *metadata.EntityMetadata) (*FilterExpression, error) {
+// convertCastFunctionWithContext converts cast function using the provided context
+func convertCastFunctionWithContext(n *FunctionCallExpr, entityMetadata *metadata.EntityMetadata, ctx *conversionContext) (*FilterExpression, error) {
 	if len(n.Args) != 2 {
 		return nil, fmt.Errorf("function cast requires 2 arguments")
 	}
 
 	// First argument can be a property or another function call
-	property, err := extractPropertyFromFunctionArg(n.Args[0], "cast", entityMetadata)
+	property, err := extractPropertyFromFunctionArgWithContext(n.Args[0], "cast", entityMetadata, ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -435,9 +442,8 @@ func convertCastFunction(n *FunctionCallExpr, entityMetadata *metadata.EntityMet
 	}, nil
 }
 
-// convertIsOfFunction converts isof function
-// Format: isof(property, TypeName) or isof(TypeName) or isof(property, 'TypeName') or isof('TypeName')
-func convertIsOfFunction(n *FunctionCallExpr, entityMetadata *metadata.EntityMetadata) (*FilterExpression, error) {
+// convertIsOfFunctionWithContext converts isof function using the provided context
+func convertIsOfFunctionWithContext(n *FunctionCallExpr, entityMetadata *metadata.EntityMetadata, ctx *conversionContext) (*FilterExpression, error) {
 	// isof can have 1 or 2 arguments
 	if len(n.Args) < 1 || len(n.Args) > 2 {
 		return nil, fmt.Errorf("function isof requires 1 or 2 arguments")
@@ -468,7 +474,7 @@ func convertIsOfFunction(n *FunctionCallExpr, entityMetadata *metadata.EntityMet
 	} else {
 		// Two argument form: isof(property, TypeName) or isof(property, 'TypeName')
 		var err error
-		property, err = extractPropertyFromFunctionArg(n.Args[0], "isof", entityMetadata)
+		property, err = extractPropertyFromFunctionArgWithContext(n.Args[0], "isof", entityMetadata, ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -535,8 +541,8 @@ func convertIsOfFunction(n *FunctionCallExpr, entityMetadata *metadata.EntityMet
 	}, nil
 }
 
-// convertGeospatialFunction converts geospatial functions (geo.distance, geo.length, geo.intersects)
-func convertGeospatialFunction(n *FunctionCallExpr, functionName string, entityMetadata *metadata.EntityMetadata) (*FilterExpression, error) {
+// convertGeospatialFunctionWithContext converts geospatial functions using the provided context
+func convertGeospatialFunctionWithContext(n *FunctionCallExpr, functionName string, entityMetadata *metadata.EntityMetadata, ctx *conversionContext) (*FilterExpression, error) {
 	switch functionName {
 	case "geo.distance":
 		// geo.distance(point1, point2) - requires 2 arguments
@@ -545,7 +551,7 @@ func convertGeospatialFunction(n *FunctionCallExpr, functionName string, entityM
 		}
 
 		// First argument should be a property (the location field)
-		property, err := extractPropertyFromFunctionArg(n.Args[0], "geo.distance", entityMetadata)
+		property, err := extractPropertyFromFunctionArgWithContext(n.Args[0], "geo.distance", entityMetadata, ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -570,7 +576,7 @@ func convertGeospatialFunction(n *FunctionCallExpr, functionName string, entityM
 			return nil, fmt.Errorf("function geo.length requires 1 argument")
 		}
 
-		property, err := extractPropertyFromFunctionArg(n.Args[0], "geo.length", entityMetadata)
+		property, err := extractPropertyFromFunctionArgWithContext(n.Args[0], "geo.length", entityMetadata, ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -588,7 +594,7 @@ func convertGeospatialFunction(n *FunctionCallExpr, functionName string, entityM
 		}
 
 		// First argument should be a property
-		property, err := extractPropertyFromFunctionArg(n.Args[0], "geo.intersects", entityMetadata)
+		property, err := extractPropertyFromFunctionArgWithContext(n.Args[0], "geo.intersects", entityMetadata, ctx)
 		if err != nil {
 			return nil, err
 		}

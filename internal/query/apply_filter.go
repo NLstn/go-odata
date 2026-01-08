@@ -99,11 +99,11 @@ func applyFilter(db *gorm.DB, filter *FilterExpression, entityMetadata *metadata
 	dialect := getDatabaseDialect(db)
 
 	if filter.Logical != "" {
-		query, args := buildFilterCondition(dialect, filter, entityMetadata)
+		query, args := buildFilterConditionWithDB(db, dialect, filter, entityMetadata)
 		return db.Where(query, args...)
 	}
 
-	query, args := buildFilterCondition(dialect, filter, entityMetadata)
+	query, args := buildFilterConditionWithDB(db, dialect, filter, entityMetadata)
 	return db.Where(query, args...)
 }
 
@@ -217,21 +217,27 @@ func applyHavingFilter(db *gorm.DB, filter *FilterExpression, entityMetadata *me
 
 	dialect := getDatabaseDialect(db)
 
-	query, args := buildFilterCondition(dialect, filter, entityMetadata)
+	query, args := buildFilterConditionWithDB(db, dialect, filter, entityMetadata)
 	return db.Having(query, args...)
 }
 
 // buildFilterCondition builds a WHERE condition string and arguments for a filter expression
+//
+//nolint:unparam // dialect varies in production, but tests consistently use "sqlite"
 func buildFilterCondition(dialect string, filter *FilterExpression, entityMetadata *metadata.EntityMetadata) (string, []interface{}) {
+	return buildFilterConditionWithDB(nil, dialect, filter, entityMetadata)
+}
+
+func buildFilterConditionWithDB(db *gorm.DB, dialect string, filter *FilterExpression, entityMetadata *metadata.EntityMetadata) (string, []interface{}) {
 	if filter == nil {
 		return "", nil
 	}
 
 	if filter.Logical != "" {
-		return buildLogicalCondition(dialect, filter, entityMetadata)
+		return buildLogicalConditionWithDB(db, dialect, filter, entityMetadata)
 	}
 
-	query, args := buildComparisonCondition(dialect, filter, entityMetadata)
+	query, args := buildComparisonConditionWithDB(db, dialect, filter, entityMetadata)
 
 	if filter.IsNot {
 		return fmt.Sprintf("NOT (%s)", query), args
@@ -240,10 +246,9 @@ func buildFilterCondition(dialect string, filter *FilterExpression, entityMetada
 	return query, args
 }
 
-// buildLogicalCondition builds a logical condition (AND/OR)
-func buildLogicalCondition(dialect string, filter *FilterExpression, entityMetadata *metadata.EntityMetadata) (string, []interface{}) {
-	leftQuery, leftArgs := buildFilterCondition(dialect, filter.Left, entityMetadata)
-	rightQuery, rightArgs := buildFilterCondition(dialect, filter.Right, entityMetadata)
+func buildLogicalConditionWithDB(db *gorm.DB, dialect string, filter *FilterExpression, entityMetadata *metadata.EntityMetadata) (string, []interface{}) {
+	leftQuery, leftArgs := buildFilterConditionWithDB(db, dialect, filter.Left, entityMetadata)
+	rightQuery, rightArgs := buildFilterConditionWithDB(db, dialect, filter.Right, entityMetadata)
 
 	var query string
 	switch filter.Logical {
@@ -264,6 +269,10 @@ func buildLogicalCondition(dialect string, filter *FilterExpression, entityMetad
 
 // buildComparisonCondition builds a comparison condition
 func buildComparisonCondition(dialect string, filter *FilterExpression, entityMetadata *metadata.EntityMetadata) (string, []interface{}) {
+	return buildComparisonConditionWithDB(nil, dialect, filter, entityMetadata)
+}
+
+func buildComparisonConditionWithDB(db *gorm.DB, dialect string, filter *FilterExpression, entityMetadata *metadata.EntityMetadata) (string, []interface{}) {
 	if filter.Operator == OpAny || filter.Operator == OpAll {
 		return buildLambdaCondition(dialect, filter, entityMetadata)
 	}
@@ -287,8 +296,12 @@ func buildComparisonCondition(dialect string, filter *FilterExpression, entityMe
 			// For PostgreSQL/MySQL/MariaDB HAVING clauses, use COUNT(*) expression instead of alias
 			// because these databases don't support referencing SELECT aliases in HAVING/WHERE
 			if dialect == "postgres" || dialect == "mysql" || dialect == "mariadb" {
-				if expr, ok := getAggregateAliasExpr("$count"); ok {
-					columnName = expr
+				if db != nil {
+					if expr, ok := getAliasExprFromDB(db, "$count"); ok {
+						columnName = expr
+					} else {
+						columnName = "COUNT(*)"
+					}
 				} else {
 					columnName = "COUNT(*)"
 				}
@@ -301,9 +314,13 @@ func buildComparisonCondition(dialect string, filter *FilterExpression, entityMe
 			// Check if this is an aggregate/compute alias that needs to be resolved
 			// PostgreSQL, MySQL, and MariaDB don't support referencing SELECT aliases in WHERE/HAVING
 			if dialect == "postgres" || dialect == "mysql" || dialect == "mariadb" {
-				if expr, ok := getAggregateAliasExpr(rawName); ok {
-					// Use the aggregate/compute expression instead of the alias
-					columnName = expr
+				if db != nil {
+					if expr, ok := getAliasExprFromDB(db, rawName); ok {
+						// Use the aggregate/compute expression instead of the alias
+						columnName = expr
+					} else {
+						columnName = quoteIdent(dialect, rawName)
+					}
 				} else {
 					columnName = quoteIdent(dialect, rawName)
 				}

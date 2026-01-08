@@ -4,21 +4,16 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
-	"sync"
 
 	"github.com/nlstn/go-odata/internal/metadata"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
-// aliasExprs maps aggregate and compute aliases to their SQL expressions (without the "as alias" part)
-// This is used for PostgreSQL:
-// - In WHERE clauses when $compute is used with $filter on the same level
-// - In HAVING clauses when aggregation is used with filtering in $apply transformations
-// PostgreSQL enforces the SQL standard which prevents referencing SELECT aliases in WHERE/HAVING.
-// Protected by aliasExprsMu for concurrent access safety.
-var aliasExprs map[string]string
-var aliasExprsMu sync.RWMutex
+// aliasExprsKey is the key used to store alias expressions in GORM's context.
+// This replaces the previous global variable approach to ensure thread-safety
+// when multiple requests are processed concurrently.
+const aliasExprsKey = "_odata_alias_exprs"
 
 // applyTransformations applies apply transformations to the GORM query
 func applyTransformations(db *gorm.DB, transformations []ApplyTransformation, entityMetadata *metadata.EntityMetadata) *gorm.DB {
@@ -30,8 +25,8 @@ func applyTransformations(db *gorm.DB, transformations []ApplyTransformation, en
 	dialect := getDatabaseDialect(db)
 
 	hasGrouping := false
-	// Reset and build alias expressions map for HAVING/WHERE clause support
-	resetAliasExprs()
+	// Initialize alias expressions map in GORM context for this query
+	db = setAliasExprsInDB(db, make(map[string]string))
 
 	for _, transformation := range transformations {
 		switch transformation.Type {
@@ -84,7 +79,7 @@ func applyGroupBy(db *gorm.DB, groupBy *GroupByTransformation, entityMetadata *m
 		for _, trans := range groupBy.Transform {
 			if trans.Type == ApplyTypeAggregate && trans.Aggregate != nil {
 				for _, aggExpr := range trans.Aggregate.Expressions {
-					aggSQL := buildAggregateSQL(dialect, aggExpr, entityMetadata)
+					aggSQL := buildAggregateSQLWithDB(db, dialect, aggExpr, entityMetadata)
 					if aggSQL != "" {
 						selectColumns = append(selectColumns, aggSQL)
 					}
@@ -96,7 +91,7 @@ func applyGroupBy(db *gorm.DB, groupBy *GroupByTransformation, entityMetadata *m
 		// Quote alias per dialect
 		selectColumns = append(selectColumns, fmt.Sprintf("COUNT(*) as %s", quoteIdent(dialect, "$count")))
 		// Record $count alias for HAVING clause support in PostgreSQL
-		setAggregateAliasExpr("$count", "COUNT(*)")
+		db = setAliasExprInDB(db, "$count", "COUNT(*)")
 	}
 
 	if len(groupByColumns) > 0 {
@@ -119,7 +114,7 @@ func applyAggregate(db *gorm.DB, aggregate *AggregateTransformation, entityMetad
 	selectColumns := make([]string, 0, len(aggregate.Expressions))
 	dialect := getDatabaseDialect(db)
 	for _, aggExpr := range aggregate.Expressions {
-		aggSQL := buildAggregateSQL(dialect, aggExpr, entityMetadata)
+		aggSQL := buildAggregateSQLWithDB(db, dialect, aggExpr, entityMetadata)
 		if aggSQL != "" {
 			selectColumns = append(selectColumns, aggSQL)
 		}
@@ -132,54 +127,77 @@ func applyAggregate(db *gorm.DB, aggregate *AggregateTransformation, entityMetad
 	return db
 }
 
-// setAliasExpr safely sets an alias expression with mutex protection
-// This is used for both aggregate and compute aliases
-func setAliasExpr(alias, expr string) {
-	aliasExprsMu.Lock()
-	defer aliasExprsMu.Unlock()
-	if aliasExprs == nil {
-		aliasExprs = make(map[string]string)
-	}
-	aliasExprs[alias] = expr
+// setAliasExprsInDB stores the alias expressions map in the GORM db context
+func setAliasExprsInDB(db *gorm.DB, exprs map[string]string) *gorm.DB {
+	return db.Set(aliasExprsKey, exprs)
 }
 
-// getAliasExpr safely gets an alias expression with mutex protection
-// This is used for both aggregate and compute aliases
-func getAliasExpr(alias string) (string, bool) {
-	aliasExprsMu.RLock()
-	defer aliasExprsMu.RUnlock()
-	if aliasExprs == nil {
+// getAliasExprsFromDB retrieves the alias expressions map from the GORM db context
+func getAliasExprsFromDB(db *gorm.DB) map[string]string {
+	if val, ok := db.Get(aliasExprsKey); ok {
+		if exprs, ok := val.(map[string]string); ok {
+			return exprs
+		}
+	}
+	return nil
+}
+
+// setAliasExprInDB stores a single alias expression in the GORM db context
+func setAliasExprInDB(db *gorm.DB, alias, expr string) *gorm.DB {
+	exprs := getAliasExprsFromDB(db)
+	if exprs == nil {
+		exprs = make(map[string]string)
+	}
+	exprs[alias] = expr
+	return db.Set(aliasExprsKey, exprs)
+}
+
+// getAliasExprFromDB retrieves an alias expression from the GORM db context
+func getAliasExprFromDB(db *gorm.DB, alias string) (string, bool) {
+	exprs := getAliasExprsFromDB(db)
+	if exprs == nil {
 		return "", false
 	}
-	expr, ok := aliasExprs[alias]
+	expr, ok := exprs[alias]
 	return expr, ok
 }
 
-// resetAliasExprs resets the alias expressions map
-// This is called before processing a new query to avoid stale data
+// resetAliasExprs resets the alias expressions map.
+// Note: This function is now a no-op as alias expressions are stored in GORM db context.
+// For concurrent safety, use setAliasExprsInDB with an empty map instead.
+// This function is kept for backward compatibility with existing tests.
 func resetAliasExprs() {
-	aliasExprsMu.Lock()
-	defer aliasExprsMu.Unlock()
-	aliasExprs = make(map[string]string)
-}
-
-// setAggregateAliasExpr safely sets an aggregate alias expression with mutex protection
-// Deprecated: use setAliasExpr instead
-func setAggregateAliasExpr(alias, expr string) {
-	setAliasExpr(alias, expr)
-}
-
-// getAggregateAliasExpr safely gets an aggregate alias expression with mutex protection
-// Deprecated: use getAliasExpr instead
-func getAggregateAliasExpr(alias string) (string, bool) {
-	return getAliasExpr(alias)
+	// No-op: The new implementation uses GORM context which is automatically scoped per-query
 }
 
 // buildAggregateSQL builds the SQL for an aggregate expression
+// Deprecated: Use buildAggregateSQLWithDB for concurrent safety
 func buildAggregateSQL(dialect string, aggExpr AggregateExpression, entityMetadata *metadata.EntityMetadata) string {
+	return buildAggregateSQLInternal(nil, dialect, aggExpr, entityMetadata)
+}
+
+// buildAggregateSQLWithDB builds the SQL for an aggregate expression with GORM db context
+func buildAggregateSQLWithDB(db *gorm.DB, dialect string, aggExpr AggregateExpression, entityMetadata *metadata.EntityMetadata) string {
+	return buildAggregateSQLInternal(db, dialect, aggExpr, entityMetadata)
+}
+
+// buildAggregateSQLInternal builds the SQL for an aggregate expression with optional db context
+func buildAggregateSQLInternal(db *gorm.DB, dialect string, aggExpr AggregateExpression, entityMetadata *metadata.EntityMetadata) string {
+	recordAlias := func(alias, expr string) {
+		if db != nil {
+			exprs := getAliasExprsFromDB(db)
+			if exprs == nil {
+				exprs = make(map[string]string)
+			}
+			exprs[alias] = expr
+			// Note: We can't update db.Set here as the function doesn't return db
+			// The alias will be stored in the map which is passed by reference
+		}
+	}
+
 	if aggExpr.Property == "$count" {
 		// Record for HAVING clause support in PostgreSQL
-		setAggregateAliasExpr(aggExpr.Alias, "COUNT(*)")
+		recordAlias(aggExpr.Alias, "COUNT(*)")
 		return fmt.Sprintf("COUNT(*) as %s", quoteIdent(dialect, aggExpr.Alias))
 	}
 
@@ -207,7 +225,7 @@ func buildAggregateSQL(dialect string, aggExpr AggregateExpression, entityMetada
 	case AggregationCountDistinct:
 		expr := fmt.Sprintf("COUNT(DISTINCT %s)", qualified)
 		// Record for HAVING clause support in PostgreSQL
-		setAggregateAliasExpr(aggExpr.Alias, expr)
+		recordAlias(aggExpr.Alias, expr)
 		return fmt.Sprintf("%s as %s", expr, quoteIdent(dialect, aggExpr.Alias))
 	default:
 		return ""
@@ -215,7 +233,7 @@ func buildAggregateSQL(dialect string, aggExpr AggregateExpression, entityMetada
 
 	expr := fmt.Sprintf("%s(%s)", sqlFunc, qualified)
 	// Record for HAVING clause support in PostgreSQL
-	setAggregateAliasExpr(aggExpr.Alias, expr)
+	recordAlias(aggExpr.Alias, expr)
 	return fmt.Sprintf("%s as %s", expr, quoteIdent(dialect, aggExpr.Alias))
 }
 
@@ -251,10 +269,18 @@ func applyCompute(db *gorm.DB, dialect string, compute *ComputeTransformation, e
 		}
 	}
 
+	// Ensure alias expressions map exists in db context
+	if getAliasExprsFromDB(db) == nil {
+		db = setAliasExprsInDB(db, make(map[string]string))
+	}
+
 	for _, computeExpr := range compute.Expressions {
-		computeSQL := buildComputeSQL(dialect, computeExpr, entityMetadata)
+		computeSQL, alias, expr := buildComputeSQLWithDB(dialect, computeExpr, entityMetadata)
 		if computeSQL != "" {
 			selectColumns = append(selectColumns, computeSQL)
+			if alias != "" && expr != "" {
+				db = setAliasExprInDB(db, alias, expr)
+			}
 		}
 	}
 
@@ -265,46 +291,43 @@ func applyCompute(db *gorm.DB, dialect string, compute *ComputeTransformation, e
 	return db
 }
 
-// buildComputeSQL builds the SQL for a compute expression
-func buildComputeSQL(dialect string, computeExpr ComputeExpression, entityMetadata *metadata.EntityMetadata) string {
+// buildComputeSQLWithDB builds the SQL for a compute expression and returns the alias and expression for registration
+func buildComputeSQLWithDB(dialect string, computeExpr ComputeExpression, entityMetadata *metadata.EntityMetadata) (sql, alias, expr string) {
 	if computeExpr.Expression == nil {
-		return ""
+		return "", "", ""
 	}
 
-	expr := computeExpr.Expression
+	expression := computeExpr.Expression
 
-	if expr.Left == nil && expr.Right == nil && expr.Operator != "" && expr.Property != "" {
-		prop := findProperty(expr.Property, entityMetadata)
+	if expression.Left == nil && expression.Right == nil && expression.Operator != "" && expression.Property != "" {
+		prop := findProperty(expression.Property, entityMetadata)
 		if prop == nil {
-			return ""
+			return "", "", ""
 		}
 
 		// Use qualified and quoted column name
 		qualified := quoteIdent(dialect, entityMetadata.TableName) + "." + quoteIdent(dialect, prop.ColumnName)
-		funcSQL, _ := buildFunctionSQL(dialect, expr.Operator, qualified, nil)
+		funcSQL, _ := buildFunctionSQL(dialect, expression.Operator, qualified, nil)
 		if funcSQL == "" {
-			return ""
+			return "", "", ""
 		}
 
-		// Register the compute expression for PostgreSQL WHERE clause support
-		setAliasExpr(computeExpr.Alias, funcSQL)
-
-		return fmt.Sprintf("%s as %s", funcSQL, quoteIdent(dialect, computeExpr.Alias))
+		return fmt.Sprintf("%s as %s", funcSQL, quoteIdent(dialect, computeExpr.Alias)), computeExpr.Alias, funcSQL
 	}
 
-	if expr.Left != nil && expr.Right != nil && expr.Logical != "" {
-		leftSQL := buildComputeExpressionSQL(dialect, expr.Left, entityMetadata)
+	if expression.Left != nil && expression.Right != nil && expression.Logical != "" {
+		leftSQL := buildComputeExpressionSQL(dialect, expression.Left, entityMetadata)
 		if leftSQL == "" {
-			return ""
+			return "", "", ""
 		}
 
-		rightSQL := buildComputeExpressionSQL(dialect, expr.Right, entityMetadata)
+		rightSQL := buildComputeExpressionSQL(dialect, expression.Right, entityMetadata)
 		if rightSQL == "" {
-			return ""
+			return "", "", ""
 		}
 
 		var sqlOp string
-		switch expr.Logical {
+		switch expression.Logical {
 		case "add":
 			sqlOp = "+"
 		case "sub":
@@ -316,18 +339,16 @@ func buildComputeSQL(dialect string, computeExpr ComputeExpression, entityMetada
 		case "mod":
 			sqlOp = "%"
 		default:
-			return ""
+			return "", "", ""
 		}
 
 		// Build the expression without alias for registration
 		exprSQL := fmt.Sprintf("(%s %s %s)", leftSQL, sqlOp, rightSQL)
-		// Register the compute expression for PostgreSQL WHERE clause support
-		setAliasExpr(computeExpr.Alias, exprSQL)
 
-		return fmt.Sprintf("%s as %s", exprSQL, quoteIdent(dialect, computeExpr.Alias))
+		return fmt.Sprintf("%s as %s", exprSQL, quoteIdent(dialect, computeExpr.Alias)), computeExpr.Alias, exprSQL
 	}
 
-	return ""
+	return "", "", ""
 }
 
 // buildComputeExpressionSQL builds SQL for a sub-expression in a compute
