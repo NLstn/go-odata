@@ -11,6 +11,8 @@ import (
 // writeHookError writes a hook error response, checking for custom HookError types
 // with custom status codes. If the error is a HookError with a StatusCode set,
 // uses that status code; otherwise falls back to the defaultStatus.
+//
+//nolint:unparam // defaultStatus is kept as parameter for potential future use with different defaults
 func (h *EntityHandler) writeHookError(w http.ResponseWriter, err error, defaultStatus int, defaultCode string) {
 	if err == nil {
 		return
