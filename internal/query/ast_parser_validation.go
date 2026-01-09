@@ -252,7 +252,8 @@ func extractPropertyFromComparisonWithContext(node ASTNode, ctx *conversionConte
 	if ident, ok := node.(*IdentifierExpr); ok {
 		property := ident.Name
 		// Validate property exists (either in entity metadata or as a computed alias)
-		if entityMetadata != nil && !propertyExists(property, entityMetadata) && !ctx.hasComputedAlias(property) {
+		hasComputedAlias := ctx != nil && ctx.hasComputedAlias(property)
+		if entityMetadata != nil && !propertyExists(property, entityMetadata) && !hasComputedAlias {
 			return "", fmt.Errorf("property '%s' does not exist", property)
 		}
 		return property, nil
@@ -299,7 +300,8 @@ func convertBinaryArithmeticExprWithContext(binExpr *BinaryExpr, ctx *conversion
 	if leftIdent, ok := binExpr.Left.(*IdentifierExpr); ok {
 		property = leftIdent.Name
 		// Validate property exists (either in entity metadata or as a computed alias)
-		if entityMetadata != nil && !propertyExists(property, entityMetadata) && !ctx.hasComputedAlias(property) {
+		hasComputedAlias := ctx != nil && ctx.hasComputedAlias(property)
+		if entityMetadata != nil && !propertyExists(property, entityMetadata) && !hasComputedAlias {
 			return nil, fmt.Errorf("property '%s' does not exist", property)
 		}
 	} else if leftBinExpr, ok := binExpr.Left.(*BinaryExpr); ok {
@@ -353,7 +355,8 @@ func extractPropertyFromArithmeticExprWithContext(binExpr *BinaryExpr, ctx *conv
 	if leftIdent, ok := binExpr.Left.(*IdentifierExpr); ok {
 		property := leftIdent.Name
 		// Validate property exists (either in entity metadata or as a computed alias)
-		if entityMetadata != nil && !propertyExists(property, entityMetadata) && !ctx.hasComputedAlias(property) {
+		hasComputedAlias := ctx != nil && ctx.hasComputedAlias(property)
+		if entityMetadata != nil && !propertyExists(property, entityMetadata) && !hasComputedAlias {
 			return "", fmt.Errorf("property '%s' does not exist", property)
 		}
 		return property, nil
