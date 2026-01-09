@@ -172,7 +172,6 @@ func (h *EntityHandler) handleOptionsNavigationPropertyRef(w http.ResponseWriter
 // handleNavigationCollectionWithQueryOptions handles collection navigation properties with query options
 // This method queries the related collection directly to properly apply filters, orderby, etc.
 func (h *EntityHandler) handleNavigationCollectionWithQueryOptions(w http.ResponseWriter, r *http.Request, entityKey string, navProp *metadata.PropertyMetadata, isRef bool) {
-	// Get the target entity metadata
 	targetMetadata, err := h.getTargetMetadata(navProp.NavigationTarget)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, ErrMsgInternalError,
@@ -180,184 +179,216 @@ func (h *EntityHandler) handleNavigationCollectionWithQueryOptions(w http.Respon
 		return
 	}
 
-	// First verify that the parent entity exists and is authorized
+	parent, err := h.verifyAndFetchParentEntity(w, r, entityKey)
+	if err != nil {
+		return
+	}
+
+	relatedDB := h.buildNavigationRelatedQuery(parent, targetMetadata)
+	navigationPath := fmt.Sprintf("%s(%s)/%s", h.metadata.EntitySetName, entityKey, navProp.JsonName)
+
+	h.executeCollectionQuery(w, &collectionExecutionContext{
+		Metadata:          targetMetadata,
+		ParseQueryOptions: h.createNavParseQueryOptions(r, targetMetadata),
+		BeforeRead:        h.createNavBeforeRead(r, targetMetadata),
+		CountFunc:         h.createNavCountFunc(relatedDB, targetMetadata),
+		FetchFunc:         h.createNavFetchFunc(relatedDB, targetMetadata),
+		NextLinkFunc:      h.createNavNextLinkFunc(r, targetMetadata),
+		AfterRead:         h.createNavAfterRead(r, targetMetadata),
+		WriteResponse:     h.createNavWriteResponse(w, r, navigationPath, targetMetadata, isRef),
+	})
+}
+
+// verifyAndFetchParentEntity verifies that the parent entity exists and is authorized
+func (h *EntityHandler) verifyAndFetchParentEntity(w http.ResponseWriter, r *http.Request, entityKey string) (interface{}, error) {
 	parentOptions := &query.QueryOptions{}
 	parentScopes, parentHookErr := callBeforeReadEntity(h.metadata, r, parentOptions)
 	if parentHookErr != nil {
 		h.writeHookError(w, parentHookErr, http.StatusForbidden, "Authorization failed")
-		return
+		return nil, parentHookErr
 	}
 
 	parent := reflect.New(h.metadata.EntityType).Interface()
 	db, err := h.buildKeyQuery(h.db, entityKey)
 	if err != nil {
 		WriteError(w, http.StatusBadRequest, ErrMsgInvalidKey, err.Error())
-		return
+		return nil, err
 	}
 	if len(parentScopes) > 0 {
 		db = db.Scopes(parentScopes...)
 	}
 	if err := db.First(parent).Error; err != nil {
 		h.handleFetchError(w, err, entityKey)
-		return
+		return nil, err
 	}
 
 	if _, _, parentAfterErr := callAfterReadEntity(h.metadata, r, parentOptions, parent); parentAfterErr != nil {
 		h.writeHookError(w, parentAfterErr, http.StatusForbidden, "Authorization failed")
-		return
+		return nil, parentAfterErr
 	}
 
-	// Build a query for the related collection
-	// We need to filter by the foreign key that relates to the parent entity
-	relatedDB := h.db.Model(reflect.New(targetMetadata.EntityType).Interface())
+	return parent, nil
+}
 
-	// Extract the parent entity's key values to filter the related collection
+// buildNavigationRelatedQuery builds a GORM query for the related collection with foreign key constraints
+func (h *EntityHandler) buildNavigationRelatedQuery(parent interface{}, targetMetadata *metadata.EntityMetadata) *gorm.DB {
+	relatedDB := h.db.Model(reflect.New(targetMetadata.EntityType).Interface())
 	parentValue := reflect.ValueOf(parent).Elem()
 
-	// Build foreign key constraints
-	// This assumes standard GORM conventions: ParentID field in child references ID in parent
-	// For the Product -> ProductDescriptions example: ProductDescription.ProductID = Product.ID
-	// GORM uses snake_case for column names, so ProductID becomes product_id
 	for _, keyProp := range h.metadata.KeyProperties {
 		keyFieldValue := parentValue.FieldByName(keyProp.Name)
 		if keyFieldValue.IsValid() {
-			// Build the foreign key column name using GORM's naming convention
-			// EntityName + KeyProperty name, converted to snake_case
 			foreignKeyFieldName := fmt.Sprintf("%s%s", h.metadata.EntityName, keyProp.Name)
 			foreignKeyColumnName := toSnakeCase(foreignKeyFieldName)
 			relatedDB = relatedDB.Where(fmt.Sprintf("%s = ?", foreignKeyColumnName), keyFieldValue.Interface())
 		}
 	}
 
-	navigationPath := fmt.Sprintf("%s(%s)/%s", h.metadata.EntitySetName, entityKey, navProp.JsonName)
+	return relatedDB
+}
 
-	h.executeCollectionQuery(w, &collectionExecutionContext{
-		Metadata: targetMetadata,
+// createNavParseQueryOptions creates the ParseQueryOptions callback for navigation collections
+func (h *EntityHandler) createNavParseQueryOptions(r *http.Request, targetMetadata *metadata.EntityMetadata) func() (*query.QueryOptions, error) {
+	return func() (*query.QueryOptions, error) {
+		queryOptions, err := query.ParseQueryOptions(r.URL.Query(), targetMetadata)
+		if err != nil {
+			return nil, err
+		}
+		if err := applyPolicyFilter(r, h.policy, buildEntityResourceDescriptor(targetMetadata, "", nil), queryOptions); err != nil {
+			return nil, &collectionRequestError{
+				StatusCode: http.StatusForbidden,
+				ErrorCode:  "Authorization failed",
+				Message:    err.Error(),
+			}
+		}
+		return queryOptions, nil
+	}
+}
 
-		ParseQueryOptions: func() (*query.QueryOptions, error) {
-			queryOptions, err := query.ParseQueryOptions(r.URL.Query(), targetMetadata)
-			if err != nil {
+// createNavBeforeRead creates the BeforeRead callback for navigation collections
+func (h *EntityHandler) createNavBeforeRead(r *http.Request, targetMetadata *metadata.EntityMetadata) func(*query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
+	return func(queryOptions *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
+		return callBeforeReadCollection(targetMetadata, r, queryOptions)
+	}
+}
+
+// createNavCountFunc creates the CountFunc callback for navigation collections
+func (h *EntityHandler) createNavCountFunc(relatedDB *gorm.DB, targetMetadata *metadata.EntityMetadata) func(*query.QueryOptions, []func(*gorm.DB) *gorm.DB) (*int64, error) {
+	return func(queryOptions *query.QueryOptions, scopes []func(*gorm.DB) *gorm.DB) (*int64, error) {
+		if !queryOptions.Count {
+			return nil, nil
+		}
+
+		countDB := relatedDB
+		if len(scopes) > 0 {
+			countDB = countDB.Scopes(scopes...)
+		}
+
+		if queryOptions.Filter != nil {
+			countDB = query.ApplyFilterOnly(countDB, queryOptions.Filter, targetMetadata)
+		}
+
+		var count int64
+		if err := countDB.Count(&count).Error; err != nil {
+			return nil, err
+		}
+
+		return &count, nil
+	}
+}
+
+// createNavFetchFunc creates the FetchFunc callback for navigation collections
+func (h *EntityHandler) createNavFetchFunc(relatedDB *gorm.DB, targetMetadata *metadata.EntityMetadata) func(*query.QueryOptions, []func(*gorm.DB) *gorm.DB) (interface{}, error) {
+	return func(queryOptions *query.QueryOptions, scopes []func(*gorm.DB) *gorm.DB) (interface{}, error) {
+		modifiedOptions := *queryOptions
+		if queryOptions.Top != nil {
+			topPlusOne := *queryOptions.Top + 1
+			modifiedOptions.Top = &topPlusOne
+		}
+
+		db := relatedDB
+		if len(scopes) > 0 {
+			db = db.Scopes(scopes...)
+		}
+
+		db = query.ApplyQueryOptions(db, &modifiedOptions, targetMetadata)
+
+		if query.ShouldUseMapResults(queryOptions) {
+			var mapResults []map[string]interface{}
+			if err := db.Find(&mapResults).Error; err != nil {
 				return nil, err
 			}
-			if err := applyPolicyFilter(r, h.policy, buildEntityResourceDescriptor(targetMetadata, "", nil), queryOptions); err != nil {
-				return nil, &collectionRequestError{
-					StatusCode: http.StatusForbidden,
-					ErrorCode:  "Authorization failed",
-					Message:    err.Error(),
-				}
-			}
-			return queryOptions, nil
-		},
+			return mapResults, nil
+		}
 
-		BeforeRead: func(queryOptions *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
-			return callBeforeReadCollection(targetMetadata, r, queryOptions)
-		},
+		resultsSlice := reflect.New(reflect.SliceOf(targetMetadata.EntityType)).Interface()
+		if err := db.Find(resultsSlice).Error; err != nil {
+			return nil, err
+		}
 
-		CountFunc: func(queryOptions *query.QueryOptions, scopes []func(*gorm.DB) *gorm.DB) (*int64, error) {
-			if !queryOptions.Count {
-				return nil, nil
-			}
+		results := reflect.ValueOf(resultsSlice).Elem().Interface()
 
-			countDB := relatedDB
-			if len(scopes) > 0 {
-				countDB = countDB.Scopes(scopes...)
-			}
+		if queryOptions.Search != "" {
+			results = query.ApplySearch(results, queryOptions.Search, targetMetadata)
+		}
 
-			if queryOptions.Filter != nil {
-				countDB = query.ApplyFilterOnly(countDB, queryOptions.Filter, targetMetadata)
-			}
+		if len(queryOptions.Select) > 0 {
+			results = query.ApplySelect(results, queryOptions.Select, targetMetadata, queryOptions.Expand)
+		}
 
-			var count int64
-			if err := countDB.Count(&count).Error; err != nil {
-				return nil, err
-			}
+		return results, nil
+	}
+}
 
-			return &count, nil
-		},
-
-		FetchFunc: func(queryOptions *query.QueryOptions, scopes []func(*gorm.DB) *gorm.DB) (interface{}, error) {
-			modifiedOptions := *queryOptions
-			if queryOptions.Top != nil {
-				topPlusOne := *queryOptions.Top + 1
-				modifiedOptions.Top = &topPlusOne
-			}
-
-			db := relatedDB
-			if len(scopes) > 0 {
-				db = db.Scopes(scopes...)
-			}
-
-			db = query.ApplyQueryOptions(db, &modifiedOptions, targetMetadata)
-
-			if query.ShouldUseMapResults(queryOptions) {
-				var mapResults []map[string]interface{}
-				if err := db.Find(&mapResults).Error; err != nil {
-					return nil, err
-				}
-				return mapResults, nil
-			}
-
-			resultsSlice := reflect.New(reflect.SliceOf(targetMetadata.EntityType)).Interface()
-			if err := db.Find(resultsSlice).Error; err != nil {
-				return nil, err
-			}
-
-			results := reflect.ValueOf(resultsSlice).Elem().Interface()
-
-			if queryOptions.Search != "" {
-				results = query.ApplySearch(results, queryOptions.Search, targetMetadata)
-			}
-
-			if len(queryOptions.Select) > 0 {
-				results = query.ApplySelect(results, queryOptions.Select, targetMetadata, queryOptions.Expand)
-			}
-
-			return results, nil
-		},
-
-		NextLinkFunc: func(queryOptions *query.QueryOptions, results interface{}) (*string, interface{}, error) {
-			if queryOptions.Top == nil {
-				return nil, results, nil
-			}
-
-			value := reflect.ValueOf(results)
-			if value.Kind() == reflect.Slice && value.Len() > *queryOptions.Top {
-				trimmed := h.trimResults(results, *queryOptions.Top)
-
-				// Navigation properties rely on deterministic ordering for stable $skiptoken generation.
-				if nextURL := buildNextLinkWithSkipToken(targetMetadata, queryOptions, results, r); nextURL != nil {
-					return nextURL, trimmed, nil
-				}
-
-				currentSkip := 0
-				if queryOptions.Skip != nil {
-					currentSkip = *queryOptions.Skip
-				}
-				nextSkip := currentSkip + *queryOptions.Top
-				fallbackURL := response.BuildNextLink(r, nextSkip)
-				return &fallbackURL, trimmed, nil
-			}
-
+// createNavNextLinkFunc creates the NextLinkFunc callback for navigation collections
+func (h *EntityHandler) createNavNextLinkFunc(r *http.Request, targetMetadata *metadata.EntityMetadata) func(*query.QueryOptions, interface{}) (*string, interface{}, error) {
+	return func(queryOptions *query.QueryOptions, results interface{}) (*string, interface{}, error) {
+		if queryOptions.Top == nil {
 			return nil, results, nil
-		},
+		}
 
-		AfterRead: func(queryOptions *query.QueryOptions, results interface{}) (interface{}, bool, error) {
-			return callAfterReadCollection(targetMetadata, r, queryOptions, results)
-		},
+		value := reflect.ValueOf(results)
+		if value.Kind() == reflect.Slice && value.Len() > *queryOptions.Top {
+			trimmed := h.trimResults(results, *queryOptions.Top)
 
-		WriteResponse: func(queryOptions *query.QueryOptions, results interface{}, totalCount *int64, nextLink *string) error {
-			if isRef {
-				h.writeNavigationCollectionRefFromData(w, r, targetMetadata, results, totalCount, nextLink)
-				return nil
+			if nextURL := buildNextLinkWithSkipToken(targetMetadata, queryOptions, results, r); nextURL != nil {
+				return nextURL, trimmed, nil
 			}
 
-			if err := response.WriteODataCollection(w, r, navigationPath, results, totalCount, nextLink); err != nil {
-				h.logger.Error("Error writing navigation property collection", "error", err)
+			currentSkip := 0
+			if queryOptions.Skip != nil {
+				currentSkip = *queryOptions.Skip
 			}
+			nextSkip := currentSkip + *queryOptions.Top
+			fallbackURL := response.BuildNextLink(r, nextSkip)
+			return &fallbackURL, trimmed, nil
+		}
 
+		return nil, results, nil
+	}
+}
+
+// createNavAfterRead creates the AfterRead callback for navigation collections
+func (h *EntityHandler) createNavAfterRead(r *http.Request, targetMetadata *metadata.EntityMetadata) func(*query.QueryOptions, interface{}) (interface{}, bool, error) {
+	return func(queryOptions *query.QueryOptions, results interface{}) (interface{}, bool, error) {
+		return callAfterReadCollection(targetMetadata, r, queryOptions, results)
+	}
+}
+
+// createNavWriteResponse creates the WriteResponse callback for navigation collections
+func (h *EntityHandler) createNavWriteResponse(w http.ResponseWriter, r *http.Request, navigationPath string, targetMetadata *metadata.EntityMetadata, isRef bool) func(*query.QueryOptions, interface{}, *int64, *string) error {
+	return func(queryOptions *query.QueryOptions, results interface{}, totalCount *int64, nextLink *string) error {
+		if isRef {
+			h.writeNavigationCollectionRefFromData(w, r, targetMetadata, results, totalCount, nextLink)
 			return nil
-		},
-	})
+		}
+
+		if err := response.WriteODataCollection(w, r, navigationPath, results, totalCount, nextLink); err != nil {
+			h.logger.Error("Error writing navigation property collection", "error", err)
+		}
+
+		return nil
+	}
 }
 
 // handleNavigationCollectionItem handles accessing a specific item from a collection navigation property
