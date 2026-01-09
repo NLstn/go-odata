@@ -184,7 +184,7 @@ func (h *EntityHandler) handleNavigationCollectionWithQueryOptions(w http.Respon
 	parentOptions := &query.QueryOptions{}
 	parentScopes, parentHookErr := callBeforeReadEntity(h.metadata, r, parentOptions)
 	if parentHookErr != nil {
-		WriteError(w, http.StatusForbidden, "Authorization failed", parentHookErr.Error())
+		h.writeHookError(w, parentHookErr, http.StatusForbidden, "Authorization failed")
 		return
 	}
 
@@ -203,7 +203,7 @@ func (h *EntityHandler) handleNavigationCollectionWithQueryOptions(w http.Respon
 	}
 
 	if _, _, parentAfterErr := callAfterReadEntity(h.metadata, r, parentOptions, parent); parentAfterErr != nil {
-		WriteError(w, http.StatusForbidden, "Authorization failed", parentAfterErr.Error())
+		h.writeHookError(w, parentAfterErr, http.StatusForbidden, "Authorization failed")
 		return
 	}
 

@@ -96,7 +96,7 @@ func (h *EntityHandler) handleGetCount(w http.ResponseWriter, r *http.Request) {
 
 	scopes, hookErr := callBeforeReadCollection(h.metadata, r, queryOptions)
 	if hookErr != nil {
-		WriteError(w, http.StatusForbidden, "Authorization failed", hookErr.Error())
+		h.writeHookError(w, hookErr, http.StatusForbidden, "Authorization failed")
 		return
 	}
 

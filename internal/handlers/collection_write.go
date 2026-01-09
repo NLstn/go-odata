@@ -110,7 +110,7 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 		}
 
 		if err := h.callBeforeCreate(entity, hookReq); err != nil {
-			WriteError(w, http.StatusForbidden, "Authorization failed", err.Error())
+			h.writeHookError(w, err, http.StatusForbidden, "Authorization failed")
 			return newTransactionHandledError(err)
 		}
 
