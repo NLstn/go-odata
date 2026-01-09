@@ -80,9 +80,7 @@ func (h *EntityHandler) handleDeleteEntity(w http.ResponseWriter, r *http.Reques
 		}
 
 		if err := h.callBeforeDelete(entity, hookReq); err != nil {
-			if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", err.Error()); writeErr != nil {
-				h.logger.Error("Error writing error response", "error", writeErr)
-			}
+			h.writeHookError(w, err, http.StatusForbidden, "Authorization failed")
 			return newTransactionHandledError(err)
 		}
 
@@ -221,9 +219,7 @@ func (h *EntityHandler) handlePatchEntity(w http.ResponseWriter, r *http.Request
 		}
 
 		if err := h.callBeforeUpdate(entity, hookReq); err != nil {
-			if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", err.Error()); writeErr != nil {
-				h.logger.Error("Error writing error response", "error", writeErr)
-			}
+			h.writeHookError(w, err, http.StatusForbidden, "Authorization failed")
 			return newTransactionHandledError(err)
 		}
 
@@ -385,9 +381,7 @@ func (h *EntityHandler) handlePutEntity(w http.ResponseWriter, r *http.Request, 
 		h.preserveTimestampFields(entity, replacementEntity)
 
 		if err := h.callBeforeUpdate(entity, hookReq); err != nil {
-			if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", err.Error()); writeErr != nil {
-				h.logger.Error("Error writing error response", "error", writeErr)
-			}
+			h.writeHookError(w, err, http.StatusForbidden, "Authorization failed")
 			return newTransactionHandledError(err)
 		}
 

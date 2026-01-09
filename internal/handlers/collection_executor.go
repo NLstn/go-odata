@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/nlstn/go-odata/internal/hookerrors"
 	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/query"
 	"github.com/nlstn/go-odata/internal/response"
@@ -98,6 +99,28 @@ func (h *EntityHandler) handleCollectionError(w http.ResponseWriter, err error, 
 	}
 
 	if errors.Is(err, errRequestHandled) {
+		return false
+	}
+
+	// Check for HookError first (public API error type)
+	var hookErr *hookerrors.HookError
+	if errors.As(err, &hookErr) {
+		status := hookErr.StatusCode
+		if status == 0 {
+			status = defaultStatus
+		}
+		message := hookErr.Message
+		if message == "" {
+			message = defaultCode
+		}
+		// Use the custom message as the main error message, with the error details in the details field
+		details := ""
+		if hookErr.Err != nil {
+			details = hookErr.Err.Error()
+		}
+		if writeErr := response.WriteError(w, status, message, details); writeErr != nil {
+			h.logger.Error("Error writing error response", "error", writeErr)
+		}
 		return false
 	}
 
