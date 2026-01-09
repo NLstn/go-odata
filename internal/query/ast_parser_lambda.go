@@ -56,7 +56,7 @@ func (p *ASTParser) parseLambdaExpression(collectionPath, operator string) (ASTN
 }
 
 // convertLambdaExprWithContext converts a lambda expression (any/all) to a filter expression using the provided context
-func convertLambdaExprWithContext(n *LambdaExpr, _ *conversionContext) (*FilterExpression, error) {
+func convertLambdaExprWithContext(n *LambdaExpr, ctx *conversionContext) (*FilterExpression, error) {
 	// Extract collection property path
 	collectionPath := ""
 	if collIdent, ok := n.Collection.(*IdentifierExpr); ok {
@@ -75,7 +75,12 @@ func convertLambdaExprWithContext(n *LambdaExpr, _ *conversionContext) (*FilterE
 	if n.Predicate != nil {
 		// For now, we'll store the range variable and predicate info
 		// The predicate needs special handling because it refers to the range variable
-		predicate, err := convertLambdaPredicateWithRangeVariable(n.Predicate, n.RangeVariable, nil)
+		// Pass the context for computed alias validation within lambda predicates
+		var entityMeta *metadata.EntityMetadata
+		if ctx != nil {
+			entityMeta = ctx.entityMetadata
+		}
+		predicate, err := convertLambdaPredicateWithRangeVariable(n.Predicate, n.RangeVariable, entityMeta)
 		if err != nil {
 			return nil, fmt.Errorf("failed to convert lambda predicate: %w", err)
 		}

@@ -142,14 +142,17 @@ func getAliasExprsFromDB(db *gorm.DB) map[string]string {
 	return nil
 }
 
-// setAliasExprInDB stores a single alias expression in the GORM db context
+// setAliasExprInDB stores a single alias expression in the GORM db context.
+// To avoid race conditions, this function creates a new map copy with the new entry
+// rather than modifying the existing map in place.
 func setAliasExprInDB(db *gorm.DB, alias, expr string) *gorm.DB {
-	exprs := getAliasExprsFromDB(db)
-	if exprs == nil {
-		exprs = make(map[string]string)
+	current := getAliasExprsFromDB(db)
+	newExprs := make(map[string]string)
+	for k, v := range current {
+		newExprs[k] = v
 	}
-	exprs[alias] = expr
-	return db.Set(aliasExprsKey, exprs)
+	newExprs[alias] = expr
+	return db.Set(aliasExprsKey, newExprs)
 }
 
 // getAliasExprFromDB retrieves an alias expression from the GORM db context
@@ -184,6 +187,13 @@ func buildAggregateSQLWithDB(db *gorm.DB, dialect string, aggExpr AggregateExpre
 // buildAggregateSQLInternal builds the SQL for an aggregate expression with optional db context
 func buildAggregateSQLInternal(db *gorm.DB, dialect string, aggExpr AggregateExpression, entityMetadata *metadata.EntityMetadata) string {
 	// Helper function to record alias in the db context.
+	// Note: State is scoped to a single *gorm.DB session created via Session() or
+	// WithContext(), so different HTTP requests do not share this map. However,
+	// this does NOT by itself make updates to the underlying map safe across
+	// multiple goroutines that share the same db instance within a single request.
+	// Callers must avoid concurrent use of the same db for aggregate building, or
+	// provide their own synchronization when using goroutines.
+	//
 	// To avoid concurrent writes to a shared map, always create a new map
 	// (copying any existing entries) and store it back via setAliasExprsInDB.
 	recordAlias := func(alias, expr string) {
@@ -191,10 +201,8 @@ func buildAggregateSQLInternal(db *gorm.DB, dialect string, aggExpr AggregateExp
 			current := getAliasExprsFromDB(db)
 
 			newExprs := make(map[string]string)
-			if current != nil {
-				for k, v := range current {
-					newExprs[k] = v
-				}
+			for k, v := range current {
+				newExprs[k] = v
 			}
 
 			newExprs[alias] = expr
