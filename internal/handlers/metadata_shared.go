@@ -61,6 +61,10 @@ func (h *MetadataHandler) propertyEdmType(model metadataModel, prop *metadata.Pr
 	if prop.IsEnum && prop.EnumTypeName != "" {
 		return model.qualifiedTypeName(prop.EnumTypeName)
 	}
+	// Check for explicit EDM type from struct tag first
+	if prop.EdmType != "" {
+		return prop.EdmType
+	}
 	return getEdmType(prop.Type)
 }
 

@@ -100,6 +100,8 @@ type PropertyMetadata struct {
 	StreamContentField     string // Name of the field containing the binary content for this stream
 	// Auto properties
 	IsAuto bool // True if this property is automatically set server-side (clients cannot provide/modify it)
+	// Explicit type override
+	EdmType string // Explicit EDM type from odata:"type=Edm.Decimal" tag (overrides auto-detection)
 }
 
 // AnalyzeEntity extracts metadata from a Go struct for OData usage
@@ -574,6 +576,87 @@ func analyzeODataTags(property *PropertyMetadata, field reflect.StructField, met
 		property.IsKey = true
 	}
 
+	// Validate type compatibility if explicit EdmType was specified
+	if err := validateTypeCompatibility(property); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// validateTypeCompatibility validates that the explicit EdmType is compatible with the Go type
+func validateTypeCompatibility(property *PropertyMetadata) error {
+	if property.EdmType == "" {
+		return nil // No explicit type, auto-detection will handle it
+	}
+
+	goType := property.Type
+	if goType.Kind() == reflect.Ptr {
+		goType = goType.Elem()
+	}
+	typeName := goType.String()
+
+	// Validate EDM type matches Go type capabilities
+	switch property.EdmType {
+	case "Edm.Decimal":
+		// Allow decimal.Decimal (proper type) or float64 (reasonable override)
+		k := goType.Kind()
+		if typeName != "decimal.Decimal" && typeName != "github.com/shopspring/decimal.Decimal" && k != reflect.Float64 && k != reflect.Float32 {
+			return fmt.Errorf("property %s: Edm.Decimal requires decimal.Decimal or float64/float32 type, got %s", property.Name, typeName)
+		}
+	case "Edm.Int32":
+		k := goType.Kind()
+		if k != reflect.Int && k != reflect.Int32 && k != reflect.Uint && k != reflect.Uint32 && k != reflect.Int8 && k != reflect.Int16 && k != reflect.Uint8 && k != reflect.Uint16 {
+			return fmt.Errorf("property %s: Edm.Int32 requires int/int32/uint/uint32 or smaller integer type, got %s", property.Name, goType.Kind())
+		}
+	case "Edm.Int64":
+		k := goType.Kind()
+		if k != reflect.Int64 && k != reflect.Uint64 {
+			return fmt.Errorf("property %s: Edm.Int64 requires int64/uint64, got %s", property.Name, goType.Kind())
+		}
+	case "Edm.String":
+		if goType.Kind() != reflect.String {
+			return fmt.Errorf("property %s: Edm.String requires string type, got %s", property.Name, goType.Kind())
+		}
+	case "Edm.Boolean":
+		if goType.Kind() != reflect.Bool {
+			return fmt.Errorf("property %s: Edm.Boolean requires bool type, got %s", property.Name, goType.Kind())
+		}
+	case "Edm.Double":
+		if goType.Kind() != reflect.Float64 {
+			return fmt.Errorf("property %s: Edm.Double requires float64 type, got %s", property.Name, goType.Kind())
+		}
+	case "Edm.Single":
+		if goType.Kind() != reflect.Float32 {
+			return fmt.Errorf("property %s: Edm.Single requires float32 type, got %s", property.Name, goType.Kind())
+		}
+	case "Edm.DateTimeOffset":
+		if typeName != "time.Time" {
+			return fmt.Errorf("property %s: Edm.DateTimeOffset requires time.Time type, got %s", property.Name, typeName)
+		}
+	case "Edm.Date":
+		if typeName != "time.Time" {
+			return fmt.Errorf("property %s: Edm.Date requires time.Time type, got %s", property.Name, typeName)
+		}
+	case "Edm.Guid":
+		if typeName != "uuid.UUID" && typeName != "github.com/google/uuid.UUID" {
+			return fmt.Errorf("property %s: Edm.Guid requires uuid.UUID type, got %s", property.Name, typeName)
+		}
+	case "Edm.Binary":
+		if goType.Kind() != reflect.Slice || goType.Elem().Kind() != reflect.Uint8 {
+			return fmt.Errorf("property %s: Edm.Binary requires []byte type, got %s", property.Name, typeName)
+		}
+	case "Edm.Stream":
+		// Stream properties don't have direct Go type requirements
+		return nil
+	default:
+		// Allow qualified type names (e.g., namespace.TypeName) for complex/enum types
+		if strings.Contains(property.EdmType, ".") {
+			return nil
+		}
+		return fmt.Errorf("property %s: unknown EDM type '%s'", property.Name, property.EdmType)
+	}
+
 	return nil
 }
 
@@ -587,6 +670,12 @@ func processODataTagPart(property *PropertyMetadata, part string, metadata *Enti
 		metadata.ETagProperty = property
 	case part == "required":
 		property.IsRequired = true
+	case strings.HasPrefix(part, "type="):
+		property.EdmType = strings.TrimPrefix(part, "type=")
+		// Validate that the type starts with Edm. prefix
+		if !strings.HasPrefix(property.EdmType, "Edm.") && !strings.Contains(property.EdmType, ".") {
+			return fmt.Errorf("invalid EDM type '%s' for field %s: must start with 'Edm.' or be a qualified type name", property.EdmType, property.Name)
+		}
 	case strings.HasPrefix(part, "maxlength="):
 		processIntFacet(part, "maxlength=", &property.MaxLength)
 	case strings.HasPrefix(part, "precision="):

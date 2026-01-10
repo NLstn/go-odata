@@ -919,3 +919,151 @@ type TestNewsEntity struct {
 func (TestNewsEntity) EntitySetName() string {
 	return "News"
 }
+
+func TestExplicitTypeTag(t *testing.T) {
+	type EntityWithExplicitTypes struct {
+		ID        int     `json:"id" odata:"key"`
+		Revenue   float64 `json:"revenue" odata:"type=Edm.Decimal,precision=18,scale=4"`
+		Discount  float64 `json:"discount" odata:"type=Edm.Double"`
+		Status    string  `json:"status" odata:"type=Edm.String"`
+		CreatedAt int64   `json:"createdAt" odata:"type=Edm.Int64"`
+		IsActive  bool    `json:"isActive" odata:"type=Edm.Boolean"`
+	}
+
+	meta, err := AnalyzeEntity(EntityWithExplicitTypes{})
+	if err != nil {
+		t.Fatalf("AnalyzeEntity() error = %v", err)
+	}
+
+	// Check Revenue with explicit Edm.Decimal type (overriding default Edm.Double for float64)
+	var revenueProp *PropertyMetadata
+	for i, prop := range meta.Properties {
+		if prop.Name == "Revenue" {
+			revenueProp = &meta.Properties[i]
+			break
+		}
+	}
+	if revenueProp == nil {
+		t.Fatal("Revenue property not found")
+	}
+	if revenueProp.EdmType != "Edm.Decimal" {
+		t.Errorf("Revenue EdmType = %v, want Edm.Decimal", revenueProp.EdmType)
+	}
+	if revenueProp.Precision != 18 {
+		t.Errorf("Revenue Precision = %v, want 18", revenueProp.Precision)
+	}
+	if revenueProp.Scale != 4 {
+		t.Errorf("Revenue Scale = %v, want 4", revenueProp.Scale)
+	}
+
+	// Check Discount with explicit Edm.Double type
+	var discountProp *PropertyMetadata
+	for i, prop := range meta.Properties {
+		if prop.Name == "Discount" {
+			discountProp = &meta.Properties[i]
+			break
+		}
+	}
+	if discountProp == nil {
+		t.Fatal("Discount property not found")
+	}
+	if discountProp.EdmType != "Edm.Double" {
+		t.Errorf("Discount EdmType = %v, want Edm.Double", discountProp.EdmType)
+	}
+
+	// Check Status with explicit Edm.String type
+	var statusProp *PropertyMetadata
+	for i, prop := range meta.Properties {
+		if prop.Name == "Status" {
+			statusProp = &meta.Properties[i]
+			break
+		}
+	}
+	if statusProp == nil {
+		t.Fatal("Status property not found")
+	}
+	if statusProp.EdmType != "Edm.String" {
+		t.Errorf("Status EdmType = %v, want Edm.String", statusProp.EdmType)
+	}
+}
+
+func TestInvalidTypeTag(t *testing.T) {
+	type EntityWithInvalidType struct {
+		ID    int    `json:"id" odata:"key"`
+		Value string `json:"value" odata:"type=InvalidType"`
+	}
+
+	_, err := AnalyzeEntity(EntityWithInvalidType{})
+	if err == nil {
+		t.Fatal("Expected error for invalid type tag, got nil")
+	}
+	if !strings.Contains(err.Error(), "must start with 'Edm.'") {
+		t.Errorf("Expected error about Edm. prefix, got: %v", err)
+	}
+}
+
+func TestTypeCompatibilityValidation(t *testing.T) {
+	tests := []struct {
+		name        string
+		entity      interface{}
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name: "invalid decimal on string",
+			entity: struct {
+				ID    int    `json:"id" odata:"key"`
+				Price string `json:"price" odata:"type=Edm.Decimal"`
+			}{},
+			wantErr:     true,
+			errContains: "Edm.Decimal requires",
+		},
+		{
+			name: "invalid int32 on string",
+			entity: struct {
+				ID    int    `json:"id" odata:"key"`
+				Count string `json:"count" odata:"type=Edm.Int32"`
+			}{},
+			wantErr:     true,
+			errContains: "Edm.Int32 requires",
+		},
+		{
+			name: "invalid boolean on int",
+			entity: struct {
+				ID     int `json:"id" odata:"key"`
+				Active int `json:"active" odata:"type=Edm.Boolean"`
+			}{},
+			wantErr:     true,
+			errContains: "Edm.Boolean requires bool type",
+		},
+		{
+			name: "valid int32 on int",
+			entity: struct {
+				ID    int `json:"id" odata:"key"`
+				Count int `json:"count" odata:"type=Edm.Int32"`
+			}{},
+			wantErr: false,
+		},
+		{
+			name: "valid string on string",
+			entity: struct {
+				ID   int    `json:"id" odata:"key"`
+				Name string `json:"name" odata:"type=Edm.String"`
+			}{},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := AnalyzeEntity(tt.entity)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("AnalyzeEntity() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if tt.wantErr && tt.errContains != "" && !strings.Contains(err.Error(), tt.errContains) {
+				t.Errorf("AnalyzeEntity() error = %v, want error containing %q", err, tt.errContains)
+			}
+		})
+	}
+}

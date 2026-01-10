@@ -1,14 +1,64 @@
 package response
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"reflect"
+	"regexp"
 	"strings"
 
 	"github.com/nlstn/go-odata/internal/etag"
 	"github.com/nlstn/go-odata/internal/metadata"
 )
+
+// decimalPattern matches valid decimal numbers (positive/negative, with optional decimal point)
+var decimalPattern = regexp.MustCompile(`^-?\d+(\.\d+)?$`)
+
+// convertFieldValue converts field values based on EDM type for proper JSON serialization.
+// For Edm.Decimal fields with decimal.Decimal type, it converts the string representation
+// to a json.RawMessage number to avoid IEEE754Compatible errors.
+func convertFieldValue(value interface{}, fullMetadata *metadata.EntityMetadata, fieldName string) interface{} {
+	if fullMetadata == nil {
+		return value
+	}
+
+	// Find the property metadata for this field
+	var propMeta *metadata.PropertyMetadata
+	for i := range fullMetadata.Properties {
+		if fullMetadata.Properties[i].FieldName == fieldName || fullMetadata.Properties[i].Name == fieldName {
+			propMeta = &fullMetadata.Properties[i]
+			break
+		}
+	}
+
+	if propMeta == nil || propMeta.EdmType != "Edm.Decimal" {
+		return value
+	}
+
+	// Check if the value implements json.Marshaler (like decimal.Decimal)
+	if marshaler, ok := value.(json.Marshaler); ok {
+		// Marshal to get the JSON representation
+		jsonBytes, err := marshaler.MarshalJSON()
+		if err != nil {
+			return value // Return original on error
+		}
+
+		// Check if it's a JSON string (starts and ends with ")
+		if len(jsonBytes) >= 2 && jsonBytes[0] == '"' && jsonBytes[len(jsonBytes)-1] == '"' {
+			// Extract the string content (remove quotes)
+			stringValue := string(jsonBytes[1 : len(jsonBytes)-1])
+
+			// Validate it's a valid decimal number
+			if decimalPattern.MatchString(stringValue) {
+				// Return as json.RawMessage (raw JSON number without quotes)
+				return json.RawMessage(stringValue)
+			}
+		}
+	}
+
+	return value
+}
 
 func addNavigationLinks(data interface{}, metadata EntityMetadataProvider, expandedProps []string, r *http.Request, entitySetName string, metadataLevel string, fullMetadata *metadata.EntityMetadata) []interface{} {
 	dataValue := reflect.ValueOf(data)
@@ -180,7 +230,9 @@ func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataPro
 			processNavigationPropertyOrderedWithMetadata(entityMap, entity, propMeta, fieldValue, info.JsonName, expandedProps, baseURL, entitySetName, metadata, metadataLevel, keySegment)
 		} else {
 			fieldValue := entity.Field(j)
-			entityMap.Set(info.JsonName, fieldValue.Interface())
+			// Convert field value based on EDM type (e.g., decimal.Decimal to JSON number)
+			convertedValue := convertFieldValue(fieldValue.Interface(), fullMetadata, field.Name)
+			entityMap.Set(info.JsonName, convertedValue)
 		}
 	}
 
