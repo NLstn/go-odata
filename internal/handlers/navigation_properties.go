@@ -721,7 +721,7 @@ func (h *EntityHandler) writeSingleNavigationRef(w http.ResponseWriter, r *http.
 			// Set Content-Type with dynamic metadata level even for 204 responses
 			metadataLevel := response.GetODataMetadataLevel(r)
 			w.Header().Set(HeaderContentType, fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
-			SetODataVersionHeaderForRequest(w, r)
+			response.SetODataVersionHeaderFromRequest(w, r)
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}

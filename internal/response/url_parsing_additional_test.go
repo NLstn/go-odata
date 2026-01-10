@@ -6,16 +6,16 @@ import (
 
 func TestParseODataURLComponents_Basic(t *testing.T) {
 	tests := []struct {
-		name           string
-		path           string
-		wantEntitySet  string
-		wantEntityKey  string
-		wantNavProp    string
-		wantIsCount    bool
-		wantIsValue    bool
-		wantIsRef      bool
-		wantTypeCast   string
-		wantErr        bool
+		name          string
+		path          string
+		wantEntitySet string
+		wantEntityKey string
+		wantNavProp   string
+		wantIsCount   bool
+		wantIsValue   bool
+		wantIsRef     bool
+		wantTypeCast  string
+		wantErr       bool
 	}{
 		{
 			name:          "Simple entity set",
@@ -47,11 +47,11 @@ func TestParseODataURLComponents_Basic(t *testing.T) {
 			wantEntityKey: "12345678-1234-1234-1234-123456789012",
 		},
 		{
-			name:           "Navigation property",
-			path:           "/Products(1)/Category",
-			wantEntitySet:  "Products",
-			wantEntityKey:  "1",
-			wantNavProp:    "Category",
+			name:          "Navigation property",
+			path:          "/Products(1)/Category",
+			wantEntitySet: "Products",
+			wantEntityKey: "1",
+			wantNavProp:   "Category",
 		},
 		{
 			name:          "Collection $count",
@@ -84,11 +84,11 @@ func TestParseODataURLComponents_Basic(t *testing.T) {
 			wantIsRef:     true,
 		},
 		{
-			name:           "Type cast",
-			path:           "/Products(1)/ODataService.SpecialProduct",
-			wantEntitySet:  "Products",
-			wantEntityKey:  "1",
-			wantTypeCast:   "ODataService.SpecialProduct",
+			name:          "Type cast",
+			path:          "/Products(1)/ODataService.SpecialProduct",
+			wantEntitySet: "Products",
+			wantEntityKey: "1",
+			wantTypeCast:  "ODataService.SpecialProduct",
 		},
 		{
 			name:          "Type cast on collection",
