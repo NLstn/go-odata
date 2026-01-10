@@ -11,7 +11,8 @@ import (
 
 const (
 	// ODataVersionValue is the maximum OData version supported by this service.
-	// This is used for CSDL schema version and as the default response version.
+	// This is used as the default response version when no OData-MaxVersion header
+	// is present, and as the schema version in CSDL metadata documents.
 	ODataVersionValue  = "4.01"
 	HeaderODataVersion = "OData-Version"
 	// HeaderODataMaxVersion is the header name for the client's maximum supported version.
@@ -19,7 +20,10 @@ const (
 )
 
 // SetODataVersionHeader sets the OData-Version header with the correct capitalization.
-// Deprecated: Use SetODataVersionHeaderForRequest instead to support version negotiation.
+//
+// Deprecated: Use SetODataVersionHeaderForRequest instead to support OData-MaxVersion
+// header negotiation per OData v4 spec section 8.2.6. This function always sets
+// the version to 4.01 regardless of client preferences.
 func SetODataVersionHeader(w http.ResponseWriter) {
 	w.Header()[HeaderODataVersion] = []string{ODataVersionValue}
 }
