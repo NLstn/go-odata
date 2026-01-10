@@ -34,6 +34,7 @@ go.work
 go.work.sum
 
 coverage.out
+coverage.html
 
 # OS specific files
 .DS_Store
