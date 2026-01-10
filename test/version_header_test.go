@@ -2,11 +2,12 @@ package odata_test
 
 import (
 	"encoding/json"
-	odata "github.com/nlstn/go-odata"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	odata "github.com/nlstn/go-odata"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -340,5 +341,203 @@ func TestODataMaxVersion_WithDELETERequest(t *testing.T) {
 	// Should be rejected with 406 Not Acceptable
 	if w.Code != http.StatusNotAcceptable {
 		t.Errorf("DELETE request with OData-MaxVersion: 3.0 should be rejected with 406, got %d", w.Code)
+	}
+}
+
+// TestODataVersionNegotiation_Returns4_0_WhenClientRequests4_0 verifies version negotiation
+func TestODataVersionNegotiation_Returns4_0_WhenClientRequests4_0(t *testing.T) {
+	service := setupVersionTestService(t)
+
+	testCases := []struct {
+		name string
+		path string
+	}{
+		{"Service document", "/"},
+		{"Metadata XML", "/$metadata"},
+		{"Entity collection", "/VersionTestProducts"},
+		{"Single entity", "/VersionTestProducts(1)"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+			req.Header.Set("OData-MaxVersion", "4.0")
+			w := httptest.NewRecorder()
+
+			service.ServeHTTP(w, req)
+
+			// Verify response has OData-Version: 4.0
+			//nolint:staticcheck // SA1008: intentionally using non-canonical header key per OData spec
+			odataVersionValues := w.Header()["OData-Version"]
+			if len(odataVersionValues) == 0 || odataVersionValues[0] != "4.0" {
+				t.Errorf("Expected OData-Version: 4.0, got: %v", odataVersionValues)
+			}
+		})
+	}
+}
+
+// TestODataVersionNegotiation_Returns4_01_WhenClientRequests4_01 verifies version negotiation
+func TestODataVersionNegotiation_Returns4_01_WhenClientRequests4_01(t *testing.T) {
+	service := setupVersionTestService(t)
+
+	testCases := []struct {
+		name string
+		path string
+	}{
+		{"Service document", "/"},
+		{"Metadata XML", "/$metadata"},
+		{"Entity collection", "/VersionTestProducts"},
+		{"Single entity", "/VersionTestProducts(1)"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+			req.Header.Set("OData-MaxVersion", "4.01")
+			w := httptest.NewRecorder()
+
+			service.ServeHTTP(w, req)
+
+			// Verify response has OData-Version: 4.01
+			//nolint:staticcheck // SA1008: intentionally using non-canonical header key per OData spec
+			odataVersionValues := w.Header()["OData-Version"]
+			if len(odataVersionValues) == 0 || odataVersionValues[0] != "4.01" {
+				t.Errorf("Expected OData-Version: 4.01, got: %v", odataVersionValues)
+			}
+		})
+	}
+}
+
+// TestODataVersionNegotiation_Returns4_01_WhenNoMaxVersion verifies default behavior
+func TestODataVersionNegotiation_Returns4_01_WhenNoMaxVersion(t *testing.T) {
+	service := setupVersionTestService(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/VersionTestProducts", nil)
+	// No OData-MaxVersion header
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	// Verify response has OData-Version: 4.01 (latest supported)
+	//nolint:staticcheck // SA1008: intentionally using non-canonical header key per OData spec
+	odataVersionValues := w.Header()["OData-Version"]
+	if len(odataVersionValues) == 0 || odataVersionValues[0] != "4.01" {
+		t.Errorf("Expected OData-Version: 4.01 (default), got: %v", odataVersionValues)
+	}
+}
+
+// TestODataVersionNegotiation_Returns4_01_WhenClientRequests5_0 verifies version negotiation
+func TestODataVersionNegotiation_Returns4_01_WhenClientRequests5_0(t *testing.T) {
+	service := setupVersionTestService(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/VersionTestProducts", nil)
+	req.Header.Set("OData-MaxVersion", "5.0")
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	// Verify response has OData-Version: 4.01 (highest supported <= 5.0)
+	//nolint:staticcheck // SA1008: intentionally using non-canonical header key per OData spec
+	odataVersionValues := w.Header()["OData-Version"]
+	if len(odataVersionValues) == 0 || odataVersionValues[0] != "4.01" {
+		t.Errorf("Expected OData-Version: 4.01 (highest supported), got: %v", odataVersionValues)
+	}
+}
+
+// TestMetadataXML_VersionAttribute_4_0 verifies metadata XML contains correct version attribute
+func TestMetadataXML_VersionAttribute_4_0(t *testing.T) {
+	service := setupVersionTestService(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/$metadata", nil)
+	req.Header.Set("OData-MaxVersion", "4.0")
+	req.Header.Set("Accept", "application/xml")
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200 OK, got %d", w.Code)
+	}
+
+	body := w.Body.String()
+	if !strings.Contains(body, `Version="4.0"`) {
+		t.Errorf("Metadata XML should contain Version=\"4.0\", got: %s", body)
+	}
+}
+
+// TestMetadataXML_VersionAttribute_4_01 verifies metadata XML contains correct version attribute
+func TestMetadataXML_VersionAttribute_4_01(t *testing.T) {
+	service := setupVersionTestService(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/$metadata", nil)
+	req.Header.Set("OData-MaxVersion", "4.01")
+	req.Header.Set("Accept", "application/xml")
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200 OK, got %d", w.Code)
+	}
+
+	body := w.Body.String()
+	if !strings.Contains(body, `Version="4.01"`) {
+		t.Errorf("Metadata XML should contain Version=\"4.01\", got: %s", body)
+	}
+}
+
+// TestMetadataJSON_VersionProperty_4_0 verifies metadata JSON contains correct version property
+func TestMetadataJSON_VersionProperty_4_0(t *testing.T) {
+	service := setupVersionTestService(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/$metadata", nil)
+	req.Header.Set("OData-MaxVersion", "4.0")
+	req.Header.Set("Accept", "application/json")
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200 OK, got %d", w.Code)
+	}
+
+	var metadata map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &metadata); err != nil {
+		t.Fatalf("Failed to parse JSON metadata: %v", err)
+	}
+
+	version, ok := metadata["$Version"]
+	if !ok {
+		t.Errorf("Metadata JSON should contain $Version property")
+	} else if version != "4.0" {
+		t.Errorf("Expected $Version: \"4.0\", got: %v", version)
+	}
+}
+
+// TestMetadataJSON_VersionProperty_4_01 verifies metadata JSON contains correct version property
+func TestMetadataJSON_VersionProperty_4_01(t *testing.T) {
+	service := setupVersionTestService(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/$metadata", nil)
+	req.Header.Set("OData-MaxVersion", "4.01")
+	req.Header.Set("Accept", "application/json")
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200 OK, got %d", w.Code)
+	}
+
+	var metadata map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &metadata); err != nil {
+		t.Fatalf("Failed to parse JSON metadata: %v", err)
+	}
+
+	version, ok := metadata["$Version"]
+	if !ok {
+		t.Errorf("Metadata JSON should contain $Version property")
+	} else if version != "4.01" {
+		t.Errorf("Expected $Version: \"4.01\", got: %v", version)
 	}
 }

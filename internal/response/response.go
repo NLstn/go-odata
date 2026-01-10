@@ -6,16 +6,25 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/nlstn/go-odata/internal/version"
 )
 
 const (
-	ODataVersionValue  = "4.01"
+	ODataVersionValue  = "4.01" // Deprecated: Use version.GetVersion(ctx) instead
 	HeaderODataVersion = "OData-Version"
 )
 
-// SetODataVersionHeader sets the OData-Version header with the correct capitalization.
+// SetODataVersionHeader sets the OData-Version header based on the negotiated version in the request context.
+// Deprecated: The version header is now set automatically in the router. This function is kept for backward compatibility.
 func SetODataVersionHeader(w http.ResponseWriter) {
 	w.Header()[HeaderODataVersion] = []string{ODataVersionValue}
+}
+
+// SetODataVersionHeaderFromRequest sets the OData-Version header based on the negotiated version in the request context.
+func SetODataVersionHeaderFromRequest(w http.ResponseWriter, r *http.Request) {
+	ver := version.GetVersion(r.Context())
+	w.Header().Set(HeaderODataVersion, ver.String())
 }
 
 // ODataResponse represents the structure of an OData JSON response.

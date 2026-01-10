@@ -16,11 +16,10 @@ import (
 // MetadataHandler handles metadata document requests
 type MetadataHandler struct {
 	entities map[string]*metadata.EntityMetadata
-	// Cached metadata documents
-	cachedXML  string
-	cachedJSON []byte
-	onceXML    sync.Once
-	onceJSON   sync.Once
+	// Cached metadata documents by version
+	cachedXML  map[string]string
+	cachedJSON map[string][]byte
+	onceMutex  sync.Mutex
 	namespace  string
 	logger     *slog.Logger
 	policy     auth.Policy
@@ -31,9 +30,11 @@ const defaultNamespace = "ODataService"
 // NewMetadataHandler creates a new metadata handler
 func NewMetadataHandler(entities map[string]*metadata.EntityMetadata) *MetadataHandler {
 	return &MetadataHandler{
-		entities:  entities,
-		namespace: defaultNamespace,
-		logger:    slog.Default(),
+		entities:   entities,
+		cachedXML:  make(map[string]string),
+		cachedJSON: make(map[string][]byte),
+		namespace:  defaultNamespace,
+		logger:     slog.Default(),
 	}
 }
 
@@ -59,11 +60,12 @@ func (h *MetadataHandler) SetNamespace(namespace string) {
 	if trimmed == h.namespace {
 		return
 	}
+	h.onceMutex.Lock()
 	h.namespace = trimmed
-	h.cachedXML = ""
-	h.cachedJSON = nil
-	h.onceXML = sync.Once{}
-	h.onceJSON = sync.Once{}
+	// Clear all cached versions since namespace changed
+	h.cachedXML = make(map[string]string)
+	h.cachedJSON = make(map[string][]byte)
+	h.onceMutex.Unlock()
 }
 
 func (h *MetadataHandler) namespaceOrDefault() string {

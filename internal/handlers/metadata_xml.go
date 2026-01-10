@@ -6,37 +6,47 @@ import (
 	"strings"
 
 	"github.com/nlstn/go-odata/internal/metadata"
-	"github.com/nlstn/go-odata/internal/response"
+	"github.com/nlstn/go-odata/internal/version"
 )
 
-// handleMetadataXML handles XML metadata format (existing implementation)
+// handleMetadataXML handles XML metadata format with version-specific caching
 func (h *MetadataHandler) handleMetadataXML(w http.ResponseWriter, r *http.Request) {
-	model := h.newMetadataModel()
-	h.onceXML.Do(func() {
-		h.cachedXML = h.buildMetadataDocument(model)
-	})
+	// Get the negotiated OData version from the request context
+	ver := version.GetVersion(r.Context())
+	versionKey := ver.String()
+
+	// Check if we have a cached version for this OData version
+	h.onceMutex.Lock()
+	cached, exists := h.cachedXML[versionKey]
+	if !exists {
+		// Build and cache the metadata document for this version
+		model := h.newMetadataModel()
+		cached = h.buildMetadataDocument(model, ver)
+		h.cachedXML[versionKey] = cached
+	}
+	h.onceMutex.Unlock()
 
 	w.Header().Set("Content-Type", "application/xml")
 
 	if r.Method == http.MethodHead {
-		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(h.cachedXML)))
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(cached)))
 		w.WriteHeader(http.StatusOK)
 		return
 	}
 
 	w.WriteHeader(http.StatusOK)
-	if _, err := w.Write([]byte(h.cachedXML)); err != nil {
+	if _, err := w.Write([]byte(cached)); err != nil {
 		h.logger.Error("Error writing metadata response", "error", err)
 	}
 }
 
-func (h *MetadataHandler) buildMetadataDocument(model metadataModel) string {
+func (h *MetadataHandler) buildMetadataDocument(model metadataModel, ver version.Version) string {
 	var builder strings.Builder
 	builder.WriteString(fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <edmx:Edmx xmlns:edmx="http://docs.oasis-open.org/odata/ns/edmx" Version="%s">
   <edmx:DataServices>
     <Schema xmlns="http://docs.oasis-open.org/odata/ns/edm" Namespace="%s">
-`, response.ODataVersionValue, model.namespace))
+`, ver.String(), model.namespace))
 
 	builder.WriteString(h.buildEnumTypes(model))
 	builder.WriteString(h.buildEntityTypes(model))

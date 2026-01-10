@@ -11,6 +11,7 @@ import (
 	"github.com/nlstn/go-odata/internal/async"
 	"github.com/nlstn/go-odata/internal/handlers"
 	"github.com/nlstn/go-odata/internal/response"
+	"github.com/nlstn/go-odata/internal/version"
 )
 
 // EntityHandler defines the behavior required from entity handlers by the router.
@@ -96,16 +97,30 @@ func (r *Router) SetLogger(logger *slog.Logger) {
 
 // ServeHTTP implements http.Handler interface.
 func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	handlers.SetODataVersionHeader(w)
-
-	if !handlers.ValidateODataVersion(req) {
-		if err := response.WriteError(w, http.StatusNotAcceptable,
-			handlers.ErrMsgVersionNotSupported,
-			handlers.ErrDetailVersionNotSupported); err != nil {
-			r.logger.Error("Error writing error response", "error", err)
+	// Check if client's OData-MaxVersion is below 4.0 (reject old versions)
+	clientMaxVersion := req.Header.Get(handlers.HeaderODataMaxVersion)
+	if clientMaxVersion != "" {
+		clientVersion := version.ParseVersionString(clientMaxVersion)
+		if clientVersion.Major < 4 {
+			if err := response.WriteError(w, http.StatusNotAcceptable,
+				handlers.ErrMsgVersionNotSupported,
+				handlers.ErrDetailVersionNotSupported); err != nil {
+				r.logger.Error("Error writing error response", "error", err)
+			}
+			return
 		}
-		return
 	}
+
+	// Negotiate OData version based on client's OData-MaxVersion header
+	negotiatedVersion := version.NegotiateVersion(clientMaxVersion)
+
+	// Store the negotiated version in the request context
+	ctx := version.WithVersion(req.Context(), negotiatedVersion)
+	req = req.WithContext(ctx)
+
+	// Set the OData-Version header based on the negotiated version
+	// Use direct assignment to preserve exact casing per OData spec
+	w.Header()[response.HeaderODataVersion] = []string{negotiatedVersion.String()}
 
 	if r.tryServeAsyncMonitor(w, req) {
 		return

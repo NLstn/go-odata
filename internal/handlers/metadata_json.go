@@ -6,18 +6,28 @@ import (
 	"net/http"
 
 	"github.com/nlstn/go-odata/internal/metadata"
-	"github.com/nlstn/go-odata/internal/response"
+	"github.com/nlstn/go-odata/internal/version"
 )
 
-// handleMetadataJSON handles JSON metadata format (CSDL JSON)
+// handleMetadataJSON handles JSON metadata format (CSDL JSON) with version-specific caching
 func (h *MetadataHandler) handleMetadataJSON(w http.ResponseWriter, r *http.Request) {
-	model := h.newMetadataModel()
-	h.onceJSON.Do(func() {
-		h.cachedJSON = h.buildMetadataJSON(model)
-	})
+	// Get the negotiated OData version from the request context
+	ver := version.GetVersion(r.Context())
+	versionKey := ver.String()
+
+	// Check if we have a cached version for this OData version
+	h.onceMutex.Lock()
+	cached, exists := h.cachedJSON[versionKey]
+	if !exists {
+		// Build and cache the metadata JSON for this version
+		model := h.newMetadataModel()
+		cached = h.buildMetadataJSON(model, ver)
+		h.cachedJSON[versionKey] = cached
+	}
+	h.onceMutex.Unlock()
 
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(h.cachedJSON)))
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(cached)))
 
 	if r.Method == http.MethodHead {
 		w.WriteHeader(http.StatusOK)
@@ -25,15 +35,15 @@ func (h *MetadataHandler) handleMetadataJSON(w http.ResponseWriter, r *http.Requ
 	}
 
 	w.WriteHeader(http.StatusOK)
-	if _, err := w.Write(h.cachedJSON); err != nil {
+	if _, err := w.Write(cached); err != nil {
 		h.logger.Error("Error writing JSON metadata response", "error", err)
 	}
 }
 
-func (h *MetadataHandler) buildMetadataJSON(model metadataModel) []byte {
+func (h *MetadataHandler) buildMetadataJSON(model metadataModel, ver version.Version) []byte {
 	odataService := make(map[string]interface{})
 	csdl := map[string]interface{}{
-		"$Version":         response.ODataVersionValue,
+		"$Version":         ver.String(),
 		"$EntityContainer": fmt.Sprintf("%s.Container", model.namespace),
 	}
 	csdl[model.namespace] = odataService
