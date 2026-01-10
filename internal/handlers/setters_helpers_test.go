@@ -15,11 +15,6 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-type testEntity struct {
-	ID   uint `gorm:"primaryKey" odata:"key"`
-	Name string
-}
-
 // TestEntityHandlerSetLogger tests the SetLogger method
 func TestEntityHandlerSetLogger(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
