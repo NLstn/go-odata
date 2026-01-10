@@ -31,7 +31,10 @@ func SetODataHeader(w http.ResponseWriter, key, value string) {
 
 // SetODataVersionHeader sets the OData-Version header with the correct version value.
 // This centralizes the version header setting to ensure consistency across all responses.
-// Deprecated: Use SetODataVersionHeaderForRequest instead to support version negotiation.
+//
+// Deprecated: Use SetODataVersionHeaderForRequest instead to support OData-MaxVersion
+// header negotiation per OData v4 spec section 8.2.6. This function always sets
+// the version to 4.01 regardless of client preferences.
 func SetODataVersionHeader(w http.ResponseWriter) {
 	SetODataHeader(w, HeaderODataVersion, response.ODataVersionValue)
 }
