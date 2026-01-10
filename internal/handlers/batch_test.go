@@ -329,7 +329,7 @@ Content-Type: application/json
 	// Verify products exist
 	var products []BatchTestProduct
 	db.Find(&products)
-	names := []string{}
+	names := make([]string, 0, len(products))
 	for _, p := range products {
 		names = append(names, p.Name)
 	}

@@ -97,7 +97,7 @@ func TestParseVersion(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			major, minor := parseVersion(tt.input)
 			if major != tt.expectedMajor || minor != tt.expectedMinor {
-				t.Errorf("parseVersion(%q) = (%d, %d), want (%d, %d)", 
+				t.Errorf("parseVersion(%q) = (%d, %d), want (%d, %d)",
 					tt.input, major, minor, tt.expectedMajor, tt.expectedMinor)
 			}
 		})
