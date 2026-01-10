@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/nlstn/go-odata/internal/response"
+	"github.com/nlstn/go-odata/internal/version"
 )
 
 func TestSetODataHeader(t *testing.T) {
@@ -67,16 +68,19 @@ func TestSetODataVersionHeaderForRequest(t *testing.T) {
 				req.Header.Set("OData-MaxVersion", tt.maxVersion)
 			}
 
-			SetODataVersionHeaderForRequest(w, req)
+			// Negotiate version and store in context
+			negotiatedVersion := version.NegotiateVersion(tt.maxVersion)
+			req = req.WithContext(version.WithVersion(req.Context(), negotiatedVersion))
+			response.SetODataVersionHeaderFromRequest(w, req)
 
-			// OData spec requires exact "OData-Version" capitalization which is non-canonical in Go
-			values := w.Header()["OData-Version"] //nolint:staticcheck // OData headers require non-canonical keys
-			if len(values) == 0 {
+			// Check for the header - use Get() since Set() was used
+			value := w.Header().Get("OData-Version")
+			if value == "" {
 				t.Error("Expected OData-Version header to be set")
 				return
 			}
-			if values[0] != tt.expectedVersion {
-				t.Errorf("Expected OData-Version %s, got %s", tt.expectedVersion, values[0])
+			if value != tt.expectedVersion {
+				t.Errorf("Expected OData-Version %s, got %s", tt.expectedVersion, value)
 			}
 		})
 	}
@@ -112,9 +116,10 @@ func TestGetNegotiatedODataVersion(t *testing.T) {
 				req.Header.Set("OData-MaxVersion", tt.maxVersion)
 			}
 
-			version := GetNegotiatedODataVersion(req)
-			if version != tt.expectedVersion {
-				t.Errorf("GetNegotiatedODataVersion() = %s, want %s", version, tt.expectedVersion)
+			negotiatedVersion := version.NegotiateVersion(tt.maxVersion)
+			versionStr := negotiatedVersion.String()
+			if versionStr != tt.expectedVersion {
+				t.Errorf("version.NegotiateVersion() = %s, want %s", versionStr, tt.expectedVersion)
 			}
 		})
 	}

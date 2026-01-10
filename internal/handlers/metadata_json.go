@@ -6,18 +6,64 @@ import (
 	"net/http"
 
 	"github.com/nlstn/go-odata/internal/metadata"
-	"github.com/nlstn/go-odata/internal/response"
+	"github.com/nlstn/go-odata/internal/version"
 )
 
-// handleMetadataJSON handles JSON metadata format (CSDL JSON)
+// handleMetadataJSON handles JSON metadata format (CSDL JSON) with version-specific caching
 func (h *MetadataHandler) handleMetadataJSON(w http.ResponseWriter, r *http.Request) {
-	model := h.newMetadataModel()
-	h.onceJSON.Do(func() {
-		h.cachedJSON = h.buildMetadataJSON(model)
-	})
+	// Get the negotiated OData version from the request context
+	ver := version.GetVersion(r.Context())
+	versionKey := ver.String()
 
+	// Lock-free cache lookup (fast path - common case)
+	if cached, ok := h.cachedJSON.Load(versionKey); ok {
+		cachedBytes, ok := cached.([]byte)
+		if !ok {
+			// Cache corruption - rebuild
+			h.cachedJSON.Delete(versionKey)
+			h.logger.Warn("Invalid cache entry, rebuilding", "version", versionKey)
+		} else {
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Content-Length", fmt.Sprintf("%d", len(cachedBytes)))
+
+			if r.Method == http.MethodHead {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+
+			w.WriteHeader(http.StatusOK)
+			if _, err := w.Write(cachedBytes); err != nil {
+				h.logger.Error("Error writing JSON metadata response", "error", err)
+			}
+			return
+		}
+	}
+
+	// Cache miss - build metadata (slow path)
+	model := h.newMetadataModel()
+	cached := h.buildMetadataJSON(model, ver)
+
+	// Store in cache using LoadOrStore for thread safety
+	// (another goroutine might have built it while we were building)
+	actual, loaded := h.cachedJSON.LoadOrStore(versionKey, cached)
+	if !loaded {
+		// We stored our version, increment counter and check for eviction
+		newSize := h.cacheSize.Add(1)
+		if newSize > maxCacheEntries {
+			h.evictOldCacheEntriesJSON()
+		}
+	}
+
+	// Use the actual cached value (ours or the one that was stored by another goroutine)
+	cachedBytes, ok := actual.([]byte)
+	if !ok {
+		// Should never happen, but handle gracefully
+		h.logger.Error("Invalid cache entry type", "version", versionKey)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(h.cachedJSON)))
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(cachedBytes)))
 
 	if r.Method == http.MethodHead {
 		w.WriteHeader(http.StatusOK)
@@ -25,15 +71,15 @@ func (h *MetadataHandler) handleMetadataJSON(w http.ResponseWriter, r *http.Requ
 	}
 
 	w.WriteHeader(http.StatusOK)
-	if _, err := w.Write(h.cachedJSON); err != nil {
+	if _, err := w.Write(cachedBytes); err != nil {
 		h.logger.Error("Error writing JSON metadata response", "error", err)
 	}
 }
 
-func (h *MetadataHandler) buildMetadataJSON(model metadataModel) []byte {
+func (h *MetadataHandler) buildMetadataJSON(model metadataModel, ver version.Version) []byte {
 	odataService := make(map[string]interface{})
 	csdl := map[string]interface{}{
-		"$Version":         response.ODataVersionValue,
+		"$Version":         ver.String(),
 		"$EntityContainer": fmt.Sprintf("%s.Container", model.namespace),
 	}
 	csdl[model.namespace] = odataService

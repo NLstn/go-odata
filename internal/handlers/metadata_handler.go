@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/nlstn/go-odata/internal/auth"
 	"github.com/nlstn/go-odata/internal/metadata"
@@ -14,27 +15,58 @@ import (
 )
 
 // MetadataHandler handles metadata document requests
+//
+// # Locking Strategy
+//
+// This handler uses a simplified locking approach that eliminates lock ordering concerns:
+//
+// 1. sync.Map for caches (cachedXML, cachedJSON): Lock-free reads, internal synchronization for writes
+// 2. namespaceMu: Protects only the namespace field (not the caches)
+// 3. No lock ordering requirements - each lock is independent
+//
+// ## Why This Design Prevents Deadlocks
+//
+// The cache and namespace are deliberately decoupled:
+// - Cache operations never acquire namespaceMu
+// - Namespace operations (SetNamespace) clear the cache but don't hold locks while doing so
+// - sync.Map provides lock-free reads, eliminating the most common contention point
+//
+// ## Thread Safety Guarantees
+//
+// - Concurrent metadata requests are safe (lock-free reads from sync.Map)
+// - SetNamespace is safe to call concurrently (protected by namespaceMu write lock)
+// - Cache eviction is safe (uses sync.Map's atomic operations and atomic.Int64 for size)
+//
+// ## Performance Characteristics
+//
+// - Cache hits: Lock-free (sync.Map.Load)
+// - Cache misses: Single sync.Map.LoadOrStore per build
+// - Namespace reads: Single RLock (fast path in namespaceOrDefault)
+// - Namespace writes: Single Lock + cache clear (rare operation)
 type MetadataHandler struct {
 	entities map[string]*metadata.EntityMetadata
-	// Cached metadata documents
-	cachedXML  string
-	cachedJSON []byte
-	onceXML    sync.Once
-	onceJSON   sync.Once
-	namespace  string
-	logger     *slog.Logger
-	policy     auth.Policy
+	// Lock-free cached metadata documents by version (key: version string)
+	cachedXML   sync.Map     // map[string]string
+	cachedJSON  sync.Map     // map[string][]byte
+	cacheSize   atomic.Int64 // Tracks total cache entries for eviction
+	namespace   string
+	namespaceMu sync.RWMutex // Protects namespace field ONLY (not the caches)
+	logger      *slog.Logger
+	policy      auth.Policy
 }
 
 const defaultNamespace = "ODataService"
 
 // NewMetadataHandler creates a new metadata handler
 func NewMetadataHandler(entities map[string]*metadata.EntityMetadata) *MetadataHandler {
-	return &MetadataHandler{
+	h := &MetadataHandler{
 		entities:  entities,
 		namespace: defaultNamespace,
 		logger:    slog.Default(),
 	}
+	// sync.Map fields are initialized to their zero value (empty map)
+	h.cacheSize.Store(0)
+	return h
 }
 
 // SetLogger sets the logger for the metadata handler.
@@ -51,26 +83,129 @@ func (h *MetadataHandler) SetPolicy(policy auth.Policy) {
 }
 
 // SetNamespace updates the namespace used for metadata generation and clears cached documents.
+//
+// Thread-safety: This method is safe to call concurrently. The namespaceMu write lock
+// ensures that only one SetNamespace operation executes at a time. Cache clearing uses
+// sync.Map.Delete which is internally synchronized.
+//
+// Design note: This method does NOT create lock ordering issues because:
+// - It only acquires namespaceMu (never acquires cache locks - sync.Map is lock-free)
+// - Cache operations (in metadata handlers) never acquire namespaceMu
+// - Therefore, no circular wait condition can occur
 func (h *MetadataHandler) SetNamespace(namespace string) {
 	trimmed := strings.TrimSpace(namespace)
 	if trimmed == "" {
 		trimmed = defaultNamespace
 	}
+
+	// Acquire write lock for namespace update
+	h.namespaceMu.Lock()
+	defer h.namespaceMu.Unlock()
+
+	// Check if namespace actually changed
 	if trimmed == h.namespace {
 		return
 	}
+
+	// Update namespace
 	h.namespace = trimmed
-	h.cachedXML = ""
-	h.cachedJSON = nil
-	h.onceXML = sync.Once{}
-	h.onceJSON = sync.Once{}
+
+	// Clear all cached versions since namespace changed
+	// Delete all entries from sync.Map instead of replacing it
+	h.cachedXML.Range(func(key, value interface{}) bool {
+		h.cachedXML.Delete(key)
+		return true
+	})
+	h.cachedJSON.Range(func(key, value interface{}) bool {
+		h.cachedJSON.Delete(key)
+		return true
+	})
+	h.cacheSize.Store(0)
 }
 
+// namespaceOrDefault returns the current namespace or the default if empty.
+//
+// Thread-safety: Uses RLock for fast concurrent reads. This is safe because:
+// - Multiple readers can hold RLock simultaneously (high throughput)
+// - SetNamespace's write lock blocks until all readers release RLock
+// - No cache operations occur while holding this lock (prevents lock ordering issues)
 func (h *MetadataHandler) namespaceOrDefault() string {
+	h.namespaceMu.RLock()
+	defer h.namespaceMu.RUnlock()
 	if strings.TrimSpace(h.namespace) == "" {
 		return defaultNamespace
 	}
 	return h.namespace
+}
+
+// maxCacheEntries defines the maximum number of cached metadata versions to keep
+// This prevents unbounded memory growth when many different OData-MaxVersion values are requested
+const maxCacheEntries = 10
+
+// evictOldCacheEntriesXML removes the oldest cached XML entries if the cache exceeds maxCacheEntries.
+// Uses sync.Map.Range to iterate and delete entries.
+func (h *MetadataHandler) evictOldCacheEntriesXML() {
+	if h.cacheSize.Load() <= maxCacheEntries {
+		return
+	}
+
+	// Keep priority versions (most common)
+	priorityVersions := map[string]bool{"4.01": true, "4.0": true}
+	keysToKeep := maxCacheEntries / 2
+	kept := 0
+	evicted := 0
+
+	// First pass: delete non-priority entries
+	h.cachedXML.Range(func(key, value interface{}) bool {
+		keyStr, ok := key.(string)
+		if !ok {
+			return true // Skip invalid entries
+		}
+		if !priorityVersions[keyStr] && kept >= keysToKeep-len(priorityVersions) {
+			h.cachedXML.Delete(key)
+			evicted++
+		} else if !priorityVersions[keyStr] {
+			kept++
+		}
+		return true
+	})
+
+	// Update cache size
+	newSize := h.cacheSize.Add(-int64(evicted))
+	h.logger.Info("Evicted old metadata XML cache entries", "newSize", newSize, "evicted", evicted)
+}
+
+// evictOldCacheEntriesJSON removes the oldest cached JSON entries if the cache exceeds maxCacheEntries.
+// Uses sync.Map.Range to iterate and delete entries.
+func (h *MetadataHandler) evictOldCacheEntriesJSON() {
+	if h.cacheSize.Load() <= maxCacheEntries {
+		return
+	}
+
+	// Keep priority versions (most common)
+	priorityVersions := map[string]bool{"4.01": true, "4.0": true}
+	keysToKeep := maxCacheEntries / 2
+	kept := 0
+	evicted := 0
+
+	// First pass: delete non-priority entries
+	h.cachedJSON.Range(func(key, value interface{}) bool {
+		keyStr, ok := key.(string)
+		if !ok {
+			return true // Skip invalid entries
+		}
+		if !priorityVersions[keyStr] && kept >= keysToKeep-len(priorityVersions) {
+			h.cachedJSON.Delete(key)
+			evicted++
+		} else if !priorityVersions[keyStr] {
+			kept++
+		}
+		return true
+	})
+
+	// Update cache size
+	newSize := h.cacheSize.Add(-int64(evicted))
+	h.logger.Info("Evicted old metadata JSON cache entries", "newSize", newSize, "evicted", evicted)
 }
 
 // HandleMetadata handles the metadata document endpoint

@@ -5,94 +5,45 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
+
+	"github.com/nlstn/go-odata/internal/version"
 )
 
 const (
-	// ODataVersionValue is the maximum OData version supported by this service.
-	// This is used as the default response version when no OData-MaxVersion header
-	// is present, and as the schema version in CSDL metadata documents.
+	// ODataVersionValue is the default OData version for responses.
+	//
+	// Deprecated: This constant always returns "4.01" and does not support version negotiation.
+	// Use version.GetVersion(ctx) to get the negotiated version from request context.
+	// This constant will be removed in v2.0.0 (target: June 2026).
 	ODataVersionValue  = "4.01"
 	HeaderODataVersion = "OData-Version"
-	// HeaderODataMaxVersion is the header name for the client's maximum supported version.
-	HeaderODataMaxVersion = "OData-MaxVersion"
 )
 
-// SetODataVersionHeader sets the OData-Version header with the correct capitalization.
+// SetODataVersionHeader sets the OData-Version header to a fixed value (4.01).
 //
-// Deprecated: Use SetODataVersionHeaderForRequest instead to support OData-MaxVersion
-// header negotiation per OData v4 spec section 8.2.6. This function always sets
-// the version to 4.01 regardless of client preferences.
+// Deprecated: This function always returns "4.01" and does not respect client version negotiation.
+// Use SetODataVersionHeaderFromRequest(w, r) instead for context-aware version handling.
+// This function will be removed in v2.0.0 (target: June 2026).
+//
+// Migration:
+//
+//	// Old (deprecated - always 4.01):
+//	response.SetODataVersionHeader(w)
+//
+//	// New (context-aware - respects negotiation):
+//	response.SetODataVersionHeaderFromRequest(w, r)
+//
+// Note: The router middleware automatically sets the version header, so manual
+// calls are rarely needed unless implementing custom handlers.
 func SetODataVersionHeader(w http.ResponseWriter) {
 	w.Header()[HeaderODataVersion] = []string{ODataVersionValue}
 }
 
-// SetODataVersionHeaderForRequest sets the OData-Version header with version negotiation support.
-// The version is determined based on the OData-MaxVersion request header.
-// Per OData v4 spec section 8.2.6: Services respond with the maximum supported version
-// that is less than or equal to the requested OData-MaxVersion.
-func SetODataVersionHeaderForRequest(w http.ResponseWriter, r *http.Request) {
-	version := GetNegotiatedODataVersion(r)
-	w.Header()[HeaderODataVersion] = []string{version}
-}
-
-// GetNegotiatedODataVersion determines the OData version to use for the response
-// based on the OData-MaxVersion request header.
-// Per OData v4 spec section 8.2.6: Services respond with the maximum supported version
-// that is less than or equal to the requested OData-MaxVersion.
-func GetNegotiatedODataVersion(r *http.Request) string {
-	if r == nil {
-		return ODataVersionValue
-	}
-
-	maxVersion := r.Header.Get(HeaderODataMaxVersion)
-	if maxVersion == "" {
-		return ODataVersionValue
-	}
-
-	// Parse the max version to determine what we should respond with
-	// We support 4.0 and 4.01
-	maxVersion = strings.TrimSpace(maxVersion)
-
-	// Parse major.minor version
-	parts := strings.Split(maxVersion, ".")
-	if len(parts) == 0 || parts[0] == "" {
-		return ODataVersionValue
-	}
-
-	// Parse major version
-	major, err := strconv.Atoi(parts[0])
-	if err != nil {
-		// Invalid version format, return default
-		return ODataVersionValue
-	}
-
-	// If major version > 4, return our maximum (4.01)
-	if major > 4 {
-		return ODataVersionValue
-	}
-
-	// If major version < 4, this should have been rejected earlier
-	// but for safety, return 4.0 (minimum we support)
-	if major < 4 {
-		return "4.0"
-	}
-
-	// Major version is 4, check minor version
-	minor := 0
-	if len(parts) > 1 && parts[1] != "" {
-		// Ignore error - invalid minor version defaults to 0
-		minor, _ = strconv.Atoi(parts[1]) //nolint:errcheck
-	}
-
-	// If client requests 4.0 (or 4.00), respond with 4.0
-	// If client requests 4.01 or higher (4.1, 4.2, etc), respond with 4.01
-	if minor == 0 {
-		return "4.0"
-	}
-
-	return ODataVersionValue
+// SetODataVersionHeaderFromRequest sets the OData-Version header based on the negotiated version in the request context.
+func SetODataVersionHeaderFromRequest(w http.ResponseWriter, r *http.Request) {
+	ver := version.GetVersion(r.Context())
+	w.Header().Set(HeaderODataVersion, ver.String())
 }
 
 // ODataResponse represents the structure of an OData JSON response.

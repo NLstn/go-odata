@@ -39,6 +39,21 @@ func TestServiceRespondAsyncFlow(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("failed to enable async processing: %v", err)
 	}
+
+	// Wait for async tables to be created (AutoMigrate is asynchronous in some cases)
+	// Verify table exists before proceeding with async requests
+	maxAttempts := 10
+	for i := 0; i < maxAttempts; i++ {
+		var count int64
+		if err := db.Raw("SELECT COUNT(*) FROM _odata_async_jobs").Scan(&count).Error; err == nil {
+			break // Table exists
+		}
+		if i == maxAttempts-1 {
+			t.Fatal("async jobs table not created after EnableAsyncProcessing")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
 	t.Cleanup(func() {
 		if err := svc.Close(); err != nil {
 			t.Fatalf("failed to close service: %v", err)

@@ -22,7 +22,7 @@ func WriteEntityReference(w http.ResponseWriter, r *http.Request, entityID strin
 	}
 
 	metadataLevel := GetODataMetadataLevel(r)
-	SetODataVersionHeaderForRequest(w, r)
+	SetODataVersionHeaderFromRequest(w, r)
 
 	if r.Method == http.MethodHead {
 		jsonBytes, err := json.Marshal(response)
@@ -72,7 +72,7 @@ func WriteEntityReferenceCollection(w http.ResponseWriter, r *http.Request, enti
 	}
 
 	metadataLevel := GetODataMetadataLevel(r)
-	SetODataVersionHeaderForRequest(w, r)
+	SetODataVersionHeaderFromRequest(w, r)
 
 	if r.Method == http.MethodHead {
 		jsonBytes, err := json.Marshal(response)
