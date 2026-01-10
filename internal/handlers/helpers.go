@@ -31,8 +31,24 @@ func SetODataHeader(w http.ResponseWriter, key, value string) {
 
 // SetODataVersionHeader sets the OData-Version header with the correct version value.
 // This centralizes the version header setting to ensure consistency across all responses.
+// Deprecated: Use SetODataVersionHeaderForRequest instead to support version negotiation.
 func SetODataVersionHeader(w http.ResponseWriter) {
 	SetODataHeader(w, HeaderODataVersion, response.ODataVersionValue)
+}
+
+// SetODataVersionHeaderForRequest sets the OData-Version header with version negotiation support.
+// The version is determined based on the OData-MaxVersion request header.
+// Per OData v4 spec section 8.2.6: Services respond with the maximum supported version
+// that is less than or equal to the requested OData-MaxVersion.
+func SetODataVersionHeaderForRequest(w http.ResponseWriter, r *http.Request) {
+	version := response.GetNegotiatedODataVersion(r)
+	SetODataHeader(w, HeaderODataVersion, version)
+}
+
+// GetNegotiatedODataVersion determines the OData version to use for the response
+// based on the OData-MaxVersion request header.
+func GetNegotiatedODataVersion(r *http.Request) string {
+	return response.GetNegotiatedODataVersion(r)
 }
 
 // buildKeyQuery builds a GORM query with WHERE conditions for the entity key(s)

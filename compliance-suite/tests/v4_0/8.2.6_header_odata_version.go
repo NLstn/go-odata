@@ -15,10 +15,10 @@ func HeaderODataVersion() *framework.TestSuite {
 		"https://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part1-protocol/odata-v4.0-errata03-os-part1-protocol-complete.html#sec_HeaderODataVersion",
 	)
 
-	// Test 1: Service should return OData-Version: 4.0 header
+	// Test 1: Service should return OData-Version: 4.01 header by default
 	suite.AddTest(
 		"test_odata_version_header",
-		"Service returns OData-Version header with value 4.0 or 4.01",
+		"Service returns OData-Version header with value 4.01 by default",
 		func(ctx *framework.TestContext) error {
 			resp, err := ctx.GET("/")
 			if err != nil {
@@ -30,19 +30,20 @@ func HeaderODataVersion() *framework.TestSuite {
 				return framework.NewError("Header not found")
 			}
 
+			// Without OData-MaxVersion, service should return its highest supported version
 			odataVersion = strings.TrimSpace(odataVersion)
-			if odataVersion != "4.0" && odataVersion != "4.01" {
-				return framework.NewError(fmt.Sprintf("Got version: %s", odataVersion))
+			if odataVersion != "4.01" {
+				return framework.NewError(fmt.Sprintf("Expected version 4.01, got: %s", odataVersion))
 			}
 
 			return nil
 		},
 	)
 
-	// Test 2: Service should accept request with OData-MaxVersion: 4.0
+	// Test 2: Service should respond with OData-Version: 4.0 when OData-MaxVersion: 4.0
 	suite.AddTest(
-		"test_maxversion_40",
-		"Service accepts OData-MaxVersion: 4.0",
+		"test_maxversion_40_response",
+		"Service responds with OData-Version: 4.0 when OData-MaxVersion: 4.0",
 		func(ctx *framework.TestContext) error {
 			resp, err := ctx.GET("/",
 				framework.Header{Key: "OData-MaxVersion", Value: "4.0"},
@@ -51,14 +52,24 @@ func HeaderODataVersion() *framework.TestSuite {
 				return err
 			}
 
-			return ctx.AssertStatusCode(resp, 200)
+			if err := ctx.AssertStatusCode(resp, 200); err != nil {
+				return err
+			}
+
+			odataVersion := resp.Headers.Get("OData-Version")
+			odataVersion = strings.TrimSpace(odataVersion)
+			if odataVersion != "4.0" {
+				return framework.NewError(fmt.Sprintf("Expected OData-Version: 4.0, got: %s (spec requires response version <= OData-MaxVersion)", odataVersion))
+			}
+
+			return nil
 		},
 	)
 
-	// Test 3: Service should accept request with OData-MaxVersion: 4.01
+	// Test 3: Service should respond with OData-Version: 4.01 when OData-MaxVersion: 4.01
 	suite.AddTest(
-		"test_maxversion_401",
-		"Service accepts OData-MaxVersion: 4.01",
+		"test_maxversion_401_response",
+		"Service responds with OData-Version: 4.01 when OData-MaxVersion: 4.01",
 		func(ctx *framework.TestContext) error {
 			resp, err := ctx.GET("/",
 				framework.Header{Key: "OData-MaxVersion", Value: "4.01"},
@@ -67,7 +78,17 @@ func HeaderODataVersion() *framework.TestSuite {
 				return err
 			}
 
-			return ctx.AssertStatusCode(resp, 200)
+			if err := ctx.AssertStatusCode(resp, 200); err != nil {
+				return err
+			}
+
+			odataVersion := resp.Headers.Get("OData-Version")
+			odataVersion = strings.TrimSpace(odataVersion)
+			if odataVersion != "4.01" {
+				return framework.NewError(fmt.Sprintf("Expected OData-Version: 4.01, got: %s", odataVersion))
+			}
+
+			return nil
 		},
 	)
 
@@ -121,6 +142,32 @@ func HeaderODataVersion() *framework.TestSuite {
 			odataVersion := resp.Headers.Get("OData-Version")
 			if odataVersion == "" {
 				return framework.NewError("No OData-Version header")
+			}
+
+			return nil
+		},
+	)
+
+	// Test 7: Entity collection respects version negotiation
+	suite.AddTest(
+		"test_entity_collection_version_negotiation",
+		"Entity collection response respects OData-MaxVersion: 4.0",
+		func(ctx *framework.TestContext) error {
+			resp, err := ctx.GET("/Products",
+				framework.Header{Key: "OData-MaxVersion", Value: "4.0"},
+			)
+			if err != nil {
+				return err
+			}
+
+			if err := ctx.AssertStatusCode(resp, 200); err != nil {
+				return err
+			}
+
+			odataVersion := resp.Headers.Get("OData-Version")
+			odataVersion = strings.TrimSpace(odataVersion)
+			if odataVersion != "4.0" {
+				return framework.NewError(fmt.Sprintf("Expected OData-Version: 4.0, got: %s", odataVersion))
 			}
 
 			return nil

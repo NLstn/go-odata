@@ -5,17 +5,90 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
 const (
+	// ODataVersionValue is the maximum OData version supported by this service.
+	// This is used for CSDL schema version and as the default response version.
 	ODataVersionValue  = "4.01"
 	HeaderODataVersion = "OData-Version"
+	// HeaderODataMaxVersion is the header name for the client's maximum supported version.
+	HeaderODataMaxVersion = "OData-MaxVersion"
 )
 
 // SetODataVersionHeader sets the OData-Version header with the correct capitalization.
+// Deprecated: Use SetODataVersionHeaderForRequest instead to support version negotiation.
 func SetODataVersionHeader(w http.ResponseWriter) {
 	w.Header()[HeaderODataVersion] = []string{ODataVersionValue}
+}
+
+// SetODataVersionHeaderForRequest sets the OData-Version header with version negotiation support.
+// The version is determined based on the OData-MaxVersion request header.
+// Per OData v4 spec section 8.2.6: Services respond with the maximum supported version
+// that is less than or equal to the requested OData-MaxVersion.
+func SetODataVersionHeaderForRequest(w http.ResponseWriter, r *http.Request) {
+	version := GetNegotiatedODataVersion(r)
+	w.Header()[HeaderODataVersion] = []string{version}
+}
+
+// GetNegotiatedODataVersion determines the OData version to use for the response
+// based on the OData-MaxVersion request header.
+// Per OData v4 spec section 8.2.6: Services respond with the maximum supported version
+// that is less than or equal to the requested OData-MaxVersion.
+func GetNegotiatedODataVersion(r *http.Request) string {
+	if r == nil {
+		return ODataVersionValue
+	}
+
+	maxVersion := r.Header.Get(HeaderODataMaxVersion)
+	if maxVersion == "" {
+		return ODataVersionValue
+	}
+
+	// Parse the max version to determine what we should respond with
+	// We support 4.0 and 4.01
+	maxVersion = strings.TrimSpace(maxVersion)
+
+	// Parse major.minor version
+	parts := strings.Split(maxVersion, ".")
+	if len(parts) == 0 || parts[0] == "" {
+		return ODataVersionValue
+	}
+
+	// Parse major version
+	major, err := strconv.Atoi(parts[0])
+	if err != nil {
+		// Invalid version format, return default
+		return ODataVersionValue
+	}
+
+	// If major version > 4, return our maximum (4.01)
+	if major > 4 {
+		return ODataVersionValue
+	}
+
+	// If major version < 4, this should have been rejected earlier
+	// but for safety, return 4.0 (minimum we support)
+	if major < 4 {
+		return "4.0"
+	}
+
+	// Major version is 4, check minor version
+	minor := 0
+	if len(parts) > 1 && parts[1] != "" {
+		// Ignore error - invalid minor version defaults to 0
+		minor, _ = strconv.Atoi(parts[1]) //nolint:errcheck
+	}
+
+	// If client requests 4.0 (or 4.00), respond with 4.0
+	// If client requests 4.01 or higher (4.1, 4.2, etc), respond with 4.01
+	if minor == 0 {
+		return "4.0"
+	}
+
+	return ODataVersionValue
 }
 
 // ODataResponse represents the structure of an OData JSON response.
