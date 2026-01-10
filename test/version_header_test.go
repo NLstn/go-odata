@@ -342,3 +342,151 @@ func TestODataMaxVersion_WithDELETERequest(t *testing.T) {
 		t.Errorf("DELETE request with OData-MaxVersion: 3.0 should be rejected with 406, got %d", w.Code)
 	}
 }
+
+// TestODataMaxVersion_ResponseVersionNegotiation tests that OData-Version in response matches the negotiated version
+func TestODataMaxVersion_ResponseVersionNegotiation(t *testing.T) {
+	service := setupVersionTestService(t)
+
+	testCases := []struct {
+		name            string
+		maxVersion      string
+		expectedVersion string
+	}{
+		{
+			name:            "No OData-MaxVersion header returns 4.01",
+			maxVersion:      "",
+			expectedVersion: "4.01",
+		},
+		{
+			name:            "OData-MaxVersion 4.0 returns 4.0",
+			maxVersion:      "4.0",
+			expectedVersion: "4.0",
+		},
+		{
+			name:            "OData-MaxVersion 4.00 returns 4.0",
+			maxVersion:      "4.00",
+			expectedVersion: "4.0",
+		},
+		{
+			name:            "OData-MaxVersion 4.01 returns 4.01",
+			maxVersion:      "4.01",
+			expectedVersion: "4.01",
+		},
+		{
+			name:            "OData-MaxVersion 4.1 returns 4.01",
+			maxVersion:      "4.1",
+			expectedVersion: "4.01",
+		},
+		{
+			name:            "OData-MaxVersion 5.0 returns 4.01",
+			maxVersion:      "5.0",
+			expectedVersion: "4.01",
+		},
+		{
+			name:            "OData-MaxVersion 4 returns 4.0",
+			maxVersion:      "4",
+			expectedVersion: "4.0",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/VersionTestProducts", nil)
+			if tc.maxVersion != "" {
+				req.Header.Set("OData-MaxVersion", tc.maxVersion)
+			}
+			w := httptest.NewRecorder()
+
+			service.ServeHTTP(w, req)
+
+			// Request should succeed
+			if w.Code != http.StatusOK {
+				t.Fatalf("Expected status 200, got %d", w.Code)
+			}
+
+			// Check OData-Version header value using non-canonical key since OData spec
+			// requires the exact capitalization "OData-Version"
+			odataVersion := w.Header()["OData-Version"] //nolint:staticcheck
+			if len(odataVersion) == 0 {
+				t.Fatalf("Missing OData-Version header in response")
+			}
+
+			if odataVersion[0] != tc.expectedVersion {
+				t.Errorf("Expected OData-Version %q, got %q", tc.expectedVersion, odataVersion[0])
+			}
+		})
+	}
+}
+
+// TestODataMaxVersion_MetadataVersionNegotiation tests version negotiation for metadata requests
+func TestODataMaxVersion_MetadataVersionNegotiation(t *testing.T) {
+	service := setupVersionTestService(t)
+
+	testCases := []struct {
+		name            string
+		maxVersion      string
+		expectedVersion string
+	}{
+		{
+			name:            "Metadata with OData-MaxVersion 4.0 returns 4.0",
+			maxVersion:      "4.0",
+			expectedVersion: "4.0",
+		},
+		{
+			name:            "Metadata with OData-MaxVersion 4.01 returns 4.01",
+			maxVersion:      "4.01",
+			expectedVersion: "4.01",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/$metadata", nil)
+			req.Header.Set("OData-MaxVersion", tc.maxVersion)
+			w := httptest.NewRecorder()
+
+			service.ServeHTTP(w, req)
+
+			// Request should succeed
+			if w.Code != http.StatusOK {
+				t.Fatalf("Expected status 200, got %d", w.Code)
+			}
+
+			// Check OData-Version header value using non-canonical key
+			odataVersion := w.Header()["OData-Version"] //nolint:staticcheck
+			if len(odataVersion) == 0 {
+				t.Fatalf("Missing OData-Version header in response")
+			}
+
+			if odataVersion[0] != tc.expectedVersion {
+				t.Errorf("Expected OData-Version %q, got %q", tc.expectedVersion, odataVersion[0])
+			}
+		})
+	}
+}
+
+// TestODataMaxVersion_ServiceDocumentVersionNegotiation tests version negotiation for service document
+func TestODataMaxVersion_ServiceDocumentVersionNegotiation(t *testing.T) {
+	service := setupVersionTestService(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("OData-MaxVersion", "4.0")
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	// Request should succeed
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected status 200, got %d", w.Code)
+	}
+
+	// Check OData-Version header value using non-canonical key
+	odataVersion := w.Header()["OData-Version"] //nolint:staticcheck
+	if len(odataVersion) == 0 {
+		t.Fatalf("Missing OData-Version header in response")
+	}
+
+	if odataVersion[0] != "4.0" {
+		t.Errorf("Expected OData-Version 4.0, got %q", odataVersion[0])
+	}
+}

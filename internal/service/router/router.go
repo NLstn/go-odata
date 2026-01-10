@@ -96,7 +96,7 @@ func (r *Router) SetLogger(logger *slog.Logger) {
 
 // ServeHTTP implements http.Handler interface.
 func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	handlers.SetODataVersionHeader(w)
+	handlers.SetODataVersionHeaderForRequest(w, req)
 
 	if !handlers.ValidateODataVersion(req) {
 		if err := response.WriteError(w, http.StatusNotAcceptable,
