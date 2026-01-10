@@ -3,6 +3,7 @@ package response
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/shopspring/decimal"
@@ -141,6 +142,128 @@ func TestConvertFieldValueDecimal(t *testing.T) {
 		expected := "123456789.12345678"
 		if string(rawMsg) != expected {
 			t.Errorf("Expected %q, got %q", expected, string(rawMsg))
+		}
+	})
+}
+
+func TestConvertFieldValueDate(t *testing.T) {
+	// Create mock metadata with Edm.Date property
+	fullMetadata := &metadata.EntityMetadata{
+		Properties: []metadata.PropertyMetadata{
+			{
+				FieldName: "PickupDate",
+				Name:      "PickupDate",
+				EdmType:   "Edm.Date",
+			},
+			{
+				FieldName: "DeliveryDate",
+				Name:      "DeliveryDate",
+				EdmType:   "Edm.Date",
+			},
+			{
+				FieldName: "CreatedAt",
+				Name:      "CreatedAt",
+				EdmType:   "Edm.DateTimeOffset",
+			},
+		},
+	}
+
+	t.Run("Converts time.Time to date-only string", func(t *testing.T) {
+		value := time.Date(2024, 1, 10, 15, 30, 45, 0, time.UTC)
+		result := convertFieldValue(value, fullMetadata, "PickupDate")
+
+		// Should return date-only string
+		dateStr, ok := result.(string)
+		if !ok {
+			t.Fatalf("Expected string, got %T", result)
+		}
+
+		expected := "2024-01-10"
+		if dateStr != expected {
+			t.Errorf("Expected %q, got %q", expected, dateStr)
+		}
+	})
+
+	t.Run("Handles pointer to time.Time", func(t *testing.T) {
+		value := time.Date(2024, 12, 25, 0, 0, 0, 0, time.UTC)
+		ptrValue := &value
+		result := convertFieldValue(ptrValue, fullMetadata, "DeliveryDate")
+
+		dateStr, ok := result.(string)
+		if !ok {
+			t.Fatalf("Expected string, got %T", result)
+		}
+
+		expected := "2024-12-25"
+		if dateStr != expected {
+			t.Errorf("Expected %q, got %q", expected, dateStr)
+		}
+	})
+
+	t.Run("Handles nil pointer to time.Time", func(t *testing.T) {
+		var ptrValue *time.Time = nil
+		result := convertFieldValue(ptrValue, fullMetadata, "DeliveryDate")
+
+		// Should return original nil pointer - result will be the pointer value (nil), not nil interface
+		_, ok := result.(*time.Time)
+		if !ok {
+			t.Errorf("Expected *time.Time, got %T", result)
+		}
+	})
+
+	t.Run("Handles zero time.Time", func(t *testing.T) {
+		value := time.Time{}
+		result := convertFieldValue(value, fullMetadata, "PickupDate")
+
+		// Should return original zero value
+		timeVal, ok := result.(time.Time)
+		if !ok {
+			t.Fatalf("Expected time.Time, got %T", result)
+		}
+		if !timeVal.IsZero() {
+			t.Errorf("Expected zero time, got %v", timeVal)
+		}
+	})
+
+	t.Run("Does not convert Edm.DateTimeOffset fields", func(t *testing.T) {
+		value := time.Date(2024, 1, 10, 15, 30, 45, 0, time.UTC)
+		result := convertFieldValue(value, fullMetadata, "CreatedAt")
+
+		// Should return original time.Time unchanged
+		timeVal, ok := result.(time.Time)
+		if !ok {
+			t.Fatalf("Expected time.Time, got %T", result)
+		}
+		if !timeVal.Equal(value) {
+			t.Errorf("Expected %v, got %v", value, timeVal)
+		}
+	})
+
+	t.Run("Formats date in different time zones correctly", func(t *testing.T) {
+		// Create time in EST (UTC-5)
+		est, _ := time.LoadLocation("America/New_York")
+		value := time.Date(2024, 1, 10, 23, 30, 0, 0, est)
+		result := convertFieldValue(value, fullMetadata, "PickupDate")
+
+		dateStr := result.(string)
+		// Should use the date from the given timezone
+		expected := "2024-01-10"
+		if dateStr != expected {
+			t.Errorf("Expected %q, got %q", expected, dateStr)
+		}
+	})
+
+	t.Run("Returns original value if field not found", func(t *testing.T) {
+		value := time.Date(2024, 1, 10, 0, 0, 0, 0, time.UTC)
+		result := convertFieldValue(value, fullMetadata, "UnknownField")
+
+		// Should return original time.Time
+		timeVal, ok := result.(time.Time)
+		if !ok {
+			t.Fatalf("Expected time.Time, got %T", result)
+		}
+		if !timeVal.Equal(value) {
+			t.Errorf("Expected %v, got %v", value, timeVal)
 		}
 	})
 }

@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/nlstn/go-odata/internal/etag"
 	"github.com/nlstn/go-odata/internal/metadata"
@@ -18,6 +19,7 @@ var decimalPattern = regexp.MustCompile(`^-?\d+(\.\d+)?$`)
 // convertFieldValue converts field values based on EDM type for proper JSON serialization.
 // For Edm.Decimal fields with decimal.Decimal type, it converts the string representation
 // to a json.RawMessage number to avoid IEEE754Compatible errors.
+// For Edm.Date fields with time.Time type, it formats as date-only string (YYYY-MM-DD).
 func convertFieldValue(value interface{}, fullMetadata *metadata.EntityMetadata, fieldName string) interface{} {
 	if fullMetadata == nil {
 		return value
@@ -32,27 +34,54 @@ func convertFieldValue(value interface{}, fullMetadata *metadata.EntityMetadata,
 		}
 	}
 
-	if propMeta == nil || propMeta.EdmType != "Edm.Decimal" {
+	if propMeta == nil {
 		return value
 	}
 
-	// Check if the value implements json.Marshaler (like decimal.Decimal)
-	if marshaler, ok := value.(json.Marshaler); ok {
-		// Marshal to get the JSON representation
-		jsonBytes, err := marshaler.MarshalJSON()
-		if err != nil {
-			return value // Return original on error
+	// Handle Edm.Date - format as date-only string (YYYY-MM-DD)
+	if propMeta.EdmType == "Edm.Date" {
+		// Handle both time.Time and *time.Time
+		var timeVal time.Time
+		var isValid bool
+
+		switch v := value.(type) {
+		case time.Time:
+			timeVal = v
+			isValid = true
+		case *time.Time:
+			if v != nil {
+				timeVal = *v
+				isValid = true
+			}
 		}
 
-		// Check if it's a JSON string (starts and ends with ")
-		if len(jsonBytes) >= 2 && jsonBytes[0] == '"' && jsonBytes[len(jsonBytes)-1] == '"' {
-			// Extract the string content (remove quotes)
-			stringValue := string(jsonBytes[1 : len(jsonBytes)-1])
+		if isValid && !timeVal.IsZero() {
+			// Format as date-only string (YYYY-MM-DD)
+			return timeVal.Format("2006-01-02")
+		}
+		return value
+	}
 
-			// Validate it's a valid decimal number
-			if decimalPattern.MatchString(stringValue) {
-				// Return as json.RawMessage (raw JSON number without quotes)
-				return json.RawMessage(stringValue)
+	// Handle Edm.Decimal - convert to JSON number
+	if propMeta.EdmType == "Edm.Decimal" {
+		// Check if the value implements json.Marshaler (like decimal.Decimal)
+		if marshaler, ok := value.(json.Marshaler); ok {
+			// Marshal to get the JSON representation
+			jsonBytes, err := marshaler.MarshalJSON()
+			if err != nil {
+				return value // Return original on error
+			}
+
+			// Check if it's a JSON string (starts and ends with ")
+			if len(jsonBytes) >= 2 && jsonBytes[0] == '"' && jsonBytes[len(jsonBytes)-1] == '"' {
+				// Extract the string content (remove quotes)
+				stringValue := string(jsonBytes[1 : len(jsonBytes)-1])
+
+				// Validate it's a valid decimal number
+				if decimalPattern.MatchString(stringValue) {
+					// Return as json.RawMessage (raw JSON number without quotes)
+					return json.RawMessage(stringValue)
+				}
 			}
 		}
 	}
