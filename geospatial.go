@@ -45,7 +45,7 @@ func checkGeospatialSupport(db *gorm.DB, logger *slog.Logger) error {
 		return fmt.Errorf("database connection is not initialized")
 	}
 
-	dialect := db.Dialector.Name()
+	dialect := db.Name()
 	logger.Info("Checking geospatial support", "dialect", dialect)
 
 	switch dialect {
