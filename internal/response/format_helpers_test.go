@@ -184,9 +184,9 @@ func TestExtractEntityKeysNilEntity(t *testing.T) {
 
 func TestExtractEntityKeysReflection(t *testing.T) {
 	type TestEntity struct {
-		ID        int    `json:"id"`
-		Name      string `json:"name"`
-		Private   string // no json tag, private
+		ID      int    `json:"id"`
+		Name    string `json:"name"`
+		Private string // no json tag, private
 	}
 
 	entity := TestEntity{ID: 789, Name: "Reflection Test", Private: "private"}

@@ -10,24 +10,24 @@ import (
 
 func TestExtractHookErrorDetails(t *testing.T) {
 	tests := []struct {
-		name           string
-		err            error
-		defaultStatus  int
-		defaultCode    string
-		wantIsHookErr  bool
-		wantStatus     int
-		wantMessage    string
-		wantDetails    string
+		name          string
+		err           error
+		defaultStatus int
+		defaultCode   string
+		wantIsHookErr bool
+		wantStatus    int
+		wantMessage   string
+		wantDetails   string
 	}{
 		{
-			name:           "Regular error, not a HookError",
-			err:            errors.New("regular error"),
-			defaultStatus:  http.StatusInternalServerError,
-			defaultCode:    "InternalError",
-			wantIsHookErr:  false,
-			wantStatus:     http.StatusInternalServerError,
-			wantMessage:    "InternalError",
-			wantDetails:    "regular error",
+			name:          "Regular error, not a HookError",
+			err:           errors.New("regular error"),
+			defaultStatus: http.StatusInternalServerError,
+			defaultCode:   "InternalError",
+			wantIsHookErr: false,
+			wantStatus:    http.StatusInternalServerError,
+			wantMessage:   "InternalError",
+			wantDetails:   "regular error",
 		},
 		{
 			name: "HookError with status code and message",
@@ -35,12 +35,12 @@ func TestExtractHookErrorDetails(t *testing.T) {
 				StatusCode: http.StatusForbidden,
 				Message:    "Access denied",
 			},
-			defaultStatus:  http.StatusInternalServerError,
-			defaultCode:    "InternalError",
-			wantIsHookErr:  true,
-			wantStatus:     http.StatusForbidden,
-			wantMessage:    "Access denied",
-			wantDetails:    "",
+			defaultStatus: http.StatusInternalServerError,
+			defaultCode:   "InternalError",
+			wantIsHookErr: true,
+			wantStatus:    http.StatusForbidden,
+			wantMessage:   "Access denied",
+			wantDetails:   "",
 		},
 		{
 			name: "HookError with wrapped error",
@@ -49,12 +49,12 @@ func TestExtractHookErrorDetails(t *testing.T) {
 				Message:    "Authentication failed",
 				Err:        errors.New("invalid token"),
 			},
-			defaultStatus:  http.StatusInternalServerError,
-			defaultCode:    "InternalError",
-			wantIsHookErr:  true,
-			wantStatus:     http.StatusUnauthorized,
-			wantMessage:    "Authentication failed",
-			wantDetails:    "invalid token",
+			defaultStatus: http.StatusInternalServerError,
+			defaultCode:   "InternalError",
+			wantIsHookErr: true,
+			wantStatus:    http.StatusUnauthorized,
+			wantMessage:   "Authentication failed",
+			wantDetails:   "invalid token",
 		},
 		{
 			name: "HookError with zero status code uses default",
@@ -62,12 +62,12 @@ func TestExtractHookErrorDetails(t *testing.T) {
 				StatusCode: 0,
 				Message:    "Custom message",
 			},
-			defaultStatus:  http.StatusBadRequest,
-			defaultCode:    "BadRequest",
-			wantIsHookErr:  true,
-			wantStatus:     http.StatusBadRequest,
-			wantMessage:    "Custom message",
-			wantDetails:    "",
+			defaultStatus: http.StatusBadRequest,
+			defaultCode:   "BadRequest",
+			wantIsHookErr: true,
+			wantStatus:    http.StatusBadRequest,
+			wantMessage:   "Custom message",
+			wantDetails:   "",
 		},
 		{
 			name: "HookError with empty message uses default code",
@@ -75,12 +75,12 @@ func TestExtractHookErrorDetails(t *testing.T) {
 				StatusCode: http.StatusNotFound,
 				Message:    "",
 			},
-			defaultStatus:  http.StatusInternalServerError,
-			defaultCode:    "NotFound",
-			wantIsHookErr:  true,
-			wantStatus:     http.StatusNotFound,
-			wantMessage:    "NotFound",
-			wantDetails:    "",
+			defaultStatus: http.StatusInternalServerError,
+			defaultCode:   "NotFound",
+			wantIsHookErr: true,
+			wantStatus:    http.StatusNotFound,
+			wantMessage:   "NotFound",
+			wantDetails:   "",
 		},
 		{
 			name: "HookError with all defaults",
@@ -88,24 +88,24 @@ func TestExtractHookErrorDetails(t *testing.T) {
 				StatusCode: 0,
 				Message:    "",
 			},
-			defaultStatus:  http.StatusForbidden,
-			defaultCode:    "Forbidden",
-			wantIsHookErr:  true,
-			wantStatus:     http.StatusForbidden,
-			wantMessage:    "Forbidden",
-			wantDetails:    "",
+			defaultStatus: http.StatusForbidden,
+			defaultCode:   "Forbidden",
+			wantIsHookErr: true,
+			wantStatus:    http.StatusForbidden,
+			wantMessage:   "Forbidden",
+			wantDetails:   "",
 		},
 		{
 			name: "HookError with only wrapped error",
 			err: &hookerrors.HookError{
 				Err: errors.New("validation error"),
 			},
-			defaultStatus:  http.StatusBadRequest,
-			defaultCode:    "ValidationFailed",
-			wantIsHookErr:  true,
-			wantStatus:     http.StatusBadRequest,
-			wantMessage:    "ValidationFailed",
-			wantDetails:    "validation error",
+			defaultStatus: http.StatusBadRequest,
+			defaultCode:   "ValidationFailed",
+			wantIsHookErr: true,
+			wantStatus:    http.StatusBadRequest,
+			wantMessage:   "ValidationFailed",
+			wantDetails:   "validation error",
 		},
 		{
 			name: "Wrapped HookError",
@@ -117,12 +117,12 @@ func TestExtractHookErrorDetails(t *testing.T) {
 				// Return it wrapped in another error
 				return errors.Join(errors.New("outer error"), innerErr)
 			}(),
-			defaultStatus:  http.StatusInternalServerError,
-			defaultCode:    "InternalError",
-			wantIsHookErr:  true,
-			wantStatus:     http.StatusConflict,
-			wantMessage:    "Conflict occurred",
-			wantDetails:    "",
+			defaultStatus: http.StatusInternalServerError,
+			defaultCode:   "InternalError",
+			wantIsHookErr: true,
+			wantStatus:    http.StatusConflict,
+			wantMessage:   "Conflict occurred",
+			wantDetails:   "",
 		},
 	}
 

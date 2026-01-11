@@ -19,7 +19,7 @@ import (
 
 // Employee entity with hook for testing custom status codes
 type EmployeeWithCustomHook struct {
-	ID        int    `gorm:"primaryKey" odata:"key"`
+	ID        int `gorm:"primaryKey" odata:"key"`
 	Name      string
 	IsBlocked bool `gorm:"-" odata:"-"` // Internal flag for testing
 }

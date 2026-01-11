@@ -86,7 +86,7 @@ func TestGetFieldInfos(t *testing.T) {
 		Name        string `json:"name,omitempty"`
 		Description string
 		//nolint:unused // unexported field is intentionally included for testing field info extraction
-		unexported  string
+		unexported string
 	}
 
 	testType := reflect.TypeOf(TestStruct{})
@@ -174,12 +174,12 @@ func TestGetFieldInfosConcurrency(t *testing.T) {
 
 // MockEntityMetadataProvider implements EntityMetadataProvider for testing
 type MockEntityMetadataProvider struct {
-	namespace      string
-	properties     []PropertyMetadata
-	entitySetName  string
-	keyProperty    *PropertyMetadata
-	keyProperties  []PropertyMetadata
-	etagProperty   *PropertyMetadata
+	namespace     string
+	properties    []PropertyMetadata
+	entitySetName string
+	keyProperty   *PropertyMetadata
+	keyProperties []PropertyMetadata
+	etagProperty  *PropertyMetadata
 }
 
 func (m *MockEntityMetadataProvider) GetNamespace() string {
