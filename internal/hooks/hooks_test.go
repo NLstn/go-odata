@@ -2,6 +2,7 @@ package hooks_test
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"testing"
 
@@ -79,21 +80,29 @@ func TestEntityHooksInterface(t *testing.T) {
 	}
 }
 
-// TestPartialEntityHooksImplementation verifies that entities can implement only some hooks
-func TestPartialEntityHooksImplementation(t *testing.T) {
-	type PartialEntity struct {
-		ID int
-	}
+// PartialEntity demonstrates that entities don't need to implement the full EntityHooks interface.
+// In practice, the OData framework uses reflection to check for individual hook methods,
+// so you can implement only the hooks you need.
+type PartialEntity struct {
+	ID   int
+	Name string
+}
 
-	// Implement only some hooks
-	var beforeCreate = func(p PartialEntity) func(context.Context, *http.Request) error {
-		return func(ctx context.Context, r *http.Request) error {
-			return nil
-		}
+// Only implement BeforeCreate hook - other hooks are optional
+func (p PartialEntity) ODataBeforeCreate(ctx context.Context, r *http.Request) error {
+	// Custom validation logic
+	if p.Name == "" {
+		return fmt.Errorf("name is required")
 	}
+	return nil
+}
 
-	entity := PartialEntity{ID: 1}
-	fn := beforeCreate(entity)
+// TestPartialHookImplementation verifies that entities can implement only some hook methods
+func TestPartialHookImplementation(t *testing.T) {
+	entity := PartialEntity{
+		ID:   1,
+		Name: "Test",
+	}
 
 	ctx := context.Background()
 	req, err := http.NewRequest("POST", "/test", nil)
@@ -101,7 +110,18 @@ func TestPartialEntityHooksImplementation(t *testing.T) {
 		t.Fatalf("Failed to create request: %v", err)
 	}
 
-	if err := fn(ctx, req); err != nil {
-		t.Errorf("Hook function failed: %v", err)
+	// Test the implemented hook
+	if err := entity.ODataBeforeCreate(ctx, req); err != nil {
+		t.Errorf("ODataBeforeCreate failed: %v", err)
 	}
+
+	// Verify validation works
+	emptyEntity := PartialEntity{ID: 2, Name: ""}
+	if err := emptyEntity.ODataBeforeCreate(ctx, req); err == nil {
+		t.Error("Expected validation error for empty name, got nil")
+	}
+
+	// Note: PartialEntity doesn't implement other hooks like ODataAfterCreate,
+	// ODataBeforeUpdate, etc. This is valid - the framework will only call hooks
+	// that are actually defined on the entity type.
 }
