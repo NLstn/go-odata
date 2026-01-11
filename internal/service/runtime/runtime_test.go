@@ -183,8 +183,6 @@ func TestServeHTTPWithServerTiming(t *testing.T) {
 	}
 
 	// Create observability config with server timing enabled
-	buf := &bytes.Buffer{}
-	_ = log.New(buf, "", 0)
 	if err := svc.SetObservability(odata.ObservabilityConfig{
 		ServiceName:        "test-service",
 		EnableServerTiming: true,
