@@ -59,6 +59,14 @@ func validateValueType(value interface{}, expectedType reflect.Type, fieldName s
 		}
 	}
 
+	// Special handling for time.Time struct type
+	// JSON datetime values come as strings but need to be assigned to time.Time fields
+	if expectedType.Kind() == reflect.Struct && expectedType.PkgPath() == "time" && expectedType.Name() == "Time" {
+		if actualType.Kind() == reflect.String {
+			return nil // Strings are valid for time.Time fields (will be parsed by JSON unmarshaler)
+		}
+	}
+
 	// Handle string type
 	if actualType.Kind() == reflect.String && expectedType.Kind() != reflect.String {
 		return fmt.Errorf("property '%s' expects type %s but got string", fieldName, expectedType.Kind())
