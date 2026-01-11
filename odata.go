@@ -356,6 +356,8 @@ type Service struct {
 	// preRequestHook is called before each request is processed (including batch sub-requests).
 	// It allows injecting custom logic such as authentication, context enrichment, or logging.
 	preRequestHook PreRequestHook
+	// geospatialEnabled indicates if geospatial features are enabled
+	geospatialEnabled bool
 }
 
 // NewService creates a new OData service instance with database connection.
@@ -888,6 +890,8 @@ func (s *Service) RegisterEntity(entity interface{}) error {
 	if s.observability != nil {
 		handler.SetObservability(s.observability)
 	}
+	// Set geospatial enabled flag
+	handler.SetGeospatialEnabled(s.geospatialEnabled)
 	s.handlers[entityMetadata.EntitySetName] = handler
 
 	s.logger.Debug("Registered entity",
@@ -956,6 +960,8 @@ func (s *Service) RegisterSingleton(entity interface{}, singletonName string) er
 	if s.observability != nil {
 		handler.SetObservability(s.observability)
 	}
+	// Set geospatial enabled flag
+	handler.SetGeospatialEnabled(s.geospatialEnabled)
 	s.handlers[singletonName] = handler
 
 	s.logger.Debug("Registered singleton",
@@ -1030,6 +1036,8 @@ func (s *Service) RegisterVirtualEntity(entity interface{}) error {
 	if s.observability != nil {
 		handler.SetObservability(s.observability)
 	}
+	// Set geospatial enabled flag
+	handler.SetGeospatialEnabled(s.geospatialEnabled)
 	s.handlers[entityMetadata.EntitySetName] = handler
 
 	s.logger.Debug("Registered virtual entity",

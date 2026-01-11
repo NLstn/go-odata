@@ -32,6 +32,8 @@ type EntityHandler struct {
 	propertyMap map[string]*metadata.PropertyMetadata
 	// observability holds the OpenTelemetry configuration for tracing and metrics
 	observability *observability.Config
+	// geospatialEnabled indicates if geospatial features are enabled
+	geospatialEnabled bool
 }
 
 // NewEntityHandler creates a new entity handler
@@ -129,6 +131,16 @@ func (h *EntityHandler) SetDefaultMaxTop(maxTop *int) {
 // SetObservability configures observability (tracing and metrics) for this handler.
 func (h *EntityHandler) SetObservability(cfg *observability.Config) {
 	h.observability = cfg
+}
+
+// SetGeospatialEnabled sets whether geospatial features are enabled for this handler.
+func (h *EntityHandler) SetGeospatialEnabled(enabled bool) {
+	h.geospatialEnabled = enabled
+}
+
+// IsGeospatialEnabled returns whether geospatial features are enabled for this handler.
+func (h *EntityHandler) IsGeospatialEnabled() bool {
+	return h.geospatialEnabled
 }
 
 // HasEntityLevelDefaultMaxTop returns true if this handler has an entity-level default max top set
