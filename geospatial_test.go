@@ -3,6 +3,7 @@ package odata
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"gorm.io/driver/sqlite"
@@ -34,13 +35,17 @@ func TestGeospatialNotEnabled(t *testing.T) {
 	}
 
 	// Test with geospatial filter - should return 501 Not Implemented
-	req := httptest.NewRequest("GET", "/GeoTestEntities?$filter=geo.distance(Location,geography'SRID=4326;POINT(0 0)') lt 10000", nil)
+	// Build URL with proper query parameters
+	params := url.Values{}
+	params.Set("$filter", "geo.distance(Location,geography'SRID=4326;POINT(0 0)') lt 10000")
+	req := httptest.NewRequest("GET", "/GeoTestEntities?"+params.Encode(), nil)
 	w := httptest.NewRecorder()
 
 	service.ServeHTTP(w, req)
 
 	if w.Code != http.StatusNotImplemented {
 		t.Errorf("Expected status 501 Not Implemented, got %d", w.Code)
+		t.Logf("Response body: %s", w.Body.String())
 	}
 }
 
