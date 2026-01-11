@@ -65,6 +65,8 @@ func validateValueType(value interface{}, expectedType reflect.Type, fieldName s
 		if actualType.Kind() == reflect.String {
 			return nil // Strings are valid for time.Time fields (will be parsed by JSON unmarshaler)
 		}
+		// Reject non-string values for time.Time fields
+		return fmt.Errorf("property '%s' expects type Edm.DateTimeOffset but got %s", fieldName, actualType.Kind())
 	}
 
 	// Handle string type
