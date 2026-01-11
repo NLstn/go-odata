@@ -68,6 +68,16 @@ func (h *EntityHandler) handleGetCollectionOverwrite(w http.ResponseWriter, r *h
 		return
 	}
 
+	// Check if geospatial operations are used but not enabled
+	if queryOptions.Filter != nil && query.ContainsGeospatialOperations(queryOptions.Filter) {
+		if !h.geospatialEnabled {
+			if writeErr := response.WriteError(w, http.StatusNotImplemented, "Geospatial features not enabled", "geospatial features are not enabled for this service"); writeErr != nil {
+				h.logger.Error("Error writing error response", "error", writeErr)
+			}
+			return
+		}
+	}
+
 	// Handle delta token requests - these are not supported with overwrite handlers
 	// because delta tokens require change tracking at the data layer
 	if queryOptions.DeltaToken != nil {
@@ -116,6 +126,13 @@ func (h *EntityHandler) parseCollectionQueryOptions(w http.ResponseWriter, r *ht
 		queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata)
 		if err != nil {
 			return nil, err
+		}
+
+		// Check if geospatial operations are used but not enabled
+		if queryOptions.Filter != nil && query.ContainsGeospatialOperations(queryOptions.Filter) {
+			if !h.geospatialEnabled {
+				return nil, &GeospatialNotEnabledError{}
+			}
 		}
 
 		if queryOptions.DeltaToken != nil {

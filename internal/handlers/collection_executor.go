@@ -101,6 +101,14 @@ func (h *EntityHandler) handleCollectionError(w http.ResponseWriter, err error, 
 		return false
 	}
 
+	// Check for GeospatialNotEnabledError
+	if IsGeospatialNotEnabledError(err) {
+		if writeErr := response.WriteError(w, http.StatusNotImplemented, "Geospatial features not enabled", err.Error()); writeErr != nil {
+			h.logger.Error("Error writing error response", "error", writeErr)
+		}
+		return false
+	}
+
 	// Check for HookError first (public API error type)
 	if isHookErr, status, message, details := extractHookErrorDetails(err, defaultStatus, defaultCode); isHookErr {
 		if writeErr := response.WriteError(w, status, message, details); writeErr != nil {
