@@ -1,6 +1,7 @@
 package response
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 )
@@ -147,12 +148,13 @@ func TestGetFieldInfosConcurrency(t *testing.T) {
 	testType := reflect.TypeOf(TestStruct{})
 
 	// Test concurrent access to the cache
-	done := make(chan bool)
+	errors := make(chan error, 10)
+	done := make(chan bool, 10)
 	for i := 0; i < 10; i++ {
 		go func() {
 			infos := getFieldInfos(testType)
 			if len(infos) != 2 {
-				t.Errorf("Expected 2 field infos, got %d", len(infos))
+				errors <- fmt.Errorf("Expected 2 field infos, got %d", len(infos))
 			}
 			done <- true
 		}()
@@ -161,6 +163,12 @@ func TestGetFieldInfosConcurrency(t *testing.T) {
 	// Wait for all goroutines to complete
 	for i := 0; i < 10; i++ {
 		<-done
+	}
+
+	// Check for any errors
+	close(errors)
+	for err := range errors {
+		t.Error(err)
 	}
 }
 
@@ -260,12 +268,13 @@ func TestGetCachedPropertyMetadataMapConcurrency(t *testing.T) {
 	}
 
 	// Test concurrent access to the cache
-	done := make(chan bool)
+	errors := make(chan error, 10)
+	done := make(chan bool, 10)
 	for i := 0; i < 10; i++ {
 		go func() {
 			propMap := getCachedPropertyMetadataMap(mockProvider)
 			if len(propMap) != 2 {
-				t.Errorf("Expected 2 properties in map, got %d", len(propMap))
+				errors <- fmt.Errorf("Expected 2 properties in map, got %d", len(propMap))
 			}
 			done <- true
 		}()
@@ -274,5 +283,11 @@ func TestGetCachedPropertyMetadataMapConcurrency(t *testing.T) {
 	// Wait for all goroutines to complete
 	for i := 0; i < 10; i++ {
 		<-done
+	}
+
+	// Check for any errors
+	close(errors)
+	for err := range errors {
+		t.Error(err)
 	}
 }

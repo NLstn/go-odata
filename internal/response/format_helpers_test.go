@@ -131,7 +131,6 @@ func TestExtractEntityKeysComposite(t *testing.T) {
 	}
 }
 
-
 func TestExtractEntityKeysInvalidField(t *testing.T) {
 	type TestEntity struct {
 		ID   int    `json:"id"`
