@@ -425,10 +425,13 @@ func buildStandardComparison(dialect string, operator FilterOperator, columnName
 		typeName, ok := value.(string)
 		if !ok {
 			// isof() requires a string type name argument
+			// Return always-false condition for invalid type
 			return "1 = 0", nil
 		}
 
-		// Check if this is an entity type check (columnName == "$it")
+		// Check if this is an entity type check (columnName == "$it").
+		// For entity type checks, we need to use the discriminator column via buildEntityTypeFilter,
+		// rather than the generic function-based approach used for property type checks.
 		if columnName == "$it" {
 			return buildEntityTypeFilter(dialect, typeName, entityMetadata)
 		}
