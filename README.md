@@ -77,15 +77,6 @@ func main() {
     if err := service.RegisterEntity(&Product{}); err != nil {
         log.Fatal(err)
     }
-
-    // Enable change tracking for Products if you need $deltatoken responses
-    if err := service.EnableChangeTracking("Products"); err != nil {
-        log.Fatal(err)
-    }
-
-    // To persist change history across restarts, build the service with:
-    // service, err := odata.NewServiceWithConfig(db, odata.ServiceConfig{PersistentChangeTracking: true})
-    // and handle err accordingly. The tracker stores events in the reserved `_odata_change_log` table.
     
     // Create HTTP mux and register the OData service as a handler
     mux := http.NewServeMux()
@@ -108,7 +99,7 @@ errors—invalid struct tags or duplicate entity names will cause `RegisterEntit
 - **[Virtual Entities](documentation/virtual-entities.md)** - Expose data from external APIs without database backing
 - **[Actions and Functions](documentation/actions-and-functions.md)** - Implement custom OData operations
 - **[Geospatial Functions](documentation/geospatial.md)** - Query geographic data with spatial functions
-- **[Advanced Features](documentation/advanced-features.md)** - Singletons, ETags, lifecycle hooks, and read hooks for tenant filtering or redaction
+- **[Advanced Features](documentation/advanced-features.md)** - Singletons, ETags, lifecycle hooks, read hooks for tenant filtering or redaction, change tracking with delta tokens, and asynchronous processing
 - **[Testing](documentation/testing.md)** - Unit tests, compliance tests, and performance profiling
 
 ## Hooks: Inject Custom Logic
@@ -200,7 +191,7 @@ All standard OData v4 query options are supported:
 - `$count` - Include total count
 - `$search` - Full-text search (database-native FTS for SQLite/PostgreSQL; other backends fall back to in-memory search)
 - `$apply` - Data aggregation
-- `$deltatoken` - Change tracking (enable per entity with `EnableChangeTracking`)
+- `$deltatoken` - Change tracking (see [Advanced Features](documentation/advanced-features.md#change-tracking-and-delta-tokens))
 
 **Additional Features:**
 - Property access: `GET /Products(1)/Name`
@@ -213,53 +204,6 @@ All standard OData v4 query options are supported:
 > **Note on UUID/GUID Keys:** When using UUID strings as entity keys, don't use quotes in the path (`/Entity(uuid-value)`), but do use quotes in filter expressions (`?$filter=field eq 'uuid-value'`). See [Working with UUID/GUID Keys](documentation/entities.md#working-with-uuidguid-keys) for details.
 
 See the [OData v4 specification](https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html) for complete protocol details.
-
-## Asynchronous Processing (`Prefer: respond-async`)
-
-Long-running requests can be offloaded to background workers when clients send
-`Prefer: respond-async`. Enable the behaviour explicitly on your service:
-
-```go
-if err := service.EnableAsyncProcessing(odata.AsyncConfig{
-    MonitorPathPrefix:    "/$async/jobs/", // default when empty
-    DefaultRetryInterval: 5 * time.Second,  // Retry-After header while pending
-    MaxQueueSize:         8,                // Optional worker limit
-    JobRetention:         15 * time.Minute, // Overrides the 24h default retention window
-}); err != nil {
-    log.Fatalf("enable async processing: %v", err)
-}
-
-defer service.Close()
-```
-
-With async processing enabled:
-
-- Initial responses return `202 Accepted` with `Preference-Applied: respond-async`,
-  a `Location` header of the form `/{prefix}{jobID}`, and (when configured) a
-  numeric `Retry-After` header.
-- Polling the monitor URL with `GET` or `HEAD` returns 202 while the job is
-  pending and replays the stored status, headers, and body once the job
-  completes.
-- Sending `DELETE` to the monitor URL cancels running work when possible and
-  removes completed jobs.
-- Job metadata is persisted in the reserved `_odata_async_jobs` table. The table
-  keeps monitor state isolated from application models and allows a fresh
-  `async.Manager` to serve completed job results until the retention TTL deletes
-  the row.
-
-Completed jobs are kept for 24 hours by default (`async.DefaultJobRetention`).
-Setting `JobRetention` to zero uses that default, while applications that must
-retain data indefinitely can opt out by setting `DisableRetention: true` and
-managing cleanup manually.
-
-Call `service.Close()` during shutdown to stop the background async manager and
-release its resources. The method is idempotent so repeated shutdown hooks are
-safe.
-
-The development server (`cmd/devserver`) enables async processing by default
-using the standard `/$async/jobs/` prefix and advertises the monitor endpoint in
-its startup banner. Compliance tests assume that path when validating async
-behaviour.
 
 ## Example Responses
 
