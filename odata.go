@@ -356,7 +356,10 @@ type Service struct {
 	// preRequestHook is called before each request is processed (including batch sub-requests).
 	// It allows injecting custom logic such as authentication, context enrichment, or logging.
 	preRequestHook PreRequestHook
-	// geospatialEnabled indicates if geospatial features are enabled
+	// geospatialEnabled indicates if geospatial features are enabled.
+	// This flag must be configured during service initialization (for example, via EnableGeospatial)
+	// before the service starts handling any requests, and it must not be modified thereafter.
+	// Concurrent runtime toggling of this field is not supported and will result in a data race.
 	geospatialEnabled bool
 }
 
