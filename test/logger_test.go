@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 
 	odata "github.com/nlstn/go-odata"
@@ -175,7 +176,7 @@ func TestSetLogger_WithEntityOperations(t *testing.T) {
 	id := int(postResponse["id"].(float64))
 
 	// Test GET
-	getReq := httptest.NewRequest(http.MethodGet, "/LoggerTestProducts("+string(rune('0'+id))+")", nil)
+	getReq := httptest.NewRequest(http.MethodGet, "/LoggerTestProducts("+strconv.Itoa(id)+")", nil)
 	getW := httptest.NewRecorder()
 	service.ServeHTTP(getW, getReq)
 
@@ -185,7 +186,7 @@ func TestSetLogger_WithEntityOperations(t *testing.T) {
 
 	// Test PATCH
 	patchBody := `{"name": "Updated Product"}`
-	patchReq := httptest.NewRequest(http.MethodPatch, "/LoggerTestProducts("+string(rune('0'+id))+")", bytes.NewBufferString(patchBody))
+	patchReq := httptest.NewRequest(http.MethodPatch, "/LoggerTestProducts("+strconv.Itoa(id)+")", bytes.NewBufferString(patchBody))
 	patchReq.Header.Set("Content-Type", "application/json")
 	patchW := httptest.NewRecorder()
 	service.ServeHTTP(patchW, patchReq)
@@ -196,7 +197,7 @@ func TestSetLogger_WithEntityOperations(t *testing.T) {
 	}
 
 	// Test DELETE
-	deleteReq := httptest.NewRequest(http.MethodDelete, "/LoggerTestProducts("+string(rune('0'+id))+")", nil)
+	deleteReq := httptest.NewRequest(http.MethodDelete, "/LoggerTestProducts("+strconv.Itoa(id)+")", nil)
 	deleteW := httptest.NewRecorder()
 	service.ServeHTTP(deleteW, deleteReq)
 
