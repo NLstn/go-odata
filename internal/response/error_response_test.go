@@ -122,7 +122,9 @@ func TestWriteError_VariousStatusCodes(t *testing.T) {
 			}
 
 			var response map[string]interface{}
-			json.NewDecoder(w.Body).Decode(&response)
+			if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+				t.Fatalf("Failed to decode response: %v", err)
+			}
 
 			errorObj := response["error"].(map[string]interface{})
 			if errorObj["code"] != tc.codeStr {
@@ -245,7 +247,9 @@ func TestWriteErrorWithTarget_NoDetails(t *testing.T) {
 	}
 
 	var response map[string]interface{}
-	json.NewDecoder(w.Body).Decode(&response)
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
 
 	errorObj := response["error"].(map[string]interface{})
 	if errorObj["target"] != "Products(999)" {
@@ -366,7 +370,9 @@ func TestWriteServiceDocument_Empty(t *testing.T) {
 	}
 
 	var response map[string]interface{}
-	json.NewDecoder(w.Body).Decode(&response)
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response body as JSON: %v", err)
+	}
 
 	value := response["value"].([]interface{})
 	if len(value) != 0 {

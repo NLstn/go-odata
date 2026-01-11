@@ -172,7 +172,9 @@ func TestSetLogger_WithEntityOperations(t *testing.T) {
 
 	// Get the created entity's ID
 	var postResponse map[string]interface{}
-	json.NewDecoder(postW.Body).Decode(&postResponse)
+	if err := json.NewDecoder(postW.Body).Decode(&postResponse); err != nil {
+		t.Fatalf("failed to decode POST response body: %v", err)
+	}
 	id := int(postResponse["id"].(float64))
 
 	// Test GET
