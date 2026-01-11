@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/nlstn/go-odata/internal/metadata"
 )
@@ -115,6 +116,55 @@ func TestValidateDataTypes_InvalidTypes(t *testing.T) {
 				"active": "true",
 			},
 			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := handler.validateDataTypes(tt.updateData)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("validateDataTypes() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestValidateDataTypes_TimeType(t *testing.T) {
+	// Test time.Time fields - JSON datetime values come as strings
+	testMetadata := &metadata.EntityMetadata{
+		Properties: []metadata.PropertyMetadata{
+			{Name: "BirthDate", JsonName: "birthDate", Type: reflect.TypeOf(time.Time{})},
+			{Name: "CreatedAt", JsonName: "createdAt", Type: reflect.TypeOf(&time.Time{})},
+		},
+	}
+
+	handler := &EntityHandler{metadata: testMetadata}
+
+	tests := []struct {
+		name       string
+		updateData map[string]interface{}
+		wantErr    bool
+	}{
+		{
+			name: "String for time.Time field (ISO 8601)",
+			updateData: map[string]interface{}{
+				"birthDate": "2024-01-15T00:00:00Z",
+			},
+			wantErr: false,
+		},
+		{
+			name: "String for pointer to time.Time field",
+			updateData: map[string]interface{}{
+				"createdAt": "1990-06-15T10:30:00Z",
+			},
+			wantErr: false,
+		},
+		{
+			name: "Null value for time.Time field",
+			updateData: map[string]interface{}{
+				"birthDate": nil,
+			},
+			wantErr: false,
 		},
 	}
 
