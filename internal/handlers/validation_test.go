@@ -166,6 +166,20 @@ func TestValidateDataTypes_TimeType(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			name: "Number for time.Time field (should fail)",
+			updateData: map[string]interface{}{
+				"birthDate": float64(1234567890),
+			},
+			wantErr: true,
+		},
+		{
+			name: "Boolean for time.Time field (should fail)",
+			updateData: map[string]interface{}{
+				"birthDate": true,
+			},
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
