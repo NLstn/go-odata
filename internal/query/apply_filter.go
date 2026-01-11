@@ -270,122 +270,133 @@ func buildLogicalConditionWithDB(db *gorm.DB, dialect string, filter *FilterExpr
 	return query, args
 }
 
-// buildComparisonCondition builds a comparison condition
-func buildComparisonCondition(dialect string, filter *FilterExpression, entityMetadata *metadata.EntityMetadata) (string, []interface{}) {
-	return buildComparisonConditionWithDB(nil, dialect, filter, entityMetadata)
+// resolveColumnName determines the correct column name to use in SQL queries.
+// It handles special cases like $it, $count, aggregate aliases, and regular properties.
+func resolveColumnName(db *gorm.DB, dialect string, propertyName string, entityMetadata *metadata.EntityMetadata) string {
+	// Check if this is a known entity property first
+	if propertyExists(propertyName, entityMetadata) {
+		return getQuotedColumnName(dialect, propertyName, entityMetadata)
+	}
+
+	// Handle special identifiers and aliases
+	rawName := sanitizeIdentifier(propertyName)
+	if rawName == "" {
+		return ""
+	}
+
+	// Special case: $it refers to the entity itself
+	if rawName == "$it" {
+		return rawName
+	}
+
+	// Special case: $count requires COUNT(*) expression for certain databases
+	if rawName == "$count" {
+		// PostgreSQL/MySQL/MariaDB don't support referencing SELECT aliases in HAVING/WHERE
+		if dialect == "postgres" || dialect == "mysql" || dialect == "mariadb" {
+			if db != nil {
+				if expr, ok := getAliasExprFromDB(db, "$count"); ok {
+					return expr
+				}
+			}
+			return "COUNT(*)"
+		}
+		return quoteIdent(dialect, rawName)
+	}
+
+	// Handle other special $ identifiers
+	if len(rawName) > 0 && rawName[0] == '$' {
+		return quoteIdent(dialect, rawName)
+	}
+
+	// Try to resolve aggregate/compute aliases for databases that don't support them
+	if dialect == "postgres" || dialect == "mysql" || dialect == "mariadb" {
+		if db != nil {
+			if expr, ok := getAliasExprFromDB(db, rawName); ok {
+				return expr
+			}
+		}
+	}
+
+	// Default: quote as identifier
+	return quoteIdent(dialect, rawName)
 }
 
-func buildComparisonConditionWithDB(db *gorm.DB, dialect string, filter *FilterExpression, entityMetadata *metadata.EntityMetadata) (string, []interface{}) {
-	if filter.Operator == OpAny || filter.Operator == OpAll {
-		return buildLambdaCondition(dialect, filter, entityMetadata)
+// tryBuildRightSideFunctionComparison attempts to build a comparison when the right side is a function call.
+// Returns the SQL string, arguments, and a boolean indicating if the comparison was successfully built.
+func tryBuildRightSideFunctionComparison(dialect string, leftColumn string, operator FilterOperator, rightValue interface{}, entityMetadata *metadata.EntityMetadata) (string, []interface{}, bool) {
+	funcCall, ok := rightValue.(*FunctionCallExpr)
+	if !ok {
+		return "", nil, false
 	}
 
-	if filter.Left != nil && filter.Left.Operator != "" {
-		return buildFunctionComparison(dialect, filter, entityMetadata)
+	rightExpr, err := convertFunctionCallExpr(funcCall, entityMetadata)
+	if err != nil || rightExpr == nil {
+		return "", nil, false
 	}
 
-	var columnName string
-	if propertyExists(filter.Property, entityMetadata) {
-		// Use getQuotedColumnName for proper PostgreSQL handling of navigation paths
-		columnName = getQuotedColumnName(dialect, filter.Property, entityMetadata)
-	} else {
-		rawName := sanitizeIdentifier(filter.Property)
-		if rawName == "" {
-			return "", nil
-		}
-		if rawName == "$it" {
-			columnName = rawName
-		} else if rawName == "$count" {
-			// For PostgreSQL/MySQL/MariaDB HAVING clauses, use COUNT(*) expression instead of alias
-			// because these databases don't support referencing SELECT aliases in HAVING/WHERE
-			if dialect == "postgres" || dialect == "mysql" || dialect == "mariadb" {
-				if db != nil {
-					if expr, ok := getAliasExprFromDB(db, "$count"); ok {
-						columnName = expr
-					} else {
-						columnName = "COUNT(*)"
-					}
-				} else {
-					columnName = "COUNT(*)"
-				}
-			} else {
-				columnName = quoteIdent(dialect, rawName)
-			}
-		} else if len(rawName) > 0 && rawName[0] == '$' {
-			columnName = quoteIdent(dialect, rawName)
-		} else {
-			// Check if this is an aggregate/compute alias that needs to be resolved
-			// PostgreSQL, MySQL, and MariaDB don't support referencing SELECT aliases in WHERE/HAVING
-			if dialect == "postgres" || dialect == "mysql" || dialect == "mariadb" {
-				if db != nil {
-					if expr, ok := getAliasExprFromDB(db, rawName); ok {
-						// Use the aggregate/compute expression instead of the alias
-						columnName = expr
-					} else {
-						columnName = quoteIdent(dialect, rawName)
-					}
-				} else {
-					columnName = quoteIdent(dialect, rawName)
-				}
-			} else {
-				// Quote computed aliases and unknown identifiers for other databases
-				columnName = quoteIdent(dialect, rawName)
-			}
-		}
+	// Determine the column name for the right side expression
+	rightColumnName := ""
+	if rightExpr.Property != "" {
+		rightColumnName = getQuotedColumnName(dialect, rightExpr.Property, entityMetadata)
 	}
 
-	if funcCall, ok := filter.Value.(*FunctionCallExpr); ok {
-		rightExpr, err := convertFunctionCallExpr(funcCall, entityMetadata)
-		if err == nil && rightExpr != nil {
-			rightColumnName := ""
-			if rightExpr.Property != "" {
-				rightColumnName = getQuotedColumnName(dialect, rightExpr.Property, entityMetadata)
-			}
-			rightSQL, rightArgs := buildFunctionSQL(dialect, rightExpr.Operator, rightColumnName, rightExpr.Value)
-			if rightSQL != "" {
-				var compSQL string
-				switch filter.Operator {
-				case OpEqual:
-					compSQL = fmt.Sprintf("%s = %s", columnName, rightSQL)
-				case OpNotEqual:
-					compSQL = fmt.Sprintf("%s != %s", columnName, rightSQL)
-				case OpGreaterThan:
-					compSQL = fmt.Sprintf("%s > %s", columnName, rightSQL)
-				case OpGreaterThanOrEqual:
-					compSQL = fmt.Sprintf("%s >= %s", columnName, rightSQL)
-				case OpLessThan:
-					compSQL = fmt.Sprintf("%s < %s", columnName, rightSQL)
-				case OpLessThanOrEqual:
-					compSQL = fmt.Sprintf("%s <= %s", columnName, rightSQL)
-				default:
-					return "", nil
-				}
-				return compSQL, rightArgs
-			}
-		}
+	rightSQL, rightArgs := buildFunctionSQL(dialect, rightExpr.Operator, rightColumnName, rightExpr.Value)
+	if rightSQL == "" {
+		return "", nil, false
 	}
 
-	switch filter.Operator {
+	// Build the comparison SQL based on the operator
+	var compSQL string
+	switch operator {
 	case OpEqual:
-		if filter.Value == nil {
+		compSQL = fmt.Sprintf("%s = %s", leftColumn, rightSQL)
+	case OpNotEqual:
+		compSQL = fmt.Sprintf("%s != %s", leftColumn, rightSQL)
+	case OpGreaterThan:
+		compSQL = fmt.Sprintf("%s > %s", leftColumn, rightSQL)
+	case OpGreaterThanOrEqual:
+		compSQL = fmt.Sprintf("%s >= %s", leftColumn, rightSQL)
+	case OpLessThan:
+		compSQL = fmt.Sprintf("%s < %s", leftColumn, rightSQL)
+	case OpLessThanOrEqual:
+		compSQL = fmt.Sprintf("%s <= %s", leftColumn, rightSQL)
+	default:
+		return "", nil, false
+	}
+
+	return compSQL, rightArgs, true
+}
+
+// buildStandardComparison builds the SQL for a standard comparison operation.
+// This handles all comparison operators like =, !=, >, <, IN, LIKE, etc.
+func buildStandardComparison(dialect string, operator FilterOperator, columnName string, value interface{}, entityMetadata *metadata.EntityMetadata) (string, []interface{}) {
+	switch operator {
+	case OpEqual:
+		if value == nil {
 			return fmt.Sprintf("%s IS NULL", columnName), []interface{}{}
 		}
-		return fmt.Sprintf("%s = ?", columnName), []interface{}{filter.Value}
+		return fmt.Sprintf("%s = ?", columnName), []interface{}{value}
+
 	case OpNotEqual:
-		if filter.Value == nil {
+		if value == nil {
 			return fmt.Sprintf("%s IS NOT NULL", columnName), []interface{}{}
 		}
-		return fmt.Sprintf("%s != ?", columnName), []interface{}{filter.Value}
+		return fmt.Sprintf("%s != ?", columnName), []interface{}{value}
+
 	case OpGreaterThan:
-		return fmt.Sprintf("%s > ?", columnName), []interface{}{filter.Value}
+		return fmt.Sprintf("%s > ?", columnName), []interface{}{value}
+
 	case OpGreaterThanOrEqual:
-		return fmt.Sprintf("%s >= ?", columnName), []interface{}{filter.Value}
+		return fmt.Sprintf("%s >= ?", columnName), []interface{}{value}
+
 	case OpLessThan:
-		return fmt.Sprintf("%s < ?", columnName), []interface{}{filter.Value}
+		return fmt.Sprintf("%s < ?", columnName), []interface{}{value}
+
 	case OpLessThanOrEqual:
-		return fmt.Sprintf("%s <= ?", columnName), []interface{}{filter.Value}
+		return fmt.Sprintf("%s <= ?", columnName), []interface{}{value}
+
 	case OpIn:
-		values, ok := filter.Value.([]interface{})
+		values, ok := value.([]interface{})
 		if !ok {
 			return "", nil
 		}
@@ -397,45 +408,83 @@ func buildComparisonConditionWithDB(db *gorm.DB, dialect string, filter *FilterE
 			placeholders[i] = "?"
 		}
 		return fmt.Sprintf("%s IN (%s)", columnName, strings.Join(placeholders, ", ")), values
+
 	case OpContains:
-		return fmt.Sprintf("%s LIKE ?", columnName), []interface{}{"%" + fmt.Sprint(filter.Value) + "%"}
+		return fmt.Sprintf("%s LIKE ?", columnName), []interface{}{"%" + fmt.Sprint(value) + "%"}
+
 	case OpStartsWith:
-		return fmt.Sprintf("%s LIKE ?", columnName), []interface{}{fmt.Sprint(filter.Value) + "%"}
+		return fmt.Sprintf("%s LIKE ?", columnName), []interface{}{fmt.Sprint(value) + "%"}
+
 	case OpEndsWith:
-		return fmt.Sprintf("%s LIKE ?", columnName), []interface{}{"%" + fmt.Sprint(filter.Value)}
+		return fmt.Sprintf("%s LIKE ?", columnName), []interface{}{"%" + fmt.Sprint(value)}
+
 	case OpHas:
-		return fmt.Sprintf("(%s & ?) = ?", columnName), []interface{}{filter.Value, filter.Value}
+		return fmt.Sprintf("(%s & ?) = ?", columnName), []interface{}{value, value}
+
 	case OpIsOf:
-		typeName, ok := filter.Value.(string)
+		typeName, ok := value.(string)
 		if !ok {
 			// isof() requires a string type name argument
-			return "1 = 0", nil // Return always-false condition for invalid type
+			return "1 = 0", nil
 		}
 
 		// Check if this is an entity type check (columnName == "$it")
-		// For entity type checks, we need to use the discriminator column
 		if columnName == "$it" {
 			return buildEntityTypeFilter(dialect, typeName, entityMetadata)
 		}
 
 		// For property type checks, use the standard buildFunctionSQL approach
-		funcSQL, funcArgs := buildFunctionSQL(dialect, OpIsOf, columnName, filter.Value)
+		funcSQL, funcArgs := buildFunctionSQL(dialect, OpIsOf, columnName, value)
 		if funcSQL == "" {
 			return "", nil
 		}
 		// Use integer 1 instead of boolean true for database compatibility (PostgreSQL)
 		return fmt.Sprintf("%s = ?", funcSQL), append(funcArgs, 1)
+
 	case OpGeoIntersects:
-		funcSQL, funcArgs := buildFunctionSQL(dialect, OpGeoIntersects, columnName, filter.Value)
+		funcSQL, funcArgs := buildFunctionSQL(dialect, OpGeoIntersects, columnName, value)
 		if funcSQL == "" {
 			return "", nil
 		}
 		return funcSQL, funcArgs
+
 	case OpCast:
 		return "", nil
+
 	default:
 		return "", nil
 	}
+}
+
+// buildComparisonCondition builds a comparison condition
+func buildComparisonCondition(dialect string, filter *FilterExpression, entityMetadata *metadata.EntityMetadata) (string, []interface{}) {
+	return buildComparisonConditionWithDB(nil, dialect, filter, entityMetadata)
+}
+
+func buildComparisonConditionWithDB(db *gorm.DB, dialect string, filter *FilterExpression, entityMetadata *metadata.EntityMetadata) (string, []interface{}) {
+	// Handle lambda operators (any, all)
+	if filter.Operator == OpAny || filter.Operator == OpAll {
+		return buildLambdaCondition(dialect, filter, entityMetadata)
+	}
+
+	// Handle function comparisons (e.g., tolower(Name) eq 'john')
+	if filter.Left != nil && filter.Left.Operator != "" {
+		return buildFunctionComparison(dialect, filter, entityMetadata)
+	}
+
+	// Resolve the column name for the left side of the comparison
+	columnName := resolveColumnName(db, dialect, filter.Property, entityMetadata)
+	if columnName == "" {
+		return "", nil
+	}
+
+	// Try to build a comparison with a function on the right side (e.g., Name eq tolower('JOHN'))
+	if sql, args, ok := tryBuildRightSideFunctionComparison(dialect, columnName, filter.Operator, filter.Value, entityMetadata); ok {
+		return sql, args
+	}
+
+	// Build a standard comparison
+	return buildStandardComparison(dialect, filter.Operator, columnName, filter.Value, entityMetadata)
 }
 
 // buildEntityTypeFilter builds SQL for filtering by entity type using the discriminator column
