@@ -12,7 +12,7 @@ func ContainsGeospatialOperations(filter *FilterExpression) bool {
 		return true
 	}
 
-	// Recursively check logical expressions
+	// Recursively check nested expressions (for logical combinations and comparisons with function calls)
 	if filter.Left != nil && ContainsGeospatialOperations(filter.Left) {
 		return true
 	}

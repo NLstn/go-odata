@@ -9,6 +9,9 @@ rely on version numbers to reason about compatibility.
 
 ## [Unreleased]
 
+### Added
+- **Geospatial feature support with database compatibility checking**: Added `EnableGeospatial()` method to enable geospatial operations (geo.distance, geo.length, geo.intersects). The service now validates database support for spatial features on startup and returns HTTP 501 Not Implemented when geospatial operations are attempted without enablement. Includes detection for SQLite (SpatiaLite), PostgreSQL (PostGIS), MySQL/MariaDB (spatial functions), and SQL Server (spatial types) with detailed error messages for missing extensions.
+
 ### Fixed
 - **OData-MaxVersion header now correctly negotiates response version**: Per OData v4 spec section 8.2.6, the service now responds with the maximum supported version that is less than or equal to the requested `OData-MaxVersion` header. When a client sends `OData-MaxVersion: 4.0`, the response now correctly includes `OData-Version: 4.0` instead of the hardcoded `4.01`. This fixes compatibility with clients like Excel that only support OData v4.0.
 - **Batch responses now echo Content-ID headers**: Per OData v4 spec section 11.7.4, Content-ID headers from batch request parts are now properly echoed back in the corresponding response parts. This enables clients to correlate batch responses with their requests, which is essential for batch request processing and changeset referencing.
