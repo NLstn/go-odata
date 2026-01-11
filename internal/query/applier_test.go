@@ -61,6 +61,7 @@ func TestApplyOffsetWithLimit(t *testing.T) {
 			result := applyOffsetWithLimit(db, tt.skip, tt.top)
 			if result == nil {
 				t.Error("applyOffsetWithLimit returned nil")
+				return
 			}
 
 			// Verify that the function returns a valid *gorm.DB

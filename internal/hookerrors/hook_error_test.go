@@ -140,16 +140,11 @@ func TestHookError_StatusCode(t *testing.T) {
 
 func TestHookError_AsError(t *testing.T) {
 	// Test that HookError implements error interface
-	var err error
 	hookErr := &HookError{
 		StatusCode: 403,
 		Message:    "Forbidden",
 	}
-	err = hookErr
-
-	if err == nil {
-		t.Error("HookError should implement error interface")
-	}
+	var err error = hookErr
 
 	if err.Error() != "Forbidden" {
 		t.Errorf("Error() = %q, want 'Forbidden'", err.Error())
