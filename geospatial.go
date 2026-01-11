@@ -19,7 +19,7 @@ import (
 //
 //	service := odata.NewService(db)
 //	service.EnableGeospatial() // Validates database support and panics if not available
-//	service.RegisterEntity(Product{}, "Products")
+//	service.RegisterEntity(&Product{})
 func (s *Service) EnableGeospatial() {
 	s.logger.Info("Enabling geospatial features")
 
@@ -64,18 +64,12 @@ func checkGeospatialSupport(db *gorm.DB, logger *slog.Logger) error {
 
 // checkSQLiteGeospatialSupport checks if SQLite has SpatiaLite extension loaded
 func checkSQLiteGeospatialSupport(db *gorm.DB, logger *slog.Logger) error {
-	// Try to load SpatiaLite extension
-	var result int
-	err := db.Raw("SELECT load_extension('mod_spatialite')").Scan(&result).Error
+	// Check if SpatiaLite is available by attempting to use a spatial function
+	// This is safer than trying to load extensions or initialize metadata
+	var result interface{}
+	err := db.Raw("SELECT spatialite_version()").Scan(&result).Error
 	if err == nil {
-		logger.Info("SpatiaLite extension loaded successfully")
-		return nil
-	}
-
-	// Try alternative loading methods
-	err = db.Exec("SELECT InitSpatialMetaData(1)").Error
-	if err == nil {
-		logger.Info("SpatiaLite already initialized")
+		logger.Info("SpatiaLite extension is available", "version", result)
 		return nil
 	}
 
@@ -169,7 +163,7 @@ Error details: %v`, err)
 func checkSQLServerGeospatialSupport(db *gorm.DB, logger *slog.Logger) error {
 	// SQL Server 2008+ has built-in spatial support with geography and geometry types
 	// Test if spatial types are available
-	var result int
+	var result float64
 	err := db.Raw("SELECT geography::Point(0, 0, 4326).STDistance(geography::Point(1, 1, 4326))").Scan(&result).Error
 	if err != nil {
 		return fmt.Errorf(`SQL Server spatial types are not available.

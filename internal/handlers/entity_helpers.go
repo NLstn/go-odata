@@ -29,6 +29,14 @@ func (h *EntityHandler) writeRequestError(w http.ResponseWriter, err error, defa
 		return
 	}
 
+	// Check for GeospatialNotEnabledError first
+	if IsGeospatialNotEnabledError(err) {
+		if writeErr := response.WriteError(w, http.StatusNotImplemented, "Geospatial features not enabled", err.Error()); writeErr != nil {
+			h.logger.Error("Error writing error response", "error", writeErr)
+		}
+		return
+	}
+
 	var reqErr *requestError
 	if errors.As(err, &reqErr) {
 		status := reqErr.StatusCode
