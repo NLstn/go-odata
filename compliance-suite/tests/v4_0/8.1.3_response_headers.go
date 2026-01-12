@@ -52,7 +52,7 @@ func ResponseHeaders() *framework.TestSuite {
 
 	suite.AddTest(
 		"test_odata_version_value",
-		"OData-Version is 4.0 or 4.01",
+		"OData-Version is exactly 4.0 or 4.01",
 		func(ctx *framework.TestContext) error {
 			resp, err := ctx.GET("/Products")
 			if err != nil {
@@ -64,8 +64,11 @@ func ResponseHeaders() *framework.TestSuite {
 				return framework.NewError("OData-Version header missing")
 			}
 
-			if !strings.HasPrefix(odataVersion, "4.0") && !strings.HasPrefix(odataVersion, "4.01") {
-				return framework.NewError("OData-Version should be 4.0 or 4.01")
+			// Strictly validate OData-Version format - must be exactly "4.0" or "4.01"
+			// Trim whitespace for comparison
+			odataVersion = strings.TrimSpace(odataVersion)
+			if odataVersion != "4.0" && odataVersion != "4.01" {
+				return framework.NewError("OData-Version must be exactly '4.0' or '4.01' (got: '" + odataVersion + "')")
 			}
 
 			return nil

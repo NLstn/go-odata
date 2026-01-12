@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/nlstn/go-odata/compliance-suite/framework"
 )
@@ -173,13 +174,13 @@ func QueryFilter() *framework.TestSuite {
 
 			// Verify all returned entities have "Laptop" in their Name
 			if len(value) == 0 {
-				return framework.NewError("No entities returned or no Name field found")
+				return framework.NewError("No entities returned - expected at least one product with 'Laptop' in name")
 			}
 
 			for _, item := range value {
 				entity, ok := item.(map[string]interface{})
 				if !ok {
-					continue
+					return framework.NewError("Entity must be an object")
 				}
 
 				name, ok := entity["Name"].(string)
@@ -191,8 +192,10 @@ func QueryFilter() *framework.TestSuite {
 					return framework.NewError("Name field is empty")
 				}
 
-				// Note: Not checking if "Laptop" is in the name as the filter may work differently
-				// Just verify we got results
+				// Strictly verify that the filter actually worked - all returned names must contain "Laptop"
+				if !strings.Contains(name, "Laptop") {
+					return framework.NewError(fmt.Sprintf("Filter failed: found entity with Name='%s' which does not contain 'Laptop'", name))
+				}
 			}
 
 			return nil

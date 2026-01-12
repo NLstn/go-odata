@@ -37,15 +37,22 @@ func registerErrorResponseTests(suite *framework.TestSuite) {
 				return fmt.Errorf("expected status 404, got %d", resp.StatusCode)
 			}
 
-			// Verify error object is present
-			if !strings.Contains(string(resp.Body), `"error"`) {
-				return fmt.Errorf("no 'error' object in response")
-			}
-
-			// Verify it's valid JSON
+			// Strictly validate error response structure per OData spec
 			var result map[string]interface{}
 			if err := json.Unmarshal(resp.Body, &result); err != nil {
 				return fmt.Errorf("response is not valid JSON: %v", err)
+			}
+
+			// Error response MUST have an "error" property at the root level
+			errorObj, ok := result["error"]
+			if !ok {
+				return fmt.Errorf("error response must have 'error' property at root level")
+			}
+
+			// The "error" property must be an object, not a string or other type
+			_, ok = errorObj.(map[string]interface{})
+			if !ok {
+				return fmt.Errorf("'error' property must be an object")
 			}
 
 			return nil
@@ -128,7 +135,7 @@ func registerErrorResponseTests(suite *framework.TestSuite) {
 
 	suite.AddTest(
 		"Invalid query returns 400 with error object",
-		"Invalid filter syntax should return 400 with error",
+		"Invalid filter syntax should return 400 with properly structured error",
 		func(ctx *framework.TestContext) error {
 			resp, err := ctx.GET("/Products?" + url.QueryEscape("$filter") + "=invalid%20syntax")
 			if err != nil {
@@ -139,17 +146,27 @@ func registerErrorResponseTests(suite *framework.TestSuite) {
 				return fmt.Errorf("expected status 400 for invalid syntax, got %d", resp.StatusCode)
 			}
 
-			// Verify error object is present
-			if !strings.Contains(string(resp.Body), `"error"`) {
-				return fmt.Errorf("no error object in 400 response")
+			// Strictly validate error response structure
+			var result map[string]interface{}
+			if err := json.Unmarshal(resp.Body, &result); err != nil {
+				return fmt.Errorf("response is not valid JSON: %v", err)
 			}
 
-			// Verify error has code and message
-			if !strings.Contains(string(resp.Body), `"code"`) {
-				return fmt.Errorf("error missing 'code' property")
+			errorObj, ok := result["error"].(map[string]interface{})
+			if !ok {
+				return fmt.Errorf("error response must have 'error' object property")
 			}
-			if !strings.Contains(string(resp.Body), `"message"`) {
-				return fmt.Errorf("error missing 'message' property")
+
+			// Verify error has required 'code' property as non-empty string
+			code, ok := errorObj["code"].(string)
+			if !ok || code == "" {
+				return fmt.Errorf("error object must have 'code' property as non-empty string")
+			}
+
+			// Verify error has required 'message' property as non-empty string
+			message, ok := errorObj["message"].(string)
+			if !ok || message == "" {
+				return fmt.Errorf("error object must have 'message' property as non-empty string")
 			}
 
 			return nil
