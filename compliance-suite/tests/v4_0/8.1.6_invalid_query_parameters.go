@@ -1,6 +1,8 @@
 package v4_0
 
 import (
+	"fmt"
+
 	"github.com/nlstn/go-odata/compliance-suite/framework"
 )
 
@@ -96,7 +98,7 @@ func InvalidQueryParameters() *framework.TestSuite {
 
 			// This test allows both 200 (lenient) and 400 (strict) responses
 			if resp.StatusCode != 200 && resp.StatusCode != 400 {
-				return ctx.AssertStatusCode(resp, 400)
+				return framework.NewError(fmt.Sprintf("Expected 200 or 400, got: %d", resp.StatusCode))
 			}
 
 			return nil
