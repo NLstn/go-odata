@@ -202,14 +202,18 @@ func (h *MetadataHandler) buildRegularProperties(model metadataModel, entityMeta
 
 		attrs := fmt.Sprintf(`Name="%s" Type="%s" Nullable="%s"`, prop.JsonName, edmType, nullable)
 
-		if prop.MaxLength > 0 {
+		// MaxLength is valid for Edm.String and Edm.Binary
+		if prop.MaxLength > 0 && (edmType == "Edm.String" || edmType == "Edm.Binary") {
 			attrs += fmt.Sprintf(` MaxLength="%d"`, prop.MaxLength)
 		}
-		if prop.Precision > 0 {
-			attrs += fmt.Sprintf(` Precision="%d"`, prop.Precision)
-		}
-		if prop.Scale > 0 {
-			attrs += fmt.Sprintf(` Scale="%d"`, prop.Scale)
+		// Precision and Scale are ONLY valid for Edm.Decimal per OData CSDL spec
+		if edmType == "Edm.Decimal" {
+			if prop.Precision > 0 {
+				attrs += fmt.Sprintf(` Precision="%d"`, prop.Precision)
+			}
+			if prop.Scale > 0 {
+				attrs += fmt.Sprintf(` Scale="%d"`, prop.Scale)
+			}
 		}
 		if prop.DefaultValue != "" {
 			attrs += fmt.Sprintf(` DefaultValue="%s"`, prop.DefaultValue)

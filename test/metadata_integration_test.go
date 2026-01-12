@@ -120,11 +120,13 @@ func TestMetadataIntegrationXML(t *testing.T) {
 	if !strings.Contains(bodyStr, `MaxLength="100"`) {
 		t.Error("XML should contain MaxLength facet")
 	}
-	if !strings.Contains(bodyStr, `Precision="10"`) {
-		t.Error("XML should contain Precision facet")
+	// Precision and Scale should NOT be in metadata for Edm.Double (float64)
+	// These are only valid for Edm.Decimal per OData CSDL specification
+	if strings.Contains(bodyStr, `Precision="10"`) {
+		t.Error("XML should NOT contain Precision facet for Edm.Double")
 	}
-	if !strings.Contains(bodyStr, `Scale="2"`) {
-		t.Error("XML should contain Scale facet")
+	if strings.Contains(bodyStr, `Scale="2"`) {
+		t.Error("XML should NOT contain Scale facet for Edm.Double")
 	}
 	if !strings.Contains(bodyStr, `DefaultValue="AUTO"`) || !strings.Contains(bodyStr, `DefaultValue="pending"`) {
 		t.Error("XML should contain DefaultValue facet")
@@ -224,11 +226,13 @@ func TestMetadataIntegrationJSON(t *testing.T) {
 	if !ok {
 		t.Fatal("totalAmount property not found in Order")
 	}
-	if precision, ok := totalAmount["$Precision"].(float64); !ok || precision != 10 {
-		t.Errorf("Expected totalAmount Precision=10, got %v", totalAmount["$Precision"])
+	// Precision and Scale should NOT be in JSON metadata for Edm.Double (float64)
+	// These are only valid for Edm.Decimal per OData CSDL specification
+	if precision := totalAmount["$Precision"]; precision != nil {
+		t.Errorf("Expected NO Precision for totalAmount (Edm.Double), got %v", precision)
 	}
-	if scale, ok := totalAmount["$Scale"].(float64); !ok || scale != 2 {
-		t.Errorf("Expected totalAmount Scale=2, got %v", totalAmount["$Scale"])
+	if scale := totalAmount["$Scale"]; scale != nil {
+		t.Errorf("Expected NO Scale for totalAmount (Edm.Double), got %v", scale)
 	}
 
 	status, ok := order["status"].(map[string]interface{})

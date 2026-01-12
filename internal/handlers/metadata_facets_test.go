@@ -64,12 +64,13 @@ func TestMetadataWithFacetsXML(t *testing.T) {
 		t.Error("XML should contain MaxLength attribute")
 	}
 
-	// Check for Precision and Scale
-	if !strings.Contains(body, `Precision="10"`) {
-		t.Error("XML should contain Precision attribute")
+	// Precision and Scale should NOT be emitted for Edm.Double (float64)
+	// These facets are only valid for Edm.Decimal per OData CSDL specification
+	if strings.Contains(body, `Precision="10"`) {
+		t.Error("XML should NOT contain Precision attribute for Edm.Double (float64)")
 	}
-	if !strings.Contains(body, `Scale="2"`) {
-		t.Error("XML should contain Scale attribute")
+	if strings.Contains(body, `Scale="2"`) {
+		t.Error("XML should NOT contain Scale attribute for Edm.Double (float64)")
 	}
 
 	// Check for DefaultValue
@@ -143,16 +144,17 @@ func TestMetadataWithFacetsJSON(t *testing.T) {
 		t.Errorf("Expected $MaxLength=500 for description, got %v", descProp["$MaxLength"])
 	}
 
-	// Check price with precision and scale
+	// Check price - should NOT have precision/scale for Edm.Double (float64)
+	// These facets are only valid for Edm.Decimal per OData CSDL specification
 	priceProp, ok := entityType["price"].(map[string]interface{})
 	if !ok {
 		t.Fatal("price property not found")
 	}
-	if precision, ok := priceProp["$Precision"].(float64); !ok || precision != 10 {
-		t.Errorf("Expected $Precision=10 for price, got %v", priceProp["$Precision"])
+	if precision := priceProp["$Precision"]; precision != nil {
+		t.Errorf("Expected NO $Precision for price (Edm.Double), got %v", precision)
 	}
-	if scale, ok := priceProp["$Scale"].(float64); !ok || scale != 2 {
-		t.Errorf("Expected $Scale=2 for price, got %v", priceProp["$Scale"])
+	if scale := priceProp["$Scale"]; scale != nil {
+		t.Errorf("Expected NO $Scale for price (Edm.Double), got %v", scale)
 	}
 
 	// Check SKU with default value
