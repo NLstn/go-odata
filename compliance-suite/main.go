@@ -231,6 +231,16 @@ func main() {
 			Suite:   v4_0.ResponseStatusCodes,
 		})
 		testSuites = append(testSuites, TestSuiteInfo{
+			Name:    "8.1.6_invalid_query_parameters",
+			Version: "4.0",
+			Suite:   v4_0.InvalidQueryParameters,
+		})
+		testSuites = append(testSuites, TestSuiteInfo{
+			Name:    "8.1.7_method_not_allowed",
+			Version: "4.0",
+			Suite:   v4_0.MethodNotAllowed,
+		})
+		testSuites = append(testSuites, TestSuiteInfo{
 			Name:    "8.2.1_cache_control_header",
 			Version: "4.0",
 			Suite:   v4_0.CacheControlHeader,
@@ -449,6 +459,11 @@ func main() {
 			Name:    "11.2.16_singleton_operations",
 			Version: "4.0",
 			Suite:   v4_0.SingletonOperations,
+		})
+		testSuites = append(testSuites, TestSuiteInfo{
+			Name:    "11.2.17_case_sensitivity",
+			Version: "4.0",
+			Suite:   v4_0.CaseSensitivity,
 		})
 		testSuites = append(testSuites, TestSuiteInfo{
 			Name:    "11.3.1_filter_string_functions",

@@ -46,7 +46,7 @@ func FilterComparisonOperators() *framework.TestSuite {
 	// Test 2: ne (not equals) operator
 	suite.AddTest(
 		"test_ne_operator",
-		"ne (not equals) operator works",
+		"ne (not equals) operator works and returns only matching entities",
 		func(ctx *framework.TestContext) error {
 			filter := url.QueryEscape("Status ne 0")
 			resp, err := ctx.GET("/Products?$filter=" + filter)
@@ -62,8 +62,24 @@ func FilterComparisonOperators() *framework.TestSuite {
 				return fmt.Errorf("failed to parse JSON: %w", err)
 			}
 
-			if _, ok := result["value"]; !ok {
-				return fmt.Errorf("missing 'value' field in response")
+			value, ok := result["value"].([]interface{})
+			if !ok {
+				return fmt.Errorf("missing 'value' field in response or not an array")
+			}
+
+			// Strictly validate: all returned entities must have Status != 0
+			for _, item := range value {
+				entity, ok := item.(map[string]interface{})
+				if !ok {
+					continue
+				}
+
+				if status, ok := entity["Status"]; ok {
+					statusVal := int(status.(float64))
+					if statusVal == 0 {
+						return fmt.Errorf("filter validation failed: found entity with Status=0, but filter was 'Status ne 0'")
+					}
+				}
 			}
 
 			return nil
@@ -73,7 +89,7 @@ func FilterComparisonOperators() *framework.TestSuite {
 	// Test 3: gt (greater than) operator
 	suite.AddTest(
 		"test_gt_operator",
-		"gt (greater than) operator works",
+		"gt (greater than) operator works and returns only matching entities",
 		func(ctx *framework.TestContext) error {
 			filter := url.QueryEscape("Price gt 50")
 			resp, err := ctx.GET("/Products?$filter=" + filter)
@@ -89,8 +105,24 @@ func FilterComparisonOperators() *framework.TestSuite {
 				return fmt.Errorf("failed to parse JSON: %w", err)
 			}
 
-			if _, ok := result["value"]; !ok {
-				return fmt.Errorf("missing 'value' field in response")
+			value, ok := result["value"].([]interface{})
+			if !ok {
+				return fmt.Errorf("missing 'value' field in response or not an array")
+			}
+
+			// Strictly validate: all returned entities must have Price > 50
+			for _, item := range value {
+				entity, ok := item.(map[string]interface{})
+				if !ok {
+					continue
+				}
+
+				if price, ok := entity["Price"]; ok {
+					priceVal := price.(float64)
+					if priceVal <= 50 {
+						return fmt.Errorf("filter validation failed: found entity with Price=%v, but filter was 'Price gt 50'", priceVal)
+					}
+				}
 			}
 
 			return nil
@@ -100,7 +132,7 @@ func FilterComparisonOperators() *framework.TestSuite {
 	// Test 4: ge (greater than or equal) operator
 	suite.AddTest(
 		"test_ge_operator",
-		"ge (greater than or equal) operator works",
+		"ge (greater than or equal) operator works and returns only matching entities",
 		func(ctx *framework.TestContext) error {
 			filter := url.QueryEscape("Price ge 50")
 			resp, err := ctx.GET("/Products?$filter=" + filter)
@@ -116,8 +148,24 @@ func FilterComparisonOperators() *framework.TestSuite {
 				return fmt.Errorf("failed to parse JSON: %w", err)
 			}
 
-			if _, ok := result["value"]; !ok {
-				return fmt.Errorf("missing 'value' field in response")
+			value, ok := result["value"].([]interface{})
+			if !ok {
+				return fmt.Errorf("missing 'value' field in response or not an array")
+			}
+
+			// Strictly validate: all returned entities must have Price >= 50
+			for _, item := range value {
+				entity, ok := item.(map[string]interface{})
+				if !ok {
+					continue
+				}
+
+				if price, ok := entity["Price"]; ok {
+					priceVal := price.(float64)
+					if priceVal < 50 {
+						return fmt.Errorf("filter validation failed: found entity with Price=%v, but filter was 'Price ge 50'", priceVal)
+					}
+				}
 			}
 
 			return nil
@@ -127,7 +175,7 @@ func FilterComparisonOperators() *framework.TestSuite {
 	// Test 5: lt (less than) operator
 	suite.AddTest(
 		"test_lt_operator",
-		"lt (less than) operator works",
+		"lt (less than) operator works and returns only matching entities",
 		func(ctx *framework.TestContext) error {
 			filter := url.QueryEscape("Price lt 100")
 			resp, err := ctx.GET("/Products?$filter=" + filter)
@@ -143,8 +191,24 @@ func FilterComparisonOperators() *framework.TestSuite {
 				return fmt.Errorf("failed to parse JSON: %w", err)
 			}
 
-			if _, ok := result["value"]; !ok {
-				return fmt.Errorf("missing 'value' field in response")
+			value, ok := result["value"].([]interface{})
+			if !ok {
+				return fmt.Errorf("missing 'value' field in response or not an array")
+			}
+
+			// Strictly validate: all returned entities must have Price < 100
+			for _, item := range value {
+				entity, ok := item.(map[string]interface{})
+				if !ok {
+					continue
+				}
+
+				if price, ok := entity["Price"]; ok {
+					priceVal := price.(float64)
+					if priceVal >= 100 {
+						return fmt.Errorf("filter validation failed: found entity with Price=%v, but filter was 'Price lt 100'", priceVal)
+					}
+				}
 			}
 
 			return nil
@@ -154,7 +218,7 @@ func FilterComparisonOperators() *framework.TestSuite {
 	// Test 6: le (less than or equal) operator
 	suite.AddTest(
 		"test_le_operator",
-		"le (less than or equal) operator works",
+		"le (less than or equal) operator works and returns only matching entities",
 		func(ctx *framework.TestContext) error {
 			filter := url.QueryEscape("Price le 100")
 			resp, err := ctx.GET("/Products?$filter=" + filter)
@@ -170,8 +234,24 @@ func FilterComparisonOperators() *framework.TestSuite {
 				return fmt.Errorf("failed to parse JSON: %w", err)
 			}
 
-			if _, ok := result["value"]; !ok {
-				return fmt.Errorf("missing 'value' field in response")
+			value, ok := result["value"].([]interface{})
+			if !ok {
+				return fmt.Errorf("missing 'value' field in response or not an array")
+			}
+
+			// Strictly validate: all returned entities must have Price <= 100
+			for _, item := range value {
+				entity, ok := item.(map[string]interface{})
+				if !ok {
+					continue
+				}
+
+				if price, ok := entity["Price"]; ok {
+					priceVal := price.(float64)
+					if priceVal > 100 {
+						return fmt.Errorf("filter validation failed: found entity with Price=%v, but filter was 'Price le 100'", priceVal)
+					}
+				}
 			}
 
 			return nil

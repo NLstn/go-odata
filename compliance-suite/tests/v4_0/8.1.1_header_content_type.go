@@ -33,12 +33,25 @@ func HeaderContentType() *framework.TestSuite {
 
 			contentType := resp.Headers.Get("Content-Type")
 
-			if !strings.Contains(contentType, "application/json") {
+			if contentType == "" {
+				return framework.NewError("Content-Type header is missing")
+			}
+
+			// Strictly validate Content-Type format per OData spec
+			// Must be application/json with odata.metadata parameter
+			if !strings.Contains(strings.ToLower(contentType), "application/json") {
 				return framework.NewError(fmt.Sprintf("Expected application/json, got: %s", contentType))
 			}
 
-			if !strings.Contains(contentType, "odata.metadata=minimal") {
+			if !strings.Contains(contentType, "odata.metadata=") {
 				return framework.NewError(fmt.Sprintf("Missing odata.metadata parameter. Got: %s", contentType))
+			}
+
+			// Validate that odata.metadata has a valid value (minimal, full, or none)
+			if !strings.Contains(contentType, "odata.metadata=minimal") &&
+				!strings.Contains(contentType, "odata.metadata=full") &&
+				!strings.Contains(contentType, "odata.metadata=none") {
+				return framework.NewError(fmt.Sprintf("Invalid odata.metadata value. Got: %s. Must be minimal, full, or none", contentType))
 			}
 
 			return nil
