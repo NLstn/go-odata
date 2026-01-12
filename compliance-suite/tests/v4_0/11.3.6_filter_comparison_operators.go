@@ -75,7 +75,11 @@ func FilterComparisonOperators() *framework.TestSuite {
 				}
 
 				if status, ok := entity["Status"]; ok {
-					statusVal := int(status.(float64))
+					statusFloat, ok := status.(float64)
+					if !ok {
+						return fmt.Errorf("filter validation failed: Status field is not a numeric value")
+					}
+					statusVal := int(statusFloat)
 					if statusVal == 0 {
 						return fmt.Errorf("filter validation failed: found entity with Status=0, but filter was 'Status ne 0'")
 					}
@@ -118,7 +122,10 @@ func FilterComparisonOperators() *framework.TestSuite {
 				}
 
 				if price, ok := entity["Price"]; ok {
-					priceVal := price.(float64)
+					priceVal, ok := price.(float64)
+					if !ok {
+						return fmt.Errorf("unexpected type for Price: %T", price)
+					}
 					if priceVal <= 50 {
 						return fmt.Errorf("filter validation failed: found entity with Price=%v, but filter was 'Price gt 50'", priceVal)
 					}
@@ -161,7 +168,10 @@ func FilterComparisonOperators() *framework.TestSuite {
 				}
 
 				if price, ok := entity["Price"]; ok {
-					priceVal := price.(float64)
+					priceVal, ok := price.(float64)
+					if !ok {
+						return fmt.Errorf("filter validation failed: unexpected type for Price field: %T", price)
+					}
 					if priceVal < 50 {
 						return fmt.Errorf("filter validation failed: found entity with Price=%v, but filter was 'Price ge 50'", priceVal)
 					}
@@ -204,7 +214,10 @@ func FilterComparisonOperators() *framework.TestSuite {
 				}
 
 				if price, ok := entity["Price"]; ok {
-					priceVal := price.(float64)
+					priceVal, ok := price.(float64)
+					if !ok {
+						return fmt.Errorf("filter validation failed: unexpected type for Price: %T", price)
+					}
 					if priceVal >= 100 {
 						return fmt.Errorf("filter validation failed: found entity with Price=%v, but filter was 'Price lt 100'", priceVal)
 					}
@@ -247,7 +260,10 @@ func FilterComparisonOperators() *framework.TestSuite {
 				}
 
 				if price, ok := entity["Price"]; ok {
-					priceVal := price.(float64)
+					priceVal, ok := price.(float64)
+					if !ok {
+						return fmt.Errorf("unexpected type for 'Price' field: %T", price)
+					}
 					if priceVal > 100 {
 						return fmt.Errorf("filter validation failed: found entity with Price=%v, but filter was 'Price le 100'", priceVal)
 					}

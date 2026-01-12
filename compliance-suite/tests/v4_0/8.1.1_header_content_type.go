@@ -2,6 +2,7 @@ package v4_0
 
 import (
 	"fmt"
+	"mime"
 	"strings"
 
 	"github.com/nlstn/go-odata/compliance-suite/framework"
@@ -39,19 +40,23 @@ func HeaderContentType() *framework.TestSuite {
 
 			// Strictly validate Content-Type format per OData spec
 			// Must be application/json with odata.metadata parameter
-			if !strings.Contains(strings.ToLower(contentType), "application/json") {
-				return framework.NewError(fmt.Sprintf("Expected application/json, got: %s", contentType))
+			mediaType, params, err := mime.ParseMediaType(contentType)
+			if err != nil {
+				return framework.NewError(fmt.Sprintf("Failed to parse Content-Type: %s", contentType))
 			}
 
-			if !strings.Contains(contentType, "odata.metadata=") {
+			if !strings.EqualFold(mediaType, "application/json") {
+				return framework.NewError(fmt.Sprintf("Expected application/json, got: %s", mediaType))
+			}
+
+			metadataValue, ok := params["odata.metadata"]
+			if !ok {
 				return framework.NewError(fmt.Sprintf("Missing odata.metadata parameter. Got: %s", contentType))
 			}
 
 			// Validate that odata.metadata has a valid value (minimal, full, or none)
-			if !strings.Contains(contentType, "odata.metadata=minimal") &&
-				!strings.Contains(contentType, "odata.metadata=full") &&
-				!strings.Contains(contentType, "odata.metadata=none") {
-				return framework.NewError(fmt.Sprintf("Invalid odata.metadata value. Got: %s. Must be minimal, full, or none", contentType))
+			if metadataValue != "minimal" && metadataValue != "full" && metadataValue != "none" {
+				return framework.NewError(fmt.Sprintf("Invalid odata.metadata value '%s'. Must be minimal, full, or none", metadataValue))
 			}
 
 			return nil
