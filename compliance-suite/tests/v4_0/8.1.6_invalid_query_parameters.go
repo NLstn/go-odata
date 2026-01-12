@@ -88,15 +88,15 @@ func InvalidQueryParameters() *framework.TestSuite {
 		"Duplicate system query options should return 400 Bad Request",
 		func(ctx *framework.TestContext) error {
 			// Per OData spec, duplicate system query options are not allowed
+			// Note: Some implementations may allow this and use the last value (lenient behavior)
 			resp, err := ctx.GET("/Products?$top=5&$top=10")
 			if err != nil {
 				return err
 			}
 
-			// Note: Some implementations may allow this and use the last value,
-			// but strict compliance requires 400
+			// This test allows both 200 (lenient) and 400 (strict) responses
 			if resp.StatusCode != 200 && resp.StatusCode != 400 {
-				return framework.NewError("Expected 200 or 400, got: " + string(rune(resp.StatusCode)))
+				return ctx.AssertStatusCode(resp, 400)
 			}
 
 			return nil
