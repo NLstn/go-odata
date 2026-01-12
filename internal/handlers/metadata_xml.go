@@ -21,6 +21,7 @@ func (h *MetadataHandler) handleMetadataXML(w http.ResponseWriter, r *http.Reque
 		if !ok {
 			// Cache corruption - rebuild
 			h.cachedXML.Delete(versionKey)
+			h.cacheSizeXML.Add(-1)
 			h.logger.Warn("Invalid cache entry, rebuilding", "version", versionKey)
 		} else {
 			w.Header().Set("Content-Type", "application/xml")
@@ -48,7 +49,7 @@ func (h *MetadataHandler) handleMetadataXML(w http.ResponseWriter, r *http.Reque
 	actual, loaded := h.cachedXML.LoadOrStore(versionKey, cached)
 	if !loaded {
 		// We stored our version, increment counter and check for eviction
-		newSize := h.cacheSize.Add(1)
+		newSize := h.cacheSizeXML.Add(1)
 		if newSize > maxCacheEntries {
 			h.evictOldCacheEntriesXML()
 		}

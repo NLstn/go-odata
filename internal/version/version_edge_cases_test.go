@@ -2,6 +2,7 @@ package version
 
 import (
 	"context"
+	"sync"
 	"testing"
 )
 
@@ -64,9 +65,12 @@ func TestWithVersion_Concurrent(t *testing.T) {
 		{Major: 5, Minor: 0},
 	}
 
+	var wg sync.WaitGroup
 	// Run concurrent WithVersion calls
 	for i := 0; i < 100; i++ {
+		wg.Add(1)
 		go func(idx int) {
+			defer wg.Done()
 			ctx := context.Background()
 			ver := versions[idx%len(versions)]
 			ctx = WithVersion(ctx, ver)
@@ -77,6 +81,7 @@ func TestWithVersion_Concurrent(t *testing.T) {
 			}
 		}(i)
 	}
+	wg.Wait()
 }
 
 // TestParseVersionString_EdgeCases tests edge cases in version parsing
