@@ -21,6 +21,7 @@ func (h *MetadataHandler) handleMetadataJSON(w http.ResponseWriter, r *http.Requ
 		if !ok {
 			// Cache corruption - rebuild
 			h.cachedJSON.Delete(versionKey)
+			h.cacheSizeJSON.Add(-1)
 			h.logger.Warn("Invalid cache entry, rebuilding", "version", versionKey)
 		} else {
 			w.Header().Set("Content-Type", "application/json")
@@ -48,7 +49,7 @@ func (h *MetadataHandler) handleMetadataJSON(w http.ResponseWriter, r *http.Requ
 	actual, loaded := h.cachedJSON.LoadOrStore(versionKey, cached)
 	if !loaded {
 		// We stored our version, increment counter and check for eviction
-		newSize := h.cacheSize.Add(1)
+		newSize := h.cacheSizeJSON.Add(1)
 		if newSize > maxCacheEntries {
 			h.evictOldCacheEntriesJSON()
 		}

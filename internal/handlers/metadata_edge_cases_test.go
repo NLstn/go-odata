@@ -59,10 +59,10 @@ func TestMetadataHandler_ManyVersionsCacheEviction(t *testing.T) {
 		}
 	}
 
-	// Verify cache size is bounded
-	cacheSize := handler.cacheSize.Load()
-	if cacheSize > maxCacheEntries {
-		t.Errorf("Cache size %d exceeds maximum %d", cacheSize, maxCacheEntries)
+	// Verify cache size is bounded (XML cache, since we're requesting XML metadata)
+	cacheSizeXML := handler.cacheSizeXML.Load()
+	if cacheSizeXML > maxCacheEntries {
+		t.Errorf("XML cache size %d exceeds maximum %d", cacheSizeXML, maxCacheEntries)
 	}
 
 	// Verify priority versions (4.0, 4.01) are still cached
@@ -115,10 +115,11 @@ func TestMetadataHandler_CacheInvalidationCorrectness(t *testing.T) {
 		t.Error("New metadata should contain updated namespace")
 	}
 
-	// Verify cache was actually cleared
-	cacheSize := handler.cacheSize.Load()
-	if cacheSize == 0 {
-		// Cache was cleared and rebuilt with 1 entry
+	// Verify both caches were actually cleared and rebuilt
+	cacheSizeXML := handler.cacheSizeXML.Load()
+	cacheSizeJSON := handler.cacheSizeJSON.Load()
+	if cacheSizeXML == 1 && cacheSizeJSON == 0 {
+		// XML cache was cleared and rebuilt with 1 entry (JSON not used in this test)
 		t.Log("Cache correctly cleared and rebuilt")
 	}
 }

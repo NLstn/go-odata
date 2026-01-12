@@ -46,13 +46,14 @@ import (
 type MetadataHandler struct {
 	entities map[string]*metadata.EntityMetadata
 	// Lock-free cached metadata documents by version (key: version string)
-	cachedXML   sync.Map     // map[string]string
-	cachedJSON  sync.Map     // map[string][]byte
-	cacheSize   atomic.Int64 // Tracks total cache entries for eviction
-	namespace   string
-	namespaceMu sync.RWMutex // Protects namespace field ONLY (not the caches)
-	logger      *slog.Logger
-	policy      auth.Policy
+	cachedXML     sync.Map     // map[string]string
+	cachedJSON    sync.Map     // map[string][]byte
+	cacheSizeXML  atomic.Int64 // Tracks XML cache entries for eviction
+	cacheSizeJSON atomic.Int64 // Tracks JSON cache entries for eviction
+	namespace     string
+	namespaceMu   sync.RWMutex // Protects namespace field ONLY (not the caches)
+	logger        *slog.Logger
+	policy        auth.Policy
 }
 
 const defaultNamespace = "ODataService"
@@ -65,7 +66,8 @@ func NewMetadataHandler(entities map[string]*metadata.EntityMetadata) *MetadataH
 		logger:    slog.Default(),
 	}
 	// sync.Map fields are initialized to their zero value (empty map)
-	h.cacheSize.Store(0)
+	h.cacheSizeXML.Store(0)
+	h.cacheSizeJSON.Store(0)
 	return h
 }
 
@@ -120,7 +122,8 @@ func (h *MetadataHandler) SetNamespace(namespace string) {
 		h.cachedJSON.Delete(key)
 		return true
 	})
-	h.cacheSize.Store(0)
+	h.cacheSizeXML.Store(0)
+	h.cacheSizeJSON.Store(0)
 }
 
 // namespaceOrDefault returns the current namespace or the default if empty.
@@ -145,66 +148,96 @@ const maxCacheEntries = 10
 // evictOldCacheEntriesXML removes the oldest cached XML entries if the cache exceeds maxCacheEntries.
 // Uses sync.Map.Range to iterate and delete entries.
 func (h *MetadataHandler) evictOldCacheEntriesXML() {
-	if h.cacheSize.Load() <= maxCacheEntries {
+	if h.cacheSizeXML.Load() <= maxCacheEntries {
 		return
 	}
 
 	// Keep priority versions (most common)
 	priorityVersions := map[string]bool{"4.01": true, "4.0": true}
 	keysToKeep := maxCacheEntries / 2
-	kept := 0
-	evicted := 0
 
-	// First pass: delete non-priority entries
+	// First pass: collect all entries and count priority versions
+	var priorityKeys []string
+	var nonPriorityKeys []string
 	h.cachedXML.Range(func(key, value interface{}) bool {
 		keyStr, ok := key.(string)
 		if !ok {
 			return true // Skip invalid entries
 		}
-		if !priorityVersions[keyStr] && kept >= keysToKeep-len(priorityVersions) {
-			h.cachedXML.Delete(key)
-			evicted++
-		} else if !priorityVersions[keyStr] {
-			kept++
+		if priorityVersions[keyStr] {
+			priorityKeys = append(priorityKeys, keyStr)
+		} else {
+			nonPriorityKeys = append(nonPriorityKeys, keyStr)
 		}
 		return true
 	})
 
+	// Calculate how many non-priority entries to keep
+	// Total to keep = keysToKeep, minus however many priority versions we actually have
+	nonPriorityToKeep := keysToKeep - len(priorityKeys)
+	if nonPriorityToKeep < 0 {
+		nonPriorityToKeep = 0
+	}
+
+	// Evict excess non-priority entries
+	evicted := 0
+	if len(nonPriorityKeys) > nonPriorityToKeep {
+		for i := nonPriorityToKeep; i < len(nonPriorityKeys); i++ {
+			h.cachedXML.Delete(nonPriorityKeys[i])
+			evicted++
+		}
+	}
+
 	// Update cache size
-	newSize := h.cacheSize.Add(-int64(evicted))
+	newSize := h.cacheSizeXML.Add(-int64(evicted))
 	h.logger.Info("Evicted old metadata XML cache entries", "newSize", newSize, "evicted", evicted)
 }
 
 // evictOldCacheEntriesJSON removes the oldest cached JSON entries if the cache exceeds maxCacheEntries.
 // Uses sync.Map.Range to iterate and delete entries.
 func (h *MetadataHandler) evictOldCacheEntriesJSON() {
-	if h.cacheSize.Load() <= maxCacheEntries {
+	if h.cacheSizeJSON.Load() <= maxCacheEntries {
 		return
 	}
 
 	// Keep priority versions (most common)
 	priorityVersions := map[string]bool{"4.01": true, "4.0": true}
 	keysToKeep := maxCacheEntries / 2
-	kept := 0
-	evicted := 0
 
-	// First pass: delete non-priority entries
+	// First pass: collect all entries and count priority versions
+	var priorityKeys []string
+	var nonPriorityKeys []string
 	h.cachedJSON.Range(func(key, value interface{}) bool {
 		keyStr, ok := key.(string)
 		if !ok {
 			return true // Skip invalid entries
 		}
-		if !priorityVersions[keyStr] && kept >= keysToKeep-len(priorityVersions) {
-			h.cachedJSON.Delete(key)
-			evicted++
-		} else if !priorityVersions[keyStr] {
-			kept++
+		if priorityVersions[keyStr] {
+			priorityKeys = append(priorityKeys, keyStr)
+		} else {
+			nonPriorityKeys = append(nonPriorityKeys, keyStr)
 		}
 		return true
 	})
 
+	// Calculate how many non-priority entries to keep
+	// Total to keep = keysToKeep, minus however many priority versions we actually have
+	nonPriorityToKeep := keysToKeep - len(priorityKeys)
+	if nonPriorityToKeep < 0 {
+		nonPriorityToKeep = 0
+	}
+
+	// Evict excess non-priority entries
+	evicted := 0
+	if len(nonPriorityKeys) > nonPriorityToKeep {
+		for i := nonPriorityToKeep; i < len(nonPriorityKeys); i++ {
+			h.cachedJSON.Delete(nonPriorityKeys[i])
+			evicted++
+		}
+	}
+
 	// Update cache size
-	newSize := h.cacheSize.Add(-int64(evicted))
+	newSize := h.cacheSizeJSON.Add(-int64(evicted))
 	h.logger.Info("Evicted old metadata JSON cache entries", "newSize", newSize, "evicted", evicted)
 }
 
