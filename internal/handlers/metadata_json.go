@@ -180,14 +180,23 @@ func (h *MetadataHandler) buildJSONPropertyDefinition(model metadataModel, prop 
 }
 
 func (h *MetadataHandler) addJSONPropertyFacets(propDef map[string]interface{}, prop *metadata.PropertyMetadata) {
-	if prop.MaxLength > 0 {
+	edmType, ok := propDef["$Type"].(string)
+	if !ok {
+		return
+	}
+
+	// MaxLength is valid for Edm.String and Edm.Binary
+	if prop.MaxLength > 0 && (edmType == "Edm.String" || edmType == "Edm.Binary") {
 		propDef["$MaxLength"] = prop.MaxLength
 	}
-	if prop.Precision > 0 {
-		propDef["$Precision"] = prop.Precision
-	}
-	if prop.Scale > 0 {
-		propDef["$Scale"] = prop.Scale
+	// Precision and Scale are ONLY valid for Edm.Decimal per OData CSDL spec
+	if edmType == "Edm.Decimal" {
+		if prop.Precision > 0 {
+			propDef["$Precision"] = prop.Precision
+		}
+		if prop.Scale > 0 {
+			propDef["$Scale"] = prop.Scale
+		}
 	}
 	if prop.DefaultValue != "" {
 		propDef["$DefaultValue"] = prop.DefaultValue
