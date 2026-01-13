@@ -137,7 +137,7 @@ func StreamProperties() *framework.TestSuite {
 			}
 
 			if resp.StatusCode == 404 || resp.StatusCode == 405 || resp.StatusCode == 501 {
-				return fmt.Errorf("media content unavailable (status: %d)", resp.StatusCode)
+				return framework.NewError(fmt.Sprintf("media content unavailable (status: %d)", resp.StatusCode))
 			}
 
 			return fmt.Errorf("unexpected status: %d", resp.StatusCode)
@@ -159,7 +159,7 @@ func StreamProperties() *framework.TestSuite {
 			}
 
 			if resp.StatusCode == 404 || resp.StatusCode == 405 || resp.StatusCode == 501 {
-				return fmt.Errorf("media entity creation unsupported (status: %d)", resp.StatusCode)
+				return framework.NewError(fmt.Sprintf("media entity creation unsupported (status: %d)", resp.StatusCode))
 			}
 
 			return fmt.Errorf("unexpected status: %d", resp.StatusCode)
@@ -185,7 +185,7 @@ func StreamProperties() *framework.TestSuite {
 			}
 
 			if resp.StatusCode == 404 || resp.StatusCode == 405 || resp.StatusCode == 501 {
-				return fmt.Errorf("media entity update unsupported (status: %d)", resp.StatusCode)
+				return framework.NewError(fmt.Sprintf("media entity update unsupported (status: %d)", resp.StatusCode))
 			}
 
 			return fmt.Errorf("unexpected status %d updating media entity. Response: %s", resp.StatusCode, string(resp.Body))
@@ -211,7 +211,7 @@ func StreamProperties() *framework.TestSuite {
 			}
 
 			if resp.StatusCode == 404 || resp.StatusCode == 405 || resp.StatusCode == 501 {
-				return fmt.Errorf("media entity metadata missing (status: %d)", resp.StatusCode)
+				return framework.NewError(fmt.Sprintf("media entity metadata missing (status: %d)", resp.StatusCode))
 			}
 
 			return fmt.Errorf("unexpected status: %d", resp.StatusCode)
@@ -262,7 +262,7 @@ func StreamProperties() *framework.TestSuite {
 			}
 
 			if resp.StatusCode == 404 || resp.StatusCode == 405 || resp.StatusCode == 501 {
-				return fmt.Errorf("media stream negotiation failed (status: %d)", resp.StatusCode)
+				return framework.NewError(fmt.Sprintf("media stream negotiation failed (status: %d)", resp.StatusCode))
 			}
 
 			return fmt.Errorf("unexpected status: %d", resp.StatusCode)
@@ -288,7 +288,7 @@ func StreamProperties() *framework.TestSuite {
 			}
 
 			if resp.StatusCode == 404 || resp.StatusCode == 405 || resp.StatusCode == 501 {
-				return fmt.Errorf("media entity deletion failed (status: %d)", resp.StatusCode)
+				return framework.NewError(fmt.Sprintf("media entity deletion failed (status: %d)", resp.StatusCode))
 			}
 
 			return fmt.Errorf("unexpected status: %d", resp.StatusCode)
@@ -318,7 +318,7 @@ func StreamProperties() *framework.TestSuite {
 			}
 
 			if resp.StatusCode == 404 || resp.StatusCode == 405 || resp.StatusCode == 501 {
-				return fmt.Errorf("media entity endpoint unavailable (status: %d)", resp.StatusCode)
+				return framework.NewError(fmt.Sprintf("media entity endpoint unavailable (status: %d)", resp.StatusCode))
 			}
 
 			return fmt.Errorf("unexpected status: %d", resp.StatusCode)
@@ -344,7 +344,7 @@ func StreamProperties() *framework.TestSuite {
 			}
 
 			if resp.StatusCode == 404 || resp.StatusCode == 405 || resp.StatusCode == 501 {
-				return fmt.Errorf("stream property $value missing (status: %d)", resp.StatusCode)
+				return framework.NewError(fmt.Sprintf("stream property $value missing (status: %d)", resp.StatusCode))
 			}
 
 			return fmt.Errorf("unexpected status: %d", resp.StatusCode)
