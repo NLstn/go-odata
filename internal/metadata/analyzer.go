@@ -43,7 +43,8 @@ type EntityMetadata struct {
 		HasODataBeforeReadEntity     bool
 		HasODataAfterReadEntity      bool
 	}
-	entitiesRegistry map[string]*EntityMetadata
+	entitiesRegistry       map[string]*EntityMetadata
+	navigationTargetIndex  map[string]*EntityMetadata // Index for fast navigation target lookup by EntityName or EntitySetName
 }
 
 // TypeDiscriminatorInfo holds metadata about the type discriminator property
@@ -1219,6 +1220,42 @@ func (metadata *EntityMetadata) SetEntitiesRegistry(entities map[string]*EntityM
 		return
 	}
 	metadata.entitiesRegistry = entities
+	
+	// Build navigation target index for O(1) lookup
+	metadata.navigationTargetIndex = make(map[string]*EntityMetadata)
+	for _, entity := range entities {
+		if entity == nil {
+			continue
+		}
+		// Index by both EntityName and EntitySetName for flexible lookups
+		if entity.EntityName != "" {
+			metadata.navigationTargetIndex[entity.EntityName] = entity
+		}
+		if entity.EntitySetName != "" {
+			metadata.navigationTargetIndex[entity.EntitySetName] = entity
+		}
+	}
+}
+
+// AddEntityToRegistry adds a single entity to the navigation target index.
+// This is more efficient than rebuilding the entire index when adding one entity at a time.
+func (metadata *EntityMetadata) AddEntityToRegistry(entity *EntityMetadata) {
+	if metadata == nil || entity == nil {
+		return
+	}
+	
+	// Initialize the index if it doesn't exist
+	if metadata.navigationTargetIndex == nil {
+		metadata.navigationTargetIndex = make(map[string]*EntityMetadata)
+	}
+	
+	// Add the entity to the index
+	if entity.EntityName != "" {
+		metadata.navigationTargetIndex[entity.EntityName] = entity
+	}
+	if entity.EntitySetName != "" {
+		metadata.navigationTargetIndex[entity.EntitySetName] = entity
+	}
 }
 
 // ResolveNavigationTarget returns the target entity metadata for a navigation property.
@@ -1232,20 +1269,17 @@ func (metadata *EntityMetadata) ResolveNavigationTarget(name string) (*EntityMet
 		return nil, fmt.Errorf("navigation property '%s' not found", name)
 	}
 
-	if metadata.entitiesRegistry == nil {
+	if metadata.navigationTargetIndex == nil {
 		return nil, fmt.Errorf("entity metadata registry is not configured")
 	}
 
-	for _, entity := range metadata.entitiesRegistry {
-		if entity == nil {
-			continue
-		}
-		if entity.EntityName == navProp.NavigationTarget || entity.EntitySetName == navProp.NavigationTarget {
-			return entity, nil
-		}
+	// Use O(1) map lookup instead of O(n) iteration
+	entity, ok := metadata.navigationTargetIndex[navProp.NavigationTarget]
+	if !ok {
+		return nil, fmt.Errorf("navigation target '%s' not registered", navProp.NavigationTarget)
 	}
 
-	return nil, fmt.Errorf("navigation target '%s' not registered", navProp.NavigationTarget)
+	return entity, nil
 }
 
 // dereferenceType unwraps pointer types to obtain the underlying type.
