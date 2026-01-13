@@ -131,5 +131,19 @@ func NestedExpandOptions() *framework.TestSuite {
 		},
 	)
 
+	// Test 9: Expand with invalid nested $orderby
+	suite.AddTest(
+		"test_expand_invalid_nested_orderby",
+		"Expand with invalid nested $orderby returns 400",
+		func(ctx *framework.TestContext) error {
+			expand := url.QueryEscape("Descriptions($orderby=DoesNotExist)")
+			resp, err := ctx.GET("/Products?$expand=" + expand)
+			if err != nil {
+				return err
+			}
+			return ctx.AssertStatusCode(resp, 400)
+		},
+	)
+
 	return suite
 }
