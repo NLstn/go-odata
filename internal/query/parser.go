@@ -219,6 +219,21 @@ func validateQueryOptions(queryParams url.Values) error {
 func ParseQueryOptions(queryParams url.Values, entityMetadata *metadata.EntityMetadata) (*QueryOptions, error) {
 	options := &QueryOptions{}
 
+	// Extract and resolve parameter aliases (e.g., @p=10)
+	paramAliases, err := extractParameterAliases(queryParams)
+	if err != nil {
+		return nil, err
+	}
+
+	// Resolve parameter aliases in query parameter values
+	resolvedParams, err := resolveParameterAliases(queryParams, paramAliases)
+	if err != nil {
+		return nil, err
+	}
+
+	// Use resolved parameters for all subsequent parsing
+	queryParams = resolvedParams
+
 	// Validate that all query parameters starting with $ are valid OData query options
 	if err := validateQueryOptions(queryParams); err != nil {
 		return nil, err
@@ -729,4 +744,108 @@ func mergeNavigationSelects(options *QueryOptions, entityMetadata *metadata.Enti
 			}
 		}
 	}
+}
+
+// extractParameterAliases extracts parameter alias definitions from query parameters
+// Parameter aliases are query parameters that start with @ (e.g., @p=10, @name='test')
+// Returns a map of alias name (without @) to its value
+func extractParameterAliases(queryParams url.Values) (map[string]string, error) {
+	aliases := make(map[string]string)
+
+	for key, values := range queryParams {
+		if strings.HasPrefix(key, "@") {
+			if len(key) == 1 {
+				return nil, fmt.Errorf("invalid parameter alias: empty alias name")
+			}
+			aliasName := key[1:] // Remove the @ prefix
+
+			// OData spec: parameter aliases must have exactly one value
+			if len(values) == 0 {
+				return nil, fmt.Errorf("parameter alias @%s has no value", aliasName)
+			}
+			if len(values) > 1 {
+				return nil, fmt.Errorf("parameter alias @%s has multiple values", aliasName)
+			}
+
+			aliases[aliasName] = values[0]
+		}
+	}
+
+	return aliases, nil
+}
+
+// resolveParameterAliases resolves parameter alias references in query parameter values
+// Returns a new url.Values with aliases resolved and alias definitions removed
+func resolveParameterAliases(queryParams url.Values, aliases map[string]string) (url.Values, error) {
+	if len(aliases) == 0 {
+		return queryParams, nil
+	}
+
+	resolvedParams := make(url.Values)
+
+	for key, values := range queryParams {
+		// Skip parameter alias definitions themselves
+		if strings.HasPrefix(key, "@") {
+			continue
+		}
+
+		// Resolve aliases in each value
+		resolvedValues := make([]string, len(values))
+		for i, value := range values {
+			resolvedValue, err := resolveAliasesInString(value, aliases)
+			if err != nil {
+				return nil, fmt.Errorf("failed to resolve aliases in %s: %w", key, err)
+			}
+			resolvedValues[i] = resolvedValue
+		}
+
+		resolvedParams[key] = resolvedValues
+	}
+
+	return resolvedParams, nil
+}
+
+// resolveAliasesInString resolves all parameter alias references in a string
+// Parameter alias references are @aliasName tokens in the string
+func resolveAliasesInString(s string, aliases map[string]string) (string, error) {
+	if !strings.Contains(s, "@") {
+		return s, nil
+	}
+
+	var result strings.Builder
+	i := 0
+	for i < len(s) {
+		if s[i] == '@' {
+			// Found a potential parameter alias reference
+			// Extract the alias name (alphanumeric characters)
+			j := i + 1
+			for j < len(s) && (isAlphaNumeric(rune(s[j])) || s[j] == '_') {
+				j++
+			}
+
+			if j == i+1 {
+				// @ not followed by a valid identifier
+				return "", fmt.Errorf("invalid parameter alias reference at position %d", i)
+			}
+
+			aliasName := s[i+1 : j]
+			aliasValue, ok := aliases[aliasName]
+			if !ok {
+				return "", fmt.Errorf("undefined parameter alias: @%s", aliasName)
+			}
+
+			result.WriteString(aliasValue)
+			i = j
+		} else {
+			result.WriteByte(s[i])
+			i++
+		}
+	}
+
+	return result.String(), nil
+}
+
+// isAlphaNumeric checks if a rune is alphanumeric
+func isAlphaNumeric(r rune) bool {
+	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9')
 }
