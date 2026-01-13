@@ -14,13 +14,7 @@ func ApplySearch(results interface{}, searchQuery string, entityMetadata *metada
 		return results
 	}
 
-	// Get searchable properties
-	searchableProps := getSearchableProperties(entityMetadata)
-
-	// If no properties are marked as searchable, consider all string properties
-	if len(searchableProps) == 0 {
-		searchableProps = getAllStringProperties(entityMetadata)
-	}
+	searchableProps := SearchableProperties(entityMetadata)
 
 	// Get the slice value
 	sliceValue := reflect.ValueOf(results)
@@ -41,6 +35,20 @@ func ApplySearch(results interface{}, searchQuery string, entityMetadata *metada
 	}
 
 	return filteredSlice.Interface()
+}
+
+// SearchableProperties returns the properties used for $search.
+func SearchableProperties(entityMetadata *metadata.EntityMetadata) []metadata.PropertyMetadata {
+	if entityMetadata == nil {
+		return nil
+	}
+
+	searchableProps := getSearchableProperties(entityMetadata)
+	if len(searchableProps) == 0 {
+		searchableProps = getAllStringProperties(entityMetadata)
+	}
+
+	return searchableProps
 }
 
 // getSearchableProperties returns all properties marked as searchable
