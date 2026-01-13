@@ -91,6 +91,9 @@ func (h *EntityHandler) SetPolicy(policy auth.Policy) {
 // SetEntitiesMetadata sets the entities metadata registry for navigation property handling
 func (h *EntityHandler) SetEntitiesMetadata(entitiesMetadata map[string]*metadata.EntityMetadata) {
 	h.entitiesMetadata = entitiesMetadata
+	if h.metadata != nil {
+		h.metadata.SetEntitiesRegistry(entitiesMetadata)
+	}
 }
 
 // SetKeyGeneratorResolver injects a resolver used to look up key generator functions by name.
