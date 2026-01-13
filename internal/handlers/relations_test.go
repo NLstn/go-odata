@@ -185,7 +185,12 @@ func TestExpandOnSingleEntity(t *testing.T) {
 func TestExpandWithNestedTop(t *testing.T) {
 	db := setupRelationTestDB(t)
 	authorMeta, _ := metadata.AnalyzeEntity(&Author{})
+	bookMeta, _ := metadata.AnalyzeEntity(&Book{})
 	handler := NewEntityHandler(db, authorMeta, nil)
+	handler.SetEntitiesMetadata(map[string]*metadata.EntityMetadata{
+		authorMeta.EntitySetName: authorMeta,
+		bookMeta.EntitySetName:   bookMeta,
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "/Authors(1)?$expand=Books($top=1)", nil)
 	w := httptest.NewRecorder()
@@ -215,7 +220,12 @@ func TestExpandWithNestedTop(t *testing.T) {
 func TestExpandWithNestedSkip(t *testing.T) {
 	db := setupRelationTestDB(t)
 	authorMeta, _ := metadata.AnalyzeEntity(&Author{})
+	bookMeta, _ := metadata.AnalyzeEntity(&Book{})
 	handler := NewEntityHandler(db, authorMeta, nil)
+	handler.SetEntitiesMetadata(map[string]*metadata.EntityMetadata{
+		authorMeta.EntitySetName: authorMeta,
+		bookMeta.EntitySetName:   bookMeta,
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "/Authors(1)?$expand=Books($skip=1)", nil)
 	w := httptest.NewRecorder()

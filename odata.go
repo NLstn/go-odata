@@ -870,6 +870,9 @@ func (s *Service) RegisterEntity(entity interface{}) error {
 
 	// Store the metadata
 	s.entities[entityMetadata.EntitySetName] = entityMetadata
+	for _, meta := range s.entities {
+		meta.SetEntitiesRegistry(s.entities)
+	}
 
 	// Create and store the handler
 	handler := handlers.NewEntityHandler(s.db, entityMetadata, s.logger)
@@ -941,6 +944,9 @@ func (s *Service) RegisterSingleton(entity interface{}, singletonName string) er
 
 	// Store the metadata using singleton name as key
 	s.entities[singletonName] = singletonMetadata
+	for _, meta := range s.entities {
+		meta.SetEntitiesRegistry(s.entities)
+	}
 
 	// Create and store the handler (same handler type works for both entities and singletons)
 	handler := handlers.NewEntityHandler(s.db, singletonMetadata, s.logger)
@@ -1017,6 +1023,9 @@ func (s *Service) RegisterVirtualEntity(entity interface{}) error {
 
 	// Store the metadata
 	s.entities[entityMetadata.EntitySetName] = entityMetadata
+	for _, meta := range s.entities {
+		meta.SetEntitiesRegistry(s.entities)
+	}
 
 	// Create and store the handler (no database operations will be performed)
 	handler := handlers.NewEntityHandler(s.db, entityMetadata, s.logger)

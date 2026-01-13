@@ -41,6 +41,7 @@ rely on version numbers to reason about compatibility.
 - **Cache eviction prevents unbounded memory growth**: Metadata cache now limited to 10 entries with automatic eviction keeping 5 most common versions (4.0, 4.01 prioritized).
 
 ### Fixed
+- Nested `$expand` options now validate `$select`, `$filter`, `$orderby`, and `$compute` against the expanded entity metadata, and expanded order-by/filter SQL uses metadata-aware column resolution with dialect quoting to avoid invalid property use and SQL mismatches.
 - **OData-MaxVersion header now correctly negotiates response version**: Per OData v4 spec section 8.2.6, the service now responds with the maximum supported version that is less than or equal to the requested `OData-MaxVersion` header. When a client sends `OData-MaxVersion: 4.0`, the response now correctly includes `OData-Version: 4.0` instead of the hardcoded `4.01`. This fixes compatibility with clients like Excel that only support OData v4.0.
 - **Batch responses now echo Content-ID headers**: Per OData v4 spec section 11.7.4, Content-ID headers from batch request parts are now properly echoed back in the corresponding response parts. This enables clients to correlate batch responses with their requests, which is essential for batch request processing and changeset referencing.
 - Pre-request hook failures now return OData-formatted error responses for non-batch requests.

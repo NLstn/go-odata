@@ -21,9 +21,42 @@ type TestBook struct {
 	Author   *TestAuthor `json:"Author,omitempty" gorm:"foreignKey:AuthorID"`
 }
 
+func buildAuthorBookMetadata(t *testing.T) (*metadata.EntityMetadata, *metadata.EntityMetadata) {
+	t.Helper()
+
+	authorMeta, err := metadata.AnalyzeEntity(&TestAuthor{})
+	if err != nil {
+		t.Fatalf("Failed to analyze author entity: %v", err)
+	}
+
+	bookMeta, err := metadata.AnalyzeEntity(&TestBook{})
+	if err != nil {
+		t.Fatalf("Failed to analyze book entity: %v", err)
+	}
+
+	setEntitiesRegistry(authorMeta, bookMeta)
+
+	return authorMeta, bookMeta
+}
+
+func setEntitiesRegistry(metas ...*metadata.EntityMetadata) {
+	entities := make(map[string]*metadata.EntityMetadata, len(metas))
+	for _, meta := range metas {
+		if meta == nil {
+			continue
+		}
+		entities[meta.EntitySetName] = meta
+	}
+	for _, meta := range metas {
+		if meta != nil {
+			meta.SetEntitiesRegistry(entities)
+		}
+	}
+}
+
 // TestParseExpandSimple tests parsing a simple $expand
 func TestParseExpandSimple(t *testing.T) {
-	authorMeta, _ := metadata.AnalyzeEntity(&TestAuthor{})
+	authorMeta, _ := buildAuthorBookMetadata(t)
 
 	params := url.Values{}
 	params.Set("$expand", "Books")
@@ -44,7 +77,7 @@ func TestParseExpandSimple(t *testing.T) {
 
 // TestParseExpandWithNestedTop tests parsing $expand with nested $top
 func TestParseExpandWithNestedTop(t *testing.T) {
-	authorMeta, _ := metadata.AnalyzeEntity(&TestAuthor{})
+	authorMeta, _ := buildAuthorBookMetadata(t)
 
 	params := url.Values{}
 	params.Set("$expand", "Books($top=5)")
@@ -67,7 +100,7 @@ func TestParseExpandWithNestedTop(t *testing.T) {
 
 // TestParseExpandWithNestedSkip tests parsing $expand with nested $skip
 func TestParseExpandWithNestedSkip(t *testing.T) {
-	authorMeta, _ := metadata.AnalyzeEntity(&TestAuthor{})
+	authorMeta, _ := buildAuthorBookMetadata(t)
 
 	params := url.Values{}
 	params.Set("$expand", "Books($skip=2)")
@@ -90,7 +123,7 @@ func TestParseExpandWithNestedSkip(t *testing.T) {
 
 // TestParseExpandWithNestedSelect tests parsing $expand with nested $select
 func TestParseExpandWithNestedSelect(t *testing.T) {
-	authorMeta, _ := metadata.AnalyzeEntity(&TestAuthor{})
+	authorMeta, _ := buildAuthorBookMetadata(t)
 
 	params := url.Values{}
 	params.Set("$expand", "Books($select=Title)")
@@ -113,7 +146,7 @@ func TestParseExpandWithNestedSelect(t *testing.T) {
 
 // TestParseExpandWithMultipleNestedOptions tests parsing $expand with multiple nested options
 func TestParseExpandWithMultipleNestedOptions(t *testing.T) {
-	authorMeta, _ := metadata.AnalyzeEntity(&TestAuthor{})
+	authorMeta, _ := buildAuthorBookMetadata(t)
 
 	params := url.Values{}
 	params.Set("$expand", "Books($select=Title;$top=3;$skip=1)")
@@ -144,7 +177,7 @@ func TestParseExpandWithMultipleNestedOptions(t *testing.T) {
 
 // TestParseExpandInvalid tests parsing an invalid $expand
 func TestParseExpandInvalid(t *testing.T) {
-	authorMeta, _ := metadata.AnalyzeEntity(&TestAuthor{})
+	authorMeta, _ := buildAuthorBookMetadata(t)
 
 	params := url.Values{}
 	params.Set("$expand", "InvalidProperty")
@@ -159,7 +192,7 @@ func TestParseExpandInvalid(t *testing.T) {
 func TestParseExpandMultiple(t *testing.T) {
 	// For this test, we need a more complex entity structure
 	// Since we only have Author->Books, we'll just test the parsing logic
-	authorMeta, _ := metadata.AnalyzeEntity(&TestAuthor{})
+	authorMeta, _ := buildAuthorBookMetadata(t)
 
 	params := url.Values{}
 	params.Set("$expand", "Books")
@@ -176,7 +209,7 @@ func TestParseExpandMultiple(t *testing.T) {
 
 // TestParseExpandWithFilterAndOrderBy tests combining $expand with $filter and $orderby
 func TestParseExpandWithFilterAndOrderBy(t *testing.T) {
-	authorMeta, _ := metadata.AnalyzeEntity(&TestAuthor{})
+	authorMeta, _ := buildAuthorBookMetadata(t)
 
 	params := url.Values{}
 	params.Set("$expand", "Books")
@@ -203,7 +236,7 @@ func TestParseExpandWithFilterAndOrderBy(t *testing.T) {
 
 // TestParseExpandWithCount tests combining $expand with $count
 func TestParseExpandWithCount(t *testing.T) {
-	authorMeta, _ := metadata.AnalyzeEntity(&TestAuthor{})
+	authorMeta, _ := buildAuthorBookMetadata(t)
 
 	params := url.Values{}
 	params.Set("$expand", "Books")
@@ -225,7 +258,7 @@ func TestParseExpandWithCount(t *testing.T) {
 
 // TestParseExpandWithTopAndSkip tests combining $expand with $top and $skip on main entity
 func TestParseExpandWithTopAndSkip(t *testing.T) {
-	authorMeta, _ := metadata.AnalyzeEntity(&TestAuthor{})
+	authorMeta, _ := buildAuthorBookMetadata(t)
 
 	params := url.Values{}
 	params.Set("$expand", "Books")
@@ -252,7 +285,7 @@ func TestParseExpandWithTopAndSkip(t *testing.T) {
 
 // TestParseExpandWithNestedFilter tests parsing $expand with nested $filter
 func TestParseExpandWithNestedFilter(t *testing.T) {
-	authorMeta, _ := metadata.AnalyzeEntity(&TestAuthor{})
+	authorMeta, _ := buildAuthorBookMetadata(t)
 
 	params := url.Values{}
 	params.Set("$expand", "Books($filter=Title eq 'Test Book')")
@@ -286,7 +319,7 @@ func TestParseExpandWithNestedFilter(t *testing.T) {
 
 // TestParseExpandWithNestedOrderBy tests parsing $expand with nested $orderby
 func TestParseExpandWithNestedOrderBy(t *testing.T) {
-	authorMeta, _ := metadata.AnalyzeEntity(&TestAuthor{})
+	authorMeta, _ := buildAuthorBookMetadata(t)
 
 	params := url.Values{}
 	params.Set("$expand", "Books($orderby=Title desc)")
@@ -317,7 +350,7 @@ func TestParseExpandWithNestedOrderBy(t *testing.T) {
 
 // TestParseExpandWithMultipleNestedFilters tests parsing $expand with complex nested $filter
 func TestParseExpandWithMultipleNestedFilters(t *testing.T) {
-	authorMeta, _ := metadata.AnalyzeEntity(&TestAuthor{})
+	authorMeta, _ := buildAuthorBookMetadata(t)
 
 	params := url.Values{}
 	params.Set("$expand", "Books($filter=Title eq 'Book A' or Title eq 'Book B')")
@@ -347,7 +380,7 @@ func TestParseExpandWithMultipleNestedFilters(t *testing.T) {
 
 // TestParseExpandWithAllNestedOptions tests parsing $expand with all nested options
 func TestParseExpandWithAllNestedOptions(t *testing.T) {
-	authorMeta, _ := metadata.AnalyzeEntity(&TestAuthor{})
+	authorMeta, _ := buildAuthorBookMetadata(t)
 
 	params := url.Values{}
 	params.Set("$expand", "Books($filter=Title ne 'Archived';$select=Title;$orderby=Title;$top=5;$skip=2)")
@@ -398,6 +431,44 @@ func TestParseExpandWithAllNestedOptions(t *testing.T) {
 	}
 }
 
+func TestParseExpandWithInvalidNestedOptions(t *testing.T) {
+	authorMeta, _ := buildAuthorBookMetadata(t)
+
+	tests := []struct {
+		name        string
+		expandQuery string
+	}{
+		{
+			name:        "Invalid nested select",
+			expandQuery: "Books($select=DoesNotExist)",
+		},
+		{
+			name:        "Invalid nested filter",
+			expandQuery: "Books($filter=DoesNotExist eq 1)",
+		},
+		{
+			name:        "Invalid nested orderby",
+			expandQuery: "Books($orderby=DoesNotExist desc)",
+		},
+		{
+			name:        "Invalid nested compute",
+			expandQuery: "Books($compute=DoesNotExist eq 1 as Total)",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			params := url.Values{}
+			params.Set("$expand", tt.expandQuery)
+
+			_, err := ParseQueryOptions(params, authorMeta)
+			if err == nil {
+				t.Fatalf("Expected error for %s", tt.expandQuery)
+			}
+		})
+	}
+}
+
 // TestSplitExpandParts tests the expand parts splitting logic
 func TestSplitExpandParts(t *testing.T) {
 	tests := []struct {
@@ -440,7 +511,7 @@ func TestSplitExpandParts(t *testing.T) {
 
 // TestParseExpandWithComplexFilter tests parsing $expand with complex nested filters
 func TestParseExpandWithComplexFilter(t *testing.T) {
-	authorMeta, _ := metadata.AnalyzeEntity(&TestAuthor{})
+	authorMeta, _ := buildAuthorBookMetadata(t)
 
 	tests := []struct {
 		name        string
@@ -521,6 +592,18 @@ func TestParseExpandWithMultipleLevels(t *testing.T) {
 		t.Fatalf("Failed to analyze entity: %v", err)
 	}
 
+	publisherMeta, err := metadata.AnalyzeEntity(&Publisher{})
+	if err != nil {
+		t.Fatalf("Failed to analyze publisher entity: %v", err)
+	}
+
+	bookMeta, err := metadata.AnalyzeEntity(&TestBook{})
+	if err != nil {
+		t.Fatalf("Failed to analyze book entity: %v", err)
+	}
+
+	setEntitiesRegistry(authorMeta, publisherMeta, bookMeta)
+
 	tests := []struct {
 		name        string
 		expandQuery string
@@ -573,7 +656,7 @@ func TestParseExpandWithMultipleLevels(t *testing.T) {
 
 // TestParseNestedExpand tests parsing of nested $expand syntax
 func TestParseNestedExpand(t *testing.T) {
-	authorMeta, _ := metadata.AnalyzeEntity(&TestAuthor{})
+	authorMeta, _ := buildAuthorBookMetadata(t)
 
 	params := url.Values{}
 	params.Set("$expand", "Books($expand=Author)")
@@ -606,7 +689,7 @@ func TestParseNestedExpand(t *testing.T) {
 
 // TestParseNestedExpandWithOptions tests nested expand with additional query options
 func TestParseNestedExpandWithOptions(t *testing.T) {
-	authorMeta, _ := metadata.AnalyzeEntity(&TestAuthor{})
+	authorMeta, _ := buildAuthorBookMetadata(t)
 
 	params := url.Values{}
 	params.Set("$expand", "Books($expand=Author($select=Name);$top=5)")
@@ -672,6 +755,18 @@ func TestParseMultiLevelNestedExpand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to analyze entity: %v", err)
 	}
+
+	memberMeta, err := metadata.AnalyzeEntity(&Member{})
+	if err != nil {
+		t.Fatalf("Failed to analyze member entity: %v", err)
+	}
+
+	clubMeta, err := metadata.AnalyzeEntity(&Club{})
+	if err != nil {
+		t.Fatalf("Failed to analyze club entity: %v", err)
+	}
+
+	setEntitiesRegistry(userMeta, memberMeta, clubMeta)
 
 	params := url.Values{}
 	params.Set("$expand", "Members($expand=Club)")
