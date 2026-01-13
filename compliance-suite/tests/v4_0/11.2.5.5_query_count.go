@@ -130,7 +130,52 @@ func QueryCount() *framework.TestSuite {
 		},
 	)
 
-	// Test 4: $count with $top still returns total count
+	// Test 4: $count with $search returns search-filtered count
+	suite.AddTest(
+		"test_count_with_search",
+		"$count with $search returns search-filtered count",
+		func(ctx *framework.TestContext) error {
+			resp, err := ctx.GET("/Products?$count=true&$search=Laptop")
+			if err != nil {
+				return err
+			}
+			if resp.StatusCode != 200 {
+				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+			}
+
+			var result map[string]interface{}
+			if err := json.Unmarshal(resp.Body, &result); err != nil {
+				return fmt.Errorf("failed to parse JSON: %w", err)
+			}
+
+			countVal, ok := result["@odata.count"]
+			if !ok {
+				return fmt.Errorf("@odata.count field is missing")
+			}
+
+			countFloat, ok := countVal.(float64)
+			if !ok {
+				return fmt.Errorf("@odata.count is not a number")
+			}
+
+			value, ok := result["value"].([]interface{})
+			if !ok {
+				return fmt.Errorf("response missing 'value' array")
+			}
+
+			if len(value) == 0 {
+				return fmt.Errorf("expected at least one search result for 'Laptop'")
+			}
+
+			if int(countFloat) != len(value) {
+				return fmt.Errorf("count=%d but response contains %d items", int(countFloat), len(value))
+			}
+
+			return nil
+		},
+	)
+
+	// Test 5: $count with $top still returns total count
 	suite.AddTest(
 		"test_count_with_top",
 		"$count with $top returns total count, not page count",
