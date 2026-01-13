@@ -10,6 +10,7 @@ rely on version numbers to reason about compatibility.
 ## [Unreleased]
 
 ### Added
+- **Compliance suite $count segment coverage**: Added OData v4.0 tests for the `$count` path segment, validating text/plain responses and filtered count parity with `@odata.count`.
 - **OData version negotiation (4.0 / 4.01) with context-aware handling**: Added full support for OData version negotiation per OData v4 spec §8.2.6. The service now negotiates version based on client's `OData-MaxVersion` header and stores the negotiated version in request context via `version.GetVersion(ctx)`. Metadata documents are now version-specific and cached per version. New features include:
   - Context-aware version handling with `version.WithVersion()` and `version.GetVersion()`
   - Version-specific metadata caching with automatic eviction (max 10 entries)

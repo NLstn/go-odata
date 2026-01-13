@@ -346,6 +346,11 @@ func main() {
 			Suite:   v4_0.QuerySearch,
 		})
 		testSuites = append(testSuites, TestSuiteInfo{
+			Name:    "11.2.4.2_count_segment",
+			Version: "4.0",
+			Suite:   v4_0.CountSegment,
+		})
+		testSuites = append(testSuites, TestSuiteInfo{
 			Name:    "11.2.5.1_query_filter",
 			Version: "4.0",
 			Suite:   v4_0.QueryFilter,
