@@ -103,5 +103,33 @@ func NestedExpandOptions() *framework.TestSuite {
 		},
 	)
 
+	// Test 7: Expand with invalid nested $select
+	suite.AddTest(
+		"test_expand_invalid_nested_select",
+		"Expand with invalid nested $select returns 400",
+		func(ctx *framework.TestContext) error {
+			expand := url.QueryEscape("Descriptions($select=DoesNotExist)")
+			resp, err := ctx.GET("/Products?$expand=" + expand)
+			if err != nil {
+				return err
+			}
+			return ctx.AssertStatusCode(resp, 400)
+		},
+	)
+
+	// Test 8: Expand with invalid nested $filter
+	suite.AddTest(
+		"test_expand_invalid_nested_filter",
+		"Expand with invalid nested $filter returns 400",
+		func(ctx *framework.TestContext) error {
+			expand := url.QueryEscape("Descriptions($filter=DoesNotExist eq 'X')")
+			resp, err := ctx.GET("/Products?$expand=" + expand)
+			if err != nil {
+				return err
+			}
+			return ctx.AssertStatusCode(resp, 400)
+		},
+	)
+
 	return suite
 }

@@ -43,6 +43,7 @@ type EntityMetadata struct {
 		HasODataBeforeReadEntity     bool
 		HasODataAfterReadEntity      bool
 	}
+	entitiesRegistry map[string]*EntityMetadata
 }
 
 // TypeDiscriminatorInfo holds metadata about the type discriminator property
@@ -1210,6 +1211,41 @@ func (metadata *EntityMetadata) IsSingleEntityNavigationPath(path string) bool {
 	// because we don't have access to the related entity's metadata here.
 	// Validation will occur during query execution, resulting in a database error if invalid.
 	return true
+}
+
+// SetEntitiesRegistry provides access to the registered entity metadata for navigation resolution.
+func (metadata *EntityMetadata) SetEntitiesRegistry(entities map[string]*EntityMetadata) {
+	if metadata == nil {
+		return
+	}
+	metadata.entitiesRegistry = entities
+}
+
+// ResolveNavigationTarget returns the target entity metadata for a navigation property.
+func (metadata *EntityMetadata) ResolveNavigationTarget(name string) (*EntityMetadata, error) {
+	if metadata == nil {
+		return nil, fmt.Errorf("entity metadata is nil")
+	}
+
+	navProp := metadata.FindNavigationProperty(name)
+	if navProp == nil {
+		return nil, fmt.Errorf("navigation property '%s' not found", name)
+	}
+
+	if metadata.entitiesRegistry == nil {
+		return nil, fmt.Errorf("entity metadata registry is not configured")
+	}
+
+	for _, entity := range metadata.entitiesRegistry {
+		if entity == nil {
+			continue
+		}
+		if entity.EntityName == navProp.NavigationTarget || entity.EntitySetName == navProp.NavigationTarget {
+			return entity, nil
+		}
+	}
+
+	return nil, fmt.Errorf("navigation target '%s' not registered", navProp.NavigationTarget)
 }
 
 // dereferenceType unwraps pointer types to obtain the underlying type.

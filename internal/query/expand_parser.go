@@ -72,8 +72,17 @@ func parseSingleExpandCore(expandStr string, entityMetadata *metadata.EntityMeta
 		expand.NavigationProperty = strings.TrimSpace(expandStr[:idx])
 		nestedOptions := expandStr[idx+1 : len(expandStr)-1]
 
+		var targetMetadata *metadata.EntityMetadata
+		if validateMetadata && entityMetadata != nil {
+			var err error
+			targetMetadata, err = entityMetadata.ResolveNavigationTarget(expand.NavigationProperty)
+			if err != nil {
+				return expand, err
+			}
+		}
+
 		// Parse nested options
-		if err := parseNestedExpandOptionsCore(&expand, nestedOptions, entityMetadata, validateMetadata); err != nil {
+		if err := parseNestedExpandOptionsCore(&expand, nestedOptions, targetMetadata, validateMetadata); err != nil {
 			return expand, err
 		}
 	} else {
@@ -89,9 +98,33 @@ func parseSingleExpandCore(expandStr string, entityMetadata *metadata.EntityMeta
 }
 
 // parseNestedExpandOptionsCore parses nested query options with optional metadata validation
-func parseNestedExpandOptionsCore(expand *ExpandOption, optionsStr string, entityMetadata *metadata.EntityMetadata, validateMetadata bool) error {
+func parseNestedExpandOptionsCore(expand *ExpandOption, optionsStr string, targetMetadata *metadata.EntityMetadata, validateMetadata bool) error {
 	// Split by semicolon for different query options
 	parts := strings.Split(optionsStr, ";")
+	var computedAliases map[string]bool
+	var computeValue string
+
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+
+		eqIdx := strings.Index(part, "=")
+		if eqIdx == -1 {
+			continue
+		}
+
+		key := strings.TrimSpace(part[:eqIdx])
+		value := strings.TrimSpace(part[eqIdx+1:])
+		if strings.EqualFold(key, "$compute") {
+			computeValue = value
+		}
+	}
+
+	if computeValue != "" {
+		computedAliases = extractComputeAliasesFromString(computeValue)
+	}
 
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
@@ -111,35 +144,67 @@ func parseNestedExpandOptionsCore(expand *ExpandOption, optionsStr string, entit
 		switch strings.ToLower(key) {
 		case "$select":
 			expand.Select = parseSelect(value)
-		case "$expand":
-			// Parse nested $expand recursively without metadata validation
-			// as we don't have easy access to the target entity metadata
-			nestedExpand, err := parseExpandWithoutMetadata(value)
-			if err != nil {
-				return fmt.Errorf("invalid nested $expand: %w", err)
-			}
-			expand.Expand = nestedExpand
-		case "$filter":
-			if validateMetadata && entityMetadata != nil {
-				// Get the navigation property metadata to find the target entity type
-				navProp := findNavigationProperty(expand.NavigationProperty, entityMetadata)
-				if navProp == nil {
-					return fmt.Errorf("navigation property '%s' not found", expand.NavigationProperty)
+			if validateMetadata {
+				if targetMetadata == nil {
+					return fmt.Errorf("navigation target metadata is missing for $select")
+				}
+				if err := validateExpandSelect(expand.Select, targetMetadata, computedAliases); err != nil {
+					return err
 				}
 			}
-			// Parse without metadata validation for both cases
-			filter, err := parseFilterWithoutMetadata(value)
-			if err != nil {
-				return fmt.Errorf("invalid nested $filter: %w", err)
+		case "$expand":
+			if validateMetadata {
+				if targetMetadata == nil {
+					return fmt.Errorf("navigation target metadata is missing for $expand")
+				}
+				nestedExpand, err := parseExpand(value, targetMetadata)
+				if err != nil {
+					return fmt.Errorf("invalid nested $expand: %w", err)
+				}
+				expand.Expand = nestedExpand
+			} else {
+				// Parse nested $expand recursively without metadata validation
+				nestedExpand, err := parseExpandWithoutMetadata(value)
+				if err != nil {
+					return fmt.Errorf("invalid nested $expand: %w", err)
+				}
+				expand.Expand = nestedExpand
 			}
-			expand.Filter = filter
+		case "$filter":
+			if validateMetadata {
+				if targetMetadata == nil {
+					return fmt.Errorf("navigation target metadata is missing for $filter")
+				}
+				filter, err := parseFilter(value, targetMetadata, computedAliases)
+				if err != nil {
+					return fmt.Errorf("invalid nested $filter: %w", err)
+				}
+				expand.Filter = filter
+			} else {
+				filter, err := parseFilterWithoutMetadata(value)
+				if err != nil {
+					return fmt.Errorf("invalid nested $filter: %w", err)
+				}
+				expand.Filter = filter
+			}
 		case "$orderby":
-			// Parse orderby without strict metadata validation
-			orderBy, err := parseOrderByWithoutMetadata(value)
-			if err != nil {
-				return fmt.Errorf("invalid nested $orderby: %w", err)
+			if validateMetadata {
+				if targetMetadata == nil {
+					return fmt.Errorf("navigation target metadata is missing for $orderby")
+				}
+				orderBy, err := parseOrderBy(value, targetMetadata, computedAliases)
+				if err != nil {
+					return fmt.Errorf("invalid nested $orderby: %w", err)
+				}
+				expand.OrderBy = orderBy
+			} else {
+				// Parse orderby without strict metadata validation
+				orderBy, err := parseOrderByWithoutMetadata(value)
+				if err != nil {
+					return fmt.Errorf("invalid nested $orderby: %w", err)
+				}
+				expand.OrderBy = orderBy
 			}
-			expand.OrderBy = orderBy
 		case "$top":
 			var top int
 			if _, err := fmt.Sscanf(value, "%d", &top); err != nil {
@@ -153,12 +218,62 @@ func parseNestedExpandOptionsCore(expand *ExpandOption, optionsStr string, entit
 			}
 			expand.Skip = &skip
 		case "$compute":
-			// Parse compute without metadata validation since we don't have the target entity metadata
-			compute, err := parseComputeWithoutMetadata(value)
-			if err != nil {
-				return fmt.Errorf("invalid nested $compute: %w", err)
+			if validateMetadata {
+				if targetMetadata == nil {
+					return fmt.Errorf("navigation target metadata is missing for $compute")
+				}
+				computeTransformation, err := parseCompute("compute("+value+")", targetMetadata)
+				if err != nil {
+					return fmt.Errorf("invalid nested $compute: %w", err)
+				}
+				expand.Compute = computeTransformation.Compute
+			} else {
+				// Parse compute without metadata validation since we don't have the target entity metadata
+				compute, err := parseComputeWithoutMetadata(value)
+				if err != nil {
+					return fmt.Errorf("invalid nested $compute: %w", err)
+				}
+				expand.Compute = compute
 			}
-			expand.Compute = compute
+		}
+	}
+
+	return nil
+}
+
+func validateExpandSelect(selectedProps []string, entityMetadata *metadata.EntityMetadata, computedAliases map[string]bool) error {
+	if entityMetadata == nil {
+		return fmt.Errorf("entity metadata is nil")
+	}
+
+	for _, propName := range selectedProps {
+		if computedAliases != nil && computedAliases[propName] {
+			continue
+		}
+
+		if strings.Contains(propName, "/") {
+			parts := strings.SplitN(propName, "/", 2)
+			navPropName := strings.TrimSpace(parts[0])
+			subPropName := strings.TrimSpace(parts[1])
+
+			if !isNavigationProperty(navPropName, entityMetadata) {
+				return fmt.Errorf("property '%s' does not exist in entity type", propName)
+			}
+
+			if subPropName != "" {
+				targetMetadata, err := entityMetadata.ResolveNavigationTarget(navPropName)
+				if err != nil {
+					return err
+				}
+				if !propertyExists(subPropName, targetMetadata) {
+					return fmt.Errorf("property '%s' does not exist in entity type", propName)
+				}
+			}
+			continue
+		}
+
+		if !propertyExists(propName, entityMetadata) {
+			return fmt.Errorf("property '%s' does not exist in entity type", propName)
 		}
 	}
 
