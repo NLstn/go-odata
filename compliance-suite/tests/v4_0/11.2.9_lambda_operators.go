@@ -159,7 +159,7 @@ func executeLambdaFilter(ctx *framework.TestContext, expression string) (*framew
 	if resp.StatusCode != 200 {
 		switch resp.StatusCode {
 		case 400, 404, 500, 501:
-			return nil, ctx.Skip(lambdaSkipReason)
+			return nil, framework.NewError(lambdaSkipReason)
 		default:
 			return nil, fmt.Errorf("expected status 200, got %d", resp.StatusCode)
 		}
