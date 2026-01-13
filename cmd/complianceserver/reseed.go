@@ -42,6 +42,21 @@ func seedDatabase(db *gorm.DB) error {
 	//nolint:errcheck
 	_ = db.Migrator().DropTable(&entities.MediaItem{})
 
+	// Drop FTS tables if they exist to ensure search indexes are rebuilt
+	// Only for SQLite - FTS tables are virtual tables specific to SQLite
+	if dialectName == "sqlite" {
+		//nolint:errcheck
+		_ = db.Exec("DROP TABLE IF EXISTS Products_fts").Error
+		//nolint:errcheck
+		_ = db.Exec("DROP TABLE IF EXISTS Categories_fts").Error
+		//nolint:errcheck
+		_ = db.Exec("DROP TABLE IF EXISTS ProductDescriptions_fts").Error
+		//nolint:errcheck
+		_ = db.Exec("DROP TABLE IF EXISTS CompanyInfo_fts").Error
+		//nolint:errcheck
+		_ = db.Exec("DROP TABLE IF EXISTS MediaItems_fts").Error
+	}
+
 	// Recreate tables with fresh schema (auto-increment counters are automatically reset)
 	if err := db.AutoMigrate(&entities.Category{}, &entities.Product{}, &entities.ProductDescription{}, &entities.CompanyInfo{}, &entities.MediaItem{}); err != nil {
 		return fmt.Errorf("failed to migrate database: %w", err)
