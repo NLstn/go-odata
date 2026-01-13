@@ -498,7 +498,7 @@ func NewSingle(value interface{}, facets Facets) (Type, error) {
 		}
 		float32Value = *v
 	case float64:
-		if v > math.MaxFloat32 || v < -math.MaxFloat32 {
+		if math.Abs(v) > math.MaxFloat32 {
 			return nil, fmt.Errorf("value %f out of range for Edm.Single", v)
 		}
 		float32Value = float32(v)

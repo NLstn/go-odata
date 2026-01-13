@@ -3,6 +3,7 @@ package edm
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 func init() {
@@ -72,8 +73,7 @@ func (s *String) String() string {
 		return "null"
 	}
 	// OData string literals are single-quoted with escaping
-	escaped := s.value
-	escaped = replaceAll(escaped, "'", "''")
+	escaped := strings.ReplaceAll(s.value, "'", "''")
 	return "'" + escaped + "'"
 }
 
@@ -125,29 +125,4 @@ func (s *String) UnmarshalJSON(data []byte) error {
 	s.value = value
 	s.isNull = false
 	return s.Validate()
-}
-
-// Helper function to replace all occurrences
-func replaceAll(s, old, new string) string {
-	result := ""
-	for {
-		idx := indexOf(s, old)
-		if idx == -1 {
-			result += s
-			break
-		}
-		result += s[:idx] + new
-		s = s[idx+len(old):]
-	}
-	return result
-}
-
-// Helper function to find index of substring
-func indexOf(s, substr string) int {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return i
-		}
-	}
-	return -1
 }
