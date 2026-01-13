@@ -38,7 +38,7 @@ func Operations() *framework.TestSuite {
 
 			// 404 indicates function not defined (acceptable if not in metadata)
 			if resp.StatusCode == 404 {
-				return ctx.Skip("Unbound function not defined in service")
+				return framework.NewError("Unbound function not defined in service")
 			}
 
 			return fmt.Errorf("Unexpected status code %d for unbound function", resp.StatusCode)
@@ -62,7 +62,7 @@ func Operations() *framework.TestSuite {
 
 			// 404 indicates function not defined
 			if resp.StatusCode == 404 {
-				return ctx.Skip("Unbound function with parameters not defined in service")
+				return framework.NewError("Unbound function with parameters not defined in service")
 			}
 
 			return fmt.Errorf("Unexpected status code %d for function with parameters", resp.StatusCode)
@@ -94,7 +94,7 @@ func Operations() *framework.TestSuite {
 
 			// 404 indicates function not bound to this entity type
 			if resp.StatusCode == 404 {
-				return ctx.Skip("Bound function not defined for this entity type")
+				return framework.NewError("Bound function not defined for this entity type")
 			}
 
 			return fmt.Errorf("Unexpected status code %d for bound function", resp.StatusCode)
@@ -121,7 +121,7 @@ func Operations() *framework.TestSuite {
 
 			// 404 indicates function not bound to this collection
 			if resp.StatusCode == 404 {
-				return ctx.Skip("Collection-bound function not defined for Products")
+				return framework.NewError("Collection-bound function not defined for Products")
 			}
 
 			return fmt.Errorf("Unexpected status code %d for collection-bound function", resp.StatusCode)
@@ -147,7 +147,7 @@ func Operations() *framework.TestSuite {
 
 			// 404 indicates action not defined
 			if resp.StatusCode == 404 {
-				return ctx.Skip("Unbound action not defined in service")
+				return framework.NewError("Unbound action not defined in service")
 			}
 
 			return fmt.Errorf("Unexpected status code %d for unbound action", resp.StatusCode)
@@ -179,7 +179,7 @@ func Operations() *framework.TestSuite {
 
 			// 404 indicates action not bound to this entity type
 			if resp.StatusCode == 404 {
-				return ctx.Skip("Bound action not defined for this entity type")
+				return framework.NewError("Bound action not defined for this entity type")
 			}
 
 			return fmt.Errorf("Unexpected status code %d for bound action", resp.StatusCode)
@@ -206,7 +206,7 @@ func Operations() *framework.TestSuite {
 
 			// 404 indicates operation not defined
 			if resp.StatusCode == 404 {
-				return ctx.Skip("Operation not defined in service")
+				return framework.NewError("Operation not defined in service")
 			}
 
 			return fmt.Errorf("Unexpected status code %d", resp.StatusCode)

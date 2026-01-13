@@ -31,7 +31,7 @@ func NavigationPropertyOperations() *framework.TestSuite {
 			}
 
 			if resp.StatusCode == 404 {
-				return ctx.Skip("Navigation property access returning 404, likely routing issue")
+				return framework.NewError("Navigation property access returning 404, likely routing issue")
 			}
 
 			return ctx.AssertStatusCode(resp, 200)
@@ -53,7 +53,7 @@ func NavigationPropertyOperations() *framework.TestSuite {
 			}
 
 			if resp.StatusCode == 404 {
-				return ctx.Skip("Navigation property access returning 404, likely routing issue")
+				return framework.NewError("Navigation property access returning 404, likely routing issue")
 			}
 
 			if err := ctx.AssertStatusCode(resp, 200); err != nil {
@@ -80,7 +80,7 @@ func NavigationPropertyOperations() *framework.TestSuite {
 			}
 
 			if resp.StatusCode == 404 {
-				return ctx.Skip("Navigation property access returning 404, likely routing issue")
+				return framework.NewError("Navigation property access returning 404, likely routing issue")
 			}
 
 			return ctx.AssertStatusCode(resp, 200)
@@ -102,7 +102,7 @@ func NavigationPropertyOperations() *framework.TestSuite {
 			}
 
 			if resp.StatusCode == 404 {
-				return ctx.Skip("Navigation property access returning 404, likely routing issue")
+				return framework.NewError("Navigation property access returning 404, likely routing issue")
 			}
 
 			return ctx.AssertStatusCode(resp, 200)
@@ -124,7 +124,7 @@ func NavigationPropertyOperations() *framework.TestSuite {
 			}
 
 			if resp.StatusCode == 404 {
-				return ctx.Skip("Navigation property access returning 404, likely routing issue")
+				return framework.NewError("Navigation property access returning 404, likely routing issue")
 			}
 
 			return ctx.AssertStatusCode(resp, 200)
@@ -146,7 +146,7 @@ func NavigationPropertyOperations() *framework.TestSuite {
 			}
 
 			if resp.StatusCode == 404 {
-				return ctx.Skip("Navigation property access returning 404, likely routing issue")
+				return framework.NewError("Navigation property access returning 404, likely routing issue")
 			}
 
 			return ctx.AssertStatusCode(resp, 200)
@@ -168,7 +168,7 @@ func NavigationPropertyOperations() *framework.TestSuite {
 			}
 
 			if resp.StatusCode == 404 {
-				return ctx.Skip("Navigation property access returning 404, likely routing issue")
+				return framework.NewError("Navigation property access returning 404, likely routing issue")
 			}
 
 			if err := ctx.AssertStatusCode(resp, 200); err != nil {
@@ -209,7 +209,7 @@ func NavigationPropertyOperations() *framework.TestSuite {
 			}
 
 			if resp.StatusCode == 404 {
-				return ctx.Skip("Navigation property access returning 404, likely routing issue")
+				return framework.NewError("Navigation property access returning 404, likely routing issue")
 			}
 
 			return ctx.AssertStatusCode(resp, 200)
@@ -231,7 +231,7 @@ func NavigationPropertyOperations() *framework.TestSuite {
 			}
 
 			if resp.StatusCode == 404 {
-				return ctx.Skip("Navigation property access returning 404, likely routing issue")
+				return framework.NewError("Navigation property access returning 404, likely routing issue")
 			}
 
 			if err := ctx.AssertStatusCode(resp, 200); err != nil {

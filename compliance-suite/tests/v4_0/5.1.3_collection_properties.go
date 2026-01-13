@@ -53,7 +53,7 @@ func CollectionProperties() *framework.TestSuite {
 			}
 			// Accept 400, 500, or 501 as indication feature is not implemented
 			if resp.StatusCode == 400 || resp.StatusCode == 500 || resp.StatusCode == 501 {
-				return ctx.Skip("Lambda operators (any/all) not implemented")
+				return framework.NewError("Lambda operators (any/all) not implemented")
 			}
 
 			return fmt.Errorf("unexpected status: %d", resp.StatusCode)
@@ -75,7 +75,7 @@ func CollectionProperties() *framework.TestSuite {
 			}
 			// Accept 400, 500, or 501 as indication feature is not implemented
 			if resp.StatusCode == 400 || resp.StatusCode == 500 || resp.StatusCode == 501 {
-				return ctx.Skip("Lambda operators (any/all) not implemented")
+				return framework.NewError("Lambda operators (any/all) not implemented")
 			}
 
 			return fmt.Errorf("unexpected status: %d", resp.StatusCode)

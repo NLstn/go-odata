@@ -55,9 +55,8 @@ func testFilterBySingleEntityNavigationProperty(ctx *framework.TestContext) erro
 	// Try with a generic entity set that likely has navigation properties
 	resp, err := ctx.GET("/Products?$filter=Category/Name eq 'Electronics'")
 	if err != nil {
-		// If Products doesn't exist or doesn't have the right structure, skip
-		ctx.Skip("Products entity set not available or doesn't have Category navigation property")
-		return nil
+		// If Products doesn't exist or doesn't have the right structure, fail
+		return framework.NewError("Products entity set not available or doesn't have Category navigation property")
 	}
 
 	if resp.StatusCode != 200 {
@@ -82,8 +81,7 @@ func testNavigationPropertyPathComparison(ctx *framework.TestContext) error {
 
 	resp, err := ctx.GET("/Products?$filter=Category/Name eq 'Electronics'")
 	if err != nil {
-		ctx.Skip("Products entity set not available or doesn't have Category navigation property")
-		return nil
+		return framework.NewError("Products entity set not available or doesn't have Category navigation property")
 	}
 
 	if resp.StatusCode != 200 {
@@ -101,8 +99,7 @@ func testCollectionNavigationRequiresLambda(ctx *framework.TestContext) error {
 	// This should return a 400 Bad Request error
 	resp, err := ctx.GET("/Products?$filter=Descriptions/LanguageKey eq 'EN'")
 	if err != nil {
-		ctx.Skip("Products entity set not available or doesn't have Descriptions collection")
-		return nil
+		return framework.NewError("Products entity set not available or doesn't have Descriptions collection")
 	}
 
 	// This should fail because Descriptions is a collection
@@ -125,8 +122,7 @@ func testCombineFilterAndExpandNavigation(ctx *framework.TestContext) error {
 	escapedFilter := url.QueryEscape("Category/Name eq 'Electronics'")
 	resp, err := ctx.GET("/Products?$filter=" + escapedFilter + "&$expand=Category")
 	if err != nil {
-		ctx.Skip("Products entity set not available")
-		return nil
+		return framework.NewError("Products entity set not available")
 	}
 
 	if resp.StatusCode != 200 {

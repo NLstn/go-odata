@@ -41,7 +41,7 @@ func HEADRequests() *framework.TestSuite {
 			productPath, err := firstEntityPath(ctx, "Products")
 			if err != nil {
 				if err.Error() == "status code: 500 (expected 200)" {
-					return ctx.Skip("GET request returns 500, skipping HEAD test")
+					return framework.NewError("GET request returns 500, skipping HEAD test")
 				}
 				return err
 			}

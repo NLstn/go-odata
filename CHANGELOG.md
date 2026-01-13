@@ -25,11 +25,13 @@ rely on version numbers to reason about compatibility.
   - `internal/query` package: 56.3% → 57.3% coverage (tests for query applier functions)
   - `internal/handlers` package: 42.9% → 43.1% coverage (tests for hook error extraction)
   - `internal/response` package: 53.6% → 60.1% coverage (tests for field caching, entity key extraction, format helpers)
+- Added compliance coverage for parameter aliases in system query options ($filter/$top).
 
 ### Changed
 - **Metadata cache now uses sync.Map for lock-free reads**: Converted metadata handler from `map[string]string` with `sync.RWMutex` to `sync.Map` for both XML and JSON caches, eliminating lock contention on cache hits (99%+ of requests). Benchmarks show 30% improvement in concurrent scenarios.
 - **Version headers now set automatically in router middleware**: The router now automatically sets the `OData-Version` response header based on client negotiation, eliminating the need for manual header management in most cases.
 - **Version parsing now returns explicit errors**: `parseVersion()` function signature changed from `(int, int)` to `(int, int, error)` for better error handling. Invalid version strings are now validated and rejected with HTTP 400, and versions < 4.0 return HTTP 406 (Not Acceptable).
+- **Compliance suite now enforces optional features**: Removed skip-based leniency in compliance tests so optional OData features (lambda operators, geospatial functions, stream properties, etc.) must be implemented to pass.
 
 ### Deprecated
 - `handlers.SetODataVersionHeader()` - Use `response.SetODataVersionHeaderFromRequest(w, r)` instead for context-aware version handling. The router middleware handles this automatically in most cases.

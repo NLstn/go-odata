@@ -56,7 +56,7 @@ func NullValueHandling() *framework.TestSuite {
 		"Retrieve entity returns null property correctly",
 		func(ctx *framework.TestContext) error {
 			if createdID == "" {
-				return ctx.Skip("No test entity available")
+				return framework.NewError("No test entity available")
 			}
 
 			resp, err := ctx.GET(fmt.Sprintf("/Products(%s)", createdID))
@@ -84,7 +84,7 @@ func NullValueHandling() *framework.TestSuite {
 		"Update property to null using PATCH",
 		func(ctx *framework.TestContext) error {
 			if createdID == "" {
-				return ctx.Skip("No test entity available")
+				return framework.NewError("No test entity available")
 			}
 
 			payload := map[string]interface{}{

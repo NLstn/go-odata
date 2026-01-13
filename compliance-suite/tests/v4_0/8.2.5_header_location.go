@@ -37,9 +37,9 @@ func HeaderLocation() *framework.TestSuite {
 			if resp.StatusCode != 201 && resp.StatusCode != 200 {
 				// Skip if creation fails due to validation
 				if resp.StatusCode == 400 {
-					return ctx.Skip("Entity creation validation error (likely schema mismatch)")
+					return framework.NewError("Entity creation validation error (likely schema mismatch)")
 				}
-				return ctx.Skip("Entity creation not supported or failed")
+				return framework.NewError("Entity creation not supported or failed")
 			}
 
 			// OData v4 requires Location header in 201 responses
