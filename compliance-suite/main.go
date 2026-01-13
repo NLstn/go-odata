@@ -663,6 +663,10 @@ func main() {
 
 	if len(testSuites) == 0 {
 		fmt.Println("No test suites found for version:", *version)
+		// Stop server explicitly before exiting
+		if !*externalServer && serverCmd != nil {
+			stopComplianceServer(serverCmd)
+		}
 		os.Exit(1)
 	}
 
@@ -703,6 +707,10 @@ func main() {
 
 	if len(suitesToRun) == 0 {
 		fmt.Println("No test suites matched the provided pattern.")
+		// Stop server explicitly before exiting
+		if !*externalServer && serverCmd != nil {
+			stopComplianceServer(serverCmd)
+		}
 		os.Exit(1)
 	}
 
@@ -807,15 +815,24 @@ func main() {
 		fmt.Println()
 	}
 
+	// Clean exit with proper status code
+	var exitCode int
 	if passedSuites == totalSuites {
 		fmt.Println("\033[0;32m✓ ALL TESTS PASSED\033[0m")
 		fmt.Println()
-		os.Exit(0)
+		exitCode = 0
 	} else {
 		fmt.Println("\033[0;31m✗ SOME TESTS FAILED\033[0m")
 		fmt.Println()
-		os.Exit(1)
+		exitCode = 1
 	}
+	
+	// Stop server explicitly before exiting (os.Exit bypasses defer)
+	if !*externalServer && serverCmd != nil {
+		stopComplianceServer(serverCmd)
+	}
+	
+	os.Exit(exitCode)
 }
 
 func startComplianceServer() (*exec.Cmd, error) {
@@ -889,6 +906,11 @@ func startComplianceServer() (*exec.Cmd, error) {
 	// Start the server
 	fmt.Printf("Starting compliance server (db=%s)\n", *dbType)
 	cmd := exec.Command("/tmp/complianceserver", dbArgs...)
+	
+	// Redirect server output to our stdout/stderr so we can see debug logs
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("failed to start server: %w", err)
 	}
