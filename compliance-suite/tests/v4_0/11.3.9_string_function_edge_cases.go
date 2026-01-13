@@ -140,6 +140,24 @@ func RegisterStringFunctionEdgeCasesTests(suite *framework.TestSuite) {
 		"Unicode characters handled correctly in string functions",
 		testUnicodeInStringFunctions,
 	)
+
+	suite.AddTest(
+		"contains() treats wildcard characters as literals",
+		"Wildcard characters must be treated as literals in contains()",
+		testContainsWildcardLiterals,
+	)
+
+	suite.AddTest(
+		"startswith() treats wildcard characters as literals",
+		"Wildcard characters must be treated as literals in startswith()",
+		testStartswithWildcardLiterals,
+	)
+
+	suite.AddTest(
+		"endswith() treats wildcard characters as literals",
+		"Wildcard characters must be treated as literals in endswith()",
+		testEndswithWildcardLiterals,
+	)
 }
 
 func testContainsEmptyString(ctx *framework.TestContext) error {
@@ -423,4 +441,46 @@ func testUnicodeInStringFunctions(ctx *framework.TestContext) error {
 	}
 
 	return nil
+}
+
+func testContainsWildcardLiterals(ctx *framework.TestContext) error {
+	filter := url.QueryEscape("contains(Name,'%')")
+	resp, err := ctx.GET(fmt.Sprintf("/Products?$filter=%s", filter))
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+	}
+
+	return assertEmptyValueSet(resp.Body)
+}
+
+func testStartswithWildcardLiterals(ctx *framework.TestContext) error {
+	filter := url.QueryEscape("startswith(Name,'_')")
+	resp, err := ctx.GET(fmt.Sprintf("/Products?$filter=%s", filter))
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+	}
+
+	return assertEmptyValueSet(resp.Body)
+}
+
+func testEndswithWildcardLiterals(ctx *framework.TestContext) error {
+	filter := url.QueryEscape("endswith(Name,'\\')")
+	resp, err := ctx.GET(fmt.Sprintf("/Products?$filter=%s", filter))
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+	}
+
+	return assertEmptyValueSet(resp.Body)
 }

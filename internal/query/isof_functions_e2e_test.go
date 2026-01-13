@@ -124,7 +124,7 @@ func TestIsOfFunctions_EndToEnd(t *testing.T) {
 			name:           "isof with contains function",
 			filter:         "contains(Name, 'Pro') and isof(Price, 'Edm.Decimal') eq true",
 			expectErr:      false,
-			expectedSQL:    "(name LIKE ?) AND (CASE WHEN CAST(price AS REAL) IS NOT NULL THEN 1 ELSE 0 END = ?)",
+			expectedSQL:    "(name LIKE ? ESCAPE '\\') AND (CASE WHEN CAST(price AS REAL) IS NOT NULL THEN 1 ELSE 0 END = ?)",
 			expectedArgsNo: 2,
 		},
 	}
