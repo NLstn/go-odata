@@ -17,7 +17,7 @@ type FTSManager struct {
 	ftsVersion   string // "FTS5", "FTS4", "FTS3", "POSTGRES", or ""
 	dbDialect    string // "sqlite", "postgres", or other
 	ftsTables    map[string]bool
-	ftsTablesMu  sync.RWMutex // protects ftsTables map
+	ftsTablesMu  sync.RWMutex // protects ftsTables map - RLock for reads, Lock for writes
 }
 
 // NewFTSManager creates a new FTS manager and detects FTS availability
