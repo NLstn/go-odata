@@ -870,8 +870,13 @@ func (s *Service) RegisterEntity(entity interface{}) error {
 
 	// Store the metadata
 	s.entities[entityMetadata.EntitySetName] = entityMetadata
+	// Set the entities registry for the newly registered entity metadata
+	entityMetadata.SetEntitiesRegistry(s.entities)
+	// Add the new entity to the navigation target index of all existing entities
 	for _, meta := range s.entities {
-		meta.SetEntitiesRegistry(s.entities)
+		if meta != entityMetadata {
+			meta.AddEntityToRegistry(entityMetadata)
+		}
 	}
 
 	// Create and store the handler
@@ -944,8 +949,13 @@ func (s *Service) RegisterSingleton(entity interface{}, singletonName string) er
 
 	// Store the metadata using singleton name as key
 	s.entities[singletonName] = singletonMetadata
+	// Set the entities registry for the newly registered singleton
+	singletonMetadata.SetEntitiesRegistry(s.entities)
+	// Add the new singleton to the navigation target index of all existing entities
 	for _, meta := range s.entities {
-		meta.SetEntitiesRegistry(s.entities)
+		if meta != singletonMetadata {
+			meta.AddEntityToRegistry(singletonMetadata)
+		}
 	}
 
 	// Create and store the handler (same handler type works for both entities and singletons)
@@ -1023,8 +1033,13 @@ func (s *Service) RegisterVirtualEntity(entity interface{}) error {
 
 	// Store the metadata
 	s.entities[entityMetadata.EntitySetName] = entityMetadata
+	// Set the entities registry for the newly registered virtual entity
+	entityMetadata.SetEntitiesRegistry(s.entities)
+	// Add the new virtual entity to the navigation target index of all existing entities
 	for _, meta := range s.entities {
-		meta.SetEntitiesRegistry(s.entities)
+		if meta != entityMetadata {
+			meta.AddEntityToRegistry(entityMetadata)
+		}
 	}
 
 	// Create and store the handler (no database operations will be performed)
