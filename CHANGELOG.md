@@ -78,6 +78,7 @@ rely on version numbers to reason about compatibility.
 - Ensure function context URLs honor the configured service namespace when returning complex types.
 - NewService constructors now return a clear error when given a nil database handle, preventing later panics from misconfigured callers.
 - **Hook method names renamed with "OData" prefix**: All EntityHook interface methods have been renamed to avoid conflicts with GORM's hook detection logic
+- **Lambda filters now respect navigation target column mappings**: any/all predicates now resolve target entity column names via metadata, honoring custom GORM `column:` tags in navigation collections.
   - `BeforeCreate` → `ODataBeforeCreate`
   - `AfterCreate` → `ODataAfterCreate`
   - `BeforeUpdate` → `ODataBeforeUpdate`

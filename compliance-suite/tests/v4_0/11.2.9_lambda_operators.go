@@ -52,6 +52,12 @@ func RegisterLambdaOperatorsTests(suite *framework.TestSuite) {
 		"Use nested any/all operators for multi-level filtering",
 		testNestedLambda,
 	)
+
+	suite.AddTest(
+		"Lambda any with custom column mapping",
+		"Use any() with navigation properties that map to custom column names",
+		testLambdaAnyCustomColumn,
+	)
 }
 
 func testLambdaAnyOperator(ctx *framework.TestContext) error {
@@ -144,6 +150,43 @@ func testNestedLambda(ctx *framework.TestContext) error {
 
 	if _, ok := result["value"]; !ok {
 		return fmt.Errorf("response missing 'value' array")
+	}
+
+	return nil
+}
+
+func testLambdaAnyCustomColumn(ctx *framework.TestContext) error {
+	resp, err := executeLambdaFilter(ctx, "Descriptions/any(d: d/CustomName eq 'Promo')")
+	if err != nil {
+		return err
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(resp.Body, &result); err != nil {
+		return fmt.Errorf("failed to parse response: %v", err)
+	}
+
+	value, ok := result["value"].([]interface{})
+	if !ok {
+		return fmt.Errorf("response missing 'value' array")
+	}
+
+	if len(value) == 0 {
+		return fmt.Errorf("expected at least one product with CustomName='Promo'")
+	}
+
+	for _, item := range value {
+		entry, ok := item.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("unexpected entry type in response")
+		}
+		name, ok := entry["Name"].(string)
+		if !ok {
+			return fmt.Errorf("response entry missing Name field")
+		}
+		if name != "Laptop" {
+			return fmt.Errorf("expected Name='Laptop' for CustomName filter, got '%s'", name)
+		}
 	}
 
 	return nil

@@ -2,6 +2,7 @@ package query
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/nlstn/go-odata/internal/metadata"
@@ -519,6 +520,8 @@ func buildLambdaCondition(dialect string, filter *FilterExpression, entityMetada
 		return "", nil
 	}
 
+	navTargetMetadata := getNavigationTargetMetadata(navProp)
+
 	// Use cached table name from metadata (computed once during entity registration)
 	relatedTableName := navProp.NavigationTargetTableName
 
@@ -555,7 +558,7 @@ func buildLambdaCondition(dialect string, filter *FilterExpression, entityMetada
 		return "", nil
 	}
 
-	predicateSQL, predicateArgs := buildFilterConditionForLambda(dialect, predicate, navProp)
+	predicateSQL, predicateArgs := buildFilterConditionForLambda(dialect, predicate, navTargetMetadata)
 	if predicateSQL == "" {
 		return "", nil
 	}
@@ -572,22 +575,46 @@ func buildLambdaCondition(dialect string, filter *FilterExpression, entityMetada
 	return sql, predicateArgs
 }
 
+func getNavigationTargetMetadata(navProp *metadata.PropertyMetadata) *metadata.EntityMetadata {
+	if navProp == nil || navProp.Type == nil {
+		return nil
+	}
+
+	targetType := navProp.Type
+	if targetType.Kind() == reflect.Slice {
+		targetType = targetType.Elem()
+	}
+	if targetType.Kind() == reflect.Ptr {
+		targetType = targetType.Elem()
+	}
+	if targetType.Kind() != reflect.Struct {
+		return nil
+	}
+
+	targetMeta, err := metadata.AnalyzeEntity(reflect.New(targetType).Interface())
+	if err != nil {
+		return nil
+	}
+
+	return targetMeta
+}
+
 // buildFilterConditionForLambda builds a filter condition for lambda subquery predicates
-func buildFilterConditionForLambda(dialect string, filter *FilterExpression, navProp *metadata.PropertyMetadata) (string, []interface{}) {
+func buildFilterConditionForLambda(dialect string, filter *FilterExpression, navTargetMetadata *metadata.EntityMetadata) (string, []interface{}) {
 	if filter == nil {
 		return "", nil
 	}
 
 	if filter.Logical != "" {
-		return buildLogicalConditionForLambda(dialect, filter, navProp)
+		return buildLogicalConditionForLambda(dialect, filter, navTargetMetadata)
 	}
 
 	if filter.Left != nil && filter.Left.Operator != "" {
-		return buildFunctionComparisonForLambda(dialect, filter, navProp)
+		return buildFunctionComparisonForLambda(dialect, filter, navTargetMetadata)
 	}
 
 	// Quote the column name for proper database compatibility
-	columnName := quoteIdent(dialect, toSnakeCase(filter.Property))
+	columnName := quoteIdent(dialect, GetColumnName(filter.Property, navTargetMetadata))
 
 	switch filter.Operator {
 	case OpEqual:
@@ -620,9 +647,9 @@ func buildFilterConditionForLambda(dialect string, filter *FilterExpression, nav
 }
 
 // buildLogicalConditionForLambda builds a logical condition for lambda predicates
-func buildLogicalConditionForLambda(dialect string, filter *FilterExpression, navProp *metadata.PropertyMetadata) (string, []interface{}) {
-	leftQuery, leftArgs := buildFilterConditionForLambda(dialect, filter.Left, navProp)
-	rightQuery, rightArgs := buildFilterConditionForLambda(dialect, filter.Right, navProp)
+func buildLogicalConditionForLambda(dialect string, filter *FilterExpression, navTargetMetadata *metadata.EntityMetadata) (string, []interface{}) {
+	leftQuery, leftArgs := buildFilterConditionForLambda(dialect, filter.Left, navTargetMetadata)
+	rightQuery, rightArgs := buildFilterConditionForLambda(dialect, filter.Right, navTargetMetadata)
 
 	var query string
 	switch filter.Logical {
@@ -639,10 +666,10 @@ func buildLogicalConditionForLambda(dialect string, filter *FilterExpression, na
 }
 
 // buildFunctionComparisonForLambda builds a function comparison for lambda predicates
-func buildFunctionComparisonForLambda(dialect string, filter *FilterExpression, _ *metadata.PropertyMetadata) (string, []interface{}) {
+func buildFunctionComparisonForLambda(dialect string, filter *FilterExpression, navTargetMetadata *metadata.EntityMetadata) (string, []interface{}) {
 	funcExpr := filter.Left
 	// Quote the column name for proper database compatibility
-	columnName := quoteIdent(dialect, toSnakeCase(funcExpr.Property))
+	columnName := quoteIdent(dialect, GetColumnName(funcExpr.Property, navTargetMetadata))
 
 	funcSQL, funcArgs := buildFunctionSQL(dialect, funcExpr.Operator, columnName, funcExpr.Value)
 	if funcSQL == "" {

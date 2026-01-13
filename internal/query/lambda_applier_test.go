@@ -26,6 +26,7 @@ type TestProductDescription struct {
 	TestProductID uint         `json:"TestProductID" gorm:"primaryKey;column:test_product_id"`
 	LanguageKey   string       `json:"LanguageKey" gorm:"primaryKey;size:2"`
 	Description   string       `json:"Description"`
+	CustomName    string       `json:"CustomName" gorm:"column:custom_name"`
 	Product       *TestProduct `gorm:"foreignKey:TestProductID;references:ID"`
 }
 
@@ -55,7 +56,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	}
 
 	descriptions := []TestProductDescription{
-		{TestProductID: 1, LanguageKey: "EN", Description: "High-performance laptop"},
+		{TestProductID: 1, LanguageKey: "EN", Description: "High-performance laptop", CustomName: "Promo"},
 		{TestProductID: 1, LanguageKey: "DE", Description: "Hochleistungs-Laptop"},
 		{TestProductID: 2, LanguageKey: "EN", Description: "Wireless mouse"},
 		{TestProductID: 3, LanguageKey: "EN", Description: "Mechanical keyboard"},
@@ -398,5 +399,27 @@ func TestLambdaApplier_ComplexPredicates(t *testing.T) {
 				t.Errorf("Expected %d results, got %d", tt.expectedCount, count)
 			}
 		})
+	}
+}
+
+func TestLambdaApplier_CustomColumnAny(t *testing.T) {
+	db := setupTestDB(t)
+	entityMetadata := getTestProductMetadata()
+
+	filterExpr, err := parseFilter("Descriptions/any(d: d/CustomName eq 'Promo')", entityMetadata, nil)
+	if err != nil {
+		t.Fatalf("Failed to parse filter: %v", err)
+	}
+
+	query := db.Model(&TestProduct{})
+	query = ApplyFilterOnly(query, filterExpr, entityMetadata)
+
+	var count int64
+	if err := query.Count(&count).Error; err != nil {
+		t.Fatalf("Failed to execute query: %v", err)
+	}
+
+	if count != 1 {
+		t.Errorf("Expected 1 result, got %d", count)
 	}
 }
