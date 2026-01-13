@@ -14,7 +14,7 @@ The compliance test suite validates that an OData service correctly implements t
 - Batch requests
 - And more...
 
-The test suite runs on both **SQLite** and **PostgreSQL** databases to ensure cross-database compatibility. All 105 test suites pass on both databases with a 93% individual test pass rate (620 passing tests out of 666 total).
+The test suite runs on both **SQLite** and **PostgreSQL** databases to ensure cross-database compatibility. All 106 test suites pass on both databases with a 93% individual test pass rate (620 passing tests out of 669 total).
 
 ## Project Structure
 
@@ -76,17 +76,17 @@ Example outputs:
 
 ```bash
 # Normal mode - concise output
-Running 105 suites (666 total tests)
+Running 106 suites (669 total tests)
 
-Progress: suites 105/105 | tests 666/666 | passed 666 | failed 0 | skipped 0
+Progress: suites 106/106 | tests 669/669 | passed 669 | failed 0 | skipped 0
 
 ╔════════════════════════════════════════════════════════╗
 ║                  OVERALL SUMMARY                       ║
 ╚════════════════════════════════════════════════════════╝
-Test Scripts: 105/105 passed (100%)
+Test Scripts: 106/106 passed (100%)
 Individual Tests:
-    - Total: 666
-    - Passing: 666
+    - Total: 669
+    - Passing: 669
     - Failing: 0
     - Skipped: 0
     - Pass Rate: 100%
