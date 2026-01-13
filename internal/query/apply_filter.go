@@ -411,13 +411,13 @@ func buildStandardComparison(dialect string, operator FilterOperator, columnName
 		return fmt.Sprintf("%s IN (%s)", columnName, strings.Join(placeholders, ", ")), values
 
 	case OpContains:
-		return buildLikeComparison(columnName, value, true, true)
+		return buildLikeComparison(dialect, columnName, value, true, true)
 
 	case OpStartsWith:
-		return buildLikeComparison(columnName, value, false, true)
+		return buildLikeComparison(dialect, columnName, value, false, true)
 
 	case OpEndsWith:
-		return buildLikeComparison(columnName, value, true, false)
+		return buildLikeComparison(dialect, columnName, value, true, false)
 
 	case OpHas:
 		return fmt.Sprintf("(%s & ?) = ?", columnName), []interface{}{value, value}
@@ -636,11 +636,11 @@ func buildFilterConditionForLambda(dialect string, filter *FilterExpression, nav
 	case OpLessThanOrEqual:
 		return fmt.Sprintf("%s <= ?", columnName), []interface{}{filter.Value}
 	case OpContains:
-		return buildLikeComparison(columnName, filter.Value, true, true)
+		return buildLikeComparison(dialect, columnName, filter.Value, true, true)
 	case OpStartsWith:
-		return buildLikeComparison(columnName, filter.Value, false, true)
+		return buildLikeComparison(dialect, columnName, filter.Value, false, true)
 	case OpEndsWith:
-		return buildLikeComparison(columnName, filter.Value, true, false)
+		return buildLikeComparison(dialect, columnName, filter.Value, true, false)
 	default:
 		return "", nil
 	}
