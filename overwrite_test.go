@@ -217,10 +217,15 @@ func TestGetCollectionOverwrite_HookError_CustomStatusCode(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
+	// Read response body once
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("Failed to read response body: %v", err)
+	}
+
 	// Verify status code is 401, not 500
 	if resp.StatusCode != http.StatusUnauthorized {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("Expected status 401, got %d: %s", resp.StatusCode, body)
+		t.Fatalf("Expected status 401, got %d: %s", resp.StatusCode, bodyBytes)
 	}
 
 	// Verify error response contains the custom message
@@ -230,12 +235,6 @@ func TestGetCollectionOverwrite_HookError_CustomStatusCode(t *testing.T) {
 			Message string `json:"message"`
 		} `json:"error"`
 	}
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("Failed to read response body: %v", err)
-	}
-
-	// Reset the body for decoding
 	if err := json.Unmarshal(bodyBytes, &result); err != nil {
 		t.Fatalf("Failed to decode error response: %v", err)
 	}
