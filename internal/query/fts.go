@@ -124,6 +124,13 @@ func (m *FTSManager) GetFTSVersion() string {
 	return m.ftsVersion
 }
 
+// ClearFTSCache clears the internal cache of FTS tables
+// This is useful after dropping FTS tables (e.g., during database reseeding)
+// to ensure the manager will recreate them when needed
+func (m *FTSManager) ClearFTSCache() {
+	m.ftsTables = make(map[string]bool)
+}
+
 // EnsureFTSTable creates an FTS table for the given entity if it doesn't exist
 func (m *FTSManager) EnsureFTSTable(tableName string, entityMetadata *metadata.EntityMetadata) error {
 	if !m.ftsAvailable {
