@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"sync"
 
 	"github.com/nlstn/go-odata/internal/metadata"
 	"gorm.io/gorm"
@@ -16,6 +17,7 @@ type FTSManager struct {
 	ftsVersion   string // "FTS5", "FTS4", "FTS3", "POSTGRES", or ""
 	dbDialect    string // "sqlite", "postgres", or other
 	ftsTables    map[string]bool
+	ftsTablesMu  sync.RWMutex // protects ftsTables map
 }
 
 // NewFTSManager creates a new FTS manager and detects FTS availability
@@ -128,6 +130,8 @@ func (m *FTSManager) GetFTSVersion() string {
 // This is useful after dropping FTS tables (e.g., during database reseeding)
 // to ensure the manager will recreate them when needed
 func (m *FTSManager) ClearFTSCache() {
+	m.ftsTablesMu.Lock()
+	defer m.ftsTablesMu.Unlock()
 	m.ftsTables = make(map[string]bool)
 }
 
@@ -139,7 +143,11 @@ func (m *FTSManager) EnsureFTSTable(tableName string, entityMetadata *metadata.E
 
 	// Check if FTS table already exists
 	ftsTableName := m.getFTSTableName(tableName)
-	if m.ftsTables[ftsTableName] {
+	m.ftsTablesMu.RLock()
+	exists := m.ftsTables[ftsTableName]
+	m.ftsTablesMu.RUnlock()
+
+	if exists {
 		return nil
 	}
 
@@ -159,7 +167,9 @@ func (m *FTSManager) EnsureFTSTable(tableName string, entityMetadata *metadata.E
 		return err
 	}
 
+	m.ftsTablesMu.Lock()
 	m.ftsTables[ftsTableName] = true
+	m.ftsTablesMu.Unlock()
 	return nil
 }
 
