@@ -107,7 +107,7 @@ func (h *EntityHandler) handleGetCollectionOverwrite(w http.ResponseWriter, r *h
 	// Call the overwrite handler
 	result, err := h.overwrite.getCollection(ctx)
 	if err != nil {
-		WriteError(w, http.StatusInternalServerError, "Error fetching collection", err.Error())
+		h.writeHookError(w, err, http.StatusInternalServerError, "Error fetching collection")
 		return
 	}
 
