@@ -179,6 +179,10 @@ func registerReseedAction(service *odata.Service, db *gorm.DB) {
 				return err
 			}
 
+			// Clear FTS cache after dropping FTS tables during seedDatabase
+			// This ensures FTS tables will be recreated when needed
+			service.ResetFTS()
+
 			// Drop the async jobs table if it exists to ensure clean state
 			if err := db.Migrator().DropTable("_odata_async_jobs"); err != nil {
 				// Log but don't fail - table might not exist

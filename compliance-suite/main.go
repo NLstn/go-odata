@@ -826,12 +826,12 @@ func main() {
 		fmt.Println()
 		exitCode = 1
 	}
-	
+
 	// Stop server explicitly before exiting (os.Exit bypasses defer)
 	if !*externalServer && serverCmd != nil {
 		stopComplianceServer(serverCmd)
 	}
-	
+
 	os.Exit(exitCode)
 }
 
@@ -906,11 +906,11 @@ func startComplianceServer() (*exec.Cmd, error) {
 	// Start the server
 	fmt.Printf("Starting compliance server (db=%s)\n", *dbType)
 	cmd := exec.Command("/tmp/complianceserver", dbArgs...)
-	
+
 	// Redirect server output to our stdout/stderr so we can see debug logs
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	
+
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("failed to start server: %w", err)
 	}

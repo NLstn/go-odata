@@ -1776,6 +1776,16 @@ func (s *Service) SetEntityDefaultMaxTop(entitySetName string, maxTop int) error
 	return nil
 }
 
+// ResetFTS clears the internal FTS (Full-Text Search) cache
+// This should be called after dropping FTS tables (e.g., during database reseeding)
+// to ensure the FTS manager will recreate them when needed
+func (s *Service) ResetFTS() {
+	if s.ftsManager != nil {
+		s.ftsManager.ClearFTSCache()
+		s.logger.Debug("FTS cache cleared")
+	}
+}
+
 func parameterDefinitionsCompatible(existing, derived []actions.ParameterDefinition) bool {
 	if len(existing) != len(derived) {
 		return false
