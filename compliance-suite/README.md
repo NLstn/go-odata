@@ -8,7 +8,7 @@ The compliance test suite validates that an OData service correctly implements t
 
 - Service document and metadata
 - Query options ($filter, $select, $orderby, etc.)
-- Query option combinations that validate $count with $search responses
+- $count behavior when using the $search query option
 - CRUD operations
 - HTTP headers and content negotiation
 - Entity relationships and navigation
