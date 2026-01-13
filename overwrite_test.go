@@ -195,6 +195,60 @@ func TestGetCollectionOverwrite_Error(t *testing.T) {
 	}
 }
 
+func TestGetCollectionOverwrite_HookError_CustomStatusCode(t *testing.T) {
+	service := setupOverwriteTestService(t)
+
+	// Register overwrite handler that returns HookError with custom status code
+	err := service.SetGetCollectionOverwrite("TestOverwriteProducts", func(ctx *OverwriteContext) (*CollectionResult, error) {
+		// Simulate authentication check failure
+		return nil, NewHookError(http.StatusUnauthorized, "unauthorized: user not authenticated")
+	})
+	if err != nil {
+		t.Fatalf("Failed to set overwrite: %v", err)
+	}
+
+	server := httptest.NewServer(service)
+	defer server.Close()
+
+	// Make request
+	resp, err := http.Get(server.URL + "/TestOverwriteProducts")
+	if err != nil {
+		t.Fatalf("Request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Verify status code is 401, not 500
+	if resp.StatusCode != http.StatusUnauthorized {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("Expected status 401, got %d: %s", resp.StatusCode, body)
+	}
+
+	// Verify error response contains the custom message
+	var result struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("Failed to read response body: %v", err)
+	}
+
+	// Reset the body for decoding
+	if err := json.Unmarshal(bodyBytes, &result); err != nil {
+		t.Fatalf("Failed to decode error response: %v", err)
+	}
+
+	if result.Error.Code != "401" {
+		t.Errorf("Expected error code '401', got %q", result.Error.Code)
+	}
+
+	if result.Error.Message != "unauthorized: user not authenticated" {
+		t.Errorf("Expected error message 'unauthorized: user not authenticated', got %q", result.Error.Message)
+	}
+}
+
 func TestGetEntityOverwrite(t *testing.T) {
 	service := setupOverwriteTestService(t)
 
