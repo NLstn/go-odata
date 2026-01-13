@@ -203,6 +203,19 @@ func buildProductPayload(ctx *framework.TestContext, name string, price float64)
 	}, nil
 }
 
+func assertEmptyValueSet(body []byte) error {
+	var result struct {
+		Value []interface{} `json:"value"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+	if len(result.Value) != 0 {
+		return fmt.Errorf("expected 0 results, got %d", len(result.Value))
+	}
+	return nil
+}
+
 func createTestProduct(ctx *framework.TestContext, name string, price float64) (string, error) {
 	payload, err := buildProductPayload(ctx, name, price)
 	if err != nil {

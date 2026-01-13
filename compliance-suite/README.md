@@ -12,6 +12,7 @@ The compliance test suite validates that an OData service correctly implements t
 - HTTP headers and content negotiation
 - Entity relationships and navigation
 - Batch requests
+- String function edge cases, including literal wildcard handling in contains/startswith/endswith
 - And more...
 
 The test suite runs on both **SQLite** and **PostgreSQL** databases to ensure cross-database compatibility. All 106 test suites pass on both databases with a 93% individual test pass rate (620 passing tests out of 669 total).
