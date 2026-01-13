@@ -8,6 +8,7 @@ type ProductDescription struct {
 	LanguageKey string    `json:"LanguageKey" gorm:"primaryKey;size:2" odata:"key,maxlength=2"`
 	Description string    `json:"Description" gorm:"not null" odata:"required,maxlength=500,searchable"`
 	LongText    *string   `json:"LongText" gorm:"type:text" odata:"maxlength=2000,nullable,searchable"`
+	CustomName  string    `json:"CustomName" gorm:"column:custom_name"`
 	// Navigation property back to Product
 	Product *Product `json:"Product,omitempty" gorm:"foreignKey:ProductID;references:ID"`
 }
@@ -26,6 +27,7 @@ func GetSampleProductDescriptions() []ProductDescription {
 			LanguageKey: "EN",
 			Description: "High-performance laptop for productivity and gaming",
 			LongText:    stringPtr("This state-of-the-art laptop features the latest processor technology, dedicated graphics card, and ample RAM to handle all your computing needs. Perfect for both professional work and entertainment."),
+			CustomName:  "Promo",
 		},
 		{
 			ProductID:   uuid.Nil, // Will be set during seeding to first product (Laptop)
