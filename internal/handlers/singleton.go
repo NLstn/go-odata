@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"strings"
 
 	"github.com/nlstn/go-odata/internal/auth"
 	"github.com/nlstn/go-odata/internal/etag"
@@ -131,6 +132,10 @@ func (h *EntityHandler) handlePatchSingleton(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	// Filter out OData control information (annotations starting with @odata.)
+	// These are not actual entity properties and should not be passed to the database
+	h.removeODataAnnotations(updateData)
+
 	// Apply updates to the entity
 	if err := h.db.Model(entityInstance).Updates(updateData).Error; err != nil {
 		h.writeDatabaseError(w, err)
@@ -215,4 +220,15 @@ func (h *EntityHandler) handlePutSingleton(w http.ResponseWriter, r *http.Reques
 func (h *EntityHandler) handleOptionsSingleton(w http.ResponseWriter) {
 	w.Header().Set("Allow", "GET, HEAD, PATCH, PUT, OPTIONS")
 	w.WriteHeader(http.StatusOK)
+}
+
+// removeODataAnnotations removes OData control information (annotations starting with @odata.)
+// from the update data as they are not actual entity properties and should not be passed to the database.
+// This includes @odata.context, @odata.etag, @odata.id, @odata.type, etc.
+func (h *EntityHandler) removeODataAnnotations(updateData map[string]interface{}) {
+	for key := range updateData {
+		if strings.HasPrefix(key, "@odata.") {
+			delete(updateData, key)
+		}
+	}
 }
