@@ -71,7 +71,7 @@ func ResourcePath() *framework.TestSuite {
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 			if len(result.Value) == 0 {
-				return ctx.Skip("no products available for testing")
+				return framework.NewError("no products available for testing")
 			}
 
 			productID := result.Value[0].ID
@@ -109,7 +109,7 @@ func ResourcePath() *framework.TestSuite {
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 			if len(result.Value) == 0 {
-				return ctx.Skip("no products available for testing")
+				return framework.NewError("no products available for testing")
 			}
 
 			productID := result.Value[0].ID
@@ -123,7 +123,7 @@ func ResourcePath() *framework.TestSuite {
 			case 200:
 				return nil
 			case 404:
-				return ctx.Skip(fmt.Sprintf("named key syntax (ID=%s) not implemented", productID))
+				return framework.NewError(fmt.Sprintf("named key syntax (ID=%s) not implemented", productID))
 			default:
 				return fmt.Errorf("named key syntax should return 200 or 404 (got %d)", resp.StatusCode)
 			}
@@ -153,7 +153,7 @@ func ResourcePath() *framework.TestSuite {
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 			if len(result.Value) == 0 {
-				return ctx.Skip("no products available for testing")
+				return framework.NewError("no products available for testing")
 			}
 
 			productID := result.Value[0].ID
@@ -193,7 +193,7 @@ func ResourcePath() *framework.TestSuite {
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 			if len(result.Value) == 0 {
-				return ctx.Skip("no products available for testing")
+				return framework.NewError("no products available for testing")
 			}
 
 			productID := result.Value[0].ID
@@ -206,7 +206,7 @@ func ResourcePath() *framework.TestSuite {
 			case 200:
 				return nil
 			case 404:
-				return ctx.Skip("property $value not implemented")
+				return framework.NewError("property $value not implemented")
 			default:
 				return fmt.Errorf("property $value should return 200 or 404 (got %d)", resp.StatusCode)
 			}
@@ -236,7 +236,7 @@ func ResourcePath() *framework.TestSuite {
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 			if len(result.Value) == 0 {
-				return ctx.Skip("no products available for testing")
+				return framework.NewError("no products available for testing")
 			}
 
 			productID := result.Value[0].ID
@@ -275,7 +275,7 @@ func ResourcePath() *framework.TestSuite {
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 			if len(result.Value) == 0 {
-				return ctx.Skip("no products available for testing")
+				return framework.NewError("no products available for testing")
 			}
 
 			productID := result.Value[0].ID
@@ -288,7 +288,7 @@ func ResourcePath() *framework.TestSuite {
 			case 200:
 				return nil
 			case 404, 501:
-				return ctx.Skip("chained navigation not implemented")
+				return framework.NewError("chained navigation not implemented")
 			default:
 				return fmt.Errorf("chained navigation should return 200, 404, or 501 (got %d)", resp.StatusCode)
 			}

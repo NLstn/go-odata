@@ -58,7 +58,7 @@ func NullableProperties() *framework.TestSuite {
 				return nil
 			}
 			if resp.StatusCode == 400 {
-				return ctx.Skip("null literal handling in $filter not implemented")
+				return framework.NewError("null literal handling in $filter not implemented")
 			}
 
 			return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
@@ -80,7 +80,7 @@ func NullableProperties() *framework.TestSuite {
 				return nil
 			}
 			if resp.StatusCode == 400 {
-				return ctx.Skip("null literal handling in $filter not implemented")
+				return framework.NewError("null literal handling in $filter not implemented")
 			}
 
 			return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
@@ -212,7 +212,7 @@ func NullableProperties() *framework.TestSuite {
 				return nil
 			}
 			if resp.StatusCode == 400 {
-				return ctx.Skip("null literal handling in $filter not implemented")
+				return framework.NewError("null literal handling in $filter not implemented")
 			}
 
 			return fmt.Errorf("expected status 200, got %d", resp.StatusCode)

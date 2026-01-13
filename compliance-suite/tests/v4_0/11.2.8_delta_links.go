@@ -66,7 +66,7 @@ func DeltaLinks() *framework.TestSuite {
 		"Delta feed includes newly created entity",
 		func(ctx *framework.TestContext) error {
 			if currentToken == "" {
-				return ctx.Skip("No delta token available from previous test")
+				return framework.NewError("No delta token available from previous test")
 			}
 
 			// Create a new product
@@ -136,11 +136,11 @@ func DeltaLinks() *framework.TestSuite {
 		"Delta feed reports deleted entity",
 		func(ctx *framework.TestContext) error {
 			if createdProductID == "" {
-				return ctx.Skip("No product created in previous test")
+				return framework.NewError("No product created in previous test")
 			}
 
 			if currentToken == "" {
-				return ctx.Skip("No delta token available")
+				return framework.NewError("No delta token available")
 			}
 
 			// Verify entity exists before attempting deletion
@@ -150,7 +150,7 @@ func DeltaLinks() *framework.TestSuite {
 			}
 
 			if checkResp.StatusCode == 404 {
-				return ctx.Skip("Product no longer exists (may have been deleted in previous test run)")
+				return framework.NewError("Product no longer exists (may have been deleted in previous test run)")
 			}
 
 			// Delete the product
@@ -166,7 +166,7 @@ func DeltaLinks() *framework.TestSuite {
 
 			// If entity was already deleted, skip the test
 			if deleteResp.StatusCode == 404 {
-				return ctx.Skip("Product was already deleted")
+				return framework.NewError("Product was already deleted")
 			}
 
 			// Get delta feed

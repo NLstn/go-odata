@@ -147,7 +147,7 @@ func EntityReferences() *framework.TestSuite {
 				return nil
 			}
 			if resp.StatusCode == 400 {
-				return ctx.Skip("$ref with $filter not supported by service")
+				return framework.NewError("$ref with $filter not supported by service")
 			}
 
 			return fmt.Errorf("expected status 200, got %d", resp.StatusCode)

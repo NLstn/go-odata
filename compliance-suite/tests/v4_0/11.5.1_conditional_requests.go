@@ -76,7 +76,7 @@ func ConditionalRequests() *framework.TestSuite {
 			}
 
 			if etag == "" {
-				return ctx.Skip("No ETag support")
+				return framework.NewError("No ETag support")
 			}
 
 			resp, err := ctx.GET(path, framework.Header{Key: "If-None-Match", Value: etag})
@@ -99,7 +99,7 @@ func ConditionalRequests() *framework.TestSuite {
 			}
 
 			if etag == "" {
-				return ctx.Skip("No ETag support")
+				return framework.NewError("No ETag support")
 			}
 
 			resp, err := ctx.GET(path, framework.Header{Key: "If-None-Match", Value: `"different-etag"`})
@@ -122,7 +122,7 @@ func ConditionalRequests() *framework.TestSuite {
 			}
 
 			if etag == "" {
-				return ctx.Skip("No ETag support")
+				return framework.NewError("No ETag support")
 			}
 
 			payload := map[string]interface{}{
@@ -156,7 +156,7 @@ func ConditionalRequests() *framework.TestSuite {
 			}
 
 			if etag == "" {
-				return ctx.Skip("No ETag support")
+				return framework.NewError("No ETag support")
 			}
 
 			payload := map[string]interface{}{
@@ -185,7 +185,7 @@ func ConditionalRequests() *framework.TestSuite {
 			}
 
 			if etag == "" {
-				return ctx.Skip("No ETag support")
+				return framework.NewError("No ETag support")
 			}
 
 			payload := map[string]interface{}{

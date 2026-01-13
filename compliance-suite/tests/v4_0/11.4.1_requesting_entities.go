@@ -125,7 +125,7 @@ func registerRequestingEntitiesTests(suite *framework.TestSuite) {
 			etag := resp.Headers.Get("ETag")
 			if etag == "" {
 				// ETag support is optional
-				return ctx.Skip("ETag support not implemented")
+				return framework.NewError("ETag support not implemented")
 			}
 
 			// Second request with If-None-Match

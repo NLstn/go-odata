@@ -63,7 +63,7 @@ func AsynchronousProcessing() *framework.TestSuite {
 			if resp.StatusCode == 202 {
 				return nil
 			} else if resp.StatusCode == 200 {
-				return ctx.Skip("Service does not support asynchronous processing")
+				return framework.NewError("Service does not support asynchronous processing")
 			}
 
 			return framework.NewError("Unexpected status code")
@@ -87,7 +87,7 @@ func AsynchronousProcessing() *framework.TestSuite {
 				}
 				return nil
 			} else if resp.StatusCode == 200 {
-				return ctx.Skip("Service does not support asynchronous processing")
+				return framework.NewError("Service does not support asynchronous processing")
 			}
 
 			return framework.NewError("Unexpected status code")

@@ -126,10 +126,10 @@ func testGeoDistance(ctx *framework.TestContext) error {
 	case 400, 500:
 		// Database doesn't support geospatial functions (e.g., SQLite without SpatiaLite)
 		// 500 occurs when SQL functions like ST_Distance are not available, causing SQL errors
-		return ctx.Skip("Database doesn't support geospatial functions (optional feature)")
+		return framework.NewError("Database doesn't support geospatial functions (optional feature)")
 	case 404, 501:
 		// Library feature not implemented
-		return ctx.Skip("geo.distance not implemented (optional feature)")
+		return framework.NewError("geo.distance not implemented (optional feature)")
 	default:
 		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
@@ -150,10 +150,10 @@ func testGeoLength(ctx *framework.TestContext) error {
 	case 400, 500:
 		// Database doesn't support geospatial functions
 		// 500 occurs when SQL functions like ST_Length are not available
-		return ctx.Skip("Database doesn't support geospatial functions (optional feature)")
+		return framework.NewError("Database doesn't support geospatial functions (optional feature)")
 	case 404, 501:
 		// Library feature not implemented
-		return ctx.Skip("geo.length not implemented (optional feature)")
+		return framework.NewError("geo.length not implemented (optional feature)")
 	default:
 		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
@@ -174,10 +174,10 @@ func testGeoIntersects(ctx *framework.TestContext) error {
 	case 400, 500:
 		// Database doesn't support geospatial functions
 		// 500 occurs when SQL functions like ST_Intersects are not available
-		return ctx.Skip("Database doesn't support geospatial functions (optional feature)")
+		return framework.NewError("Database doesn't support geospatial functions (optional feature)")
 	case 404, 501:
 		// Library feature not implemented
-		return ctx.Skip("geo.intersects not implemented (optional feature)")
+		return framework.NewError("geo.intersects not implemented (optional feature)")
 	default:
 		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
@@ -228,10 +228,10 @@ func testGeoLiteralFormat(ctx *framework.TestContext) error {
 	case 400, 500:
 		// Database doesn't support geospatial functions
 		// 500 occurs when SQL spatial functions are not available
-		return ctx.Skip("Database doesn't support geospatial functions (optional feature)")
+		return framework.NewError("Database doesn't support geospatial functions (optional feature)")
 	case 404, 501:
 		// Library feature not implemented
-		return ctx.Skip("Geospatial functions not implemented (optional feature)")
+		return framework.NewError("Geospatial functions not implemented (optional feature)")
 	default:
 		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
@@ -253,10 +253,10 @@ func testGeometryVsGeography(ctx *framework.TestContext) error {
 	case 400, 500:
 		// Database doesn't support geospatial or geometry type
 		// 500 occurs when SQL spatial functions are not available
-		return ctx.Skip("Database doesn't support geometry type (optional feature)")
+		return framework.NewError("Database doesn't support geometry type (optional feature)")
 	case 404, 501:
 		// Library feature not implemented
-		return ctx.Skip("Geometry type not implemented (optional feature)")
+		return framework.NewError("Geometry type not implemented (optional feature)")
 	default:
 		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
@@ -311,10 +311,10 @@ func testGeoCombinedFilter(ctx *framework.TestContext) error {
 	case 400, 500:
 		// Database doesn't support geospatial functions or combined filters
 		// 500 occurs when SQL spatial functions are not available
-		return ctx.Skip("Database doesn't support combined geospatial filters (optional feature)")
+		return framework.NewError("Database doesn't support combined geospatial filters (optional feature)")
 	case 404, 501:
 		// Library feature not implemented
-		return ctx.Skip("Combined geo filter not supported (optional feature)")
+		return framework.NewError("Combined geo filter not supported (optional feature)")
 	default:
 		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}

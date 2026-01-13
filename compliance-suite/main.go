@@ -386,6 +386,11 @@ func main() {
 			Suite:   v4_0.QuerySkiptoken,
 		})
 		testSuites = append(testSuites, TestSuiteInfo{
+			Name:    "11.2.5.8_parameter_aliases",
+			Version: "4.0",
+			Suite:   v4_0.ParameterAliases,
+		})
+		testSuites = append(testSuites, TestSuiteInfo{
 			Name:    "11.2.5.9_nested_expand_options",
 			Version: "4.0",
 			Suite:   v4_0.NestedExpandOptions,

@@ -65,7 +65,7 @@ func CollectionOperations() *framework.TestSuite {
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 			if len(result.Value) == 0 {
-				return ctx.Skip("no products available for testing")
+				return framework.NewError("no products available for testing")
 			}
 
 			productID := result.Value[0].ID
@@ -210,7 +210,7 @@ func CollectionOperations() *framework.TestSuite {
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 			if len(result.Value) == 0 {
-				return ctx.Skip("no products available for testing")
+				return framework.NewError("no products available for testing")
 			}
 
 			productID := result.Value[0].ID
@@ -250,7 +250,7 @@ func CollectionOperations() *framework.TestSuite {
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 			if len(result.Value) == 0 {
-				return ctx.Skip("no products available for testing")
+				return framework.NewError("no products available for testing")
 			}
 
 			productID := result.Value[0].ID

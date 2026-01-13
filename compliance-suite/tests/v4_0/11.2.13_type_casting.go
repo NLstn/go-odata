@@ -368,7 +368,7 @@ func skipIfDerivedTypesUnavailable(ctx *framework.TestContext) error {
 		return err
 	}
 	if !supported {
-		return ctx.Skip("Service metadata does not declare derived type with ProductType discriminator")
+		return framework.NewError("Service metadata does not declare derived type with ProductType discriminator")
 	}
 	return nil
 }

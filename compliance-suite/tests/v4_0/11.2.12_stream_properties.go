@@ -54,7 +54,7 @@ func StreamProperties() *framework.TestSuite {
 			}
 
 			if resp.StatusCode == 404 || resp.StatusCode == 405 || resp.StatusCode == 501 {
-				return ctx.Skip("media entities not implemented")
+				return framework.NewError("media entities not implemented")
 			}
 
 			return fmt.Errorf("unexpected status: %d", resp.StatusCode)
@@ -80,7 +80,7 @@ func StreamProperties() *framework.TestSuite {
 			}
 
 			if resp.StatusCode == 404 || resp.StatusCode == 405 || resp.StatusCode == 501 {
-				return ctx.Skip("media entity $value not implemented")
+				return framework.NewError("media entity $value not implemented")
 			}
 
 			return fmt.Errorf("unexpected status: %d", resp.StatusCode)
@@ -106,7 +106,7 @@ func StreamProperties() *framework.TestSuite {
 			}
 
 			if resp.StatusCode == 404 || resp.StatusCode == 405 || resp.StatusCode == 501 {
-				return ctx.Skip("stream properties not implemented")
+				return framework.NewError("stream properties not implemented")
 			}
 
 			return fmt.Errorf("unexpected status: %d", resp.StatusCode)
@@ -137,7 +137,7 @@ func StreamProperties() *framework.TestSuite {
 			}
 
 			if resp.StatusCode == 404 || resp.StatusCode == 405 || resp.StatusCode == 501 {
-				return ctx.Skip("media content unavailable (status: %d)")
+				return fmt.Errorf("media content unavailable (status: %d)", resp.StatusCode)
 			}
 
 			return fmt.Errorf("unexpected status: %d", resp.StatusCode)
@@ -159,7 +159,7 @@ func StreamProperties() *framework.TestSuite {
 			}
 
 			if resp.StatusCode == 404 || resp.StatusCode == 405 || resp.StatusCode == 501 {
-				return ctx.Skip("media entity creation unsupported (status: %d)")
+				return fmt.Errorf("media entity creation unsupported (status: %d)", resp.StatusCode)
 			}
 
 			return fmt.Errorf("unexpected status: %d", resp.StatusCode)
@@ -185,7 +185,7 @@ func StreamProperties() *framework.TestSuite {
 			}
 
 			if resp.StatusCode == 404 || resp.StatusCode == 405 || resp.StatusCode == 501 {
-				return ctx.Skip("media entity update unsupported (status: %d)")
+				return fmt.Errorf("media entity update unsupported (status: %d)", resp.StatusCode)
 			}
 
 			return fmt.Errorf("unexpected status %d updating media entity. Response: %s", resp.StatusCode, string(resp.Body))
@@ -211,7 +211,7 @@ func StreamProperties() *framework.TestSuite {
 			}
 
 			if resp.StatusCode == 404 || resp.StatusCode == 405 || resp.StatusCode == 501 {
-				return ctx.Skip("media entity metadata missing (status: %d)")
+				return fmt.Errorf("media entity metadata missing (status: %d)", resp.StatusCode)
 			}
 
 			return fmt.Errorf("unexpected status: %d", resp.StatusCode)
@@ -262,7 +262,7 @@ func StreamProperties() *framework.TestSuite {
 			}
 
 			if resp.StatusCode == 404 || resp.StatusCode == 405 || resp.StatusCode == 501 {
-				return ctx.Skip("media stream negotiation failed (status: %d)")
+				return fmt.Errorf("media stream negotiation failed (status: %d)", resp.StatusCode)
 			}
 
 			return fmt.Errorf("unexpected status: %d", resp.StatusCode)
@@ -288,7 +288,7 @@ func StreamProperties() *framework.TestSuite {
 			}
 
 			if resp.StatusCode == 404 || resp.StatusCode == 405 || resp.StatusCode == 501 {
-				return ctx.Skip("media entity deletion failed (status: %d)")
+				return fmt.Errorf("media entity deletion failed (status: %d)", resp.StatusCode)
 			}
 
 			return fmt.Errorf("unexpected status: %d", resp.StatusCode)
@@ -318,7 +318,7 @@ func StreamProperties() *framework.TestSuite {
 			}
 
 			if resp.StatusCode == 404 || resp.StatusCode == 405 || resp.StatusCode == 501 {
-				return ctx.Skip("media entity endpoint unavailable (status: %d)")
+				return fmt.Errorf("media entity endpoint unavailable (status: %d)", resp.StatusCode)
 			}
 
 			return fmt.Errorf("unexpected status: %d", resp.StatusCode)
@@ -344,7 +344,7 @@ func StreamProperties() *framework.TestSuite {
 			}
 
 			if resp.StatusCode == 404 || resp.StatusCode == 405 || resp.StatusCode == 501 {
-				return ctx.Skip("stream property $value missing (status: %d)")
+				return fmt.Errorf("stream property $value missing (status: %d)", resp.StatusCode)
 			}
 
 			return fmt.Errorf("unexpected status: %d", resp.StatusCode)

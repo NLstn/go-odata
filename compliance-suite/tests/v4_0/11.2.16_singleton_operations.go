@@ -273,7 +273,7 @@ func SingletonOperations() *framework.TestSuite {
 			}
 
 			if resp.StatusCode == 404 {
-				return ctx.Skip("singleton properties not implemented (optional feature)")
+				return framework.NewError("singleton properties not implemented (optional feature)")
 			}
 
 			return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
