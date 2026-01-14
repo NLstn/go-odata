@@ -13,20 +13,20 @@ import (
 
 // OrderHeader is a parent entity with composite keys
 type OrderHeader struct {
-	OrderID  uint       `json:"OrderID" gorm:"primaryKey" odata:"key"`
-	Version  string     `json:"Version" gorm:"primaryKey;size:10" odata:"key"`
-	Customer string     `json:"Customer" gorm:"not null"`
+	OrderID  uint        `json:"OrderID" gorm:"primaryKey" odata:"key"`
+	Version  string      `json:"Version" gorm:"primaryKey;size:10" odata:"key"`
+	Customer string      `json:"Customer" gorm:"not null"`
 	Lines    []OrderLine `json:"Lines" gorm:"foreignKey:OrderID,Version;references:OrderID,Version"`
 }
 
 // OrderLine is a child entity that references the parent's composite key
 type OrderLine struct {
-	LineID      uint    `json:"LineID" gorm:"primaryKey" odata:"key"`
-	OrderID     uint    `json:"OrderID" gorm:"not null"`
-	Version     string  `json:"Version" gorm:"size:10;not null"`
-	ProductName string  `json:"ProductName" gorm:"not null"`
-	Quantity    int     `json:"Quantity" gorm:"not null"`
-	UnitPrice   float64 `json:"UnitPrice" gorm:"not null"`
+	LineID      uint         `json:"LineID" gorm:"primaryKey" odata:"key"`
+	OrderID     uint         `json:"OrderID" gorm:"not null"`
+	Version     string       `json:"Version" gorm:"size:10;not null"`
+	ProductName string       `json:"ProductName" gorm:"not null"`
+	Quantity    int          `json:"Quantity" gorm:"not null"`
+	UnitPrice   float64      `json:"UnitPrice" gorm:"not null"`
 	Order       *OrderHeader `json:"Order,omitempty" gorm:"foreignKey:OrderID,Version;references:OrderID,Version"`
 }
 

@@ -30,11 +30,11 @@ func TestNavigationFilterWithCustomPrimaryKey(t *testing.T) {
 	}
 
 	type Employee struct {
-		ID             uint        `json:"ID" gorm:"primaryKey" odata:"key"`
-		Name           string      `json:"Name" gorm:"not null" odata:"required"`
-		DepartmentCode string      `json:"DepartmentCode" gorm:"type:varchar(10);not null" odata:"required"`
+		ID             uint   `json:"ID" gorm:"primaryKey" odata:"key"`
+		Name           string `json:"Name" gorm:"not null" odata:"required"`
+		DepartmentCode string `json:"DepartmentCode" gorm:"type:varchar(10);not null" odata:"required"`
 		// Note: No explicit references: tag - should auto-detect from Department's primary key
-		Department     *Department `json:"Department" gorm:"foreignKey:DepartmentCode"`
+		Department *Department `json:"Department" gorm:"foreignKey:DepartmentCode"`
 	}
 
 	// Migrate and seed
