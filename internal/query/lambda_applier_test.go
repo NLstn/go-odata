@@ -1,6 +1,7 @@
 package query
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/nlstn/go-odata/internal/metadata"
@@ -34,6 +35,27 @@ type TestProductDescription struct {
 // TableName specifies the table name for TestProductDescription
 func (TestProductDescription) TableName() string {
 	return "TestProductDescriptions"
+}
+
+type CompositeParent struct {
+	KeyPartA string           `json:"KeyPartA" gorm:"primaryKey;column:pk_alpha" odata:"key"`
+	KeyPartB int              `json:"KeyPartB" gorm:"primaryKey;column:pk_beta" odata:"key"`
+	Children []CompositeChild `json:"Children" gorm:"foreignKey:ParentKeyA,ParentKeyB;references:KeyPartA,KeyPartB"`
+}
+
+func (CompositeParent) TableName() string {
+	return "CompositeParents"
+}
+
+type CompositeChild struct {
+	ID         uint   `json:"ID" gorm:"primaryKey;column:child_id" odata:"key"`
+	ParentKeyA string `json:"ParentKeyA" gorm:"column:fk_alpha"`
+	ParentKeyB int    `json:"ParentKeyB" gorm:"column:fk_beta"`
+	Note       string `json:"Note" gorm:"column:note_text"`
+}
+
+func (CompositeChild) TableName() string {
+	return "CompositeChildren"
 }
 
 // setupTestDB creates an in-memory database for testing
@@ -94,6 +116,35 @@ func getTestProductMetadata() *metadata.EntityMetadata {
 	descriptionMeta.SetEntitiesRegistry(registry)
 
 	return productMeta
+}
+
+func setupCompositeKeyMetadata(t *testing.T) (*gorm.DB, *metadata.EntityMetadata) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("Failed to connect to database: %v", err)
+	}
+
+	if err := db.AutoMigrate(&CompositeParent{}, &CompositeChild{}); err != nil {
+		t.Fatalf("Failed to migrate database: %v", err)
+	}
+
+	parentMeta, err := metadata.AnalyzeEntity(CompositeParent{})
+	if err != nil {
+		t.Fatalf("Failed to analyze parent metadata: %v", err)
+	}
+	childMeta, err := metadata.AnalyzeEntity(CompositeChild{})
+	if err != nil {
+		t.Fatalf("Failed to analyze child metadata: %v", err)
+	}
+
+	registry := map[string]*metadata.EntityMetadata{
+		"CompositeParent": parentMeta,
+		"CompositeChild":  childMeta,
+	}
+	parentMeta.SetEntitiesRegistry(registry)
+	childMeta.SetEntitiesRegistry(registry)
+
+	return db, parentMeta
 }
 
 func TestLambdaApplier_SimpleAny(t *testing.T) {
@@ -456,5 +507,54 @@ func TestLambdaApplier_CustomColumnRegistryLookup(t *testing.T) {
 
 	if count != 1 {
 		t.Errorf("Expected 1 result, got %d", count)
+	}
+}
+
+func TestLambdaApplier_CompositeKeyColumnNamesInJoin(t *testing.T) {
+	db, entityMetadata := setupCompositeKeyMetadata(t)
+
+	buildSQL := func(filter string) string {
+		filterExpr, err := parseFilter(filter, entityMetadata, nil, 0)
+		if err != nil {
+			t.Fatalf("Failed to parse filter: %v", err)
+		}
+
+		query := db.Session(&gorm.Session{DryRun: true}).Model(&CompositeParent{})
+		query = ApplyFilterOnly(query, filterExpr, entityMetadata)
+		result := query.Find(&[]CompositeParent{})
+		if result.Error != nil {
+			t.Fatalf("Failed to build SQL: %v", result.Error)
+		}
+		return result.Statement.SQL.String()
+	}
+
+	tests := []struct {
+		name   string
+		filter string
+	}{
+		{
+			name:   "any uses composite key column names",
+			filter: "Children/any(c: c/Note eq 'alpha')",
+		},
+		{
+			name:   "all uses composite key column names",
+			filter: "Children/all(c: c/Note ne 'beta')",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sql := buildSQL(tt.filter)
+			expectedColumns := []string{
+				`"CompositeParents"."pk_alpha"`,
+				`"CompositeParents"."pk_beta"`,
+			}
+
+			for _, expected := range expectedColumns {
+				if !strings.Contains(sql, expected) {
+					t.Errorf("Expected SQL to contain %s, got: %s", expected, sql)
+				}
+			}
+		})
 	}
 }

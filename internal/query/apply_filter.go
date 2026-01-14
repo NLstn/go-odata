@@ -627,14 +627,12 @@ func buildLambdaCondition(dialect string, filter *FilterExpression, entityMetada
 			if i < len(foreignKeyColumns) {
 				fkColumn = strings.TrimSpace(foreignKeyColumns[i])
 			} else {
-				// Fallback: For composite keys, GORM foreignKey tag must specify all columns.
-				// Use naming convention <NavProp>_<ParentKey> as last resort.
-				// Example: for navigation "Items" with parent key "OrderID", use "Items_OrderID"
-				fkColumn = toSnakeCase(navProp.Name + "_" + keyProp.Name)
+				// Fallback: use the key property column name as foreign key column name
+				fkColumn = keyProp.ColumnName
 			}
 
 			quotedForeignKey := quoteIdent(dialect, fkColumn)
-			quotedParentPK := quoteIdent(dialect, GetColumnName(keyProp.Name, entityMetadata))
+			quotedParentPK := quoteIdent(dialect, keyProp.ColumnName)
 
 			joinConditions = append(joinConditions,
 				fmt.Sprintf("%s.%s = %s.%s", quotedRelatedTable, quotedForeignKey, quotedParentTable, quotedParentPK))
