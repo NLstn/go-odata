@@ -9,7 +9,7 @@ import (
 // TestIsOfFunction_EntityTypeWithAnd tests that isof function with entity types
 // generates correct SQL when used with logical operators.
 // This test validates that when no discriminator column is configured,
-// isof('EntityType') returns 1 = 1 (matches all entities).
+// isof('EntityType') returns 1 = 0 (matches no entities).
 func TestIsOfFunction_EntityTypeWithAnd(t *testing.T) {
 	meta := getTestMetadata(t)
 
@@ -24,7 +24,7 @@ func TestIsOfFunction_EntityTypeWithAnd(t *testing.T) {
 			name:           "isof entity type with and (no discriminator)",
 			filter:         "isof('Namespace.SpecialProduct') and Price gt 100",
 			expectErr:      false,
-			expectedSQL:    "(1 = 1) AND (price > ?)",
+			expectedSQL:    "(1 = 0) AND (price > ?)",
 			expectedArgsNo: 1,
 		},
 		{
@@ -38,28 +38,28 @@ func TestIsOfFunction_EntityTypeWithAnd(t *testing.T) {
 			name:           "isof entity type with or (no discriminator)",
 			filter:         "isof('Namespace.SpecialProduct') or Price lt 50",
 			expectErr:      false,
-			expectedSQL:    "(1 = 1) OR (price < ?)",
+			expectedSQL:    "(1 = 0) OR (price < ?)",
 			expectedArgsNo: 1,
 		},
 		{
 			name:           "isof entity type standalone (no discriminator)",
 			filter:         "isof('Namespace.SpecialProduct')",
 			expectErr:      false,
-			expectedSQL:    "1 = 1",
+			expectedSQL:    "1 = 0",
 			expectedArgsNo: 0,
 		},
 		{
 			name:           "isof entity type negated (no discriminator)",
 			filter:         "not isof('Namespace.SpecialProduct')",
 			expectErr:      false,
-			expectedSQL:    "NOT (1 = 1)",
+			expectedSQL:    "NOT (1 = 0)",
 			expectedArgsNo: 0,
 		},
 		{
 			name:           "isof entity type with parentheses and and (no discriminator)",
 			filter:         "(isof('Namespace.SpecialProduct')) and Price gt 100",
 			expectErr:      false,
-			expectedSQL:    "(1 = 1) AND (price > ?)",
+			expectedSQL:    "(1 = 0) AND (price > ?)",
 			expectedArgsNo: 1,
 		},
 		{
@@ -73,14 +73,14 @@ func TestIsOfFunction_EntityTypeWithAnd(t *testing.T) {
 			name:           "multiple isof entity type checks (no discriminator)",
 			filter:         "isof('Namespace.SpecialProduct') and isof('Namespace.AnotherType')",
 			expectErr:      false,
-			expectedSQL:    "(1 = 1) AND (1 = 1)",
+			expectedSQL:    "(1 = 0) AND (1 = 0)",
 			expectedArgsNo: 0,
 		},
 		{
 			name:           "isof entity type in complex expression (no discriminator)",
 			filter:         "(isof('Namespace.SpecialProduct') and Price gt 100) or Category eq 'Electronics'",
 			expectErr:      false,
-			expectedSQL:    "((1 = 1) AND (price > ?)) OR (category = ?)",
+			expectedSQL:    "((1 = 0) AND (price > ?)) OR (category = ?)",
 			expectedArgsNo: 2,
 		},
 	}

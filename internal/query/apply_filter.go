@@ -495,9 +495,9 @@ func buildComparisonConditionWithDB(db *gorm.DB, dialect string, filter *FilterE
 // For isof('Namespace.EntityType'), this creates a filter on the discriminator column
 func buildEntityTypeFilter(dialect string, typeName string, entityMetadata *metadata.EntityMetadata) (string, []interface{}) {
 	if entityMetadata == nil || entityMetadata.TypeDiscriminator == nil {
-		// If no discriminator is configured, we can't filter by entity type
-		// Return "1 = 1" to match all entities (fall back to allowing all types)
-		return "1 = 1", nil
+		// If no discriminator is configured, we can't filter by entity type correctly
+		// Return "1 = 0" to match no entities (since we can't verify the type)
+		return "1 = 0", nil
 	}
 
 	// Extract the simple type name from the qualified name (e.g., "Namespace.SpecialProduct" -> "SpecialProduct")
