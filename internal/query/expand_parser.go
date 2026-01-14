@@ -16,7 +16,10 @@ func parseExpandWithConfig(expandStr string, entityMetadata *metadata.EntityMeta
 	}
 
 	// Split by comma for multiple expands (basic implementation, doesn't handle nested parens)
-	parts := splitExpandParts(expandStr)
+	parts, err := splitExpandParts(expandStr)
+	if err != nil {
+		return nil, err
+	}
 	result := make([]ExpandOption, 0, len(parts))
 
 	for _, part := range parts {
@@ -36,7 +39,7 @@ func parseExpandWithConfig(expandStr string, entityMetadata *metadata.EntityMeta
 }
 
 // splitExpandParts splits expand string by comma, handling nested parentheses
-func splitExpandParts(expandStr string) []string {
+func splitExpandParts(expandStr string) ([]string, error) {
 	result := make([]string, 0)
 	current := ""
 	depth := 0
@@ -46,6 +49,9 @@ func splitExpandParts(expandStr string) []string {
 			depth++
 			current += string(ch)
 		} else if ch == ')' {
+			if depth == 0 {
+				return nil, fmt.Errorf("invalid $expand syntax: unexpected ')'")
+			}
 			depth--
 			current += string(ch)
 		} else if ch == ',' && depth == 0 {
@@ -58,11 +64,15 @@ func splitExpandParts(expandStr string) []string {
 		}
 	}
 
+	if depth != 0 {
+		return nil, fmt.Errorf("invalid $expand syntax: missing ')'")
+	}
+
 	if current != "" {
 		result = append(result, current)
 	}
 
-	return result
+	return result, nil
 }
 
 // parseSingleExpandCoreWithConfig parses a single expand option with depth tracking
