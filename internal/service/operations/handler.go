@@ -85,7 +85,7 @@ func (h *Handler) HandleActionOrFunction(w http.ResponseWriter, r *http.Request,
 		}
 
 		if err := actionDef.Handler(w, r, ctx, params); err != nil {
-			if writeErr := response.WriteError(w, http.StatusInternalServerError, "Action failed", err.Error()); writeErr != nil {
+			if writeErr := response.WriteError(w, r, http.StatusInternalServerError, "Action failed", err.Error()); writeErr != nil {
 				h.logError("Error writing error response", writeErr)
 			}
 			return
@@ -109,14 +109,14 @@ func (h *Handler) HandleActionOrFunction(w http.ResponseWriter, r *http.Request,
 
 		result, err := functionDef.Handler(w, r, ctx, params)
 		if err != nil {
-			if writeErr := response.WriteError(w, http.StatusInternalServerError, "Function failed", err.Error()); writeErr != nil {
+			if writeErr := response.WriteError(w, r, http.StatusInternalServerError, "Function failed", err.Error()); writeErr != nil {
 				h.logError("Error writing error response", writeErr)
 			}
 			return
 		}
 
 		if !response.IsAcceptableFormat(r) {
-			if writeErr := response.WriteError(w, http.StatusNotAcceptable, "Not Acceptable",
+			if writeErr := response.WriteError(w, r, http.StatusNotAcceptable, "Not Acceptable",
 				"The requested format is not supported. Only application/json is supported for data responses."); writeErr != nil {
 				h.logError("Error writing error response", writeErr)
 			}
@@ -157,7 +157,7 @@ func (h *Handler) HandleActionOrFunction(w http.ResponseWriter, r *http.Request,
 			h.logError("Error encoding response", err)
 		}
 	default:
-		if writeErr := response.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
+		if writeErr := response.WriteError(w, r, http.StatusMethodNotAllowed, "Method not allowed",
 			fmt.Sprintf("Method %s is not allowed for actions or functions", r.Method)); writeErr != nil {
 			h.logError("Error writing error response", writeErr)
 		}
@@ -168,7 +168,7 @@ func (h *Handler) writeError(w http.ResponseWriter, invErr *invocationError) {
 	if invErr == nil {
 		return
 	}
-	if writeErr := response.WriteError(w, invErr.status, invErr.message, invErr.detail); writeErr != nil {
+	if writeErr := response.WriteError(w, r, invErr.status, invErr.message, invErr.detail); writeErr != nil {
 		h.logError("Error writing error response", writeErr)
 	}
 }

@@ -21,7 +21,7 @@ func (s *Service) serveHTTP(w http.ResponseWriter, r *http.Request, allowAsync b
 	if s.preRequestHook != nil {
 		ctx, err := s.preRequestHook(r)
 		if err != nil {
-			if writeErr := response.WriteError(w, http.StatusForbidden, "Forbidden", err.Error()); writeErr != nil {
+			if writeErr := response.WriteError(w, r, http.StatusForbidden, "Forbidden", err.Error()); writeErr != nil {
 				http.Error(w, writeErr.Error(), http.StatusInternalServerError)
 			}
 			return

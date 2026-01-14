@@ -17,7 +17,7 @@ func (h *EntityHandler) HandleCollection(w http.ResponseWriter, r *http.Request)
 		methodToCheck = http.MethodGet
 	}
 	if h.isMethodDisabled(methodToCheck) {
-		WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+		WriteError(w, r, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
 			fmt.Sprintf("Method %s is not allowed for this entity", r.Method))
 		return
 	}
@@ -36,7 +36,7 @@ func (h *EntityHandler) HandleCollection(w http.ResponseWriter, r *http.Request)
 		}
 		h.handleOptionsCollection(w)
 	default:
-		WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+		WriteError(w, r, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
 			fmt.Sprintf("Method %s is not supported for entity collections", r.Method))
 	}
 }
@@ -52,7 +52,7 @@ func (h *EntityHandler) HandleCount(w http.ResponseWriter, r *http.Request) {
 	// Check if GET method is disabled (applies to both GET and HEAD)
 	if r.Method == http.MethodGet || r.Method == http.MethodHead {
 		if h.isMethodDisabled(http.MethodGet) {
-			WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+			WriteError(w, r, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
 				fmt.Sprintf("Method %s is not allowed for this entity", r.Method))
 			return
 		}
@@ -70,7 +70,7 @@ func (h *EntityHandler) HandleCount(w http.ResponseWriter, r *http.Request) {
 		}
 		h.handleOptionsCount(w)
 	default:
-		WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+		WriteError(w, r, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
 			fmt.Sprintf("Method %s is not supported for $count", r.Method))
 	}
 }
@@ -85,12 +85,12 @@ func (h *EntityHandler) handleGetCount(w http.ResponseWriter, r *http.Request) {
 
 	queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata)
 	if err != nil {
-		WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions, err.Error())
+		WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidQueryOptions, err.Error())
 		return
 	}
 
 	if err := applyPolicyFilter(r, h.policy, buildEntityResourceDescriptor(h.metadata, "", []string{"$count"}), queryOptions); err != nil {
-		WriteError(w, http.StatusForbidden, "Authorization failed", err.Error())
+		WriteError(w, r, http.StatusForbidden, "Authorization failed", err.Error())
 		return
 	}
 
@@ -102,7 +102,7 @@ func (h *EntityHandler) handleGetCount(w http.ResponseWriter, r *http.Request) {
 
 	count, countErr := h.countEntities(r.Context(), queryOptions, scopes)
 	if countErr != nil {
-		WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, countErr.Error())
+		WriteError(w, r, http.StatusInternalServerError, ErrMsgDatabaseError, countErr.Error())
 		return
 	}
 
@@ -122,12 +122,12 @@ func (h *EntityHandler) handleGetCount(w http.ResponseWriter, r *http.Request) {
 func (h *EntityHandler) handleGetCountOverwrite(w http.ResponseWriter, r *http.Request) {
 	queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata)
 	if err != nil {
-		WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions, err.Error())
+		WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidQueryOptions, err.Error())
 		return
 	}
 
 	if err := applyPolicyFilter(r, h.policy, buildEntityResourceDescriptor(h.metadata, "", []string{"$count"}), queryOptions); err != nil {
-		WriteError(w, http.StatusForbidden, "Authorization failed", err.Error())
+		WriteError(w, r, http.StatusForbidden, "Authorization failed", err.Error())
 		return
 	}
 
@@ -140,7 +140,7 @@ func (h *EntityHandler) handleGetCountOverwrite(w http.ResponseWriter, r *http.R
 	// Call the overwrite handler
 	count, err := h.overwrite.getCount(ctx)
 	if err != nil {
-		WriteError(w, http.StatusInternalServerError, "Error getting count", err.Error())
+		WriteError(w, r, http.StatusInternalServerError, "Error getting count", err.Error())
 		return
 	}
 

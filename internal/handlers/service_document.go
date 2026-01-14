@@ -55,7 +55,7 @@ func (h *ServiceDocumentHandler) HandleServiceDocument(w http.ResponseWriter, r 
 		}
 		h.handleOptionsServiceDocument(w)
 	default:
-		if err := response.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
+		if err := response.WriteError(w, r, http.StatusMethodNotAllowed, "Method not allowed",
 			fmt.Sprintf("Method %s is not supported for service document", r.Method)); err != nil {
 			h.logger.Error("Error writing error response", "error", err)
 		}

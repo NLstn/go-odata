@@ -22,7 +22,7 @@ func (h *EntityHandler) HandleEntity(w http.ResponseWriter, r *http.Request, ent
 		methodToCheck = http.MethodGet
 	}
 	if h.isMethodDisabled(methodToCheck) {
-		if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+		if err := response.WriteError(w, r, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
 			fmt.Sprintf("Method %s is not allowed for this entity", r.Method)); err != nil {
 			h.logger.Error("Error writing error response", "error", err)
 		}
@@ -47,7 +47,7 @@ func (h *EntityHandler) HandleEntity(w http.ResponseWriter, r *http.Request, ent
 		}
 		h.handleOptionsEntity(w)
 	default:
-		if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+		if err := response.WriteError(w, r, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
 			fmt.Sprintf("Method %s is not supported for individual entities", r.Method)); err != nil {
 			h.logger.Error("Error writing error response", "error", err)
 		}
@@ -75,7 +75,7 @@ func (h *EntityHandler) handleGetEntity(w http.ResponseWriter, r *http.Request, 
 
 	// Check if this is a virtual entity without overwrite handler
 	if h.metadata.IsVirtual {
-		if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+		if err := response.WriteError(w, r, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
 			"Virtual entities require an overwrite handler for GetEntity operation"); err != nil {
 			h.logger.Error("Error writing error response", "error", err)
 		}
@@ -106,7 +106,7 @@ func (h *EntityHandler) handleGetEntity(w http.ResponseWriter, r *http.Request, 
 	if typeCast := GetTypeCast(ctx); typeCast != "" {
 		if !h.entityMatchesType(result, typeCast) {
 			// Entity exists but doesn't match the type cast
-			if writeErr := response.WriteError(w, http.StatusNotFound, "Entity not found",
+			if writeErr := response.WriteError(w, r, http.StatusNotFound, "Entity not found",
 				fmt.Sprintf("Entity with key '%s' is not of type '%s'", entityKey, typeCast)); writeErr != nil {
 				h.logger.Error("Error writing error response", "error", writeErr)
 			}
@@ -152,7 +152,7 @@ func (h *EntityHandler) handleGetEntity(w http.ResponseWriter, r *http.Request, 
 func (h *EntityHandler) handleGetEntityOverwrite(w http.ResponseWriter, r *http.Request, entityKey string) {
 	queryOptions, err := h.parseSingleEntityQueryOptions(r)
 	if err != nil {
-		h.writeRequestError(w, err, http.StatusBadRequest, ErrMsgInvalidQueryOptions)
+		h.writeRequestError(w, r, err, http.StatusBadRequest, ErrMsgInvalidQueryOptions)
 		return
 	}
 
@@ -168,16 +168,16 @@ func (h *EntityHandler) handleGetEntityOverwrite(w http.ResponseWriter, r *http.
 	if err != nil {
 		// Check if it's a not found error
 		if IsNotFoundError(err) {
-			WriteError(w, http.StatusNotFound, ErrMsgEntityNotFound,
+			WriteError(w, r, http.StatusNotFound, ErrMsgEntityNotFound,
 				fmt.Sprintf("Entity with key '%s' not found", entityKey))
 			return
 		}
-		WriteError(w, http.StatusInternalServerError, "Error fetching entity", err.Error())
+		WriteError(w, r, http.StatusInternalServerError, "Error fetching entity", err.Error())
 		return
 	}
 
 	if result == nil {
-		WriteError(w, http.StatusNotFound, ErrMsgEntityNotFound,
+		WriteError(w, r, http.StatusNotFound, ErrMsgEntityNotFound,
 			fmt.Sprintf("Entity with key '%s' not found", entityKey))
 		return
 	}
@@ -190,7 +190,7 @@ func (h *EntityHandler) handleGetEntityOverwrite(w http.ResponseWriter, r *http.
 func (h *EntityHandler) HandleEntityRef(w http.ResponseWriter, r *http.Request, entityKey string) {
 	ctx := r.Context()
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+		if err := response.WriteError(w, r, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
 			fmt.Sprintf("Method %s is not supported for entity references", r.Method)); err != nil {
 			h.logger.Error("Error writing error response", "error", err)
 		}
@@ -205,14 +205,14 @@ func (h *EntityHandler) HandleEntityRef(w http.ResponseWriter, r *http.Request, 
 	// According to OData v4 spec, $ref does not support $expand or $select
 	queryParams := r.URL.Query()
 	if queryParams.Get("$expand") != "" {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions,
+		if writeErr := response.WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidQueryOptions,
 			"$expand is not supported with $ref"); writeErr != nil {
 			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return
 	}
 	if queryParams.Get("$select") != "" {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions,
+		if writeErr := response.WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidQueryOptions,
 			"$select is not supported with $ref"); writeErr != nil {
 			h.logger.Error("Error writing error response", "error", writeErr)
 		}
@@ -231,7 +231,7 @@ func (h *EntityHandler) HandleEntityRef(w http.ResponseWriter, r *http.Request, 
 	entity := reflect.New(h.metadata.EntityType).Interface()
 	db, err := h.buildKeyQuery(h.db.WithContext(ctx), entityKey)
 	if err != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidKey, err.Error()); writeErr != nil {
+		if writeErr := response.WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidKey, err.Error()); writeErr != nil {
 			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return
@@ -242,7 +242,7 @@ func (h *EntityHandler) HandleEntityRef(w http.ResponseWriter, r *http.Request, 
 
 	if err := db.First(entity).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			if writeErr := response.WriteError(w, http.StatusNotFound, ErrMsgEntityNotFound,
+			if writeErr := response.WriteError(w, r, http.StatusNotFound, ErrMsgEntityNotFound,
 				fmt.Sprintf("Entity with key '%s' not found", entityKey)); writeErr != nil {
 				h.logger.Error("Error writing error response", "error", writeErr)
 			}
@@ -270,7 +270,7 @@ func (h *EntityHandler) HandleEntityRef(w http.ResponseWriter, r *http.Request, 
 func (h *EntityHandler) HandleCollectionRef(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+		if err := response.WriteError(w, r, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
 			fmt.Sprintf("Method %s is not supported for collection references", r.Method)); err != nil {
 			h.logger.Error("Error writing error response", "error", err)
 		}
@@ -285,14 +285,14 @@ func (h *EntityHandler) HandleCollectionRef(w http.ResponseWriter, r *http.Reque
 	// According to OData v4 spec, $ref only supports $filter, $top, $skip, $orderby, and $count
 	queryParams := r.URL.Query()
 	if queryParams.Get("$expand") != "" {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions,
+		if writeErr := response.WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidQueryOptions,
 			"$expand is not supported with $ref"); writeErr != nil {
 			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return
 	}
 	if queryParams.Get("$select") != "" {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions,
+		if writeErr := response.WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidQueryOptions,
 			"$select is not supported with $ref"); writeErr != nil {
 			h.logger.Error("Error writing error response", "error", writeErr)
 		}
@@ -302,7 +302,7 @@ func (h *EntityHandler) HandleCollectionRef(w http.ResponseWriter, r *http.Reque
 	// Parse query options (support filtering, ordering, pagination for references)
 	queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata)
 	if err != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions, err.Error()); writeErr != nil {
+		if writeErr := response.WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidQueryOptions, err.Error()); writeErr != nil {
 			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return
@@ -316,7 +316,7 @@ func (h *EntityHandler) HandleCollectionRef(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Get the total count if $count=true is specified
-	totalCount := h.getTotalCount(ctx, queryOptions, w, scopes)
+	totalCount := h.getTotalCount(ctx, queryOptions, w, r, scopes)
 	if totalCount == nil && queryOptions.Count {
 		return // Error already written
 	}

@@ -23,7 +23,7 @@ func (h *EntityHandler) HandleSingleton(w http.ResponseWriter, r *http.Request) 
 		methodToCheck = http.MethodGet
 	}
 	if h.isMethodDisabled(methodToCheck) {
-		if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+		if err := response.WriteError(w, r, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
 			fmt.Sprintf("Method %s is not allowed for this entity", r.Method)); err != nil {
 			h.logger.Error("Error writing error response", "error", err)
 		}
@@ -52,7 +52,7 @@ func (h *EntityHandler) HandleSingleton(w http.ResponseWriter, r *http.Request) 
 		}
 		h.handleOptionsSingleton(w)
 	default:
-		if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+		if err := response.WriteError(w, r, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
 			fmt.Sprintf("Method %s is not supported for singleton", r.Method)); err != nil {
 			h.logger.Error("Error writing error response", "error", err)
 		}
@@ -69,14 +69,14 @@ func (h *EntityHandler) handleGetSingleton(w http.ResponseWriter, r *http.Reques
 	if err := h.db.First(entityInstance).Error; err != nil {
 		if err.Error() == "record not found" {
 			// If no record exists for the singleton, return 404
-			if writeErr := response.WriteError(w, http.StatusNotFound, ErrMsgEntityNotFound,
+			if writeErr := response.WriteError(w, r, http.StatusNotFound, ErrMsgEntityNotFound,
 				fmt.Sprintf("Singleton '%s' not found", h.metadata.SingletonName)); writeErr != nil {
 				h.logger.Error("Error writing error response", "error", writeErr)
 			}
 			return
 		}
 		// Other database errors
-		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error()); writeErr != nil {
+		if writeErr := response.WriteError(w, r, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error()); writeErr != nil {
 			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return
@@ -95,14 +95,14 @@ func (h *EntityHandler) handlePatchSingleton(w http.ResponseWriter, r *http.Requ
 	if err := h.db.First(entityInstance).Error; err != nil {
 		if err.Error() == "record not found" {
 			// If no record exists, return 404
-			if writeErr := response.WriteError(w, http.StatusNotFound, ErrMsgEntityNotFound,
+			if writeErr := response.WriteError(w, r, http.StatusNotFound, ErrMsgEntityNotFound,
 				fmt.Sprintf("Singleton '%s' not found", h.metadata.SingletonName)); writeErr != nil {
 				h.logger.Error("Error writing error response", "error", writeErr)
 			}
 			return
 		}
 		// Other database errors
-		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error()); writeErr != nil {
+		if writeErr := response.WriteError(w, r, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error()); writeErr != nil {
 			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return
@@ -114,7 +114,7 @@ func (h *EntityHandler) handlePatchSingleton(w http.ResponseWriter, r *http.Requ
 		currentETag := etag.Generate(entityInstance, h.metadata)
 
 		if !etag.Match(ifMatch, currentETag) {
-			if writeErr := response.WriteError(w, http.StatusPreconditionFailed, ErrMsgPreconditionFailed,
+			if writeErr := response.WriteError(w, r, http.StatusPreconditionFailed, ErrMsgPreconditionFailed,
 				ErrDetailPreconditionFailed); writeErr != nil {
 				h.logger.Error("Error writing error response", "error", writeErr)
 			}
@@ -125,7 +125,7 @@ func (h *EntityHandler) handlePatchSingleton(w http.ResponseWriter, r *http.Requ
 	// Parse the update data from request body
 	var updateData map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&updateData); err != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidRequestBody,
+		if writeErr := response.WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidRequestBody,
 			fmt.Sprintf(ErrDetailFailedToParseJSON, err.Error())); writeErr != nil {
 			h.logger.Error("Error writing error response", "error", writeErr)
 		}
@@ -162,14 +162,14 @@ func (h *EntityHandler) handlePutSingleton(w http.ResponseWriter, r *http.Reques
 	if err := h.db.First(existingEntity).Error; err != nil {
 		if err.Error() == "record not found" {
 			// If no record exists, return 404
-			if writeErr := response.WriteError(w, http.StatusNotFound, ErrMsgEntityNotFound,
+			if writeErr := response.WriteError(w, r, http.StatusNotFound, ErrMsgEntityNotFound,
 				fmt.Sprintf("Singleton '%s' not found", h.metadata.SingletonName)); writeErr != nil {
 				h.logger.Error("Error writing error response", "error", writeErr)
 			}
 			return
 		}
 		// Other database errors
-		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error()); writeErr != nil {
+		if writeErr := response.WriteError(w, r, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error()); writeErr != nil {
 			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return
@@ -181,7 +181,7 @@ func (h *EntityHandler) handlePutSingleton(w http.ResponseWriter, r *http.Reques
 		currentETag := etag.Generate(existingEntity, h.metadata)
 
 		if !etag.Match(ifMatch, currentETag) {
-			if writeErr := response.WriteError(w, http.StatusPreconditionFailed, ErrMsgPreconditionFailed,
+			if writeErr := response.WriteError(w, r, http.StatusPreconditionFailed, ErrMsgPreconditionFailed,
 				ErrDetailPreconditionFailed); writeErr != nil {
 				h.logger.Error("Error writing error response", "error", writeErr)
 			}
@@ -192,7 +192,7 @@ func (h *EntityHandler) handlePutSingleton(w http.ResponseWriter, r *http.Reques
 	// Parse the new entity data from request body
 	newEntity := reflect.New(h.metadata.EntityType).Interface()
 	if err := json.NewDecoder(r.Body).Decode(newEntity); err != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidRequestBody,
+		if writeErr := response.WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidRequestBody,
 			fmt.Sprintf(ErrDetailFailedToParseJSON, err.Error())); writeErr != nil {
 			h.logger.Error("Error writing error response", "error", writeErr)
 		}

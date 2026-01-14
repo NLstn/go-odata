@@ -98,7 +98,7 @@ type ODataError struct {
 }
 
 // WriteError writes an OData v4 compliant error response.
-func WriteError(w http.ResponseWriter, code int, message string, details string) error {
+func WriteError(w http.ResponseWriter, r *http.Request, code int, message string, details string) error {
 	odataErr := &ODataError{
 		Code:    fmt.Sprintf("%d", code),
 		Message: message,
@@ -108,17 +108,17 @@ func WriteError(w http.ResponseWriter, code int, message string, details string)
 		odataErr.Details = []ODataErrorDetail{{Message: details}}
 	}
 
-	return WriteODataError(w, code, odataErr)
+	return WriteODataError(w, r, code, odataErr)
 }
 
 // WriteODataError writes an OData v4 compliant error response with full error structure.
-func WriteODataError(w http.ResponseWriter, httpStatusCode int, odataError *ODataError) error {
+func WriteODataError(w http.ResponseWriter, r *http.Request, httpStatusCode int, odataError *ODataError) error {
 	errorResponse := map[string]interface{}{
 		"error": odataError,
 	}
 
 	w.Header().Set("Content-Type", "application/json;odata.metadata=minimal")
-	SetODataVersionHeader(w)
+	SetODataVersionHeaderFromRequest(w, r)
 	w.WriteHeader(httpStatusCode)
 
 	encoder := json.NewEncoder(w)
@@ -127,7 +127,7 @@ func WriteODataError(w http.ResponseWriter, httpStatusCode int, odataError *ODat
 }
 
 // WriteErrorWithTarget writes an OData error with target information.
-func WriteErrorWithTarget(w http.ResponseWriter, code int, message string, target string, details string) error {
+func WriteErrorWithTarget(w http.ResponseWriter, r *http.Request, code int, message string, target string, details string) error {
 	odataErr := &ODataError{
 		Code:    fmt.Sprintf("%d", code),
 		Message: message,
@@ -141,13 +141,13 @@ func WriteErrorWithTarget(w http.ResponseWriter, code int, message string, targe
 		}}
 	}
 
-	return WriteODataError(w, code, odataErr)
+	return WriteODataError(w, r, code, odataErr)
 }
 
 // WriteServiceDocument writes the OData service document.
 func WriteServiceDocument(w http.ResponseWriter, r *http.Request, entitySets []string, singletons []string) error {
 	if !IsAcceptableFormat(r) {
-		return WriteError(w, http.StatusNotAcceptable, "Not Acceptable",
+		return WriteError(w, r, http.StatusNotAcceptable, "Not Acceptable",
 			"The requested format is not supported. Only application/json is supported for service documents.")
 	}
 
@@ -178,7 +178,7 @@ func WriteServiceDocument(w http.ResponseWriter, r *http.Request, entitySets []s
 	if r.Method == http.MethodHead {
 		jsonBytes, err := json.Marshal(serviceDoc)
 		if err != nil {
-			return WriteError(w, http.StatusInternalServerError, "Internal Server Error", "Failed to marshal service document.")
+			return WriteError(w, r, http.StatusInternalServerError, "Internal Server Error", "Failed to marshal service document.")
 		}
 		w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
 		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(jsonBytes)))

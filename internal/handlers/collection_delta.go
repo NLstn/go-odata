@@ -10,27 +10,27 @@ import (
 
 func (h *EntityHandler) handleDeltaCollection(w http.ResponseWriter, r *http.Request, token string) {
 	if !h.supportsTrackChanges() {
-		WriteError(w, http.StatusNotImplemented, ErrMsgNotImplemented,
+		WriteError(w, r, http.StatusNotImplemented, ErrMsgNotImplemented,
 			"Change tracking is not enabled for this entity set")
 		return
 	}
 
 	entitySet, err := h.tracker.EntitySetFromToken(token)
 	if err != nil {
-		WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions,
+		WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidQueryOptions,
 			"Invalid $deltatoken value")
 		return
 	}
 
 	if entitySet != h.metadata.EntitySetName {
-		WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions,
+		WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidQueryOptions,
 			"Delta token does not match the requested entity set")
 		return
 	}
 
 	events, newToken, err := h.tracker.ChangesSince(token)
 	if err != nil {
-		WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions, err.Error())
+		WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidQueryOptions, err.Error())
 		return
 	}
 

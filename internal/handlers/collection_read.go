@@ -36,7 +36,7 @@ func (h *EntityHandler) handleGetCollection(w http.ResponseWriter, r *http.Reque
 
 	// Check if this is a virtual entity without overwrite handler
 	if h.metadata.IsVirtual {
-		if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+		if err := response.WriteError(w, r, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
 			"Virtual entities require an overwrite handler for GetCollection operation"); err != nil {
 			h.logger.Error("Error writing error response", "error", err)
 		}
@@ -45,7 +45,7 @@ func (h *EntityHandler) handleGetCollection(w http.ResponseWriter, r *http.Reque
 
 	pref := preference.ParsePrefer(r)
 
-	h.executeCollectionQuery(w, &collectionExecutionContext{
+	h.executeCollectionQuery(w, r, &collectionExecutionContext{
 		Metadata:          h.metadata,
 		ParseQueryOptions: h.parseCollectionQueryOptions(w, r, pref),
 		BeforeRead:        h.beforeReadCollection(r),
@@ -71,7 +71,7 @@ func (h *EntityHandler) handleGetCollectionOverwrite(w http.ResponseWriter, r *h
 	// Check if geospatial operations are used but not enabled
 	if queryOptions.Filter != nil && query.ContainsGeospatialOperations(queryOptions.Filter) {
 		if !h.geospatialEnabled {
-			if writeErr := response.WriteError(w, http.StatusNotImplemented, "Geospatial features not enabled", "geospatial features are not enabled for this service"); writeErr != nil {
+			if writeErr := response.WriteError(w, r, http.StatusNotImplemented, "Geospatial features not enabled", "geospatial features are not enabled for this service"); writeErr != nil {
 				h.logger.Error("Error writing error response", "error", writeErr)
 			}
 			return
@@ -94,7 +94,7 @@ func (h *EntityHandler) handleGetCollectionOverwrite(w http.ResponseWriter, r *h
 	queryOptions = h.applyDefaultMaxTop(queryOptions)
 
 	if err := applyPolicyFilter(r, h.policy, buildEntityResourceDescriptor(h.metadata, "", nil), queryOptions); err != nil {
-		WriteError(w, http.StatusForbidden, "Authorization failed", err.Error())
+		WriteError(w, r, http.StatusForbidden, "Authorization failed", err.Error())
 		return
 	}
 
@@ -687,14 +687,14 @@ validateChildren:
 	return nil
 }
 
-func (h *EntityHandler) getTotalCount(ctx context.Context, queryOptions *query.QueryOptions, w http.ResponseWriter, scopes []func(*gorm.DB) *gorm.DB) *int64 {
+func (h *EntityHandler) getTotalCount(ctx context.Context, queryOptions *query.QueryOptions, w http.ResponseWriter, r *http.Request, scopes []func(*gorm.DB) *gorm.DB) *int64 {
 	if !queryOptions.Count {
 		return nil
 	}
 
 	count, err := h.countEntities(ctx, queryOptions, scopes)
 	if err != nil {
-		WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error())
+		WriteError(w, r, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error())
 		return nil
 	}
 	return &count

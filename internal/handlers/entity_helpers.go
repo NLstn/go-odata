@@ -24,14 +24,14 @@ func (e *requestError) Error() string {
 	return e.Message
 }
 
-func (h *EntityHandler) writeRequestError(w http.ResponseWriter, err error, defaultStatus int, defaultCode string) {
+func (h *EntityHandler) writeRequestError(w http.ResponseWriter, r *http.Request, err error, defaultStatus int, defaultCode string) {
 	if err == nil {
 		return
 	}
 
 	// Check for GeospatialNotEnabledError first
 	if IsGeospatialNotEnabledError(err) {
-		if writeErr := response.WriteError(w, http.StatusNotImplemented, "Geospatial features not enabled", err.Error()); writeErr != nil {
+		if writeErr := response.WriteError(w, r, http.StatusNotImplemented, "Geospatial features not enabled", err.Error()); writeErr != nil {
 			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return
@@ -54,13 +54,13 @@ func (h *EntityHandler) writeRequestError(w http.ResponseWriter, err error, defa
 			message = err.Error()
 		}
 
-		if writeErr := response.WriteError(w, status, code, message); writeErr != nil {
+		if writeErr := response.WriteError(w, r, status, code, message); writeErr != nil {
 			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return
 	}
 
-	if writeErr := response.WriteError(w, defaultStatus, defaultCode, err.Error()); writeErr != nil {
+	if writeErr := response.WriteError(w, r, defaultStatus, defaultCode, err.Error()); writeErr != nil {
 		h.logger.Error("Error writing error response", "error", writeErr)
 	}
 }
@@ -139,7 +139,7 @@ func (h *EntityHandler) fetchEntityByKey(ctx context.Context, entityKey string, 
 func (h *EntityHandler) writeEntityResponseWithETag(w http.ResponseWriter, r *http.Request, result interface{}, precomputedETag string, status int) {
 	// Check if the requested format is supported
 	if !response.IsAcceptableFormat(r) {
-		if err := response.WriteError(w, http.StatusNotAcceptable, "Not Acceptable",
+		if err := response.WriteError(w, r, http.StatusNotAcceptable, "Not Acceptable",
 			"The requested format is not supported. Only application/json is supported for data responses."); err != nil {
 			h.logger.Error("Error writing error response", "error", err)
 		}
@@ -169,7 +169,7 @@ func (h *EntityHandler) writeEntityResponseWithETag(w http.ResponseWriter, r *ht
 		jsonBytes, err := json.Marshal(odataResponse)
 		if err != nil {
 			h.logger.Error("Error marshaling entity response for HEAD request", "error", err)
-			if writeErr := response.WriteError(w, http.StatusInternalServerError, "Internal Server Error", "Failed to marshal response for HEAD request."); writeErr != nil {
+			if writeErr := response.WriteError(w, r, http.StatusInternalServerError, "Internal Server Error", "Failed to marshal response for HEAD request."); writeErr != nil {
 				h.logger.Error("Error writing error response", "error", writeErr)
 			}
 			return
@@ -189,7 +189,7 @@ func (h *EntityHandler) writeEntityResponseWithETag(w http.ResponseWriter, r *ht
 
 // writeInvalidQueryError writes an invalid query error response
 func (h *EntityHandler) writeInvalidQueryError(w http.ResponseWriter, err error) {
-	if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidQueryOptions, err.Error()); writeErr != nil {
+	if writeErr := response.WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidQueryOptions, err.Error()); writeErr != nil {
 		h.logger.Error("Error writing error response", "error", writeErr)
 	}
 }
@@ -200,7 +200,7 @@ func (h *EntityHandler) fetchAndVerifyEntity(db *gorm.DB, entityKey string, w ht
 
 	query, err := h.buildKeyQuery(db, entityKey)
 	if err != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidKey, err.Error()); writeErr != nil {
+		if writeErr := response.WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidKey, err.Error()); writeErr != nil {
 			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return nil, err
@@ -216,7 +216,7 @@ func (h *EntityHandler) fetchAndVerifyEntity(db *gorm.DB, entityKey string, w ht
 
 // writeDatabaseError writes a database error response
 func (h *EntityHandler) writeDatabaseError(w http.ResponseWriter, err error) {
-	if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error()); writeErr != nil {
+	if writeErr := response.WriteError(w, r, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error()); writeErr != nil {
 		h.logger.Error("Error writing error response", "error", writeErr)
 	}
 }

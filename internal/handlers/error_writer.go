@@ -8,8 +8,8 @@ import (
 )
 
 // WriteError writes an OData error response and logs if the write fails.
-func WriteError(w http.ResponseWriter, status int, code, detail string) {
-	if err := response.WriteError(w, status, code, detail); err != nil {
+func WriteError(w http.ResponseWriter, r *http.Request, status int, code, detail string) {
+	if err := response.WriteError(w, r, status, code, detail); err != nil {
 		slog.Default().Error("Error writing error response", "error", err)
 	}
 }

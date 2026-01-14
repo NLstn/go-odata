@@ -52,14 +52,14 @@ func (h *EntityHandler) handleGetComplexTypeProperty(w http.ResponseWriter, r *h
 	}
 
 	if len(propertySegments) == 1 && isValue {
-		if err := response.WriteError(w, http.StatusBadRequest, "Invalid request",
+		if err := response.WriteError(w, r, http.StatusBadRequest, "Invalid request",
 			"$value is not supported on complex properties"); err != nil {
 			h.logger.Error("Error writing error response", "error", err)
 		}
 		return
 	}
 
-	fieldValue, err := h.fetchComplexPropertyValue(w, entityKey, complexProp)
+	fieldValue, err := h.fetchComplexPropertyValue(w, r, entityKey, complexProp)
 	if err != nil {
 		return
 	}
@@ -97,7 +97,7 @@ func (h *EntityHandler) handleGetComplexTypeProperty(w http.ResponseWriter, r *h
 		// If there are more segments to traverse, ensure we can continue
 		if idx < len(propertySegments[1:])-1 {
 			if isNilPointer(currentValue) {
-				h.writeComplexSegmentNullError(w, contextSegments)
+				h.writeComplexSegmentNullError(w, r, contextSegments)
 				return
 			}
 			currentValue = dereferenceValue(currentValue)
@@ -115,7 +115,7 @@ func (h *EntityHandler) handleOptionsComplexTypeProperty(w http.ResponseWriter) 
 }
 
 // fetchComplexPropertyValue fetches a complex property value from an entity without applying select clauses
-func (h *EntityHandler) fetchComplexPropertyValue(w http.ResponseWriter, entityKey string, prop *metadata.PropertyMetadata) (reflect.Value, error) {
+func (h *EntityHandler) fetchComplexPropertyValue(w http.ResponseWriter, r *http.Request, entityKey string, prop *metadata.PropertyMetadata) (reflect.Value, error) {
 	entity := reflect.New(h.metadata.EntityType).Interface()
 
 	var db *gorm.DB
@@ -129,7 +129,7 @@ func (h *EntityHandler) fetchComplexPropertyValue(w http.ResponseWriter, entityK
 		// For regular entities, build the key query
 		db, err = h.buildKeyQuery(h.db, entityKey)
 		if err != nil {
-			if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidKey, err.Error()); writeErr != nil {
+			if writeErr := response.WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidKey, err.Error()); writeErr != nil {
 				h.logger.Error("Error writing error response", "error", writeErr)
 			}
 			return reflect.Value{}, err
@@ -144,7 +144,7 @@ func (h *EntityHandler) fetchComplexPropertyValue(w http.ResponseWriter, entityK
 	entityValue := reflect.ValueOf(entity).Elem()
 	fieldValue := entityValue.FieldByName(prop.Name)
 	if !fieldValue.IsValid() {
-		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgInternalError,
+		if writeErr := response.WriteError(w, r, http.StatusInternalServerError, ErrMsgInternalError,
 			"Could not access complex property"); writeErr != nil {
 			h.logger.Error("Error writing error response", "error", writeErr)
 		}
@@ -162,9 +162,9 @@ func (h *EntityHandler) writeNoContentForNullComplex(w http.ResponseWriter, r *h
 }
 
 // writeComplexSegmentNullError writes an error when a nested complex segment is null
-func (h *EntityHandler) writeComplexSegmentNullError(w http.ResponseWriter, contextSegments []string) {
+func (h *EntityHandler) writeComplexSegmentNullError(w http.ResponseWriter, r *http.Request, contextSegments []string) {
 	path := strings.Join(contextSegments, "/")
-	if err := response.WriteError(w, http.StatusNotFound, "Property not found",
+	if err := response.WriteError(w, r, http.StatusNotFound, "Property not found",
 		fmt.Sprintf("Complex property path '%s' is null", path)); err != nil {
 		h.logger.Error("Error writing error response", "error", err)
 	}
@@ -174,7 +174,7 @@ func (h *EntityHandler) writeComplexSegmentNullError(w http.ResponseWriter, cont
 func (h *EntityHandler) writeResolvedComplexValue(w http.ResponseWriter, r *http.Request, entityKey string, contextSegments []string, value reflect.Value, valueType reflect.Type, isValue bool) {
 	if isComplexValue(value, valueType) {
 		if isValue {
-			if err := response.WriteError(w, http.StatusBadRequest, "Invalid request",
+			if err := response.WriteError(w, r, http.StatusBadRequest, "Invalid request",
 				"$value is not supported on complex properties"); err != nil {
 				h.logger.Error("Error writing error response", "error", err)
 			}
