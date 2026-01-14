@@ -402,6 +402,8 @@ func tryBuildRightSideFunctionComparison(dialect string, leftColumn string, oper
 //
 //nolint:unparam // maxInClauseSize is enforced during parsing; keep signature for future extensibility.
 func buildStandardComparison(dialect string, operator FilterOperator, columnName string, value interface{}, entityMetadata *metadata.EntityMetadata, maxInClauseSize int) (string, []interface{}) {
+	_ = maxInClauseSize
+
 	// Check if this is a property-to-property comparison
 	// (e.g., "Price gt Cost" should generate "price > cost", not "price > 'Cost'")
 	if valueStr, ok := value.(string); ok && propertyExists(valueStr, entityMetadata) {
@@ -637,13 +639,16 @@ func buildLambdaCondition(dialect string, filter *FilterExpression, entityMetada
 			var fkColumn string
 			if i < len(foreignKeyColumns) {
 				fkColumn = strings.TrimSpace(foreignKeyColumns[i])
+			} else if navTargetMetadata != nil {
+				// Fallback: use metadata to resolve the foreign key column name
+				fkColumn = GetColumnName(keyProp.Name, navTargetMetadata)
 			} else {
-				// Fallback: use the key property name as foreign key column name
-				fkColumn = toSnakeCase(keyProp.Name)
+				// Last-resort fallback when target metadata is unavailable
+				fkColumn = GetColumnName(keyProp.Name, entityMetadata)
 			}
 
 			quotedForeignKey := quoteIdent(dialect, fkColumn)
-			quotedParentPK := quoteIdent(dialect, toSnakeCase(keyProp.Name))
+			quotedParentPK := quoteIdent(dialect, GetColumnName(keyProp.Name, entityMetadata))
 
 			joinConditions = append(joinConditions,
 				fmt.Sprintf("%s.%s = %s.%s", quotedRelatedTable, quotedForeignKey, quotedParentTable, quotedParentPK))
