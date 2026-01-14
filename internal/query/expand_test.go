@@ -121,6 +121,36 @@ func TestParseExpandWithNestedSkip(t *testing.T) {
 	}
 }
 
+func TestParseExpandWithNegativeNestedTopOrSkip(t *testing.T) {
+	authorMeta, _ := buildAuthorBookMetadata(t)
+
+	tests := []struct {
+		name        string
+		expandQuery string
+	}{
+		{
+			name:        "Negative nested top",
+			expandQuery: "Books($top=-1)",
+		},
+		{
+			name:        "Negative nested skip",
+			expandQuery: "Books($skip=-2)",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			params := url.Values{}
+			params.Set("$expand", tt.expandQuery)
+
+			_, err := ParseQueryOptions(params, authorMeta)
+			if err == nil {
+				t.Fatalf("Expected error for %s", tt.expandQuery)
+			}
+		})
+	}
+}
+
 // TestParseExpandWithNestedSelect tests parsing $expand with nested $select
 func TestParseExpandWithNestedSelect(t *testing.T) {
 	authorMeta, _ := buildAuthorBookMetadata(t)
@@ -939,170 +969,170 @@ func TestParseOrderByWithMultipleProperties(t *testing.T) {
 
 // TestParseExpandWithNestedCount tests parsing $expand with nested $count
 func TestParseExpandWithNestedCount(t *testing.T) {
-authorMeta, _ := buildAuthorBookMetadata(t)
+	authorMeta, _ := buildAuthorBookMetadata(t)
 
-tests := []struct {
-name        string
-expandQuery string
-expectCount bool
-expectErr   bool
-}{
-{
-name:        "Count true - not yet implemented",
-expandQuery: "Books($count=true)",
-expectCount: true,
-expectErr:   true, // Expect error since feature is not yet implemented
-},
-{
-name:        "Count false - allowed",
-expandQuery: "Books($count=false)",
-expectCount: false,
-expectErr:   false, // count=false is allowed (no-op)
-},
-{
-name:        "Invalid count value",
-expandQuery: "Books($count=invalid)",
-expectErr:   true,
-},
-}
+	tests := []struct {
+		name        string
+		expandQuery string
+		expectCount bool
+		expectErr   bool
+	}{
+		{
+			name:        "Count true - not yet implemented",
+			expandQuery: "Books($count=true)",
+			expectCount: true,
+			expectErr:   true, // Expect error since feature is not yet implemented
+		},
+		{
+			name:        "Count false - allowed",
+			expandQuery: "Books($count=false)",
+			expectCount: false,
+			expectErr:   false, // count=false is allowed (no-op)
+		},
+		{
+			name:        "Invalid count value",
+			expandQuery: "Books($count=invalid)",
+			expectErr:   true,
+		},
+	}
 
-for _, tt := range tests {
-t.Run(tt.name, func(t *testing.T) {
-params := url.Values{}
-params.Set("$expand", tt.expandQuery)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			params := url.Values{}
+			params.Set("$expand", tt.expandQuery)
 
-options, err := ParseQueryOptions(params, authorMeta)
-if (err != nil) != tt.expectErr {
-t.Errorf("Expected error: %v, got: %v", tt.expectErr, err)
-return
-}
+			options, err := ParseQueryOptions(params, authorMeta)
+			if (err != nil) != tt.expectErr {
+				t.Errorf("Expected error: %v, got: %v", tt.expectErr, err)
+				return
+			}
 
-if !tt.expectErr {
-if len(options.Expand) != 1 {
-t.Fatalf("Expected 1 expand option, got %d", len(options.Expand))
-}
+			if !tt.expectErr {
+				if len(options.Expand) != 1 {
+					t.Fatalf("Expected 1 expand option, got %d", len(options.Expand))
+				}
 
-if options.Expand[0].Count != tt.expectCount {
-t.Errorf("Expected Count=%v, got %v", tt.expectCount, options.Expand[0].Count)
-}
-}
-})
-}
+				if options.Expand[0].Count != tt.expectCount {
+					t.Errorf("Expected Count=%v, got %v", tt.expectCount, options.Expand[0].Count)
+				}
+			}
+		})
+	}
 }
 
 // TestParseExpandWithNestedLevels tests parsing $expand with nested $levels
 func TestParseExpandWithNestedLevels(t *testing.T) {
-authorMeta, _ := buildAuthorBookMetadata(t)
+	authorMeta, _ := buildAuthorBookMetadata(t)
 
-tests := []struct {
-name          string
-expandQuery   string
-expectLevels  *int
-expectErr     bool
-description   string
-}{
-{
-name:         "Levels with integer value - not yet implemented",
-expandQuery:  "Books($levels=2)",
-expectLevels: intPtr(2),
-expectErr:    true, // Expect error since feature is not yet implemented
-description:  "Should reject numeric levels (not implemented)",
-},
-{
-name:         "Levels with max - not yet implemented",
-expandQuery:  "Books($levels=max)",
-expectLevels: intPtr(-1), // -1 represents "max"
-expectErr:    true, // Expect error since feature is not yet implemented
-description:  "Should reject 'max' (not implemented)",
-},
-{
-name:        "Invalid levels - zero",
-expandQuery: "Books($levels=0)",
-expectErr:   true,
-description: "Should reject zero",
-},
-{
-name:        "Invalid levels - negative",
-expandQuery: "Books($levels=-5)",
-expectErr:   true,
-description: "Should reject negative numbers",
-},
-{
-name:        "Invalid levels - text",
-expandQuery: "Books($levels=invalid)",
-expectErr:   true,
-description: "Should reject non-numeric non-max values",
-},
-{
-name:        "Invalid levels - partial numeric",
-expandQuery: "Books($levels=5abc)",
-expectErr:   true,
-description: "Should reject values with trailing non-numeric characters",
-},
-}
+	tests := []struct {
+		name         string
+		expandQuery  string
+		expectLevels *int
+		expectErr    bool
+		description  string
+	}{
+		{
+			name:         "Levels with integer value - not yet implemented",
+			expandQuery:  "Books($levels=2)",
+			expectLevels: intPtr(2),
+			expectErr:    true, // Expect error since feature is not yet implemented
+			description:  "Should reject numeric levels (not implemented)",
+		},
+		{
+			name:         "Levels with max - not yet implemented",
+			expandQuery:  "Books($levels=max)",
+			expectLevels: intPtr(-1), // -1 represents "max"
+			expectErr:    true,       // Expect error since feature is not yet implemented
+			description:  "Should reject 'max' (not implemented)",
+		},
+		{
+			name:        "Invalid levels - zero",
+			expandQuery: "Books($levels=0)",
+			expectErr:   true,
+			description: "Should reject zero",
+		},
+		{
+			name:        "Invalid levels - negative",
+			expandQuery: "Books($levels=-5)",
+			expectErr:   true,
+			description: "Should reject negative numbers",
+		},
+		{
+			name:        "Invalid levels - text",
+			expandQuery: "Books($levels=invalid)",
+			expectErr:   true,
+			description: "Should reject non-numeric non-max values",
+		},
+		{
+			name:        "Invalid levels - partial numeric",
+			expandQuery: "Books($levels=5abc)",
+			expectErr:   true,
+			description: "Should reject values with trailing non-numeric characters",
+		},
+	}
 
-for _, tt := range tests {
-t.Run(tt.name, func(t *testing.T) {
-params := url.Values{}
-params.Set("$expand", tt.expandQuery)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			params := url.Values{}
+			params.Set("$expand", tt.expandQuery)
 
-options, err := ParseQueryOptions(params, authorMeta)
-if (err != nil) != tt.expectErr {
-t.Errorf("Expected error: %v, got: %v (%s)", tt.expectErr, err, tt.description)
-return
-}
+			options, err := ParseQueryOptions(params, authorMeta)
+			if (err != nil) != tt.expectErr {
+				t.Errorf("Expected error: %v, got: %v (%s)", tt.expectErr, err, tt.description)
+				return
+			}
 
-if !tt.expectErr {
-if len(options.Expand) != 1 {
-t.Fatalf("Expected 1 expand option, got %d", len(options.Expand))
-}
+			if !tt.expectErr {
+				if len(options.Expand) != 1 {
+					t.Fatalf("Expected 1 expand option, got %d", len(options.Expand))
+				}
 
-expand := options.Expand[0]
-if tt.expectLevels == nil {
-if expand.Levels != nil {
-t.Errorf("Expected Levels to be nil, got %v", *expand.Levels)
-}
-} else {
-if expand.Levels == nil {
-t.Errorf("Expected Levels to be %d, got nil", *tt.expectLevels)
-} else if *expand.Levels != *tt.expectLevels {
-t.Errorf("Expected Levels=%d, got %d", *tt.expectLevels, *expand.Levels)
-}
-}
-}
-})
-}
+				expand := options.Expand[0]
+				if tt.expectLevels == nil {
+					if expand.Levels != nil {
+						t.Errorf("Expected Levels to be nil, got %v", *expand.Levels)
+					}
+				} else {
+					if expand.Levels == nil {
+						t.Errorf("Expected Levels to be %d, got nil", *tt.expectLevels)
+					} else if *expand.Levels != *tt.expectLevels {
+						t.Errorf("Expected Levels=%d, got %d", *tt.expectLevels, *expand.Levels)
+					}
+				}
+			}
+		})
+	}
 }
 
 // TestParseExpandWithCountAndLevels tests parsing $expand with both $count and $levels
 func TestParseExpandWithCountAndLevels(t *testing.T) {
-authorMeta, _ := buildAuthorBookMetadata(t)
+	authorMeta, _ := buildAuthorBookMetadata(t)
 
-params := url.Values{}
-params.Set("$expand", "Books($count=true;$levels=3)")
+	params := url.Values{}
+	params.Set("$expand", "Books($count=true;$levels=3)")
 
-_, err := ParseQueryOptions(params, authorMeta)
-// Expect error since $count=true and $levels are not yet implemented
-if err == nil {
-t.Fatal("Expected error for unsupported $count=true and $levels options")
-}
+	_, err := ParseQueryOptions(params, authorMeta)
+	// Expect error since $count=true and $levels are not yet implemented
+	if err == nil {
+		t.Fatal("Expected error for unsupported $count=true and $levels options")
+	}
 }
 
 // TestParseExpandWithAllNestedOptionsIncludingCountAndLevels tests all nested options together
 func TestParseExpandWithAllNestedOptionsIncludingCountAndLevels(t *testing.T) {
-authorMeta, _ := buildAuthorBookMetadata(t)
+	authorMeta, _ := buildAuthorBookMetadata(t)
 
-params := url.Values{}
-params.Set("$expand", "Books($filter=Title ne 'Archived';$select=Title;$orderby=Title;$top=5;$skip=2;$count=true;$levels=2)")
+	params := url.Values{}
+	params.Set("$expand", "Books($filter=Title ne 'Archived';$select=Title;$orderby=Title;$top=5;$skip=2;$count=true;$levels=2)")
 
-_, err := ParseQueryOptions(params, authorMeta)
-// Expect error since $count=true and $levels are not yet implemented
-if err == nil {
-t.Fatal("Expected error for unsupported $count=true and $levels options")
-}
+	_, err := ParseQueryOptions(params, authorMeta)
+	// Expect error since $count=true and $levels are not yet implemented
+	if err == nil {
+		t.Fatal("Expected error for unsupported $count=true and $levels options")
+	}
 }
 
 // intPtr returns a pointer to an integer
 func intPtr(i int) *int {
-return &i
+	return &i
 }
