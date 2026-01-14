@@ -1163,5 +1163,3 @@ func TestParseExpandWithAllNestedOptionsIncludingCountAndLevels(t *testing.T) {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 }
-
-// intPtr returns a pointer to an integer
