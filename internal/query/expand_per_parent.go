@@ -207,7 +207,8 @@ func fallbackReferenceConstraints(navProp *metadata.PropertyMetadata, entityMeta
 }
 
 // resolvePropertyName resolves a property name or JSON name to the canonical property name.
-// Uses EntityMetadata.FindProperty for efficient lookup.
+// Uses EntityMetadata.FindProperty which provides O(n) lookup but encapsulates the logic
+// for matching both Name and JsonName fields.
 func resolvePropertyName(name string, metadata *metadata.EntityMetadata) string {
 	if metadata == nil {
 		return name
