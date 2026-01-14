@@ -85,6 +85,25 @@ func (p targetSetDenyPolicy) Authorize(_ auth.AuthContext, resource auth.Resourc
 	return auth.Allow()
 }
 
+type booksPolicyFilter struct {
+	title string
+}
+
+func (p booksPolicyFilter) Authorize(_ auth.AuthContext, _ auth.ResourceDescriptor, _ auth.Operation) auth.Decision {
+	return auth.Allow()
+}
+
+func (p booksPolicyFilter) QueryFilter(_ auth.AuthContext, resource auth.ResourceDescriptor, _ auth.Operation) (*query.FilterExpression, error) {
+	if resource.EntitySetName != "Books" {
+		return nil, nil
+	}
+	return &query.FilterExpression{
+		Property: "Title",
+		Operator: query.OpEqual,
+		Value:    p.title,
+	}, nil
+}
+
 func TestNavigationPropertyRequiresTargetAuthorization(t *testing.T) {
 	db := setupRelationTestDB(t)
 	authorMeta := mustAnalyzeEntity(&Author{})
@@ -105,6 +124,71 @@ func TestNavigationPropertyRequiresTargetAuthorization(t *testing.T) {
 
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("Status = %v, want %v", w.Code, http.StatusForbidden)
+	}
+}
+
+func TestExpandAppliesPolicyFilterLikeNavigation(t *testing.T) {
+	db := setupRelationTestDB(t)
+	authorMeta := mustAnalyzeEntity(&Author{})
+	bookMeta := mustAnalyzeEntity(&Book{})
+
+	handler := NewEntityHandler(db, authorMeta, nil)
+	handler.SetEntitiesMetadata(map[string]*metadata.EntityMetadata{
+		authorMeta.EntitySetName: authorMeta,
+		bookMeta.EntitySetName:   bookMeta,
+	})
+	handler.SetPolicy(booksPolicyFilter{title: "A Game of Thrones"})
+
+	expandReq := httptest.NewRequest(http.MethodGet, "/Authors?$filter=Name%20eq%20%27George%20R.R.%20Martin%27&$expand=Books($filter=Title%20ne%20%27A%20Game%20of%20Thrones%27)", nil)
+	expandW := httptest.NewRecorder()
+
+	handler.HandleCollection(expandW, expandReq)
+
+	if expandW.Code != http.StatusOK {
+		t.Fatalf("Expected status 200, got %d: %s", expandW.Code, expandW.Body.String())
+	}
+
+	var expandResponse map[string]interface{}
+	if err := json.Unmarshal(expandW.Body.Bytes(), &expandResponse); err != nil {
+		t.Fatalf("Failed to parse expand response: %v", err)
+	}
+
+	expandValues, ok := expandResponse["value"].([]interface{})
+	if !ok || len(expandValues) != 1 {
+		t.Fatalf("Expected one author in expand response")
+	}
+
+	author := expandValues[0].(map[string]interface{})
+	books, ok := author["Books"].([]interface{})
+	if !ok {
+		t.Fatalf("Expected Books to be expanded")
+	}
+
+	if len(books) != 0 {
+		t.Fatalf("Expected no books after policy filter merge, got %d", len(books))
+	}
+
+	navReq := httptest.NewRequest(http.MethodGet, "/Authors(2)/Books?$filter=Title%20ne%20%27A%20Game%20of%20Thrones%27", nil)
+	navW := httptest.NewRecorder()
+
+	handler.HandleNavigationProperty(navW, navReq, "2", "Books", false)
+
+	if navW.Code != http.StatusOK {
+		t.Fatalf("Expected status 200, got %d: %s", navW.Code, navW.Body.String())
+	}
+
+	var navResponse map[string]interface{}
+	if err := json.Unmarshal(navW.Body.Bytes(), &navResponse); err != nil {
+		t.Fatalf("Failed to parse navigation response: %v", err)
+	}
+
+	navValues, ok := navResponse["value"].([]interface{})
+	if !ok {
+		t.Fatalf("Expected value array in navigation response")
+	}
+
+	if len(navValues) != 0 {
+		t.Fatalf("Expected no books in navigation response, got %d", len(navValues))
 	}
 }
 

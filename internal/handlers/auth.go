@@ -67,11 +67,45 @@ func applyPolicyFilter(r *http.Request, policy auth.Policy, resource auth.Resour
 	if queryOptions == nil {
 		return nil
 	}
-	filter, err := policyQueryFilter(r, policy, resource, auth.OperationQuery)
+	return applyPolicyFilterToExpression(r, policy, resource, &queryOptions.Filter)
+}
+
+func applyPolicyFilterToExpression(r *http.Request, policy auth.Policy, resource auth.ResourceDescriptor, filter **query.FilterExpression) error {
+	if filter == nil {
+		return nil
+	}
+	policyFilter, err := policyQueryFilter(r, policy, resource, auth.OperationQuery)
 	if err != nil {
 		return err
 	}
-	queryOptions.Filter = query.MergeFilterExpressions(queryOptions.Filter, filter)
+	*filter = query.MergeFilterExpressions(*filter, policyFilter)
+	return nil
+}
+
+func applyPolicyFiltersToExpand(r *http.Request, policy auth.Policy, entityMetadata *metadata.EntityMetadata, expand []query.ExpandOption) error {
+	if policy == nil || entityMetadata == nil || len(expand) == 0 {
+		return nil
+	}
+
+	for i := range expand {
+		expandOpt := &expand[i]
+		targetMetadata, err := entityMetadata.ResolveNavigationTarget(expandOpt.NavigationProperty)
+		if err != nil || targetMetadata == nil {
+			continue
+		}
+
+		resource := buildEntityResourceDescriptor(targetMetadata, "", nil)
+		if err := applyPolicyFilterToExpression(r, policy, resource, &expandOpt.Filter); err != nil {
+			return err
+		}
+
+		if len(expandOpt.Expand) > 0 {
+			if err := applyPolicyFiltersToExpand(r, policy, targetMetadata, expandOpt.Expand); err != nil {
+				return err
+			}
+		}
+	}
+
 	return nil
 }
 

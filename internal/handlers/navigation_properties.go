@@ -261,6 +261,13 @@ func (h *EntityHandler) createNavParseQueryOptions(r *http.Request, targetMetada
 				Message:    err.Error(),
 			}
 		}
+		if err := applyPolicyFiltersToExpand(r, h.policy, targetMetadata, queryOptions.Expand); err != nil {
+			return nil, &collectionRequestError{
+				StatusCode: http.StatusForbidden,
+				ErrorCode:  "Authorization failed",
+				Message:    err.Error(),
+			}
+		}
 		return queryOptions, nil
 	}
 }
