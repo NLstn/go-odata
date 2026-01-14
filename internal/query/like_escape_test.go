@@ -35,7 +35,7 @@ func TestGetLikeEscapeClause(t *testing.T) {
 
 func TestBuildFilterCondition_LikeEscapes(t *testing.T) {
 	meta := getTestMetadata(t)
-		filterExpr, err := parseFilter("contains(Name, '%_')", meta, nil, 0)
+	filterExpr, err := parseFilter("contains(Name, '%_')", meta, nil, 0)
 	if err != nil {
 		t.Fatalf("parseFilter failed: %v", err)
 	}

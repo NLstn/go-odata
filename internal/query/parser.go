@@ -117,14 +117,14 @@ type ComputeExpression struct {
 
 // FilterExpression represents a parsed filter expression
 type FilterExpression struct {
-	Property         string
-	Operator         FilterOperator
-	Value            interface{}
-	Left             *FilterExpression
-	Right            *FilterExpression
-	Logical          LogicalOperator
-	IsNot            bool // Indicates if this is a NOT expression
-	maxInClauseSize  int  // Maximum allowed size for IN clauses (internal use only)
+	Property        string
+	Operator        FilterOperator
+	Value           interface{}
+	Left            *FilterExpression
+	Right           *FilterExpression
+	Logical         LogicalOperator
+	IsNot           bool // Indicates if this is a NOT expression
+	maxInClauseSize int  // Maximum allowed size for IN clauses (internal use only)
 }
 
 // FilterOperator represents filter comparison operators
@@ -839,8 +839,48 @@ func resolveAliasesInString(s string, aliases map[string]string) (string, error)
 
 	var result strings.Builder
 	i := 0
+	inSingleQuote := false
+	inDoubleQuote := false
 	for i < len(s) {
-		if s[i] == '@' {
+		switch s[i] {
+		case '\'':
+			if !inDoubleQuote {
+				if inSingleQuote {
+					if i+1 < len(s) && s[i+1] == '\'' {
+						result.WriteByte(s[i])
+						result.WriteByte(s[i+1])
+						i += 2
+						continue
+					}
+					inSingleQuote = false
+				} else {
+					inSingleQuote = true
+				}
+			}
+			result.WriteByte(s[i])
+			i++
+		case '"':
+			if !inSingleQuote {
+				if inDoubleQuote {
+					if i+1 < len(s) && s[i+1] == '"' {
+						result.WriteByte(s[i])
+						result.WriteByte(s[i+1])
+						i += 2
+						continue
+					}
+					inDoubleQuote = false
+				} else {
+					inDoubleQuote = true
+				}
+			}
+			result.WriteByte(s[i])
+			i++
+		case '@':
+			if inSingleQuote || inDoubleQuote {
+				result.WriteByte(s[i])
+				i++
+				continue
+			}
 			// Found a potential parameter alias reference
 			// Extract the alias name (alphanumeric characters)
 			j := i + 1
@@ -861,7 +901,7 @@ func resolveAliasesInString(s string, aliases map[string]string) (string, error)
 
 			result.WriteString(aliasValue)
 			i = j
-		} else {
+		default:
 			result.WriteByte(s[i])
 			i++
 		}

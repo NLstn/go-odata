@@ -94,10 +94,10 @@ func TestMaxExpandDepth(t *testing.T) {
 
 	// Define entities with relationships
 	type Category struct {
-		ID         int    `gorm:"primaryKey" json:"id"`
-		Name       string `json:"name"`
-		ParentID   *int
-		Parent     *Category   `gorm:"foreignKey:ParentID" json:"parent,omitempty"`
+		ID            int    `gorm:"primaryKey" json:"id"`
+		Name          string `json:"name"`
+		ParentID      *int
+		Parent        *Category  `gorm:"foreignKey:ParentID" json:"parent,omitempty"`
 		Subcategories []Category `gorm:"foreignKey:ParentID" json:"subcategories,omitempty"`
 	}
 
@@ -201,12 +201,12 @@ func TestDefaultLimits(t *testing.T) {
 			values[i] = fmt.Sprintf("%d", i+1)
 		}
 		filterValue := fmt.Sprintf("ID in (%s)", strings.Join(values, ","))
-		
+
 		// Use url.Values to properly encode the query parameter
 		params := url.Values{}
 		params.Set("$filter", filterValue)
 		requestURL := "/TestSecurityEntities?" + params.Encode()
-		
+
 		req := httptest.NewRequest("GET", requestURL, nil)
 		w := httptest.NewRecorder()
 		service.ServeHTTP(w, req)
@@ -252,11 +252,11 @@ func TestConfigurableLimits(t *testing.T) {
 			values[i] = fmt.Sprintf("%d", i+1)
 		}
 		filterValue := fmt.Sprintf("ID in (%s)", strings.Join(values, ","))
-		
+
 		params := url.Values{}
 		params.Set("$filter", filterValue)
 		requestURL := "/TestSecurityEntities?" + params.Encode()
-		
+
 		req := httptest.NewRequest("GET", requestURL, nil)
 		w := httptest.NewRecorder()
 		service.ServeHTTP(w, req)
@@ -286,11 +286,11 @@ func TestConfigurableLimits(t *testing.T) {
 			values[i] = fmt.Sprintf("%d", i+1)
 		}
 		filterValue := fmt.Sprintf("ID in (%s)", strings.Join(values, ","))
-		
+
 		params := url.Values{}
 		params.Set("$filter", filterValue)
 		requestURL := "/TestSecurityEntities?" + params.Encode()
-		
+
 		req := httptest.NewRequest("GET", requestURL, nil)
 		w := httptest.NewRecorder()
 		service.ServeHTTP(w, req)

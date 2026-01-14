@@ -238,6 +238,27 @@ func TestResolveAliasesInString(t *testing.T) {
 			expected:    "Price eq 10",
 			expectError: false,
 		},
+		{
+			name:        "alias in single-quoted string literal",
+			input:       "Name eq '@p'",
+			aliases:     map[string]string{"p": "'x'"},
+			expected:    "Name eq '@p'",
+			expectError: false,
+		},
+		{
+			name:        "alias in string literal function call",
+			input:       "contains(Name,'@p')",
+			aliases:     map[string]string{"p": "'x'"},
+			expected:    "contains(Name,'@p')",
+			expectError: false,
+		},
+		{
+			name:        "alias outside string literal",
+			input:       "Name eq @p",
+			aliases:     map[string]string{"p": "'x'"},
+			expected:    "Name eq 'x'",
+			expectError: false,
+		},
 	}
 
 	for _, tt := range tests {
