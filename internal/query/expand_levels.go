@@ -108,7 +108,74 @@ func cloneExpandOptions(options []ExpandOption) []ExpandOption {
 	clone := make([]ExpandOption, len(options))
 	for i := range options {
 		clone[i] = options[i]
+
+		// Deep copy pointer fields to ensure proper isolation
+		if options[i].Top != nil {
+			topValue := *options[i].Top
+			clone[i].Top = &topValue
+		}
+		if options[i].Skip != nil {
+			skipValue := *options[i].Skip
+			clone[i].Skip = &skipValue
+		}
+		if options[i].Levels != nil {
+			levelsValue := *options[i].Levels
+			clone[i].Levels = &levelsValue
+		}
+		if options[i].Filter != nil {
+			clone[i].Filter = cloneFilterExpression(options[i].Filter)
+		}
+		if options[i].Compute != nil {
+			clone[i].Compute = cloneComputeTransformation(options[i].Compute)
+		}
+
+		// Recursively clone nested expand options
 		clone[i].Expand = cloneExpandOptions(options[i].Expand)
+
+		// Deep copy Select slice
+		if len(options[i].Select) > 0 {
+			clone[i].Select = make([]string, len(options[i].Select))
+			copy(clone[i].Select, options[i].Select)
+		}
+
+		// Deep copy OrderBy slice
+		if len(options[i].OrderBy) > 0 {
+			clone[i].OrderBy = make([]OrderByItem, len(options[i].OrderBy))
+			copy(clone[i].OrderBy, options[i].OrderBy)
+		}
+	}
+	return clone
+}
+
+func cloneFilterExpression(filter *FilterExpression) *FilterExpression {
+	if filter == nil {
+		return nil
+	}
+	clone := &FilterExpression{
+		Property:        filter.Property,
+		Operator:        filter.Operator,
+		Value:           filter.Value,
+		Logical:         filter.Logical,
+		IsNot:           filter.IsNot,
+		maxInClauseSize: filter.maxInClauseSize,
+	}
+	if filter.Left != nil {
+		clone.Left = cloneFilterExpression(filter.Left)
+	}
+	if filter.Right != nil {
+		clone.Right = cloneFilterExpression(filter.Right)
+	}
+	return clone
+}
+
+func cloneComputeTransformation(compute *ComputeTransformation) *ComputeTransformation {
+	if compute == nil {
+		return nil
+	}
+	clone := &ComputeTransformation{}
+	if len(compute.Expressions) > 0 {
+		clone.Expressions = make([]ComputeExpression, len(compute.Expressions))
+		copy(clone.Expressions, compute.Expressions)
 	}
 	return clone
 }
