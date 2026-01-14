@@ -156,12 +156,12 @@ func parseCompositeKey(keyPart string, components *response.ODataURLComponents) 
 func (h *EntityHandler) handleFetchError(w http.ResponseWriter, err error, entityKey string) {
 	if err == gorm.ErrRecordNotFound {
 		target := fmt.Sprintf(ODataEntityKeyFormat, h.metadata.EntitySetName, entityKey)
-		if writeErr := response.WriteErrorWithTarget(w, http.StatusNotFound, ErrMsgEntityNotFound,
+		if writeErr := response.WriteErrorWithTarget(w, r, http.StatusNotFound, ErrMsgEntityNotFound,
 			target, fmt.Sprintf(EntityKeyNotExistFmt, entityKey)); writeErr != nil {
 			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 	} else {
-		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error()); writeErr != nil {
+		if writeErr := response.WriteError(w, r, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error()); writeErr != nil {
 			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 	}

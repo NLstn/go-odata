@@ -108,7 +108,7 @@ func (h *EntityHandler) NavigationTargetSet(propertyName string) (string, bool) 
 
 // writeMethodNotAllowedError writes a method not allowed error for a specific context
 func (h *EntityHandler) writeMethodNotAllowedError(w http.ResponseWriter, method, context string) {
-	if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+	if err := response.WriteError(w, r, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
 		fmt.Sprintf("Method %s is not supported for %s", method, context)); err != nil {
 		h.logger.Error("Error writing error response", "error", err)
 	}
@@ -116,7 +116,7 @@ func (h *EntityHandler) writeMethodNotAllowedError(w http.ResponseWriter, method
 
 // writePropertyNotFoundError writes a property not found error
 func (h *EntityHandler) writePropertyNotFoundError(w http.ResponseWriter, propertyName string) {
-	if err := response.WriteError(w, http.StatusNotFound, "Property not found",
+	if err := response.WriteError(w, r, http.StatusNotFound, "Property not found",
 		fmt.Sprintf("'%s' is not a valid property for %s", propertyName, h.metadata.EntitySetName)); err != nil {
 		h.logger.Error("Error writing error response", "error", err)
 	}

@@ -42,20 +42,20 @@ type collectionExecutionContext struct {
 	WriteResponse     func(*query.QueryOptions, interface{}, *int64, *string) error
 }
 
-func (h *EntityHandler) executeCollectionQuery(w http.ResponseWriter, ctx *collectionExecutionContext) {
+func (h *EntityHandler) executeCollectionQuery(w http.ResponseWriter, r *http.Request, ctx *collectionExecutionContext) {
 	if ctx == nil || ctx.ParseQueryOptions == nil || ctx.FetchFunc == nil || ctx.WriteResponse == nil {
 		panic("executeCollectionQuery requires ParseQueryOptions, FetchFunc, and WriteResponse callbacks")
 	}
 
 	queryOptions, err := ctx.ParseQueryOptions()
-	if !h.handleCollectionError(w, err, http.StatusBadRequest, ErrMsgInvalidQueryOptions) {
+	if !h.handleCollectionError(w, r, err, http.StatusBadRequest, ErrMsgInvalidQueryOptions) {
 		return
 	}
 
 	var scopes []func(*gorm.DB) *gorm.DB
 	if ctx.BeforeRead != nil {
 		scopes, err = ctx.BeforeRead(queryOptions)
-		if !h.handleCollectionError(w, err, http.StatusForbidden, "Authorization failed") {
+		if !h.handleCollectionError(w, r, err, http.StatusForbidden, "Authorization failed") {
 			return
 		}
 	}
@@ -63,36 +63,36 @@ func (h *EntityHandler) executeCollectionQuery(w http.ResponseWriter, ctx *colle
 	var totalCount *int64
 	if ctx.CountFunc != nil {
 		totalCount, err = ctx.CountFunc(queryOptions, scopes)
-		if !h.handleCollectionError(w, err, http.StatusInternalServerError, ErrMsgDatabaseError) {
+		if !h.handleCollectionError(w, r, err, http.StatusInternalServerError, ErrMsgDatabaseError) {
 			return
 		}
 	}
 
 	results, err := ctx.FetchFunc(queryOptions, scopes)
-	if !h.handleCollectionError(w, err, http.StatusInternalServerError, ErrMsgDatabaseError) {
+	if !h.handleCollectionError(w, r, err, http.StatusInternalServerError, ErrMsgDatabaseError) {
 		return
 	}
 
 	var nextLink *string
 	if ctx.NextLinkFunc != nil {
 		nextLink, results, err = ctx.NextLinkFunc(queryOptions, results)
-		if !h.handleCollectionError(w, err, http.StatusInternalServerError, ErrMsgInternalError) {
+		if !h.handleCollectionError(w, r, err, http.StatusInternalServerError, ErrMsgInternalError) {
 			return
 		}
 	}
 
 	if ctx.AfterRead != nil {
-		if override, hasOverride, hookErr := ctx.AfterRead(queryOptions, results); !h.handleCollectionError(w, hookErr, http.StatusForbidden, "Authorization failed") {
+		if override, hasOverride, hookErr := ctx.AfterRead(queryOptions, results); !h.handleCollectionError(w, r, hookErr, http.StatusForbidden, "Authorization failed") {
 			return
 		} else if hasOverride {
 			results = override
 		}
 	}
 
-	h.handleCollectionError(w, ctx.WriteResponse(queryOptions, results, totalCount, nextLink), http.StatusInternalServerError, ErrMsgInternalError)
+	h.handleCollectionError(w, r, ctx.WriteResponse(queryOptions, results, totalCount, nextLink), http.StatusInternalServerError, ErrMsgInternalError)
 }
 
-func (h *EntityHandler) handleCollectionError(w http.ResponseWriter, err error, defaultStatus int, defaultCode string) bool {
+func (h *EntityHandler) handleCollectionError(w http.ResponseWriter, r *http.Request, err error, defaultStatus int, defaultCode string) bool {
 	if err == nil {
 		return true
 	}
@@ -103,7 +103,7 @@ func (h *EntityHandler) handleCollectionError(w http.ResponseWriter, err error, 
 
 	// Check for GeospatialNotEnabledError
 	if IsGeospatialNotEnabledError(err) {
-		if writeErr := response.WriteError(w, http.StatusNotImplemented, "Geospatial features not enabled", err.Error()); writeErr != nil {
+		if writeErr := response.WriteError(w, r, http.StatusNotImplemented, "Geospatial features not enabled", err.Error()); writeErr != nil {
 			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return false
@@ -111,7 +111,7 @@ func (h *EntityHandler) handleCollectionError(w http.ResponseWriter, err error, 
 
 	// Check for HookError first (public API error type)
 	if isHookErr, status, message, details := extractHookErrorDetails(err, defaultStatus, defaultCode); isHookErr {
-		if writeErr := response.WriteError(w, status, message, details); writeErr != nil {
+		if writeErr := response.WriteError(w, r, status, message, details); writeErr != nil {
 			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return false
@@ -129,13 +129,13 @@ func (h *EntityHandler) handleCollectionError(w http.ResponseWriter, err error, 
 			code = defaultCode
 		}
 
-		if writeErr := response.WriteError(w, status, code, reqErr.Message); writeErr != nil {
+		if writeErr := response.WriteError(w, r, status, code, reqErr.Message); writeErr != nil {
 			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return false
 	}
 
-	if writeErr := response.WriteError(w, defaultStatus, defaultCode, err.Error()); writeErr != nil {
+	if writeErr := response.WriteError(w, r, defaultStatus, defaultCode, err.Error()); writeErr != nil {
 		h.logger.Error("Error writing error response", "error", writeErr)
 	}
 	return false

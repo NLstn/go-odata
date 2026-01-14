@@ -30,7 +30,7 @@ func WriteODataCollectionWithNavigationAndDelta(w http.ResponseWriter, r *http.R
 
 func writeODataCollectionResponse(w http.ResponseWriter, r *http.Request, entitySetName string, data interface{}, count *int64, nextLink, deltaLink *string) error {
 	if !IsAcceptableFormat(r) {
-		return WriteError(w, http.StatusNotAcceptable, "Not Acceptable",
+		return WriteError(w, r, http.StatusNotAcceptable, "Not Acceptable",
 			"The requested format is not supported. Only application/json is supported for data responses.")
 	}
 
@@ -65,7 +65,7 @@ func writeODataCollectionResponse(w http.ResponseWriter, r *http.Request, entity
 	if r.Method == http.MethodHead {
 		jsonBytes, err := json.Marshal(response)
 		if err != nil {
-			return WriteError(w, http.StatusInternalServerError, "Internal Server Error", "Failed to marshal response to JSON")
+			return WriteError(w, r, http.StatusInternalServerError, "Internal Server Error", "Failed to marshal response to JSON")
 		}
 		w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
 		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(jsonBytes)))
@@ -82,7 +82,7 @@ func writeODataCollectionResponse(w http.ResponseWriter, r *http.Request, entity
 
 func writeODataCollectionWithNavigationResponse(w http.ResponseWriter, r *http.Request, entitySetName string, data interface{}, count *int64, nextLink, deltaLink *string, metadata EntityMetadataProvider, expandedProps []string, fullMetadata *metadata.EntityMetadata) error {
 	if !IsAcceptableFormat(r) {
-		return WriteError(w, http.StatusNotAcceptable, "Not Acceptable",
+		return WriteError(w, r, http.StatusNotAcceptable, "Not Acceptable",
 			"The requested format is not supported. Only application/json is supported for data responses.")
 	}
 
@@ -123,7 +123,7 @@ func writeODataCollectionWithNavigationResponse(w http.ResponseWriter, r *http.R
 	if r.Method == http.MethodHead {
 		jsonBytes, err := json.Marshal(response)
 		if err != nil {
-			return WriteError(w, http.StatusInternalServerError, "Internal Server Error", "Failed to serialize response to JSON.")
+			return WriteError(w, r, http.StatusInternalServerError, "Internal Server Error", "Failed to serialize response to JSON.")
 		}
 		w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
 		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(jsonBytes)))
@@ -141,7 +141,7 @@ func writeODataCollectionWithNavigationResponse(w http.ResponseWriter, r *http.R
 // WriteODataDeltaResponse writes an OData delta response containing change tracking entries.
 func WriteODataDeltaResponse(w http.ResponseWriter, r *http.Request, entitySetName string, entries []map[string]interface{}, deltaLink *string) error {
 	if !IsAcceptableFormat(r) {
-		return WriteError(w, http.StatusNotAcceptable, "Not Acceptable",
+		return WriteError(w, r, http.StatusNotAcceptable, "Not Acceptable",
 			"The requested format is not supported. Only application/json is supported for data responses.")
 	}
 

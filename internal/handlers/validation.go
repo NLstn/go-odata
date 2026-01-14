@@ -131,7 +131,7 @@ func validateContentType(w http.ResponseWriter, r *http.Request) error {
 
 	// Check if Content-Type is missing
 	if contentType == "" {
-		if writeErr := response.WriteError(w, http.StatusUnsupportedMediaType, "Unsupported Media Type",
+		if writeErr := response.WriteError(w, r, http.StatusUnsupportedMediaType, "Unsupported Media Type",
 			"Content-Type header is required for this operation"); writeErr != nil {
 			slog.Default().Error("Error writing error response", "error", writeErr)
 		}
@@ -166,7 +166,7 @@ func validateContentType(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if !isValid {
-		if writeErr := response.WriteError(w, http.StatusUnsupportedMediaType, "Unsupported Media Type",
+		if writeErr := response.WriteError(w, r, http.StatusUnsupportedMediaType, "Unsupported Media Type",
 			fmt.Sprintf("Content-Type '%s' is not supported. Only application/json is supported for data modifications.", contentType)); writeErr != nil {
 			slog.Default().Error("Error writing error response", "error", writeErr)
 		}

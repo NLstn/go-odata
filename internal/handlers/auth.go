@@ -43,7 +43,7 @@ func authorizeRequest(w http.ResponseWriter, r *http.Request, policy auth.Policy
 		message = "Unauthorized"
 	}
 
-	if err := response.WriteError(w, statusCode, message, decision.Reason); err != nil {
+	if err := response.WriteError(w, r, statusCode, message, decision.Reason); err != nil {
 		if logger == nil {
 			logger = slog.Default()
 		}

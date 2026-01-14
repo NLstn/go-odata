@@ -94,7 +94,7 @@ func (h *BatchHandler) HandleBatch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method != http.MethodPost {
-		if err := response.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
+		if err := response.WriteError(w, r, http.StatusMethodNotAllowed, "Method not allowed",
 			"Only POST method is supported for $batch requests"); err != nil {
 			h.logger.Error("Error writing error response", "error", err)
 		}
@@ -105,7 +105,7 @@ func (h *BatchHandler) HandleBatch(w http.ResponseWriter, r *http.Request) {
 	contentType := r.Header.Get("Content-Type")
 	mediaType, params, err := mime.ParseMediaType(contentType)
 	if err != nil {
-		if err := response.WriteError(w, http.StatusBadRequest, "Invalid Content-Type",
+		if err := response.WriteError(w, r, http.StatusBadRequest, "Invalid Content-Type",
 			fmt.Sprintf("Failed to parse Content-Type header: %v", err)); err != nil {
 			h.logger.Error("Error writing error response", "error", err)
 		}
@@ -113,7 +113,7 @@ func (h *BatchHandler) HandleBatch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !strings.HasPrefix(mediaType, "multipart/") {
-		if err := response.WriteError(w, http.StatusBadRequest, "Invalid Content-Type",
+		if err := response.WriteError(w, r, http.StatusBadRequest, "Invalid Content-Type",
 			"$batch requests must use multipart/mixed Content-Type"); err != nil {
 			h.logger.Error("Error writing error response", "error", err)
 		}
@@ -122,7 +122,7 @@ func (h *BatchHandler) HandleBatch(w http.ResponseWriter, r *http.Request) {
 
 	boundary, ok := params["boundary"]
 	if !ok {
-		if err := response.WriteError(w, http.StatusBadRequest, "Missing boundary",
+		if err := response.WriteError(w, r, http.StatusBadRequest, "Missing boundary",
 			"Content-Type must include boundary parameter"); err != nil {
 			h.logger.Error("Error writing error response", "error", err)
 		}
@@ -139,7 +139,7 @@ func (h *BatchHandler) HandleBatch(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 		if err != nil {
-			if err := response.WriteError(w, http.StatusBadRequest, "Invalid batch request",
+			if err := response.WriteError(w, r, http.StatusBadRequest, "Invalid batch request",
 				fmt.Sprintf("Failed to read batch part: %v", err)); err != nil {
 				h.logger.Error("Error writing error response", "error", err)
 			}
@@ -386,7 +386,7 @@ func (h *BatchHandler) executeRequestInTransaction(req *batchRequest, tx *gorm.D
 		components *response.ODataURLComponents, key string) {
 		property := components.NavigationProperty
 		if property == "" {
-			if err := response.WriteError(w, http.StatusNotFound, "Property not found",
+			if err := response.WriteError(w, r, http.StatusNotFound, "Property not found",
 				"Requested property was not found on the target entity"); err != nil {
 				h.logger.Error("Error writing error response", "error", err)
 			}
@@ -400,7 +400,7 @@ func (h *BatchHandler) executeRequestInTransaction(req *batchRequest, tx *gorm.D
 
 		if handler.IsNavigationProperty(property) {
 			if components.IsValue {
-				if err := response.WriteError(w, http.StatusBadRequest, "Invalid request",
+				if err := response.WriteError(w, r, http.StatusBadRequest, "Invalid request",
 					"$value is not supported on navigation properties"); err != nil {
 					h.logger.Error("Error writing error response", "error", err)
 				}
@@ -412,7 +412,7 @@ func (h *BatchHandler) executeRequestInTransaction(req *batchRequest, tx *gorm.D
 
 		if handler.IsStreamProperty(property) {
 			if components.IsRef {
-				if err := response.WriteError(w, http.StatusBadRequest, "Invalid request",
+				if err := response.WriteError(w, r, http.StatusBadRequest, "Invalid request",
 					"$ref is not supported on stream properties"); err != nil {
 					h.logger.Error("Error writing error response", "error", err)
 				}
@@ -436,7 +436,7 @@ func (h *BatchHandler) executeRequestInTransaction(req *batchRequest, tx *gorm.D
 			return
 		}
 
-		if err := response.WriteError(w, http.StatusNotFound, "Property not found",
+		if err := response.WriteError(w, r, http.StatusNotFound, "Property not found",
 			fmt.Sprintf("'%s' is not a valid property for %s", property, components.EntitySet)); err != nil {
 			h.logger.Error("Error writing error response", "error", err)
 		}
@@ -445,7 +445,7 @@ func (h *BatchHandler) executeRequestInTransaction(req *batchRequest, tx *gorm.D
 	serviceHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := strings.TrimPrefix(r.URL.Path, "/")
 		if path == "" {
-			if err := response.WriteError(w, http.StatusNotFound, "Resource not found",
+			if err := response.WriteError(w, r, http.StatusNotFound, "Resource not found",
 				"Requested resource is not available in transactional batch requests"); err != nil {
 				h.logger.Error("Error writing error response", "error", err)
 			}
@@ -454,13 +454,13 @@ func (h *BatchHandler) executeRequestInTransaction(req *batchRequest, tx *gorm.D
 
 		switch path {
 		case "$metadata":
-			if err := response.WriteError(w, http.StatusNotFound, "Resource not found",
+			if err := response.WriteError(w, r, http.StatusNotFound, "Resource not found",
 				"Metadata is not accessible inside transactional batch requests"); err != nil {
 				h.logger.Error("Error writing error response", "error", err)
 			}
 			return
 		case "$batch":
-			if err := response.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
+			if err := response.WriteError(w, r, http.StatusMethodNotAllowed, "Method not allowed",
 				"Nested $batch requests are not supported within transactional batch requests"); err != nil {
 				h.logger.Error("Error writing error response", "error", err)
 			}
@@ -469,7 +469,7 @@ func (h *BatchHandler) executeRequestInTransaction(req *batchRequest, tx *gorm.D
 
 		components, err := response.ParseODataURLComponents(path)
 		if err != nil {
-			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid URL", err.Error()); writeErr != nil {
+			if writeErr := response.WriteError(w, r, http.StatusBadRequest, "Invalid URL", err.Error()); writeErr != nil {
 				h.logger.Error("Error writing error response", "error", writeErr)
 			}
 			return
@@ -477,7 +477,7 @@ func (h *BatchHandler) executeRequestInTransaction(req *batchRequest, tx *gorm.D
 
 		handler, exists := txHandlers[components.EntitySet]
 		if !exists {
-			if writeErr := response.WriteError(w, http.StatusNotFound, "Entity set not found",
+			if writeErr := response.WriteError(w, r, http.StatusNotFound, "Entity set not found",
 				fmt.Sprintf("Entity set '%s' is not registered", components.EntitySet)); writeErr != nil {
 				h.logger.Error("Error writing error response", "error", writeErr)
 			}
@@ -487,7 +487,7 @@ func (h *BatchHandler) executeRequestInTransaction(req *batchRequest, tx *gorm.D
 		if components.TypeCast != "" {
 			parts := strings.Split(components.TypeCast, ".")
 			if len(parts) < 2 {
-				if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid type cast",
+				if writeErr := response.WriteError(w, r, http.StatusBadRequest, "Invalid type cast",
 					fmt.Sprintf("Type cast '%s' is not in the correct format (Namespace.TypeName)", components.TypeCast)); writeErr != nil {
 					h.logger.Error("Error writing error response", "error", writeErr)
 				}
@@ -513,7 +513,7 @@ func (h *BatchHandler) executeRequestInTransaction(req *batchRequest, tx *gorm.D
 				handler.HandleCount(w, r)
 				return
 			}
-			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid request",
+			if writeErr := response.WriteError(w, r, http.StatusBadRequest, "Invalid request",
 				"$count is not supported on individual entities. Use $count on collections or navigation properties."); writeErr != nil {
 				h.logger.Error("Error writing error response", "error", writeErr)
 			}
@@ -535,14 +535,14 @@ func (h *BatchHandler) executeRequestInTransaction(req *batchRequest, tx *gorm.D
 			}
 		case !hasKey:
 			if components.IsValue {
-				if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid request",
+				if writeErr := response.WriteError(w, r, http.StatusBadRequest, "Invalid request",
 					"$value is not supported on entity collections. Use $value on individual properties: EntitySet(key)/PropertyName/$value"); writeErr != nil {
 					h.logger.Error("Error writing error response", "error", writeErr)
 				}
 				return
 			}
 			if components.NavigationProperty != "" {
-				if writeErr := response.WriteError(w, http.StatusNotFound, "Property or operation not found",
+				if writeErr := response.WriteError(w, r, http.StatusNotFound, "Property or operation not found",
 					fmt.Sprintf("'%s' is not a valid property, action, or function for %s", components.NavigationProperty, components.EntitySet)); writeErr != nil {
 					h.logger.Error("Error writing error response", "error", writeErr)
 				}

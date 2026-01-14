@@ -9,7 +9,7 @@ import (
 // WriteEntityReference writes an OData entity reference response for a single entity.
 func WriteEntityReference(w http.ResponseWriter, r *http.Request, entityID string) error {
 	if !IsAcceptableFormat(r) {
-		return WriteError(w, http.StatusNotAcceptable, "Not Acceptable",
+		return WriteError(w, r, http.StatusNotAcceptable, "Not Acceptable",
 			"The requested format is not supported. Only application/json is supported for data responses.")
 	}
 
@@ -27,7 +27,7 @@ func WriteEntityReference(w http.ResponseWriter, r *http.Request, entityID strin
 	if r.Method == http.MethodHead {
 		jsonBytes, err := json.Marshal(response)
 		if err != nil {
-			return WriteError(w, http.StatusInternalServerError, "Internal Server Error", "Failed to serialize response to JSON.")
+			return WriteError(w, r, http.StatusInternalServerError, "Internal Server Error", "Failed to serialize response to JSON.")
 		}
 		w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
 		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(jsonBytes)))
@@ -45,7 +45,7 @@ func WriteEntityReference(w http.ResponseWriter, r *http.Request, entityID strin
 // WriteEntityReferenceCollection writes an OData entity reference collection response.
 func WriteEntityReferenceCollection(w http.ResponseWriter, r *http.Request, entityIDs []string, count *int64, nextLink *string) error {
 	if !IsAcceptableFormat(r) {
-		return WriteError(w, http.StatusNotAcceptable, "Not Acceptable",
+		return WriteError(w, r, http.StatusNotAcceptable, "Not Acceptable",
 			"The requested format is not supported. Only application/json is supported for data responses.")
 	}
 
@@ -77,7 +77,7 @@ func WriteEntityReferenceCollection(w http.ResponseWriter, r *http.Request, enti
 	if r.Method == http.MethodHead {
 		jsonBytes, err := json.Marshal(response)
 		if err != nil {
-			return WriteError(w, http.StatusInternalServerError, "Internal Server Error", "Failed to serialize response to JSON.")
+			return WriteError(w, r, http.StatusInternalServerError, "Internal Server Error", "Failed to serialize response to JSON.")
 		}
 		w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
 		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(jsonBytes)))

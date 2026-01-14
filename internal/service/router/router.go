@@ -105,7 +105,7 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		// Invalid version strings are parsed as 0.0 and should be ignored per spec
 		// Only reject versions that are validly parsed but below 4.0
 		if clientVersion.Major > 0 && clientVersion.Major < 4 {
-			if err := response.WriteError(w, http.StatusNotAcceptable,
+			if err := response.WriteError(w, r, http.StatusNotAcceptable,
 				handlers.ErrMsgVersionNotSupported,
 				handlers.ErrDetailVersionNotSupported); err != nil {
 				r.logger.Error("Error writing error response", "error", err)
@@ -173,14 +173,14 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			pathWithoutParams = path[:idx]
 		}
 		if r.isActionOrFunction(pathWithoutParams) {
-			if writeErr := response.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
+			if writeErr := response.WriteError(w, r, http.StatusMethodNotAllowed, "Method not allowed",
 				fmt.Sprintf("Method %s is not allowed for actions or functions", req.Method)); writeErr != nil {
 				r.logger.Error("Error writing error response", "error", writeErr)
 			}
 			return
 		}
 		if r.isActionOrFunction(path) {
-			if writeErr := response.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
+			if writeErr := response.WriteError(w, r, http.StatusMethodNotAllowed, "Method not allowed",
 				fmt.Sprintf("Method %s is not allowed for actions or functions", req.Method)); writeErr != nil {
 				r.logger.Error("Error writing error response", "error", writeErr)
 			}
@@ -190,7 +190,7 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	components, err := response.ParseODataURLComponents(path)
 	if err != nil {
-		if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid URL", err.Error()); writeErr != nil {
+		if writeErr := response.WriteError(w, r, http.StatusBadRequest, "Invalid URL", err.Error()); writeErr != nil {
 			r.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return
@@ -198,7 +198,7 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	handler, exists := r.resolveHandler(components.EntitySet)
 	if !exists {
-		if writeErr := response.WriteError(w, http.StatusNotFound, "Entity set not found",
+		if writeErr := response.WriteError(w, r, http.StatusNotFound, "Entity set not found",
 			fmt.Sprintf("Entity set '%s' is not registered", components.EntitySet)); writeErr != nil {
 			r.logger.Error("Error writing error response", "error", writeErr)
 		}
@@ -208,7 +208,7 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	if components.TypeCast != "" {
 		parts := strings.Split(components.TypeCast, ".")
 		if len(parts) < 2 {
-			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid type cast",
+			if writeErr := response.WriteError(w, r, http.StatusBadRequest, "Invalid type cast",
 				fmt.Sprintf("Type cast '%s' is not in the correct format (Namespace.TypeName)", components.TypeCast)); writeErr != nil {
 				r.logger.Error("Error writing error response", "error", writeErr)
 			}
@@ -309,7 +309,7 @@ func (r *Router) routeRequest(w http.ResponseWriter, req *http.Request, handler 
 		} else if !hasKey && components.NavigationProperty == "" {
 			handler.HandleCount(w, req)
 		} else {
-			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid request",
+			if writeErr := response.WriteError(w, r, http.StatusBadRequest, "Invalid request",
 				"$count is not supported on individual entities. Use $count on collections or navigation properties."); writeErr != nil {
 				r.logger.Error("Error writing error response", "error", writeErr)
 			}
@@ -331,7 +331,7 @@ func (r *Router) routeRequest(w http.ResponseWriter, req *http.Request, handler 
 		}
 	} else if !hasKey {
 		if components.IsValue {
-			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid request",
+			if writeErr := response.WriteError(w, r, http.StatusBadRequest, "Invalid request",
 				"$value is not supported on entity collections. Use $value on individual properties: EntitySet(key)/PropertyName/$value"); writeErr != nil {
 				r.logger.Error("Error writing error response", "error", writeErr)
 			}
@@ -348,7 +348,7 @@ func (r *Router) routeRequest(w http.ResponseWriter, req *http.Request, handler 
 			}
 		}
 		if components.NavigationProperty != "" {
-			if writeErr := response.WriteError(w, http.StatusNotFound, "Property or operation not found",
+			if writeErr := response.WriteError(w, r, http.StatusNotFound, "Property or operation not found",
 				fmt.Sprintf("'%s' is not a valid property, action, or function for %s", components.NavigationProperty, components.EntitySet)); writeErr != nil {
 				r.logger.Error("Error writing error response", "error", writeErr)
 			}
@@ -404,7 +404,7 @@ func (r *Router) handlePropertyRequest(w http.ResponseWriter, req *http.Request,
 			// We need to get the target entity set for the navigation property
 			targetEntitySet := r.getNavigationTargetEntitySet(handler, firstSegment)
 			if targetEntitySet == "" {
-				if writeErr := response.WriteError(w, http.StatusInternalServerError, "Internal error",
+				if writeErr := response.WriteError(w, r, http.StatusInternalServerError, "Internal error",
 					fmt.Sprintf("Could not determine target entity set for navigation property '%s'", firstSegment)); writeErr != nil {
 					r.logger.Error("Error writing error response", "error", writeErr)
 				}
@@ -421,7 +421,7 @@ func (r *Router) handlePropertyRequest(w http.ResponseWriter, req *http.Request,
 
 	if handler.IsNavigationProperty(components.NavigationProperty) {
 		if components.IsValue {
-			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid request",
+			if writeErr := response.WriteError(w, r, http.StatusBadRequest, "Invalid request",
 				"$value is not supported on navigation properties"); writeErr != nil {
 				r.logger.Error("Error writing error response", "error", writeErr)
 			}
@@ -430,7 +430,7 @@ func (r *Router) handlePropertyRequest(w http.ResponseWriter, req *http.Request,
 		handler.HandleNavigationProperty(w, req, keyString, components.NavigationProperty, components.IsRef)
 	} else if handler.IsStreamProperty(components.NavigationProperty) {
 		if components.IsRef {
-			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid request",
+			if writeErr := response.WriteError(w, r, http.StatusBadRequest, "Invalid request",
 				"$ref is not supported on stream properties"); writeErr != nil {
 				r.logger.Error("Error writing error response", "error", writeErr)
 			}
@@ -439,7 +439,7 @@ func (r *Router) handlePropertyRequest(w http.ResponseWriter, req *http.Request,
 		handler.HandleStreamProperty(w, req, keyString, components.NavigationProperty, components.IsValue)
 	} else if handler.IsStructuralProperty(components.NavigationProperty) {
 		if components.IsRef {
-			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid request",
+			if writeErr := response.WriteError(w, r, http.StatusBadRequest, "Invalid request",
 				"$ref is not supported on structural properties"); writeErr != nil {
 				r.logger.Error("Error writing error response", "error", writeErr)
 			}
@@ -448,7 +448,7 @@ func (r *Router) handlePropertyRequest(w http.ResponseWriter, req *http.Request,
 		handler.HandleStructuralProperty(w, req, keyString, components.NavigationProperty, components.IsValue)
 	} else if handler.IsComplexTypeProperty(components.NavigationProperty) {
 		if components.IsRef {
-			if writeErr := response.WriteError(w, http.StatusBadRequest, "Invalid request",
+			if writeErr := response.WriteError(w, r, http.StatusBadRequest, "Invalid request",
 				"$ref is not supported on complex properties"); writeErr != nil {
 				r.logger.Error("Error writing error response", "error", writeErr)
 			}
@@ -456,7 +456,7 @@ func (r *Router) handlePropertyRequest(w http.ResponseWriter, req *http.Request,
 		}
 		handler.HandleComplexTypeProperty(w, req, keyString, propertySegments, components.IsValue)
 	} else {
-		if writeErr := response.WriteError(w, http.StatusNotFound, "Property not found",
+		if writeErr := response.WriteError(w, r, http.StatusNotFound, "Property not found",
 			fmt.Sprintf("'%s' is not a valid property for %s", components.NavigationProperty, components.EntitySet)); writeErr != nil {
 			r.logger.Error("Error writing error response", "error", writeErr)
 		}

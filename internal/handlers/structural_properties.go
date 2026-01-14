@@ -79,7 +79,7 @@ func (h *EntityHandler) fetchPropertyValue(w http.ResponseWriter, entityKey stri
 		// For regular entities, build the key query
 		db, err = h.buildKeyQuery(h.db, entityKey)
 		if err != nil {
-			if writeErr := response.WriteError(w, http.StatusBadRequest, ErrMsgInvalidKey, err.Error()); writeErr != nil {
+			if writeErr := response.WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidKey, err.Error()); writeErr != nil {
 				h.logger.Error("Error writing error response", "error", writeErr)
 			}
 			return reflect.Value{}, err
@@ -96,7 +96,7 @@ func (h *EntityHandler) fetchPropertyValue(w http.ResponseWriter, entityKey stri
 	entityValue := reflect.ValueOf(entity).Elem()
 	fieldValue := entityValue.FieldByName(prop.Name)
 	if !fieldValue.IsValid() {
-		if err := response.WriteError(w, http.StatusInternalServerError, ErrMsgInternalError,
+		if err := response.WriteError(w, r, http.StatusInternalServerError, ErrMsgInternalError,
 			"Could not access property"); err != nil {
 			h.logger.Error("Error writing error response", "error", err)
 		}
@@ -116,7 +116,7 @@ func (h *EntityHandler) handlePropertyFetchError(w http.ResponseWriter, err erro
 			errorMessage = fmt.Sprintf("Entity with key '%s' not found", entityKey)
 		}
 
-		if writeErr := response.WriteError(w, http.StatusNotFound, ErrMsgEntityNotFound, errorMessage); writeErr != nil {
+		if writeErr := response.WriteError(w, r, http.StatusNotFound, ErrMsgEntityNotFound, errorMessage); writeErr != nil {
 			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 	} else {

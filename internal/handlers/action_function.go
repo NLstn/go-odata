@@ -39,7 +39,7 @@ func (h *ActionFunctionHandler) HandleActionOrFunction(w http.ResponseWriter, r 
 		// Functions are invoked with GET
 		h.handleFunction(w, r, name, key, isBound)
 	default:
-		if err := response.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed",
+		if err := response.WriteError(w, r, http.StatusMethodNotAllowed, "Method not allowed",
 			fmt.Sprintf("Method %s is not allowed for actions or functions", r.Method)); err != nil {
 			slog.Default().Error("Error writing error response", "error", err)
 		}
@@ -51,7 +51,7 @@ func (h *ActionFunctionHandler) handleAction(w http.ResponseWriter, r *http.Requ
 	actions := h.actionsGetter()
 	actionDef, exists := actions[name]
 	if !exists {
-		if err := response.WriteError(w, http.StatusNotFound, "Action not found",
+		if err := response.WriteError(w, r, http.StatusNotFound, "Action not found",
 			fmt.Sprintf("Action '%s' is not registered", name)); err != nil {
 			slog.Default().Error("Error writing error response", "error", err)
 		}
@@ -79,7 +79,7 @@ func (h *ActionFunctionHandler) handleFunction(w http.ResponseWriter, r *http.Re
 	functions := h.functionsGetter()
 	functionDef, exists := functions[name]
 	if !exists {
-		if err := response.WriteError(w, http.StatusNotFound, "Function not found",
+		if err := response.WriteError(w, r, http.StatusNotFound, "Function not found",
 			fmt.Sprintf("Function '%s' is not registered", name)); err != nil {
 			slog.Default().Error("Error writing error response", "error", err)
 		}

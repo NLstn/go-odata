@@ -38,7 +38,7 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 
 	// Check if this is a virtual entity without overwrite handler
 	if h.metadata.IsVirtual {
-		if err := response.WriteError(w, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+		if err := response.WriteError(w, r, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
 			"Virtual entities require an overwrite handler for Create operation"); err != nil {
 			h.logger.Error("Error writing error response", "error", err)
 		}
@@ -63,7 +63,7 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 
 	var requestData map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&requestData); err != nil {
-		WriteError(w, http.StatusBadRequest, ErrMsgInvalidRequestBody,
+		WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidRequestBody,
 			fmt.Sprintf(ErrDetailFailedToParseJSON, err.Error()))
 		return
 	}
@@ -72,11 +72,11 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 
 	jsonData, err := json.Marshal(requestData)
 	if err != nil {
-		WriteError(w, http.StatusInternalServerError, "Failed to process request data", err.Error())
+		WriteError(w, r, http.StatusInternalServerError, "Failed to process request data", err.Error())
 		return
 	}
 	if err := json.Unmarshal(jsonData, entity); err != nil {
-		WriteError(w, http.StatusBadRequest, ErrMsgInvalidRequestBody,
+		WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidRequestBody,
 			fmt.Sprintf(ErrDetailFailedToParseJSON, err.Error()))
 		return
 	}
@@ -85,27 +85,27 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 	if err := h.runInTransaction(ctx, r, func(tx *gorm.DB, hookReq *http.Request) error {
 		pendingBindings, err := h.processODataBindAnnotations(ctx, entity, requestData, tx)
 		if err != nil {
-			WriteError(w, http.StatusBadRequest, "Invalid @odata.bind annotation", err.Error())
+			WriteError(w, r, http.StatusBadRequest, "Invalid @odata.bind annotation", err.Error())
 			return newTransactionHandledError(err)
 		}
 
 		if err := h.initializeEntityKeys(ctx, entity); err != nil {
-			WriteError(w, http.StatusInternalServerError, ErrMsgInternalError, err.Error())
+			WriteError(w, r, http.StatusInternalServerError, ErrMsgInternalError, err.Error())
 			return newTransactionHandledError(err)
 		}
 
 		if err := h.validateAutoPropertiesNotProvided(requestData); err != nil {
-			WriteError(w, http.StatusBadRequest, "Invalid property", err.Error())
+			WriteError(w, r, http.StatusBadRequest, "Invalid property", err.Error())
 			return newTransactionHandledError(err)
 		}
 
 		if err := h.validateRequiredProperties(requestData); err != nil {
-			WriteError(w, http.StatusBadRequest, "Missing required properties", err.Error())
+			WriteError(w, r, http.StatusBadRequest, "Missing required properties", err.Error())
 			return newTransactionHandledError(err)
 		}
 
 		if err := h.validateRequiredFieldsNotNull(requestData); err != nil {
-			WriteError(w, http.StatusBadRequest, "Invalid null value", err.Error())
+			WriteError(w, r, http.StatusBadRequest, "Invalid null value", err.Error())
 			return newTransactionHandledError(err)
 		}
 
@@ -115,13 +115,13 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 		}
 
 		if err := tx.Create(entity).Error; err != nil {
-			WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error())
+			WriteError(w, r, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error())
 			return newTransactionHandledError(err)
 		}
 
 		// Apply pending collection-valued navigation property bindings after entity is saved
 		if err := h.applyPendingCollectionBindings(ctx, tx, entity, pendingBindings); err != nil {
-			WriteError(w, http.StatusInternalServerError, "Failed to bind navigation properties", err.Error())
+			WriteError(w, r, http.StatusInternalServerError, "Failed to bind navigation properties", err.Error())
 			return newTransactionHandledError(err)
 		}
 
@@ -184,7 +184,7 @@ func (h *EntityHandler) handlePostMediaEntity(w http.ResponseWriter, r *http.Req
 
 	// Initialize entity keys (e.g., generate UUID for key properties)
 	if err := h.initializeEntityKeys(ctx, entity); err != nil {
-		if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgInternalError, err.Error()); writeErr != nil {
+		if writeErr := response.WriteError(w, r, http.StatusInternalServerError, ErrMsgInternalError, err.Error()); writeErr != nil {
 			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return
@@ -203,14 +203,14 @@ func (h *EntityHandler) handlePostMediaEntity(w http.ResponseWriter, r *http.Req
 	var changeEvents []changeEvent
 	if err := h.runInTransaction(ctx, r, func(tx *gorm.DB, hookReq *http.Request) error {
 		if err := h.callBeforeCreate(entity, hookReq); err != nil {
-			if writeErr := response.WriteError(w, http.StatusForbidden, "Authorization failed", err.Error()); writeErr != nil {
+			if writeErr := response.WriteError(w, r, http.StatusForbidden, "Authorization failed", err.Error()); writeErr != nil {
 				h.logger.Error("Error writing error response", "error", writeErr)
 			}
 			return newTransactionHandledError(err)
 		}
 
 		if err := tx.Create(entity).Error; err != nil {
-			if writeErr := response.WriteError(w, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error()); writeErr != nil {
+			if writeErr := response.WriteError(w, r, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error()); writeErr != nil {
 				h.logger.Error("Error writing error response", "error", writeErr)
 			}
 			return newTransactionHandledError(err)
@@ -514,7 +514,7 @@ func (h *EntityHandler) handlePostEntityOverwrite(w http.ResponseWriter, r *http
 	// Parse the request body
 	var requestData map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&requestData); err != nil {
-		WriteError(w, http.StatusBadRequest, ErrMsgInvalidRequestBody,
+		WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidRequestBody,
 			fmt.Sprintf(ErrDetailFailedToParseJSON, err.Error()))
 		return
 	}
@@ -523,11 +523,11 @@ func (h *EntityHandler) handlePostEntityOverwrite(w http.ResponseWriter, r *http
 	entity := reflect.New(h.metadata.EntityType).Interface()
 	jsonData, err := json.Marshal(requestData)
 	if err != nil {
-		WriteError(w, http.StatusInternalServerError, "Failed to process request data", err.Error())
+		WriteError(w, r, http.StatusInternalServerError, "Failed to process request data", err.Error())
 		return
 	}
 	if err := json.Unmarshal(jsonData, entity); err != nil {
-		WriteError(w, http.StatusBadRequest, ErrMsgInvalidRequestBody,
+		WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidRequestBody,
 			fmt.Sprintf(ErrDetailFailedToParseJSON, err.Error()))
 		return
 	}
@@ -542,12 +542,12 @@ func (h *EntityHandler) handlePostEntityOverwrite(w http.ResponseWriter, r *http
 	// Call the overwrite handler
 	result, err := h.overwrite.create(ctx, entity)
 	if err != nil {
-		WriteError(w, http.StatusInternalServerError, "Error creating entity", err.Error())
+		WriteError(w, r, http.StatusInternalServerError, "Error creating entity", err.Error())
 		return
 	}
 
 	if result == nil {
-		WriteError(w, http.StatusInternalServerError, "Error creating entity", "handler returned nil entity")
+		WriteError(w, r, http.StatusInternalServerError, "Error creating entity", "handler returned nil entity")
 		return
 	}
 

@@ -5,12 +5,15 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/nlstn/go-odata/internal/version"
 )
 
 func TestWriteError_BasicError(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	w := httptest.NewRecorder()
 
-	err := WriteError(w, http.StatusBadRequest, "Bad Request", "Invalid input")
+	err := WriteError(w, req, http.StatusBadRequest, "Bad Request", "Invalid input")
 	if err != nil {
 		t.Fatalf("WriteError failed: %v", err)
 	}
@@ -68,9 +71,10 @@ func TestWriteError_BasicError(t *testing.T) {
 }
 
 func TestWriteError_NoDetails(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	w := httptest.NewRecorder()
 
-	err := WriteError(w, http.StatusNotFound, "Not Found", "")
+	err := WriteError(w, req, http.StatusNotFound, "Not Found", "")
 	if err != nil {
 		t.Fatalf("WriteError failed: %v", err)
 	}
@@ -110,9 +114,10 @@ func TestWriteError_VariousStatusCodes(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.message, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/test", nil)
 			w := httptest.NewRecorder()
 
-			err := WriteError(w, tc.code, tc.message, "")
+			err := WriteError(w, req, tc.code, tc.message, "")
 			if err != nil {
 				t.Fatalf("WriteError failed: %v", err)
 			}
@@ -138,6 +143,7 @@ func TestWriteError_VariousStatusCodes(t *testing.T) {
 }
 
 func TestWriteODataError_FullStructure(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	w := httptest.NewRecorder()
 
 	odataErr := &ODataError{
@@ -155,7 +161,7 @@ func TestWriteODataError_FullStructure(t *testing.T) {
 		},
 	}
 
-	err := WriteODataError(w, http.StatusBadRequest, odataErr)
+	err := WriteODataError(w, req, http.StatusBadRequest, odataErr)
 	if err != nil {
 		t.Fatalf("WriteODataError failed: %v", err)
 	}
@@ -200,9 +206,10 @@ func TestWriteODataError_FullStructure(t *testing.T) {
 }
 
 func TestWriteErrorWithTarget_Basic(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	w := httptest.NewRecorder()
 
-	err := WriteErrorWithTarget(w, http.StatusBadRequest, "Validation Error", "Products(1)/Name", "Name is required")
+	err := WriteErrorWithTarget(w, req, http.StatusBadRequest, "Validation Error", "Products(1)/Name", "Name is required")
 	if err != nil {
 		t.Fatalf("WriteErrorWithTarget failed: %v", err)
 	}
@@ -239,9 +246,10 @@ func TestWriteErrorWithTarget_Basic(t *testing.T) {
 }
 
 func TestWriteErrorWithTarget_NoDetails(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	w := httptest.NewRecorder()
 
-	err := WriteErrorWithTarget(w, http.StatusNotFound, "Not Found", "Products(999)", "")
+	err := WriteErrorWithTarget(w, req, http.StatusNotFound, "Not Found", "Products(999)", "")
 	if err != nil {
 		t.Fatalf("WriteErrorWithTarget failed: %v", err)
 	}
@@ -393,5 +401,79 @@ func TestWriteServiceDocument_InvalidAcceptHeader(t *testing.T) {
 	// Should return 406 Not Acceptable
 	if w.Code != http.StatusNotAcceptable {
 		t.Errorf("Status = %v, want %v", w.Code, http.StatusNotAcceptable)
+	}
+}
+
+func TestWriteError_RespectsVersionNegotiation_40(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.Header.Set("OData-MaxVersion", "4.0")
+	
+	// Simulate version negotiation middleware
+	ctx := req.Context()
+	ctx = version.WithVersion(ctx, version.Version{Major: 4, Minor: 0})
+	req = req.WithContext(ctx)
+	
+	w := httptest.NewRecorder()
+
+	err := WriteError(w, req, http.StatusBadRequest, "Bad Request", "Test error")
+	if err != nil {
+		t.Fatalf("WriteError failed: %v", err)
+	}
+
+	// Verify OData-Version header matches negotiated version
+	odataVersion := w.Header().Get("OData-Version")
+	if odataVersion != "4.0" {
+		t.Errorf("OData-Version = %v, want 4.0", odataVersion)
+	}
+}
+
+func TestWriteError_RespectsVersionNegotiation_401(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.Header.Set("OData-MaxVersion", "4.01")
+	
+	// Simulate version negotiation middleware
+	ctx := req.Context()
+	ctx = version.WithVersion(ctx, version.Version{Major: 4, Minor: 1})
+	req = req.WithContext(ctx)
+	
+	w := httptest.NewRecorder()
+
+	err := WriteError(w, req, http.StatusNotFound, "Not Found", "Test error")
+	if err != nil {
+		t.Fatalf("WriteError failed: %v", err)
+	}
+
+	// Verify OData-Version header matches negotiated version
+	odataVersion := w.Header().Get("OData-Version")
+	if odataVersion != "4.01" {
+		t.Errorf("OData-Version = %v, want 4.01", odataVersion)
+	}
+}
+
+func TestWriteODataError_RespectsVersionNegotiation(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.Header.Set("OData-MaxVersion", "4.0")
+	
+	// Simulate version negotiation middleware
+	ctx := req.Context()
+	ctx = version.WithVersion(ctx, version.Version{Major: 4, Minor: 0})
+	req = req.WithContext(ctx)
+	
+	w := httptest.NewRecorder()
+
+	odataErr := &ODataError{
+		Code:    "TestCode",
+		Message: "Test Message",
+	}
+
+	err := WriteODataError(w, req, http.StatusBadRequest, odataErr)
+	if err != nil {
+		t.Fatalf("WriteODataError failed: %v", err)
+	}
+
+	// Verify OData-Version header matches negotiated version
+	odataVersion := w.Header().Get("OData-Version")
+	if odataVersion != "4.0" {
+		t.Errorf("OData-Version = %v, want 4.0", odataVersion)
 	}
 }
