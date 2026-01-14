@@ -473,7 +473,7 @@ func applyOrderBy(db *gorm.DB, orderBy []OrderByItem, entityMetadata *metadata.E
 		for _, item := range orderBy {
 			var columnName string
 			if propertyExists(item.Property, entityMetadata) {
-				if entityMetadata != nil && entityMetadata.IsSingleEntityNavigationPath(item.Property) {
+				if entityMetadata.IsSingleEntityNavigationPath(item.Property) {
 					columnName = getQuotedColumnName(dialect, item.Property, entityMetadata)
 				} else {
 					col := GetColumnName(item.Property, entityMetadata)
@@ -507,7 +507,7 @@ func applyOrderBy(db *gorm.DB, orderBy []OrderByItem, entityMetadata *metadata.E
 			var columnName string
 			rawColumn := false
 			if propertyExists(item.Property, entityMetadata) {
-				if entityMetadata != nil && entityMetadata.IsSingleEntityNavigationPath(item.Property) {
+				if entityMetadata.IsSingleEntityNavigationPath(item.Property) {
 					columnName = getQuotedColumnName(dialect, item.Property, entityMetadata)
 					rawColumn = true
 				} else {

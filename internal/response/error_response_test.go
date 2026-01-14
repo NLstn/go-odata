@@ -409,12 +409,12 @@ func TestWriteServiceDocument_InvalidAcceptHeader(t *testing.T) {
 func TestWriteError_RespectsVersionNegotiation_40(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.Header.Set("OData-MaxVersion", "4.0")
-	
+
 	// Simulate version negotiation middleware
 	ctx := req.Context()
 	ctx = version.WithVersion(ctx, version.Version{Major: 4, Minor: 0})
 	req = req.WithContext(ctx)
-	
+
 	w := httptest.NewRecorder()
 
 	err := WriteError(w, req, http.StatusBadRequest, "Bad Request", "Test error")
@@ -432,12 +432,12 @@ func TestWriteError_RespectsVersionNegotiation_40(t *testing.T) {
 func TestWriteError_RespectsVersionNegotiation_401(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.Header.Set("OData-MaxVersion", "4.01")
-	
+
 	// Simulate version negotiation middleware
 	ctx := req.Context()
 	ctx = version.WithVersion(ctx, version.Version{Major: 4, Minor: 1})
 	req = req.WithContext(ctx)
-	
+
 	w := httptest.NewRecorder()
 
 	err := WriteError(w, req, http.StatusNotFound, "Not Found", "Test error")
@@ -455,12 +455,12 @@ func TestWriteError_RespectsVersionNegotiation_401(t *testing.T) {
 func TestWriteODataError_RespectsVersionNegotiation(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.Header.Set("OData-MaxVersion", "4.0")
-	
+
 	// Simulate version negotiation middleware
 	ctx := req.Context()
 	ctx = version.WithVersion(ctx, version.Version{Major: 4, Minor: 0})
 	req = req.WithContext(ctx)
-	
+
 	w := httptest.NewRecorder()
 
 	odataErr := &ODataError{

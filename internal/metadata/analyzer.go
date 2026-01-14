@@ -43,8 +43,8 @@ type EntityMetadata struct {
 		HasODataBeforeReadEntity     bool
 		HasODataAfterReadEntity      bool
 	}
-	entitiesRegistry       map[string]*EntityMetadata
-	navigationTargetIndex  map[string]*EntityMetadata // Index for fast navigation target lookup by EntityName or EntitySetName
+	entitiesRegistry      map[string]*EntityMetadata
+	navigationTargetIndex map[string]*EntityMetadata // Index for fast navigation target lookup by EntityName or EntitySetName
 }
 
 // TypeDiscriminatorInfo holds metadata about the type discriminator property
@@ -1220,7 +1220,7 @@ func (metadata *EntityMetadata) SetEntitiesRegistry(entities map[string]*EntityM
 		return
 	}
 	metadata.entitiesRegistry = entities
-	
+
 	// Build navigation target index for O(1) lookup
 	metadata.navigationTargetIndex = make(map[string]*EntityMetadata)
 	for _, entity := range entities {
@@ -1243,12 +1243,12 @@ func (metadata *EntityMetadata) AddEntityToRegistry(entity *EntityMetadata) {
 	if metadata == nil || entity == nil {
 		return
 	}
-	
+
 	// Initialize the index if it doesn't exist
 	if metadata.navigationTargetIndex == nil {
 		metadata.navigationTargetIndex = make(map[string]*EntityMetadata)
 	}
-	
+
 	// Add the entity to the index
 	if entity.EntityName != "" {
 		metadata.navigationTargetIndex[entity.EntityName] = entity

@@ -38,10 +38,6 @@ func parseOrderBy(orderByStr string, entityMetadata *metadata.EntityMetadata, co
 		if !computedAliases[item.Property] {
 			if entityMetadata != nil && entityMetadata.IsSingleEntityNavigationPath(item.Property) {
 				segments := strings.Split(item.Property, "/")
-				if len(segments) != 2 {
-					return nil, fmt.Errorf("property '%s' does not exist", item.Property)
-				}
-
 				navPropName := strings.TrimSpace(segments[0])
 				targetProperty := strings.TrimSpace(segments[1])
 
