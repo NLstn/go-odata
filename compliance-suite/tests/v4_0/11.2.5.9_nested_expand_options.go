@@ -236,9 +236,9 @@ func NestedExpandOptions() *framework.TestSuite {
 	// Test 16: Expand with invalid nested $levels (negative)
 	suite.AddTest(
 		"test_expand_invalid_nested_levels_negative",
-		"Expand with invalid nested $levels=-1 returns 400",
+		"Expand with invalid nested $levels=-5 returns 400",
 		func(ctx *framework.TestContext) error {
-			expand := url.QueryEscape("Descriptions($levels=-1)")
+			expand := url.QueryEscape("Descriptions($levels=-5)")
 			resp, err := ctx.GET("/Products?$expand=" + expand)
 			if err != nil {
 				return err

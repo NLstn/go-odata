@@ -1033,6 +1033,12 @@ expandQuery: "Books($levels=invalid)",
 expectErr:   true,
 description: "Should reject non-numeric non-max values",
 },
+{
+name:        "Invalid levels - partial numeric",
+expandQuery: "Books($levels=5abc)",
+expectErr:   true,
+description: "Should reject values with trailing non-numeric characters",
+},
 }
 
 for _, tt := range tests {
