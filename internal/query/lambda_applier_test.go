@@ -136,7 +136,7 @@ func TestLambdaApplier_SimpleAny(t *testing.T) {
 
 			// Apply the filter
 			query := db.Model(&TestProduct{})
-			query = ApplyFilterOnly(query, filterExpr, entityMetadata)
+			query = ApplyFilterOnly(query, filterExpr, entityMetadata, nil)
 
 			// Count the results
 			var count int64
@@ -180,7 +180,7 @@ func TestLambdaApplier_AnyWithContains(t *testing.T) {
 			}
 
 			query := db.Model(&TestProduct{})
-			query = ApplyFilterOnly(query, filterExpr, entityMetadata)
+			query = ApplyFilterOnly(query, filterExpr, entityMetadata, nil)
 
 			var count int64
 			if err := query.Count(&count).Error; err != nil {
@@ -226,7 +226,7 @@ func TestLambdaApplier_MultipleAny(t *testing.T) {
 			}
 
 			query := db.Model(&TestProduct{})
-			query = ApplyFilterOnly(query, filterExpr, entityMetadata)
+			query = ApplyFilterOnly(query, filterExpr, entityMetadata, nil)
 
 			var count int64
 			if err := query.Count(&count).Error; err != nil {
@@ -272,7 +272,7 @@ func TestLambdaApplier_NotAny(t *testing.T) {
 			}
 
 			query := db.Model(&TestProduct{})
-			query = ApplyFilterOnly(query, filterExpr, entityMetadata)
+			query = ApplyFilterOnly(query, filterExpr, entityMetadata, nil)
 
 			var count int64
 			if err := query.Count(&count).Error; err != nil {
@@ -318,7 +318,7 @@ func TestLambdaApplier_CombinedFilters(t *testing.T) {
 			}
 
 			query := db.Model(&TestProduct{})
-			query = ApplyFilterOnly(query, filterExpr, entityMetadata)
+			query = ApplyFilterOnly(query, filterExpr, entityMetadata, nil)
 
 			var count int64
 			if err := query.Count(&count).Error; err != nil {
@@ -358,7 +358,7 @@ func TestLambdaApplier_All(t *testing.T) {
 			}
 
 			query := db.Model(&TestProduct{})
-			query = ApplyFilterOnly(query, filterExpr, entityMetadata)
+			query = ApplyFilterOnly(query, filterExpr, entityMetadata, nil)
 
 			var count int64
 			if err := query.Count(&count).Error; err != nil {
@@ -401,7 +401,7 @@ func TestLambdaApplier_ComplexPredicates(t *testing.T) {
 			}
 
 			query := db.Model(&TestProduct{})
-			query = ApplyFilterOnly(query, filterExpr, entityMetadata)
+			query = ApplyFilterOnly(query, filterExpr, entityMetadata, nil)
 
 			var count int64
 			if err := query.Count(&count).Error; err != nil {
@@ -425,7 +425,7 @@ func TestLambdaApplier_CustomColumnAny(t *testing.T) {
 	}
 
 	query := db.Model(&TestProduct{})
-	query = ApplyFilterOnly(query, filterExpr, entityMetadata)
+	query = ApplyFilterOnly(query, filterExpr, entityMetadata, nil)
 
 	var count int64
 	if err := query.Count(&count).Error; err != nil {
@@ -447,7 +447,7 @@ func TestLambdaApplier_CustomColumnRegistryLookup(t *testing.T) {
 	}
 
 	query := db.Model(&TestProduct{})
-	query = ApplyFilterOnly(query, filterExpr, entityMetadata)
+	query = ApplyFilterOnly(query, filterExpr, entityMetadata, nil)
 
 	var count int64
 	if err := query.Count(&count).Error; err != nil {

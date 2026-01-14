@@ -296,10 +296,10 @@ func (h *EntityHandler) createNavCountFunc(relatedDB *gorm.DB, targetMetadata *m
 
 		if search != "" && h.ftsManager != nil {
 			countOptions := &query.QueryOptions{Filter: filter, Search: search}
-			countDB = query.ApplyQueryOptionsWithFTS(countDB, countOptions, targetMetadata, h.ftsManager, targetMetadata.TableName)
-			if searchAppliedAtDB(countDB) {
+			ftsDB := query.ApplyQueryOptionsWithFTS(countDB, countOptions, targetMetadata, h.ftsManager, targetMetadata.TableName, h.logger)
+			if searchAppliedAtDB(ftsDB) {
 				var count int64
-				if err := countDB.Count(&count).Error; err != nil {
+				if err := ftsDB.Count(&count).Error; err != nil {
 					return nil, err
 				}
 
@@ -308,7 +308,7 @@ func (h *EntityHandler) createNavCountFunc(relatedDB *gorm.DB, targetMetadata *m
 		}
 
 		if filter != nil {
-			countDB = query.ApplyFilterOnly(countDB, filter, targetMetadata)
+			countDB = query.ApplyFilterOnly(countDB, filter, targetMetadata, h.logger)
 		}
 
 		if search == "" {
@@ -352,7 +352,7 @@ func (h *EntityHandler) createNavFetchFunc(relatedDB *gorm.DB, targetMetadata *m
 			db = db.Scopes(scopes...)
 		}
 
-		db = query.ApplyQueryOptions(db, &modifiedOptions, targetMetadata)
+		db = query.ApplyQueryOptions(db, &modifiedOptions, targetMetadata, h.logger)
 
 		if query.ShouldUseMapResults(queryOptions) {
 			var mapResults []map[string]interface{}

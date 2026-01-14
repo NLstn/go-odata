@@ -211,7 +211,7 @@ func TestApplyQueryOptions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := ApplyQueryOptions(db, tt.options, meta)
+			result := ApplyQueryOptions(db, tt.options, meta, nil)
 			if result == nil {
 				t.Error("ApplyQueryOptions returned nil")
 				return
@@ -274,7 +274,7 @@ func TestApplyQueryOptionsWithFTS(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := ApplyQueryOptionsWithFTS(db, tt.options, meta, tt.ftsManager, tt.tableName)
+			result := ApplyQueryOptionsWithFTS(db, tt.options, meta, tt.ftsManager, tt.tableName, nil)
 			if result == nil {
 				t.Error("ApplyQueryOptionsWithFTS returned nil")
 				return
@@ -319,7 +319,7 @@ func TestApplyExpandOnly(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := ApplyExpandOnly(db, tt.expand, meta)
+			result := ApplyExpandOnly(db, tt.expand, meta, nil)
 			if result == nil {
 				t.Error("ApplyExpandOnly returned nil")
 			}
