@@ -12,6 +12,7 @@ import (
 type conversionContext struct {
 	computedAliases map[string]bool
 	entityMetadata  *metadata.EntityMetadata
+	maxInClauseSize int
 }
 
 // hasComputedAlias checks if an alias is registered as a computed property
@@ -23,10 +24,11 @@ func (ctx *conversionContext) hasComputedAlias(alias string) bool {
 }
 
 // ASTToFilterExpressionWithComputed converts an AST to a FilterExpression with computed alias support
-func ASTToFilterExpressionWithComputed(node ASTNode, entityMetadata *metadata.EntityMetadata, computedAliases map[string]bool) (*FilterExpression, error) {
+func ASTToFilterExpressionWithComputed(node ASTNode, entityMetadata *metadata.EntityMetadata, computedAliases map[string]bool, maxInClauseSize int) (*FilterExpression, error) {
 	ctx := &conversionContext{
 		computedAliases: computedAliases,
 		entityMetadata:  entityMetadata,
+		maxInClauseSize: maxInClauseSize,
 	}
 	return astToFilterExpressionWithContext(node, ctx)
 }
@@ -216,6 +218,11 @@ func convertComparisonExprWithContext(n *ComparisonExpr, ctx *conversionContext)
 			} else {
 				return nil, fmt.Errorf("collection values must be literals")
 			}
+		}
+
+		// Validate IN clause size if configured
+		if ctx != nil && ctx.maxInClauseSize > 0 && len(values) > ctx.maxInClauseSize {
+			return nil, fmt.Errorf("IN clause size (%d) exceeds maximum allowed (%d)", len(values), ctx.maxInClauseSize)
 		}
 
 		return &FilterExpression{

@@ -392,6 +392,7 @@ func tryBuildRightSideFunctionComparison(dialect string, leftColumn string, oper
 
 // buildStandardComparison builds the SQL for a standard comparison operation.
 // This handles all comparison operators like =, !=, >, <, IN, LIKE, etc.
+<<<<<<< HEAD
 func buildStandardComparison(dialect string, operator FilterOperator, columnName string, value interface{}, entityMetadata *metadata.EntityMetadata) (string, []interface{}) {
 	// Check if this is a property-to-property comparison
 	// (e.g., "Price gt Cost" should generate "price > cost", not "price > 'Cost'")
@@ -414,6 +415,9 @@ func buildStandardComparison(dialect string, operator FilterOperator, columnName
 		}
 	}
 
+=======
+func buildStandardComparison(dialect string, operator FilterOperator, columnName string, value interface{}, entityMetadata *metadata.EntityMetadata, maxInClauseSize int) (string, []interface{}) {
+>>>>>>> 893d2b1 (Add MaxInClauseSize and MaxExpandDepth security limits)
 	switch operator {
 	case OpEqual:
 		if value == nil {
@@ -446,6 +450,11 @@ func buildStandardComparison(dialect string, operator FilterOperator, columnName
 		}
 		if len(values) == 0 {
 			return "1 = 0", []interface{}{}
+		}
+		// Check IN clause size limit if configured
+		if maxInClauseSize > 0 && len(values) > maxInClauseSize {
+			// Return error condition that will be caught by caller
+			return "", []interface{}{fmt.Errorf("IN clause size (%d) exceeds maximum allowed (%d)", len(values), maxInClauseSize)}
 		}
 		placeholders := make([]string, len(values))
 		for i := range values {
@@ -531,7 +540,17 @@ func buildComparisonConditionWithDB(db *gorm.DB, dialect string, filter *FilterE
 	}
 
 	// Build a standard comparison
-	return buildStandardComparison(dialect, filter.Operator, columnName, filter.Value, entityMetadata)
+	sql, args := buildStandardComparison(dialect, filter.Operator, columnName, filter.Value, entityMetadata, filter.maxInClauseSize)
+
+	// Check if the args contain an error (from validation like IN clause size limit)
+	if len(args) > 0 {
+		if err, ok := args[0].(error); ok {
+			// Return empty SQL with error message as a comment to fail the query
+			return fmt.Sprintf("/* Error: %s */ 1 = 0", err.Error()), nil
+		}
+	}
+
+	return sql, args
 }
 
 // buildEntityTypeFilter builds SQL for filtering by entity type using the discriminator column

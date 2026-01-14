@@ -415,7 +415,7 @@ func parseFilterTransformation(transStr string, entityMetadata *metadata.EntityM
 	content = strings.TrimSpace(content)
 
 	// Parse the filter expression with computed aliases support
-	filter, err := parseFilter(content, entityMetadata, computedAliases)
+	filter, err := parseFilter(content, entityMetadata, computedAliases, 0)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse filter expression: %w", err)
 	}
@@ -516,7 +516,7 @@ func parseComputeExpression(exprStr string, entityMetadata *metadata.EntityMetad
 
 	// Parse the expression as a filter expression
 	// For simplicity, we'll support basic expressions for now
-	expression, err := parseFilter(expressionStr, entityMetadata, nil)
+	expression, err := parseFilter(expressionStr, entityMetadata, nil, 0)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse compute expression: %w", err)
 	}
