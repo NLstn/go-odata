@@ -262,6 +262,15 @@ func parseNestedExpandOptionsCore(expand *ExpandOption, optionsStr string, targe
 		}
 	}
 
+	// TODO: Implement support for $count and $levels in nested expand
+	// For now, return an error if these unsupported options are used
+	if expand.Count {
+		return fmt.Errorf("nested $count in $expand is not yet implemented")
+	}
+	if expand.Levels != nil {
+		return fmt.Errorf("nested $levels in $expand is not yet implemented")
+	}
+
 	return nil
 }
 
