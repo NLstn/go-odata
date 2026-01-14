@@ -79,7 +79,7 @@ func TestPropertyToPropertyComparison(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			filterExpr, err := parseFilter(tt.filter, meta, nil)
+			filterExpr, err := parseFilter(tt.filter, meta, nil, 0)
 			if err != nil {
 				t.Fatalf("Failed to parse filter: %v", err)
 			}
@@ -117,7 +117,7 @@ func TestPropertyToPropertyComparison(t *testing.T) {
 func TestPropertyToPropertyComparisonParsing(t *testing.T) {
 	meta := getTestMetadata2(t)
 
-	filterExpr, err := parseFilter("Price gt Cost", meta, nil)
+	filterExpr, err := parseFilter("Price gt Cost", meta, nil, 0)
 	if err != nil {
 		t.Fatalf("Failed to parse filter: %v", err)
 	}

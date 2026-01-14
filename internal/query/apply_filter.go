@@ -392,8 +392,7 @@ func tryBuildRightSideFunctionComparison(dialect string, leftColumn string, oper
 
 // buildStandardComparison builds the SQL for a standard comparison operation.
 // This handles all comparison operators like =, !=, >, <, IN, LIKE, etc.
-<<<<<<< HEAD
-func buildStandardComparison(dialect string, operator FilterOperator, columnName string, value interface{}, entityMetadata *metadata.EntityMetadata) (string, []interface{}) {
+func buildStandardComparison(dialect string, operator FilterOperator, columnName string, value interface{}, entityMetadata *metadata.EntityMetadata, maxInClauseSize int) (string, []interface{}) {
 	// Check if this is a property-to-property comparison
 	// (e.g., "Price gt Cost" should generate "price > cost", not "price > 'Cost'")
 	if valueStr, ok := value.(string); ok && propertyExists(valueStr, entityMetadata) {
@@ -415,9 +414,7 @@ func buildStandardComparison(dialect string, operator FilterOperator, columnName
 		}
 	}
 
-=======
-func buildStandardComparison(dialect string, operator FilterOperator, columnName string, value interface{}, entityMetadata *metadata.EntityMetadata, maxInClauseSize int) (string, []interface{}) {
->>>>>>> 893d2b1 (Add MaxInClauseSize and MaxExpandDepth security limits)
+
 	switch operator {
 	case OpEqual:
 		if value == nil {
