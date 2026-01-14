@@ -105,6 +105,7 @@ func TestPerParentExpandCompositeKeysBatched(t *testing.T) {
 
 	countLogger.Reset()
 
+	// Per OData v4.01 spec section 5.1.2, semicolon (;) separates nested query options within $expand
 	req := httptest.NewRequest(http.MethodGet, "/CompositeParents?$expand=Children($orderby=ID;$top=1)", nil)
 	w := httptest.NewRecorder()
 	service.ServeHTTP(w, req)
