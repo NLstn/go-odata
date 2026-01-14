@@ -24,6 +24,7 @@ A Go library for building services that expose OData v4 APIs with automatic hand
 - 🧪 **Fully tested** - 85+ compliance tests ensuring OData v4 adherence
 - 🔑 **Server-side key generation** - Validate directives during metadata analysis and plug in custom generators
 - 🌐 **Virtual entities** - Expose data from external APIs without database backing
+- 🛣️ **Custom base paths** - Mount your OData service at any path (e.g., `/api/odata`) with automatic URL generation
 
 ### OData v4 Specification
 
@@ -77,6 +78,9 @@ func main() {
     if err := service.RegisterEntity(&Product{}); err != nil {
         log.Fatal(err)
     }
+    
+    // Optional: Set a base path for the service
+    // service.SetBasePath("/api/odata")
     
     // Create HTTP mux and register the OData service as a handler
     mux := http.NewServeMux()

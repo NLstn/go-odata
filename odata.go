@@ -62,6 +62,7 @@ import (
 	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/observability"
 	"github.com/nlstn/go-odata/internal/query"
+	"github.com/nlstn/go-odata/internal/response"
 	"github.com/nlstn/go-odata/internal/service/operations"
 	servrouter "github.com/nlstn/go-odata/internal/service/router"
 	servruntime "github.com/nlstn/go-odata/internal/service/runtime"
@@ -384,6 +385,8 @@ type Service struct {
 	maxInClauseSize int
 	// maxExpandDepth limits the depth of nested $expand operations
 	maxExpandDepth int
+	// basePath is the configured base path for mounting the service at a custom path
+	basePath string
 }
 
 // NewService creates a new OData service instance with database connection.
@@ -1522,6 +1525,68 @@ func (s *Service) SetNamespace(namespace string) error {
 		handler.SetNamespace(trimmed)
 	}
 	return nil
+}
+
+// SetBasePath configures the path prefix for the service mount point.
+// When set, the service will automatically strip this prefix from incoming requests
+// and include it in all generated response URLs.
+//
+// The base path must:
+//   - Start with "/" (e.g., "/odata")
+//   - NOT end with "/" (e.g., NOT "/odata/")
+//   - Be empty string "" for root mounting (default)
+//
+// Example:
+//
+//	service := odata.NewService(db)
+//	if err := service.SetBasePath("/odata"); err != nil {
+//	    log.Fatal(err)
+//	}
+//	mux.Handle("/odata/", service)  // No http.StripPrefix needed!
+//
+// The service will:
+//  1. Strip "/odata" from incoming request paths automatically
+//  2. Include "/odata" in all generated response URLs:
+//     - @odata.context: "http://host/odata/$metadata#Products"
+//     - @odata.id: "http://host/odata/Products(1)"
+//     - @odata.nextLink: "http://host/odata/Products?$skip=10"
+func (s *Service) SetBasePath(basePath string) error {
+	trimmed := strings.TrimSpace(basePath)
+
+	// Empty string is valid (root mounting)
+	if trimmed == "" {
+		s.basePath = ""
+		response.SetBasePath("")
+		return nil
+	}
+
+	// MUST start with "/"
+	if !strings.HasPrefix(trimmed, "/") {
+		return fmt.Errorf("base path must start with '/': got %q", trimmed)
+	}
+
+	// MUST NOT end with "/"
+	if strings.HasSuffix(trimmed, "/") {
+		return fmt.Errorf("base path must not end with '/': got %q", trimmed)
+	}
+
+	// Reject path traversal attempts
+	if strings.Contains(trimmed, "..") {
+		return fmt.Errorf("base path cannot contain '..': got %q", trimmed)
+	}
+
+	s.basePath = trimmed
+	response.SetBasePath(trimmed)
+
+	s.logger.Debug("Base path configured", "base_path", trimmed)
+
+	return nil
+}
+
+// GetBasePath returns the configured base path.
+// Returns empty string if the service is mounted at root.
+func (s *Service) GetBasePath() string {
+	return s.basePath
 }
 
 // SetEntityOverwrite configures all overwrite handlers for the specified entity set.

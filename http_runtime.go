@@ -2,6 +2,7 @@ package odata
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/nlstn/go-odata/internal/response"
 )
@@ -15,6 +16,20 @@ func (s *Service) serveHTTP(w http.ResponseWriter, r *http.Request, allowAsync b
 	if s.runtime == nil {
 		http.Error(w, "service runtime not initialized", http.StatusInternalServerError)
 		return
+	}
+
+	// Strip base path from incoming request if configured
+	if s.basePath != "" && strings.HasPrefix(r.URL.Path, s.basePath) {
+		newPath := strings.TrimPrefix(r.URL.Path, s.basePath)
+		// Handle exact match of base path
+		if newPath == "" {
+			newPath = "/"
+		}
+		// Ensure we only strip if followed by "/" or exact match
+		// This prevents /odatax/foo from being incorrectly stripped to x/foo
+		if newPath == "/" || strings.HasPrefix(newPath, "/") {
+			r.URL.Path = newPath
+		}
 	}
 
 	// Call the pre-request hook if configured
