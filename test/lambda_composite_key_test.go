@@ -174,7 +174,7 @@ func TestLambdaAll_CompositeKeyParent(t *testing.T) {
 	}
 }
 
-// TestLambdaAny_NoMatch tests lambda any with no matching results
+// TestLambdaAny_CompositeKeyParent_NoMatch tests lambda any with no matching results
 func TestLambdaAny_CompositeKeyParent_NoMatch(t *testing.T) {
 	service, _ := setupLambdaCompositeKeyTest(t)
 
