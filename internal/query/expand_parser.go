@@ -10,6 +10,16 @@ import (
 
 // parseExpand parses the $expand query option
 func parseExpand(expandStr string, entityMetadata *metadata.EntityMetadata) ([]ExpandOption, error) {
+	return parseExpandWithConfig(expandStr, entityMetadata, nil, 0)
+}
+
+// parseExpandWithConfig parses the $expand query option with depth tracking
+func parseExpandWithConfig(expandStr string, entityMetadata *metadata.EntityMetadata, config *ParserConfig, currentDepth int) ([]ExpandOption, error) {
+	// Check depth limit if configured
+	if config != nil && config.MaxExpandDepth > 0 && currentDepth >= config.MaxExpandDepth {
+		return nil, fmt.Errorf("$expand depth (%d) exceeds maximum allowed (%d)", currentDepth+1, config.MaxExpandDepth)
+	}
+
 	// Split by comma for multiple expands (basic implementation, doesn't handle nested parens)
 	parts := splitExpandParts(expandStr)
 	result := make([]ExpandOption, 0, len(parts))
@@ -20,7 +30,7 @@ func parseExpand(expandStr string, entityMetadata *metadata.EntityMetadata) ([]E
 			continue
 		}
 
-		expand, err := parseSingleExpandCore(trimmed, entityMetadata, true)
+		expand, err := parseSingleExpandCoreWithConfig(trimmed, entityMetadata, true, config, currentDepth)
 		if err != nil {
 			return nil, err
 		}
@@ -62,6 +72,11 @@ func splitExpandParts(expandStr string) []string {
 
 // parseSingleExpandCore parses a single expand option with optional metadata validation
 func parseSingleExpandCore(expandStr string, entityMetadata *metadata.EntityMetadata, validateMetadata bool) (ExpandOption, error) {
+	return parseSingleExpandCoreWithConfig(expandStr, entityMetadata, validateMetadata, nil, 0)
+}
+
+// parseSingleExpandCoreWithConfig parses a single expand option with depth tracking
+func parseSingleExpandCoreWithConfig(expandStr string, entityMetadata *metadata.EntityMetadata, validateMetadata bool, config *ParserConfig, currentDepth int) (ExpandOption, error) {
 	expand := ExpandOption{}
 
 	// Check for nested query options: NavigationProp($select=...,...)
@@ -83,7 +98,11 @@ func parseSingleExpandCore(expandStr string, entityMetadata *metadata.EntityMeta
 		}
 
 		// Parse nested options
+<<<<<<< HEAD
 		if err := parseNestedExpandOptionsCore(&expand, nestedOptions, targetMetadata, validateMetadata); err != nil {
+=======
+		if err := parseNestedExpandOptionsCoreWithConfig(&expand, nestedOptions, entityMetadata, validateMetadata, config, currentDepth); err != nil {
+>>>>>>> 893d2b1 (Add MaxInClauseSize and MaxExpandDepth security limits)
 			return expand, err
 		}
 	} else {
@@ -99,7 +118,16 @@ func parseSingleExpandCore(expandStr string, entityMetadata *metadata.EntityMeta
 }
 
 // parseNestedExpandOptionsCore parses nested query options with optional metadata validation
+<<<<<<< HEAD
 func parseNestedExpandOptionsCore(expand *ExpandOption, optionsStr string, targetMetadata *metadata.EntityMetadata, validateMetadata bool) error {
+=======
+func parseNestedExpandOptionsCore(expand *ExpandOption, optionsStr string, entityMetadata *metadata.EntityMetadata, validateMetadata bool) error {
+	return parseNestedExpandOptionsCoreWithConfig(expand, optionsStr, entityMetadata, validateMetadata, nil, 0)
+}
+
+// parseNestedExpandOptionsCoreWithConfig parses nested query options with depth tracking
+func parseNestedExpandOptionsCoreWithConfig(expand *ExpandOption, optionsStr string, entityMetadata *metadata.EntityMetadata, validateMetadata bool, config *ParserConfig, currentDepth int) error {
+>>>>>>> 893d2b1 (Add MaxInClauseSize and MaxExpandDepth security limits)
 	// Split by semicolon for different query options
 	parts := strings.Split(optionsStr, ";")
 	var computedAliases map[string]bool
@@ -145,12 +173,30 @@ func parseNestedExpandOptionsCore(expand *ExpandOption, optionsStr string, targe
 		switch strings.ToLower(key) {
 		case "$select":
 			expand.Select = parseSelect(value)
+<<<<<<< HEAD
 			if validateMetadata {
 				if targetMetadata == nil {
 					return fmt.Errorf("navigation target metadata is missing for $select")
 				}
 				if err := validateExpandSelect(expand.Select, targetMetadata, computedAliases); err != nil {
 					return err
+=======
+		case "$expand":
+			// Parse nested $expand recursively without metadata validation
+			// as we don't have easy access to the target entity metadata
+			// Increment depth for nested expand to enforce depth limits
+			nestedExpand, err := parseExpandWithConfig(value, nil, config, currentDepth+1)
+			if err != nil {
+				return fmt.Errorf("invalid nested $expand: %w", err)
+			}
+			expand.Expand = nestedExpand
+		case "$filter":
+			if validateMetadata && entityMetadata != nil {
+				// Get the navigation property metadata to find the target entity type
+				navProp := findNavigationProperty(expand.NavigationProperty, entityMetadata)
+				if navProp == nil {
+					return fmt.Errorf("navigation property '%s' not found", expand.NavigationProperty)
+>>>>>>> 893d2b1 (Add MaxInClauseSize and MaxExpandDepth security limits)
 				}
 			}
 		case "$expand":
