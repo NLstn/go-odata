@@ -6,6 +6,7 @@ import (
 	odata "github.com/nlstn/go-odata"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -423,5 +424,5 @@ func TestMain(m *testing.M) {
 	// Disable GORM logging for cleaner test output
 	// Individual tests can enable it if needed
 	fmt.Println("Running select columns tests...")
-	m.Run()
+	os.Exit(m.Run())
 }

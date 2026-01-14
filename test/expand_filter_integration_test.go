@@ -263,8 +263,9 @@ func TestExpandWithFilterIntegration(t *testing.T) {
 		}
 	})
 
-	t.Run("Select navigation property auto-expands", func(t *testing.T) {
+	t.Run("Select navigation property includes navigation link but does not expand", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/ExpandTestProducts?$select=Name,Descriptions", nil)
+		req.Header.Set("Accept", "application/json;odata.metadata=minimal")
 		w := httptest.NewRecorder()
 
 		service.ServeHTTP(w, req)
@@ -290,28 +291,22 @@ func TestExpandWithFilterIntegration(t *testing.T) {
 			t.Error("Expected Name property")
 		}
 
-		// Should have Descriptions array (auto-expanded)
-		descriptions, ok := item["Descriptions"].([]interface{})
-		if !ok {
-			t.Fatalf("Expected Descriptions to be auto-expanded as array, got %T: %v", item["Descriptions"], item["Descriptions"])
+		// Should NOT have Descriptions data (not expanded without $expand)
+		if descriptions, ok := item["Descriptions"]; ok {
+			if _, isArray := descriptions.([]interface{}); isArray {
+				t.Error("Expected Descriptions to not be expanded without $expand")
+			}
 		}
 
-		if len(descriptions) == 0 {
-			t.Fatal("Expected at least one description")
-		}
-
-		// Verify description has expected properties
-		firstDesc, ok := descriptions[0].(map[string]interface{})
-		if !ok {
-			t.Fatalf("Expected description to be a map, got %T", descriptions[0])
-		}
-
-		if _, ok := firstDesc["Description"]; !ok {
-			t.Error("Expected Description property in expanded entity")
-		}
-
-		if _, ok := firstDesc["LanguageKey"]; !ok {
-			t.Error("Expected LanguageKey property in expanded entity")
+		// Should have Descriptions@odata.navigationLink
+		if navLink, ok := item["Descriptions@odata.navigationLink"]; !ok {
+			t.Error("Expected Descriptions@odata.navigationLink to be present for minimal metadata with $select")
+		} else if navLinkStr, ok := navLink.(string); ok {
+			if navLinkStr == "" {
+				t.Error("Expected Descriptions@odata.navigationLink to be non-empty")
+			}
+		} else {
+			t.Errorf("Expected Descriptions@odata.navigationLink to be a string, got %T", navLink)
 		}
 	})
 }
