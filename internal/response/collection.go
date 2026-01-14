@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/nlstn/go-odata/internal/metadata"
+	"github.com/nlstn/go-odata/internal/query"
 )
 
 // WriteODataCollection writes an OData collection response.
@@ -19,13 +20,13 @@ func WriteODataCollectionWithDelta(w http.ResponseWriter, r *http.Request, entit
 }
 
 // WriteODataCollectionWithNavigation writes an OData collection response with navigation links.
-func WriteODataCollectionWithNavigation(w http.ResponseWriter, r *http.Request, entitySetName string, data interface{}, count *int64, nextLink *string, metadata EntityMetadataProvider, expandedProps []string, selectedNavProps []string, fullMetadata *metadata.EntityMetadata) error {
-	return writeODataCollectionWithNavigationResponse(w, r, entitySetName, data, count, nextLink, nil, metadata, expandedProps, selectedNavProps, fullMetadata)
+func WriteODataCollectionWithNavigation(w http.ResponseWriter, r *http.Request, entitySetName string, data interface{}, count *int64, nextLink *string, metadata EntityMetadataProvider, expandOptions []query.ExpandOption, selectedNavProps []string, fullMetadata *metadata.EntityMetadata) error {
+	return writeODataCollectionWithNavigationResponse(w, r, entitySetName, data, count, nextLink, nil, metadata, expandOptions, selectedNavProps, fullMetadata)
 }
 
 // WriteODataCollectionWithNavigationAndDelta writes an OData collection response with navigation links and a delta link.
-func WriteODataCollectionWithNavigationAndDelta(w http.ResponseWriter, r *http.Request, entitySetName string, data interface{}, count *int64, nextLink, deltaLink *string, metadata EntityMetadataProvider, expandedProps []string, selectedNavProps []string, fullMetadata *metadata.EntityMetadata) error {
-	return writeODataCollectionWithNavigationResponse(w, r, entitySetName, data, count, nextLink, deltaLink, metadata, expandedProps, selectedNavProps, fullMetadata)
+func WriteODataCollectionWithNavigationAndDelta(w http.ResponseWriter, r *http.Request, entitySetName string, data interface{}, count *int64, nextLink, deltaLink *string, metadata EntityMetadataProvider, expandOptions []query.ExpandOption, selectedNavProps []string, fullMetadata *metadata.EntityMetadata) error {
+	return writeODataCollectionWithNavigationResponse(w, r, entitySetName, data, count, nextLink, deltaLink, metadata, expandOptions, selectedNavProps, fullMetadata)
 }
 
 func writeODataCollectionResponse(w http.ResponseWriter, r *http.Request, entitySetName string, data interface{}, count *int64, nextLink, deltaLink *string) error {
@@ -80,7 +81,7 @@ func writeODataCollectionResponse(w http.ResponseWriter, r *http.Request, entity
 	return encoder.Encode(response)
 }
 
-func writeODataCollectionWithNavigationResponse(w http.ResponseWriter, r *http.Request, entitySetName string, data interface{}, count *int64, nextLink, deltaLink *string, metadata EntityMetadataProvider, expandedProps []string, selectedNavProps []string, fullMetadata *metadata.EntityMetadata) error {
+func writeODataCollectionWithNavigationResponse(w http.ResponseWriter, r *http.Request, entitySetName string, data interface{}, count *int64, nextLink, deltaLink *string, metadata EntityMetadataProvider, expandOptions []query.ExpandOption, selectedNavProps []string, fullMetadata *metadata.EntityMetadata) error {
 	if !IsAcceptableFormat(r) {
 		return WriteError(w, r, http.StatusNotAcceptable, "Not Acceptable",
 			"The requested format is not supported. Only application/json is supported for data responses.")
@@ -93,7 +94,7 @@ func writeODataCollectionWithNavigationResponse(w http.ResponseWriter, r *http.R
 		contextURL = buildContextURL(r, entitySetName)
 	}
 
-	transformedData := addNavigationLinks(data, metadata, expandedProps, selectedNavProps, r, entitySetName, metadataLevel, fullMetadata)
+	transformedData := addNavigationLinks(data, metadata, expandOptions, selectedNavProps, r, entitySetName, metadataLevel, fullMetadata)
 	if transformedData == nil {
 		transformedData = []interface{}{}
 	}

@@ -297,7 +297,7 @@ func (h *EntityHandler) returnUpdatedEntity(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	h.writeEntityResponseWithETag(w, r, updatedEntity, "", http.StatusOK)
+	h.writeEntityResponseWithETag(w, r, updatedEntity, "", http.StatusOK, nil)
 }
 
 // handlePutEntity handles PUT requests for individual entities
@@ -654,7 +654,7 @@ func (h *EntityHandler) handleUpdateEntityOverwrite(w http.ResponseWriter, r *ht
 
 	if pref.ShouldReturnContent(false) {
 		if result != nil {
-			h.writeEntityResponseWithETag(w, r, result, "", http.StatusOK)
+			h.writeEntityResponseWithETag(w, r, result, "", http.StatusOK, nil)
 		} else {
 			// If no result was returned but content was requested, return 204
 			w.WriteHeader(http.StatusNoContent)

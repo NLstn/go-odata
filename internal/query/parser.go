@@ -558,6 +558,10 @@ func parseExpandOption(queryParams url.Values, entityMetadata *metadata.EntityMe
 		if err != nil {
 			return fmt.Errorf("invalid $expand: %w", err)
 		}
+		expand, err = applyExpandLevels(expand, entityMetadata, config)
+		if err != nil {
+			return fmt.Errorf("invalid $expand: %w", err)
+		}
 		options.Expand = expand
 	}
 	return nil

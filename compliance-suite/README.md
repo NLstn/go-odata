@@ -16,7 +16,7 @@ The compliance test suite validates that an OData service correctly implements t
 - String function edge cases, including literal wildcard handling in contains/startswith/endswith
 - And more...
 
-The test suite runs on both **SQLite** and **PostgreSQL** databases to ensure cross-database compatibility. All 106 test suites pass on both databases with a 93% individual test pass rate (620 passing tests out of 669 total).
+The test suite runs on both **SQLite** and **PostgreSQL** databases to ensure cross-database compatibility. CI tracks the exact suite and test totals as new suites are added.
 
 ## Project Structure
 
@@ -99,6 +99,16 @@ Individual Tests:
 ✗ FAIL: Test should validate deep insert
     Error: expected status code 201 but got 500
 ```
+
+## OData v4.01 Test Suites
+
+Current v4.01 suites include:
+
+- 11.2.5.8 Query Compute
+- 11.2.5.9 Nested Expand Options ($count and $levels)
+- 11.2.5.11 OrderBy Computed Properties
+- 11.2.5.13 Query Index
+- 12.2 Function and Action Overloading
 
 ## Usage
 

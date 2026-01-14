@@ -1,6 +1,7 @@
 package v4_0
 
 import (
+	"fmt"
 	"net/url"
 
 	"github.com/nlstn/go-odata/compliance-suite/framework"
@@ -148,30 +149,74 @@ func NestedExpandOptions() *framework.TestSuite {
 	// Test 10: Expand with nested $count=true
 	suite.AddTest(
 		"test_expand_with_count_true",
-		"Expand with $count=true returns 400 (not yet implemented)",
+		"Expand with $count=true includes @odata.count annotation",
 		func(ctx *framework.TestContext) error {
 			expand := url.QueryEscape("Descriptions($count=true)")
-			resp, err := ctx.GET("/Products?$expand=" + expand)
+			resp, err := ctx.GET("/Products?$top=1&$expand=" + expand)
 			if err != nil {
 				return err
 			}
-			// Expect 400 since $count=true is not yet implemented
-			return ctx.AssertStatusCode(resp, 400)
+			if err := ctx.AssertStatusCode(resp, 200); err != nil {
+				return err
+			}
+
+			var body map[string]interface{}
+			if err := ctx.GetJSON(resp, &body); err != nil {
+				return err
+			}
+
+			entities, ok := body["value"].([]interface{})
+			if !ok || len(entities) == 0 {
+				return fmt.Errorf("expected non-empty value array in response")
+			}
+
+			entity, ok := entities[0].(map[string]interface{})
+			if !ok {
+				return fmt.Errorf("expected expanded entity to be a JSON object")
+			}
+
+			if _, ok := entity["Descriptions@odata.count"]; !ok {
+				return fmt.Errorf("missing Descriptions@odata.count annotation")
+			}
+
+			return nil
 		},
 	)
 
 	// Test 11: Expand with nested $count=false
 	suite.AddTest(
 		"test_expand_with_count_false",
-		"Expand with $count=false returns 200 (no-op)",
+		"Expand with $count=false does not include @odata.count annotation",
 		func(ctx *framework.TestContext) error {
 			expand := url.QueryEscape("Descriptions($count=false)")
-			resp, err := ctx.GET("/Products?$expand=" + expand)
+			resp, err := ctx.GET("/Products?$top=1&$expand=" + expand)
 			if err != nil {
 				return err
 			}
-			// count=false is a no-op, should work fine
-			return ctx.AssertStatusCode(resp, 200)
+			if err := ctx.AssertStatusCode(resp, 200); err != nil {
+				return err
+			}
+
+			var body map[string]interface{}
+			if err := ctx.GetJSON(resp, &body); err != nil {
+				return err
+			}
+
+			entities, ok := body["value"].([]interface{})
+			if !ok || len(entities) == 0 {
+				return fmt.Errorf("expected non-empty value array in response")
+			}
+
+			entity, ok := entities[0].(map[string]interface{})
+			if !ok {
+				return fmt.Errorf("expected expanded entity to be a JSON object")
+			}
+
+			if _, ok := entity["Descriptions@odata.count"]; ok {
+				return fmt.Errorf("unexpected Descriptions@odata.count annotation")
+			}
+
+			return nil
 		},
 	)
 
@@ -192,30 +237,36 @@ func NestedExpandOptions() *framework.TestSuite {
 	// Test 13: Expand with nested $levels (integer)
 	suite.AddTest(
 		"test_expand_with_levels_integer",
-		"Expand with $levels=2 returns 400 (not yet implemented)",
+		"Expand with $levels=2 returns expanded results",
 		func(ctx *framework.TestContext) error {
 			expand := url.QueryEscape("Descriptions($levels=2)")
-			resp, err := ctx.GET("/Products?$expand=" + expand)
+			resp, err := ctx.GET("/Products?$top=1&$expand=" + expand)
 			if err != nil {
 				return err
 			}
-			// Expect 400 since $levels is not yet implemented
-			return ctx.AssertStatusCode(resp, 400)
+			if err := ctx.AssertStatusCode(resp, 200); err != nil {
+				return err
+			}
+
+			return ctx.AssertBodyContains(resp, "Descriptions")
 		},
 	)
 
 	// Test 14: Expand with nested $levels=max
 	suite.AddTest(
 		"test_expand_with_levels_max",
-		"Expand with $levels=max returns 400 (not yet implemented)",
+		"Expand with $levels=max returns expanded results",
 		func(ctx *framework.TestContext) error {
 			expand := url.QueryEscape("Descriptions($levels=max)")
-			resp, err := ctx.GET("/Products?$expand=" + expand)
+			resp, err := ctx.GET("/Products?$top=1&$expand=" + expand)
 			if err != nil {
 				return err
 			}
-			// Expect 400 since $levels is not yet implemented
-			return ctx.AssertStatusCode(resp, 400)
+			if err := ctx.AssertStatusCode(resp, 200); err != nil {
+				return err
+			}
+
+			return ctx.AssertBodyContains(resp, "Descriptions")
 		},
 	)
 
@@ -250,15 +301,18 @@ func NestedExpandOptions() *framework.TestSuite {
 	// Test 17: Expand with both $count and $levels
 	suite.AddTest(
 		"test_expand_with_count_and_levels",
-		"Expand with both $count=true and $levels=2 returns 400 (not yet implemented)",
+		"Expand with both $count=true and $levels=2 returns annotations",
 		func(ctx *framework.TestContext) error {
 			expand := url.QueryEscape("Descriptions($count=true;$levels=2)")
-			resp, err := ctx.GET("/Products?$expand=" + expand)
+			resp, err := ctx.GET("/Products?$top=1&$expand=" + expand)
 			if err != nil {
 				return err
 			}
-			// Expect 400 since both options are not yet implemented
-			return ctx.AssertStatusCode(resp, 400)
+			if err := ctx.AssertStatusCode(resp, 200); err != nil {
+				return err
+			}
+
+			return ctx.AssertBodyContains(resp, "Descriptions@odata.count")
 		},
 	)
 

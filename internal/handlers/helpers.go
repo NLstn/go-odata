@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/nlstn/go-odata/internal/metadata"
+	"github.com/nlstn/go-odata/internal/query"
 	"github.com/nlstn/go-odata/internal/response"
 	"github.com/nlstn/go-odata/internal/trackchanges"
 	"gorm.io/gorm"
@@ -278,7 +279,7 @@ func (h *EntityHandler) buildEntityResponseWithMetadata(navValue reflect.Value, 
 }
 
 // buildOrderedEntityResponseWithMetadata builds an ordered OData entity response with metadata level support
-func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{}, contextURL string, metadataLevel string, r *http.Request, etagValue string) *response.OrderedMap {
+func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{}, contextURL string, metadataLevel string, r *http.Request, etagValue string, expandOptions []query.ExpandOption) *response.OrderedMap {
 	odataResponse := response.NewOrderedMap()
 
 	// Only include @odata.context for minimal and full metadata (not for none)
@@ -356,11 +357,17 @@ func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{
 
 	// Handle map[string]interface{} (from $select filtering)
 	if resultValue.Kind() == reflect.Map {
-		// Iterate over map keys in a consistent order
-		for _, key := range resultValue.MapKeys() {
-			keyStr := key.String()
-			value := resultValue.MapIndex(key)
-			odataResponse.Set(keyStr, value.Interface())
+		if mapResult, ok := result.(map[string]interface{}); ok {
+			if len(expandOptions) > 0 && h.metadata != nil {
+				mapResult = response.ApplyExpandAnnotationsToMap(mapResult, expandOptions, h.metadata)
+			}
+
+			// Iterate over map keys in a consistent order
+			for _, key := range reflect.ValueOf(mapResult).MapKeys() {
+				keyStr := key.String()
+				value := reflect.ValueOf(mapResult).MapIndex(key)
+				odataResponse.Set(keyStr, value.Interface())
+			}
 		}
 
 		// For minimal metadata with map, check if all key fields are present
@@ -431,8 +438,22 @@ func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{
 			}
 
 			if isExpanded {
+				updatedValue := fieldValue.Interface()
+				if propMeta != nil && len(expandOptions) > 0 {
+					expandOpt := query.FindExpandOption(expandOptions, propMeta.Name, propMeta.JsonName)
+					if expandOpt != nil {
+						if targetMetadata, err := h.metadata.ResolveNavigationTarget(propMeta.Name); err == nil {
+							var count *int
+							updatedValue, count = response.ApplyExpandOptionToValue(updatedValue, expandOpt, targetMetadata)
+							if count != nil {
+								odataResponse.Set(jsonName+"@odata.count", *count)
+							}
+						}
+					}
+				}
+
 				// Include the expanded data
-				odataResponse.Set(jsonName, fieldValue.Interface())
+				odataResponse.Set(jsonName, updatedValue)
 			} else {
 				// Handle navigation property based on metadata level
 				// Only add navigation link for full metadata (per OData v4 spec)

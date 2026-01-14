@@ -8,9 +8,10 @@ import (
 
 	"github.com/nlstn/go-odata/internal/etag"
 	"github.com/nlstn/go-odata/internal/metadata"
+	"github.com/nlstn/go-odata/internal/query"
 )
 
-func addNavigationLinks(data interface{}, metadata EntityMetadataProvider, expandedProps []string, selectedNavProps []string, r *http.Request, entitySetName string, metadataLevel string, fullMetadata *metadata.EntityMetadata) []interface{} {
+func addNavigationLinks(data interface{}, metadata EntityMetadataProvider, expandOptions []query.ExpandOption, selectedNavProps []string, r *http.Request, entitySetName string, metadataLevel string, fullMetadata *metadata.EntityMetadata) []interface{} {
 	dataValue := reflect.ValueOf(data)
 	if dataValue.Kind() != reflect.Slice {
 		return []interface{}{}
@@ -32,12 +33,12 @@ func addNavigationLinks(data interface{}, metadata EntityMetadataProvider, expan
 		entity := dataValue.Index(i)
 
 		if entity.Kind() == reflect.Map {
-			entityMap := processMapEntity(entity, metadata, expandedProps, selectedNavProps, baseURL, entitySetName, metadataLevel, fullMetadata)
+			entityMap := processMapEntity(entity, metadata, expandOptions, selectedNavProps, baseURL, entitySetName, metadataLevel, fullMetadata)
 			if entityMap != nil {
 				result[i] = entityMap
 			}
 		} else {
-			orderedMap := processStructEntityOrdered(entity, metadata, expandedProps, selectedNavProps, baseURL, entitySetName, metadataLevel, fullMetadata)
+			orderedMap := processStructEntityOrdered(entity, metadata, expandOptions, selectedNavProps, baseURL, entitySetName, metadataLevel, fullMetadata)
 			result[i] = orderedMap
 		}
 	}
@@ -45,7 +46,7 @@ func addNavigationLinks(data interface{}, metadata EntityMetadataProvider, expan
 	return result
 }
 
-func processMapEntity(entity reflect.Value, metadata EntityMetadataProvider, expandedProps []string, selectedNavProps []string, baseURL, entitySetName string, metadataLevel string, fullMetadata *metadata.EntityMetadata) map[string]interface{} {
+func processMapEntity(entity reflect.Value, metadata EntityMetadataProvider, expandOptions []query.ExpandOption, selectedNavProps []string, baseURL, entitySetName string, metadataLevel string, fullMetadata *metadata.EntityMetadata) map[string]interface{} {
 	entityMap, ok := entity.Interface().(map[string]interface{})
 	if !ok {
 		return nil
@@ -79,7 +80,7 @@ func processMapEntity(entity reflect.Value, metadata EntityMetadataProvider, exp
 				continue
 			}
 
-			if isPropertyExpanded(prop, expandedProps) {
+			if isPropertyExpanded(prop, expandOptions) {
 				continue
 			}
 
@@ -98,7 +99,7 @@ func processMapEntity(entity reflect.Value, metadata EntityMetadataProvider, exp
 				continue
 			}
 
-			if isPropertyExpanded(prop, expandedProps) || !isPropertySelectedForLinks(prop, selectedNavProps) {
+			if isPropertyExpanded(prop, expandOptions) || !isPropertySelectedForLinks(prop, selectedNavProps) {
 				continue
 			}
 
@@ -110,10 +111,14 @@ func processMapEntity(entity reflect.Value, metadata EntityMetadataProvider, exp
 		}
 	}
 
+	if fullMetadata != nil {
+		applyNestedExpandAnnotationsToMap(entityMap, expandOptions, fullMetadata)
+	}
+
 	return entityMap
 }
 
-func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataProvider, expandedProps []string, selectedNavProps []string, baseURL, entitySetName string, metadataLevel string, fullMetadata *metadata.EntityMetadata) *OrderedMap {
+func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataProvider, expandOptions []query.ExpandOption, selectedNavProps []string, baseURL, entitySetName string, metadataLevel string, fullMetadata *metadata.EntityMetadata) *OrderedMap {
 	entityType := entity.Type()
 	fieldInfos := getFieldInfos(entityType)
 
@@ -188,13 +193,14 @@ func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataPro
 
 		if propMeta != nil && propMeta.IsNavigationProp {
 			// For minimal metadata, skip navigation properties unless they're expanded
-			if metadataLevel == "minimal" && !isPropertyExpanded(*propMeta, expandedProps) && !isPropertySelectedForLinks(*propMeta, selectedNavProps) {
+			if metadataLevel == "minimal" && !isPropertyExpanded(*propMeta, expandOptions) && !isPropertySelectedForLinks(*propMeta, selectedNavProps) {
 				// Skip unexpanded navigation properties for minimal metadata
 				continue
 			}
 			// Only get fieldValue when we actually need it
 			fieldValue := entity.Field(j)
-			processNavigationPropertyOrderedWithMetadata(entityMap, entity, propMeta, fieldValue, info.JsonName, expandedProps, selectedNavProps, baseURL, entitySetName, metadata, metadataLevel, keySegment)
+			expandOpt := query.FindExpandOption(expandOptions, propMeta.Name, propMeta.JsonName)
+			processNavigationPropertyOrderedWithMetadata(entityMap, entity, propMeta, fieldValue, info.JsonName, expandOpt, selectedNavProps, baseURL, entitySetName, metadata, metadataLevel, keySegment, fullMetadata)
 		} else {
 			fieldValue := entity.Field(j)
 			entityMap.Set(info.JsonName, fieldValue.Interface())
@@ -204,18 +210,23 @@ func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataPro
 	return entityMap
 }
 
-func isPropertyExpanded(prop PropertyMetadata, expandedProps []string) bool {
-	for _, expanded := range expandedProps {
-		if expanded == prop.Name || expanded == prop.JsonName {
-			return true
-		}
-	}
-	return false
+func isPropertyExpanded(prop PropertyMetadata, expandOptions []query.ExpandOption) bool {
+	return query.FindExpandOption(expandOptions, prop.Name, prop.JsonName) != nil
 }
 
-func processNavigationPropertyOrderedWithMetadata(entityMap *OrderedMap, entity reflect.Value, propMeta *PropertyMetadata, fieldValue reflect.Value, jsonName string, expandedProps []string, selectedNavProps []string, baseURL, entitySetName string, metadata EntityMetadataProvider, metadataLevel string, keySegment string) {
-	if isPropertyExpanded(*propMeta, expandedProps) {
-		entityMap.Set(jsonName, fieldValue.Interface())
+func processNavigationPropertyOrderedWithMetadata(entityMap *OrderedMap, entity reflect.Value, propMeta *PropertyMetadata, fieldValue reflect.Value, jsonName string, expandOpt *query.ExpandOption, selectedNavProps []string, baseURL, entitySetName string, metadata EntityMetadataProvider, metadataLevel string, keySegment string, fullMetadata *metadata.EntityMetadata) {
+	if expandOpt != nil {
+		updatedValue := fieldValue.Interface()
+		if fullMetadata != nil {
+			if targetMetadata, err := fullMetadata.ResolveNavigationTarget(propMeta.Name); err == nil {
+				var count *int
+				updatedValue, count = ApplyExpandOptionToValue(updatedValue, expandOpt, targetMetadata)
+				if count != nil {
+					entityMap.Set(jsonName+"@odata.count", *count)
+				}
+			}
+		}
+		entityMap.Set(jsonName, updatedValue)
 		return
 	}
 

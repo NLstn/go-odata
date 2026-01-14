@@ -83,7 +83,7 @@ func (h *EntityHandler) handleGetSingleton(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Write the singleton entity response
-	h.writeEntityResponseWithETag(w, r, entityInstance, "", http.StatusOK)
+	h.writeEntityResponseWithETag(w, r, entityInstance, "", http.StatusOK, nil)
 }
 
 // handlePatchSingleton handles PATCH requests for singleton entities (partial update)
