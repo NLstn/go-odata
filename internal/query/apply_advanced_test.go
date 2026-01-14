@@ -85,7 +85,7 @@ func TestParseApply_FilterAfterGroupBy(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := parseApply(tt.applyStr, meta)
+			result, err := parseApply(tt.applyStr, meta, 0)
 			if tt.expectErr {
 				if err == nil {
 					t.Error("Expected error but got none")

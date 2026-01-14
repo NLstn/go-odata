@@ -55,7 +55,7 @@ func TestGeoDistanceFunction(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			filter, err := parseFilter(tt.filterStr, meta, nil)
+			filter, err := parseFilter(tt.filterStr, meta, nil, 0)
 
 			if tt.expectError {
 				if err == nil {
@@ -100,7 +100,7 @@ func TestGeoLengthFunction(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			filter, err := parseFilter(tt.filterStr, meta, nil)
+			filter, err := parseFilter(tt.filterStr, meta, nil, 0)
 
 			if tt.expectError {
 				if err == nil {
@@ -145,7 +145,7 @@ func TestGeoIntersectsFunction(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			filter, err := parseFilter(tt.filterStr, meta, nil)
+			filter, err := parseFilter(tt.filterStr, meta, nil, 0)
 
 			if tt.expectError {
 				if err == nil {
@@ -167,7 +167,7 @@ func TestGeoCombinedWithOtherFilters(t *testing.T) {
 	meta := getTestGeoMetadata(t)
 	filterStr := "Price gt 100 and geo.distance(Location,geography'SRID=4326;POINT(0 0)') lt 10000"
 
-	filter, err := parseFilter(filterStr, meta, nil)
+	filter, err := parseFilter(filterStr, meta, nil, 0)
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 		return
@@ -205,7 +205,7 @@ func TestGeoLiteralParsing(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			filter, err := parseFilter(tt.filterStr, meta, nil)
+			filter, err := parseFilter(tt.filterStr, meta, nil, 0)
 			if err != nil {
 				t.Fatalf("Unexpected error: %v", err)
 			}

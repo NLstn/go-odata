@@ -151,6 +151,14 @@ func MergeFilterExpressions(left *FilterExpression, right *FilterExpression) *Fi
 }
 
 // ParseFilterExpression parses a raw filter string into a filter expression with metadata validation.
+// This helper enforces the DefaultMaxInClauseSize limit for security.
+// For custom limits, use ParseFilterExpressionWithConfig instead.
 func ParseFilterExpression(filterStr string, entityMetadata *metadata.EntityMetadata) (*FilterExpression, error) {
-	return parseFilter(filterStr, entityMetadata, map[string]bool{}, 0)
+	// Use default limit for security - prevent DoS via large IN clauses
+	return parseFilter(filterStr, entityMetadata, map[string]bool{}, 1000) // DefaultMaxInClauseSize
+}
+
+// ParseFilterExpressionWithConfig parses a raw filter string with custom configuration.
+func ParseFilterExpressionWithConfig(filterStr string, entityMetadata *metadata.EntityMetadata, maxInClauseSize int) (*FilterExpression, error) {
+	return parseFilter(filterStr, entityMetadata, map[string]bool{}, maxInClauseSize)
 }

@@ -17,7 +17,7 @@ func parseExpand(expandStr string, entityMetadata *metadata.EntityMetadata) ([]E
 func parseExpandWithConfig(expandStr string, entityMetadata *metadata.EntityMetadata, config *ParserConfig, currentDepth int) ([]ExpandOption, error) {
 	// Check depth limit if configured
 	if config != nil && config.MaxExpandDepth > 0 && currentDepth >= config.MaxExpandDepth {
-		return nil, fmt.Errorf("$expand depth (%d) exceeds maximum allowed (%d)", currentDepth+1, config.MaxExpandDepth)
+		return nil, fmt.Errorf("$expand nesting level (%d) exceeds maximum allowed depth (%d)", currentDepth+1, config.MaxExpandDepth)
 	}
 
 	// Split by comma for multiple expands (basic implementation, doesn't handle nested parens)

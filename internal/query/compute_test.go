@@ -56,7 +56,7 @@ func TestCompute_ArithmeticOperations(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := parseCompute("compute("+tt.compute+")", meta)
+			result, err := parseCompute("compute("+tt.compute+")", meta, 0)
 
 			if tt.expectErr {
 				if err == nil {
@@ -120,7 +120,7 @@ func TestCompute_StringFunctions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := parseCompute("compute("+tt.compute+")", meta)
+			result, err := parseCompute("compute("+tt.compute+")", meta, 0)
 
 			if tt.expectErr {
 				if err == nil {
@@ -172,7 +172,7 @@ func TestCompute_MultipleExpressions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := parseCompute("compute("+tt.compute+")", meta)
+			result, err := parseCompute("compute("+tt.compute+")", meta, 0)
 
 			if tt.expectErr {
 				if err == nil {
@@ -384,7 +384,7 @@ func TestCompute_InvalidSyntax(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := parseCompute("compute("+tt.compute+")", meta)
+			_, err := parseCompute("compute("+tt.compute+")", meta, 0)
 
 			if tt.expectErr {
 				if err == nil {
@@ -476,7 +476,7 @@ func TestCompute_AliasExpression(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Parse the compute expression
-			result, err := parseCompute("compute("+tt.compute+")", meta)
+			result, err := parseCompute("compute("+tt.compute+")", meta, 0)
 			if err != nil {
 				t.Errorf("Unexpected error: %v", err)
 				return
@@ -527,7 +527,7 @@ func TestCompute_FilterWithComputedAlias(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Parse the compute expression
-			computeResult, err := parseCompute("compute("+tt.compute+")", meta)
+			computeResult, err := parseCompute("compute("+tt.compute+")", meta, 0)
 			if err != nil {
 				t.Errorf("Unexpected error parsing compute: %v", err)
 				return
@@ -546,7 +546,7 @@ func TestCompute_FilterWithComputedAlias(t *testing.T) {
 			}
 
 			// Parse and build the filter
-			filterExpr, err := parseFilter(tt.filter, meta, map[string]bool{"PriceWithTax": true})
+			filterExpr, err := parseFilter(tt.filter, meta, map[string]bool{"PriceWithTax": true}, 0)
 			if err != nil {
 				t.Errorf("Unexpected error parsing filter: %v", err)
 				return
