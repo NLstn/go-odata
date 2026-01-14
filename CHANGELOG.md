@@ -34,6 +34,7 @@ rely on version numbers to reason about compatibility.
 - **Version headers now set automatically in router middleware**: The router now automatically sets the `OData-Version` response header based on client negotiation, eliminating the need for manual header management in most cases.
 - **Version parsing now returns explicit errors**: `parseVersion()` function signature changed from `(int, int)` to `(int, int, error)` for better error handling. Invalid version strings are now validated and rejected with HTTP 400, and versions < 4.0 return HTTP 406 (Not Acceptable).
 - **Compliance suite now enforces optional features**: Removed skip-based leniency in compliance tests so optional OData features (lambda operators, geospatial functions, stream properties, etc.) must be implemented to pass.
+- **Navigation $orderby now validates and joins single-entity paths**: `$orderby` expressions like `Nav/Field` now validate the target property and add the required JOINs with qualified column references for correct SQL generation.
 
 ### Deprecated
 - `handlers.SetODataVersionHeader()` - Use `response.SetODataVersionHeaderFromRequest(w, r)` instead for context-aware version handling. The router middleware handles this automatically in most cases.
