@@ -43,7 +43,7 @@ func TestMathFunctions_EndToEnd(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Parse the OData filter
-			filterExpr, err := parseFilter(tt.odataFilter, meta, nil)
+			filterExpr, err := parseFilter(tt.odataFilter, meta, nil, 0)
 			if err != nil {
 				t.Fatalf("Failed to parse filter: %v", err)
 			}

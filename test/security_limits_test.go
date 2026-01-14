@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -119,36 +120,36 @@ func TestMaxExpandDepth(t *testing.T) {
 
 	// Test case 1: Expand within depth limit should succeed
 	t.Run("WithinDepthLimit", func(t *testing.T) {
-		// Depth 1
+		// 1 level of nesting (depth counter 0)
 		req := httptest.NewRequest("GET", "/Categories?$expand=Parent", nil)
 		w := httptest.NewRecorder()
 		service.ServeHTTP(w, req)
 
 		if w.Code != http.StatusOK {
-			t.Errorf("Expected status 200 for depth 1, got %d. Body: %s", w.Code, w.Body.String())
+			t.Errorf("Expected status 200 for 1 level of nesting, got %d. Body: %s", w.Code, w.Body.String())
 		}
 	})
 
 	t.Run("NestedExpandWithinLimit", func(t *testing.T) {
-		// Depth 2: Categories -> Parent -> Parent
+		// 2 levels of nesting (depth counter 1): Categories -> Parent -> Parent
 		req := httptest.NewRequest("GET", "/Categories?$expand=Parent($expand=Parent)", nil)
 		w := httptest.NewRecorder()
 		service.ServeHTTP(w, req)
 
 		if w.Code != http.StatusOK {
-			t.Errorf("Expected status 200 for depth 2, got %d. Body: %s", w.Code, w.Body.String())
+			t.Errorf("Expected status 200 for 2 levels of nesting, got %d. Body: %s", w.Code, w.Body.String())
 		}
 	})
 
 	// Test case 2: Expand exceeding depth limit should fail
 	t.Run("ExceedsDepthLimit", func(t *testing.T) {
-		// Depth 4: Categories -> Parent -> Parent -> Parent -> Parent (exceeds limit of 3)
+		// 4 levels of nesting (depth counter 3): Categories -> Parent -> Parent -> Parent -> Parent (exceeds limit of 3)
 		req := httptest.NewRequest("GET", "/Categories?$expand=Parent($expand=Parent($expand=Parent($expand=Parent)))", nil)
 		w := httptest.NewRecorder()
 		service.ServeHTTP(w, req)
 
 		if w.Code != http.StatusBadRequest {
-			t.Errorf("Expected status 400 for depth 4, got %d. Body: %s", w.Code, w.Body.String())
+			t.Errorf("Expected status 400 for 4 levels of nesting, got %d. Body: %s", w.Code, w.Body.String())
 		}
 
 		// Verify error message mentions expand depth
@@ -199,8 +200,14 @@ func TestDefaultLimits(t *testing.T) {
 		for i := range values {
 			values[i] = fmt.Sprintf("%d", i+1)
 		}
-		filter := fmt.Sprintf("$filter=ID in (%s)", strings.Join(values, ","))
-		req := httptest.NewRequest("GET", "/TestSecurityEntities?"+filter, nil)
+		filterValue := fmt.Sprintf("ID in (%s)", strings.Join(values, ","))
+		
+		// Use url.Values to properly encode the query parameter
+		params := url.Values{}
+		params.Set("$filter", filterValue)
+		requestURL := "/TestSecurityEntities?" + params.Encode()
+		
+		req := httptest.NewRequest("GET", requestURL, nil)
 		w := httptest.NewRecorder()
 		service.ServeHTTP(w, req)
 
@@ -244,8 +251,13 @@ func TestConfigurableLimits(t *testing.T) {
 		for i := range values {
 			values[i] = fmt.Sprintf("%d", i+1)
 		}
-		filter := fmt.Sprintf("$filter=ID in (%s)", strings.Join(values, ","))
-		req := httptest.NewRequest("GET", "/TestSecurityEntities?"+filter, nil)
+		filterValue := fmt.Sprintf("ID in (%s)", strings.Join(values, ","))
+		
+		params := url.Values{}
+		params.Set("$filter", filterValue)
+		requestURL := "/TestSecurityEntities?" + params.Encode()
+		
+		req := httptest.NewRequest("GET", requestURL, nil)
 		w := httptest.NewRecorder()
 		service.ServeHTTP(w, req)
 
@@ -273,8 +285,13 @@ func TestConfigurableLimits(t *testing.T) {
 		for i := range values {
 			values[i] = fmt.Sprintf("%d", i+1)
 		}
-		filter := fmt.Sprintf("$filter=ID in (%s)", strings.Join(values, ","))
-		req := httptest.NewRequest("GET", "/TestSecurityEntities?"+filter, nil)
+		filterValue := fmt.Sprintf("ID in (%s)", strings.Join(values, ","))
+		
+		params := url.Values{}
+		params.Set("$filter", filterValue)
+		requestURL := "/TestSecurityEntities?" + params.Encode()
+		
+		req := httptest.NewRequest("GET", requestURL, nil)
 		w := httptest.NewRecorder()
 		service.ServeHTTP(w, req)
 

@@ -299,11 +299,11 @@ type ServiceConfig struct {
 	PersistentChangeTracking bool
 
 	// MaxInClauseSize limits the maximum number of values in an IN clause to prevent DoS attacks.
-	// Default: 1000. Set to 0 to disable the limit (not recommended for production).
+	// Default: 1000. If set to 0 or left unset, DefaultMaxInClauseSize is used. This limit is always enforced.
 	MaxInClauseSize int
 
 	// MaxExpandDepth limits the maximum depth of nested $expand operations to prevent DoS attacks.
-	// Default: 10. Set to 0 to disable the limit (not recommended for production).
+	// Default: 10. If set to 0 or left unset, DefaultMaxExpandDepth is used. This limit is always enforced.
 	MaxExpandDepth int
 }
 
@@ -421,13 +421,13 @@ func NewServiceWithConfig(db *gorm.DB, cfg ServiceConfig) (*Service, error) {
 	// Initialize FTS manager for SQLite full-text search
 	ftsManager := query.NewFTSManager(db)
 
-	// Set defaults for security limits if not specified
+	// Set defaults for security limits if not specified or negative
 	maxInClauseSize := cfg.MaxInClauseSize
-	if maxInClauseSize == 0 {
+	if maxInClauseSize <= 0 {
 		maxInClauseSize = DefaultMaxInClauseSize
 	}
 	maxExpandDepth := cfg.MaxExpandDepth
-	if maxExpandDepth == 0 {
+	if maxExpandDepth <= 0 {
 		maxExpandDepth = DefaultMaxExpandDepth
 	}
 

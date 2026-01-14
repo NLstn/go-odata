@@ -403,11 +403,8 @@ func buildStandardComparison(dialect string, operator FilterOperator, columnName
 		if len(values) == 0 {
 			return "1 = 0", []interface{}{}
 		}
-		// Check IN clause size limit if configured
-		if maxInClauseSize > 0 && len(values) > maxInClauseSize {
-			// Return error condition that will be caught by caller
-			return "", []interface{}{fmt.Errorf("IN clause size (%d) exceeds maximum allowed (%d)", len(values), maxInClauseSize)}
-		}
+		// Note: IN clause size limit is enforced during AST parsing in ast_parser_validation.go
+		// No need for redundant validation here
 		placeholders := make([]string, len(values))
 		for i := range values {
 			placeholders[i] = "?"
@@ -493,14 +490,6 @@ func buildComparisonConditionWithDB(db *gorm.DB, dialect string, filter *FilterE
 
 	// Build a standard comparison
 	sql, args := buildStandardComparison(dialect, filter.Operator, columnName, filter.Value, entityMetadata, filter.maxInClauseSize)
-
-	// Check if the args contain an error (from validation like IN clause size limit)
-	if len(args) > 0 {
-		if err, ok := args[0].(error); ok {
-			// Return empty SQL with error message as a comment to fail the query
-			return fmt.Sprintf("/* Error: %s */ 1 = 0", err.Error()), nil
-		}
-	}
 
 	return sql, args
 }

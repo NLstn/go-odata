@@ -24,7 +24,6 @@ type QueryOptions struct {
 	Compute       *ComputeTransformation // Standalone $compute option
 	Index         bool                   // $index query option - adds @odata.index annotations
 	SchemaVersion *string                // $schemaversion query option - for metadata versioning
-	parserConfig  *ParserConfig          // Parser configuration used during parsing (internal use only)
 }
 
 // ParserConfig contains configuration options for query parsing
@@ -123,7 +122,7 @@ type FilterExpression struct {
 	Right            *FilterExpression
 	Logical          LogicalOperator
 	IsNot            bool // Indicates if this is a NOT expression
-	maxInClauseSize  int  // Maximum allowed size for IN clauses (internal use)
+	maxInClauseSize  int  // Maximum allowed size for IN clauses (internal use only)
 }
 
 // FilterOperator represents filter comparison operators
@@ -282,7 +281,7 @@ func ParseQueryOptionsWithConfig(queryParams url.Values, entityMetadata *metadat
 		return nil, err
 	}
 
-	if err := parseApplyOption(queryParams, entityMetadata, options); err != nil {
+	if err := parseApplyOption(queryParams, entityMetadata, options, config); err != nil {
 		return nil, err
 	}
 
@@ -290,7 +289,7 @@ func ParseQueryOptionsWithConfig(queryParams url.Values, entityMetadata *metadat
 		return nil, err
 	}
 
-	if err := parseComputeOption(queryParams, entityMetadata, options); err != nil {
+	if err := parseComputeOption(queryParams, entityMetadata, options, config); err != nil {
 		return nil, err
 	}
 
@@ -306,9 +305,6 @@ func ParseQueryOptionsWithConfig(queryParams url.Values, entityMetadata *metadat
 	// This handles cases like $select=Product/Name with $expand=Product
 	// as well as plain navigation properties like $select=Descriptions
 	mergeNavigationSelects(options, entityMetadata)
-
-	// Store parser config for use during query application
-	options.parserConfig = config
 
 	return options, nil
 }
@@ -632,11 +628,16 @@ func parseSearchOption(queryParams url.Values, options *QueryOptions) error {
 }
 
 // parseComputeOption parses the $compute query parameter
-func parseComputeOption(queryParams url.Values, entityMetadata *metadata.EntityMetadata, options *QueryOptions) error {
+func parseComputeOption(queryParams url.Values, entityMetadata *metadata.EntityMetadata, options *QueryOptions, config *ParserConfig) error {
 	if computeStr := queryParams.Get("$compute"); computeStr != "" {
+		maxInClauseSize := 0
+		if config != nil {
+			maxInClauseSize = config.MaxInClauseSize
+		}
+
 		// Parse the compute transformation using the existing parseCompute function from apply_parser.go
 		// We need to wrap it in compute(...) format
-		computeTransformation, err := parseCompute("compute("+computeStr+")", entityMetadata)
+		computeTransformation, err := parseCompute("compute("+computeStr+")", entityMetadata, maxInClauseSize)
 		if err != nil {
 			return fmt.Errorf("invalid $compute: %w", err)
 		}

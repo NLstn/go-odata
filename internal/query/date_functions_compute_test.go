@@ -63,7 +63,7 @@ func TestDateFunctions_ComputeParsing(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Parse the compute transformation
-			result, err := parseCompute("compute("+tt.compute+")", meta)
+			result, err := parseCompute("compute("+tt.compute+")", meta, 0)
 
 			if tt.expectErr {
 				if err == nil {
@@ -121,7 +121,7 @@ func TestDateFunctions_ComputeSQL(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := parseCompute("compute("+tt.compute+")", meta)
+			result, err := parseCompute("compute("+tt.compute+")", meta, 0)
 
 			if tt.expectErr {
 				if err == nil {
