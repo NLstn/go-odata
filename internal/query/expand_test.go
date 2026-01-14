@@ -218,6 +218,36 @@ func TestParseExpandInvalid(t *testing.T) {
 	}
 }
 
+func TestParseExpandUnbalancedParentheses(t *testing.T) {
+	authorMeta, _ := buildAuthorBookMetadata(t)
+
+	tests := []struct {
+		name        string
+		expandQuery string
+	}{
+		{
+			name:        "Extra closing parenthesis",
+			expandQuery: "Books)",
+		},
+		{
+			name:        "Missing closing parenthesis",
+			expandQuery: "Books($select=Title",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			params := url.Values{}
+			params.Set("$expand", tt.expandQuery)
+
+			_, err := ParseQueryOptions(params, authorMeta)
+			if err == nil {
+				t.Fatalf("Expected error for %s", tt.expandQuery)
+			}
+		})
+	}
+}
+
 // TestParseExpandMultiple tests parsing multiple $expand values
 func TestParseExpandMultiple(t *testing.T) {
 	// For this test, we need a more complex entity structure
@@ -502,8 +532,9 @@ func TestParseExpandWithInvalidNestedOptions(t *testing.T) {
 // TestSplitExpandParts tests the expand parts splitting logic
 func TestSplitExpandParts(t *testing.T) {
 	tests := []struct {
-		input    string
-		expected []string
+		input     string
+		expected  []string
+		expectErr bool
 	}{
 		{
 			input:    "Books",
@@ -521,11 +552,25 @@ func TestSplitExpandParts(t *testing.T) {
 			input:    "Books($top=5),Author($select=Name)",
 			expected: []string{"Books($top=5)", "Author($select=Name)"},
 		},
+		{
+			input:     "Books)",
+			expectErr: true,
+		},
+		{
+			input:     "Books($top=5",
+			expectErr: true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			result := splitExpandParts(tt.input)
+			result, err := splitExpandParts(tt.input)
+			if (err != nil) != tt.expectErr {
+				t.Fatalf("Expected error %v, got %v", tt.expectErr, err)
+			}
+			if tt.expectErr {
+				return
+			}
 			if len(result) != len(tt.expected) {
 				t.Errorf("Expected %d parts, got %d", len(tt.expected), len(result))
 				return
