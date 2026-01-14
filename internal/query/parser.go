@@ -235,7 +235,11 @@ func ParseQueryOptions(queryParams url.Values, entityMetadata *metadata.EntityMe
 func ParseQueryOptionsWithConfig(queryParams url.Values, entityMetadata *metadata.EntityMetadata, config *ParserConfig) (*QueryOptions, error) {
 	options := &QueryOptions{}
 
-<<<<<<< HEAD
+	// Use default config if not provided
+	if config == nil {
+		config = &ParserConfig{}
+	}
+
 	// Extract and resolve parameter aliases (e.g., @p=10)
 	paramAliases, err := extractParameterAliases(queryParams)
 	if err != nil {
@@ -251,13 +255,6 @@ func ParseQueryOptionsWithConfig(queryParams url.Values, entityMetadata *metadat
 	// Use resolved parameters for all subsequent parsing
 	queryParams = resolvedParams
 
-=======
-	// Use default config if not provided
-	if config == nil {
-		config = &ParserConfig{}
-	}
-
->>>>>>> 893d2b1 (Add MaxInClauseSize and MaxExpandDepth security limits)
 	// Validate that all query parameters starting with $ are valid OData query options
 	if err := validateQueryOptions(queryParams); err != nil {
 		return nil, err

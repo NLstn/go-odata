@@ -46,7 +46,7 @@ func buildNavigationFilterMetadata(t *testing.T) (*metadata.EntityMetadata, *met
 func TestNavigationFilterUsesTargetColumnMetadata(t *testing.T) {
 	_, bookMeta := buildNavigationFilterMetadata(t)
 
-	filterExpr, err := parseFilter("Author/Name eq 'Jane'", bookMeta, nil)
+	filterExpr, err := parseFilter("Author/Name eq 'Jane'", bookMeta, nil, 0)
 	if err != nil {
 		t.Fatalf("Failed to parse navigation filter: %v", err)
 	}

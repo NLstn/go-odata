@@ -419,7 +419,7 @@ func TestLambdaApplier_CustomColumnAny(t *testing.T) {
 	db := setupTestDB(t)
 	entityMetadata := getTestProductMetadata()
 
-	filterExpr, err := parseFilter("Descriptions/any(d: d/CustomName eq 'Promo')", entityMetadata, nil)
+	filterExpr, err := parseFilter("Descriptions/any(d: d/CustomName eq 'Promo')", entityMetadata, nil, 0)
 	if err != nil {
 		t.Fatalf("Failed to parse filter: %v", err)
 	}
@@ -441,7 +441,7 @@ func TestLambdaApplier_CustomColumnRegistryLookup(t *testing.T) {
 	db := setupTestDB(t)
 	entityMetadata := getTestProductMetadata()
 
-	filterExpr, err := parseFilter("Descriptions/any(d: d/Locale eq 'DE')", entityMetadata, nil)
+	filterExpr, err := parseFilter("Descriptions/any(d: d/Locale eq 'DE')", entityMetadata, nil, 0)
 	if err != nil {
 		t.Fatalf("Failed to parse filter: %v", err)
 	}
