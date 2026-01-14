@@ -35,8 +35,27 @@ func parseOrderBy(orderByStr string, entityMetadata *metadata.EntityMetadata, co
 		}
 
 		// Validate property exists (either in entity metadata or as a computed alias)
-		if !propertyExists(item.Property, entityMetadata) && !computedAliases[item.Property] {
-			return nil, fmt.Errorf("property '%s' does not exist", item.Property)
+		if !computedAliases[item.Property] {
+			if entityMetadata != nil && entityMetadata.IsSingleEntityNavigationPath(item.Property) {
+				segments := strings.Split(item.Property, "/")
+				if len(segments) != 2 {
+					return nil, fmt.Errorf("property '%s' does not exist", item.Property)
+				}
+
+				navPropName := strings.TrimSpace(segments[0])
+				targetProperty := strings.TrimSpace(segments[1])
+
+				targetMetadata, err := entityMetadata.ResolveNavigationTarget(navPropName)
+				if err != nil {
+					return nil, fmt.Errorf("property '%s' does not exist", item.Property)
+				}
+
+				if !propertyExists(targetProperty, targetMetadata) {
+					return nil, fmt.Errorf("property '%s' does not exist", item.Property)
+				}
+			} else if !propertyExists(item.Property, entityMetadata) {
+				return nil, fmt.Errorf("property '%s' does not exist", item.Property)
+			}
 		}
 
 		result = append(result, item)

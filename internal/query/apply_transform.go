@@ -464,6 +464,7 @@ func buildComputeExpressionSQL(dialect string, expr *FilterExpression, entityMet
 // applyOrderBy applies order by clauses to the GORM query
 func applyOrderBy(db *gorm.DB, orderBy []OrderByItem, entityMetadata *metadata.EntityMetadata) *gorm.DB {
 	dialect := getDatabaseDialect(db)
+	db = addOrderByNavigationJoins(db, orderBy, entityMetadata)
 
 	// For PostgreSQL, we need to build all ORDER BY expressions in a single Clauses() call
 	// to ensure they're all preserved in the final SQL query
@@ -472,8 +473,12 @@ func applyOrderBy(db *gorm.DB, orderBy []OrderByItem, entityMetadata *metadata.E
 		for _, item := range orderBy {
 			var columnName string
 			if propertyExists(item.Property, entityMetadata) {
-				col := GetColumnName(item.Property, entityMetadata)
-				columnName = quoteIdent(dialect, col)
+				if entityMetadata != nil && entityMetadata.IsSingleEntityNavigationPath(item.Property) {
+					columnName = getQuotedColumnName(dialect, item.Property, entityMetadata)
+				} else {
+					col := GetColumnName(item.Property, entityMetadata)
+					columnName = quoteIdent(dialect, col)
+				}
 			} else {
 				sanitizedAlias := sanitizeIdentifier(item.Property)
 				if sanitizedAlias == "" {
@@ -500,8 +505,14 @@ func applyOrderBy(db *gorm.DB, orderBy []OrderByItem, entityMetadata *metadata.E
 		// For other databases, use the simple approach
 		for _, item := range orderBy {
 			var columnName string
+			rawColumn := false
 			if propertyExists(item.Property, entityMetadata) {
-				columnName = GetColumnName(item.Property, entityMetadata)
+				if entityMetadata != nil && entityMetadata.IsSingleEntityNavigationPath(item.Property) {
+					columnName = getQuotedColumnName(dialect, item.Property, entityMetadata)
+					rawColumn = true
+				} else {
+					columnName = GetColumnName(item.Property, entityMetadata)
+				}
 			} else {
 				sanitizedAlias := sanitizeIdentifier(item.Property)
 				if sanitizedAlias == "" {
@@ -511,10 +522,38 @@ func applyOrderBy(db *gorm.DB, orderBy []OrderByItem, entityMetadata *metadata.E
 			}
 
 			db = db.Order(clause.OrderByColumn{
-				Column: clause.Column{Name: columnName},
+				Column: clause.Column{Name: columnName, Raw: rawColumn},
 				Desc:   item.Descending,
 			})
 		}
+	}
+
+	return db
+}
+
+func addOrderByNavigationJoins(db *gorm.DB, orderBy []OrderByItem, entityMetadata *metadata.EntityMetadata) *gorm.DB {
+	if entityMetadata == nil || len(orderBy) == 0 {
+		return db
+	}
+
+	joinedNavProps := make(map[string]bool)
+	for _, item := range orderBy {
+		if !entityMetadata.IsSingleEntityNavigationPath(item.Property) {
+			continue
+		}
+
+		segments := strings.Split(item.Property, "/")
+		if len(segments) < 2 {
+			continue
+		}
+
+		navPropName := strings.TrimSpace(segments[0])
+		if navPropName == "" || joinedNavProps[navPropName] {
+			continue
+		}
+
+		joinedNavProps[navPropName] = true
+		db = addNavigationJoin(db, navPropName, entityMetadata)
 	}
 
 	return db
