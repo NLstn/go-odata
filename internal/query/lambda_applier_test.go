@@ -520,7 +520,7 @@ func TestLambdaApplier_CompositeKeyColumnNamesInJoin(t *testing.T) {
 		}
 
 		query := db.Session(&gorm.Session{DryRun: true}).Model(&CompositeParent{})
-		query = ApplyFilterOnly(query, filterExpr, entityMetadata)
+		query = ApplyFilterOnly(query, filterExpr, entityMetadata, nil)
 		result := query.Find(&[]CompositeParent{})
 		if result.Error != nil {
 			t.Fatalf("Failed to build SQL: %v", result.Error)
