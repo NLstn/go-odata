@@ -44,6 +44,11 @@ linters:
       - linters:
           - staticcheck
         text: "SA5011\\(related information\\)"
+      # Exclude SA5011 from test files (false positives where nil checks exist but staticcheck doesn't recognize them)
+      - linters:
+          - staticcheck
+        text: "SA5011"
+        path: "_test\\.go"
       # Meter instrument creation errors are unlikely and handled gracefully
       - linters:
           - errcheck

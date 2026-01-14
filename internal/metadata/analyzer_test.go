@@ -339,6 +339,7 @@ func TestResolvePropertyPathForComplexType(t *testing.T) {
 	complexProp := meta.FindComplexTypeProperty("ShippingAddress")
 	if complexProp == nil {
 		t.Fatal("expected ShippingAddress to be recognized as complex type")
+		return
 	}
 	if complexProp.EmbeddedPrefix != "shipping_" {
 		t.Fatalf("expected embedded prefix 'shipping_', got %q", complexProp.EmbeddedPrefix)
@@ -393,6 +394,7 @@ func TestPropertyMetadata(t *testing.T) {
 
 	if nameProperty == nil {
 		t.Fatal("Name property not found")
+		return
 	}
 
 	if !nameProperty.IsRequired {
@@ -428,6 +430,7 @@ func TestPropertyFacets(t *testing.T) {
 	}
 	if nameProp == nil {
 		t.Fatal("Name property not found")
+		return
 	}
 	if nameProp.MaxLength != 100 {
 		t.Errorf("Name MaxLength = %v, want 100", nameProp.MaxLength)
@@ -443,6 +446,7 @@ func TestPropertyFacets(t *testing.T) {
 	}
 	if priceProp == nil {
 		t.Fatal("Price property not found")
+		return
 	}
 	if priceProp.Precision != 10 {
 		t.Errorf("Price Precision = %v, want 10", priceProp.Precision)
@@ -461,6 +465,7 @@ func TestPropertyFacets(t *testing.T) {
 	}
 	if skuProp == nil {
 		t.Fatal("SKU property not found")
+		return
 	}
 	if skuProp.DefaultValue != "AUTO" {
 		t.Errorf("SKU DefaultValue = %v, want AUTO", skuProp.DefaultValue)
@@ -476,6 +481,7 @@ func TestPropertyFacets(t *testing.T) {
 	}
 	if activeProp == nil {
 		t.Fatal("Active property not found")
+		return
 	}
 	if activeProp.Nullable == nil || *activeProp.Nullable {
 		t.Error("Active should not be nullable")
@@ -510,6 +516,7 @@ func TestNavigationPropertyWithReferentialConstraints(t *testing.T) {
 
 	if customerProp == nil {
 		t.Fatal("Customer navigation property not found")
+		return
 	}
 
 	if !customerProp.IsNavigationProp {
