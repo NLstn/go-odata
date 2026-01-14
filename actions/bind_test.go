@@ -41,8 +41,11 @@ func TestBindParams_StructAndPointer(t *testing.T) {
 	if ptrResult.Percentage != 12.5 {
 		t.Fatalf("BindParams() pointer percentage = %v, want 12.5", ptrResult.Percentage)
 	}
-	if ptrResult.Note == nil || *ptrResult.Note != note {
-		t.Fatalf("BindParams() pointer note = %#v, want %q", ptrResult.Note, note)
+	if ptrResult.Note == nil {
+		t.Fatalf("BindParams() pointer note is nil, want %q", note)
+	}
+	if *ptrResult.Note != note {
+		t.Fatalf("BindParams() pointer note = %q, want %q", *ptrResult.Note, note)
 	}
 }
 
