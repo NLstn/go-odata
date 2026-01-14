@@ -207,14 +207,14 @@ func parseNestedExpandOptionsCore(expand *ExpandOption, optionsStr string, targe
 				expand.OrderBy = orderBy
 			}
 		case "$top":
-			var top int
-			if _, err := fmt.Sscanf(value, "%d", &top); err != nil {
+			top, err := parseNonNegativeInt(value, "$top")
+			if err != nil {
 				return fmt.Errorf("invalid nested $top: %w", err)
 			}
 			expand.Top = &top
 		case "$skip":
-			var skip int
-			if _, err := fmt.Sscanf(value, "%d", &skip); err != nil {
+			skip, err := parseNonNegativeInt(value, "$skip")
+			if err != nil {
 				return fmt.Errorf("invalid nested $skip: %w", err)
 			}
 			expand.Skip = &skip
