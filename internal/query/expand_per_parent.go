@@ -206,19 +206,22 @@ func fallbackReferenceConstraints(navProp *metadata.PropertyMetadata, entityMeta
 	return resolved
 }
 
+// resolvePropertyName resolves a property name or JSON name to the canonical property name.
+// Uses EntityMetadata.FindProperty for efficient lookup.
 func resolvePropertyName(name string, metadata *metadata.EntityMetadata) string {
 	if metadata == nil {
 		return name
 	}
 	trimmed := strings.TrimSpace(name)
-	for _, prop := range metadata.Properties {
-		if prop.Name == trimmed || prop.JsonName == trimmed {
-			return prop.Name
-		}
+	prop := metadata.FindProperty(trimmed)
+	if prop != nil {
+		return prop.Name
 	}
 	return trimmed
 }
 
+// resolvePropertyByColumn resolves a database column name to the property name.
+// Note: This uses linear search as metadata API doesn't provide indexed column lookup.
 func resolvePropertyByColumn(column string, metadata *metadata.EntityMetadata) string {
 	if metadata == nil {
 		return ""
@@ -456,6 +459,8 @@ func maxBatchSize(constraintCount int) int {
 	if constraintCount <= 0 {
 		return 1
 	}
+	// maxArgs is a safety limit to avoid exceeding database parameter limits
+	// (e.g., SQLite has a default limit of 999 parameters, so 900 provides a margin).
 	const maxArgs = 900
 	batch := maxArgs / constraintCount
 	if batch < 1 {
@@ -464,12 +469,7 @@ func maxBatchSize(constraintCount int) int {
 	return batch
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
+
 
 func getStructFieldValue(parentStruct reflect.Value, propName string) (interface{}, bool) {
 	if !parentStruct.IsValid() || parentStruct.Kind() != reflect.Struct {
