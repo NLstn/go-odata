@@ -2,6 +2,7 @@ package query
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/nlstn/go-odata/internal/metadata"
@@ -250,8 +251,8 @@ func parseNestedExpandOptionsCore(expand *ExpandOption, optionsStr string, targe
 				maxLevels := -1
 				expand.Levels = &maxLevels
 			} else {
-				var levels int
-				if _, err := fmt.Sscanf(value, "%d", &levels); err != nil {
+				levels, err := strconv.Atoi(value)
+				if err != nil {
 					return fmt.Errorf("invalid nested $levels: must be a positive integer or 'max'")
 				}
 				if levels < 1 {
