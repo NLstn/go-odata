@@ -328,4 +328,3 @@ func validateExpandSelect(selectedProps []string, entityMetadata *metadata.Entit
 
 	return nil
 }
-

@@ -49,6 +49,7 @@ rely on version numbers to reason about compatibility.
 - **Cache eviction prevents unbounded memory growth**: Metadata cache now limited to 10 entries with automatic eviction keeping 5 most common versions (4.0, 4.01 prioritized).
 
 ### Fixed
+- Parameter alias substitution now skips quoted string literals so alias tokens like `'@p'` remain unchanged in filter expressions.
 - Nested `$expand` options now reject negative `$top` and `$skip` values using the same non-negative validation as top-level query options.
 - **Lambda any/all operators now support composite key relationships**: Fixed lambda operators (any/all) to properly join on all key properties when filtering by collection navigation properties. Previously, only the first key property was used in the join condition, which caused incorrect results for entities with composite keys. The fix handles comma-separated foreign keys in GORM tags and builds proper join predicates across all key columns.
 - **`isof()` fallback behavior without discriminator**: Fixed spec deviation where `isof('EntityType')` returned `1 = 1` (matching all entities) when no type discriminator was configured. Now returns `1 = 0` (matching no entities) since correct type filtering cannot be performed without a discriminator. This prevents incorrect results in inheritance scenarios and ensures spec compliance.
