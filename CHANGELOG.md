@@ -37,6 +37,7 @@ rely on version numbers to reason about compatibility.
 - **Policy filters now apply to expanded navigation results**: Authorization policy query filters are merged into `$expand` filters to ensure expanded navigation properties are filtered the same way as direct navigation queries.
 - **Navigation $orderby now validates and joins single-entity paths**: `$orderby` expressions like `Nav/Field` now validate the target property and add the required JOINs with qualified column references for correct SQL generation.
 - **Navigation links included for selected navigation properties in minimal metadata**: `$select=NavProp` now emits `NavProp@odata.navigationLink` without requiring `$expand` when minimal metadata is requested.
+- Lambda filter navigation targets now resolve through the cached entity registry, reducing repeated metadata analysis during lambda predicate evaluation.
 
 ### Deprecated
 - `handlers.SetODataVersionHeader()` - Use `response.SetODataVersionHeaderFromRequest(w, r)` instead for context-aware version handling. The router middleware handles this automatically in most cases.

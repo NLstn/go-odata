@@ -2,7 +2,6 @@ package query
 
 import (
 	"fmt"
-	"reflect"
 	"strings"
 
 	"github.com/nlstn/go-odata/internal/metadata"
@@ -564,7 +563,7 @@ func buildLambdaCondition(dialect string, filter *FilterExpression, entityMetada
 		return "", nil
 	}
 
-	navTargetMetadata := getNavigationTargetMetadata(navProp)
+	navTargetMetadata := getNavigationTargetMetadata(entityMetadata, navProp)
 
 	// Use cached table name from metadata (computed once during entity registration)
 	relatedTableName := navProp.NavigationTargetTableName
@@ -670,23 +669,12 @@ func buildLambdaCondition(dialect string, filter *FilterExpression, entityMetada
 	return sql, predicateArgs
 }
 
-func getNavigationTargetMetadata(navProp *metadata.PropertyMetadata) *metadata.EntityMetadata {
-	if navProp == nil || navProp.Type == nil {
+func getNavigationTargetMetadata(entityMetadata *metadata.EntityMetadata, navProp *metadata.PropertyMetadata) *metadata.EntityMetadata {
+	if entityMetadata == nil || navProp == nil {
 		return nil
 	}
 
-	targetType := navProp.Type
-	if targetType.Kind() == reflect.Slice {
-		targetType = targetType.Elem()
-	}
-	if targetType.Kind() == reflect.Ptr {
-		targetType = targetType.Elem()
-	}
-	if targetType.Kind() != reflect.Struct {
-		return nil
-	}
-
-	targetMeta, err := metadata.AnalyzeEntity(reflect.New(targetType).Interface())
+	targetMeta, err := entityMetadata.ResolveNavigationTarget(navProp.Name)
 	if err != nil {
 		return nil
 	}
