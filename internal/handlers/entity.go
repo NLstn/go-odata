@@ -34,6 +34,10 @@ type EntityHandler struct {
 	observability *observability.Config
 	// geospatialEnabled indicates if geospatial features are enabled
 	geospatialEnabled bool
+	// maxInClauseSize limits the number of values in an IN clause
+	maxInClauseSize int
+	// maxExpandDepth limits the depth of nested $expand operations
+	maxExpandDepth int
 }
 
 // NewEntityHandler creates a new entity handler
@@ -136,6 +140,24 @@ func (h *EntityHandler) SetObservability(cfg *observability.Config) {
 // SetGeospatialEnabled sets whether geospatial features are enabled for this handler.
 func (h *EntityHandler) SetGeospatialEnabled(enabled bool) {
 	h.geospatialEnabled = enabled
+}
+
+// SetMaxInClauseSize sets the maximum number of values allowed in an IN clause.
+func (h *EntityHandler) SetMaxInClauseSize(limit int) {
+	h.maxInClauseSize = limit
+}
+
+// SetMaxExpandDepth sets the maximum depth for nested $expand operations.
+func (h *EntityHandler) SetMaxExpandDepth(depth int) {
+	h.maxExpandDepth = depth
+}
+
+// getParserConfig creates a ParserConfig from the handler's current settings
+func (h *EntityHandler) getParserConfig() *query.ParserConfig {
+	return &query.ParserConfig{
+		MaxInClauseSize: h.maxInClauseSize,
+		MaxExpandDepth:  h.maxExpandDepth,
+	}
 }
 
 // IsGeospatialEnabled returns whether geospatial features are enabled for this handler.

@@ -8,7 +8,7 @@ import (
 )
 
 // parseFilter parses a filter expression with metadata validation
-func parseFilter(filterStr string, entityMetadata *metadata.EntityMetadata, computedAliases map[string]bool) (*FilterExpression, error) {
+func parseFilter(filterStr string, entityMetadata *metadata.EntityMetadata, computedAliases map[string]bool, maxInClauseSize int) (*FilterExpression, error) {
 	filterStr = strings.TrimSpace(filterStr)
 
 	// Use the tokenizer and AST parser
@@ -24,7 +24,7 @@ func parseFilter(filterStr string, entityMetadata *metadata.EntityMetadata, comp
 		return nil, fmt.Errorf("parsing failed: %w", err)
 	}
 
-	return ASTToFilterExpressionWithComputed(ast, entityMetadata, computedAliases)
+	return ASTToFilterExpressionWithComputed(ast, entityMetadata, computedAliases, maxInClauseSize)
 }
 
 // parseFilterWithoutMetadata parses a filter expression without metadata validation

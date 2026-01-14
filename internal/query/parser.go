@@ -24,6 +24,15 @@ type QueryOptions struct {
 	Compute       *ComputeTransformation // Standalone $compute option
 	Index         bool                   // $index query option - adds @odata.index annotations
 	SchemaVersion *string                // $schemaversion query option - for metadata versioning
+	parserConfig  *ParserConfig          // Parser configuration used during parsing (internal use only)
+}
+
+// ParserConfig contains configuration options for query parsing
+type ParserConfig struct {
+	// MaxInClauseSize limits the number of values in an IN clause (0 = unlimited)
+	MaxInClauseSize int
+	// MaxExpandDepth limits the depth of nested $expand operations (0 = unlimited)
+	MaxExpandDepth int
 }
 
 // ExpandOption represents a single $expand clause
@@ -107,13 +116,14 @@ type ComputeExpression struct {
 
 // FilterExpression represents a parsed filter expression
 type FilterExpression struct {
-	Property string
-	Operator FilterOperator
-	Value    interface{}
-	Left     *FilterExpression
-	Right    *FilterExpression
-	Logical  LogicalOperator
-	IsNot    bool // Indicates if this is a NOT expression
+	Property         string
+	Operator         FilterOperator
+	Value            interface{}
+	Left             *FilterExpression
+	Right            *FilterExpression
+	Logical          LogicalOperator
+	IsNot            bool // Indicates if this is a NOT expression
+	maxInClauseSize  int  // Maximum allowed size for IN clauses (internal use)
 }
 
 // FilterOperator represents filter comparison operators
@@ -217,7 +227,17 @@ func validateQueryOptions(queryParams url.Values) error {
 
 // ParseQueryOptions parses OData query options from the URL
 func ParseQueryOptions(queryParams url.Values, entityMetadata *metadata.EntityMetadata) (*QueryOptions, error) {
+	return ParseQueryOptionsWithConfig(queryParams, entityMetadata, nil)
+}
+
+// ParseQueryOptionsWithConfig parses OData query options from the URL with additional configuration
+func ParseQueryOptionsWithConfig(queryParams url.Values, entityMetadata *metadata.EntityMetadata, config *ParserConfig) (*QueryOptions, error) {
 	options := &QueryOptions{}
+
+	// Use default config if not provided
+	if config == nil {
+		config = &ParserConfig{}
+	}
 
 	// Validate that all query parameters starting with $ are valid OData query options
 	if err := validateQueryOptions(queryParams); err != nil {
@@ -228,7 +248,7 @@ func ParseQueryOptions(queryParams url.Values, entityMetadata *metadata.EntityMe
 	computedAliases := extractAllComputedAliases(queryParams)
 
 	// Parse each query option
-	if err := parseFilterOption(queryParams, entityMetadata, options, computedAliases); err != nil {
+	if err := parseFilterOption(queryParams, entityMetadata, options, computedAliases, config); err != nil {
 		return nil, err
 	}
 
@@ -236,7 +256,7 @@ func ParseQueryOptions(queryParams url.Values, entityMetadata *metadata.EntityMe
 		return nil, err
 	}
 
-	if err := parseExpandOption(queryParams, entityMetadata, options); err != nil {
+	if err := parseExpandOption(queryParams, entityMetadata, options, config); err != nil {
 		return nil, err
 	}
 
@@ -287,15 +307,36 @@ func ParseQueryOptions(queryParams url.Values, entityMetadata *metadata.EntityMe
 	// as well as plain navigation properties like $select=Descriptions
 	mergeNavigationSelects(options, entityMetadata)
 
+	// Store parser config for use during query application
+	options.parserConfig = config
+
 	return options, nil
 }
 
+// setMaxInClauseSizeRecursive sets the maxInClauseSize on a filter expression and all its children
+func setMaxInClauseSizeRecursive(filter *FilterExpression, maxSize int) {
+	if filter == nil {
+		return
+	}
+	filter.maxInClauseSize = maxSize
+	setMaxInClauseSizeRecursive(filter.Left, maxSize)
+	setMaxInClauseSizeRecursive(filter.Right, maxSize)
+}
+
 // parseFilterOption parses the $filter query parameter
-func parseFilterOption(queryParams url.Values, entityMetadata *metadata.EntityMetadata, options *QueryOptions, computedAliases map[string]bool) error {
+func parseFilterOption(queryParams url.Values, entityMetadata *metadata.EntityMetadata, options *QueryOptions, computedAliases map[string]bool, config *ParserConfig) error {
 	if filterStr := queryParams.Get("$filter"); filterStr != "" {
-		filter, err := parseFilter(filterStr, entityMetadata, computedAliases)
+		maxInClauseSize := 0
+		if config != nil {
+			maxInClauseSize = config.MaxInClauseSize
+		}
+		filter, err := parseFilter(filterStr, entityMetadata, computedAliases, maxInClauseSize)
 		if err != nil {
 			return fmt.Errorf("invalid $filter: %w", err)
+		}
+		// Set maxInClauseSize on all filter expressions for apply_filter.go usage
+		if config != nil && config.MaxInClauseSize > 0 {
+			setMaxInClauseSizeRecursive(filter, config.MaxInClauseSize)
 		}
 		options.Filter = filter
 	}
@@ -499,9 +540,9 @@ func extractAliasesFromAggregate(applyStr string, aliases map[string]bool) {
 }
 
 // parseExpandOption parses the $expand query parameter
-func parseExpandOption(queryParams url.Values, entityMetadata *metadata.EntityMetadata, options *QueryOptions) error {
+func parseExpandOption(queryParams url.Values, entityMetadata *metadata.EntityMetadata, options *QueryOptions, config *ParserConfig) error {
 	if expandStr := queryParams.Get("$expand"); expandStr != "" {
-		expand, err := parseExpand(expandStr, entityMetadata)
+		expand, err := parseExpandWithConfig(expandStr, entityMetadata, config, 0)
 		if err != nil {
 			return fmt.Errorf("invalid $expand: %w", err)
 		}

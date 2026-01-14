@@ -297,10 +297,29 @@ type ReadHook interface {
 type ServiceConfig struct {
 	// PersistentChangeTracking enables database-backed change tracking history.
 	PersistentChangeTracking bool
+
+	// MaxInClauseSize limits the maximum number of values in an IN clause to prevent DoS attacks.
+	// Default: 1000. Set to 0 to disable the limit (not recommended for production).
+	MaxInClauseSize int
+
+	// MaxExpandDepth limits the maximum depth of nested $expand operations to prevent DoS attacks.
+	// Default: 10. Set to 0 to disable the limit (not recommended for production).
+	MaxExpandDepth int
 }
 
 // DefaultNamespace is used when no explicit namespace is configured for the service.
 const DefaultNamespace = "ODataService"
+
+const (
+	// DefaultMaxInClauseSize is the default maximum number of values allowed in an IN clause.
+	// This conservative limit prevents DoS attacks while supporting most legitimate use cases.
+	// Oracle has a hard limit of 1000, so this is a safe cross-database default.
+	DefaultMaxInClauseSize = 1000
+
+	// DefaultMaxExpandDepth is the default maximum depth for nested $expand operations.
+	// This prevents exponential query complexity and stack overflow issues.
+	DefaultMaxExpandDepth = 10
+)
 
 // Service represents an OData service that can handle multiple entities.
 type Service struct {
@@ -361,6 +380,10 @@ type Service struct {
 	// before the service starts handling any requests, and it must not be modified thereafter.
 	// Concurrent runtime toggling of this field is not supported and will result in a data race.
 	geospatialEnabled bool
+	// maxInClauseSize limits the number of values in an IN clause
+	maxInClauseSize int
+	// maxExpandDepth limits the depth of nested $expand operations
+	maxExpandDepth int
 }
 
 // NewService creates a new OData service instance with database connection.
@@ -398,6 +421,16 @@ func NewServiceWithConfig(db *gorm.DB, cfg ServiceConfig) (*Service, error) {
 	// Initialize FTS manager for SQLite full-text search
 	ftsManager := query.NewFTSManager(db)
 
+	// Set defaults for security limits if not specified
+	maxInClauseSize := cfg.MaxInClauseSize
+	if maxInClauseSize == 0 {
+		maxInClauseSize = DefaultMaxInClauseSize
+	}
+	maxExpandDepth := cfg.MaxExpandDepth
+	if maxExpandDepth == 0 {
+		maxExpandDepth = DefaultMaxExpandDepth
+	}
+
 	s := &Service{
 		db:                       db,
 		entities:                 entities,
@@ -412,6 +445,8 @@ func NewServiceWithConfig(db *gorm.DB, cfg ServiceConfig) (*Service, error) {
 		logger:                   logger,
 		ftsManager:               ftsManager,
 		keyGenerators:            make(map[string]KeyGenerator),
+		maxInClauseSize:          maxInClauseSize,
+		maxExpandDepth:           maxExpandDepth,
 	}
 	s.metadataHandler.SetNamespace(DefaultNamespace)
 	s.metadataHandler.SetPolicy(s.policy)
@@ -895,6 +930,9 @@ func (s *Service) RegisterEntity(entity interface{}) error {
 	}
 	// Set geospatial enabled flag
 	handler.SetGeospatialEnabled(s.geospatialEnabled)
+	// Set security limits
+	handler.SetMaxInClauseSize(s.maxInClauseSize)
+	handler.SetMaxExpandDepth(s.maxExpandDepth)
 	s.handlers[entityMetadata.EntitySetName] = handler
 
 	s.logger.Debug("Registered entity",
@@ -965,6 +1003,9 @@ func (s *Service) RegisterSingleton(entity interface{}, singletonName string) er
 	}
 	// Set geospatial enabled flag
 	handler.SetGeospatialEnabled(s.geospatialEnabled)
+	// Set security limits
+	handler.SetMaxInClauseSize(s.maxInClauseSize)
+	handler.SetMaxExpandDepth(s.maxExpandDepth)
 	s.handlers[singletonName] = handler
 
 	s.logger.Debug("Registered singleton",
@@ -1041,6 +1082,9 @@ func (s *Service) RegisterVirtualEntity(entity interface{}) error {
 	}
 	// Set geospatial enabled flag
 	handler.SetGeospatialEnabled(s.geospatialEnabled)
+	// Set security limits
+	handler.SetMaxInClauseSize(s.maxInClauseSize)
+	handler.SetMaxExpandDepth(s.maxExpandDepth)
 	s.handlers[entityMetadata.EntitySetName] = handler
 
 	s.logger.Debug("Registered virtual entity",

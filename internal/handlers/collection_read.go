@@ -62,7 +62,7 @@ func (h *EntityHandler) handleGetCollectionOverwrite(w http.ResponseWriter, r *h
 	pref := preference.ParsePrefer(r)
 
 	// Parse and validate query options
-	queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata)
+	queryOptions, err := query.ParseQueryOptionsWithConfig(r.URL.Query(), h.metadata, h.getParserConfig())
 	if err != nil {
 		h.writeInvalidQueryError(w, err)
 		return
@@ -123,7 +123,7 @@ func (h *EntityHandler) handleGetCollectionOverwrite(w http.ResponseWriter, r *h
 
 func (h *EntityHandler) parseCollectionQueryOptions(w http.ResponseWriter, r *http.Request, pref *preference.Preference) func() (*query.QueryOptions, error) {
 	return func() (*query.QueryOptions, error) {
-		queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata)
+		queryOptions, err := query.ParseQueryOptionsWithConfig(r.URL.Query(), h.metadata, h.getParserConfig())
 		if err != nil {
 			return nil, err
 		}
