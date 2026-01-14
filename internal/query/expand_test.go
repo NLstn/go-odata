@@ -978,10 +978,10 @@ func TestParseExpandWithNestedCount(t *testing.T) {
 		expectErr   bool
 	}{
 		{
-			name:        "Count true - not yet implemented",
+			name:        "Count true",
 			expandQuery: "Books($count=true)",
 			expectCount: true,
-			expectErr:   true, // Expect error since feature is not yet implemented
+			expectErr:   false,
 		},
 		{
 			name:        "Count false - allowed",
@@ -1025,25 +1025,22 @@ func TestParseExpandWithNestedLevels(t *testing.T) {
 	authorMeta, _ := buildAuthorBookMetadata(t)
 
 	tests := []struct {
-		name         string
-		expandQuery  string
-		expectLevels *int
-		expectErr    bool
-		description  string
+		name        string
+		expandQuery string
+		expectErr   bool
+		description string
 	}{
 		{
-			name:         "Levels with integer value - not yet implemented",
-			expandQuery:  "Books($levels=2)",
-			expectLevels: intPtr(2),
-			expectErr:    true, // Expect error since feature is not yet implemented
-			description:  "Should reject numeric levels (not implemented)",
+			name:        "Levels with integer value",
+			expandQuery: "Books($levels=2)",
+			expectErr:   false,
+			description: "Should accept numeric levels",
 		},
 		{
-			name:         "Levels with max - not yet implemented",
-			expandQuery:  "Books($levels=max)",
-			expectLevels: intPtr(-1), // -1 represents "max"
-			expectErr:    true,       // Expect error since feature is not yet implemented
-			description:  "Should reject 'max' (not implemented)",
+			name:        "Levels with max",
+			expandQuery: "Books($levels=max)",
+			expectErr:   false,
+			description: "Should accept 'max'",
 		},
 		{
 			name:        "Invalid levels - zero",
@@ -1088,16 +1085,8 @@ func TestParseExpandWithNestedLevels(t *testing.T) {
 				}
 
 				expand := options.Expand[0]
-				if tt.expectLevels == nil {
-					if expand.Levels != nil {
-						t.Errorf("Expected Levels to be nil, got %v", *expand.Levels)
-					}
-				} else {
-					if expand.Levels == nil {
-						t.Errorf("Expected Levels to be %d, got nil", *tt.expectLevels)
-					} else if *expand.Levels != *tt.expectLevels {
-						t.Errorf("Expected Levels=%d, got %d", *tt.expectLevels, *expand.Levels)
-					}
+				if expand.Levels != nil {
+					t.Errorf("Expected Levels to be nil after normalization, got %v", *expand.Levels)
 				}
 			}
 		})
@@ -1111,10 +1100,54 @@ func TestParseExpandWithCountAndLevels(t *testing.T) {
 	params := url.Values{}
 	params.Set("$expand", "Books($count=true;$levels=3)")
 
-	_, err := ParseQueryOptions(params, authorMeta)
-	// Expect error since $count=true and $levels are not yet implemented
-	if err == nil {
-		t.Fatal("Expected error for unsupported $count=true and $levels options")
+	options, err := ParseQueryOptions(params, authorMeta)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if len(options.Expand) != 1 {
+		t.Fatalf("Expected 1 expand option, got %d", len(options.Expand))
+	}
+	if !options.Expand[0].Count {
+		t.Fatal("Expected Count to be true")
+	}
+	if options.Expand[0].Levels != nil {
+		t.Fatalf("Expected Levels to be nil after normalization, got %v", options.Expand[0].Levels)
+	}
+}
+
+func TestParseExpandWithRecursiveLevels(t *testing.T) {
+	type Node struct {
+		ID       uint   `json:"ID" gorm:"primaryKey" odata:"key"`
+		Name     string `json:"Name"`
+		Children []Node `json:"Children,omitempty" gorm:"foreignKey:ParentID"`
+		ParentID *uint  `json:"ParentID"`
+	}
+
+	nodeMeta, err := metadata.AnalyzeEntity(&Node{})
+	if err != nil {
+		t.Fatalf("Failed to analyze entity: %v", err)
+	}
+
+	setEntitiesRegistry(nodeMeta)
+
+	params := url.Values{}
+	params.Set("$expand", "Children($levels=2)")
+
+	options, err := ParseQueryOptions(params, nodeMeta)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	if len(options.Expand) != 1 {
+		t.Fatalf("Expected 1 expand option, got %d", len(options.Expand))
+	}
+
+	if options.Expand[0].Levels != nil {
+		t.Fatalf("Expected Levels to be nil after normalization, got %v", options.Expand[0].Levels)
+	}
+
+	if len(options.Expand[0].Expand) == 0 {
+		t.Fatal("Expected recursive expand to be generated for $levels")
 	}
 }
 
@@ -1126,13 +1159,9 @@ func TestParseExpandWithAllNestedOptionsIncludingCountAndLevels(t *testing.T) {
 	params.Set("$expand", "Books($filter=Title ne 'Archived';$select=Title;$orderby=Title;$top=5;$skip=2;$count=true;$levels=2)")
 
 	_, err := ParseQueryOptions(params, authorMeta)
-	// Expect error since $count=true and $levels are not yet implemented
-	if err == nil {
-		t.Fatal("Expected error for unsupported $count=true and $levels options")
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
 	}
 }
 
 // intPtr returns a pointer to an integer
-func intPtr(i int) *int {
-	return &i
-}

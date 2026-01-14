@@ -10,6 +10,14 @@ import (
 
 // applyExpand applies expand (preload) options to the GORM query
 func applyExpand(db *gorm.DB, expand []ExpandOption, entityMetadata *metadata.EntityMetadata) *gorm.DB {
+	if len(expand) == 0 {
+		return db
+	}
+
+	if normalized, err := applyExpandLevels(expand, entityMetadata, nil); err == nil {
+		expand = normalized
+	}
+
 	for _, expandOpt := range expand {
 		navProp := findNavigationProperty(expandOpt.NavigationProperty, entityMetadata)
 		if navProp == nil {

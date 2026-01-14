@@ -54,15 +54,10 @@ func (h *EntityHandler) collectionResponseWriter(w http.ResponseWriter, r *http.
 			w.Header().Set(HeaderPreferenceApplied, applied)
 		}
 
-		expandedProps := make([]string, len(queryOptions.Expand))
-		for i, exp := range queryOptions.Expand {
-			expandedProps[i] = exp.NavigationProperty
-		}
-
 		selectedNavProps := selectedNavigationProps(queryOptions.Select, h.metadata)
 
 		metadataProvider := newMetadataAdapter(h.metadata, h.namespace)
-		if err := response.WriteODataCollectionWithNavigationAndDelta(w, r, h.metadata.EntitySetName, results, totalCount, nextLink, deltaLink, metadataProvider, expandedProps, selectedNavProps, h.metadata); err != nil {
+		if err := response.WriteODataCollectionWithNavigationAndDelta(w, r, h.metadata.EntitySetName, results, totalCount, nextLink, deltaLink, metadataProvider, queryOptions.Expand, selectedNavProps, h.metadata); err != nil {
 			h.logger.Error("Error writing OData response", "error", err)
 		}
 

@@ -645,6 +645,11 @@ func main() {
 	// Register v4.01 tests
 	if *version == "all" || *version == "4.01" {
 		testSuites = append(testSuites, TestSuiteInfo{
+			Name:    "11.2.5.9_nested_expand_options",
+			Version: "4.01",
+			Suite:   v4_01.NestedExpandOptions,
+		})
+		testSuites = append(testSuites, TestSuiteInfo{
 			Name:    "11.2.5.8_query_compute",
 			Version: "4.01",
 			Suite:   v4_01.QueryCompute,
