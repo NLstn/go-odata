@@ -10,7 +10,7 @@ import (
 	"github.com/nlstn/go-odata/internal/metadata"
 )
 
-func addNavigationLinks(data interface{}, metadata EntityMetadataProvider, expandedProps []string, r *http.Request, entitySetName string, metadataLevel string, fullMetadata *metadata.EntityMetadata) []interface{} {
+func addNavigationLinks(data interface{}, metadata EntityMetadataProvider, expandedProps []string, selectedNavProps []string, r *http.Request, entitySetName string, metadataLevel string, fullMetadata *metadata.EntityMetadata) []interface{} {
 	dataValue := reflect.ValueOf(data)
 	if dataValue.Kind() != reflect.Slice {
 		return []interface{}{}
@@ -32,12 +32,12 @@ func addNavigationLinks(data interface{}, metadata EntityMetadataProvider, expan
 		entity := dataValue.Index(i)
 
 		if entity.Kind() == reflect.Map {
-			entityMap := processMapEntity(entity, metadata, expandedProps, baseURL, entitySetName, metadataLevel, fullMetadata)
+			entityMap := processMapEntity(entity, metadata, expandedProps, selectedNavProps, baseURL, entitySetName, metadataLevel, fullMetadata)
 			if entityMap != nil {
 				result[i] = entityMap
 			}
 		} else {
-			orderedMap := processStructEntityOrdered(entity, metadata, expandedProps, baseURL, entitySetName, metadataLevel, fullMetadata)
+			orderedMap := processStructEntityOrdered(entity, metadata, expandedProps, selectedNavProps, baseURL, entitySetName, metadataLevel, fullMetadata)
 			result[i] = orderedMap
 		}
 	}
@@ -45,7 +45,7 @@ func addNavigationLinks(data interface{}, metadata EntityMetadataProvider, expan
 	return result
 }
 
-func processMapEntity(entity reflect.Value, metadata EntityMetadataProvider, expandedProps []string, baseURL, entitySetName string, metadataLevel string, fullMetadata *metadata.EntityMetadata) map[string]interface{} {
+func processMapEntity(entity reflect.Value, metadata EntityMetadataProvider, expandedProps []string, selectedNavProps []string, baseURL, entitySetName string, metadataLevel string, fullMetadata *metadata.EntityMetadata) map[string]interface{} {
 	entityMap, ok := entity.Interface().(map[string]interface{})
 	if !ok {
 		return nil
@@ -83,12 +83,29 @@ func processMapEntity(entity reflect.Value, metadata EntityMetadataProvider, exp
 				continue
 			}
 
-			if _, exists := entityMap[prop.JsonName]; !exists {
-				keySegment := buildKeySegmentFromMap(entityMap, metadata)
-				if keySegment != "" {
-					navLink := fmt.Sprintf("%s/%s(%s)/%s", baseURL, entitySetName, keySegment, prop.JsonName)
-					entityMap[prop.JsonName+"@odata.navigationLink"] = navLink
-				}
+			keySegment := buildKeySegmentFromMap(entityMap, metadata)
+			if keySegment != "" {
+				navLink := fmt.Sprintf("%s/%s(%s)/%s", baseURL, entitySetName, keySegment, prop.JsonName)
+				entityMap[prop.JsonName+"@odata.navigationLink"] = navLink
+			}
+		}
+		return entityMap
+	}
+
+	if metadataLevel == "minimal" {
+		for _, prop := range metadata.GetProperties() {
+			if !prop.IsNavigationProp {
+				continue
+			}
+
+			if isPropertyExpanded(prop, expandedProps) || !isPropertySelectedForLinks(prop, selectedNavProps) {
+				continue
+			}
+
+			keySegment := buildKeySegmentFromMap(entityMap, metadata)
+			if keySegment != "" {
+				navLink := fmt.Sprintf("%s/%s(%s)/%s", baseURL, entitySetName, keySegment, prop.JsonName)
+				entityMap[prop.JsonName+"@odata.navigationLink"] = navLink
 			}
 		}
 	}
@@ -96,7 +113,7 @@ func processMapEntity(entity reflect.Value, metadata EntityMetadataProvider, exp
 	return entityMap
 }
 
-func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataProvider, expandedProps []string, baseURL, entitySetName string, metadataLevel string, fullMetadata *metadata.EntityMetadata) *OrderedMap {
+func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataProvider, expandedProps []string, selectedNavProps []string, baseURL, entitySetName string, metadataLevel string, fullMetadata *metadata.EntityMetadata) *OrderedMap {
 	entityType := entity.Type()
 	fieldInfos := getFieldInfos(entityType)
 
@@ -171,13 +188,13 @@ func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataPro
 
 		if propMeta != nil && propMeta.IsNavigationProp {
 			// For minimal metadata, skip navigation properties unless they're expanded
-			if metadataLevel == "minimal" && !isPropertyExpanded(*propMeta, expandedProps) {
+			if metadataLevel == "minimal" && !isPropertyExpanded(*propMeta, expandedProps) && !isPropertySelectedForLinks(*propMeta, selectedNavProps) {
 				// Skip unexpanded navigation properties for minimal metadata
 				continue
 			}
 			// Only get fieldValue when we actually need it
 			fieldValue := entity.Field(j)
-			processNavigationPropertyOrderedWithMetadata(entityMap, entity, propMeta, fieldValue, info.JsonName, expandedProps, baseURL, entitySetName, metadata, metadataLevel, keySegment)
+			processNavigationPropertyOrderedWithMetadata(entityMap, entity, propMeta, fieldValue, info.JsonName, expandedProps, selectedNavProps, baseURL, entitySetName, metadata, metadataLevel, keySegment)
 		} else {
 			fieldValue := entity.Field(j)
 			entityMap.Set(info.JsonName, fieldValue.Interface())
@@ -196,10 +213,13 @@ func isPropertyExpanded(prop PropertyMetadata, expandedProps []string) bool {
 	return false
 }
 
-func processNavigationPropertyOrderedWithMetadata(entityMap *OrderedMap, entity reflect.Value, propMeta *PropertyMetadata, fieldValue reflect.Value, jsonName string, expandedProps []string, baseURL, entitySetName string, metadata EntityMetadataProvider, metadataLevel string, keySegment string) {
+func processNavigationPropertyOrderedWithMetadata(entityMap *OrderedMap, entity reflect.Value, propMeta *PropertyMetadata, fieldValue reflect.Value, jsonName string, expandedProps []string, selectedNavProps []string, baseURL, entitySetName string, metadata EntityMetadataProvider, metadataLevel string, keySegment string) {
 	if isPropertyExpanded(*propMeta, expandedProps) {
 		entityMap.Set(jsonName, fieldValue.Interface())
-	} else if metadataLevel == "full" {
+		return
+	}
+
+	if metadataLevel == "full" || (metadataLevel == "minimal" && isPropertySelectedForLinks(*propMeta, selectedNavProps)) {
 		if keySegment == "" {
 			keySegment = BuildKeySegmentFromEntity(entity, metadata)
 		}
@@ -208,6 +228,15 @@ func processNavigationPropertyOrderedWithMetadata(entityMap *OrderedMap, entity 
 			entityMap.Set(jsonName+"@odata.navigationLink", navLink)
 		}
 	}
+}
+
+func isPropertySelectedForLinks(prop PropertyMetadata, selectedNavProps []string) bool {
+	for _, selected := range selectedNavProps {
+		if selected == prop.Name || selected == prop.JsonName {
+			return true
+		}
+	}
+	return false
 }
 
 // BuildKeySegmentFromEntity builds the key segment for URLs from an entity and metadata.

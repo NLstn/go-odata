@@ -1,25 +1,10 @@
 package query
 
-import (
-	"github.com/nlstn/go-odata/internal/metadata"
-	"testing"
-)
+import "testing"
 
 // TestMergeNavigationSelectsPlainNavProperty tests that plain navigation properties
-// in $select are automatically expanded
+// in $select do not trigger implicit expands.
 func TestMergeNavigationSelectsPlainNavProperty(t *testing.T) {
-	// Setup entity metadata with a navigation property
-	entityMetadata := &metadata.EntityMetadata{
-		Properties: []metadata.PropertyMetadata{
-			{Name: "ID", JsonName: "ID", IsNavigationProp: false},
-			{Name: "Name", JsonName: "Name", IsNavigationProp: false},
-			{Name: "Descriptions", JsonName: "Descriptions", IsNavigationProp: true},
-		},
-		KeyProperties: []metadata.PropertyMetadata{
-			{Name: "ID", JsonName: "ID"},
-		},
-	}
-
 	tests := []struct {
 		name             string
 		selectProps      []string
@@ -29,12 +14,12 @@ func TestMergeNavigationSelectsPlainNavProperty(t *testing.T) {
 		shouldAutoExpand bool
 	}{
 		{
-			name:             "Plain navigation property should auto-expand",
+			name:             "Plain navigation property should not auto-expand",
 			selectProps:      []string{"Name", "Descriptions"},
 			existingExpands:  []ExpandOption{},
-			expectedExpands:  1,
-			expectedNavProp:  "Descriptions",
-			shouldAutoExpand: true,
+			expectedExpands:  0,
+			expectedNavProp:  "",
+			shouldAutoExpand: false,
 		},
 		{
 			name:             "Navigation property with existing expand should not duplicate",
@@ -53,12 +38,12 @@ func TestMergeNavigationSelectsPlainNavProperty(t *testing.T) {
 			shouldAutoExpand: true,
 		},
 		{
-			name:             "Multiple plain navigation properties",
+			name:             "Multiple plain navigation properties do not auto-expand",
 			selectProps:      []string{"Name", "Descriptions"},
 			existingExpands:  []ExpandOption{},
-			expectedExpands:  1,
-			expectedNavProp:  "Descriptions",
-			shouldAutoExpand: true,
+			expectedExpands:  0,
+			expectedNavProp:  "",
+			shouldAutoExpand: false,
 		},
 	}
 
@@ -69,7 +54,7 @@ func TestMergeNavigationSelectsPlainNavProperty(t *testing.T) {
 				Expand: tt.existingExpands,
 			}
 
-			mergeNavigationSelects(options, entityMetadata)
+			mergeNavigationSelects(options)
 
 			if len(options.Expand) != tt.expectedExpands {
 				t.Errorf("Expected %d expand options, got %d", tt.expectedExpands, len(options.Expand))
@@ -94,23 +79,12 @@ func TestMergeNavigationSelectsPlainNavProperty(t *testing.T) {
 // TestMergeNavigationSelectsRegularProperty tests that regular (non-navigation) properties
 // are not added to expand options
 func TestMergeNavigationSelectsRegularProperty(t *testing.T) {
-	entityMetadata := &metadata.EntityMetadata{
-		Properties: []metadata.PropertyMetadata{
-			{Name: "ID", JsonName: "ID", IsNavigationProp: false},
-			{Name: "Name", JsonName: "Name", IsNavigationProp: false},
-			{Name: "Price", JsonName: "Price", IsNavigationProp: false},
-		},
-		KeyProperties: []metadata.PropertyMetadata{
-			{Name: "ID", JsonName: "ID"},
-		},
-	}
-
 	options := &QueryOptions{
 		Select: []string{"Name", "Price"},
 		Expand: []ExpandOption{},
 	}
 
-	mergeNavigationSelects(options, entityMetadata)
+	mergeNavigationSelects(options)
 
 	if len(options.Expand) != 0 {
 		t.Errorf("Expected 0 expand options for regular properties, got %d", len(options.Expand))

@@ -33,7 +33,7 @@ func TestWriteODataCollectionWithNavigationWithNilData(t *testing.T) {
 	req := httptest.NewRequest("GET", "http://example.com/Products", nil)
 	w := httptest.NewRecorder()
 
-	if err := WriteODataCollectionWithNavigation(w, req, "Products", nil, nil, nil, nil, nil, nil); err != nil {
+	if err := WriteODataCollectionWithNavigation(w, req, "Products", nil, nil, nil, nil, nil, nil, nil); err != nil {
 		t.Fatalf("WriteODataCollectionWithNavigation failed: %v", err)
 	}
 

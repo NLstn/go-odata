@@ -301,8 +301,7 @@ func ParseQueryOptions(queryParams url.Values, entityMetadata *metadata.EntityMe
 
 	// Post-process: merge navigation property selections into expand options
 	// This handles cases like $select=Product/Name with $expand=Product
-	// as well as plain navigation properties like $select=Descriptions
-	mergeNavigationSelects(options, entityMetadata)
+	mergeNavigationSelects(options)
 
 	return options, nil
 }
@@ -668,15 +667,13 @@ func parseNonNegativeInt(str, paramName string) (int, error) {
 
 // mergeNavigationSelects processes $select with navigation paths and merges them into expand options
 // For example: $select=Product/Name with $expand=Product should result in Product being expanded with $select=Name
-// Also handles plain navigation properties: $select=Descriptions should auto-expand Descriptions
-func mergeNavigationSelects(options *QueryOptions, entityMetadata *metadata.EntityMetadata) {
+func mergeNavigationSelects(options *QueryOptions) {
 	if len(options.Select) == 0 {
 		return
 	}
 
 	// Track navigation property selections
 	navSelects := make(map[string][]string) // nav prop name -> list of sub-properties
-	plainNavProps := make(map[string]bool)  // plain navigation properties without paths
 
 	// Process select properties to extract navigation paths
 	for _, propName := range options.Select {
@@ -690,16 +687,11 @@ func mergeNavigationSelects(options *QueryOptions, entityMetadata *metadata.Enti
 				navSelects[navProp] = []string{}
 			}
 			navSelects[navProp] = append(navSelects[navProp], subProp)
-		} else {
-			// Check if this is a plain navigation property
-			if isNavigationProperty(propName, entityMetadata) {
-				plainNavProps[propName] = true
-			}
 		}
 	}
 
 	// If there are navigation selects or plain navigation properties, update or add expand options
-	if len(navSelects) > 0 || len(plainNavProps) > 0 {
+	if len(navSelects) > 0 {
 		// Build a map of existing expand options
 		expandMap := make(map[string]*ExpandOption)
 		for i := range options.Expand {
@@ -734,17 +726,6 @@ func mergeNavigationSelects(options *QueryOptions, entityMetadata *metadata.Enti
 			}
 		}
 
-		// For plain navigation properties (without paths), add them to expand if not already present
-		for navProp := range plainNavProps {
-			if _, exists := expandMap[navProp]; !exists {
-				// Create a new expand option without nested select (expand all properties)
-				newExpand := ExpandOption{
-					NavigationProperty: navProp,
-					Select:             nil, // nil means select all properties of the navigation entity
-				}
-				options.Expand = append(options.Expand, newExpand)
-			}
-		}
 	}
 }
 

@@ -3,7 +3,9 @@ package handlers
 import (
 	"net/http"
 	"reflect"
+	"strings"
 
+	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/preference"
 	"github.com/nlstn/go-odata/internal/query"
 	"github.com/nlstn/go-odata/internal/response"
@@ -57,11 +59,48 @@ func (h *EntityHandler) collectionResponseWriter(w http.ResponseWriter, r *http.
 			expandedProps[i] = exp.NavigationProperty
 		}
 
+		selectedNavProps := selectedNavigationProps(queryOptions.Select, h.metadata)
+
 		metadataProvider := newMetadataAdapter(h.metadata, h.namespace)
-		if err := response.WriteODataCollectionWithNavigationAndDelta(w, r, h.metadata.EntitySetName, results, totalCount, nextLink, deltaLink, metadataProvider, expandedProps, h.metadata); err != nil {
+		if err := response.WriteODataCollectionWithNavigationAndDelta(w, r, h.metadata.EntitySetName, results, totalCount, nextLink, deltaLink, metadataProvider, expandedProps, selectedNavProps, h.metadata); err != nil {
 			h.logger.Error("Error writing OData response", "error", err)
 		}
 
 		return nil
 	}
+}
+
+func selectedNavigationProps(selectedProps []string, entityMetadata *metadata.EntityMetadata) []string {
+	if len(selectedProps) == 0 || entityMetadata == nil {
+		return nil
+	}
+
+	navPropSet := make(map[string]bool)
+	for _, propName := range selectedProps {
+		propName = strings.TrimSpace(propName)
+		if propName == "" {
+			continue
+		}
+
+		navPropName := propName
+		if strings.Contains(propName, "/") {
+			parts := strings.SplitN(propName, "/", 2)
+			navPropName = strings.TrimSpace(parts[0])
+		}
+
+		navProp := entityMetadata.FindNavigationProperty(navPropName)
+		if navProp == nil {
+			continue
+		}
+
+		navPropSet[navProp.Name] = true
+		navPropSet[navProp.JsonName] = true
+	}
+
+	navProps := make([]string, 0, len(navPropSet))
+	for prop := range navPropSet {
+		navProps = append(navProps, prop)
+	}
+
+	return navProps
 }
