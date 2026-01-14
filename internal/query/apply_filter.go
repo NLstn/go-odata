@@ -174,10 +174,8 @@ func addNavigationJoin(db *gorm.DB, navPropName string, entityMetadata *metadata
 	foreignKeyColumn := navProp.ForeignKeyColumnName
 
 	// Determine the primary key column of the related table
-	// Default to "id" but should check the related entity's key properties
-	relatedPrimaryKey := "id"
-
-	// Check GORM tag for explicit references
+	// First check for explicit references: tag in GORM as an override
+	relatedPrimaryKey := ""
 	if navProp.GormTag != "" {
 		parts := strings.Split(navProp.GormTag, ";")
 		for _, part := range parts {
@@ -187,6 +185,19 @@ func addNavigationJoin(db *gorm.DB, navPropName string, entityMetadata *metadata
 				relatedPrimaryKey = toSnakeCase(refField)
 				break
 			}
+		}
+	}
+
+	// If no explicit references: tag, use the target entity's actual primary key from metadata
+	if relatedPrimaryKey == "" {
+		targetMetadata, err := entityMetadata.ResolveNavigationTarget(navPropName)
+		if err == nil && targetMetadata != nil && len(targetMetadata.KeyProperties) > 0 {
+			// Use the first key property's column name
+			// For composite keys, this will use the first key component
+			relatedPrimaryKey = targetMetadata.KeyProperties[0].ColumnName
+		} else {
+			// Fallback to "id" only if we can't resolve the target metadata
+			relatedPrimaryKey = "id"
 		}
 	}
 
