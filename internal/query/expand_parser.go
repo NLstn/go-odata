@@ -235,6 +235,30 @@ func parseNestedExpandOptionsCore(expand *ExpandOption, optionsStr string, targe
 				}
 				expand.Compute = compute
 			}
+		case "$count":
+			// Parse $count option (must be true or false)
+			countLower := strings.ToLower(value)
+			if countLower == "true" {
+				expand.Count = true
+			} else if countLower != "false" {
+				return fmt.Errorf("invalid nested $count: must be 'true' or 'false'")
+			}
+		case "$levels":
+			// Parse $levels option (positive integer or "max")
+			if strings.ToLower(value) == "max" {
+				// Use -1 as a sentinel value for "max"
+				maxLevels := -1
+				expand.Levels = &maxLevels
+			} else {
+				var levels int
+				if _, err := fmt.Sscanf(value, "%d", &levels); err != nil {
+					return fmt.Errorf("invalid nested $levels: must be a positive integer or 'max'")
+				}
+				if levels < 1 {
+					return fmt.Errorf("invalid nested $levels: must be a positive integer or 'max'")
+				}
+				expand.Levels = &levels
+			}
 		}
 	}
 
