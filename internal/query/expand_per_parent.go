@@ -470,8 +470,6 @@ func maxBatchSize(constraintCount int) int {
 	return batch
 }
 
-
-
 func getStructFieldValue(parentStruct reflect.Value, propName string) (interface{}, bool) {
 	if !parentStruct.IsValid() || parentStruct.Kind() != reflect.Struct {
 		return nil, false
