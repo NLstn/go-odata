@@ -19,6 +19,7 @@ func TestNewTracer(t *testing.T) {
 
 	if tracer == nil {
 		t.Fatal("NewTracer() should return non-nil tracer")
+		return
 	}
 	if tracer.serviceName != "test-service" {
 		t.Errorf("serviceName = %q, want %q", tracer.serviceName, "test-service")
