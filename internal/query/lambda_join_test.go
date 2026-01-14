@@ -57,7 +57,7 @@ func TestBuildLambdaCondition_CompositeKeyUsesColumnNames(t *testing.T) {
 		t.Fatalf("Failed to parse filter: %v", err)
 	}
 
-	query := ApplyFilterOnly(db.Model(&testCompositeParent{}), filterExpr, parentMeta)
+	query := ApplyFilterOnly(db.Model(&testCompositeParent{}), filterExpr, parentMeta, nil)
 	var parents []testCompositeParent
 	stmt := query.Find(&parents).Statement
 	sql := stmt.SQL.String()
