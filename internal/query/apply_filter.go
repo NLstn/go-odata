@@ -565,27 +565,60 @@ func buildLambdaCondition(dialect string, filter *FilterExpression, entityMetada
 
 	// Use cached foreign key column name from metadata
 	// This was computed once during entity registration and respects GORM foreignKey: tags
+	// For composite keys, this may contain comma-separated column names
 	foreignKeyColumn := navProp.ForeignKeyColumnName
 
-	parentPrimaryKey := "id"
-	if len(entityMetadata.KeyProperties) > 0 {
-		parentPrimaryKey = toSnakeCase(entityMetadata.KeyProperties[0].Name)
+	// Build join conditions for all key properties
+	// Support both single keys and composite keys
+	var joinConditions []string
+	
+	// Parse foreign key column names (may be comma-separated for composite keys)
+	foreignKeyColumns := strings.Split(foreignKeyColumn, ",")
+	
+	// Get parent key properties
+	if len(entityMetadata.KeyProperties) == 0 {
+		// Fallback to default "id" if no key properties found
+		quotedRelatedTable := quoteIdent(dialect, relatedTableName)
+		quotedParentTable := quoteIdent(dialect, parentTableName)
+		quotedForeignKey := quoteIdent(dialect, strings.TrimSpace(foreignKeyColumns[0]))
+		quotedParentPK := quoteIdent(dialect, "id")
+		joinConditions = append(joinConditions, 
+			fmt.Sprintf("%s.%s = %s.%s", quotedRelatedTable, quotedForeignKey, quotedParentTable, quotedParentPK))
+	} else {
+		// Match foreign key columns with parent key properties
+		// For composite keys, we need to join on all key columns
+		for i, keyProp := range entityMetadata.KeyProperties {
+			quotedRelatedTable := quoteIdent(dialect, relatedTableName)
+			quotedParentTable := quoteIdent(dialect, parentTableName)
+			
+			// Get the corresponding foreign key column
+			var fkColumn string
+			if i < len(foreignKeyColumns) {
+				fkColumn = strings.TrimSpace(foreignKeyColumns[i])
+			} else {
+				// Fallback: use the key property name as foreign key column name
+				fkColumn = toSnakeCase(keyProp.Name)
+			}
+			
+			quotedForeignKey := quoteIdent(dialect, fkColumn)
+			quotedParentPK := quoteIdent(dialect, toSnakeCase(keyProp.Name))
+			
+			joinConditions = append(joinConditions, 
+				fmt.Sprintf("%s.%s = %s.%s", quotedRelatedTable, quotedForeignKey, quotedParentTable, quotedParentPK))
+		}
 	}
-
-	// Quote identifiers for database compatibility (especially PostgreSQL)
-	quotedRelatedTable := quoteIdent(dialect, relatedTableName)
-	quotedParentTable := quoteIdent(dialect, parentTableName)
-	quotedForeignKey := quoteIdent(dialect, foreignKeyColumn)
-	quotedParentPK := quoteIdent(dialect, parentPrimaryKey)
+	
+	// Combine all join conditions with AND
+	joinCondition := strings.Join(joinConditions, " AND ")
 
 	if filter.Value == nil || filter.Left == nil {
 		if filter.Operator == OpAny {
-			return fmt.Sprintf("EXISTS (SELECT 1 FROM %s WHERE %s.%s = %s.%s)",
-				quotedRelatedTable, quotedRelatedTable, quotedForeignKey, quotedParentTable, quotedParentPK), []interface{}{}
+			return fmt.Sprintf("EXISTS (SELECT 1 FROM %s WHERE %s)",
+				quoteIdent(dialect, relatedTableName), joinCondition), []interface{}{}
 		}
-		return fmt.Sprintf("NOT EXISTS (SELECT 1 FROM %s WHERE %s.%s = %s.%s) OR EXISTS (SELECT 1 FROM %s WHERE %s.%s = %s.%s)",
-			quotedRelatedTable, quotedRelatedTable, quotedForeignKey, quotedParentTable, quotedParentPK,
-			quotedRelatedTable, quotedRelatedTable, quotedForeignKey, quotedParentTable, quotedParentPK), []interface{}{}
+		return fmt.Sprintf("NOT EXISTS (SELECT 1 FROM %s WHERE %s) OR EXISTS (SELECT 1 FROM %s WHERE %s)",
+			quoteIdent(dialect, relatedTableName), joinCondition,
+			quoteIdent(dialect, relatedTableName), joinCondition), []interface{}{}
 	}
 
 	predicate := filter.Left
@@ -600,11 +633,11 @@ func buildLambdaCondition(dialect string, filter *FilterExpression, entityMetada
 
 	var sql string
 	if filter.Operator == OpAny {
-		sql = fmt.Sprintf("EXISTS (SELECT 1 FROM %s WHERE %s.%s = %s.%s AND %s)",
-			quotedRelatedTable, quotedRelatedTable, quotedForeignKey, quotedParentTable, quotedParentPK, predicateSQL)
+		sql = fmt.Sprintf("EXISTS (SELECT 1 FROM %s WHERE %s AND %s)",
+			quoteIdent(dialect, relatedTableName), joinCondition, predicateSQL)
 	} else {
-		sql = fmt.Sprintf("NOT EXISTS (SELECT 1 FROM %s WHERE %s.%s = %s.%s AND NOT (%s))",
-			quotedRelatedTable, quotedRelatedTable, quotedForeignKey, quotedParentTable, quotedParentPK, predicateSQL)
+		sql = fmt.Sprintf("NOT EXISTS (SELECT 1 FROM %s WHERE %s AND NOT (%s))",
+			quoteIdent(dialect, relatedTableName), joinCondition, predicateSQL)
 	}
 
 	return sql, predicateArgs

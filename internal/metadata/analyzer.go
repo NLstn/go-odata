@@ -1347,7 +1347,13 @@ func getForeignKeyColumnName(prop *PropertyMetadata) string {
 			part = strings.TrimSpace(part)
 			if strings.HasPrefix(part, "foreignKey:") {
 				fkField := strings.TrimPrefix(part, "foreignKey:")
-				return toSnakeCase(fkField)
+				// For composite keys, handle comma-separated field names
+				fkFields := strings.Split(fkField, ",")
+				snakeCaseFields := make([]string, len(fkFields))
+				for i, field := range fkFields {
+					snakeCaseFields[i] = toSnakeCase(strings.TrimSpace(field))
+				}
+				return strings.Join(snakeCaseFields, ",")
 			}
 		}
 	}
