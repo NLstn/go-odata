@@ -1,26 +1,18 @@
 package response
 
-import "sync"
+import "net/http"
 
-var (
-	basePath   string
-	basePathMu sync.RWMutex
-)
+// ContextKey is the type for context keys used by the response package.
+type ContextKey string
 
-// SetBasePath configures the base path for URL generation.
-// This is called by the Service when SetBasePath() is configured.
-// Thread-safe for concurrent access.
-func SetBasePath(path string) {
-	basePathMu.Lock()
-	basePath = path
-	basePathMu.Unlock()
-}
+// BasePathContextKey is the context key for storing the base path.
+const BasePathContextKey ContextKey = "odata.basePath"
 
-// getBasePath returns the configured base path.
+// getBasePath retrieves the base path from the request context.
 // Returns empty string if not configured.
-// Thread-safe for concurrent access.
-func getBasePath() string {
-	basePathMu.RLock()
-	defer basePathMu.RUnlock()
-	return basePath
+func getBasePath(r *http.Request) string {
+	if basePath, ok := r.Context().Value(BasePathContextKey).(string); ok {
+		return basePath
+	}
+	return ""
 }

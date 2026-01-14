@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 
 	"gorm.io/driver/sqlite"
@@ -238,5 +239,110 @@ func TestBasePath_RootMounting(t *testing.T) {
 	expectedContext := "http://example.com/$metadata#BasePathProducts"
 	if context != expectedContext {
 		t.Errorf("@odata.context = %q, want %q", context, expectedContext)
+	}
+}
+
+func TestBasePath_ConcurrentGetBasePath(t *testing.T) {
+	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	service := NewService(db)
+
+	if err := service.SetBasePath("/odata"); err != nil {
+		t.Fatal(err)
+	}
+
+	var wg sync.WaitGroup
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			basePath := service.GetBasePath()
+			if basePath != "/odata" {
+				t.Errorf("expected /odata, got %s", basePath)
+			}
+		}()
+	}
+	wg.Wait()
+}
+
+func TestBasePath_MultipleServicesWithDifferentPaths(t *testing.T) {
+	// Create two services with different base paths
+	db1, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db1.AutoMigrate(&BasePathProduct{})
+	db1.Create(&BasePathProduct{ID: 1, Name: "Service1 Product"})
+
+	service1 := NewService(db1)
+	if err := service1.RegisterEntity(&BasePathProduct{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := service1.SetBasePath("/api/v1"); err != nil {
+		t.Fatal(err)
+	}
+
+	db2, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db2.AutoMigrate(&BasePathProduct{})
+	db2.Create(&BasePathProduct{ID: 2, Name: "Service2 Product"})
+
+	service2 := NewService(db2)
+	if err := service2.RegisterEntity(&BasePathProduct{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := service2.SetBasePath("/api/v2"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Test service1
+	req1 := httptest.NewRequest("GET", "/api/v1/BasePathProducts", nil)
+	req1.Host = "example.com"
+	w1 := httptest.NewRecorder()
+	service1.ServeHTTP(w1, req1)
+
+	if w1.Code != http.StatusOK {
+		t.Fatalf("service1: expected status 200, got %d: %s", w1.Code, w1.Body.String())
+	}
+
+	var response1 map[string]interface{}
+	if err := json.NewDecoder(w1.Body).Decode(&response1); err != nil {
+		t.Fatal(err)
+	}
+
+	context1, ok := response1["@odata.context"].(string)
+	if !ok {
+		t.Fatal("service1: @odata.context not found")
+	}
+	expectedContext1 := "http://example.com/api/v1/$metadata#BasePathProducts"
+	if context1 != expectedContext1 {
+		t.Errorf("service1: @odata.context = %q, want %q", context1, expectedContext1)
+	}
+
+	// Test service2
+	req2 := httptest.NewRequest("GET", "/api/v2/BasePathProducts", nil)
+	req2.Host = "example.com"
+	w2 := httptest.NewRecorder()
+	service2.ServeHTTP(w2, req2)
+
+	if w2.Code != http.StatusOK {
+		t.Fatalf("service2: expected status 200, got %d: %s", w2.Code, w2.Body.String())
+	}
+
+	var response2 map[string]interface{}
+	if err := json.NewDecoder(w2.Body).Decode(&response2); err != nil {
+		t.Fatal(err)
+	}
+
+	context2, ok := response2["@odata.context"].(string)
+	if !ok {
+		t.Fatal("service2: @odata.context not found")
+	}
+	expectedContext2 := "http://example.com/api/v2/$metadata#BasePathProducts"
+	if context2 != expectedContext2 {
+		t.Errorf("service2: @odata.context = %q, want %q", context2, expectedContext2)
+	}
+
+	// Verify services maintain separate base paths
+	if service1.GetBasePath() != "/api/v1" {
+		t.Errorf("service1: expected /api/v1, got %s", service1.GetBasePath())
+	}
+	if service2.GetBasePath() != "/api/v2" {
+		t.Errorf("service2: expected /api/v2, got %s", service2.GetBasePath())
 	}
 }

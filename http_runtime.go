@@ -1,6 +1,7 @@
 package odata
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
@@ -18,9 +19,20 @@ func (s *Service) serveHTTP(w http.ResponseWriter, r *http.Request, allowAsync b
 		return
 	}
 
-	// Strip base path from incoming request if configured
-	if s.basePath != "" && strings.HasPrefix(r.URL.Path, s.basePath) {
-		newPath := strings.TrimPrefix(r.URL.Path, s.basePath)
+	// Read basePath with lock
+	s.basePathMu.RLock()
+	basePath := s.basePath
+	s.basePathMu.RUnlock()
+
+	// Inject base path into request context for response generation
+	if basePath != "" {
+		ctx := context.WithValue(r.Context(), response.BasePathContextKey, basePath)
+		r = r.WithContext(ctx)
+	}
+
+	// Strip base path from incoming request path
+	if basePath != "" && strings.HasPrefix(r.URL.Path, basePath) {
+		newPath := strings.TrimPrefix(r.URL.Path, basePath)
 		// Handle exact match of base path
 		if newPath == "" {
 			newPath = "/"
