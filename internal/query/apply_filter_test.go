@@ -1,9 +1,7 @@
 package query
 
 import (
-	"bytes"
 	"io"
-	"log/slog"
 	"os"
 	"strings"
 	"testing"
@@ -98,11 +96,6 @@ func TestBuildLambdaConditionLogsForeignKeyMismatch(t *testing.T) {
 		t.Fatalf("Failed to parse lambda filter: %v", err)
 	}
 
-	var logBuffer bytes.Buffer
-	logger := slog.New(slog.NewTextHandler(&logBuffer, &slog.HandlerOptions{
-		Level: slog.LevelWarn,
-	}))
-
 	originalStdout := os.Stdout
 	stdoutReader, stdoutWriter, err := os.Pipe()
 	if err != nil {
@@ -113,7 +106,7 @@ func TestBuildLambdaConditionLogsForeignKeyMismatch(t *testing.T) {
 	})
 	os.Stdout = stdoutWriter
 
-	_, _ = buildLambdaCondition("sqlite", filterExpr, parentMeta, logger)
+	_, _ = buildLambdaCondition("sqlite", filterExpr, parentMeta)
 
 	if err := stdoutWriter.Close(); err != nil {
 		t.Fatalf("Failed to close stdout writer: %v", err)
@@ -126,11 +119,12 @@ func TestBuildLambdaConditionLogsForeignKeyMismatch(t *testing.T) {
 		t.Fatalf("Failed to close stdout reader: %v", err)
 	}
 
-	if len(stdoutBytes) != 0 {
-		t.Fatalf("expected no stdout output, got %q", string(stdoutBytes))
+	if len(stdoutBytes) == 0 {
+		t.Fatalf("expected warning output to stdout, got none")
 	}
 
-	if !strings.Contains(logBuffer.String(), "Foreign key column count does not match key property count for navigation property") {
-		t.Fatalf("expected warning to be logged, got %q", logBuffer.String())
+	stdoutOutput := string(stdoutBytes)
+	if !strings.Contains(stdoutOutput, "Foreign key column count") {
+		t.Fatalf("expected warning about foreign key mismatch in stdout, got %q", stdoutOutput)
 	}
 }

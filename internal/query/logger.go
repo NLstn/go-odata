@@ -17,15 +17,3 @@ func setLoggerInDB(db *gorm.DB, logger *slog.Logger) *gorm.DB {
 	}
 	return db.Set(loggerKey, logger)
 }
-
-func getLoggerFromDB(db *gorm.DB) *slog.Logger {
-	if db == nil {
-		return slog.Default()
-	}
-	if value, ok := db.Get(loggerKey); ok {
-		if logger, ok := value.(*slog.Logger); ok && logger != nil {
-			return logger
-		}
-	}
-	return slog.Default()
-}
