@@ -84,21 +84,21 @@ func (h *EntityHandler) handleGetEntity(w http.ResponseWriter, r *http.Request, 
 
 	queryOptions, err := h.parseSingleEntityQueryOptions(r)
 	if err != nil {
-		h.writeRequestError(w, err, http.StatusBadRequest, ErrMsgInvalidQueryOptions)
+		h.writeRequestError(w, r, err, http.StatusBadRequest, ErrMsgInvalidQueryOptions)
 		return
 	}
 
 	// Invoke BeforeReadEntity hooks to obtain scopes
 	scopes, hookErr := callBeforeReadEntity(h.metadata, r, queryOptions)
 	if hookErr != nil {
-		h.writeHookError(w, hookErr, http.StatusForbidden, "Authorization failed")
+		h.writeHookError(w, r, hookErr, http.StatusForbidden, "Authorization failed")
 		return
 	}
 
 	// Fetch the entity
 	result, err := h.fetchEntityByKey(ctx, entityKey, queryOptions, scopes)
 	if err != nil {
-		h.handleFetchError(w, err, entityKey)
+		h.handleFetchError(w, r, err, entityKey)
 		return
 	}
 
@@ -123,7 +123,7 @@ func (h *EntityHandler) handleGetEntity(w http.ResponseWriter, r *http.Request, 
 	// Invoke AfterReadEntity hooks to allow mutation or override
 	override, hasOverride, afterErr := callAfterReadEntity(h.metadata, r, queryOptions, result)
 	if afterErr != nil {
-		h.writeHookError(w, afterErr, http.StatusForbidden, "Authorization failed")
+		h.writeHookError(w, r, afterErr, http.StatusForbidden, "Authorization failed")
 		return
 	}
 	if hasOverride {
@@ -223,7 +223,7 @@ func (h *EntityHandler) HandleEntityRef(w http.ResponseWriter, r *http.Request, 
 	refQueryOptions := &query.QueryOptions{}
 	refScopes, hookErr := callBeforeReadEntity(h.metadata, r, refQueryOptions)
 	if hookErr != nil {
-		h.writeHookError(w, hookErr, http.StatusForbidden, "Authorization failed")
+		h.writeHookError(w, r, hookErr, http.StatusForbidden, "Authorization failed")
 		return
 	}
 
@@ -247,13 +247,13 @@ func (h *EntityHandler) HandleEntityRef(w http.ResponseWriter, r *http.Request, 
 				h.logger.Error("Error writing error response", "error", writeErr)
 			}
 		} else {
-			h.writeDatabaseError(w, err)
+			h.writeDatabaseError(w, r, err)
 		}
 		return
 	}
 
 	if _, _, afterErr := callAfterReadEntity(h.metadata, r, refQueryOptions, entity); afterErr != nil {
-		h.writeHookError(w, afterErr, http.StatusForbidden, "Authorization failed")
+		h.writeHookError(w, r, afterErr, http.StatusForbidden, "Authorization failed")
 		return
 	}
 
@@ -311,7 +311,7 @@ func (h *EntityHandler) HandleCollectionRef(w http.ResponseWriter, r *http.Reque
 	// Invoke BeforeReadCollection hooks to obtain scopes
 	scopes, hookErr := callBeforeReadCollection(h.metadata, r, queryOptions)
 	if hookErr != nil {
-		h.writeHookError(w, hookErr, http.StatusForbidden, "Authorization failed")
+		h.writeHookError(w, r, hookErr, http.StatusForbidden, "Authorization failed")
 		return
 	}
 
@@ -324,7 +324,7 @@ func (h *EntityHandler) HandleCollectionRef(w http.ResponseWriter, r *http.Reque
 	// Fetch the results
 	results, err := h.fetchResults(ctx, queryOptions, scopes)
 	if err != nil {
-		h.writeDatabaseError(w, err)
+		h.writeDatabaseError(w, r, err)
 		return
 	}
 
@@ -336,7 +336,7 @@ func (h *EntityHandler) HandleCollectionRef(w http.ResponseWriter, r *http.Reque
 	}
 
 	if override, hasOverride, afterErr := callAfterReadCollection(h.metadata, r, queryOptions, results); afterErr != nil {
-		h.writeHookError(w, afterErr, http.StatusForbidden, "Authorization failed")
+		h.writeHookError(w, r, afterErr, http.StatusForbidden, "Authorization failed")
 		return
 	} else if hasOverride {
 		results = override

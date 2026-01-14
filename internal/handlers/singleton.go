@@ -138,13 +138,13 @@ func (h *EntityHandler) handlePatchSingleton(w http.ResponseWriter, r *http.Requ
 
 	// Apply updates to the entity
 	if err := h.db.Model(entityInstance).Updates(updateData).Error; err != nil {
-		h.writeDatabaseError(w, err)
+		h.writeDatabaseError(w, r, err)
 		return
 	}
 
 	// Reload the entity to get the updated values
 	if err := h.db.First(entityInstance).Error; err != nil {
-		h.writeDatabaseError(w, err)
+		h.writeDatabaseError(w, r, err)
 		return
 	}
 
@@ -201,13 +201,13 @@ func (h *EntityHandler) handlePutSingleton(w http.ResponseWriter, r *http.Reques
 
 	// Update the entity in the database (replace all fields)
 	if err := h.db.Model(existingEntity).Select("*").Updates(newEntity).Error; err != nil {
-		h.writeDatabaseError(w, err)
+		h.writeDatabaseError(w, r, err)
 		return
 	}
 
 	// Reload the entity to get the updated values
 	if err := h.db.First(existingEntity).Error; err != nil {
-		h.writeDatabaseError(w, err)
+		h.writeDatabaseError(w, r, err)
 		return
 	}
 

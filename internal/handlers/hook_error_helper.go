@@ -39,7 +39,7 @@ func extractHookErrorDetails(err error, defaultStatus int, defaultCode string) (
 // uses that status code; otherwise falls back to the defaultStatus.
 //
 //nolint:unparam // defaultStatus is kept as parameter for potential future use with different defaults
-func (h *EntityHandler) writeHookError(w http.ResponseWriter, err error, defaultStatus int, defaultCode string) {
+func (h *EntityHandler) writeHookError(w http.ResponseWriter, r *http.Request, err error, defaultStatus int, defaultCode string) {
 	if err == nil {
 		return
 	}

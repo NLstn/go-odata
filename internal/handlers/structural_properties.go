@@ -31,7 +31,7 @@ func (h *EntityHandler) HandleStructuralProperty(w http.ResponseWriter, r *http.
 		}
 		h.handleOptionsStructuralProperty(w)
 	default:
-		h.writeMethodNotAllowedError(w, r.Method, "property access")
+		h.writeMethodNotAllowedError(w, r, r.Method, "property access")
 	}
 }
 
@@ -40,12 +40,12 @@ func (h *EntityHandler) handleGetStructuralProperty(w http.ResponseWriter, r *ht
 	// Find and validate the structural property
 	prop := h.findStructuralProperty(propertyName)
 	if prop == nil {
-		h.writePropertyNotFoundError(w, propertyName)
+		h.writePropertyNotFoundError(w, r, propertyName)
 		return
 	}
 
 	// Fetch property value
-	fieldValue, err := h.fetchPropertyValue(w, entityKey, prop)
+	fieldValue, err := h.fetchPropertyValue(w, r, entityKey, prop)
 	if err != nil {
 		return // Error already written
 	}
@@ -65,7 +65,7 @@ func (h *EntityHandler) handleOptionsStructuralProperty(w http.ResponseWriter) {
 }
 
 // fetchPropertyValue fetches a property value from an entity
-func (h *EntityHandler) fetchPropertyValue(w http.ResponseWriter, entityKey string, prop *metadata.PropertyMetadata) (reflect.Value, error) {
+func (h *EntityHandler) fetchPropertyValue(w http.ResponseWriter, r *http.Request, entityKey string, prop *metadata.PropertyMetadata) (reflect.Value, error) {
 	entity := reflect.New(h.metadata.EntityType).Interface()
 
 	var db *gorm.DB
@@ -89,7 +89,7 @@ func (h *EntityHandler) fetchPropertyValue(w http.ResponseWriter, entityKey stri
 	db = h.applyStructuralPropertySelect(db, prop)
 
 	if err := db.First(entity).Error; err != nil {
-		h.handlePropertyFetchError(w, err, entityKey)
+		h.handlePropertyFetchError(w, r, err, entityKey)
 		return reflect.Value{}, err
 	}
 
@@ -107,7 +107,7 @@ func (h *EntityHandler) fetchPropertyValue(w http.ResponseWriter, entityKey stri
 }
 
 // handlePropertyFetchError handles errors when fetching a property
-func (h *EntityHandler) handlePropertyFetchError(w http.ResponseWriter, err error, entityKey string) {
+func (h *EntityHandler) handlePropertyFetchError(w http.ResponseWriter, r *http.Request, err error, entityKey string) {
 	if err == gorm.ErrRecordNotFound {
 		var errorMessage string
 		if h.metadata.IsSingleton {
@@ -120,7 +120,7 @@ func (h *EntityHandler) handlePropertyFetchError(w http.ResponseWriter, err erro
 			h.logger.Error("Error writing error response", "error", writeErr)
 		}
 	} else {
-		h.writeDatabaseError(w, err)
+		h.writeDatabaseError(w, r, err)
 	}
 }
 

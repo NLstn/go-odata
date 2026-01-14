@@ -70,7 +70,7 @@ func (h *Handler) HandleActionOrFunction(w http.ResponseWriter, r *http.Request,
 	case http.MethodPost:
 		actionDef, params, invErr := resolveInvocation(r, name, "Action", h.actions, actions.ResolveActionOverload, isBound, entitySet)
 		if invErr != nil {
-			h.writeError(w, invErr)
+			h.writeError(w, r, invErr)
 			return
 		}
 
@@ -79,7 +79,7 @@ func (h *Handler) HandleActionOrFunction(w http.ResponseWriter, r *http.Request,
 			var ctxErr *invocationError
 			ctx, ctxErr = h.loadBoundContext(entitySet, key)
 			if ctxErr != nil {
-				h.writeError(w, ctxErr)
+				h.writeError(w, r, ctxErr)
 				return
 			}
 		}
@@ -93,7 +93,7 @@ func (h *Handler) HandleActionOrFunction(w http.ResponseWriter, r *http.Request,
 	case http.MethodGet:
 		functionDef, params, invErr := resolveInvocation(r, name, "Function", h.functions, actions.ResolveFunctionOverload, isBound, entitySet)
 		if invErr != nil {
-			h.writeError(w, invErr)
+			h.writeError(w, r, invErr)
 			return
 		}
 
@@ -102,7 +102,7 @@ func (h *Handler) HandleActionOrFunction(w http.ResponseWriter, r *http.Request,
 			var ctxErr *invocationError
 			ctx, ctxErr = h.loadBoundContext(entitySet, key)
 			if ctxErr != nil {
-				h.writeError(w, ctxErr)
+				h.writeError(w, r, ctxErr)
 				return
 			}
 		}
@@ -164,7 +164,7 @@ func (h *Handler) HandleActionOrFunction(w http.ResponseWriter, r *http.Request,
 	}
 }
 
-func (h *Handler) writeError(w http.ResponseWriter, invErr *invocationError) {
+func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, invErr *invocationError) {
 	if invErr == nil {
 		return
 	}

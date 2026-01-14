@@ -64,7 +64,7 @@ func (h *EntityHandler) handleGetCollectionOverwrite(w http.ResponseWriter, r *h
 	// Parse and validate query options
 	queryOptions, err := query.ParseQueryOptions(r.URL.Query(), h.metadata)
 	if err != nil {
-		h.writeInvalidQueryError(w, err)
+		h.writeInvalidQueryError(w, r, err)
 		return
 	}
 
@@ -107,7 +107,7 @@ func (h *EntityHandler) handleGetCollectionOverwrite(w http.ResponseWriter, r *h
 	// Call the overwrite handler
 	result, err := h.overwrite.getCollection(ctx)
 	if err != nil {
-		h.writeHookError(w, err, http.StatusInternalServerError, "Error fetching collection")
+		h.writeHookError(w, r, err, http.StatusInternalServerError, "Error fetching collection")
 		return
 	}
 
