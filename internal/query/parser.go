@@ -117,14 +117,14 @@ type ComputeExpression struct {
 
 // FilterExpression represents a parsed filter expression
 type FilterExpression struct {
-	Property         string
-	Operator         FilterOperator
-	Value            interface{}
-	Left             *FilterExpression
-	Right            *FilterExpression
-	Logical          LogicalOperator
-	IsNot            bool // Indicates if this is a NOT expression
-	maxInClauseSize  int  // Maximum allowed size for IN clauses (internal use only)
+	Property        string
+	Operator        FilterOperator
+	Value           interface{}
+	Left            *FilterExpression
+	Right           *FilterExpression
+	Logical         LogicalOperator
+	IsNot           bool // Indicates if this is a NOT expression
+	maxInClauseSize int  // Maximum allowed size for IN clauses (internal use only)
 }
 
 // FilterOperator represents filter comparison operators

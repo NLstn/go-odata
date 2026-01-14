@@ -282,7 +282,7 @@ func (h *EntityHandler) createNavBeforeRead(r *http.Request, targetMetadata *met
 // createNavCountFunc creates the CountFunc callback for navigation collections
 func (h *EntityHandler) createNavCountFunc(relatedDB *gorm.DB, targetMetadata *metadata.EntityMetadata) func(*query.QueryOptions, []func(*gorm.DB) *gorm.DB) (*int64, error) {
 	return func(queryOptions *query.QueryOptions, scopes []func(*gorm.DB) *gorm.DB) (*int64, error) {
-		if !queryOptions.Count {
+		if queryOptions == nil || !queryOptions.Count {
 			return nil, nil
 		}
 
@@ -291,14 +291,48 @@ func (h *EntityHandler) createNavCountFunc(relatedDB *gorm.DB, targetMetadata *m
 			countDB = countDB.Scopes(scopes...)
 		}
 
-		if queryOptions.Filter != nil {
-			countDB = query.ApplyFilterOnly(countDB, queryOptions.Filter, targetMetadata)
+		filter := queryOptions.Filter
+		search := queryOptions.Search
+
+		if search != "" && h.ftsManager != nil {
+			countOptions := &query.QueryOptions{Filter: filter, Search: search}
+			countDB = query.ApplyQueryOptionsWithFTS(countDB, countOptions, targetMetadata, h.ftsManager, targetMetadata.TableName)
+			if searchAppliedAtDB(countDB) {
+				var count int64
+				if err := countDB.Count(&count).Error; err != nil {
+					return nil, err
+				}
+
+				return &count, nil
+			}
 		}
 
-		var count int64
-		if err := countDB.Count(&count).Error; err != nil {
+		if filter != nil {
+			countDB = query.ApplyFilterOnly(countDB, filter, targetMetadata)
+		}
+
+		if search == "" {
+			var count int64
+			if err := countDB.Count(&count).Error; err != nil {
+				return nil, err
+			}
+
+			return &count, nil
+		}
+
+		selectColumns := searchableCountColumns(targetMetadata)
+		if len(selectColumns) > 0 {
+			countDB = countDB.Select(selectColumns)
+		}
+
+		results := reflect.New(reflect.SliceOf(targetMetadata.EntityType)).Interface()
+		if err := countDB.Find(results).Error; err != nil {
 			return nil, err
 		}
+
+		sliceValue := reflect.ValueOf(results).Elem().Interface()
+		filtered := query.ApplySearch(sliceValue, search, targetMetadata)
+		count := int64(reflect.ValueOf(filtered).Len())
 
 		return &count, nil
 	}
