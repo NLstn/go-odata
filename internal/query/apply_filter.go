@@ -2,7 +2,6 @@ package query
 
 import (
 	"fmt"
-	"log/slog"
 	"strings"
 
 	"github.com/nlstn/go-odata/internal/metadata"
@@ -107,14 +106,13 @@ func applyFilter(db *gorm.DB, filter *FilterExpression, entityMetadata *metadata
 	db = addNavigationJoins(db, filter, entityMetadata)
 
 	dialect := getDatabaseDialect(db)
-	logger := getLoggerFromDB(db)
 
 	if filter.Logical != "" {
-		query, args := buildFilterConditionWithDBAndLogger(db, dialect, filter, entityMetadata, logger)
+		query, args := buildFilterConditionWithDB(db, dialect, filter, entityMetadata)
 		return db.Where(query, args...)
 	}
 
-	query, args := buildFilterConditionWithDBAndLogger(db, dialect, filter, entityMetadata, logger)
+	query, args := buildFilterConditionWithDB(db, dialect, filter, entityMetadata)
 	return db.Where(query, args...)
 }
 
@@ -241,9 +239,8 @@ func applyHavingFilter(db *gorm.DB, filter *FilterExpression, entityMetadata *me
 	}
 
 	dialect := getDatabaseDialect(db)
-	logger := getLoggerFromDB(db)
 
-	query, args := buildFilterConditionWithDBAndLogger(db, dialect, filter, entityMetadata, logger)
+	query, args := buildFilterConditionWithDB(db, dialect, filter, entityMetadata)
 	return db.Having(query, args...)
 }
 
@@ -254,23 +251,19 @@ func applyHavingFilter(db *gorm.DB, filter *FilterExpression, entityMetadata *me
 //
 //nolint:unparam // dialect varies in production based on database, tests use sqlite
 func buildFilterCondition(dialect string, filter *FilterExpression, entityMetadata *metadata.EntityMetadata) (string, []interface{}) {
-	return buildFilterConditionWithDBAndLogger(nil, dialect, filter, entityMetadata, nil)
+	return buildFilterConditionWithDB(nil, dialect, filter, entityMetadata)
 }
 
 func buildFilterConditionWithDB(db *gorm.DB, dialect string, filter *FilterExpression, entityMetadata *metadata.EntityMetadata) (string, []interface{}) {
-	return buildFilterConditionWithDBAndLogger(db, dialect, filter, entityMetadata, nil)
-}
-
-func buildFilterConditionWithDBAndLogger(db *gorm.DB, dialect string, filter *FilterExpression, entityMetadata *metadata.EntityMetadata, logger *slog.Logger) (string, []interface{}) {
 	if filter == nil {
 		return "", nil
 	}
 
 	if filter.Logical != "" {
-		return buildLogicalConditionWithDBAndLogger(db, dialect, filter, entityMetadata, logger)
+		return buildLogicalConditionWithDB(db, dialect, filter, entityMetadata)
 	}
 
-	query, args := buildComparisonConditionWithDBAndLogger(db, dialect, filter, entityMetadata, logger)
+	query, args := buildComparisonConditionWithDB(db, dialect, filter, entityMetadata)
 
 	if filter.IsNot {
 		return fmt.Sprintf("NOT (%s)", query), args
@@ -279,9 +272,9 @@ func buildFilterConditionWithDBAndLogger(db *gorm.DB, dialect string, filter *Fi
 	return query, args
 }
 
-func buildLogicalConditionWithDBAndLogger(db *gorm.DB, dialect string, filter *FilterExpression, entityMetadata *metadata.EntityMetadata, logger *slog.Logger) (string, []interface{}) {
-	leftQuery, leftArgs := buildFilterConditionWithDBAndLogger(db, dialect, filter.Left, entityMetadata, logger)
-	rightQuery, rightArgs := buildFilterConditionWithDBAndLogger(db, dialect, filter.Right, entityMetadata, logger)
+func buildLogicalConditionWithDB(db *gorm.DB, dialect string, filter *FilterExpression, entityMetadata *metadata.EntityMetadata) (string, []interface{}) {
+	leftQuery, leftArgs := buildFilterConditionWithDB(db, dialect, filter.Left, entityMetadata)
+	rightQuery, rightArgs := buildFilterConditionWithDB(db, dialect, filter.Right, entityMetadata)
 
 	var query string
 	switch filter.Logical {
@@ -399,11 +392,8 @@ func tryBuildRightSideFunctionComparison(dialect string, leftColumn string, oper
 
 // buildStandardComparison builds the SQL for a standard comparison operation.
 // This handles all comparison operators like =, !=, >, <, IN, LIKE, etc.
-//
-//nolint:unparam // maxInClauseSize is enforced during parsing; keep signature for future extensibility.
-func buildStandardComparison(dialect string, operator FilterOperator, columnName string, value interface{}, entityMetadata *metadata.EntityMetadata, maxInClauseSize int) (string, []interface{}) {
-	_ = maxInClauseSize
-
+// Note: IN clause size validation is enforced during AST parsing, not here.
+func buildStandardComparison(dialect string, operator FilterOperator, columnName string, value interface{}, entityMetadata *metadata.EntityMetadata) (string, []interface{}) {
 	// Check if this is a property-to-property comparison
 	// (e.g., "Price gt Cost" should generate "price > cost", not "price > 'Cost'")
 	if valueStr, ok := value.(string); ok && propertyExists(valueStr, entityMetadata) {
@@ -518,13 +508,13 @@ func buildStandardComparison(dialect string, operator FilterOperator, columnName
 
 // buildComparisonCondition builds a comparison condition
 func buildComparisonCondition(dialect string, filter *FilterExpression, entityMetadata *metadata.EntityMetadata) (string, []interface{}) {
-	return buildComparisonConditionWithDBAndLogger(nil, dialect, filter, entityMetadata, nil)
+	return buildComparisonConditionWithDB(nil, dialect, filter, entityMetadata)
 }
 
-func buildComparisonConditionWithDBAndLogger(db *gorm.DB, dialect string, filter *FilterExpression, entityMetadata *metadata.EntityMetadata, logger *slog.Logger) (string, []interface{}) {
+func buildComparisonConditionWithDB(db *gorm.DB, dialect string, filter *FilterExpression, entityMetadata *metadata.EntityMetadata) (string, []interface{}) {
 	// Handle lambda operators (any, all)
 	if filter.Operator == OpAny || filter.Operator == OpAll {
-		return buildLambdaCondition(dialect, filter, entityMetadata, logger)
+		return buildLambdaCondition(dialect, filter, entityMetadata)
 	}
 
 	// Handle function comparisons (e.g., tolower(Name) eq 'john')
@@ -544,7 +534,7 @@ func buildComparisonConditionWithDBAndLogger(db *gorm.DB, dialect string, filter
 	}
 
 	// Build a standard comparison
-	sql, args := buildStandardComparison(dialect, filter.Operator, columnName, filter.Value, entityMetadata, filter.maxInClauseSize)
+	sql, args := buildStandardComparison(dialect, filter.Operator, columnName, filter.Value, entityMetadata)
 
 	return sql, args
 }
@@ -572,7 +562,7 @@ func buildEntityTypeFilter(dialect string, typeName string, entityMetadata *meta
 }
 
 // buildLambdaCondition builds SQL for lambda operators (any/all) using EXISTS subquery
-func buildLambdaCondition(dialect string, filter *FilterExpression, entityMetadata *metadata.EntityMetadata, logger *slog.Logger) (string, []interface{}) {
+func buildLambdaCondition(dialect string, filter *FilterExpression, entityMetadata *metadata.EntityMetadata) (string, []interface{}) {
 	navProp := findNavigationProperty(filter.Property, entityMetadata)
 	if navProp == nil {
 		return "", nil
@@ -613,21 +603,18 @@ func buildLambdaCondition(dialect string, filter *FilterExpression, entityMetada
 
 		// Validate that foreign key column count matches key property count
 		if len(foreignKeyColumns) != len(entityMetadata.KeyProperties) {
-			keyPropertyNames := make([]string, len(entityMetadata.KeyProperties))
-			for i, kp := range entityMetadata.KeyProperties {
-				keyPropertyNames[i] = kp.Name
-			}
-			if logger == nil {
-				logger = slog.Default()
-			}
-			logger.Warn(
-				"Foreign key column count does not match key property count for navigation property",
-				"navigationProperty", navProp.Name,
-				"foreignKeyColumnCount", len(foreignKeyColumns),
-				"keyPropertyCount", len(entityMetadata.KeyProperties),
-				"foreignKeyColumns", foreignKeyColumns,
-				"keyProperties", keyPropertyNames,
-			)
+			// Log warning about potential GORM tag configuration error
+			// This may indicate that the foreignKey tag is incomplete or incorrect
+			fmt.Printf("Warning: Foreign key column count (%d) does not match key property count (%d) for navigation property '%s'. "+
+				"This may indicate a GORM tag configuration error. Foreign keys: %v, Key properties: %v\n",
+				len(foreignKeyColumns), len(entityMetadata.KeyProperties), navProp.Name,
+				foreignKeyColumns, func() []string {
+					names := make([]string, len(entityMetadata.KeyProperties))
+					for i, kp := range entityMetadata.KeyProperties {
+						names[i] = kp.Name
+					}
+					return names
+				}())
 		}
 
 		// Quote table names once outside the loop
@@ -639,12 +626,11 @@ func buildLambdaCondition(dialect string, filter *FilterExpression, entityMetada
 			var fkColumn string
 			if i < len(foreignKeyColumns) {
 				fkColumn = strings.TrimSpace(foreignKeyColumns[i])
-			} else if navTargetMetadata != nil {
-				// Fallback: use metadata to resolve the foreign key column name
-				fkColumn = GetColumnName(keyProp.Name, navTargetMetadata)
 			} else {
-				// Last-resort fallback when target metadata is unavailable
-				fkColumn = GetColumnName(keyProp.Name, entityMetadata)
+				// Fallback: For composite keys, GORM foreignKey tag must specify all columns.
+				// Use naming convention <NavProp>_<ParentKey> as last resort.
+				// Example: for navigation "Items" with parent key "OrderID", use "Items_OrderID"
+				fkColumn = toSnakeCase(navProp.Name + "_" + keyProp.Name)
 			}
 
 			quotedForeignKey := quoteIdent(dialect, fkColumn)
