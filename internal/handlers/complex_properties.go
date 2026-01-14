@@ -17,7 +17,7 @@ import (
 // propertySegments represents the navigation path segments without $value/$ref/$count (e.g., ["ShippingAddress", "City"]).
 func (h *EntityHandler) HandleComplexTypeProperty(w http.ResponseWriter, r *http.Request, entityKey string, propertySegments []string, isValue bool) {
 	if len(propertySegments) == 0 {
-		h.writePropertyNotFoundError(w, "")
+		h.writePropertyNotFoundError(w, r, "")
 		return
 	}
 
@@ -38,7 +38,7 @@ func (h *EntityHandler) HandleComplexTypeProperty(w http.ResponseWriter, r *http
 		}
 		h.handleOptionsComplexTypeProperty(w)
 	default:
-		h.writeMethodNotAllowedError(w, r.Method, "complex property access")
+		h.writeMethodNotAllowedError(w, r, r.Method, "complex property access")
 	}
 }
 
@@ -47,7 +47,7 @@ func (h *EntityHandler) handleGetComplexTypeProperty(w http.ResponseWriter, r *h
 	rootName := propertySegments[0]
 	complexProp := h.findComplexTypeProperty(rootName)
 	if complexProp == nil {
-		h.writePropertyNotFoundError(w, rootName)
+		h.writePropertyNotFoundError(w, r, rootName)
 		return
 	}
 
@@ -86,7 +86,7 @@ func (h *EntityHandler) handleGetComplexTypeProperty(w http.ResponseWriter, r *h
 		}
 
 		if !ok {
-			h.writePropertyNotFoundError(w, segment)
+			h.writePropertyNotFoundError(w, r, segment)
 			return
 		}
 
@@ -137,7 +137,7 @@ func (h *EntityHandler) fetchComplexPropertyValue(w http.ResponseWriter, r *http
 	}
 
 	if err := db.First(entity).Error; err != nil {
-		h.handlePropertyFetchError(w, err, entityKey)
+		h.handlePropertyFetchError(w, r, err, entityKey)
 		return reflect.Value{}, err
 	}
 

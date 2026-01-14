@@ -110,7 +110,7 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 		}
 
 		if err := h.callBeforeCreate(entity, hookReq); err != nil {
-			h.writeHookError(w, err, http.StatusForbidden, "Authorization failed")
+			h.writeHookError(w, r, err, http.StatusForbidden, "Authorization failed")
 			return newTransactionHandledError(err)
 		}
 
@@ -135,7 +135,7 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 		if isTransactionHandled(err) {
 			return
 		}
-		h.writeDatabaseError(w, err)
+		h.writeDatabaseError(w, r, err)
 		return
 	}
 
@@ -226,7 +226,7 @@ func (h *EntityHandler) handlePostMediaEntity(w http.ResponseWriter, r *http.Req
 		if isTransactionHandled(err) {
 			return
 		}
-		h.writeDatabaseError(w, err)
+		h.writeDatabaseError(w, r, err)
 		return
 	}
 

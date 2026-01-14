@@ -728,7 +728,7 @@ func TestValidatePropertiesExistForUpdate_AutoFields(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			w := httptest.NewRecorder()
-			err := handler.validatePropertiesExistForUpdate(tt.updateData, w)
+			err := handler.validatePropertiesExistForUpdate(tt.updateData, w, httptest.NewRequest(http.MethodPost, "/", nil))
 			if (err != nil) != tt.wantErr {
 				t.Errorf("validatePropertiesExistForUpdate() error = %v, wantErr %v", err, tt.wantErr)
 			}

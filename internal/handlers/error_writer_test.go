@@ -23,9 +23,10 @@ func (f *failingWriter) Write([]byte) (int, error) {
 func (f *failingWriter) WriteHeader(statusCode int) {}
 
 func TestWriteErrorSuccess(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	recorder := httptest.NewRecorder()
 
-	WriteError(recorder, http.StatusBadRequest, "TestCode", "test detail")
+	WriteError(recorder, req, http.StatusBadRequest, "TestCode", "test detail")
 
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, recorder.Code)
@@ -65,6 +66,7 @@ func TestWriteErrorSuccess(t *testing.T) {
 }
 
 func TestWriteErrorLogsOnFailure(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	fw := &failingWriter{header: make(http.Header)}
 
 	// The WriteError function should not panic even if writing fails
@@ -77,7 +79,7 @@ func TestWriteErrorLogsOnFailure(t *testing.T) {
 		}
 	}()
 
-	WriteError(fw, http.StatusInternalServerError, "TestCode", "test detail")
+	WriteError(fw, req, http.StatusInternalServerError, "TestCode", "test detail")
 
 	// If we got here without panicking, the test passes
 	// The error is logged via slog which we've verified works in other contexts

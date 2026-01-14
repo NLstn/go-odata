@@ -11,6 +11,9 @@ import (
 
 func TestWriteError_BasicError(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	// Set default version in context
+	ctx := version.WithVersion(req.Context(), version.Version{Major: 4, Minor: 1})
+	req = req.WithContext(ctx)
 	w := httptest.NewRecorder()
 
 	err := WriteError(w, req, http.StatusBadRequest, "Bad Request", "Invalid input")
@@ -30,10 +33,9 @@ func TestWriteError_BasicError(t *testing.T) {
 	}
 
 	// Verify OData-Version header
-	//nolint:staticcheck // SA1008: intentionally using non-canonical header key per OData spec
-	odataVersion := w.Header()["OData-Version"]
-	if len(odataVersion) == 0 || odataVersion[0] != "4.01" {
-		t.Errorf("OData-Version = %v, want [4.01]", odataVersion)
+	odataVersion := w.Header().Get("OData-Version")
+	if odataVersion != "4.01" {
+		t.Errorf("OData-Version = %v, want 4.01", odataVersion)
 	}
 
 	// Parse response

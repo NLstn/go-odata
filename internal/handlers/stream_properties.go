@@ -40,7 +40,7 @@ func (h *EntityHandler) HandleStreamProperty(w http.ResponseWriter, r *http.Requ
 		}
 		h.handleOptionsStreamProperty(w, isValue)
 	default:
-		h.writeMethodNotAllowedError(w, r.Method, "stream property access")
+		h.writeMethodNotAllowedError(w, r, r.Method, "stream property access")
 	}
 }
 
@@ -49,7 +49,7 @@ func (h *EntityHandler) handleGetStreamProperty(w http.ResponseWriter, r *http.R
 	// Find and validate the stream property
 	prop := h.findStreamProperty(propertyName)
 	if prop == nil {
-		h.writePropertyNotFoundError(w, propertyName)
+		h.writePropertyNotFoundError(w, r, propertyName)
 		return
 	}
 
@@ -67,7 +67,7 @@ func (h *EntityHandler) handleGetStreamProperty(w http.ResponseWriter, r *http.R
 	db = h.applyStreamPropertySelect(db, prop)
 
 	if err := db.First(entity).Error; err != nil {
-		h.handlePropertyFetchError(w, err, entityKey)
+		h.handlePropertyFetchError(w, r, err, entityKey)
 		return
 	}
 
@@ -147,7 +147,7 @@ func (h *EntityHandler) handlePutStreamProperty(w http.ResponseWriter, r *http.R
 	// Find and validate the stream property
 	prop := h.findStreamProperty(propertyName)
 	if prop == nil {
-		h.writePropertyNotFoundError(w, propertyName)
+		h.writePropertyNotFoundError(w, r, propertyName)
 		return
 	}
 
@@ -184,7 +184,7 @@ func (h *EntityHandler) handlePutStreamProperty(w http.ResponseWriter, r *http.R
 	db = h.applyStreamPropertySelect(db, prop)
 
 	if err := db.First(entity).Error; err != nil {
-		h.handlePropertyFetchError(w, err, entityKey)
+		h.handlePropertyFetchError(w, r, err, entityKey)
 		return
 	}
 

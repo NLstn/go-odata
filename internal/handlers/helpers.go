@@ -153,7 +153,7 @@ func parseCompositeKey(keyPart string, components *response.ODataURLComponents) 
 }
 
 // handleFetchError writes appropriate error responses based on the fetch error type
-func (h *EntityHandler) handleFetchError(w http.ResponseWriter, err error, entityKey string) {
+func (h *EntityHandler) handleFetchError(w http.ResponseWriter, r *http.Request, err error, entityKey string) {
 	if err == gorm.ErrRecordNotFound {
 		target := fmt.Sprintf(ODataEntityKeyFormat, h.metadata.EntitySetName, entityKey)
 		if writeErr := response.WriteErrorWithTarget(w, r, http.StatusNotFound, ErrMsgEntityNotFound,

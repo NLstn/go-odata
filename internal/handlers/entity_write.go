@@ -56,7 +56,7 @@ func (h *EntityHandler) handleDeleteEntity(w http.ResponseWriter, r *http.Reques
 	)
 
 	if err := h.runInTransaction(ctx, r, func(tx *gorm.DB, hookReq *http.Request) error {
-		fetched, err := h.fetchAndVerifyEntity(tx, entityKey, w)
+		fetched, err := h.fetchAndVerifyEntity(tx, entityKey, w, r)
 		if err != nil {
 			return newTransactionHandledError(err)
 		}
@@ -80,12 +80,12 @@ func (h *EntityHandler) handleDeleteEntity(w http.ResponseWriter, r *http.Reques
 		}
 
 		if err := h.callBeforeDelete(entity, hookReq); err != nil {
-			h.writeHookError(w, err, http.StatusForbidden, "Authorization failed")
+			h.writeHookError(w, r, err, http.StatusForbidden, "Authorization failed")
 			return newTransactionHandledError(err)
 		}
 
 		if err := tx.Delete(entity).Error; err != nil {
-			h.writeDatabaseError(w, err)
+			h.writeDatabaseError(w, r, err)
 			return newTransactionHandledError(err)
 		}
 
@@ -99,7 +99,7 @@ func (h *EntityHandler) handleDeleteEntity(w http.ResponseWriter, r *http.Reques
 		if isTransactionHandled(err) {
 			return
 		}
-		h.writeDatabaseError(w, err)
+		h.writeDatabaseError(w, r, err)
 		return
 	}
 
@@ -160,7 +160,7 @@ func (h *EntityHandler) handlePatchEntity(w http.ResponseWriter, r *http.Request
 		}
 
 		if err := db.First(entity).Error; err != nil {
-			h.handleFetchError(w, err, entityKey)
+			h.handleFetchError(w, r, err, entityKey)
 			return newTransactionHandledError(err)
 		}
 
@@ -186,11 +186,11 @@ func (h *EntityHandler) handlePatchEntity(w http.ResponseWriter, r *http.Request
 			return newTransactionHandledError(err)
 		}
 
-		if err := h.validateKeyPropertiesNotUpdated(updateData, w); err != nil {
+		if err := h.validateKeyPropertiesNotUpdated(updateData, w, r); err != nil {
 			return newTransactionHandledError(err)
 		}
 
-		if err := h.validatePropertiesExistForUpdate(updateData, w); err != nil {
+		if err := h.validatePropertiesExistForUpdate(updateData, w, r); err != nil {
 			return newTransactionHandledError(err)
 		}
 
@@ -219,12 +219,12 @@ func (h *EntityHandler) handlePatchEntity(w http.ResponseWriter, r *http.Request
 		}
 
 		if err := h.callBeforeUpdate(entity, hookReq); err != nil {
-			h.writeHookError(w, err, http.StatusForbidden, "Authorization failed")
+			h.writeHookError(w, r, err, http.StatusForbidden, "Authorization failed")
 			return newTransactionHandledError(err)
 		}
 
 		if err := tx.Model(entity).Updates(updateData).Error; err != nil {
-			h.writeDatabaseError(w, err)
+			h.writeDatabaseError(w, r, err)
 			return newTransactionHandledError(err)
 		}
 
@@ -250,7 +250,7 @@ func (h *EntityHandler) handlePatchEntity(w http.ResponseWriter, r *http.Request
 		if isTransactionHandled(err) {
 			return
 		}
-		h.writeDatabaseError(w, err)
+		h.writeDatabaseError(w, r, err)
 		return
 	}
 
@@ -258,7 +258,7 @@ func (h *EntityHandler) handlePatchEntity(w http.ResponseWriter, r *http.Request
 
 	db, err := h.buildKeyQuery(h.db.WithContext(ctx), entityKey)
 	if err != nil {
-		h.writeDatabaseError(w, err)
+		h.writeDatabaseError(w, r, err)
 		return
 	}
 
@@ -293,7 +293,7 @@ func (h *EntityHandler) writeUpdateResponse(w http.ResponseWriter, r *http.Reque
 func (h *EntityHandler) returnUpdatedEntity(w http.ResponseWriter, r *http.Request, db *gorm.DB) {
 	updatedEntity := reflect.New(h.metadata.EntityType).Interface()
 	if err := db.First(updatedEntity).Error; err != nil {
-		h.writeDatabaseError(w, err)
+		h.writeDatabaseError(w, r, err)
 		return
 	}
 
@@ -340,7 +340,7 @@ func (h *EntityHandler) handlePutEntity(w http.ResponseWriter, r *http.Request, 
 		}
 
 		if err := db.First(entity).Error; err != nil {
-			h.handleFetchError(w, err, entityKey)
+			h.handleFetchError(w, r, err, entityKey)
 			return newTransactionHandledError(err)
 		}
 
@@ -381,12 +381,12 @@ func (h *EntityHandler) handlePutEntity(w http.ResponseWriter, r *http.Request, 
 		h.preserveTimestampFields(entity, replacementEntity)
 
 		if err := h.callBeforeUpdate(entity, hookReq); err != nil {
-			h.writeHookError(w, err, http.StatusForbidden, "Authorization failed")
+			h.writeHookError(w, r, err, http.StatusForbidden, "Authorization failed")
 			return newTransactionHandledError(err)
 		}
 
 		if err := tx.Model(entity).Select("*").Updates(replacementEntity).Error; err != nil {
-			h.writeDatabaseError(w, err)
+			h.writeDatabaseError(w, r, err)
 			return newTransactionHandledError(err)
 		}
 
@@ -405,7 +405,7 @@ func (h *EntityHandler) handlePutEntity(w http.ResponseWriter, r *http.Request, 
 		if isTransactionHandled(err) {
 			return
 		}
-		h.writeDatabaseError(w, err)
+		h.writeDatabaseError(w, r, err)
 		return
 	}
 
@@ -413,7 +413,7 @@ func (h *EntityHandler) handlePutEntity(w http.ResponseWriter, r *http.Request, 
 
 	db, err := h.buildKeyQuery(h.db.WithContext(ctx), entityKey)
 	if err != nil {
-		h.writeDatabaseError(w, err)
+		h.writeDatabaseError(w, r, err)
 		return
 	}
 
@@ -515,7 +515,7 @@ func (h *EntityHandler) parsePatchRequestBody(r *http.Request, w http.ResponseWr
 }
 
 // validateKeyPropertiesNotUpdated validates that key properties are not being updated
-func (h *EntityHandler) validateKeyPropertiesNotUpdated(updateData map[string]interface{}, w http.ResponseWriter) error {
+func (h *EntityHandler) validateKeyPropertiesNotUpdated(updateData map[string]interface{}, w http.ResponseWriter, r *http.Request) error {
 	for _, keyProp := range h.metadata.KeyProperties {
 		if _, exists := updateData[keyProp.JsonName]; exists {
 			err := fmt.Errorf("key property '%s' cannot be modified", keyProp.JsonName)
@@ -538,7 +538,7 @@ func (h *EntityHandler) validateKeyPropertiesNotUpdated(updateData map[string]in
 
 // validatePropertiesExistForUpdate validates that all properties in updateData are valid entity properties
 // This version allows @odata.bind annotations for navigation properties
-func (h *EntityHandler) validatePropertiesExistForUpdate(updateData map[string]interface{}, w http.ResponseWriter) error {
+func (h *EntityHandler) validatePropertiesExistForUpdate(updateData map[string]interface{}, w http.ResponseWriter, r *http.Request) error {
 	// Build a map of valid property names (both JSON names and struct field names)
 	validProperties := make(map[string]bool)
 	autoProperties := make(map[string]bool)

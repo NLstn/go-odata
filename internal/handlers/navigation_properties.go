@@ -138,7 +138,7 @@ func (h *EntityHandler) handleGetNavigationProperty(w http.ResponseWriter, r *ht
 	// Fetch the parent entity with the navigation property preloaded
 	parent, err := h.fetchParentEntityWithNav(entityKey, navProp.Name)
 	if err != nil {
-		h.handleFetchError(w, err, entityKey)
+		h.handleFetchError(w, r, err, entityKey)
 		return
 	}
 
@@ -204,7 +204,7 @@ func (h *EntityHandler) verifyAndFetchParentEntity(w http.ResponseWriter, r *htt
 	parentOptions := &query.QueryOptions{}
 	parentScopes, parentHookErr := callBeforeReadEntity(h.metadata, r, parentOptions)
 	if parentHookErr != nil {
-		h.writeHookError(w, parentHookErr, http.StatusForbidden, "Authorization failed")
+		h.writeHookError(w, r, parentHookErr, http.StatusForbidden, "Authorization failed")
 		return nil, parentHookErr
 	}
 
@@ -218,12 +218,12 @@ func (h *EntityHandler) verifyAndFetchParentEntity(w http.ResponseWriter, r *htt
 		db = db.Scopes(parentScopes...)
 	}
 	if err := db.First(parent).Error; err != nil {
-		h.handleFetchError(w, err, entityKey)
+		h.handleFetchError(w, r, err, entityKey)
 		return nil, err
 	}
 
 	if _, _, parentAfterErr := callAfterReadEntity(h.metadata, r, parentOptions, parent); parentAfterErr != nil {
-		h.writeHookError(w, parentAfterErr, http.StatusForbidden, "Authorization failed")
+		h.writeHookError(w, r, parentAfterErr, http.StatusForbidden, "Authorization failed")
 		return nil, parentAfterErr
 	}
 
@@ -413,7 +413,7 @@ func (h *EntityHandler) handleNavigationCollectionItem(w http.ResponseWriter, r 
 	// Preload the navigation property to verify the relationship
 	parentDB = parentDB.Preload(navProp.Name)
 	if err := parentDB.First(parent).Error; err != nil {
-		h.handleFetchError(w, err, entityKey)
+		h.handleFetchError(w, r, err, entityKey)
 		return
 	}
 
@@ -548,7 +548,7 @@ func (h *EntityHandler) handleGetNavigationPropertyCount(w http.ResponseWriter, 
 	// Fetch the parent entity with the navigation property preloaded
 	parent, err := h.fetchParentEntityWithNav(entityKey, navProp.Name)
 	if err != nil {
-		h.handleFetchError(w, err, entityKey)
+		h.handleFetchError(w, r, err, entityKey)
 		return
 	}
 
