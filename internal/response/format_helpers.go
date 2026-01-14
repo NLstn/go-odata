@@ -241,7 +241,7 @@ func buildBaseURL(r *http.Request) string {
 		host = "localhost:8080"
 	}
 
-	pathPrefix := getBasePath()
+	pathPrefix := getBasePath(r)
 
 	// Use strings.Builder to avoid string concatenation allocations
 	var b strings.Builder

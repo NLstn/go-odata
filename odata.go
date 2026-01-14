@@ -62,7 +62,6 @@ import (
 	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/observability"
 	"github.com/nlstn/go-odata/internal/query"
-	"github.com/nlstn/go-odata/internal/response"
 	"github.com/nlstn/go-odata/internal/service/operations"
 	servrouter "github.com/nlstn/go-odata/internal/service/router"
 	servruntime "github.com/nlstn/go-odata/internal/service/runtime"
@@ -386,7 +385,8 @@ type Service struct {
 	// maxExpandDepth limits the depth of nested $expand operations
 	maxExpandDepth int
 	// basePath is the configured base path for mounting the service at a custom path
-	basePath string
+	basePath   string
+	basePathMu sync.RWMutex
 }
 
 // NewService creates a new OData service instance with database connection.
@@ -1531,6 +1531,10 @@ func (s *Service) SetNamespace(namespace string) error {
 // When set, the service will automatically strip this prefix from incoming requests
 // and include it in all generated response URLs.
 //
+// Each service instance maintains its own independent base path, allowing
+// multiple services with different mount points to run in the same process.
+// Thread-safe for concurrent access during request handling.
+//
 // The base path must:
 //   - Start with "/" (e.g., "/odata")
 //   - NOT end with "/" (e.g., NOT "/odata/")
@@ -1555,8 +1559,9 @@ func (s *Service) SetBasePath(basePath string) error {
 
 	// Empty string is valid (root mounting)
 	if trimmed == "" {
+		s.basePathMu.Lock()
 		s.basePath = ""
-		response.SetBasePath("")
+		s.basePathMu.Unlock()
 		return nil
 	}
 
@@ -1575,8 +1580,9 @@ func (s *Service) SetBasePath(basePath string) error {
 		return fmt.Errorf("base path cannot contain '..': got %q", trimmed)
 	}
 
+	s.basePathMu.Lock()
 	s.basePath = trimmed
-	response.SetBasePath(trimmed)
+	s.basePathMu.Unlock()
 
 	s.logger.Debug("Base path configured", "base_path", trimmed)
 
@@ -1586,6 +1592,8 @@ func (s *Service) SetBasePath(basePath string) error {
 // GetBasePath returns the configured base path.
 // Returns empty string if the service is mounted at root.
 func (s *Service) GetBasePath() string {
+	s.basePathMu.RLock()
+	defer s.basePathMu.RUnlock()
 	return s.basePath
 }
 
