@@ -23,10 +23,11 @@ func (TestProduct) TableName() string {
 
 // TestProductDescription is a test entity for lambda applier tests
 type TestProductDescription struct {
-	TestProductID uint         `json:"TestProductID" gorm:"primaryKey;column:test_product_id"`
-	LanguageKey   string       `json:"LanguageKey" gorm:"primaryKey;size:2"`
+	TestProductID uint         `json:"TestProductID" gorm:"primaryKey;column:test_product_id" odata:"key"`
+	LanguageKey   string       `json:"LanguageKey" gorm:"primaryKey;size:2" odata:"key"`
 	Description   string       `json:"Description"`
 	CustomName    string       `json:"CustomName" gorm:"column:custom_name"`
+	Locale        string       `json:"Locale" gorm:"column:locale_code"`
 	Product       *TestProduct `gorm:"foreignKey:TestProductID;references:ID"`
 }
 
@@ -56,11 +57,11 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	}
 
 	descriptions := []TestProductDescription{
-		{TestProductID: 1, LanguageKey: "EN", Description: "High-performance laptop", CustomName: "Promo"},
-		{TestProductID: 1, LanguageKey: "DE", Description: "Hochleistungs-Laptop"},
-		{TestProductID: 2, LanguageKey: "EN", Description: "Wireless mouse"},
-		{TestProductID: 3, LanguageKey: "EN", Description: "Mechanical keyboard"},
-		{TestProductID: 3, LanguageKey: "FR", Description: "Clavier mécanique"},
+		{TestProductID: 1, LanguageKey: "EN", Description: "High-performance laptop", CustomName: "Promo", Locale: "EN"},
+		{TestProductID: 1, LanguageKey: "DE", Description: "Hochleistungs-Laptop", Locale: "DE"},
+		{TestProductID: 2, LanguageKey: "EN", Description: "Wireless mouse", Locale: "EN"},
+		{TestProductID: 3, LanguageKey: "EN", Description: "Mechanical keyboard", Locale: "EN"},
+		{TestProductID: 3, LanguageKey: "FR", Description: "Clavier mécanique", Locale: "FR"},
 	}
 
 	if err := db.Create(&products).Error; err != nil {
@@ -76,11 +77,23 @@ func setupTestDB(t *testing.T) *gorm.DB {
 
 // getTestProductMetadata creates test metadata for TestProduct
 func getTestProductMetadata() *metadata.EntityMetadata {
-	meta, err := metadata.AnalyzeEntity(TestProduct{})
+	productMeta, err := metadata.AnalyzeEntity(TestProduct{})
 	if err != nil {
 		panic(err)
 	}
-	return meta
+	descriptionMeta, err := metadata.AnalyzeEntity(TestProductDescription{})
+	if err != nil {
+		panic(err)
+	}
+
+	registry := map[string]*metadata.EntityMetadata{
+		"TestProduct":            productMeta,
+		"TestProductDescription": descriptionMeta,
+	}
+	productMeta.SetEntitiesRegistry(registry)
+	descriptionMeta.SetEntitiesRegistry(registry)
+
+	return productMeta
 }
 
 func TestLambdaApplier_SimpleAny(t *testing.T) {
@@ -407,6 +420,28 @@ func TestLambdaApplier_CustomColumnAny(t *testing.T) {
 	entityMetadata := getTestProductMetadata()
 
 	filterExpr, err := parseFilter("Descriptions/any(d: d/CustomName eq 'Promo')", entityMetadata, nil)
+	if err != nil {
+		t.Fatalf("Failed to parse filter: %v", err)
+	}
+
+	query := db.Model(&TestProduct{})
+	query = ApplyFilterOnly(query, filterExpr, entityMetadata)
+
+	var count int64
+	if err := query.Count(&count).Error; err != nil {
+		t.Fatalf("Failed to execute query: %v", err)
+	}
+
+	if count != 1 {
+		t.Errorf("Expected 1 result, got %d", count)
+	}
+}
+
+func TestLambdaApplier_CustomColumnRegistryLookup(t *testing.T) {
+	db := setupTestDB(t)
+	entityMetadata := getTestProductMetadata()
+
+	filterExpr, err := parseFilter("Descriptions/any(d: d/Locale eq 'DE')", entityMetadata, nil)
 	if err != nil {
 		t.Fatalf("Failed to parse filter: %v", err)
 	}
