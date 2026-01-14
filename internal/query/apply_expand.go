@@ -16,6 +16,10 @@ func applyExpand(db *gorm.DB, expand []ExpandOption, entityMetadata *metadata.En
 			continue
 		}
 
+		if needsPerParentExpand(expandOpt, navProp) {
+			continue
+		}
+
 		var targetMetadata *metadata.EntityMetadata
 		if entityMetadata != nil {
 			target, err := entityMetadata.ResolveNavigationTarget(expandOpt.NavigationProperty)
@@ -33,6 +37,13 @@ func applyExpand(db *gorm.DB, expand []ExpandOption, entityMetadata *metadata.En
 		}
 	}
 	return db
+}
+
+func needsPerParentExpand(expandOpt ExpandOption, navProp *metadata.PropertyMetadata) bool {
+	if navProp == nil || !navProp.IsNavigationProp || !navProp.NavigationIsArray {
+		return false
+	}
+	return expandOpt.Top != nil || expandOpt.Skip != nil
 }
 
 // needsPreloadCallback checks if an expand option requires a preload callback
@@ -74,6 +85,11 @@ func applyExpandCallback(db *gorm.DB, expandOpt ExpandOption, targetMetadata *me
 	}
 
 	return db
+}
+
+// ApplyExpandOption applies expand options to a query for a specific navigation property.
+func ApplyExpandOption(db *gorm.DB, expandOpt ExpandOption, targetMetadata *metadata.EntityMetadata) *gorm.DB {
+	return applyExpandCallback(db, expandOpt, targetMetadata)
 }
 
 func quoteColumnReference(dialect string, column string) string {

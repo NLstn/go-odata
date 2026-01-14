@@ -300,6 +300,85 @@ func TestExpandWithNestedTop(t *testing.T) {
 	}
 }
 
+func TestExpandWithNestedTopMultipleParents(t *testing.T) {
+	db := setupRelationTestDB(t)
+	authorMeta, _ := metadata.AnalyzeEntity(&Author{})
+	bookMeta, _ := metadata.AnalyzeEntity(&Book{})
+	handler := NewEntityHandler(db, authorMeta, nil)
+	handler.SetEntitiesMetadata(map[string]*metadata.EntityMetadata{
+		authorMeta.EntitySetName: authorMeta,
+		bookMeta.EntitySetName:   bookMeta,
+	})
+
+	query := url.Values{}
+	query.Set("$orderby", "ID")
+	query.Set("$expand", "Books($orderby=ID;$top=1)")
+	req := httptest.NewRequest(http.MethodGet, "/Authors?"+query.Encode(), nil)
+	w := httptest.NewRecorder()
+
+	handler.HandleCollection(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected status 200, got %d", w.Code)
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+
+	values, ok := response["value"].([]interface{})
+	if !ok || len(values) != 3 {
+		t.Fatalf("Expected 3 authors in response")
+	}
+
+	expectedBookIDs := map[float64]float64{
+		1: 1,
+		2: 3,
+		3: 5,
+	}
+
+	for _, value := range values {
+		author, ok := value.(map[string]interface{})
+		if !ok {
+			t.Fatalf("Expected author entry to be an object")
+		}
+
+		authorID, ok := author["ID"].(float64)
+		if !ok {
+			t.Fatalf("Expected author ID to be present")
+		}
+
+		books, ok := author["Books"].([]interface{})
+		if !ok {
+			t.Fatalf("Expected Books to be expanded")
+		}
+
+		if len(books) != 1 {
+			t.Fatalf("Expected 1 book for author %v, got %d", authorID, len(books))
+		}
+
+		book, ok := books[0].(map[string]interface{})
+		if !ok {
+			t.Fatalf("Expected book entry to be an object")
+		}
+
+		bookID, ok := book["ID"].(float64)
+		if !ok {
+			t.Fatalf("Expected book ID to be present")
+		}
+
+		expectedID, ok := expectedBookIDs[authorID]
+		if !ok {
+			t.Fatalf("Unexpected author ID %v", authorID)
+		}
+
+		if bookID != expectedID {
+			t.Fatalf("Expected book ID %v for author %v, got %v", expectedID, authorID, bookID)
+		}
+	}
+}
+
 // TestExpandWithNestedSkip tests $expand with nested $skip
 func TestExpandWithNestedSkip(t *testing.T) {
 	db := setupRelationTestDB(t)
