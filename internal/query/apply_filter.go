@@ -371,6 +371,27 @@ func tryBuildRightSideFunctionComparison(dialect string, leftColumn string, oper
 // buildStandardComparison builds the SQL for a standard comparison operation.
 // This handles all comparison operators like =, !=, >, <, IN, LIKE, etc.
 func buildStandardComparison(dialect string, operator FilterOperator, columnName string, value interface{}, entityMetadata *metadata.EntityMetadata) (string, []interface{}) {
+	// Check if this is a property-to-property comparison
+	// (e.g., "Price gt Cost" should generate "price > cost", not "price > 'Cost'")
+	if valueStr, ok := value.(string); ok && propertyExists(valueStr, entityMetadata) {
+		rightColumnName := getQuotedColumnName(dialect, valueStr, entityMetadata)
+		
+		switch operator {
+		case OpEqual:
+			return fmt.Sprintf("%s = %s", columnName, rightColumnName), []interface{}{}
+		case OpNotEqual:
+			return fmt.Sprintf("%s != %s", columnName, rightColumnName), []interface{}{}
+		case OpGreaterThan:
+			return fmt.Sprintf("%s > %s", columnName, rightColumnName), []interface{}{}
+		case OpGreaterThanOrEqual:
+			return fmt.Sprintf("%s >= %s", columnName, rightColumnName), []interface{}{}
+		case OpLessThan:
+			return fmt.Sprintf("%s < %s", columnName, rightColumnName), []interface{}{}
+		case OpLessThanOrEqual:
+			return fmt.Sprintf("%s <= %s", columnName, rightColumnName), []interface{}{}
+		}
+	}
+	
 	switch operator {
 	case OpEqual:
 		if value == nil {
