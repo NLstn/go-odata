@@ -8,7 +8,7 @@ import (
 
 func TestAddNavigationLinksWithNilData(t *testing.T) {
 	req := httptest.NewRequest("GET", "http://example.com/Products", nil)
-	result := addNavigationLinks(nil, nil, nil, req, "Products", "minimal", nil)
+	result := addNavigationLinks(nil, nil, nil, nil, req, "Products", "minimal", nil)
 
 	if result == nil {
 		t.Fatal("addNavigationLinks should not return nil for nil data")
@@ -25,7 +25,7 @@ func TestAddNavigationLinksWithNilData(t *testing.T) {
 
 func TestAddNavigationLinksWithEmptySlice(t *testing.T) {
 	req := httptest.NewRequest("GET", "http://example.com/Products", nil)
-	result := addNavigationLinks([]interface{}{}, nil, nil, req, "Products", "minimal", nil)
+	result := addNavigationLinks([]interface{}{}, nil, nil, nil, req, "Products", "minimal", nil)
 
 	if result == nil {
 		t.Fatal("addNavigationLinks should not return nil for empty slice")
@@ -46,7 +46,7 @@ func TestAddNavigationLinksWithEmptySlice(t *testing.T) {
 func TestAddNavigationLinksWithNonSliceData(t *testing.T) {
 	req := httptest.NewRequest("GET", "http://example.com/Products", nil)
 	single := map[string]interface{}{"ID": 1}
-	result := addNavigationLinks(single, nil, nil, req, "Products", "minimal", nil)
+	result := addNavigationLinks(single, nil, nil, nil, req, "Products", "minimal", nil)
 
 	if result == nil {
 		t.Fatal("addNavigationLinks should return empty slice for non-slice data")

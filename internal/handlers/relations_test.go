@@ -1018,6 +1018,54 @@ func TestNavigationLinksWithSelect(t *testing.T) {
 	}
 }
 
+// TestNavigationLinksWithSelectMinimalMetadata tests that selected navigation properties
+// in minimal metadata include navigation links without requiring $expand.
+func TestNavigationLinksWithSelectMinimalMetadata(t *testing.T) {
+	db := setupRelationTestDB(t)
+	authorMeta, _ := metadata.AnalyzeEntity(&Author{})
+	handler := NewEntityHandler(db, authorMeta, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "http://localhost:8080/Authors?$select=Books", nil)
+	req.Header.Set("Accept", "application/json;odata.metadata=minimal")
+	w := httptest.NewRecorder()
+
+	handler.HandleCollection(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", w.Code)
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+
+	values, ok := response["value"].([]interface{})
+	if !ok || len(values) == 0 {
+		t.Fatal("Expected value array in response")
+	}
+
+	firstAuthor := values[0].(map[string]interface{})
+
+	// Navigation link should be present for selected navigation property.
+	navLink, hasNavLink := firstAuthor["Books@odata.navigationLink"]
+	if !hasNavLink {
+		t.Error("Expected Books@odata.navigationLink to be present for minimal metadata with $select")
+	}
+
+	expectedPattern := "http://localhost:8080/Authors(1)/Books"
+	if navLink != expectedPattern {
+		t.Errorf("Expected navigation link to be %s, got %v", expectedPattern, navLink)
+	}
+
+	// Navigation property should not be expanded without $expand.
+	if books, hasBooks := firstAuthor["Books"]; hasBooks {
+		if _, ok := books.([]interface{}); ok {
+			t.Error("Books should not be expanded without $expand")
+		}
+	}
+}
+
 // TestReadSingleNavigationPropertyRef tests GET on single-valued navigation property with $ref
 func TestReadSingleNavigationPropertyRef(t *testing.T) {
 	db := setupRelationTestDB(t)
