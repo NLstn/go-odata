@@ -245,6 +245,7 @@ func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.Qu
 	if len(scopes) > 0 {
 		db = db.Scopes(scopes...)
 	}
+	baseDB := db
 
 	if queryOptions.SkipToken != nil {
 		db = h.applySkipTokenFilter(db, queryOptions)
@@ -285,6 +286,12 @@ func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.Qu
 
 	if err := db.Find(results).Error; err != nil {
 		return nil, err
+	}
+
+	if len(queryOptions.Expand) > 0 {
+		if err := query.ApplyPerParentExpand(baseDB, results, queryOptions.Expand, h.metadata); err != nil {
+			return nil, err
+		}
 	}
 
 	sliceValue := reflect.ValueOf(results).Elem().Interface()

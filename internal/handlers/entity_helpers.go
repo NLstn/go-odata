@@ -121,13 +121,16 @@ func (h *EntityHandler) parseSingleEntityQueryOptions(r *http.Request) (*query.Q
 func (h *EntityHandler) fetchEntityByKey(ctx context.Context, entityKey string, queryOptions *query.QueryOptions, scopes []func(*gorm.DB) *gorm.DB) (interface{}, error) {
 	result := reflect.New(h.metadata.EntityType).Interface()
 
-	db, err := h.buildKeyQuery(h.db.WithContext(ctx), entityKey)
-	if err != nil {
-		return nil, err
-	}
+	db := h.db.WithContext(ctx)
 
 	if len(scopes) > 0 {
 		db = db.Scopes(scopes...)
+	}
+	baseDB := db
+
+	db, err := h.buildKeyQuery(db, entityKey)
+	if err != nil {
+		return nil, err
 	}
 
 	// Apply expand (preload navigation properties) if specified
@@ -137,6 +140,12 @@ func (h *EntityHandler) fetchEntityByKey(ctx context.Context, entityKey string, 
 
 	if err := db.First(result).Error; err != nil {
 		return nil, err
+	}
+
+	if len(queryOptions.Expand) > 0 {
+		if err := query.ApplyPerParentExpand(baseDB, result, queryOptions.Expand, h.metadata); err != nil {
+			return nil, err
+		}
 	}
 
 	return result, nil
