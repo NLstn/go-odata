@@ -92,7 +92,7 @@ func TestParseApply_GroupBy_Simple(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := parseApply(tt.applyStr, meta)
+			result, err := parseApply(tt.applyStr, meta, 0)
 			if tt.expectErr {
 				if err == nil {
 					t.Error("Expected error but got none")
@@ -246,7 +246,7 @@ func TestParseApply_Aggregate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := parseApply(tt.applyStr, meta)
+			result, err := parseApply(tt.applyStr, meta, 0)
 			if tt.expectErr {
 				if err == nil {
 					t.Error("Expected error but got none")
@@ -344,7 +344,7 @@ func TestParseApply_GroupByWithAggregate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := parseApply(tt.applyStr, meta)
+			result, err := parseApply(tt.applyStr, meta, 0)
 			if tt.expectErr {
 				if err == nil {
 					t.Error("Expected error but got none")
@@ -409,7 +409,7 @@ func TestParseApply_MultipleTransformations(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := parseApply(tt.applyStr, meta)
+			result, err := parseApply(tt.applyStr, meta, 0)
 			if tt.expectErr {
 				if err == nil {
 					t.Error("Expected error but got none")
@@ -471,7 +471,7 @@ func TestParseApply_Filter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := parseApply(tt.applyStr, meta)
+			result, err := parseApply(tt.applyStr, meta, 0)
 			if tt.expectErr {
 				if err == nil {
 					t.Error("Expected error but got none")

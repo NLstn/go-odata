@@ -8,7 +8,7 @@ import (
 )
 
 // parseApplyOption parses the $apply query parameter
-func parseApplyOption(queryParams map[string][]string, entityMetadata *metadata.EntityMetadata, options *QueryOptions) error {
+func parseApplyOption(queryParams map[string][]string, entityMetadata *metadata.EntityMetadata, options *QueryOptions, config *ParserConfig) error {
 	applyStr := ""
 	if vals, ok := queryParams["$apply"]; ok && len(vals) > 0 {
 		applyStr = vals[0]
@@ -18,7 +18,12 @@ func parseApplyOption(queryParams map[string][]string, entityMetadata *metadata.
 		return nil
 	}
 
-	transformations, err := parseApply(applyStr, entityMetadata)
+	maxInClauseSize := 0
+	if config != nil {
+		maxInClauseSize = config.MaxInClauseSize
+	}
+
+	transformations, err := parseApply(applyStr, entityMetadata, maxInClauseSize)
 	if err != nil {
 		return fmt.Errorf("invalid $apply: %w", err)
 	}
@@ -27,7 +32,7 @@ func parseApplyOption(queryParams map[string][]string, entityMetadata *metadata.
 }
 
 // parseApply parses the $apply query parameter value
-func parseApply(applyStr string, entityMetadata *metadata.EntityMetadata) ([]ApplyTransformation, error) {
+func parseApply(applyStr string, entityMetadata *metadata.EntityMetadata, maxInClauseSize int) ([]ApplyTransformation, error) {
 	applyStr = strings.TrimSpace(applyStr)
 	if applyStr == "" {
 		return nil, fmt.Errorf("empty apply string")
@@ -47,7 +52,7 @@ func parseApply(applyStr string, entityMetadata *metadata.EntityMetadata) ([]App
 			continue
 		}
 
-		transformation, err := parseApplyTransformationWithAliases(transStr, entityMetadata, computedAliases)
+		transformation, err := parseApplyTransformationWithAliases(transStr, entityMetadata, computedAliases, maxInClauseSize)
 		if err != nil {
 			return nil, err
 		}
@@ -103,11 +108,11 @@ func splitApplyTransformations(applyStr string) []string {
 
 // parseApplyTransformation parses a single transformation
 func parseApplyTransformation(transStr string, entityMetadata *metadata.EntityMetadata) (*ApplyTransformation, error) {
-	return parseApplyTransformationWithAliases(transStr, entityMetadata, nil)
+	return parseApplyTransformationWithAliases(transStr, entityMetadata, nil, 0)
 }
 
 // parseApplyTransformationWithAliases parses a single transformation with computed aliases support
-func parseApplyTransformationWithAliases(transStr string, entityMetadata *metadata.EntityMetadata, computedAliases map[string]bool) (*ApplyTransformation, error) {
+func parseApplyTransformationWithAliases(transStr string, entityMetadata *metadata.EntityMetadata, computedAliases map[string]bool, maxInClauseSize int) (*ApplyTransformation, error) {
 	transStr = strings.TrimSpace(transStr)
 
 	// Determine transformation type
@@ -116,9 +121,9 @@ func parseApplyTransformationWithAliases(transStr string, entityMetadata *metada
 	} else if strings.HasPrefix(transStr, "aggregate(") {
 		return parseAggregate(transStr, entityMetadata)
 	} else if strings.HasPrefix(transStr, "filter(") {
-		return parseFilterTransformation(transStr, entityMetadata, computedAliases)
+		return parseFilterTransformation(transStr, entityMetadata, computedAliases, maxInClauseSize)
 	} else if strings.HasPrefix(transStr, "compute(") {
-		return parseCompute(transStr, entityMetadata)
+		return parseCompute(transStr, entityMetadata, maxInClauseSize)
 	}
 
 	return nil, fmt.Errorf("unknown transformation: %s", transStr)
@@ -402,7 +407,7 @@ func parseAggregationMethod(methodStr string) (AggregationMethod, error) {
 
 // parseFilterTransformation parses a filter transformation within apply
 // Format: filter(expression)
-func parseFilterTransformation(transStr string, entityMetadata *metadata.EntityMetadata, computedAliases map[string]bool) (*ApplyTransformation, error) {
+func parseFilterTransformation(transStr string, entityMetadata *metadata.EntityMetadata, computedAliases map[string]bool, maxInClauseSize int) (*ApplyTransformation, error) {
 	if !strings.HasPrefix(transStr, "filter(") {
 		return nil, fmt.Errorf("invalid filter format")
 	}
@@ -414,8 +419,8 @@ func parseFilterTransformation(transStr string, entityMetadata *metadata.EntityM
 	content = content[:len(content)-1] // Remove final )
 	content = strings.TrimSpace(content)
 
-	// Parse the filter expression with computed aliases support
-	filter, err := parseFilter(content, entityMetadata, computedAliases, 0)
+	// Parse the filter expression with computed aliases support and maxInClauseSize
+	filter, err := parseFilter(content, entityMetadata, computedAliases, maxInClauseSize)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse filter expression: %w", err)
 	}
@@ -428,7 +433,7 @@ func parseFilterTransformation(transStr string, entityMetadata *metadata.EntityM
 
 // parseCompute parses a compute transformation
 // Format: compute(expression as alias, ...)
-func parseCompute(transStr string, entityMetadata *metadata.EntityMetadata) (*ApplyTransformation, error) {
+func parseCompute(transStr string, entityMetadata *metadata.EntityMetadata, maxInClauseSize int) (*ApplyTransformation, error) {
 	if !strings.HasPrefix(transStr, "compute(") {
 		return nil, fmt.Errorf("invalid compute format")
 	}
@@ -445,7 +450,7 @@ func parseCompute(transStr string, entityMetadata *metadata.EntityMetadata) (*Ap
 	expressions := make([]ComputeExpression, 0, len(exprStrs))
 
 	for _, exprStr := range exprStrs {
-		expr, err := parseComputeExpression(exprStr, entityMetadata)
+		expr, err := parseComputeExpression(exprStr, entityMetadata, maxInClauseSize)
 		if err != nil {
 			return nil, err
 		}
@@ -502,7 +507,7 @@ func splitComputeExpressions(content string) []string {
 
 // parseComputeExpression parses a single compute expression
 // Format: expression as alias
-func parseComputeExpression(exprStr string, entityMetadata *metadata.EntityMetadata) (*ComputeExpression, error) {
+func parseComputeExpression(exprStr string, entityMetadata *metadata.EntityMetadata, maxInClauseSize int) (*ComputeExpression, error) {
 	exprStr = strings.TrimSpace(exprStr)
 
 	// Split by " as " to get expression and alias
@@ -514,9 +519,8 @@ func parseComputeExpression(exprStr string, entityMetadata *metadata.EntityMetad
 	expressionStr := strings.TrimSpace(exprStr[:asIdx])
 	alias := strings.TrimSpace(exprStr[asIdx+4:]) // Skip " as "
 
-	// Parse the expression as a filter expression
-	// For simplicity, we'll support basic expressions for now
-	expression, err := parseFilter(expressionStr, entityMetadata, nil, 0)
+	// Parse the expression as a filter expression with maxInClauseSize enforcement
+	expression, err := parseFilter(expressionStr, entityMetadata, nil, maxInClauseSize)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse compute expression: %w", err)
 	}
