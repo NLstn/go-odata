@@ -69,13 +69,22 @@ func getQuotedColumnName(dialect string, property string, entityMetadata *metada
 		if len(segments) >= 2 {
 			navPropName := strings.TrimSpace(segments[0])
 			targetPropertyName := strings.TrimSpace(segments[1])
+			targetMetadata, err := entityMetadata.ResolveNavigationTarget(navPropName)
+			if err == nil && targetMetadata != nil {
+				targetProp := targetMetadata.FindProperty(targetPropertyName)
+				if targetProp != nil {
+					relatedTableName := targetMetadata.TableName
+					columnName := targetProp.ColumnName
+					// Return fully quoted reference for proper PostgreSQL case handling
+					return quoteIdent(dialect, relatedTableName) + "." + quoteIdent(dialect, columnName)
+				}
+			}
 
+			// Fallback to legacy behavior only when metadata resolution fails
 			navProp := entityMetadata.FindNavigationProperty(navPropName)
 			if navProp != nil {
-				// Get the related table name from cached metadata
 				relatedTableName := navProp.NavigationTargetTableName
 				columnName := toSnakeCase(targetPropertyName)
-				// Return fully quoted reference for proper PostgreSQL case handling
 				return quoteIdent(dialect, relatedTableName) + "." + quoteIdent(dialect, columnName)
 			}
 		}
@@ -389,7 +398,7 @@ func buildStandardComparison(dialect string, operator FilterOperator, columnName
 	// (e.g., "Price gt Cost" should generate "price > cost", not "price > 'Cost'")
 	if valueStr, ok := value.(string); ok && propertyExists(valueStr, entityMetadata) {
 		rightColumnName := getQuotedColumnName(dialect, valueStr, entityMetadata)
-		
+
 		switch operator {
 		case OpEqual:
 			return fmt.Sprintf("%s = %s", columnName, rightColumnName), []interface{}{}
@@ -405,7 +414,7 @@ func buildStandardComparison(dialect string, operator FilterOperator, columnName
 			return fmt.Sprintf("%s <= %s", columnName, rightColumnName), []interface{}{}
 		}
 	}
-	
+
 	switch operator {
 	case OpEqual:
 		if value == nil {
@@ -571,10 +580,10 @@ func buildLambdaCondition(dialect string, filter *FilterExpression, entityMetada
 	// Build join conditions for all key properties
 	// Support both single keys and composite keys
 	var joinConditions []string
-	
+
 	// Parse foreign key column names (may be comma-separated for composite keys)
 	foreignKeyColumns := strings.Split(foreignKeyColumn, ",")
-	
+
 	// Get parent key properties
 	if len(entityMetadata.KeyProperties) == 0 {
 		// Fallback to default "id" if no key properties found
@@ -582,12 +591,12 @@ func buildLambdaCondition(dialect string, filter *FilterExpression, entityMetada
 		quotedParentTable := quoteIdent(dialect, parentTableName)
 		quotedForeignKey := quoteIdent(dialect, strings.TrimSpace(foreignKeyColumns[0]))
 		quotedParentPK := quoteIdent(dialect, "id")
-		joinConditions = append(joinConditions, 
+		joinConditions = append(joinConditions,
 			fmt.Sprintf("%s.%s = %s.%s", quotedRelatedTable, quotedForeignKey, quotedParentTable, quotedParentPK))
 	} else {
 		// Match foreign key columns with parent key properties
 		// For composite keys, we need to join on all key columns
-		
+
 		// Validate that foreign key column count matches key property count
 		if len(foreignKeyColumns) != len(entityMetadata.KeyProperties) {
 			// Log warning about potential GORM tag configuration error
@@ -603,11 +612,11 @@ func buildLambdaCondition(dialect string, filter *FilterExpression, entityMetada
 					return names
 				}())
 		}
-		
+
 		// Quote table names once outside the loop
 		quotedRelatedTable := quoteIdent(dialect, relatedTableName)
 		quotedParentTable := quoteIdent(dialect, parentTableName)
-		
+
 		for i, keyProp := range entityMetadata.KeyProperties {
 			// Get the corresponding foreign key column
 			var fkColumn string
@@ -617,15 +626,15 @@ func buildLambdaCondition(dialect string, filter *FilterExpression, entityMetada
 				// Fallback: use the key property name as foreign key column name
 				fkColumn = toSnakeCase(keyProp.Name)
 			}
-			
+
 			quotedForeignKey := quoteIdent(dialect, fkColumn)
 			quotedParentPK := quoteIdent(dialect, toSnakeCase(keyProp.Name))
-			
-			joinConditions = append(joinConditions, 
+
+			joinConditions = append(joinConditions,
 				fmt.Sprintf("%s.%s = %s.%s", quotedRelatedTable, quotedForeignKey, quotedParentTable, quotedParentPK))
 		}
 	}
-	
+
 	// Combine all join conditions with AND
 	joinCondition := strings.Join(joinConditions, " AND ")
 
