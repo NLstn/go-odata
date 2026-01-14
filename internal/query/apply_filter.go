@@ -193,7 +193,10 @@ func addNavigationJoin(db *gorm.DB, navPropName string, entityMetadata *metadata
 		targetMetadata, err := entityMetadata.ResolveNavigationTarget(navPropName)
 		if err == nil && targetMetadata != nil && len(targetMetadata.KeyProperties) > 0 {
 			// Use the first key property's column name
-			// For composite keys, this will use the first key component
+			// For single keys: This correctly resolves the actual primary key (e.g., "code", "language_key")
+			// For composite keys: This uses the first key component, which works when the foreign key
+			//   references the first component of the composite key. If a foreign key should reference
+			//   a different component, the references: tag MUST be used explicitly.
 			relatedPrimaryKey = targetMetadata.KeyProperties[0].ColumnName
 		} else {
 			// Fallback to "id" only if we can't resolve the target metadata
