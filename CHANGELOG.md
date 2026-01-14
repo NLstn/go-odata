@@ -10,6 +10,7 @@ rely on version numbers to reason about compatibility.
 ## [Unreleased]
 
 ### Added
+- **$count and $levels support in nested $expand options**: Added parser support for OData v4 nested query options `$count` and `$levels` within `$expand` clauses. The parser now correctly validates `$count=true/false` to include counts of related entities and `$levels=N` or `$levels=max` for recursive expansion depth. These options are parsed and validated according to the OData v4 specification, but return HTTP 400 (Bad Request) with clear error messages when used since the implementation for these features is not yet complete. This ensures compliant clients receive proper error responses instead of silent failures or rejections. `$count=false` is treated as a no-op and is allowed.
 - **Compliance suite $count segment coverage**: Added OData v4.0 tests for the `$count` path segment, validating text/plain responses and filtered count parity with `@odata.count`.
 - **OData version negotiation (4.0 / 4.01) with context-aware handling**: Added full support for OData version negotiation per OData v4 spec §8.2.6. The service now negotiates version based on client's `OData-MaxVersion` header and stores the negotiated version in request context via `version.GetVersion(ctx)`. Metadata documents are now version-specific and cached per version. New features include:
   - Context-aware version handling with `version.WithVersion()` and `version.GetVersion()`

@@ -10,7 +10,7 @@ import (
 func NestedExpandOptions() *framework.TestSuite {
 	suite := framework.NewTestSuite(
 		"11.2.5.9 Nested Expand with Query Options",
-		"Tests nested $expand with multiple levels and nested query options ($filter, $select, $orderby, $top, $skip).",
+		"Tests nested $expand with multiple levels and nested query options ($filter, $select, $orderby, $top, $skip, $count, $levels).",
 		"https://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part2-url-conventions/odata-v4.0-errata03-os-part2-url-conventions-complete.html#sec_SystemQueryOptionexpand",
 	)
 
@@ -141,6 +141,123 @@ func NestedExpandOptions() *framework.TestSuite {
 			if err != nil {
 				return err
 			}
+			return ctx.AssertStatusCode(resp, 400)
+		},
+	)
+
+	// Test 10: Expand with nested $count=true
+	suite.AddTest(
+		"test_expand_with_count_true",
+		"Expand with $count=true returns 400 (not yet implemented)",
+		func(ctx *framework.TestContext) error {
+			expand := url.QueryEscape("Descriptions($count=true)")
+			resp, err := ctx.GET("/Products?$expand=" + expand)
+			if err != nil {
+				return err
+			}
+			// Expect 400 since $count=true is not yet implemented
+			return ctx.AssertStatusCode(resp, 400)
+		},
+	)
+
+	// Test 11: Expand with nested $count=false
+	suite.AddTest(
+		"test_expand_with_count_false",
+		"Expand with $count=false returns 200 (no-op)",
+		func(ctx *framework.TestContext) error {
+			expand := url.QueryEscape("Descriptions($count=false)")
+			resp, err := ctx.GET("/Products?$expand=" + expand)
+			if err != nil {
+				return err
+			}
+			// count=false is a no-op, should work fine
+			return ctx.AssertStatusCode(resp, 200)
+		},
+	)
+
+	// Test 12: Expand with invalid nested $count
+	suite.AddTest(
+		"test_expand_invalid_nested_count",
+		"Expand with invalid nested $count returns 400",
+		func(ctx *framework.TestContext) error {
+			expand := url.QueryEscape("Descriptions($count=invalid)")
+			resp, err := ctx.GET("/Products?$expand=" + expand)
+			if err != nil {
+				return err
+			}
+			return ctx.AssertStatusCode(resp, 400)
+		},
+	)
+
+	// Test 13: Expand with nested $levels (integer)
+	suite.AddTest(
+		"test_expand_with_levels_integer",
+		"Expand with $levels=2 returns 400 (not yet implemented)",
+		func(ctx *framework.TestContext) error {
+			expand := url.QueryEscape("Descriptions($levels=2)")
+			resp, err := ctx.GET("/Products?$expand=" + expand)
+			if err != nil {
+				return err
+			}
+			// Expect 400 since $levels is not yet implemented
+			return ctx.AssertStatusCode(resp, 400)
+		},
+	)
+
+	// Test 14: Expand with nested $levels=max
+	suite.AddTest(
+		"test_expand_with_levels_max",
+		"Expand with $levels=max returns 400 (not yet implemented)",
+		func(ctx *framework.TestContext) error {
+			expand := url.QueryEscape("Descriptions($levels=max)")
+			resp, err := ctx.GET("/Products?$expand=" + expand)
+			if err != nil {
+				return err
+			}
+			// Expect 400 since $levels is not yet implemented
+			return ctx.AssertStatusCode(resp, 400)
+		},
+	)
+
+	// Test 15: Expand with invalid nested $levels (zero)
+	suite.AddTest(
+		"test_expand_invalid_nested_levels_zero",
+		"Expand with invalid nested $levels=0 returns 400",
+		func(ctx *framework.TestContext) error {
+			expand := url.QueryEscape("Descriptions($levels=0)")
+			resp, err := ctx.GET("/Products?$expand=" + expand)
+			if err != nil {
+				return err
+			}
+			return ctx.AssertStatusCode(resp, 400)
+		},
+	)
+
+	// Test 16: Expand with invalid nested $levels (negative)
+	suite.AddTest(
+		"test_expand_invalid_nested_levels_negative",
+		"Expand with invalid nested $levels=-1 returns 400",
+		func(ctx *framework.TestContext) error {
+			expand := url.QueryEscape("Descriptions($levels=-1)")
+			resp, err := ctx.GET("/Products?$expand=" + expand)
+			if err != nil {
+				return err
+			}
+			return ctx.AssertStatusCode(resp, 400)
+		},
+	)
+
+	// Test 17: Expand with both $count and $levels
+	suite.AddTest(
+		"test_expand_with_count_and_levels",
+		"Expand with both $count=true and $levels=2 returns 400 (not yet implemented)",
+		func(ctx *framework.TestContext) error {
+			expand := url.QueryEscape("Descriptions($count=true;$levels=2)")
+			resp, err := ctx.GET("/Products?$expand=" + expand)
+			if err != nil {
+				return err
+			}
+			// Expect 400 since both options are not yet implemented
 			return ctx.AssertStatusCode(resp, 400)
 		},
 	)

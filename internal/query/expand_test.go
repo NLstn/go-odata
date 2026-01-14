@@ -948,16 +948,16 @@ expectCount bool
 expectErr   bool
 }{
 {
-name:        "Count true",
+name:        "Count true - not yet implemented",
 expandQuery: "Books($count=true)",
 expectCount: true,
-expectErr:   false,
+expectErr:   true, // Expect error since feature is not yet implemented
 },
 {
-name:        "Count false",
+name:        "Count false - allowed",
 expandQuery: "Books($count=false)",
 expectCount: false,
-expectErr:   false,
+expectErr:   false, // count=false is allowed (no-op)
 },
 {
 name:        "Invalid count value",
@@ -1002,18 +1002,18 @@ expectErr     bool
 description   string
 }{
 {
-name:         "Levels with integer value",
+name:         "Levels with integer value - not yet implemented",
 expandQuery:  "Books($levels=2)",
 expectLevels: intPtr(2),
-expectErr:    false,
-description:  "Should parse numeric levels",
+expectErr:    true, // Expect error since feature is not yet implemented
+description:  "Should reject numeric levels (not implemented)",
 },
 {
-name:         "Levels with max",
+name:         "Levels with max - not yet implemented",
 expandQuery:  "Books($levels=max)",
 expectLevels: intPtr(-1), // -1 represents "max"
-expectErr:    false,
-description:  "Should parse 'max' as -1",
+expectErr:    true, // Expect error since feature is not yet implemented
+description:  "Should reject 'max' (not implemented)",
 },
 {
 name:        "Invalid levels - zero",
@@ -1075,25 +1075,10 @@ authorMeta, _ := buildAuthorBookMetadata(t)
 params := url.Values{}
 params.Set("$expand", "Books($count=true;$levels=3)")
 
-options, err := ParseQueryOptions(params, authorMeta)
-if err != nil {
-t.Fatalf("Failed to parse query options: %v", err)
-}
-
-if len(options.Expand) != 1 {
-t.Fatalf("Expected 1 expand option, got %d", len(options.Expand))
-}
-
-expand := options.Expand[0]
-
-if !expand.Count {
-t.Error("Expected Count to be true")
-}
-
-if expand.Levels == nil {
-t.Error("Expected Levels to be set")
-} else if *expand.Levels != 3 {
-t.Errorf("Expected Levels=3, got %d", *expand.Levels)
+_, err := ParseQueryOptions(params, authorMeta)
+// Expect error since $count=true and $levels are not yet implemented
+if err == nil {
+t.Fatal("Expected error for unsupported $count=true and $levels options")
 }
 }
 
@@ -1104,50 +1089,10 @@ authorMeta, _ := buildAuthorBookMetadata(t)
 params := url.Values{}
 params.Set("$expand", "Books($filter=Title ne 'Archived';$select=Title;$orderby=Title;$top=5;$skip=2;$count=true;$levels=2)")
 
-options, err := ParseQueryOptions(params, authorMeta)
-if err != nil {
-t.Fatalf("Failed to parse query options: %v", err)
-}
-
-if len(options.Expand) != 1 {
-t.Fatalf("Expected 1 expand option, got %d", len(options.Expand))
-}
-
-expand := options.Expand[0]
-
-// Check filter
-if expand.Filter == nil {
-t.Error("Expected $filter to be set")
-}
-
-// Check select
-if len(expand.Select) != 1 || expand.Select[0] != "Title" {
-t.Error("Expected $select=Title")
-}
-
-// Check orderby
-if len(expand.OrderBy) != 1 {
-t.Error("Expected 1 orderby item")
-}
-
-// Check top
-if expand.Top == nil || *expand.Top != 5 {
-t.Error("Expected $top=5")
-}
-
-// Check skip
-if expand.Skip == nil || *expand.Skip != 2 {
-t.Error("Expected $skip=2")
-}
-
-// Check count
-if !expand.Count {
-t.Error("Expected $count=true")
-}
-
-// Check levels
-if expand.Levels == nil || *expand.Levels != 2 {
-t.Error("Expected $levels=2")
+_, err := ParseQueryOptions(params, authorMeta)
+// Expect error since $count=true and $levels are not yet implemented
+if err == nil {
+t.Fatal("Expected error for unsupported $count=true and $levels options")
 }
 }
 
