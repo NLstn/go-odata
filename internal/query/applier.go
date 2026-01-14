@@ -1,6 +1,8 @@
 package query
 
 import (
+	"log/slog"
+
 	"github.com/nlstn/go-odata/internal/metadata"
 	"gorm.io/gorm"
 )
@@ -28,16 +30,17 @@ func ShouldUseMapResults(options *QueryOptions) bool {
 }
 
 // ApplyQueryOptions applies parsed query options to a GORM database query
-func ApplyQueryOptions(db *gorm.DB, options *QueryOptions, entityMetadata *metadata.EntityMetadata) *gorm.DB {
-	return ApplyQueryOptionsWithFTS(db, options, entityMetadata, nil, "")
+func ApplyQueryOptions(db *gorm.DB, options *QueryOptions, entityMetadata *metadata.EntityMetadata, logger *slog.Logger) *gorm.DB {
+	return ApplyQueryOptionsWithFTS(db, options, entityMetadata, nil, "", logger)
 }
 
 // ApplyQueryOptionsWithFTS applies parsed query options to a GORM database query with optional FTS support
-func ApplyQueryOptionsWithFTS(db *gorm.DB, options *QueryOptions, entityMetadata *metadata.EntityMetadata, ftsManager *FTSManager, tableName string) *gorm.DB {
+func ApplyQueryOptionsWithFTS(db *gorm.DB, options *QueryOptions, entityMetadata *metadata.EntityMetadata, ftsManager *FTSManager, tableName string, logger *slog.Logger) *gorm.DB {
 	if options == nil {
 		return db
 	}
 
+	db = setLoggerInDB(db, logger)
 	dialect := getDatabaseDialect(db)
 
 	// Try to apply search at database level using FTS if available
@@ -121,18 +124,20 @@ func ApplyQueryOptionsWithFTS(db *gorm.DB, options *QueryOptions, entityMetadata
 
 // ApplyFilterOnly applies only the filter expression to a GORM database query
 // This is useful for getting counts without applying pagination
-func ApplyFilterOnly(db *gorm.DB, filter *FilterExpression, entityMetadata *metadata.EntityMetadata) *gorm.DB {
+func ApplyFilterOnly(db *gorm.DB, filter *FilterExpression, entityMetadata *metadata.EntityMetadata, logger *slog.Logger) *gorm.DB {
 	if filter == nil {
 		return db
 	}
+	db = setLoggerInDB(db, logger)
 	return applyFilter(db, filter, entityMetadata)
 }
 
 // ApplyExpandOnly applies only the expand (preload) options to a GORM database query
 // This is useful for loading related entities without applying other query options
-func ApplyExpandOnly(db *gorm.DB, expand []ExpandOption, entityMetadata *metadata.EntityMetadata) *gorm.DB {
+func ApplyExpandOnly(db *gorm.DB, expand []ExpandOption, entityMetadata *metadata.EntityMetadata, logger *slog.Logger) *gorm.DB {
 	if len(expand) == 0 {
 		return db
 	}
+	db = setLoggerInDB(db, logger)
 	return applyExpand(db, expand, entityMetadata)
 }

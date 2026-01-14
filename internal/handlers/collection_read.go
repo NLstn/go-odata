@@ -254,7 +254,7 @@ func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.Qu
 	tableName := h.metadata.TableName
 
 	// Apply query options with FTS support
-	db = query.ApplyQueryOptionsWithFTS(db, &modifiedOptions, h.metadata, h.ftsManager, tableName)
+	db = query.ApplyQueryOptionsWithFTS(db, &modifiedOptions, h.metadata, h.ftsManager, tableName, h.logger)
 
 	// Check if search was applied at database level
 	searchAppliedAtDB := false

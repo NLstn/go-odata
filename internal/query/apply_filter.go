@@ -2,6 +2,7 @@ package query
 
 import (
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/nlstn/go-odata/internal/metadata"
@@ -106,13 +107,14 @@ func applyFilter(db *gorm.DB, filter *FilterExpression, entityMetadata *metadata
 	db = addNavigationJoins(db, filter, entityMetadata)
 
 	dialect := getDatabaseDialect(db)
+	logger := getLoggerFromDB(db)
 
 	if filter.Logical != "" {
-		query, args := buildFilterConditionWithDB(db, dialect, filter, entityMetadata)
+		query, args := buildFilterConditionWithDBAndLogger(db, dialect, filter, entityMetadata, logger)
 		return db.Where(query, args...)
 	}
 
-	query, args := buildFilterConditionWithDB(db, dialect, filter, entityMetadata)
+	query, args := buildFilterConditionWithDBAndLogger(db, dialect, filter, entityMetadata, logger)
 	return db.Where(query, args...)
 }
 
@@ -239,8 +241,9 @@ func applyHavingFilter(db *gorm.DB, filter *FilterExpression, entityMetadata *me
 	}
 
 	dialect := getDatabaseDialect(db)
+	logger := getLoggerFromDB(db)
 
-	query, args := buildFilterConditionWithDB(db, dialect, filter, entityMetadata)
+	query, args := buildFilterConditionWithDBAndLogger(db, dialect, filter, entityMetadata, logger)
 	return db.Having(query, args...)
 }
 
@@ -251,19 +254,23 @@ func applyHavingFilter(db *gorm.DB, filter *FilterExpression, entityMetadata *me
 //
 //nolint:unparam // dialect varies in production based on database, tests use sqlite
 func buildFilterCondition(dialect string, filter *FilterExpression, entityMetadata *metadata.EntityMetadata) (string, []interface{}) {
-	return buildFilterConditionWithDB(nil, dialect, filter, entityMetadata)
+	return buildFilterConditionWithDBAndLogger(nil, dialect, filter, entityMetadata, nil)
 }
 
 func buildFilterConditionWithDB(db *gorm.DB, dialect string, filter *FilterExpression, entityMetadata *metadata.EntityMetadata) (string, []interface{}) {
+	return buildFilterConditionWithDBAndLogger(db, dialect, filter, entityMetadata, nil)
+}
+
+func buildFilterConditionWithDBAndLogger(db *gorm.DB, dialect string, filter *FilterExpression, entityMetadata *metadata.EntityMetadata, logger *slog.Logger) (string, []interface{}) {
 	if filter == nil {
 		return "", nil
 	}
 
 	if filter.Logical != "" {
-		return buildLogicalConditionWithDB(db, dialect, filter, entityMetadata)
+		return buildLogicalConditionWithDBAndLogger(db, dialect, filter, entityMetadata, logger)
 	}
 
-	query, args := buildComparisonConditionWithDB(db, dialect, filter, entityMetadata)
+	query, args := buildComparisonConditionWithDBAndLogger(db, dialect, filter, entityMetadata, logger)
 
 	if filter.IsNot {
 		return fmt.Sprintf("NOT (%s)", query), args
@@ -272,9 +279,9 @@ func buildFilterConditionWithDB(db *gorm.DB, dialect string, filter *FilterExpre
 	return query, args
 }
 
-func buildLogicalConditionWithDB(db *gorm.DB, dialect string, filter *FilterExpression, entityMetadata *metadata.EntityMetadata) (string, []interface{}) {
-	leftQuery, leftArgs := buildFilterConditionWithDB(db, dialect, filter.Left, entityMetadata)
-	rightQuery, rightArgs := buildFilterConditionWithDB(db, dialect, filter.Right, entityMetadata)
+func buildLogicalConditionWithDBAndLogger(db *gorm.DB, dialect string, filter *FilterExpression, entityMetadata *metadata.EntityMetadata, logger *slog.Logger) (string, []interface{}) {
+	leftQuery, leftArgs := buildFilterConditionWithDBAndLogger(db, dialect, filter.Left, entityMetadata, logger)
+	rightQuery, rightArgs := buildFilterConditionWithDBAndLogger(db, dialect, filter.Right, entityMetadata, logger)
 
 	var query string
 	switch filter.Logical {
@@ -392,7 +399,9 @@ func tryBuildRightSideFunctionComparison(dialect string, leftColumn string, oper
 
 // buildStandardComparison builds the SQL for a standard comparison operation.
 // This handles all comparison operators like =, !=, >, <, IN, LIKE, etc.
-func buildStandardComparison(dialect string, operator FilterOperator, columnName string, value interface{}, entityMetadata *metadata.EntityMetadata) (string, []interface{}) {
+//
+//nolint:unparam // maxInClauseSize is enforced during parsing; keep signature for future extensibility.
+func buildStandardComparison(dialect string, operator FilterOperator, columnName string, value interface{}, entityMetadata *metadata.EntityMetadata, maxInClauseSize int) (string, []interface{}) {
 	// Check if this is a property-to-property comparison
 	// (e.g., "Price gt Cost" should generate "price > cost", not "price > 'Cost'")
 	if valueStr, ok := value.(string); ok && propertyExists(valueStr, entityMetadata) {
@@ -507,13 +516,13 @@ func buildStandardComparison(dialect string, operator FilterOperator, columnName
 
 // buildComparisonCondition builds a comparison condition
 func buildComparisonCondition(dialect string, filter *FilterExpression, entityMetadata *metadata.EntityMetadata) (string, []interface{}) {
-	return buildComparisonConditionWithDB(nil, dialect, filter, entityMetadata)
+	return buildComparisonConditionWithDBAndLogger(nil, dialect, filter, entityMetadata, nil)
 }
 
-func buildComparisonConditionWithDB(db *gorm.DB, dialect string, filter *FilterExpression, entityMetadata *metadata.EntityMetadata) (string, []interface{}) {
+func buildComparisonConditionWithDBAndLogger(db *gorm.DB, dialect string, filter *FilterExpression, entityMetadata *metadata.EntityMetadata, logger *slog.Logger) (string, []interface{}) {
 	// Handle lambda operators (any, all)
 	if filter.Operator == OpAny || filter.Operator == OpAll {
-		return buildLambdaCondition(dialect, filter, entityMetadata)
+		return buildLambdaCondition(dialect, filter, entityMetadata, logger)
 	}
 
 	// Handle function comparisons (e.g., tolower(Name) eq 'john')
@@ -533,7 +542,7 @@ func buildComparisonConditionWithDB(db *gorm.DB, dialect string, filter *FilterE
 	}
 
 	// Build a standard comparison
-	sql, args := buildStandardComparison(dialect, filter.Operator, columnName, filter.Value, entityMetadata)
+	sql, args := buildStandardComparison(dialect, filter.Operator, columnName, filter.Value, entityMetadata, filter.maxInClauseSize)
 
 	return sql, args
 }
@@ -561,7 +570,7 @@ func buildEntityTypeFilter(dialect string, typeName string, entityMetadata *meta
 }
 
 // buildLambdaCondition builds SQL for lambda operators (any/all) using EXISTS subquery
-func buildLambdaCondition(dialect string, filter *FilterExpression, entityMetadata *metadata.EntityMetadata) (string, []interface{}) {
+func buildLambdaCondition(dialect string, filter *FilterExpression, entityMetadata *metadata.EntityMetadata, logger *slog.Logger) (string, []interface{}) {
 	navProp := findNavigationProperty(filter.Property, entityMetadata)
 	if navProp == nil {
 		return "", nil
@@ -602,18 +611,21 @@ func buildLambdaCondition(dialect string, filter *FilterExpression, entityMetada
 
 		// Validate that foreign key column count matches key property count
 		if len(foreignKeyColumns) != len(entityMetadata.KeyProperties) {
-			// Log warning about potential GORM tag configuration error
-			// This may indicate that the foreignKey tag is incomplete or incorrect
-			fmt.Printf("Warning: Foreign key column count (%d) does not match key property count (%d) for navigation property '%s'. "+
-				"This may indicate a GORM tag configuration error. Foreign keys: %v, Key properties: %v\n",
-				len(foreignKeyColumns), len(entityMetadata.KeyProperties), navProp.Name,
-				foreignKeyColumns, func() []string {
-					names := make([]string, len(entityMetadata.KeyProperties))
-					for i, kp := range entityMetadata.KeyProperties {
-						names[i] = kp.Name
-					}
-					return names
-				}())
+			keyPropertyNames := make([]string, len(entityMetadata.KeyProperties))
+			for i, kp := range entityMetadata.KeyProperties {
+				keyPropertyNames[i] = kp.Name
+			}
+			if logger == nil {
+				logger = slog.Default()
+			}
+			logger.Warn(
+				"Foreign key column count does not match key property count for navigation property",
+				"navigationProperty", navProp.Name,
+				"foreignKeyColumnCount", len(foreignKeyColumns),
+				"keyPropertyCount", len(entityMetadata.KeyProperties),
+				"foreignKeyColumns", foreignKeyColumns,
+				"keyProperties", keyPropertyNames,
+			)
 		}
 
 		// Quote table names once outside the loop

@@ -31,7 +31,7 @@ func (h *EntityHandler) countEntities(ctx context.Context, queryOptions *query.Q
 
 	if search != "" && h.ftsManager != nil {
 		countOptions := &query.QueryOptions{Filter: filter, Search: search}
-		countDB := query.ApplyQueryOptionsWithFTS(baseDB, countOptions, h.metadata, h.ftsManager, h.metadata.TableName)
+		countDB := query.ApplyQueryOptionsWithFTS(baseDB, countOptions, h.metadata, h.ftsManager, h.metadata.TableName, h.logger)
 		if searchAppliedAtDB(countDB) {
 			var count int64
 			if err := countDB.Count(&count).Error; err != nil {
@@ -44,7 +44,7 @@ func (h *EntityHandler) countEntities(ctx context.Context, queryOptions *query.Q
 
 	countDB := baseDB
 	if filter != nil {
-		countDB = query.ApplyFilterOnly(countDB, filter, h.metadata)
+		countDB = query.ApplyFilterOnly(countDB, filter, h.metadata, h.logger)
 	}
 
 	if search == "" {

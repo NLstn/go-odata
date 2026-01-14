@@ -132,7 +132,7 @@ func (h *EntityHandler) fetchEntityByKey(ctx context.Context, entityKey string, 
 
 	// Apply expand (preload navigation properties) if specified
 	if len(queryOptions.Expand) > 0 {
-		db = query.ApplyExpandOnly(db, queryOptions.Expand, h.metadata)
+		db = query.ApplyExpandOnly(db, queryOptions.Expand, h.metadata, h.logger)
 	}
 
 	if err := db.First(result).Error; err != nil {
