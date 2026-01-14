@@ -36,6 +36,8 @@ type ExpandOption struct {
 	Top                *int                   // Nested $top
 	Skip               *int                   // Nested $skip
 	Compute            *ComputeTransformation // Nested $compute
+	Count              bool                   // Nested $count - includes count of related entities
+	Levels             *int                   // Nested $levels - depth of recursive expansion (special value -1 for "max")
 }
 
 // OrderByItem represents a single orderby clause

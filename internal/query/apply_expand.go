@@ -39,7 +39,7 @@ func applyExpand(db *gorm.DB, expand []ExpandOption, entityMetadata *metadata.En
 func needsPreloadCallback(expandOpt ExpandOption) bool {
 	return expandOpt.Select != nil || expandOpt.Filter != nil || expandOpt.OrderBy != nil ||
 		expandOpt.Top != nil || expandOpt.Skip != nil || len(expandOpt.Expand) > 0 ||
-		expandOpt.Compute != nil
+		expandOpt.Compute != nil || expandOpt.Count || expandOpt.Levels != nil
 }
 
 // applyExpandCallback applies the expand options within a GORM preload callback

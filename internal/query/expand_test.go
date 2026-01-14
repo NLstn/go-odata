@@ -936,3 +936,222 @@ func TestParseOrderByWithMultipleProperties(t *testing.T) {
 		})
 	}
 }
+
+// TestParseExpandWithNestedCount tests parsing $expand with nested $count
+func TestParseExpandWithNestedCount(t *testing.T) {
+authorMeta, _ := buildAuthorBookMetadata(t)
+
+tests := []struct {
+name        string
+expandQuery string
+expectCount bool
+expectErr   bool
+}{
+{
+name:        "Count true",
+expandQuery: "Books($count=true)",
+expectCount: true,
+expectErr:   false,
+},
+{
+name:        "Count false",
+expandQuery: "Books($count=false)",
+expectCount: false,
+expectErr:   false,
+},
+{
+name:        "Invalid count value",
+expandQuery: "Books($count=invalid)",
+expectErr:   true,
+},
+}
+
+for _, tt := range tests {
+t.Run(tt.name, func(t *testing.T) {
+params := url.Values{}
+params.Set("$expand", tt.expandQuery)
+
+options, err := ParseQueryOptions(params, authorMeta)
+if (err != nil) != tt.expectErr {
+t.Errorf("Expected error: %v, got: %v", tt.expectErr, err)
+return
+}
+
+if !tt.expectErr {
+if len(options.Expand) != 1 {
+t.Fatalf("Expected 1 expand option, got %d", len(options.Expand))
+}
+
+if options.Expand[0].Count != tt.expectCount {
+t.Errorf("Expected Count=%v, got %v", tt.expectCount, options.Expand[0].Count)
+}
+}
+})
+}
+}
+
+// TestParseExpandWithNestedLevels tests parsing $expand with nested $levels
+func TestParseExpandWithNestedLevels(t *testing.T) {
+authorMeta, _ := buildAuthorBookMetadata(t)
+
+tests := []struct {
+name          string
+expandQuery   string
+expectLevels  *int
+expectErr     bool
+description   string
+}{
+{
+name:         "Levels with integer value",
+expandQuery:  "Books($levels=2)",
+expectLevels: intPtr(2),
+expectErr:    false,
+description:  "Should parse numeric levels",
+},
+{
+name:         "Levels with max",
+expandQuery:  "Books($levels=max)",
+expectLevels: intPtr(-1), // -1 represents "max"
+expectErr:    false,
+description:  "Should parse 'max' as -1",
+},
+{
+name:        "Invalid levels - zero",
+expandQuery: "Books($levels=0)",
+expectErr:   true,
+description: "Should reject zero",
+},
+{
+name:        "Invalid levels - negative",
+expandQuery: "Books($levels=-5)",
+expectErr:   true,
+description: "Should reject negative numbers",
+},
+{
+name:        "Invalid levels - text",
+expandQuery: "Books($levels=invalid)",
+expectErr:   true,
+description: "Should reject non-numeric non-max values",
+},
+}
+
+for _, tt := range tests {
+t.Run(tt.name, func(t *testing.T) {
+params := url.Values{}
+params.Set("$expand", tt.expandQuery)
+
+options, err := ParseQueryOptions(params, authorMeta)
+if (err != nil) != tt.expectErr {
+t.Errorf("Expected error: %v, got: %v (%s)", tt.expectErr, err, tt.description)
+return
+}
+
+if !tt.expectErr {
+if len(options.Expand) != 1 {
+t.Fatalf("Expected 1 expand option, got %d", len(options.Expand))
+}
+
+expand := options.Expand[0]
+if tt.expectLevels == nil {
+if expand.Levels != nil {
+t.Errorf("Expected Levels to be nil, got %v", *expand.Levels)
+}
+} else {
+if expand.Levels == nil {
+t.Errorf("Expected Levels to be %d, got nil", *tt.expectLevels)
+} else if *expand.Levels != *tt.expectLevels {
+t.Errorf("Expected Levels=%d, got %d", *tt.expectLevels, *expand.Levels)
+}
+}
+}
+})
+}
+}
+
+// TestParseExpandWithCountAndLevels tests parsing $expand with both $count and $levels
+func TestParseExpandWithCountAndLevels(t *testing.T) {
+authorMeta, _ := buildAuthorBookMetadata(t)
+
+params := url.Values{}
+params.Set("$expand", "Books($count=true;$levels=3)")
+
+options, err := ParseQueryOptions(params, authorMeta)
+if err != nil {
+t.Fatalf("Failed to parse query options: %v", err)
+}
+
+if len(options.Expand) != 1 {
+t.Fatalf("Expected 1 expand option, got %d", len(options.Expand))
+}
+
+expand := options.Expand[0]
+
+if !expand.Count {
+t.Error("Expected Count to be true")
+}
+
+if expand.Levels == nil {
+t.Error("Expected Levels to be set")
+} else if *expand.Levels != 3 {
+t.Errorf("Expected Levels=3, got %d", *expand.Levels)
+}
+}
+
+// TestParseExpandWithAllNestedOptionsIncludingCountAndLevels tests all nested options together
+func TestParseExpandWithAllNestedOptionsIncludingCountAndLevels(t *testing.T) {
+authorMeta, _ := buildAuthorBookMetadata(t)
+
+params := url.Values{}
+params.Set("$expand", "Books($filter=Title ne 'Archived';$select=Title;$orderby=Title;$top=5;$skip=2;$count=true;$levels=2)")
+
+options, err := ParseQueryOptions(params, authorMeta)
+if err != nil {
+t.Fatalf("Failed to parse query options: %v", err)
+}
+
+if len(options.Expand) != 1 {
+t.Fatalf("Expected 1 expand option, got %d", len(options.Expand))
+}
+
+expand := options.Expand[0]
+
+// Check filter
+if expand.Filter == nil {
+t.Error("Expected $filter to be set")
+}
+
+// Check select
+if len(expand.Select) != 1 || expand.Select[0] != "Title" {
+t.Error("Expected $select=Title")
+}
+
+// Check orderby
+if len(expand.OrderBy) != 1 {
+t.Error("Expected 1 orderby item")
+}
+
+// Check top
+if expand.Top == nil || *expand.Top != 5 {
+t.Error("Expected $top=5")
+}
+
+// Check skip
+if expand.Skip == nil || *expand.Skip != 2 {
+t.Error("Expected $skip=2")
+}
+
+// Check count
+if !expand.Count {
+t.Error("Expected $count=true")
+}
+
+// Check levels
+if expand.Levels == nil || *expand.Levels != 2 {
+t.Error("Expected $levels=2")
+}
+}
+
+// intPtr returns a pointer to an integer
+func intPtr(i int) *int {
+return &i
+}
