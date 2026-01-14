@@ -587,10 +587,28 @@ func buildLambdaCondition(dialect string, filter *FilterExpression, entityMetada
 	} else {
 		// Match foreign key columns with parent key properties
 		// For composite keys, we need to join on all key columns
+		
+		// Validate that foreign key column count matches key property count
+		if len(foreignKeyColumns) != len(entityMetadata.KeyProperties) {
+			// Log warning about potential GORM tag configuration error
+			// This may indicate that the foreignKey tag is incomplete or incorrect
+			fmt.Printf("Warning: Foreign key column count (%d) does not match key property count (%d) for navigation property '%s'. "+
+				"This may indicate a GORM tag configuration error. Foreign keys: %v, Key properties: %v\n",
+				len(foreignKeyColumns), len(entityMetadata.KeyProperties), navProp.Name,
+				foreignKeyColumns, func() []string {
+					names := make([]string, len(entityMetadata.KeyProperties))
+					for i, kp := range entityMetadata.KeyProperties {
+						names[i] = kp.Name
+					}
+					return names
+				}())
+		}
+		
+		// Quote table names once outside the loop
+		quotedRelatedTable := quoteIdent(dialect, relatedTableName)
+		quotedParentTable := quoteIdent(dialect, parentTableName)
+		
 		for i, keyProp := range entityMetadata.KeyProperties {
-			quotedRelatedTable := quoteIdent(dialect, relatedTableName)
-			quotedParentTable := quoteIdent(dialect, parentTableName)
-			
 			// Get the corresponding foreign key column
 			var fkColumn string
 			if i < len(foreignKeyColumns) {
