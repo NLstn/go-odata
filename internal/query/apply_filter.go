@@ -53,6 +53,41 @@ func quoteIdent(dialect string, ident string) string {
 	}
 }
 
+// quoteTableName safely quotes table names that may include schema prefixes.
+// For table names like "mart.r2_dashboard_loads", it splits on dots and quotes
+// each part separately to produce "[mart].[r2_dashboard_loads]" for MSSQL
+// or "mart"."r2_dashboard_loads" for PostgreSQL.
+// For simple table names without schema, it behaves like quoteIdent.
+// Supports multi-part names like "database.schema.table".
+func quoteTableName(dialect string, tableName string) string {
+	if tableName == "" {
+		return tableName
+	}
+
+	// Split on dots to handle schema.table or database.schema.table notation
+	parts := strings.Split(tableName, ".")
+	if len(parts) == 1 {
+		// No schema, just quote the table name
+		return quoteIdent(dialect, tableName)
+	}
+
+	// Quote each part separately and rejoin with dots
+	quotedParts := make([]string, 0, len(parts))
+	for _, part := range parts {
+		// Skip empty parts (defensive against malformed input like "schema..table")
+		if part != "" {
+			quotedParts = append(quotedParts, quoteIdent(dialect, part))
+		}
+	}
+
+	// Fallback to quoting the entire name if splitting resulted in no valid parts
+	if len(quotedParts) == 0 {
+		return quoteIdent(dialect, tableName)
+	}
+
+	return strings.Join(quotedParts, ".")
+}
+
 // getQuotedColumnName returns a properly quoted column name for use in SQL queries.
 // For navigation property paths (e.g., "Category/Name"), it returns a fully qualified
 // and quoted reference like "<TargetTableFromMetadata>"."column_name" to ensure PostgreSQL compatibility.

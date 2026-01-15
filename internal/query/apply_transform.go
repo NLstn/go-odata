@@ -70,7 +70,7 @@ func applyGroupBy(db *gorm.DB, groupBy *GroupByTransformation, entityMetadata *m
 
 		columnName := GetColumnName(propName, entityMetadata)
 		// Qualify and quote to avoid ambiguity and preserve case-sensitivity
-		qualified := quoteIdent(dialect, tableName) + "." + quoteIdent(dialect, columnName)
+		qualified := quoteTableName(dialect, tableName) + "." + quoteIdent(dialect, columnName)
 		groupByColumns = append(groupByColumns, qualified)
 		selectColumns = append(selectColumns, fmt.Sprintf("%s as %s", qualified, quoteIdent(dialect, prop.JsonName)))
 	}
@@ -223,7 +223,7 @@ func buildAggregateSQLInternal(db *gorm.DB, dialect string, aggExpr AggregateExp
 
 	columnName := GetColumnName(aggExpr.Property, entityMetadata)
 	// Qualify with table name to avoid ambiguity and quote identifiers
-	qualified := quoteIdent(dialect, entityMetadata.TableName) + "." + quoteIdent(dialect, columnName)
+	qualified := quoteTableName(dialect, entityMetadata.TableName) + "." + quoteIdent(dialect, columnName)
 
 	var sqlFunc string
 	switch aggExpr.Method {
@@ -279,7 +279,7 @@ func applyCompute(db *gorm.DB, dialect string, compute *ComputeTransformation, e
 	for _, prop := range entityMetadata.Properties {
 		if !prop.IsNavigationProp && !prop.IsComplexType && !prop.IsStream && !streamAuxFields[prop.FieldName] {
 			// Qualify and quote identifiers for compatibility across dialects
-			qualified := quoteIdent(dialect, tableName) + "." + quoteIdent(dialect, prop.ColumnName)
+			qualified := quoteTableName(dialect, tableName) + "." + quoteIdent(dialect, prop.ColumnName)
 			selectColumns = append(selectColumns, fmt.Sprintf("%s as %s", qualified, quoteIdent(dialect, prop.JsonName)))
 		}
 	}
@@ -321,7 +321,7 @@ func buildComputeSQLWithDB(dialect string, computeExpr ComputeExpression, entity
 		}
 
 		// Use qualified and quoted column name
-		qualified := quoteIdent(dialect, entityMetadata.TableName) + "." + quoteIdent(dialect, prop.ColumnName)
+		qualified := quoteTableName(dialect, entityMetadata.TableName) + "." + quoteIdent(dialect, prop.ColumnName)
 		funcSQL, _ := buildFunctionSQL(dialect, expression.Operator, qualified, nil)
 		if funcSQL == "" {
 			return "", "", ""
@@ -378,7 +378,7 @@ func buildComputeExpressionSQL(dialect string, expr *FilterExpression, entityMet
 			return ""
 		}
 		// Return qualified and quoted column
-		return quoteIdent(dialect, entityMetadata.TableName) + "." + quoteIdent(dialect, prop.ColumnName)
+		return quoteTableName(dialect, entityMetadata.TableName) + "." + quoteIdent(dialect, prop.ColumnName)
 	}
 
 	if expr.Value != nil && expr.Property == "" && expr.Left == nil && expr.Right == nil {
@@ -401,7 +401,7 @@ func buildComputeExpressionSQL(dialect string, expr *FilterExpression, entityMet
 			return ""
 		}
 		// Use qualified and quoted column name
-		qualified := quoteIdent(dialect, entityMetadata.TableName) + "." + quoteIdent(dialect, prop.ColumnName)
+		qualified := quoteTableName(dialect, entityMetadata.TableName) + "." + quoteIdent(dialect, prop.ColumnName)
 		funcSQL, _ := buildFunctionSQL(dialect, expr.Operator, qualified, expr.Value)
 		return funcSQL
 	}
