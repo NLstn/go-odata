@@ -305,6 +305,10 @@ type ServiceConfig struct {
 	// MaxExpandDepth limits the maximum depth of nested $expand operations to prevent DoS attacks.
 	// Default: 10. If set to 0 or left unset, DefaultMaxExpandDepth is used. This limit is always enforced.
 	MaxExpandDepth int
+
+	// MaxBatchSize limits the maximum number of sub-requests in a batch request to prevent DoS attacks.
+	// Default: 100. If set to 0 or left unset, DefaultMaxBatchSize is used. This limit is always enforced.
+	MaxBatchSize int
 }
 
 // DefaultNamespace is used when no explicit namespace is configured for the service.
@@ -319,6 +323,10 @@ const (
 	// DefaultMaxExpandDepth is the default maximum depth for nested $expand operations.
 	// This prevents exponential query complexity and stack overflow issues.
 	DefaultMaxExpandDepth = 10
+
+	// DefaultMaxBatchSize is the default maximum number of sub-requests allowed in a batch request.
+	// This prevents DoS attacks via large batch payloads while supporting most legitimate use cases.
+	DefaultMaxBatchSize = 100
 )
 
 // Service represents an OData service that can handle multiple entities.
@@ -384,6 +392,8 @@ type Service struct {
 	maxInClauseSize int
 	// maxExpandDepth limits the depth of nested $expand operations
 	maxExpandDepth int
+	// maxBatchSize limits the number of sub-requests in a batch request
+	maxBatchSize int
 	// basePath is the configured base path for mounting the service at a custom path
 	basePath   string
 	basePathMu sync.RWMutex
@@ -433,6 +443,10 @@ func NewServiceWithConfig(db *gorm.DB, cfg ServiceConfig) (*Service, error) {
 	if maxExpandDepth <= 0 {
 		maxExpandDepth = DefaultMaxExpandDepth
 	}
+	maxBatchSize := cfg.MaxBatchSize
+	if maxBatchSize <= 0 {
+		maxBatchSize = DefaultMaxBatchSize
+	}
 
 	s := &Service{
 		db:                       db,
@@ -450,6 +464,7 @@ func NewServiceWithConfig(db *gorm.DB, cfg ServiceConfig) (*Service, error) {
 		keyGenerators:            make(map[string]KeyGenerator),
 		maxInClauseSize:          maxInClauseSize,
 		maxExpandDepth:           maxExpandDepth,
+		maxBatchSize:             maxBatchSize,
 	}
 	s.metadataHandler.SetNamespace(DefaultNamespace)
 	s.metadataHandler.SetPolicy(s.policy)
@@ -458,7 +473,7 @@ func NewServiceWithConfig(db *gorm.DB, cfg ServiceConfig) (*Service, error) {
 	// Initialize batch handler with reference to service's internal handler (for changesets)
 	s.batchHandler = handlers.NewBatchHandler(db, handlersMap, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		s.serveHTTP(w, r, false)
-	}))
+	}), maxBatchSize)
 	s.router = servrouter.NewRouter(
 		func(name string) (servrouter.EntityHandler, bool) {
 			handler, ok := s.handlers[name]
