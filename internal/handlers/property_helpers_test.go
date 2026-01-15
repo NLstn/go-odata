@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/nlstn/go-odata/internal/metadata"
@@ -12,11 +13,11 @@ import (
 
 // PropertyHelperTestEntity is a test entity for property helper tests
 type PropertyHelperTestEntity struct {
-	ID              uint    `json:"ID" gorm:"primaryKey" odata:"key"`
-	Name            string  `json:"Name"`
-	StructProp      string  `json:"StructuralProperty"`
-	ComplexProp     Address `json:"ComplexProperty" gorm:"-"`
-	StreamProp      []byte  `json:"StreamProperty" odata:"stream"`
+	ID              uint             `json:"ID" gorm:"primaryKey" odata:"key"`
+	Name            string           `json:"Name"`
+	StructProp      string           `json:"StructuralProperty"`
+	ComplexProp     Address          `json:"ComplexProperty" gorm:"embedded"`
+	StreamProp      []byte           `json:"StreamProperty" odata:"stream"`
 	RelatedProducts []RelatedProduct `json:"RelatedProducts" gorm:"foreignKey:ParentID"`
 }
 
@@ -149,7 +150,11 @@ func TestEntityHandler_IsComplexTypeProperty(t *testing.T) {
 		propertyName string
 		want         bool
 	}{
-		// Complex properties may not be detected with simple test setup, so test mostly negative cases
+		{
+			name:         "Complex property",
+			propertyName: "ComplexProp",
+			want:         true,
+		},
 		{
 			name:         "Structural property",
 			propertyName: "Name",
@@ -180,7 +185,11 @@ func TestEntityHandler_IsStreamProperty(t *testing.T) {
 		propertyName string
 		want         bool
 	}{
-		// Stream properties may not be detected with simple test setup, so test mostly negative cases
+		{
+			name:         "Stream property",
+			propertyName: "StreamProp",
+			want:         true,
+		},
 		{
 			name:         "Structural property",
 			propertyName: "Name",
@@ -265,6 +274,14 @@ func TestEntityHandler_writeMethodNotAllowedError(t *testing.T) {
 	if body == "" {
 		t.Error("Expected error response body, got empty")
 	}
+
+	// Validate error message contains expected details
+	if !strings.Contains(body, "POST") {
+		t.Error("Expected error message to contain 'POST'")
+	}
+	if !strings.Contains(body, "structural properties") {
+		t.Error("Expected error message to contain 'structural properties'")
+	}
 }
 
 func TestEntityHandler_writePropertyNotFoundError(t *testing.T) {
@@ -282,5 +299,13 @@ func TestEntityHandler_writePropertyNotFoundError(t *testing.T) {
 	body := w.Body.String()
 	if body == "" {
 		t.Error("Expected error response body, got empty")
+	}
+
+	// Validate error message contains expected details
+	if !strings.Contains(body, "Property not found") {
+		t.Error("Expected error message to contain 'Property not found'")
+	}
+	if !strings.Contains(body, "NonExistentProperty") {
+		t.Error("Expected error message to contain 'NonExistentProperty'")
 	}
 }
