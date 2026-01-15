@@ -1046,3 +1046,282 @@ Accept: application/json
 		}
 	})
 }
+
+func TestBatchIntegration_MaxBatchSizeEnforcement(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("Failed to connect to database: %v", err)
+	}
+
+	if err := db.AutoMigrate(&BatchIntegrationProduct{}); err != nil {
+		t.Fatalf("Failed to migrate database: %v", err)
+	}
+
+	// Create service with small max batch size
+	service, err := odata.NewServiceWithConfig(db, odata.ServiceConfig{
+		MaxBatchSize: 2,
+	})
+	if err != nil {
+		t.Fatalf("Failed to create service: %v", err)
+	}
+
+	if err := service.RegisterEntity(&BatchIntegrationProduct{}); err != nil {
+		t.Fatalf("Failed to register entity: %v", err)
+	}
+
+	// Insert test data
+	products := []BatchIntegrationProduct{
+		{ID: 1, Name: "Product 1", Price: 10.00, Category: "Category A"},
+		{ID: 2, Name: "Product 2", Price: 20.00, Category: "Category B"},
+		{ID: 3, Name: "Product 3", Price: 30.00, Category: "Category C"},
+	}
+	for _, p := range products {
+		db.Create(&p)
+	}
+
+	// Create batch request with 3 GET requests (exceeds limit of 2)
+	boundary := "batch_boundary"
+	body := fmt.Sprintf(`--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+GET /BatchIntegrationProducts(1) HTTP/1.1
+Host: localhost
+Accept: application/json
+
+
+--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+GET /BatchIntegrationProducts(2) HTTP/1.1
+Host: localhost
+Accept: application/json
+
+
+--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+GET /BatchIntegrationProducts(3) HTTP/1.1
+Host: localhost
+Accept: application/json
+
+
+--%s--
+`, boundary, boundary, boundary, boundary)
+
+	req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+	req.Header.Set("Content-Type", fmt.Sprintf("multipart/mixed; boundary=%s", boundary))
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	// Should return 413 Request Entity Too Large
+	if w.Code != http.StatusRequestEntityTooLarge {
+		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusRequestEntityTooLarge, w.Body.String())
+	}
+
+	// Check error message contains limit information
+	responseBody := w.Body.String()
+	if !strings.Contains(responseBody, "Maximum allowed: 2") {
+		t.Errorf("Response should contain limit information. Body: %s", responseBody)
+	}
+}
+
+func TestBatchIntegration_MaxBatchSizeWithinLimit(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("Failed to connect to database: %v", err)
+	}
+
+	if err := db.AutoMigrate(&BatchIntegrationProduct{}); err != nil {
+		t.Fatalf("Failed to migrate database: %v", err)
+	}
+
+	// Create service with max batch size of 2
+	service, err := odata.NewServiceWithConfig(db, odata.ServiceConfig{
+		MaxBatchSize: 2,
+	})
+	if err != nil {
+		t.Fatalf("Failed to create service: %v", err)
+	}
+
+	if err := service.RegisterEntity(&BatchIntegrationProduct{}); err != nil {
+		t.Fatalf("Failed to register entity: %v", err)
+	}
+
+	// Insert test data
+	products := []BatchIntegrationProduct{
+		{ID: 1, Name: "Product 1", Price: 10.00, Category: "Category A"},
+		{ID: 2, Name: "Product 2", Price: 20.00, Category: "Category B"},
+	}
+	for _, p := range products {
+		db.Create(&p)
+	}
+
+	// Create batch request with 2 GET requests (within limit)
+	boundary := "batch_boundary"
+	body := fmt.Sprintf(`--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+GET /BatchIntegrationProducts(1) HTTP/1.1
+Host: localhost
+Accept: application/json
+
+
+--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+GET /BatchIntegrationProducts(2) HTTP/1.1
+Host: localhost
+Accept: application/json
+
+
+--%s--
+`, boundary, boundary, boundary)
+
+	req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+	req.Header.Set("Content-Type", fmt.Sprintf("multipart/mixed; boundary=%s", boundary))
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	// Should succeed with 200 OK
+	if w.Code != http.StatusOK {
+		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	// Check response contains both products
+	responseBody := w.Body.String()
+	if !strings.Contains(responseBody, "Product 1") || !strings.Contains(responseBody, "Product 2") {
+		t.Errorf("Response should contain both products. Body: %s", responseBody)
+	}
+}
+
+func TestBatchIntegration_DefaultMaxBatchSize(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("Failed to connect to database: %v", err)
+	}
+
+	if err := db.AutoMigrate(&BatchIntegrationProduct{}); err != nil {
+		t.Fatalf("Failed to migrate database: %v", err)
+	}
+
+	// Create service without specifying MaxBatchSize (should use default)
+	service := odata.NewService(db)
+	if err := service.RegisterEntity(&BatchIntegrationProduct{}); err != nil {
+		t.Fatalf("Failed to register entity: %v", err)
+	}
+
+	// Insert test data
+	for i := 1; i <= 100; i++ {
+		product := BatchIntegrationProduct{
+			ID:       uint(i),
+			Name:     fmt.Sprintf("Product %d", i),
+			Price:    float64(i) * 10.0,
+			Category: "Test",
+		}
+		db.Create(&product)
+	}
+
+	// Create batch request with exactly 100 requests (should be allowed with default limit)
+	boundary := "batch_boundary"
+	bodyBuilder := strings.Builder{}
+	for i := 1; i <= 100; i++ {
+		bodyBuilder.WriteString(fmt.Sprintf(`--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+GET /BatchIntegrationProducts(%d) HTTP/1.1
+Host: localhost
+Accept: application/json
+
+
+`, boundary, i))
+	}
+	bodyBuilder.WriteString(fmt.Sprintf("--%s--\n", boundary))
+
+	req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(bodyBuilder.String()))
+	req.Header.Set("Content-Type", fmt.Sprintf("multipart/mixed; boundary=%s", boundary))
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	// Should succeed with 200 OK (default limit is 100)
+	if w.Code != http.StatusOK {
+		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	// Count number of HTTP responses in batch
+	responseBody := w.Body.String()
+	count := strings.Count(responseBody, "HTTP/1.1")
+	if count != 100 {
+		t.Errorf("Expected 100 HTTP responses, got %d", count)
+	}
+}
+
+func TestBatchIntegration_ExceedDefaultMaxBatchSize(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("Failed to connect to database: %v", err)
+	}
+
+	if err := db.AutoMigrate(&BatchIntegrationProduct{}); err != nil {
+		t.Fatalf("Failed to migrate database: %v", err)
+	}
+
+	// Create service without specifying MaxBatchSize (should use default of 100)
+	service := odata.NewService(db)
+	if err := service.RegisterEntity(&BatchIntegrationProduct{}); err != nil {
+		t.Fatalf("Failed to register entity: %v", err)
+	}
+
+	// Insert test data
+	for i := 1; i <= 101; i++ {
+		product := BatchIntegrationProduct{
+			ID:       uint(i),
+			Name:     fmt.Sprintf("Product %d", i),
+			Price:    float64(i) * 10.0,
+			Category: "Test",
+		}
+		db.Create(&product)
+	}
+
+	// Create batch request with 101 requests (exceeds default limit of 100)
+	boundary := "batch_boundary"
+	bodyBuilder := strings.Builder{}
+	for i := 1; i <= 101; i++ {
+		bodyBuilder.WriteString(fmt.Sprintf(`--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+GET /BatchIntegrationProducts(%d) HTTP/1.1
+Host: localhost
+Accept: application/json
+
+
+`, boundary, i))
+	}
+	bodyBuilder.WriteString(fmt.Sprintf("--%s--\n", boundary))
+
+	req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(bodyBuilder.String()))
+	req.Header.Set("Content-Type", fmt.Sprintf("multipart/mixed; boundary=%s", boundary))
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	// Should return 413 Request Entity Too Large
+	if w.Code != http.StatusRequestEntityTooLarge {
+		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusRequestEntityTooLarge, w.Body.String())
+	}
+
+	// Check error message contains limit information
+	responseBody := w.Body.String()
+	if !strings.Contains(responseBody, "Maximum allowed: 100") {
+		t.Errorf("Response should contain default limit information. Body: %s", responseBody)
+	}
+}

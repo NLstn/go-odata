@@ -32,15 +32,18 @@ type BatchHandler struct {
 	observability *observability.Config
 	// preRequestHook is called before each sub-request is processed.
 	preRequestHook func(r *http.Request) (context.Context, error)
+	// maxBatchSize limits the maximum number of sub-requests allowed in a batch
+	maxBatchSize int
 }
 
 // NewBatchHandler creates a new batch handler
-func NewBatchHandler(db *gorm.DB, handlers map[string]*EntityHandler, service http.Handler) *BatchHandler {
+func NewBatchHandler(db *gorm.DB, handlers map[string]*EntityHandler, service http.Handler, maxBatchSize int) *BatchHandler {
 	return &BatchHandler{
-		db:       db,
-		handlers: handlers,
-		service:  service,
-		logger:   slog.Default(),
+		db:           db,
+		handlers:     handlers,
+		service:      service,
+		logger:       slog.Default(),
+		maxBatchSize: maxBatchSize,
 	}
 }
 
@@ -162,9 +165,29 @@ func (h *BatchHandler) HandleBatch(w http.ResponseWriter, r *http.Request) {
 			}
 
 			// Process changeset (atomic operations)
-			changesetResponses := h.processChangeset(part, changesetBoundary)
+			// Pass remaining capacity to ensure changeset doesn't exceed batch limit
+			remainingCapacity := h.maxBatchSize - len(responses)
+			changesetResponses, exceeded := h.processChangeset(part, changesetBoundary, remainingCapacity)
+			
+			// Check if batch size limit was exceeded
+			if exceeded {
+				if err := response.WriteError(w, r, http.StatusRequestEntityTooLarge, "Batch size limit exceeded",
+					fmt.Sprintf("Batch request contains too many sub-requests. Maximum allowed: %d", h.maxBatchSize)); err != nil {
+					h.logger.Error("Error writing error response", "error", err)
+				}
+				return
+			}
 			responses = append(responses, changesetResponses...)
 		} else if partMediaType == "application/http" {
+			// Check batch size limit before processing single request
+			if len(responses)+1 > h.maxBatchSize {
+				if err := response.WriteError(w, r, http.StatusRequestEntityTooLarge, "Batch size limit exceeded",
+					fmt.Sprintf("Batch request contains too many sub-requests. Maximum allowed: %d", h.maxBatchSize)); err != nil {
+					h.logger.Error("Error writing error response", "error", err)
+				}
+				return
+			}
+
 			// Process single request
 			// Capture Content-ID from MIME part envelope headers (per OData v4 spec, must be echoed in response)
 			contentID := part.Header.Get("Content-ID")
@@ -182,6 +205,14 @@ func (h *BatchHandler) HandleBatch(w http.ResponseWriter, r *http.Request) {
 			resp.ContentID = req.ContentID // Echo Content-ID in response
 			responses = append(responses, resp)
 		} else {
+			// Check batch size limit before appending error response
+			if len(responses)+1 > h.maxBatchSize {
+				if err := response.WriteError(w, r, http.StatusRequestEntityTooLarge, "Batch size limit exceeded",
+					fmt.Sprintf("Batch request contains too many sub-requests. Maximum allowed: %d", h.maxBatchSize)); err != nil {
+					h.logger.Error("Error writing error response", "error", err)
+				}
+				return
+			}
 			responses = append(responses, h.createErrorResponse(http.StatusBadRequest, "Invalid part Content-Type"))
 		}
 	}
@@ -197,19 +228,21 @@ func (h *BatchHandler) HandleBatch(w http.ResponseWriter, r *http.Request) {
 }
 
 // processChangeset processes a changeset (atomic operations)
-func (h *BatchHandler) processChangeset(r io.Reader, boundary string) []batchResponse {
+// Returns responses and a boolean indicating if batch size limit was exceeded
+func (h *BatchHandler) processChangeset(r io.Reader, boundary string, remainingCapacity int) ([]batchResponse, bool) {
 	reader := multipart.NewReader(r, boundary)
 	responses := []batchResponse{}
 
 	// Start a transaction for the changeset
 	tx := h.db.Begin()
 	if tx.Error != nil {
-		return []batchResponse{h.createErrorResponse(http.StatusInternalServerError, "Failed to start transaction")}
+		return []batchResponse{h.createErrorResponse(http.StatusInternalServerError, "Failed to start transaction")}, false
 	}
 
 	pendingEvents := make([]pendingChangeEvent, 0)
 
 	var hasError bool
+	var sizeExceeded bool
 	for {
 		part, err := reader.NextPart()
 		if err == io.EOF {
@@ -218,6 +251,13 @@ func (h *BatchHandler) processChangeset(r io.Reader, boundary string) []batchRes
 		if err != nil {
 			hasError = true
 			responses = append(responses, h.createErrorResponse(http.StatusBadRequest, fmt.Sprintf("Failed to read changeset part: %v", err)))
+			break
+		}
+
+		// Check if adding this request would exceed the batch size limit
+		if len(responses)+1 > remainingCapacity {
+			sizeExceeded = true
+			hasError = true
 			break
 		}
 
@@ -253,12 +293,12 @@ func (h *BatchHandler) processChangeset(r io.Reader, boundary string) []batchRes
 	} else {
 		if err := tx.Commit().Error; err != nil {
 			tx.Rollback()
-			return []batchResponse{h.createErrorResponse(http.StatusInternalServerError, "Failed to commit transaction")}
+			return []batchResponse{h.createErrorResponse(http.StatusInternalServerError, "Failed to commit transaction")}, false
 		}
 		flushPendingChangeEvents(pendingEvents)
 	}
 
-	return responses
+	return responses, sizeExceeded
 }
 
 // parseHTTPRequest parses an HTTP request from a multipart part

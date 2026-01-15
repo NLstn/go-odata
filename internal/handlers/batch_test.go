@@ -62,7 +62,7 @@ func setupBatchTestHandler(t *testing.T) (*BatchHandler, *gorm.DB, http.Handler)
 		}
 	})
 
-	batchHandler := NewBatchHandler(db, handlers, serviceHandler)
+	batchHandler := NewBatchHandler(db, handlers, serviceHandler, 100)
 	return batchHandler, db, serviceHandler
 }
 
@@ -1035,5 +1035,298 @@ func TestBatchHandler_SetPreRequestHook(t *testing.T) {
 	}
 	if !hookCalled {
 		t.Error("Expected hook to be called")
+	}
+}
+
+func TestBatchHandler_MaxBatchSizeEnforcement(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("Failed to connect to database: %v", err)
+	}
+
+	if err := db.AutoMigrate(&BatchTestProduct{}); err != nil {
+		t.Fatalf("Failed to migrate database: %v", err)
+	}
+
+	entityMeta, err := metadata.AnalyzeEntity(BatchTestProduct{})
+	if err != nil {
+		t.Fatalf("Failed to analyze entity: %v", err)
+	}
+
+	handlers := make(map[string]*EntityHandler)
+	entityHandler := NewEntityHandler(db, entityMeta, nil)
+	handlers["BatchTestProducts"] = entityHandler
+
+	// Create a simple service handler for testing
+	serviceHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := strings.TrimPrefix(r.URL.Path, "/")
+		if strings.HasPrefix(path, "BatchTestProducts") {
+			if strings.Contains(path, "(") {
+				// Entity request
+				keyStart := strings.Index(path, "(")
+				keyEnd := strings.Index(path, ")")
+				if keyStart > 0 && keyEnd > keyStart {
+					key := path[keyStart+1 : keyEnd]
+					entityHandler.HandleEntity(w, r, key)
+				}
+			} else {
+				// Collection request
+				entityHandler.HandleCollection(w, r)
+			}
+		}
+	})
+
+	// Create handler with small max batch size for testing
+	batchHandler := NewBatchHandler(db, handlers, serviceHandler, 2)
+
+	// Insert test data
+	products := []BatchTestProduct{
+		{ID: 1, Name: "Product 1", Price: 10.00, Category: "Category A"},
+		{ID: 2, Name: "Product 2", Price: 20.00, Category: "Category B"},
+		{ID: 3, Name: "Product 3", Price: 30.00, Category: "Category C"},
+	}
+	for _, p := range products {
+		db.Create(&p)
+	}
+
+	// Create batch request with 3 GET requests (exceeds limit of 2)
+	boundary := "batch_boundary"
+	body := fmt.Sprintf(`--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+GET /BatchTestProducts(1) HTTP/1.1
+Host: localhost
+Accept: application/json
+
+
+--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+GET /BatchTestProducts(2) HTTP/1.1
+Host: localhost
+Accept: application/json
+
+
+--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+GET /BatchTestProducts(3) HTTP/1.1
+Host: localhost
+Accept: application/json
+
+
+--%s--
+`, boundary, boundary, boundary, boundary)
+
+	req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+	req.Header.Set("Content-Type", fmt.Sprintf("multipart/mixed; boundary=%s", boundary))
+	w := httptest.NewRecorder()
+
+	batchHandler.HandleBatch(w, req)
+
+	// Should return 413 Request Entity Too Large
+	if w.Code != http.StatusRequestEntityTooLarge {
+		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusRequestEntityTooLarge, w.Body.String())
+	}
+
+	// Check error message contains limit information
+	responseBody := w.Body.String()
+	if !strings.Contains(responseBody, "Maximum allowed: 2") {
+		t.Errorf("Response should contain limit information. Body: %s", responseBody)
+	}
+}
+
+func TestBatchHandler_MaxBatchSizeWithinLimit(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("Failed to connect to database: %v", err)
+	}
+
+	if err := db.AutoMigrate(&BatchTestProduct{}); err != nil {
+		t.Fatalf("Failed to migrate database: %v", err)
+	}
+
+	entityMeta, err := metadata.AnalyzeEntity(BatchTestProduct{})
+	if err != nil {
+		t.Fatalf("Failed to analyze entity: %v", err)
+	}
+
+	handlers := make(map[string]*EntityHandler)
+	entityHandler := NewEntityHandler(db, entityMeta, nil)
+	handlers["BatchTestProducts"] = entityHandler
+
+	// Create a simple service handler for testing
+	serviceHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := strings.TrimPrefix(r.URL.Path, "/")
+		if strings.HasPrefix(path, "BatchTestProducts") {
+			if strings.Contains(path, "(") {
+				// Entity request
+				keyStart := strings.Index(path, "(")
+				keyEnd := strings.Index(path, ")")
+				if keyStart > 0 && keyEnd > keyStart {
+					key := path[keyStart+1 : keyEnd]
+					entityHandler.HandleEntity(w, r, key)
+				}
+			} else {
+				// Collection request
+				entityHandler.HandleCollection(w, r)
+			}
+		}
+	})
+
+	// Create handler with max batch size of 2
+	batchHandler := NewBatchHandler(db, handlers, serviceHandler, 2)
+
+	// Insert test data
+	products := []BatchTestProduct{
+		{ID: 1, Name: "Product 1", Price: 10.00, Category: "Category A"},
+		{ID: 2, Name: "Product 2", Price: 20.00, Category: "Category B"},
+	}
+	for _, p := range products {
+		db.Create(&p)
+	}
+
+	// Create batch request with 2 GET requests (within limit)
+	boundary := "batch_boundary"
+	body := fmt.Sprintf(`--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+GET /BatchTestProducts(1) HTTP/1.1
+Host: localhost
+Accept: application/json
+
+
+--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+GET /BatchTestProducts(2) HTTP/1.1
+Host: localhost
+Accept: application/json
+
+
+--%s--
+`, boundary, boundary, boundary)
+
+	req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+	req.Header.Set("Content-Type", fmt.Sprintf("multipart/mixed; boundary=%s", boundary))
+	w := httptest.NewRecorder()
+
+	batchHandler.HandleBatch(w, req)
+
+	// Should succeed with 200 OK
+	if w.Code != http.StatusOK {
+		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	// Check response contains both products
+	responseBody := w.Body.String()
+	if !strings.Contains(responseBody, "Product 1") || !strings.Contains(responseBody, "Product 2") {
+		t.Errorf("Response should contain both products. Body: %s", responseBody)
+	}
+}
+
+func TestBatchHandler_MaxBatchSizeWithChangeset(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("Failed to connect to database: %v", err)
+	}
+
+	if err := db.AutoMigrate(&BatchTestProduct{}); err != nil {
+		t.Fatalf("Failed to migrate database: %v", err)
+	}
+
+	entityMeta, err := metadata.AnalyzeEntity(BatchTestProduct{})
+	if err != nil {
+		t.Fatalf("Failed to analyze entity: %v", err)
+	}
+
+	handlers := make(map[string]*EntityHandler)
+	entityHandler := NewEntityHandler(db, entityMeta, nil)
+	handlers["BatchTestProducts"] = entityHandler
+
+	// Create a simple service handler for testing
+	serviceHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := strings.TrimPrefix(r.URL.Path, "/")
+		if strings.HasPrefix(path, "BatchTestProducts") {
+			if strings.Contains(path, "(") {
+				// Entity request
+				keyStart := strings.Index(path, "(")
+				keyEnd := strings.Index(path, ")")
+				if keyStart > 0 && keyEnd > keyStart {
+					key := path[keyStart+1 : keyEnd]
+					entityHandler.HandleEntity(w, r, key)
+				}
+			} else {
+				// Collection request
+				entityHandler.HandleCollection(w, r)
+			}
+		}
+	})
+
+	// Create handler with max batch size of 2
+	batchHandler := NewBatchHandler(db, handlers, serviceHandler, 2)
+
+	// Create batch request with changeset containing 3 POST requests (exceeds limit)
+	batchBoundary := "batch_boundary"
+	changesetBoundary := "changeset_boundary"
+	body := fmt.Sprintf(`--%s
+Content-Type: multipart/mixed; boundary=%s
+
+--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+POST /BatchTestProducts HTTP/1.1
+Host: localhost
+Content-Type: application/json
+
+{"Name":"Product 1","Price":10.00,"Category":"Electronics"}
+
+--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+POST /BatchTestProducts HTTP/1.1
+Host: localhost
+Content-Type: application/json
+
+{"Name":"Product 2","Price":20.00,"Category":"Books"}
+
+--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+POST /BatchTestProducts HTTP/1.1
+Host: localhost
+Content-Type: application/json
+
+{"Name":"Product 3","Price":30.00,"Category":"Toys"}
+
+--%s--
+
+--%s--
+`, batchBoundary, changesetBoundary, changesetBoundary, changesetBoundary, changesetBoundary, changesetBoundary, batchBoundary)
+
+	req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+	req.Header.Set("Content-Type", fmt.Sprintf("multipart/mixed; boundary=%s", batchBoundary))
+	w := httptest.NewRecorder()
+
+	batchHandler.HandleBatch(w, req)
+
+	// Should return 413 Request Entity Too Large
+	if w.Code != http.StatusRequestEntityTooLarge {
+		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusRequestEntityTooLarge, w.Body.String())
+	}
+
+	// Verify no products were created (transaction should be rolled back)
+	var count int64
+	db.Model(&BatchTestProduct{}).Count(&count)
+	if count != 0 {
+		t.Errorf("Expected 0 products in database due to batch size limit, got %d", count)
 	}
 }
