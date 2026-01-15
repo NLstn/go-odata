@@ -128,6 +128,46 @@ func TestTokenizer(t *testing.T) {
 				TokenEOF,
 			},
 		},
+		{
+			name:  "Scientific notation positive exponent",
+			input: "Price lt 1.5e+10",
+			expected: []TokenType{
+				TokenIdentifier,
+				TokenOperator,
+				TokenNumber,
+				TokenEOF,
+			},
+		},
+		{
+			name:  "Scientific notation negative exponent",
+			input: "Price gt 2.5e-5",
+			expected: []TokenType{
+				TokenIdentifier,
+				TokenOperator,
+				TokenNumber,
+				TokenEOF,
+			},
+		},
+		{
+			name:  "Scientific notation very large double",
+			input: "Price lt 1.7976931348623157e+308",
+			expected: []TokenType{
+				TokenIdentifier,
+				TokenOperator,
+				TokenNumber,
+				TokenEOF,
+			},
+		},
+		{
+			name:  "Scientific notation very small double",
+			input: "Price gt 2.2250738585072014e-308",
+			expected: []TokenType{
+				TokenIdentifier,
+				TokenOperator,
+				TokenNumber,
+				TokenEOF,
+			},
+		},
 	}
 
 	for _, tt := range tests {
