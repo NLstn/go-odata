@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 // CompanyInfo represents a singleton entity for company information
@@ -26,7 +27,7 @@ func (CompanyInfo) TableName() string {
 
 // BeforeUpdate is a GORM hook that increments the Version field before each update
 // This ensures the ETag changes whenever the entity is modified
-func (c *CompanyInfo) BeforeUpdate(tx interface{}) error {
+func (c *CompanyInfo) BeforeUpdate(tx *gorm.DB) error {
 	c.Version++
 	return nil
 }
