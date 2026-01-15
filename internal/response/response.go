@@ -75,7 +75,7 @@ type PropertyMetadata struct {
 
 // ODataErrorDetail represents an additional error detail in an OData error response.
 type ODataErrorDetail struct {
-	Code    string `json:"code,omitempty"`
+	Code    string `json:"code"`
 	Target  string `json:"target,omitempty"`
 	Message string `json:"message"`
 }
@@ -105,7 +105,10 @@ func WriteError(w http.ResponseWriter, r *http.Request, code int, message string
 	}
 
 	if details != "" {
-		odataErr.Details = []ODataErrorDetail{{Message: details}}
+		odataErr.Details = []ODataErrorDetail{{
+			Code:    fmt.Sprintf("%d", code),
+			Message: details,
+		}}
 	}
 
 	return WriteODataError(w, r, code, odataErr)
@@ -136,6 +139,7 @@ func WriteErrorWithTarget(w http.ResponseWriter, r *http.Request, code int, mess
 
 	if details != "" {
 		odataErr.Details = []ODataErrorDetail{{
+			Code:    fmt.Sprintf("%d", code),
 			Message: details,
 			Target:  target,
 		}}

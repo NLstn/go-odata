@@ -24,6 +24,13 @@ func (CompanyInfo) TableName() string {
 	return "Company"
 }
 
+// BeforeUpdate is a GORM hook that increments the Version field before each update
+// This ensures the ETag changes whenever the entity is modified
+func (c *CompanyInfo) BeforeUpdate(tx interface{}) error {
+	c.Version++
+	return nil
+}
+
 // GetCompanyInfo returns the singleton company information
 // Note: ID is server-generated
 func GetCompanyInfo() CompanyInfo {
