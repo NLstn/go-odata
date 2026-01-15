@@ -167,7 +167,7 @@ func (h *BatchHandler) HandleBatch(w http.ResponseWriter, r *http.Request) {
 			// Process changeset (atomic operations)
 			// Pass remaining capacity to ensure changeset doesn't exceed batch limit
 			remainingCapacity := h.maxBatchSize - len(responses)
-			changesetResponses, exceeded := h.processChangeset(part, changesetBoundary, remainingCapacity)
+			changesetResponses, exceeded := h.processChangeset(part, changesetBoundary, remainingCapacity, r)
 			// Check if batch size limit was exceeded
 			if exceeded {
 				if err := response.WriteError(w, r, http.StatusRequestEntityTooLarge, "Batch size limit exceeded",
@@ -200,7 +200,7 @@ func (h *BatchHandler) HandleBatch(w http.ResponseWriter, r *http.Request) {
 			}
 
 			req.ContentID = contentID
-			resp := h.executeRequest(req)
+			resp := h.executeRequest(req, r)
 			resp.ContentID = req.ContentID // Echo Content-ID in response
 			responses = append(responses, resp)
 		} else {
@@ -228,7 +228,7 @@ func (h *BatchHandler) HandleBatch(w http.ResponseWriter, r *http.Request) {
 
 // processChangeset processes a changeset (atomic operations)
 // Returns responses and a boolean indicating if batch size limit was exceeded
-func (h *BatchHandler) processChangeset(r io.Reader, boundary string, remainingCapacity int) ([]batchResponse, bool) {
+func (h *BatchHandler) processChangeset(r io.Reader, boundary string, remainingCapacity int, parentReq *http.Request) ([]batchResponse, bool) {
 	reader := multipart.NewReader(r, boundary)
 	responses := []batchResponse{}
 
@@ -275,7 +275,7 @@ func (h *BatchHandler) processChangeset(r io.Reader, boundary string, remainingC
 		req.ContentID = contentID
 
 		// Execute request within transaction
-		resp := h.executeRequestInTransaction(req, tx, &pendingEvents)
+		resp := h.executeRequestInTransaction(req, tx, &pendingEvents, parentReq)
 		resp.ContentID = req.ContentID // Echo Content-ID in response
 		responses = append(responses, resp)
 
@@ -347,7 +347,8 @@ func (h *BatchHandler) parseHTTPRequest(r io.Reader) (*batchRequest, error) {
 // executeRequest executes a single batch request.
 // Per the OData specification, each sub-request should be treated as an independent request.
 // Sub-requests are routed through the service handler which invokes the PreRequestHook.
-func (h *BatchHandler) executeRequest(req *batchRequest) batchResponse {
+// Cookies from the parent batch request are forwarded to enable cookie-based authentication.
+func (h *BatchHandler) executeRequest(req *batchRequest, parentReq *http.Request) batchResponse {
 	// Ensure URL has a leading slash to avoid httptest.NewRequest panic
 	url := req.URL
 	if !strings.HasPrefix(url, "/") {
@@ -360,6 +361,11 @@ func (h *BatchHandler) executeRequest(req *batchRequest) batchResponse {
 		for _, value := range values {
 			httpReq.Header.Add(key, value)
 		}
+	}
+
+	// Forward cookies from parent request to enable cookie-based authentication
+	for _, cookie := range parentReq.Cookies() {
+		httpReq.AddCookie(cookie)
 	}
 
 	// Execute request using the service handler.
@@ -375,7 +381,7 @@ func (h *BatchHandler) executeRequest(req *batchRequest) batchResponse {
 }
 
 // executeRequestInTransaction executes a request within a transaction
-func (h *BatchHandler) executeRequestInTransaction(req *batchRequest, tx *gorm.DB, pendingEvents *[]pendingChangeEvent) batchResponse {
+func (h *BatchHandler) executeRequestInTransaction(req *batchRequest, tx *gorm.DB, pendingEvents *[]pendingChangeEvent, parentReq *http.Request) batchResponse {
 	// Create temporary handlers that use the transaction
 	txHandlers := make(map[string]*EntityHandler)
 	for name, handler := range h.handlers {
@@ -613,6 +619,11 @@ func (h *BatchHandler) executeRequestInTransaction(req *batchRequest, tx *gorm.D
 		for _, value := range values {
 			httpReq.Header.Add(key, value)
 		}
+	}
+
+	// Forward cookies from parent request to enable cookie-based authentication
+	for _, cookie := range parentReq.Cookies() {
+		httpReq.AddCookie(cookie)
 	}
 
 	// Call the pre-request hook if configured (for changeset sub-requests)
