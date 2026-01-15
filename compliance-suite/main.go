@@ -156,6 +156,11 @@ func main() {
 			Suite:   v4_0.NumericEdgeCases,
 		})
 		testSuites = append(testSuites, TestSuiteInfo{
+			Name:    "5.1.1.5_numeric_boundary_tests",
+			Version: "4.0",
+			Suite:   v4_0.NumericBoundaryTests,
+		})
+		testSuites = append(testSuites, TestSuiteInfo{
 			Name:    "5.1.2_nullable_properties",
 			Version: "4.0",
 			Suite:   v4_0.NullableProperties,
@@ -314,6 +319,11 @@ func main() {
 			Name:    "10.1_json_format",
 			Version: "4.0",
 			Suite:   v4_0.JSONFormat,
+		})
+		testSuites = append(testSuites, TestSuiteInfo{
+			Name:    "10.2_odata_annotations",
+			Version: "4.0",
+			Suite:   v4_0.ODataAnnotations,
 		})
 		testSuites = append(testSuites, TestSuiteInfo{
 			Name:    "11.1_resource_path",
