@@ -213,4 +213,282 @@ func registerErrorResponseTests(suite *framework.TestSuite) {
 			return nil
 		},
 	)
+
+	suite.AddTest(
+		"Error code has no whitespace",
+		"Error code should not contain whitespace",
+		func(ctx *framework.TestContext) error {
+			resp, err := ctx.GET(invalidProductPath)
+			if err != nil {
+				return err
+			}
+
+			var result map[string]interface{}
+			if err := json.Unmarshal(resp.Body, &result); err != nil {
+				return fmt.Errorf("invalid JSON: %v", err)
+			}
+
+			errorObj, ok := result["error"].(map[string]interface{})
+			if !ok {
+				return fmt.Errorf("no 'error' object in response")
+			}
+
+			code, ok := errorObj["code"].(string)
+			if !ok {
+				return fmt.Errorf("no 'code' in error object")
+			}
+
+			if strings.ContainsAny(code, " \t\n\r") {
+				return fmt.Errorf("error code should not contain whitespace, got: %q", code)
+			}
+
+			ctx.Log(fmt.Sprintf("Error code: %s", code))
+			return nil
+		},
+	)
+
+	suite.AddTest(
+		"Error target field validation",
+		"Error object may include 'target' field for property-specific errors",
+		func(ctx *framework.TestContext) error {
+			// Try to create a product with invalid data
+			invalidPayload := map[string]interface{}{
+				"Name":  "Test Product",
+				"Price": "not-a-number", // Invalid price type
+			}
+
+			resp, err := ctx.POST("/Products", invalidPayload,
+				framework.Header{Key: "Content-Type", Value: "application/json"},
+			)
+			if err != nil {
+				return err
+			}
+
+			// Should return 400 for validation error
+			if resp.StatusCode != 400 {
+				// Some servers might be lenient and convert types
+				return ctx.Skip(fmt.Sprintf("Expected 400 for invalid data, got %d", resp.StatusCode))
+			}
+
+			var result map[string]interface{}
+			if err := json.Unmarshal(resp.Body, &result); err != nil {
+				return fmt.Errorf("invalid JSON: %v", err)
+			}
+
+			errorObj, ok := result["error"].(map[string]interface{})
+			if !ok {
+				return fmt.Errorf("no 'error' object in response")
+			}
+
+			// Target is optional, but if present should be a string
+			if target, ok := errorObj["target"]; ok {
+				targetStr, ok := target.(string)
+				if !ok {
+					return fmt.Errorf("'target' must be a string if present, got %T", target)
+				}
+				if targetStr == "" {
+					return fmt.Errorf("'target' must not be empty if present")
+				}
+				ctx.Log(fmt.Sprintf("Error target: %s", targetStr))
+			} else {
+				ctx.Log("No 'target' field (optional)")
+			}
+
+			return nil
+		},
+	)
+
+	suite.AddTest(
+		"Error details array validation",
+		"Error object may include 'details' array for multiple errors",
+		func(ctx *framework.TestContext) error {
+			// Try various operations that might return detailed errors
+			resp, err := ctx.GET("/Products?$filter=InvalidFunction()")
+			if err != nil {
+				return err
+			}
+
+			if resp.StatusCode != 400 {
+				return ctx.Skip("No validation error triggered")
+			}
+
+			var result map[string]interface{}
+			if err := json.Unmarshal(resp.Body, &result); err != nil {
+				return fmt.Errorf("invalid JSON: %v", err)
+			}
+
+			errorObj, ok := result["error"].(map[string]interface{})
+			if !ok {
+				return fmt.Errorf("no 'error' object in response")
+			}
+
+			// Details is optional, but if present must be an array
+			if details, ok := errorObj["details"]; ok {
+				detailsArray, ok := details.([]interface{})
+				if !ok {
+					return fmt.Errorf("'details' must be an array if present, got %T", details)
+				}
+
+				// Each detail should be an object with code and message
+				for i, detail := range detailsArray {
+					detailObj, ok := detail.(map[string]interface{})
+					if !ok {
+						return fmt.Errorf("details[%d] must be an object", i)
+					}
+
+					// Each detail must have code
+					if _, ok := detailObj["code"].(string); !ok {
+						return fmt.Errorf("details[%d] must have 'code' as string", i)
+					}
+
+					// Each detail must have message
+					if _, ok := detailObj["message"].(string); !ok {
+						return fmt.Errorf("details[%d] must have 'message' as string", i)
+					}
+				}
+
+				ctx.Log(fmt.Sprintf("Error has %d details", len(detailsArray)))
+			} else {
+				ctx.Log("No 'details' array (optional)")
+			}
+
+			return nil
+		},
+	)
+
+	suite.AddTest(
+		"Error innererror validation",
+		"Error object may include 'innererror' for debugging",
+		func(ctx *framework.TestContext) error {
+			resp, err := ctx.GET(invalidProductPath)
+			if err != nil {
+				return err
+			}
+
+			var result map[string]interface{}
+			if err := json.Unmarshal(resp.Body, &result); err != nil {
+				return fmt.Errorf("invalid JSON: %v", err)
+			}
+
+			errorObj, ok := result["error"].(map[string]interface{})
+			if !ok {
+				return fmt.Errorf("no 'error' object in response")
+			}
+
+			// Innererror is optional, but if present can be object or nested
+			if innererror, ok := errorObj["innererror"]; ok {
+				// Can be an object or string (implementation-specific)
+				switch v := innererror.(type) {
+				case map[string]interface{}:
+					ctx.Log(fmt.Sprintf("innererror object with %d fields", len(v)))
+				case string:
+					ctx.Log(fmt.Sprintf("innererror string: %s", v))
+				default:
+					return fmt.Errorf("innererror has unexpected type: %T", innererror)
+				}
+			} else {
+				ctx.Log("No 'innererror' (optional)")
+			}
+
+			return nil
+		},
+	)
+
+	suite.AddTest(
+		"Multiple validation errors in create",
+		"Creating entity with multiple invalid fields",
+		func(ctx *framework.TestContext) error {
+			// Try to create with multiple problems
+			invalidPayload := map[string]interface{}{
+				"Name": "", // Empty name might be invalid
+				// Missing required fields
+			}
+
+			resp, err := ctx.POST("/Products", invalidPayload,
+				framework.Header{Key: "Content-Type", Value: "application/json"},
+			)
+			if err != nil {
+				return err
+			}
+
+			// Should return 400 for validation errors
+			if resp.StatusCode != 400 {
+				// Might be lenient with defaults
+				return ctx.Skip(fmt.Sprintf("Expected 400 for invalid data, got %d", resp.StatusCode))
+			}
+
+			var result map[string]interface{}
+			if err := json.Unmarshal(resp.Body, &result); err != nil {
+				return fmt.Errorf("invalid JSON: %v", err)
+			}
+
+			errorObj, ok := result["error"].(map[string]interface{})
+			if !ok {
+				return fmt.Errorf("no 'error' object in response")
+			}
+
+			// Must have code and message
+			if _, ok := errorObj["code"].(string); !ok {
+				return fmt.Errorf("missing 'code' in error")
+			}
+			if _, ok := errorObj["message"].(string); !ok {
+				return fmt.Errorf("missing 'message' in error")
+			}
+
+			// Server may include details for multiple validation errors
+			ctx.Log("Validation error response properly structured")
+			return nil
+		},
+	)
+
+	suite.AddTest(
+		"Error message structure validation",
+		"Error message can be string or object with value and lang",
+		func(ctx *framework.TestContext) error {
+			resp, err := ctx.GET(invalidProductPath)
+			if err != nil {
+				return err
+			}
+
+			var result map[string]interface{}
+			if err := json.Unmarshal(resp.Body, &result); err != nil {
+				return fmt.Errorf("invalid JSON: %v", err)
+			}
+
+			errorObj, ok := result["error"].(map[string]interface{})
+			if !ok {
+				return fmt.Errorf("no 'error' object in response")
+			}
+
+			message := errorObj["message"]
+			switch msg := message.(type) {
+			case string:
+				// Simple string message - most common
+				if msg == "" {
+					return fmt.Errorf("message string must not be empty")
+				}
+				ctx.Log(fmt.Sprintf("Simple message: %s", msg))
+			case map[string]interface{}:
+				// Object with value and optional lang
+				value, ok := msg["value"].(string)
+				if !ok || value == "" {
+					return fmt.Errorf("message object must have 'value' as non-empty string")
+				}
+				// lang is optional
+				if lang, ok := msg["lang"]; ok {
+					if langStr, ok := lang.(string); ok {
+						ctx.Log(fmt.Sprintf("Message: %s (lang: %s)", value, langStr))
+					} else {
+						return fmt.Errorf("message.lang must be a string if present")
+					}
+				} else {
+					ctx.Log(fmt.Sprintf("Message object: %s", value))
+				}
+			default:
+				return fmt.Errorf("message must be string or object, got %T", message)
+			}
+
+			return nil
+		},
+	)
 }
