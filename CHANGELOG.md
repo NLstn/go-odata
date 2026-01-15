@@ -28,6 +28,7 @@ rely on version numbers to reason about compatibility.
   - `internal/query` package: 56.3% → 57.3% coverage (tests for query applier functions)
   - `internal/handlers` package: 42.9% → 43.1% coverage (tests for hook error extraction)
   - `internal/response` package: 53.6% → 60.1% coverage (tests for field caching, entity key extraction, format helpers)
+- **Expanded service routing and operation handler coverage**: Added tests for OData version handling, async monitor path normalization, key serialization, function response formatting, action signature matching, and geospatial capability checks, and stabilized async runtime tests by using a file-backed SQLite database.
 - Added compliance coverage for parameter aliases in system query options ($filter/$top).
 - **Parameter alias support**: Added full support for OData v4.0 parameter aliases (section 11.2.5.8), allowing query options to reference aliases defined as query parameters (e.g., `$filter=Price gt @p&@p=10`). Parameter aliases can be used in $filter, $orderby, $top, $skip, and other query options. This enables more flexible and readable queries, especially when using the same value multiple times.
 

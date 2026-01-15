@@ -3,6 +3,7 @@ package runtime_test
 import (
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -18,7 +19,8 @@ type asyncTestEntity struct {
 }
 
 func TestServiceRespondAsyncFlow(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	dbPath := filepath.Join(t.TempDir(), "runtime.db")
+	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("failed to open database: %v", err)
 	}
