@@ -20,6 +20,12 @@ func parseOrderBy(orderByStr string, entityMetadata *metadata.EntityMetadata, co
 
 		// Check for "desc" or "asc" suffix
 		tokens := strings.Fields(trimmed)
+		if len(tokens) == 0 {
+			continue
+		}
+		if len(tokens) > 2 {
+			return nil, fmt.Errorf("invalid $orderby clause for property '%s': unexpected token '%s'", tokens[0], tokens[2])
+		}
 		item := OrderByItem{
 			Property:   tokens[0],
 			Descending: false,
@@ -30,7 +36,7 @@ func parseOrderBy(orderByStr string, entityMetadata *metadata.EntityMetadata, co
 			if direction == "desc" {
 				item.Descending = true
 			} else if direction != "asc" {
-				return nil, fmt.Errorf("invalid direction '%s', expected 'asc' or 'desc'", tokens[1])
+				return nil, fmt.Errorf("invalid direction '%s' for property '%s', expected 'asc' or 'desc'", tokens[1], tokens[0])
 			}
 		}
 
@@ -73,6 +79,12 @@ func parseOrderByWithoutMetadata(orderByStr string) ([]OrderByItem, error) {
 
 		// Check for "desc" or "asc" suffix
 		tokens := strings.Fields(trimmed)
+		if len(tokens) == 0 {
+			continue
+		}
+		if len(tokens) > 2 {
+			return nil, fmt.Errorf("invalid $orderby clause for property '%s': unexpected token '%s'", tokens[0], tokens[2])
+		}
 		item := OrderByItem{
 			Property:   tokens[0],
 			Descending: false,
@@ -83,7 +95,7 @@ func parseOrderByWithoutMetadata(orderByStr string) ([]OrderByItem, error) {
 			if direction == "desc" {
 				item.Descending = true
 			} else if direction != "asc" {
-				return nil, fmt.Errorf("invalid direction '%s', expected 'asc' or 'desc'", tokens[1])
+				return nil, fmt.Errorf("invalid direction '%s' for property '%s', expected 'asc' or 'desc'", tokens[1], tokens[0])
 			}
 		}
 
