@@ -54,9 +54,9 @@ func quoteIdent(dialect string, ident string) string {
 }
 
 // quoteTableName safely quotes table names that may include schema prefixes.
-// For table names like "mart.r2_dashboard_loads", it splits on dots and quotes
-// each part separately to produce "[mart].[r2_dashboard_loads]" for MSSQL
-// or "mart"."r2_dashboard_loads" for PostgreSQL.
+// For table names like "schema.table", it splits on dots and quotes
+// each part separately to produce "[schema].[table]" for MSSQL
+// or "schema"."table" for PostgreSQL.
 // For simple table names without schema, it behaves like quoteIdent.
 // Supports multi-part names like "database.schema.table".
 func quoteTableName(dialect string, tableName string) string {
