@@ -10,12 +10,23 @@ import (
 )
 
 type navigationFilterAuthor struct {
+	ID          uint                       `json:"ID" gorm:"primaryKey" odata:"key"`
+	Name        string                     `json:"Name" gorm:"column:custom_name"`
+	PublisherID uint                       `json:"PublisherID"`
+	Publisher   *navigationFilterPublisher `json:"Publisher,omitempty" gorm:"foreignKey:PublisherID"`
+}
+
+type navigationFilterPublisher struct {
 	ID   uint   `json:"ID" gorm:"primaryKey" odata:"key"`
-	Name string `json:"Name" gorm:"column:custom_name"`
+	Name string `json:"Name" gorm:"column:publisher_name"`
 }
 
 func (navigationFilterAuthor) TableName() string {
 	return "nav_authors"
+}
+
+func (navigationFilterPublisher) TableName() string {
+	return "nav_publishers"
 }
 
 type navigationFilterBook struct {
@@ -40,7 +51,7 @@ type lambdaMismatchKid struct {
 	Name             string `json:"Name"`
 }
 
-func buildNavigationFilterMetadata(t *testing.T) (*metadata.EntityMetadata, *metadata.EntityMetadata) {
+func buildNavigationFilterMetadata(t *testing.T) (*metadata.EntityMetadata, *metadata.EntityMetadata, *metadata.EntityMetadata) {
 	t.Helper()
 
 	authorMeta, err := metadata.AnalyzeEntity(&navigationFilterAuthor{})
@@ -48,18 +59,23 @@ func buildNavigationFilterMetadata(t *testing.T) (*metadata.EntityMetadata, *met
 		t.Fatalf("Failed to analyze author entity: %v", err)
 	}
 
+	publisherMeta, err := metadata.AnalyzeEntity(&navigationFilterPublisher{})
+	if err != nil {
+		t.Fatalf("Failed to analyze publisher entity: %v", err)
+	}
+
 	bookMeta, err := metadata.AnalyzeEntity(&navigationFilterBook{})
 	if err != nil {
 		t.Fatalf("Failed to analyze book entity: %v", err)
 	}
 
-	setEntitiesRegistry(authorMeta, bookMeta)
+	setEntitiesRegistry(authorMeta, publisherMeta, bookMeta)
 
-	return authorMeta, bookMeta
+	return authorMeta, publisherMeta, bookMeta
 }
 
 func TestNavigationFilterUsesTargetColumnMetadata(t *testing.T) {
-	_, bookMeta := buildNavigationFilterMetadata(t)
+	_, _, bookMeta := buildNavigationFilterMetadata(t)
 
 	filterExpr, err := parseFilter("Author/Name eq 'Jane'", bookMeta, nil, 0)
 	if err != nil {
@@ -68,13 +84,33 @@ func TestNavigationFilterUsesTargetColumnMetadata(t *testing.T) {
 
 	sql, args := buildFilterCondition("postgres", filterExpr, bookMeta)
 
-	expectedSQL := `"nav_authors"."custom_name" = ?`
+	expectedSQL := `"nav_author"."custom_name" = ?`
 	if sql != expectedSQL {
 		t.Fatalf("expected SQL %q, got %q", expectedSQL, sql)
 	}
 
 	if len(args) != 1 || args[0] != "Jane" {
 		t.Fatalf("expected args [Jane], got %#v", args)
+	}
+}
+
+func TestNavigationFilterUsesMultiHopNavigationPath(t *testing.T) {
+	_, _, bookMeta := buildNavigationFilterMetadata(t)
+
+	filterExpr, err := parseFilter("Author/Publisher/Name eq 'Acme'", bookMeta, nil, 0)
+	if err != nil {
+		t.Fatalf("Failed to parse navigation filter: %v", err)
+	}
+
+	sql, args := buildFilterCondition("postgres", filterExpr, bookMeta)
+
+	expectedSQL := `"nav_author_publisher"."publisher_name" = ?`
+	if sql != expectedSQL {
+		t.Fatalf("expected SQL %q, got %q", expectedSQL, sql)
+	}
+
+	if len(args) != 1 || args[0] != "Acme" {
+		t.Fatalf("expected args [Acme], got %#v", args)
 	}
 }
 

@@ -260,16 +260,14 @@ func TestMultiLevelNavigationPathRejection(t *testing.T) {
 
 	service.ServeHTTP(w, req)
 
-	// This should return an error because multi-level paths are not supported
-	if w.Code != http.StatusBadRequest {
+	// Multi-level navigation paths are supported for single-valued navigation chains.
+	if w.Code != http.StatusOK {
 		t.Errorf("Expected status %d for multi-level navigation path, got %d. Body: %s",
-			http.StatusBadRequest, w.Code, w.Body.String())
+			http.StatusOK, w.Code, w.Body.String())
 	}
 
-	// The error message will say "property does not exist" which is acceptable
-	// since multi-level paths are validated by only accepting exactly 2 segments
 	bodyStr := w.Body.String()
-	if !strings.Contains(bodyStr, "does not exist") && !strings.Contains(bodyStr, "not supported") {
-		t.Errorf("Error message should indicate the path is invalid. Body: %s", bodyStr)
+	if !strings.Contains(bodyStr, "@odata.context") {
+		t.Errorf("Expected response to include context. Body: %s", bodyStr)
 	}
 }
