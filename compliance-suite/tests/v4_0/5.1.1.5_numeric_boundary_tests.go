@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"net/url"
 	"strings"
 
 	"github.com/nlstn/go-odata/compliance-suite/framework"
@@ -314,7 +315,9 @@ func NumericBoundaryTests() *framework.TestSuite {
 			verySmall := "2.2250738585072014e-308"
 
 			filter := fmt.Sprintf("Price gt %s", verySmall)
-			resp, err := ctx.GET("/Products?$filter=" + filter)
+			// Properly encode the filter parameter to handle '-' in scientific notation
+			encodedFilter := url.QueryEscape(filter)
+			resp, err := ctx.GET("/Products?$filter=" + encodedFilter)
 			if err != nil {
 				return err
 			}
@@ -336,7 +339,9 @@ func NumericBoundaryTests() *framework.TestSuite {
 			veryLarge := "1.7976931348623157e+308"
 
 			filter := fmt.Sprintf("Price lt %s", veryLarge)
-			resp, err := ctx.GET("/Products?$filter=" + filter)
+			// Properly encode the filter parameter to handle '+' in scientific notation
+			encodedFilter := url.QueryEscape(filter)
+			resp, err := ctx.GET("/Products?$filter=" + encodedFilter)
 			if err != nil {
 				return err
 			}
