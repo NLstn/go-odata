@@ -223,6 +223,12 @@ func (h *EntityHandler) handlePatchEntity(w http.ResponseWriter, r *http.Request
 			return newTransactionHandledError(err)
 		}
 
+		// Manually increment ETag property (Version field) for PATCH operations
+		// GORM's BeforeUpdate hook is not triggered when using Updates() with a map
+		if h.metadata.ETagProperty != nil {
+			h.incrementETagProperty(entity)
+		}
+
 		if err := tx.Model(entity).Updates(updateData).Error; err != nil {
 			h.writeDatabaseError(w, r, err)
 			return newTransactionHandledError(err)
@@ -383,6 +389,14 @@ func (h *EntityHandler) handlePutEntity(w http.ResponseWriter, r *http.Request, 
 		if err := h.callBeforeUpdate(entity, hookReq); err != nil {
 			h.writeHookError(w, r, err, http.StatusForbidden, "Authorization failed")
 			return newTransactionHandledError(err)
+		}
+
+		// Manually increment ETag property (Version field) for PUT operations
+		// GORM's BeforeUpdate hook is not triggered reliably with Updates()
+		if h.metadata.ETagProperty != nil {
+			h.incrementETagProperty(entity)
+			// Copy the incremented version to the replacement entity
+			h.copyETagProperty(entity, replacementEntity)
 		}
 
 		if err := tx.Model(entity).Select("*").Updates(replacementEntity).Error; err != nil {
@@ -586,6 +600,48 @@ func (h *EntityHandler) removeODataBindAnnotations(updateData map[string]interfa
 			delete(updateData, key)
 		}
 	}
+}
+
+// incrementETagProperty increments the ETag property (Version field) on an entity
+// This is needed because GORM's BeforeUpdate hook is not triggered when using Updates() with a map
+func (h *EntityHandler) incrementETagProperty(entity interface{}) {
+	if h.metadata.ETagProperty == nil {
+		return
+	}
+
+	entityVal := reflect.ValueOf(entity).Elem()
+	etagField := entityVal.FieldByName(h.metadata.ETagProperty.Name)
+
+	if !etagField.IsValid() || !etagField.CanSet() {
+		h.logger.Error("Cannot increment ETag property", "property", h.metadata.ETagProperty.Name)
+		return
+	}
+
+	// Handle int-based version fields
+	if etagField.Kind() == reflect.Int || etagField.Kind() == reflect.Int32 || etagField.Kind() == reflect.Int64 {
+		currentValue := etagField.Int()
+		etagField.SetInt(currentValue + 1)
+	}
+}
+
+// copyETagProperty copies the ETag property value from source to destination
+func (h *EntityHandler) copyETagProperty(source, destination interface{}) {
+	if h.metadata.ETagProperty == nil {
+		return
+	}
+
+	sourceVal := reflect.ValueOf(source).Elem()
+	destVal := reflect.ValueOf(destination).Elem()
+
+	sourceField := sourceVal.FieldByName(h.metadata.ETagProperty.Name)
+	destField := destVal.FieldByName(h.metadata.ETagProperty.Name)
+
+	if !sourceField.IsValid() || !destField.IsValid() || !destField.CanSet() {
+		h.logger.Error("Cannot copy ETag property", "property", h.metadata.ETagProperty.Name)
+		return
+	}
+
+	destField.Set(sourceField)
 }
 
 // handleDeleteEntityOverwrite handles DELETE entity requests using the overwrite handler
