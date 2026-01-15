@@ -11,6 +11,7 @@ rely on version numbers to reason about compatibility.
 
 ### Added
 - Added unit tests covering enum registry error handling, enum member resolution, and underlying type detection.
+- Added unit tests for expand annotations to validate nested expand handling and count emission.
 - **Base path mounting with automatic URL generation**: Added `SetBasePath()` method to mount the OData service at a custom path (e.g., `/api/odata`). The service automatically strips the base path from incoming requests and includes it in all generated URLs (`@odata.id`, `@odata.nextLink`, etc.). This eliminates the need for `http.StripPrefix` middleware and ensures all OData URLs are correctly qualified. Validation prevents path traversal (`..`), trailing slashes, and other invalid patterns. Thread-safe configuration using `sync.RWMutex` allows concurrent requests while the base path is being set. Each service instance maintains its own independent base path, allowing multiple services with different mount points to run in the same process.
 - **$count and $levels support in nested $expand options**: Added full support for `$count=true` and `$levels` within `$expand` clauses. Expanded collections now emit `Nav@odata.count` annotations when requested, and `$levels` recursively expands navigation properties with a safe maximum depth (including `$levels=max`). `$count=false` remains a no-op.
 - **Compliance suite $count segment coverage**: Added OData v4.0 tests for the `$count` path segment, validating text/plain responses and filtered count parity with `@odata.count`.
