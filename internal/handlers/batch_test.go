@@ -1,13 +1,16 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/nlstn/go-odata/internal/metadata"
+	"github.com/nlstn/go-odata/internal/observability"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -975,5 +978,62 @@ Content-Type: application/json
 	db.Model(&BatchTestProduct{}).Count(&count)
 	if count != 1 {
 		t.Errorf("Expected 1 product in database, got %d", count)
+	}
+}
+
+func TestBatchHandler_SetLogger(t *testing.T) {
+	handler, _, _ := setupBatchTestHandler(t)
+
+	// Test with custom logger
+	customLogger := slog.Default()
+	handler.SetLogger(customLogger)
+	if handler.logger != customLogger {
+		t.Error("Expected custom logger to be set")
+	}
+
+	// Test with nil logger (should use default)
+	handler.SetLogger(nil)
+	if handler.logger == nil {
+		t.Error("Expected default logger when nil is passed")
+	}
+}
+
+func TestBatchHandler_SetObservability(t *testing.T) {
+	handler, _, _ := setupBatchTestHandler(t)
+
+	cfg := &observability.Config{}
+	handler.SetObservability(cfg)
+
+	if handler.observability != cfg {
+		t.Error("Expected observability config to be set")
+	}
+}
+
+func TestBatchHandler_SetPreRequestHook(t *testing.T) {
+	handler, _, _ := setupBatchTestHandler(t)
+
+	hookCalled := false
+	hook := func(r *http.Request) (context.Context, error) {
+		hookCalled = true
+		return r.Context(), nil
+	}
+
+	handler.SetPreRequestHook(hook)
+
+	if handler.preRequestHook == nil {
+		t.Error("Expected pre-request hook to be set")
+	}
+
+	// Test that the hook was set correctly by invoking it
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	ctx, err := handler.preRequestHook(req)
+	if err != nil {
+		t.Errorf("Unexpected error from hook: %v", err)
+	}
+	if ctx == nil {
+		t.Error("Expected context from hook")
+	}
+	if !hookCalled {
+		t.Error("Expected hook to be called")
 	}
 }
