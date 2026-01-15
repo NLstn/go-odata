@@ -51,6 +51,7 @@ rely on version numbers to reason about compatibility.
 - **Cache eviction prevents unbounded memory growth**: Metadata cache now limited to 10 entries with automatic eviction keeping 5 most common versions (4.0, 4.01 prioritized).
 
 ### Fixed
+- `$expand` parsing now ignores commas inside single-quoted string literals, preventing incorrect splitting of expand items when nested filters include commas.
 - Nested `$expand` options now reject negative `$top` and `$skip` values using the same non-negative validation as top-level query options.
 - Collection `$expand` now applies `$top/$skip/$orderby` per parent instead of using global preload limits, ensuring consistent pagination semantics across supported dialects.
 - Unbalanced parentheses in `$expand` now return clear parsing errors instead of being silently accepted.

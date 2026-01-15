@@ -41,35 +41,57 @@ func parseExpandWithConfig(expandStr string, entityMetadata *metadata.EntityMeta
 // splitExpandParts splits expand string by comma, handling nested parentheses
 func splitExpandParts(expandStr string) ([]string, error) {
 	result := make([]string, 0)
-	current := ""
+	var current strings.Builder
 	depth := 0
+	inString := false
 
-	for _, ch := range expandStr {
-		if ch == '(' {
+	for i := 0; i < len(expandStr); i++ {
+		ch := expandStr[i]
+		if ch == '\'' {
+			if inString {
+				if i+1 < len(expandStr) && expandStr[i+1] == '\'' {
+					current.WriteByte(ch)
+					current.WriteByte(ch)
+					i++
+					continue
+				}
+				inString = false
+			} else {
+				inString = true
+			}
+			current.WriteByte(ch)
+			continue
+		}
+
+		if !inString && ch == '(' {
 			depth++
-			current += string(ch)
-		} else if ch == ')' {
+			current.WriteByte(ch)
+		} else if !inString && ch == ')' {
 			if depth == 0 {
 				return nil, fmt.Errorf("invalid $expand syntax: unexpected ')'")
 			}
 			depth--
-			current += string(ch)
-		} else if ch == ',' && depth == 0 {
-			if current != "" {
-				result = append(result, current)
+			current.WriteByte(ch)
+		} else if !inString && ch == ',' && depth == 0 {
+			if current.Len() != 0 {
+				result = append(result, current.String())
 			}
-			current = ""
+			current.Reset()
 		} else {
-			current += string(ch)
+			current.WriteByte(ch)
 		}
+	}
+
+	if inString {
+		return nil, fmt.Errorf("invalid $expand syntax: missing closing quote")
 	}
 
 	if depth != 0 {
 		return nil, fmt.Errorf("invalid $expand syntax: missing ')'")
 	}
 
-	if current != "" {
-		result = append(result, current)
+	if current.Len() != 0 {
+		result = append(result, current.String())
 	}
 
 	return result, nil

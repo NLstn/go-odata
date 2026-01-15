@@ -553,6 +553,10 @@ func TestSplitExpandParts(t *testing.T) {
 			expected: []string{"Books($top=5)", "Author($select=Name)"},
 		},
 		{
+			input:    "Books($filter=contains(Title,'a,b')),Author",
+			expected: []string{"Books($filter=contains(Title,'a,b'))", "Author"},
+		},
+		{
 			input:     "Books)",
 			expectErr: true,
 		},
@@ -581,6 +585,77 @@ func TestSplitExpandParts(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestParseExpandWithFilterContainingComma(t *testing.T) {
+	authorMeta, _ := buildAuthorBookMetadata(t)
+
+	params := url.Values{}
+	params.Set("$expand", "Books($filter=contains(Title,'a,b'))")
+
+	options, err := ParseQueryOptions(params, authorMeta)
+	if err != nil {
+		t.Fatalf("Failed to parse query options: %v", err)
+	}
+
+	if len(options.Expand) != 1 {
+		t.Fatalf("Expected 1 expand option, got %d", len(options.Expand))
+	}
+
+	expand := options.Expand[0]
+	if expand.Filter == nil {
+		t.Fatal("Expected $filter to be set")
+	}
+
+	if expand.Filter.Property != "Title" {
+		t.Errorf("Expected property 'Title', got '%s'", expand.Filter.Property)
+	}
+
+	if expand.Filter.Operator != OpContains {
+		t.Errorf("Expected operator 'contains', got '%s'", expand.Filter.Operator)
+	}
+
+	if expand.Filter.Value != "a,b" {
+		t.Errorf("Expected value 'a,b', got '%v'", expand.Filter.Value)
+	}
+}
+
+func TestParseNestedExpandWithFilterContainingComma(t *testing.T) {
+	authorMeta, _ := buildAuthorBookMetadata(t)
+
+	params := url.Values{}
+	params.Set("$expand", "Books($expand=Author($filter=contains(Name,'a,b')))")
+
+	options, err := ParseQueryOptions(params, authorMeta)
+	if err != nil {
+		t.Fatalf("Failed to parse query options: %v", err)
+	}
+
+	if len(options.Expand) != 1 {
+		t.Fatalf("Expected 1 expand option, got %d", len(options.Expand))
+	}
+
+	firstLevel := options.Expand[0]
+	if len(firstLevel.Expand) != 1 {
+		t.Fatalf("Expected 1 nested expand option, got %d", len(firstLevel.Expand))
+	}
+
+	nestedExpand := firstLevel.Expand[0]
+	if nestedExpand.Filter == nil {
+		t.Fatal("Expected nested $filter to be set")
+	}
+
+	if nestedExpand.Filter.Property != "Name" {
+		t.Errorf("Expected property 'Name', got '%s'", nestedExpand.Filter.Property)
+	}
+
+	if nestedExpand.Filter.Operator != OpContains {
+		t.Errorf("Expected operator 'contains', got '%s'", nestedExpand.Filter.Operator)
+	}
+
+	if nestedExpand.Filter.Value != "a,b" {
+		t.Errorf("Expected value 'a,b', got '%v'", nestedExpand.Filter.Value)
 	}
 }
 
