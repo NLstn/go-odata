@@ -22,13 +22,6 @@ type EntityTestProduct struct {
 	Description string  `json:"Description"`
 }
 
-type EntityWithDiscriminator struct {
-	ID            uint   `json:"ID" gorm:"primaryKey" odata:"key"`
-	TypeName      string `json:"TypeName" odata:"discriminator"`
-	Name          string `json:"Name"`
-	SpecificField string `json:"SpecificField"`
-}
-
 func setupEntityHandlerTest(t *testing.T) (*EntityHandler, *gorm.DB) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
@@ -400,8 +393,8 @@ func TestEntityHandler_SetPolicy(t *testing.T) {
 
 	handler.SetPolicy(policy)
 
-	// Verify the policy was set (can't directly compare interface values, so just check it's not nil)
-	if handler.policy == nil {
-		t.Error("Expected policy to be set")
+	// Verify the policy was set
+	if handler.policy != policy {
+		t.Error("Expected policy to be set to the provided policy")
 	}
 }
