@@ -1,9 +1,11 @@
 package odata
 
 import (
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
 	"gorm.io/driver/sqlite"
@@ -124,5 +126,42 @@ func TestIsGeospatialEnabled(t *testing.T) {
 	// Initially, geospatial should not be enabled
 	if service.IsGeospatialEnabled() {
 		t.Error("Expected geospatial to be disabled initially")
+	}
+}
+
+func TestCheckGeospatialSupportNilDB(t *testing.T) {
+	if err := checkGeospatialSupport(nil, slog.Default()); err == nil {
+		t.Fatal("expected error for nil database")
+	}
+}
+
+func TestCheckGeospatialSupportSQLiteError(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("failed to open database: %v", err)
+	}
+
+	err = checkGeospatialSupport(db, slog.Default())
+	if err == nil || !strings.Contains(err.Error(), "SpatiaLite") {
+		t.Fatalf("expected SpatiaLite error, got %v", err)
+	}
+}
+
+func TestCheckGeospatialSupportOtherDialectsErrors(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("failed to open database: %v", err)
+	}
+
+	if err := checkPostgreSQLGeospatialSupport(db, slog.Default()); err == nil || !strings.Contains(err.Error(), "PostGIS extension") {
+		t.Fatalf("expected PostGIS error, got %v", err)
+	}
+
+	if err := checkMySQLGeospatialSupport(db, slog.Default()); err == nil || !strings.Contains(err.Error(), "MySQL/MariaDB spatial functions") {
+		t.Fatalf("expected MySQL/MariaDB error, got %v", err)
+	}
+
+	if err := checkSQLServerGeospatialSupport(db, slog.Default()); err == nil || !strings.Contains(err.Error(), "SQL Server spatial types") {
+		t.Fatalf("expected SQL Server error, got %v", err)
 	}
 }
