@@ -1,6 +1,7 @@
 package odata_test
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -1323,5 +1324,350 @@ Accept: application/json
 	responseBody := w.Body.String()
 	if !strings.Contains(responseBody, "Maximum allowed: 100") {
 		t.Errorf("Response should contain default limit information. Body: %s", responseBody)
+	}
+}
+
+// TestBatchIntegration_CookieForwarding verifies that cookies from the parent
+// batch request are forwarded to sub-requests for cookie-based authentication
+func TestBatchIntegration_CookieForwarding(t *testing.T) {
+	service, db := setupBatchIntegrationTest(t)
+
+	// Insert test data
+	product := BatchIntegrationProduct{
+		ID:       1,
+		Name:     "Test Product",
+		Price:    99.99,
+		Category: "Electronics",
+	}
+	db.Create(&product)
+
+	// Set up a PreRequestHook that checks for cookies
+	var receivedCookies []*http.Cookie
+	service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
+		receivedCookies = r.Cookies()
+		return r.Context(), nil
+	})
+
+	// Create batch request with a GET request
+	boundary := "batch_36d5c8c6"
+	body := fmt.Sprintf(`--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+GET /BatchIntegrationProducts(1) HTTP/1.1
+Host: localhost
+Accept: application/json
+
+
+--%s--
+`, boundary, boundary)
+
+	req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+	req.Header.Set("Content-Type", fmt.Sprintf("multipart/mixed; boundary=%s", boundary))
+
+	// Add cookies to the parent batch request
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "abc123"})
+	req.AddCookie(&http.Cookie{Name: "user_id", Value: "user456"})
+
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	// Verify that cookies were forwarded to the sub-request
+	if len(receivedCookies) != 2 {
+		t.Errorf("Expected 2 cookies to be forwarded, got %d", len(receivedCookies))
+	}
+
+	cookieMap := make(map[string]string)
+	for _, cookie := range receivedCookies {
+		cookieMap[cookie.Name] = cookie.Value
+	}
+
+	if cookieMap["session_token"] != "abc123" {
+		t.Errorf("Expected session_token=abc123, got %v", cookieMap["session_token"])
+	}
+	if cookieMap["user_id"] != "user456" {
+		t.Errorf("Expected user_id=user456, got %v", cookieMap["user_id"])
+	}
+
+	// Verify the product was returned successfully
+	responseBody := w.Body.String()
+	if !strings.Contains(responseBody, "Test Product") {
+		t.Errorf("Response does not contain product name. Body: %s", responseBody)
+	}
+}
+
+// TestBatchIntegration_CookieBasedAuthentication verifies that cookie-based
+// authentication works correctly in batch requests
+func TestBatchIntegration_CookieBasedAuthentication(t *testing.T) {
+	service, db := setupBatchIntegrationTest(t)
+
+	// Insert test data
+	product := BatchIntegrationProduct{
+		ID:       1,
+		Name:     "Secret Product",
+		Price:    99.99,
+		Category: "Electronics",
+	}
+	db.Create(&product)
+
+	// Set up a PreRequestHook that requires authentication via cookie
+	// Allow $batch endpoint through, but check cookies for actual data requests
+	service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
+		// Allow $batch endpoint to pass through without authentication
+		// The sub-requests within the batch will be authenticated individually
+		if r.URL.Path == "/$batch" {
+			return r.Context(), nil
+		}
+
+		cookie, err := r.Cookie("access_token")
+		if err != nil || cookie.Value != "valid_token" {
+			return nil, fmt.Errorf("authentication required")
+		}
+		return r.Context(), nil
+	})
+
+	t.Run("with valid cookie", func(t *testing.T) {
+		boundary := "batch_36d5c8c6"
+		body := fmt.Sprintf(`--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+GET /BatchIntegrationProducts(1) HTTP/1.1
+Host: localhost
+Accept: application/json
+
+
+--%s--
+`, boundary, boundary)
+
+		req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+		req.Header.Set("Content-Type", fmt.Sprintf("multipart/mixed; boundary=%s", boundary))
+		req.AddCookie(&http.Cookie{Name: "access_token", Value: "valid_token"})
+
+		w := httptest.NewRecorder()
+		service.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+		}
+
+		responseBody := w.Body.String()
+		if !strings.Contains(responseBody, "Secret Product") {
+			t.Errorf("Response does not contain product name. Body: %s", responseBody)
+		}
+		if !strings.Contains(responseBody, "HTTP/1.1 200") {
+			t.Errorf("Response should contain HTTP 200 status. Body: %s", responseBody)
+		}
+	})
+
+	t.Run("without cookie", func(t *testing.T) {
+		boundary := "batch_36d5c8c6"
+		body := fmt.Sprintf(`--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+GET /BatchIntegrationProducts(1) HTTP/1.1
+Host: localhost
+Accept: application/json
+
+
+--%s--
+`, boundary, boundary)
+
+		req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+		req.Header.Set("Content-Type", fmt.Sprintf("multipart/mixed; boundary=%s", boundary))
+		// No cookie added
+
+		w := httptest.NewRecorder()
+		service.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("Status = %v, want %v (batch itself should succeed). Body: %s", w.Code, http.StatusOK, w.Body.String())
+		}
+
+		responseBody := w.Body.String()
+		if !strings.Contains(responseBody, "403") && !strings.Contains(responseBody, "Forbidden") {
+			t.Errorf("Response should contain 403/Forbidden error. Body: %s", responseBody)
+		}
+	})
+
+	t.Run("with invalid cookie", func(t *testing.T) {
+		boundary := "batch_36d5c8c6"
+		body := fmt.Sprintf(`--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+GET /BatchIntegrationProducts(1) HTTP/1.1
+Host: localhost
+Accept: application/json
+
+
+--%s--
+`, boundary, boundary)
+
+		req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+		req.Header.Set("Content-Type", fmt.Sprintf("multipart/mixed; boundary=%s", boundary))
+		req.AddCookie(&http.Cookie{Name: "access_token", Value: "invalid_token"})
+
+		w := httptest.NewRecorder()
+		service.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("Status = %v, want %v (batch itself should succeed). Body: %s", w.Code, http.StatusOK, w.Body.String())
+		}
+
+		responseBody := w.Body.String()
+		if !strings.Contains(responseBody, "403") && !strings.Contains(responseBody, "Forbidden") {
+			t.Errorf("Response should contain 403/Forbidden error. Body: %s", responseBody)
+		}
+	})
+}
+
+// TestBatchIntegration_CookieForwardingInChangeset verifies that cookies are
+// forwarded to changeset sub-requests
+func TestBatchIntegration_CookieForwardingInChangeset(t *testing.T) {
+	service, db := setupBatchIntegrationTest(t)
+
+	// Set up a PreRequestHook that checks for cookies
+	var receivedCookies []*http.Cookie
+	service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
+		receivedCookies = r.Cookies()
+		return r.Context(), nil
+	})
+
+	// Create batch request with changeset
+	batchBoundary := "batch_36d5c8c6"
+	changesetBoundary := "changeset_77162fcd"
+	body := fmt.Sprintf(`--%s
+Content-Type: multipart/mixed; boundary=%s
+
+--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+POST /BatchIntegrationProducts HTTP/1.1
+Host: localhost
+Content-Type: application/json
+
+{"Name":"Product 1","Price":10.00,"Category":"Electronics"}
+
+--%s--
+
+--%s--
+`, batchBoundary, changesetBoundary, changesetBoundary, changesetBoundary, batchBoundary)
+
+	req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+	req.Header.Set("Content-Type", fmt.Sprintf("multipart/mixed; boundary=%s", batchBoundary))
+
+	// Add cookies to the parent batch request
+	req.AddCookie(&http.Cookie{Name: "auth_token", Value: "xyz789"})
+
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	// Verify that cookies were forwarded to the changeset sub-request
+	if len(receivedCookies) != 1 {
+		t.Errorf("Expected 1 cookie to be forwarded, got %d", len(receivedCookies))
+	}
+
+	if len(receivedCookies) > 0 && receivedCookies[0].Name != "auth_token" {
+		t.Errorf("Expected cookie name=auth_token, got %v", receivedCookies[0].Name)
+	}
+	if len(receivedCookies) > 0 && receivedCookies[0].Value != "xyz789" {
+		t.Errorf("Expected cookie value=xyz789, got %v", receivedCookies[0].Value)
+	}
+
+	// Verify product was created
+	var count int64
+	db.Model(&BatchIntegrationProduct{}).Count(&count)
+	if count != 1 {
+		t.Errorf("Expected 1 product in database, got %d", count)
+	}
+}
+
+// TestBatchIntegration_CookieForwardingMultipleRequests verifies that cookies
+// are forwarded to all sub-requests in a batch
+func TestBatchIntegration_CookieForwardingMultipleRequests(t *testing.T) {
+	service, db := setupBatchIntegrationTest(t)
+
+	// Insert test data
+	products := []BatchIntegrationProduct{
+		{ID: 1, Name: "Product 1", Price: 10.00, Category: "Category A"},
+		{ID: 2, Name: "Product 2", Price: 20.00, Category: "Category B"},
+	}
+	for _, p := range products {
+		db.Create(&p)
+	}
+
+	// Track how many times the hook is called and verify cookies each time
+	hookCallCount := 0
+	service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
+		hookCallCount++
+		// Allow $batch endpoint to pass through
+		if r.URL.Path == "/$batch" {
+			return r.Context(), nil
+		}
+		cookies := r.Cookies()
+		if len(cookies) != 1 || cookies[0].Name != "test_cookie" || cookies[0].Value != "test_value" {
+			return nil, fmt.Errorf("cookie not found or incorrect")
+		}
+		return r.Context(), nil
+	})
+
+	// Create batch request with multiple GET requests
+	boundary := "batch_36d5c8c6"
+	body := fmt.Sprintf(`--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+GET /BatchIntegrationProducts(1) HTTP/1.1
+Host: localhost
+Accept: application/json
+
+
+--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+GET /BatchIntegrationProducts(2) HTTP/1.1
+Host: localhost
+Accept: application/json
+
+
+--%s--
+`, boundary, boundary, boundary)
+
+	req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+	req.Header.Set("Content-Type", fmt.Sprintf("multipart/mixed; boundary=%s", boundary))
+	req.AddCookie(&http.Cookie{Name: "test_cookie", Value: "test_value"})
+
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	// Verify hook was called 3 times (1 for batch request, 2 for sub-requests)
+	if hookCallCount != 3 {
+		t.Errorf("Expected hook to be called 3 times (1 batch + 2 sub-requests), got %d", hookCallCount)
+	}
+
+	// Verify both requests succeeded
+	responseBody := w.Body.String()
+	successCount := strings.Count(responseBody, "HTTP/1.1 200")
+	if successCount != 2 {
+		t.Errorf("Expected 2 successful HTTP responses, got %d. Body: %s", successCount, responseBody)
 	}
 }
