@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 // ProductStatus represents product status as a flags enum
@@ -70,7 +71,7 @@ func (Product) TableName() string {
 
 // BeforeUpdate is a GORM hook that increments the Version field before each update
 // This ensures the ETag changes whenever the entity is modified
-func (p *Product) BeforeUpdate(tx interface{}) error {
+func (p *Product) BeforeUpdate(tx *gorm.DB) error {
 	p.Version++
 	return nil
 }
