@@ -21,6 +21,7 @@ rely on version numbers to reason about compatibility.
   - Router middleware automatically sets `OData-Version` response header based on negotiation
   - Comprehensive edge case tests with race detector validation (550+ concurrent goroutines tested)
   - Version feature detection via `version.Supports()` method for conditional functionality
+- Version parsing and negotiation unit test coverage for supported protocol versions.
 - **Geospatial feature support with database compatibility checking**: Added `EnableGeospatial()` method to enable geospatial operations (geo.distance, geo.length, geo.intersects). The service now validates database support for spatial features on startup and returns HTTP 501 Not Implemented when geospatial operations are attempted without enablement. Includes detection for SQLite (SpatiaLite), PostgreSQL (PostGIS), MySQL/MariaDB (spatial functions), and SQL Server (spatial types) with detailed error messages for missing extensions.
 - **Increased test coverage with meaningful unit tests**: Added comprehensive unit tests across multiple packages, improving overall code coverage from 52.8% to 53.7%. Key improvements include:
   - `internal/auth` package: 0% → 100% coverage (tests for AuthContext, Policy interface, Decision functions)
