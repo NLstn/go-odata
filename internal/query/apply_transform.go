@@ -538,22 +538,7 @@ func addOrderByNavigationJoins(db *gorm.DB, orderBy []OrderByItem, entityMetadat
 
 	joinedNavProps := make(map[string]bool)
 	for _, item := range orderBy {
-		if !entityMetadata.IsSingleEntityNavigationPath(item.Property) {
-			continue
-		}
-
-		segments := strings.Split(item.Property, "/")
-		if len(segments) < 2 {
-			continue
-		}
-
-		navPropName := strings.TrimSpace(segments[0])
-		if navPropName == "" || joinedNavProps[navPropName] {
-			continue
-		}
-
-		joinedNavProps[navPropName] = true
-		db = addNavigationJoin(db, navPropName, entityMetadata)
+		db = addNavigationJoinsForProperty(db, item.Property, entityMetadata, joinedNavProps)
 	}
 
 	return db

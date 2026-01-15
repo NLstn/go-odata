@@ -63,29 +63,12 @@ func getQuotedColumnName(dialect string, property string, entityMetadata *metada
 	}
 
 	// Check if this is a navigation property path
-	if entityMetadata.IsSingleEntityNavigationPath(property) {
-		segments := strings.Split(property, "/")
-		if len(segments) >= 2 {
-			navPropName := strings.TrimSpace(segments[0])
-			targetPropertyName := strings.TrimSpace(segments[1])
-			targetMetadata, err := entityMetadata.ResolveNavigationTarget(navPropName)
-			if err == nil && targetMetadata != nil {
-				targetProp := targetMetadata.FindProperty(targetPropertyName)
-				if targetProp != nil {
-					relatedTableName := targetMetadata.TableName
-					columnName := targetProp.ColumnName
-					// Return fully quoted reference for proper PostgreSQL case handling
-					return quoteIdent(dialect, relatedTableName) + "." + quoteIdent(dialect, columnName)
-				}
-			}
-
-			// Fallback to legacy behavior only when metadata resolution fails
-			navProp := entityMetadata.FindNavigationProperty(navPropName)
-			if navProp != nil {
-				relatedTableName := navProp.NavigationTargetTableName
-				columnName := toSnakeCase(targetPropertyName)
-				return quoteIdent(dialect, relatedTableName) + "." + quoteIdent(dialect, columnName)
-			}
+	if _, navSegments, prop, prefix, err := resolveNavigationPropertyPath(property, entityMetadata); err == nil {
+		alias := navigationAliasForPath(navSegments)
+		columnName := prefix + prop.ColumnName
+		if alias != "" {
+			// Return fully quoted reference for proper PostgreSQL case handling
+			return quoteIdent(dialect, alias) + "." + quoteIdent(dialect, columnName)
 		}
 	}
 
@@ -128,54 +111,81 @@ func addNavigationJoins(db *gorm.DB, filter *FilterExpression, entityMetadata *m
 	// Track which navigation properties we've already joined to avoid duplicates
 	joinedNavProps := make(map[string]bool)
 
-	// Recursively collect all navigation property paths used in the filter
-	collectAndJoinNavigationProperties(filter, entityMetadata, joinedNavProps)
+	var applyJoins func(filter *FilterExpression)
+	applyJoins = func(filter *FilterExpression) {
+		if filter == nil {
+			return
+		}
 
-	// Apply the collected joins
-	for navPropName := range joinedNavProps {
-		db = addNavigationJoin(db, navPropName, entityMetadata)
+		if filter.Property != "" {
+			db = addNavigationJoinsForProperty(db, filter.Property, entityMetadata, joinedNavProps)
+		}
+
+		if filter.Left != nil {
+			applyJoins(filter.Left)
+		}
+		if filter.Right != nil {
+			applyJoins(filter.Right)
+		}
+	}
+
+	applyJoins(filter)
+
+	return db
+}
+
+func addNavigationJoinsForProperty(db *gorm.DB, property string, entityMetadata *metadata.EntityMetadata, joinedNavProps map[string]bool) *gorm.DB {
+	if entityMetadata == nil || property == "" {
+		return db
+	}
+
+	targetMetadata, navSegments, _, _, err := resolveNavigationPropertyPath(property, entityMetadata)
+	if err != nil || targetMetadata == nil || len(navSegments) == 0 {
+		return db
+	}
+
+	currentMetadata := entityMetadata
+	parentAlias := entityMetadata.TableName
+
+	for i, navSegment := range navSegments {
+		navProp := currentMetadata.FindNavigationProperty(navSegment)
+		if navProp == nil || navProp.NavigationIsArray {
+			return db
+		}
+
+		pathKey := strings.Join(navSegments[:i+1], "/")
+		if joinedNavProps[pathKey] {
+			currentMetadata, err = currentMetadata.ResolveNavigationTarget(navSegment)
+			if err != nil || currentMetadata == nil {
+				return db
+			}
+			parentAlias = navigationAliasForPath(navSegments[:i+1])
+			continue
+		}
+
+		joinAlias := navigationAliasForPath(navSegments[:i+1])
+		if joinAlias == "" {
+			return db
+		}
+
+		db = addNavigationJoin(db, currentMetadata, parentAlias, navProp, joinAlias)
+		joinedNavProps[pathKey] = true
+
+		currentMetadata, err = currentMetadata.ResolveNavigationTarget(navSegment)
+		if err != nil || currentMetadata == nil {
+			return db
+		}
+		parentAlias = joinAlias
 	}
 
 	return db
 }
 
-// collectAndJoinNavigationProperties recursively finds navigation property paths in filter expressions
-func collectAndJoinNavigationProperties(filter *FilterExpression, entityMetadata *metadata.EntityMetadata, joinedNavProps map[string]bool) {
-	if filter == nil {
-		return
-	}
-
-	// Check if this filter's property is a navigation property path
-	if filter.Property != "" && entityMetadata.IsSingleEntityNavigationPath(filter.Property) {
-		// Extract the navigation property name (first segment)
-		segments := strings.Split(filter.Property, "/")
-		navPropName := strings.TrimSpace(segments[0])
-		joinedNavProps[navPropName] = true
-	}
-
-	// Recursively process child filters
-	if filter.Left != nil {
-		collectAndJoinNavigationProperties(filter.Left, entityMetadata, joinedNavProps)
-	}
-	if filter.Right != nil {
-		collectAndJoinNavigationProperties(filter.Right, entityMetadata, joinedNavProps)
-	}
-}
-
 // addNavigationJoin adds a JOIN clause for a single-entity navigation property
-func addNavigationJoin(db *gorm.DB, navPropName string, entityMetadata *metadata.EntityMetadata) *gorm.DB {
-	navProp := entityMetadata.FindNavigationProperty(navPropName)
-	if navProp == nil || navProp.NavigationIsArray {
-		// Only join single-entity navigation properties
-		return db
-	}
-
+func addNavigationJoin(db *gorm.DB, parentMetadata *metadata.EntityMetadata, parentAlias string, navProp *metadata.PropertyMetadata, joinAlias string) *gorm.DB {
 	// Get the related entity's table name from cached metadata
 	// This was computed once during entity registration and respects custom TableName() methods
 	relatedTableName := navProp.NavigationTargetTableName
-
-	// Get the parent entity's table name from cached metadata
-	parentTableName := entityMetadata.TableName
 
 	// Get the foreign key column from cached metadata
 	// This was computed once during entity registration and respects GORM foreignKey: tags
@@ -198,7 +208,7 @@ func addNavigationJoin(db *gorm.DB, navPropName string, entityMetadata *metadata
 
 	// If no explicit references: tag, use the target entity's actual primary key from metadata
 	if relatedPrimaryKey == "" {
-		targetMetadata, err := entityMetadata.ResolveNavigationTarget(navPropName)
+		targetMetadata, err := parentMetadata.ResolveNavigationTarget(navProp.Name)
 		if err == nil && targetMetadata != nil && len(targetMetadata.KeyProperties) > 0 {
 			// Use the first key property's column name
 			// For single keys: This correctly resolves the actual primary key (e.g., "code", "language_key")
@@ -217,15 +227,17 @@ func addNavigationJoin(db *gorm.DB, navPropName string, entityMetadata *metadata
 	// Use GORM's quote mechanism to safely quote identifiers
 	dialect := getDatabaseDialect(db)
 	quotedRelatedTable := quoteIdent(dialect, relatedTableName)
-	quotedParentTable := quoteIdent(dialect, parentTableName)
+	quotedParentTable := quoteIdent(dialect, parentAlias)
 	quotedForeignKey := quoteIdent(dialect, foreignKeyColumn)
 	quotedPrimaryKey := quoteIdent(dialect, relatedPrimaryKey)
+	quotedJoinAlias := quoteIdent(dialect, joinAlias)
 
-	joinClause := fmt.Sprintf("LEFT JOIN %s ON %s.%s = %s.%s",
+	joinClause := fmt.Sprintf("LEFT JOIN %s AS %s ON %s.%s = %s.%s",
 		quotedRelatedTable,
+		quotedJoinAlias,
 		quotedParentTable,
 		quotedForeignKey,
-		quotedRelatedTable,
+		quotedJoinAlias,
 		quotedPrimaryKey)
 
 	return db.Joins(joinClause)

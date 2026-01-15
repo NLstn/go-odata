@@ -1,6 +1,7 @@
 package query
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/nlstn/go-odata/internal/metadata"
@@ -33,6 +34,53 @@ func propertyExists(propertyName string, entityMetadata *metadata.EntityMetadata
 
 	_, _, err := entityMetadata.ResolvePropertyPath(propertyName)
 	return err == nil
+}
+
+func resolveNavigationPropertyPath(propertyName string, entityMetadata *metadata.EntityMetadata) (*metadata.EntityMetadata, []string, *metadata.PropertyMetadata, string, error) {
+	if entityMetadata == nil {
+		return nil, nil, nil, "", fmt.Errorf("entity metadata is nil")
+	}
+
+	targetMetadata, navSegments, remainingPath, err := entityMetadata.ResolveSingleEntityNavigationPath(propertyName)
+	if err != nil {
+		return nil, nil, nil, "", err
+	}
+
+	if targetMetadata == nil || remainingPath == "" {
+		return nil, nil, nil, "", fmt.Errorf("navigation path '%s' has no remaining property", propertyName)
+	}
+
+	prop, prefix, err := targetMetadata.ResolvePropertyPath(remainingPath)
+	if err != nil || prop == nil {
+		return nil, nil, nil, "", fmt.Errorf("property '%s' not found", remainingPath)
+	}
+
+	if prop.IsNavigationProp {
+		return nil, nil, nil, "", fmt.Errorf("navigation path '%s' ends with a navigation property", propertyName)
+	}
+
+	return targetMetadata, navSegments, prop, prefix, nil
+}
+
+func navigationAliasForPath(segments []string) string {
+	if len(segments) == 0 {
+		return ""
+	}
+
+	aliasSegments := make([]string, 0, len(segments))
+	for _, segment := range segments {
+		trimmed := strings.TrimSpace(segment)
+		if trimmed == "" {
+			continue
+		}
+		aliasSegments = append(aliasSegments, toSnakeCase(trimmed))
+	}
+
+	if len(aliasSegments) == 0 {
+		return ""
+	}
+
+	return "nav_" + strings.Join(aliasSegments, "_")
 }
 
 // isNavigationProperty checks if a property is a navigation property
@@ -68,24 +116,12 @@ func GetColumnName(propertyName string, entityMetadata *metadata.EntityMetadata)
 		return toSnakeCase(propertyName)
 	}
 
-	// Check if this is a single-entity navigation property path (e.g., "Team/ClubID")
-	// Per OData v4 spec 5.1.1.15, properties of entities with cardinality 0..1 or 1 can be accessed directly
-	// Note: IsSingleEntityNavigationPath validates the navigation property but not the target property.
-	// If the target property doesn't exist, the database will return an error with the column name.
-	if entityMetadata.IsSingleEntityNavigationPath(propertyName) {
-		segments := strings.Split(propertyName, "/")
-		if len(segments) >= 2 {
-			navPropName := strings.TrimSpace(segments[0])
-			targetPropertyName := strings.TrimSpace(segments[1])
-
-			navProp := entityMetadata.FindNavigationProperty(navPropName)
-			if navProp != nil {
-				// Get the related table name from cached metadata
-				// This was computed once during entity registration and respects custom TableName() methods
-				relatedTableName := navProp.NavigationTargetTableName
-
-				// Return qualified column name: related_table.column_name
-				return relatedTableName + "." + toSnakeCase(targetPropertyName)
+	if entityMetadata != nil {
+		if _, navSegments, prop, prefix, err := resolveNavigationPropertyPath(propertyName, entityMetadata); err == nil {
+			columnName := prefix + prop.ColumnName
+			alias := navigationAliasForPath(navSegments)
+			if alias != "" {
+				return alias + "." + columnName
 			}
 		}
 	}

@@ -1172,46 +1172,77 @@ func (property *PropertyMetadata) FindComplexField(name string) *PropertyMetadat
 	return nil
 }
 
+// ResolveSingleEntityNavigationPath resolves a navigation path that traverses only single-entity navigation properties.
+// It returns the target entity metadata, the navigation segments traversed, and the remaining property path.
+// For example, "Team/Club/Name" returns the Club entity metadata, ["Team", "Club"], and "Name".
+func (metadata *EntityMetadata) ResolveSingleEntityNavigationPath(path string) (*EntityMetadata, []string, string, error) {
+	if metadata == nil {
+		return nil, nil, "", fmt.Errorf("entity metadata is nil")
+	}
+
+	trimmedPath := strings.TrimSpace(path)
+	if trimmedPath == "" || !strings.Contains(trimmedPath, "/") {
+		return nil, nil, "", fmt.Errorf("navigation path '%s' is not a multi-segment path", path)
+	}
+
+	segments := strings.Split(trimmedPath, "/")
+	currentMetadata := metadata
+	rootRegistry := metadata.entitiesRegistry
+	navigationSegments := make([]string, 0, len(segments)-1)
+
+	for i, segment := range segments {
+		segment = strings.TrimSpace(segment)
+		if segment == "" {
+			return nil, nil, "", fmt.Errorf("navigation path '%s' contains an empty segment", trimmedPath)
+		}
+
+		navProp := currentMetadata.FindNavigationProperty(segment)
+		if navProp == nil {
+			if len(navigationSegments) == 0 {
+				return nil, nil, "", fmt.Errorf("navigation path '%s' does not start with a navigation property", trimmedPath)
+			}
+			remaining := strings.Join(segments[i:], "/")
+			return currentMetadata, navigationSegments, remaining, nil
+		}
+
+		if navProp.NavigationIsArray {
+			return nil, nil, "", fmt.Errorf("navigation property '%s' is a collection", segment)
+		}
+
+		navigationSegments = append(navigationSegments, segment)
+		targetMetadata, err := currentMetadata.ResolveNavigationTarget(segment)
+		if err != nil {
+			return nil, nil, "", err
+		}
+		if targetMetadata != nil && targetMetadata.navigationTargetIndex == nil && rootRegistry != nil {
+			targetMetadata.SetEntitiesRegistry(rootRegistry)
+		}
+		currentMetadata = targetMetadata
+	}
+
+	return nil, nil, "", fmt.Errorf("navigation path '%s' cannot end with a navigation property", trimmedPath)
+}
+
 // IsSingleEntityNavigationPath checks if a property path represents a single-entity navigation property path.
 // For example, "Team/ClubID" where Team is a single-entity (not collection) navigation property.
-// Returns true if the first segment is a single-entity navigation property and subsequent segments exist.
+// Returns true if the path traverses only single-entity navigation properties and ends on a property.
 // Per OData v4 spec 5.1.1.15, properties of entities related with cardinality 0..1 or 1 can be accessed directly.
-// Note: This validates only single-level navigation paths (e.g., "Team/ClubID"). Multi-level paths
-// (e.g., "Team/Club/Name") are not currently supported and will return false.
 func (metadata *EntityMetadata) IsSingleEntityNavigationPath(path string) bool {
 	if metadata == nil {
 		return false
 	}
 
-	trimmedPath := strings.TrimSpace(path)
-	if trimmedPath == "" || !strings.Contains(trimmedPath, "/") {
+	targetMetadata, _, remainingPath, err := metadata.ResolveSingleEntityNavigationPath(path)
+	if err != nil || targetMetadata == nil || remainingPath == "" {
 		return false
 	}
 
-	segments := strings.Split(trimmedPath, "/")
-	// Currently only support single-level navigation (e.g., "Team/ClubID")
-	// Multi-level paths (e.g., "Team/Club/Name") would require multiple JOINs
-	if len(segments) != 2 {
+	prop, _, err := targetMetadata.ResolvePropertyPath(remainingPath)
+	if err != nil || prop == nil {
 		return false
 	}
 
-	// Check if the first segment is a navigation property
-	firstSegment := strings.TrimSpace(segments[0])
-	navProp := metadata.FindNavigationProperty(firstSegment)
-	if navProp == nil {
-		return false
-	}
-
-	// Check if it's a single-entity navigation property (not a collection)
-	// NavigationIsArray == false means it's a single-entity navigation (cardinality 0..1 or 1)
-	if navProp.NavigationIsArray {
-		return false
-	}
-
-	// Note: We don't validate that the second segment is a valid property on the target entity
-	// because we don't have access to the related entity's metadata here.
-	// Validation will occur during query execution, resulting in a database error if invalid.
-	return true
+	return !prop.IsNavigationProp
 }
 
 // SetEntitiesRegistry provides access to the registered entity metadata for navigation resolution.

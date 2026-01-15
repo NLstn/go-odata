@@ -38,6 +38,7 @@ rely on version numbers to reason about compatibility.
 - **Compliance suite now enforces optional features**: Removed skip-based leniency in compliance tests so optional OData features (lambda operators, geospatial functions, stream properties, etc.) must be implemented to pass.
 - **Policy filters now apply to expanded navigation results**: Authorization policy query filters are merged into `$expand` filters to ensure expanded navigation properties are filtered the same way as direct navigation queries.
 - **Navigation $orderby now validates and joins single-entity paths**: `$orderby` expressions like `Nav/Field` now validate the target property and add the required JOINs with qualified column references for correct SQL generation.
+- **Multi-segment navigation path validation and joins**: `$filter` and `$orderby` now validate multi-hop single-entity navigation paths and generate JOINs with stable aliases to avoid table name collisions when chaining navigation segments.
 - **Navigation links included for selected navigation properties in minimal metadata**: `$select=NavProp` now emits `NavProp@odata.navigationLink` without requiring `$expand` when minimal metadata is requested.
 - Lambda filter navigation targets now resolve through the cached entity registry, reducing repeated metadata analysis during lambda predicate evaluation.
 
