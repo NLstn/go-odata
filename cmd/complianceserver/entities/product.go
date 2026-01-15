@@ -68,6 +68,13 @@ func (Product) TableName() string {
 	return "Products"
 }
 
+// BeforeUpdate is a GORM hook that increments the Version field before each update
+// This ensures the ETag changes whenever the entity is modified
+func (p *Product) BeforeUpdate(tx interface{}) error {
+	p.Version++
+	return nil
+}
+
 // GetStreamProperty returns the content of a stream property by name
 func (p *Product) GetStreamProperty(name string) ([]byte, string, bool) {
 	if name == "Photo" {
