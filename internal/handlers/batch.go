@@ -168,7 +168,6 @@ func (h *BatchHandler) HandleBatch(w http.ResponseWriter, r *http.Request) {
 			// Pass remaining capacity to ensure changeset doesn't exceed batch limit
 			remainingCapacity := h.maxBatchSize - len(responses)
 			changesetResponses, exceeded := h.processChangeset(part, changesetBoundary, remainingCapacity)
-			
 			// Check if batch size limit was exceeded
 			if exceeded {
 				if err := response.WriteError(w, r, http.StatusRequestEntityTooLarge, "Batch size limit exceeded",
