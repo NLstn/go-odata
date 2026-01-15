@@ -27,8 +27,8 @@ func applySelect(db *gorm.DB, selectedProperties []string, entityMetadata *metad
 				columnName := GetColumnName(prop.Name, entityMetadata)
 				// Qualify with quoted table and column names to avoid ambiguous column references when JOINs are present
 				// This is necessary for PostgreSQL and also helps with SQLite when multiple tables have the same column names
-				// quoteIdent properly quotes identifiers for both PostgreSQL and SQLite
-				qualifiedColumn := quoteIdent(dialect, tableName) + "." + quoteIdent(dialect, columnName)
+				// quoteTableName handles schema-qualified tables, quoteIdent quotes column names
+				qualifiedColumn := quoteTableName(dialect, tableName) + "." + quoteIdent(dialect, columnName)
 				columns = append(columns, qualifiedColumn)
 				selectedPropMap[prop.Name] = true
 				break
@@ -41,7 +41,7 @@ func applySelect(db *gorm.DB, selectedProperties []string, entityMetadata *metad
 			// Use GetColumnName for proper column name resolution (handles GORM tags and metadata)
 			columnName := GetColumnName(keyProp.Name, entityMetadata)
 			// Qualify with quoted table and column names to avoid ambiguous column references when JOINs are present
-			qualifiedColumn := quoteIdent(dialect, tableName) + "." + quoteIdent(dialect, columnName)
+			qualifiedColumn := quoteTableName(dialect, tableName) + "." + quoteIdent(dialect, columnName)
 			columns = append(columns, qualifiedColumn)
 		}
 	}

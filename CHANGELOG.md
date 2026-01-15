@@ -55,6 +55,7 @@ rely on version numbers to reason about compatibility.
 - **Cache eviction prevents unbounded memory growth**: Metadata cache now limited to 10 entries with automatic eviction keeping 5 most common versions (4.0, 4.01 prioritized).
 
 ### Fixed
+- **Schema-qualified table name quoting in SQL generation**: Fixed SQL generation for entities with schema-qualified table names (e.g., `"mart.loads"`). Previously, `quoteIdent()` treated the entire table name as a single identifier, generating invalid SQL like `[mart.loads].[column]` for SQL Server. Added `quoteTableName()` helper that splits on dots and quotes each part separately, producing correct SQL like `[mart].[loads].[column]`. This aligns column reference quoting with GORM's FROM clause handling and prevents "multi-part identifier could not be bound" errors.
 - `$expand` parsing now ignores commas inside single-quoted string literals, preventing incorrect splitting of expand items when nested filters include commas.
 - Nested `$expand` options now reject negative `$top` and `$skip` values using the same non-negative validation as top-level query options.
 - Collection `$expand` now applies `$top/$skip/$orderby` per parent instead of using global preload limits, ensuring consistent pagination semantics across supported dialects.
