@@ -33,7 +33,7 @@ load-test-results*
 go.work
 go.work.sum
 
-coverage.out
+coverage*.out
 
 # OS specific files
 .DS_Store
