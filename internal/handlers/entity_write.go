@@ -227,6 +227,13 @@ func (h *EntityHandler) handlePatchEntity(w http.ResponseWriter, r *http.Request
 		// GORM's BeforeUpdate hook is not triggered when using Updates() with a map
 		if h.metadata.ETagProperty != nil {
 			h.incrementETagProperty(entity)
+			// Add the incremented version to updateData so it gets persisted
+			entityVal := reflect.ValueOf(entity).Elem()
+			etagField := entityVal.FieldByName(h.metadata.ETagProperty.FieldName)
+			if etagField.IsValid() {
+				// Use the column name from metadata for the database update
+				updateData[h.metadata.ETagProperty.ColumnName] = etagField.Interface()
+			}
 		}
 
 		if err := tx.Model(entity).Updates(updateData).Error; err != nil {
@@ -610,10 +617,10 @@ func (h *EntityHandler) incrementETagProperty(entity interface{}) {
 	}
 
 	entityVal := reflect.ValueOf(entity).Elem()
-	etagField := entityVal.FieldByName(h.metadata.ETagProperty.Name)
+	etagField := entityVal.FieldByName(h.metadata.ETagProperty.FieldName)
 
 	if !etagField.IsValid() || !etagField.CanSet() {
-		h.logger.Error("Cannot increment ETag property", "property", h.metadata.ETagProperty.Name)
+		h.logger.Error("Cannot increment ETag property", "property", h.metadata.ETagProperty.FieldName)
 		return
 	}
 
@@ -633,11 +640,11 @@ func (h *EntityHandler) copyETagProperty(source, destination interface{}) {
 	sourceVal := reflect.ValueOf(source).Elem()
 	destVal := reflect.ValueOf(destination).Elem()
 
-	sourceField := sourceVal.FieldByName(h.metadata.ETagProperty.Name)
-	destField := destVal.FieldByName(h.metadata.ETagProperty.Name)
+	sourceField := sourceVal.FieldByName(h.metadata.ETagProperty.FieldName)
+	destField := destVal.FieldByName(h.metadata.ETagProperty.FieldName)
 
 	if !sourceField.IsValid() || !destField.IsValid() || !destField.CanSet() {
-		h.logger.Error("Cannot copy ETag property", "property", h.metadata.ETagProperty.Name)
+		h.logger.Error("Cannot copy ETag property", "property", h.metadata.ETagProperty.FieldName)
 		return
 	}
 
