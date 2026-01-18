@@ -14,6 +14,7 @@ rely on version numbers to reason about compatibility.
 - Added table-driven tests for EDM Go type inference, value parsing, and struct tag handling.
 - Added a unit test for the async job record table name mapping.
 - Added expand parser tests covering depth limits and quoted string handling in split expand parsing.
+- Added unit tests for delta collection entries across OData metadata levels.
 - Added unit tests covering enum registry error handling, enum member resolution, and underlying type detection.
 - Added unit tests for expand annotations to validate nested expand handling and count emission.
 - **Base path mounting with automatic URL generation**: Added `SetBasePath()` method to mount the OData service at a custom path (e.g., `/api/odata`). The service automatically strips the base path from incoming requests and includes it in all generated URLs (`@odata.id`, `@odata.nextLink`, etc.). This eliminates the need for `http.StripPrefix` middleware and ensures all OData URLs are correctly qualified. Validation prevents path traversal (`..`), trailing slashes, and other invalid patterns. Thread-safe configuration using `sync.RWMutex` allows concurrent requests while the base path is being set. Each service instance maintains its own independent base path, allowing multiple services with different mount points to run in the same process.
