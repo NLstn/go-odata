@@ -77,7 +77,7 @@ func (h *EntityHandler) parseSingleEntityQueryOptions(r *http.Request) (*query.Q
 
 	// Check if geospatial operations are used but not enabled
 	if queryOptions.Filter != nil && query.ContainsGeospatialOperations(queryOptions.Filter) {
-		if !h.geospatialEnabled {
+		if !h.IsGeospatialEnabled() {
 			return nil, &GeospatialNotEnabledError{}
 		}
 	}
