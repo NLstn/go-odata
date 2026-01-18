@@ -1,12 +1,18 @@
 package handlers
 
 import (
+	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
+	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/response"
 	"github.com/nlstn/go-odata/internal/version"
+	"gorm.io/gorm"
 )
 
 func TestSetODataHeader(t *testing.T) {
@@ -223,4 +229,94 @@ func TestParseCompositeKey(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestEntityHandlerHandleFetchError(t *testing.T) {
+	entitySetName := "Products"
+	entityKey := "42"
+	handler := &EntityHandler{
+		metadata: &metadata.EntityMetadata{
+			EntitySetName: entitySetName,
+			KeyProperties: []metadata.PropertyMetadata{
+				{
+					Name:       "ID",
+					JsonName:   "ID",
+					ColumnName: "id",
+					IsKey:      true,
+				},
+			},
+		},
+	}
+
+	decodeError := func(t *testing.T, recorder *httptest.ResponseRecorder) response.ODataError {
+		t.Helper()
+
+		var payload struct {
+			Error response.ODataError `json:"error"`
+		}
+
+		if err := json.NewDecoder(recorder.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode error response: %v", err)
+		}
+
+		return payload.Error
+	}
+
+	t.Run("record not found", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/Products(42)", nil)
+
+		handler.handleFetchError(recorder, req, gorm.ErrRecordNotFound, entityKey)
+
+		if recorder.Code != http.StatusNotFound {
+			t.Fatalf("expected status %d, got %d", http.StatusNotFound, recorder.Code)
+		}
+
+		odataErr := decodeError(t, recorder)
+		if odataErr.Code != fmt.Sprintf("%d", http.StatusNotFound) {
+			t.Fatalf("expected error code %d, got %s", http.StatusNotFound, odataErr.Code)
+		}
+		if odataErr.Message != ErrMsgEntityNotFound {
+			t.Fatalf("expected error message %q, got %q", ErrMsgEntityNotFound, odataErr.Message)
+		}
+
+		expectedTarget := fmt.Sprintf(ODataEntityKeyFormat, entitySetName, entityKey)
+		if !strings.Contains(odataErr.Target, expectedTarget) {
+			t.Fatalf("expected target %q to include %q", odataErr.Target, expectedTarget)
+		}
+
+		if len(odataErr.Details) != 1 {
+			t.Fatalf("expected 1 detail message, got %d", len(odataErr.Details))
+		}
+		expectedDetail := fmt.Sprintf(EntityKeyNotExistFmt, entityKey)
+		if odataErr.Details[0].Message != expectedDetail {
+			t.Fatalf("expected detail message %q, got %q", expectedDetail, odataErr.Details[0].Message)
+		}
+	})
+
+	t.Run("database error", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/Products(42)", nil)
+		fetchErr := errors.New("database unavailable")
+
+		handler.handleFetchError(recorder, req, fetchErr, entityKey)
+
+		if recorder.Code != http.StatusInternalServerError {
+			t.Fatalf("expected status %d, got %d", http.StatusInternalServerError, recorder.Code)
+		}
+
+		odataErr := decodeError(t, recorder)
+		if odataErr.Code != fmt.Sprintf("%d", http.StatusInternalServerError) {
+			t.Fatalf("expected error code %d, got %s", http.StatusInternalServerError, odataErr.Code)
+		}
+		if odataErr.Message != ErrMsgDatabaseError {
+			t.Fatalf("expected error message %q, got %q", ErrMsgDatabaseError, odataErr.Message)
+		}
+		if len(odataErr.Details) != 1 {
+			t.Fatalf("expected 1 detail message, got %d", len(odataErr.Details))
+		}
+		if odataErr.Details[0].Message != fetchErr.Error() {
+			t.Fatalf("expected detail message %q, got %q", fetchErr.Error(), odataErr.Details[0].Message)
+		}
+	})
 }
