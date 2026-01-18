@@ -729,7 +729,10 @@ func TestGetJSONFieldName(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.fieldName, func(t *testing.T) {
-			field, _ := typ.FieldByName(tt.fieldName)
+			field, ok := typ.FieldByName(tt.fieldName)
+			if !ok {
+				t.Fatalf("Field %s not found in struct", tt.fieldName)
+			}
 			result := getJSONFieldName(field)
 			if result != tt.expectedJSON {
 				t.Errorf("getJSONFieldName(%s) = %v, want %v", tt.fieldName, result, tt.expectedJSON)

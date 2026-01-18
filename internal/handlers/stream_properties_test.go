@@ -12,14 +12,18 @@ import (
 	"gorm.io/gorm"
 )
 
-// StreamPropertyTestEntity is a test entity with stream properties
-// Following convention: Photo is the metadata pointer, PhotoContent contains the binary data
+// StreamPropertyTestEntity is a test entity with stream properties.
+// Stream property convention in this library:
+// - The field marked with `odata:"stream"` (Photo) indicates this is a stream property
+// - The actual binary content is stored in {PropertyName}Content (PhotoContent)
+// - The content type is stored in {PropertyName}ContentType (PhotoContentType)
+// This allows the library to automatically handle media uploads and downloads.
 type StreamPropertyTestEntity struct {
 	ID               uint   `json:"ID" gorm:"primaryKey" odata:"key"`
 	Name             string `json:"Name"`
-	Photo            []byte `json:"-" odata:"stream"` // Stream property marker
-	PhotoContent     []byte `json:"-" gorm:"type:blob"` // Actual binary content
-	PhotoContentType string `json:"-"` // Content type following convention
+	Photo            []byte `json:"-" odata:"stream"`    // Stream property marker
+	PhotoContent     []byte `json:"-" gorm:"type:blob"`  // Actual binary content
+	PhotoContentType string `json:"-"`                   // Content type following convention
 }
 
 func setupStreamPropertyHandler(t *testing.T) (*EntityHandler, *gorm.DB) {
