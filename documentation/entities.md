@@ -31,7 +31,10 @@ type Product struct {
 **Register the entity:**
 
 ```go
-service := odata.NewService(db)
+service, err := odata.NewService(db)
+if err != nil {
+    log.Fatal(err)
+}
 if err := service.RegisterEntity(&Product{}); err != nil {
     // Surface registration errors like invalid tags or duplicate entity set names.
     return err
@@ -63,7 +66,10 @@ func (News) EntitySetName() string {
 **Register the entity:**
 
 ```go
-service := odata.NewService(db)
+service, err := odata.NewService(db)
+if err != nil {
+    log.Fatal(err)
+}
 if err := service.RegisterEntity(&News{}); err != nil {
     return err
 }
@@ -189,7 +195,10 @@ When a client posts a new `APIKey` without a `KeyID`, the service resolves the `
 Register additional generators on the `Service` when you need different formats:
 
 ```go
-service := odata.NewService(db)
+service, err := odata.NewService(db)
+if err != nil {
+    log.Fatal(err)
+}
 
 service.RegisterKeyGenerator("snowflake", func(ctx context.Context) (interface{}, error) {
     return time.Now().UnixNano(), nil

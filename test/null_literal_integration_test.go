@@ -56,7 +56,8 @@ func TestNullLiteralInFilter(t *testing.T) {
 	db := setupNullLiteralTestDB(t)
 
 	// Create OData service
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	if err := service.RegisterEntity(&NullableProduct{}); err != nil {
 		t.Fatalf("Failed to register NullableProduct entity: %v", err)
 	}

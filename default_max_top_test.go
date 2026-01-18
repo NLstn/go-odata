@@ -59,7 +59,8 @@ func setupTestServiceWithProducts(t *testing.T, productCount int) (*Service, *go
 		}
 	}
 
-	service := NewService(db)
+	service, err := NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	if err := service.RegisterEntity(&TestProduct{}); err != nil {
 		t.Fatalf("Failed to register TestProduct: %v", err)
 	}

@@ -46,7 +46,8 @@ func setupDeleteStringKeyTestService(t *testing.T) (*odata.Service, *gorm.DB) {
 		t.Fatalf("Failed to migrate database: %v", err)
 	}
 
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	if err := service.RegisterEntity(UserSession{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
 	}
@@ -174,7 +175,8 @@ func TestDeleteEntity_CompositeKeyWithQuotes_ValuesClean(t *testing.T) {
 		t.Fatalf("Failed to migrate database: %v", err)
 	}
 
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	if err := service.RegisterEntity(CompositeKeyEntity{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
 	}

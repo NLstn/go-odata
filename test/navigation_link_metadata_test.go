@@ -42,7 +42,8 @@ func TestNavigationLinkMetadataLevels(t *testing.T) {
 	db.Create(&Product{ID: 1, Name: "Laptop", CategoryID: 1})
 	db.Create(&Product{ID: 2, Name: "Mouse", CategoryID: 1})
 
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	service.RegisterEntity(&Category{})
 	service.RegisterEntity(&Product{})
 
@@ -263,7 +264,8 @@ func TestNavigationLinkWithExpand(t *testing.T) {
 	db.Create(&Category{ID: 1, Name: "Electronics"})
 	db.Create(&Product{ID: 1, Name: "Laptop", CategoryID: 1})
 
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	service.RegisterEntity(&Category{})
 	service.RegisterEntity(&Product{})
 

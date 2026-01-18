@@ -33,7 +33,8 @@ func TestODataIDFieldIntegration(t *testing.T) {
 	db.Create(&Product{ID: 1, Name: "Laptop", Price: 999.99})
 	db.Create(&Product{ID: 2, Name: "Mouse", Price: 29.99})
 
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	service.RegisterEntity(&Product{})
 
 	tests := []struct {
@@ -239,7 +240,8 @@ func TestODataIDFieldWithCompositeKeys(t *testing.T) {
 	db.Create(&ProductTranslation{ProductID: 1, LanguageKey: "EN", Description: "Laptop"})
 	db.Create(&ProductTranslation{ProductID: 1, LanguageKey: "DE", Description: "Laptop"})
 
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	service.RegisterEntity(&ProductTranslation{})
 
 	tests := []struct {
@@ -362,7 +364,8 @@ func TestODataIDFieldOrdering(t *testing.T) {
 	// Insert test data
 	db.Create(&Product{ID: 1, Name: "Laptop", Price: 999.99})
 
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	service.RegisterEntity(&Product{})
 
 	// Test with full metadata to check ordering

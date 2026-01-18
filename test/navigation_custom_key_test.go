@@ -60,7 +60,8 @@ func TestNavigationFilterWithCustomPrimaryKey(t *testing.T) {
 	db.Create(&empDiana)
 
 	// Create OData service
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	service.RegisterEntity(&Department{})
 	service.RegisterEntity(&Employee{})
 

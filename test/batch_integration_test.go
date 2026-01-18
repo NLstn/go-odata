@@ -46,7 +46,8 @@ func setupBatchIntegrationTest(t *testing.T) (*odata.Service, *gorm.DB) {
 		t.Fatalf("Failed to migrate database: %v", err)
 	}
 
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	if err := service.RegisterEntity(&BatchIntegrationProduct{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
 	}
@@ -339,7 +340,8 @@ func TestBatchIntegration_ChangesetWithNavigationAndChangeTracking(t *testing.T)
 		t.Fatalf("Failed to migrate database: %v", err)
 	}
 
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	if err := service.RegisterEntity(&BatchIntegrationCustomer{}); err != nil {
 		t.Fatalf("Failed to register customer entity: %v", err)
 	}
@@ -1213,7 +1215,8 @@ func TestBatchIntegration_DefaultMaxBatchSize(t *testing.T) {
 	}
 
 	// Create service without specifying MaxBatchSize (should use default)
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	if err := service.RegisterEntity(&BatchIntegrationProduct{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
 	}
@@ -1276,7 +1279,8 @@ func TestBatchIntegration_ExceedDefaultMaxBatchSize(t *testing.T) {
 	}
 
 	// Create service without specifying MaxBatchSize (should use default of 100)
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	if err := service.RegisterEntity(&BatchIntegrationProduct{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
 	}

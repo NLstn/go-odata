@@ -220,7 +220,10 @@ func main() {
     }
     
     // Create OData service
-    service := odata.NewService(db)
+    service, err := odata.NewService(db)
+    if err != nil {
+        log.Fatal(err)
+    }
     
     // Create mock external API
     externalAPI := NewMockExternalAPI()

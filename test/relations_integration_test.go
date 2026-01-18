@@ -54,7 +54,8 @@ func setupIntegrationTest(t *testing.T) *odata.Service {
 	}
 	db.Create(&employees)
 
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	_ = service.RegisterEntity(&Department{})
 	_ = service.RegisterEntity(&Employee{})
 
@@ -553,7 +554,8 @@ func TestIntegrationExpandEntityEmptyCollection(t *testing.T) {
 	}
 	db.Create(&employees)
 
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	_ = service.RegisterEntity(&Department{})
 	_ = service.RegisterEntity(&Employee{})
 

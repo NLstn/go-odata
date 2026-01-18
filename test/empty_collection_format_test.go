@@ -32,7 +32,8 @@ func TestODataV4EmptyCollectionFormat(t *testing.T) {
 	}
 
 	// Create OData service
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	service.RegisterEntity(&EmptyTestProduct{})
 
 	tests := []struct {

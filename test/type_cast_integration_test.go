@@ -41,7 +41,8 @@ func TestCollectionTypeCastWithAlternateDiscriminator(t *testing.T) {
 		}
 	}
 
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	if err := service.RegisterEntity(&TypeCastGizmo{}); err != nil {
 		t.Fatalf("failed to register entity: %v", err)
 	}

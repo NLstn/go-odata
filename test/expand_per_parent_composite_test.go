@@ -95,7 +95,8 @@ func TestPerParentExpandCompositeKeysBatched(t *testing.T) {
 		t.Fatalf("Failed to seed children: %v", err)
 	}
 
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	if err := service.RegisterEntity(&CompositeParent{}); err != nil {
 		t.Fatalf("Failed to register parent entity: %v", err)
 	}

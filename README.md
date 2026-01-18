@@ -72,7 +72,10 @@ func main() {
     db.Create(&Product{Name: "Laptop", Price: 999.99, Category: "Electronics"})
     
     // Initialize OData service
-    service := odata.NewService(db)
+    service, err := odata.NewService(db)
+    if err != nil {
+        log.Fatal(err)
+    }
     
     // Register entity
     if err := service.RegisterEntity(&Product{}); err != nil {

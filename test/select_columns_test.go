@@ -35,7 +35,8 @@ func setupSelectTestService(t *testing.T) *odata.Service {
 		t.Fatalf("Failed to migrate database: %v", err)
 	}
 
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	if err := service.RegisterEntity(TestProductSelect{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
 	}
@@ -335,7 +336,8 @@ func TestSelectWithUppercaseJsonNames(t *testing.T) {
 		t.Fatalf("Failed to migrate database: %v", err)
 	}
 
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	if err := service.RegisterEntity(TestProductUppercase{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
 	}

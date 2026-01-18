@@ -68,7 +68,8 @@ func TestExpandWithFilterIntegration(t *testing.T) {
 	db := setupExpandFilterTestDB(t)
 
 	// Create OData service
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	if err := service.RegisterEntity(&ExpandTestProduct{}); err != nil {
 		t.Fatalf("Failed to register ExpandTestProduct entity: %v", err)
 	}
