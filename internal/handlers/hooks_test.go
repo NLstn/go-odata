@@ -61,6 +61,9 @@ func (e *HookedTestEntity) ODataAfterDelete(ctx context.Context, r *http.Request
 }
 
 func createHandlerWithHook(hookName string, enabled bool) *EntityHandler {
+	// Note: This creates a handler without a db connection because the
+	// hook functions being tested only check metadata flags and call
+	// entity methods via reflection - they don't interact with the database.
 	meta := &metadata.EntityMetadata{}
 	switch hookName {
 	case "BeforeCreate":

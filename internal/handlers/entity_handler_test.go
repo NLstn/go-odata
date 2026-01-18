@@ -390,7 +390,8 @@ func TestEntityHandler_EmptyMetadata(t *testing.T) {
 		t.Fatalf("Failed to connect to database: %v", err)
 	}
 
-	// Test with nil metadata
+	// Test with nil metadata - using direct instantiation to test edge cases
+	// that would not normally occur via the constructor
 	handler := &EntityHandler{
 		db:       db,
 		metadata: nil,
@@ -402,7 +403,7 @@ func TestEntityHandler_EmptyMetadata(t *testing.T) {
 		t.Error("Expected propertyMap to be nil for nil metadata")
 	}
 
-	// Test with empty properties
+	// Test with empty properties - using direct instantiation for same reason
 	handler = &EntityHandler{
 		db: db,
 		metadata: &metadata.EntityMetadata{
