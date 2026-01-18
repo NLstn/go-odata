@@ -38,7 +38,9 @@ func TestGeospatialNotEnabled(t *testing.T) {
 
 	// Create service WITHOUT enabling geospatial
 	service, err := NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	if err := service.RegisterEntity(&GeoTestEntity{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
 	}
@@ -77,7 +79,9 @@ func TestGeospatialNotEnabledSingleEntity(t *testing.T) {
 
 	// Create service WITHOUT enabling geospatial
 	service, err := NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	if err := service.RegisterEntity(&GeoTestEntity{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
 	}
@@ -105,7 +109,9 @@ func TestGeospatialEnabledWithSQLiteNoSpatialite(t *testing.T) {
 
 	// Create service
 	service, err := NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 
 	// Try to enable geospatial - should panic because SQLite doesn't have SpatiaLite
 	defer func() {
@@ -125,7 +131,9 @@ func TestIsGeospatialEnabled(t *testing.T) {
 	}
 
 	service, err := NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 
 	// Initially, geospatial should not be enabled
 	if service.IsGeospatialEnabled() {
@@ -167,5 +175,36 @@ func TestCheckGeospatialSupportOtherDialectsErrors(t *testing.T) {
 
 	if err := checkSQLServerGeospatialSupport(db, slog.Default()); err == nil || !strings.Contains(err.Error(), "SQL Server spatial types") {
 		t.Fatalf("expected SQL Server error, got %v", err)
+	}
+}
+
+// TestIsGeospatialEnabledConcurrent verifies that concurrent reads of the geospatial
+// enabled flag are safe. This test will fail with -race if there's a data race.
+func TestIsGeospatialEnabledConcurrent(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("Failed to open database: %v", err)
+	}
+
+	service, err := NewService(db)
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
+
+	// Run concurrent reads of IsGeospatialEnabled
+	// This tests that the mutex properly protects concurrent reads
+	done := make(chan bool, 10)
+	for i := 0; i < 10; i++ {
+		go func() {
+			for j := 0; j < 100; j++ {
+				_ = service.IsGeospatialEnabled()
+			}
+			done <- true
+		}()
+	}
+
+	// Wait for all goroutines to finish
+	for i := 0; i < 10; i++ {
+		<-done
 	}
 }
