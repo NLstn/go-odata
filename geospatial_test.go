@@ -37,7 +37,8 @@ func TestGeospatialNotEnabled(t *testing.T) {
 	}
 
 	// Create service WITHOUT enabling geospatial
-	service := NewService(db)
+	service, err := NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	if err := service.RegisterEntity(&GeoTestEntity{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
 	}
@@ -75,7 +76,8 @@ func TestGeospatialNotEnabledSingleEntity(t *testing.T) {
 	}
 
 	// Create service WITHOUT enabling geospatial
-	service := NewService(db)
+	service, err := NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	if err := service.RegisterEntity(&GeoTestEntity{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
 	}
@@ -102,7 +104,8 @@ func TestGeospatialEnabledWithSQLiteNoSpatialite(t *testing.T) {
 	}
 
 	// Create service
-	service := NewService(db)
+	service, err := NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 
 	// Try to enable geospatial - should panic because SQLite doesn't have SpatiaLite
 	defer func() {
@@ -121,7 +124,8 @@ func TestIsGeospatialEnabled(t *testing.T) {
 		t.Fatalf("Failed to open database: %v", err)
 	}
 
-	service := NewService(db)
+	service, err := NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 
 	// Initially, geospatial should not be enabled
 	if service.IsGeospatialEnabled() {

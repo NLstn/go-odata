@@ -400,12 +400,8 @@ type Service struct {
 }
 
 // NewService creates a new OData service instance with database connection.
-func NewService(db *gorm.DB) *Service {
-	service, err := NewServiceWithConfig(db, ServiceConfig{})
-	if err != nil {
-		panic(err)
-	}
-	return service
+func NewService(db *gorm.DB) (*Service, error) {
+	return NewServiceWithConfig(db, ServiceConfig{})
 }
 
 // NewServiceWithConfig creates a new OData service instance with additional configuration.
@@ -595,7 +591,10 @@ type ObservabilityConfig struct {
 //	defer tp.Shutdown(ctx)
 //
 //	// Configure OData service
-//	service := odata.NewService(db)
+//	service, err := odata.NewService(db)
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
 //	service.SetObservability(odata.ObservabilityConfig{
 //	    TracerProvider: tp,
 //	    ServiceName:    "my-odata-api",
@@ -1557,7 +1556,10 @@ func (s *Service) SetNamespace(namespace string) error {
 //
 // Example:
 //
-//	service := odata.NewService(db)
+//	service, err := odata.NewService(db)
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
 //	if err := service.SetBasePath("/odata"); err != nil {
 //	    log.Fatal(err)
 //	}

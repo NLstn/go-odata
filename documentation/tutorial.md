@@ -274,7 +274,10 @@ func main() {
         log.Fatal(err)
     }
 
-    service := odata.NewService(db)
+    service, err := odata.NewService(db)
+    if err != nil {
+        log.Fatal(err)
+    }
     if err := service.SetNamespace("TutorialService"); err != nil {
         log.Fatal(err)
     }

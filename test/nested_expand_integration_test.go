@@ -82,7 +82,8 @@ func TestNestedExpandIntegration(t *testing.T) {
 	db := setupNestedExpandTestDB(t)
 
 	// Create OData service
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	if err := service.RegisterEntity(&NestedExpandUser{}); err != nil {
 		t.Fatalf("Failed to register NestedExpandUser entity: %v", err)
 	}
@@ -269,7 +270,8 @@ func TestNestedExpandMultipleLevels(t *testing.T) {
 	db := setupNestedExpandTestDB(t)
 
 	// Create OData service
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	if err := service.RegisterEntity(&NestedExpandUser{}); err != nil {
 		t.Fatalf("Failed to register NestedExpandUser entity: %v", err)
 	}

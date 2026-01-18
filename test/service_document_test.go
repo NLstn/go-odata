@@ -34,7 +34,8 @@ func setupServiceDocTestService(t *testing.T) *odata.Service {
 		t.Fatalf("Failed to migrate database: %v", err)
 	}
 
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	if err := service.RegisterEntity(ServiceDocProduct{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
 	}
@@ -289,7 +290,8 @@ func TestServiceDocument_EmptyService(t *testing.T) {
 		t.Fatalf("Failed to connect to database: %v", err)
 	}
 
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()

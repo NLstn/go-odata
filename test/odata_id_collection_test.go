@@ -35,7 +35,8 @@ func TestODataIDInCollectionMinimalMetadata(t *testing.T) {
 		}
 	}
 
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	service.RegisterEntity(&Product{})
 
 	server := httptest.NewServer(http.HandlerFunc(service.ServeHTTP))
@@ -121,7 +122,8 @@ func TestODataIDInCollectionFullMetadata(t *testing.T) {
 		}
 	}
 
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	service.RegisterEntity(&Product{})
 
 	server := httptest.NewServer(http.HandlerFunc(service.ServeHTTP))
@@ -195,7 +197,8 @@ func TestODataIDNotInCollectionNoneMetadata(t *testing.T) {
 		}
 	}
 
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	service.RegisterEntity(&Product{})
 
 	server := httptest.NewServer(http.HandlerFunc(service.ServeHTTP))
@@ -268,7 +271,8 @@ func TestODataIDInSingleEntity(t *testing.T) {
 		t.Fatalf("Failed to create product: %v", err)
 	}
 
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	service.RegisterEntity(&Product{})
 
 	server := httptest.NewServer(http.HandlerFunc(service.ServeHTTP))

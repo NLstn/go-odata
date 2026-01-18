@@ -35,7 +35,8 @@ func setupDisableMethodsTestDB(t *testing.T) *gorm.DB {
 
 func TestDisableHTTPMethods_POST(t *testing.T) {
 	db := setupDisableMethodsTestDB(t)
-	service := NewService(db)
+	service, err := NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 
 	if err := service.RegisterEntity(&User{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
@@ -71,7 +72,8 @@ func TestDisableHTTPMethods_POST(t *testing.T) {
 
 func TestDisableHTTPMethods_DELETE(t *testing.T) {
 	db := setupDisableMethodsTestDB(t)
-	service := NewService(db)
+	service, err := NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 
 	if err := service.RegisterEntity(&User{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
@@ -105,7 +107,8 @@ func TestDisableHTTPMethods_DELETE(t *testing.T) {
 
 func TestDisableHTTPMethods_PATCH(t *testing.T) {
 	db := setupDisableMethodsTestDB(t)
-	service := NewService(db)
+	service, err := NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 
 	if err := service.RegisterEntity(&User{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
@@ -131,7 +134,8 @@ func TestDisableHTTPMethods_PATCH(t *testing.T) {
 
 func TestDisableHTTPMethods_PUT(t *testing.T) {
 	db := setupDisableMethodsTestDB(t)
-	service := NewService(db)
+	service, err := NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 
 	if err := service.RegisterEntity(&User{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
@@ -157,7 +161,8 @@ func TestDisableHTTPMethods_PUT(t *testing.T) {
 
 func TestDisableHTTPMethods_GET(t *testing.T) {
 	db := setupDisableMethodsTestDB(t)
-	service := NewService(db)
+	service, err := NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 
 	if err := service.RegisterEntity(&User{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
@@ -201,7 +206,8 @@ func TestDisableHTTPMethods_GET(t *testing.T) {
 
 func TestDisableHTTPMethods_HEAD_BlockedWhenGETDisabled(t *testing.T) {
 	db := setupDisableMethodsTestDB(t)
-	service := NewService(db)
+	service, err := NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 
 	if err := service.RegisterEntity(&User{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
@@ -245,7 +251,8 @@ func TestDisableHTTPMethods_HEAD_BlockedWhenGETDisabled(t *testing.T) {
 
 func TestDisableHTTPMethods_HEAD_AllowedWhenGETEnabled(t *testing.T) {
 	db := setupDisableMethodsTestDB(t)
-	service := NewService(db)
+	service, err := NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 
 	if err := service.RegisterEntity(&User{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
@@ -286,7 +293,8 @@ func TestDisableHTTPMethods_HEAD_AllowedWhenGETEnabled(t *testing.T) {
 
 func TestDisableHTTPMethods_Multiple(t *testing.T) {
 	db := setupDisableMethodsTestDB(t)
-	service := NewService(db)
+	service, err := NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 
 	if err := service.RegisterEntity(&User{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
@@ -344,10 +352,11 @@ func TestDisableHTTPMethods_Multiple(t *testing.T) {
 
 func TestDisableHTTPMethods_InvalidEntitySet(t *testing.T) {
 	db := setupDisableMethodsTestDB(t)
-	service := NewService(db)
+	service, err := NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 
 	// Try to disable methods for non-existent entity set
-	err := service.DisableHTTPMethods("NonExistent", "POST")
+	err = service.DisableHTTPMethods("NonExistent", "POST")
 	if err == nil {
 		t.Error("Expected error when disabling methods for non-existent entity set")
 	}
@@ -360,14 +369,15 @@ func TestDisableHTTPMethods_InvalidEntitySet(t *testing.T) {
 
 func TestDisableHTTPMethods_InvalidMethod(t *testing.T) {
 	db := setupDisableMethodsTestDB(t)
-	service := NewService(db)
+	service, err := NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 
 	if err := service.RegisterEntity(&User{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
 	}
 
 	// Try to disable an invalid HTTP method
-	err := service.DisableHTTPMethods("Users", "INVALID")
+	err = service.DisableHTTPMethods("Users", "INVALID")
 	if err == nil {
 		t.Error("Expected error when disabling invalid HTTP method")
 	}
@@ -379,7 +389,8 @@ func TestDisableHTTPMethods_InvalidMethod(t *testing.T) {
 
 func TestDisableHTTPMethods_CaseInsensitive(t *testing.T) {
 	db := setupDisableMethodsTestDB(t)
-	service := NewService(db)
+	service, err := NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 
 	if err := service.RegisterEntity(&User{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
@@ -405,7 +416,8 @@ func TestDisableHTTPMethods_CaseInsensitive(t *testing.T) {
 
 func TestDisableHTTPMethods_ErrorResponse(t *testing.T) {
 	db := setupDisableMethodsTestDB(t)
-	service := NewService(db)
+	service, err := NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 
 	if err := service.RegisterEntity(&User{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)

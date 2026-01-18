@@ -73,7 +73,8 @@ func TestPostgresIntegrationSearch_WithSearchableFields(t *testing.T) {
 	}
 
 	// Initialize OData service
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	if err := service.RegisterEntity(&PostgresSearchTestProduct{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
 	}
@@ -271,7 +272,8 @@ func TestPostgresIntegrationSearch_PerformanceComparison(t *testing.T) {
 	}
 
 	// Initialize OData service
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	if err := service.RegisterEntity(&PostgresSearchTestProduct{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
 	}

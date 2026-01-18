@@ -52,7 +52,8 @@ func setupPostTestService(t *testing.T) (*odata.Service, *gorm.DB) {
 		t.Fatalf("Failed to migrate database: %v", err)
 	}
 
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	if err := service.RegisterEntity(PostTestProduct{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
 	}
@@ -70,7 +71,8 @@ func setupPostCompositeKeyTestService(t *testing.T) (*odata.Service, *gorm.DB) {
 		t.Fatalf("Failed to migrate database: %v", err)
 	}
 
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	if err := service.RegisterEntity(PostTestProductCompositeKey{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
 	}
@@ -88,7 +90,8 @@ func setupPostNoAutoIncrementTestService(t *testing.T) (*odata.Service, *gorm.DB
 		t.Fatalf("Failed to migrate database: %v", err)
 	}
 
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	if err := service.RegisterEntity(PostTestProductNoAutoIncrement{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
 	}
@@ -106,7 +109,8 @@ func setupPostUUIDTestService(t *testing.T) (*odata.Service, *gorm.DB) {
 		t.Fatalf("Failed to migrate database: %v", err)
 	}
 
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	if err := service.RegisterEntity(&PostUUIDProduct{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
 	}

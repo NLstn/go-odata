@@ -55,7 +55,8 @@ func TestAdvancedFilterWithParentheses(t *testing.T) {
 	db := setupAdvancedFilterTestDB(t)
 
 	// Create OData service
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	if err := service.RegisterEntity(&AdvancedProduct{}); err != nil {
 		t.Fatalf("Failed to register AdvancedProduct entity: %v", err)
 	}
@@ -119,7 +120,8 @@ func TestAdvancedFilterWithNOT(t *testing.T) {
 	db := setupAdvancedFilterTestDB(t)
 
 	// Create OData service
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	if err := service.RegisterEntity(&AdvancedProduct{}); err != nil {
 		t.Fatalf("Failed to register AdvancedProduct entity: %v", err)
 	}
@@ -184,7 +186,8 @@ func TestAdvancedFilterWithFunctions(t *testing.T) {
 	db := setupAdvancedFilterTestDB(t)
 
 	// Create OData service
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	if err := service.RegisterEntity(&AdvancedProduct{}); err != nil {
 		t.Fatalf("Failed to register AdvancedProduct entity: %v", err)
 	}
@@ -248,7 +251,8 @@ func TestAdvancedFilterWithLiterals(t *testing.T) {
 	db := setupAdvancedFilterTestDB(t)
 
 	// Create OData service
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	if err := service.RegisterEntity(&AdvancedProduct{}); err != nil {
 		t.Fatalf("Failed to register AdvancedProduct entity: %v", err)
 	}
@@ -318,7 +322,8 @@ func TestCombinedAdvancedFeatures(t *testing.T) {
 	db := setupAdvancedFilterTestDB(t)
 
 	// Create OData service
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	if err := service.RegisterEntity(&AdvancedProduct{}); err != nil {
 		t.Fatalf("Failed to register AdvancedProduct entity: %v", err)
 	}

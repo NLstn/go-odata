@@ -74,7 +74,10 @@ func TestEntityRetrieval(t *testing.T) {
     db.Create(&Product{Name: "Test", Price: 99.99})
     
     // Create service
-    service := odata.NewService(db)
+    service, err := odata.NewService(db)
+    if err != nil {
+        log.Fatal(err)
+    }
     service.RegisterEntity(&Product{})
     
     // Test requests

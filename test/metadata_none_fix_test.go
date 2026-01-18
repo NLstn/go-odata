@@ -33,7 +33,8 @@ func TestODataMetadataNoneOmitsContext(t *testing.T) {
 	db.Create(&Product{ID: 1, Name: "Laptop", Price: 999.99})
 	db.Create(&Product{ID: 2, Name: "Mouse", Price: 29.99})
 
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	service.RegisterEntity(&Product{})
 
 	tests := []struct {
@@ -131,7 +132,8 @@ func TestODataMetadataContextPresence(t *testing.T) {
 
 	db.Create(&Product{ID: 1, Name: "Laptop", Price: 999.99})
 
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	service.RegisterEntity(&Product{})
 
 	tests := []struct {
@@ -227,7 +229,8 @@ func TestODataMetadataNoneWithCountAndNextLink(t *testing.T) {
 		db.Create(&Product{ID: i, Name: "Product" + string(rune(i)), Price: float64(i * 10)})
 	}
 
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	service.RegisterEntity(&Product{})
 
 	// Test with $count and $top

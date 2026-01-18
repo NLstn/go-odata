@@ -47,7 +47,10 @@ func main() {
     db.AutoMigrate(&Product{})
     
     // Initialize OData service
-    service := odata.NewService(db)
+    service, err := odata.NewService(db)
+    if err != nil {
+        log.Fatal(err)
+    }
     
     // Register entity
     service.RegisterEntity(&Product{})
@@ -68,7 +71,10 @@ By default the service uses the `ODataService` namespace when generating metadat
 
 ```go
 // Initialize OData service
-service := odata.NewService(db)
+service, err := odata.NewService(db)
+if err != nil {
+    log.Fatal(err)
+}
 
 // Set a custom namespace before registering entities
 if err := service.SetNamespace("Contoso.Sales"); err != nil {
@@ -88,7 +94,10 @@ You can configure default limits on the number of results returned when no expli
 Set a default maximum number of results for all entity sets:
 
 ```go
-service := odata.NewService(db)
+service, err := odata.NewService(db)
+if err != nil {
+    log.Fatal(err)
+}
 service.RegisterEntity(&Product{})
 service.RegisterEntity(&Order{})
 
@@ -134,7 +143,10 @@ service.SetEntityDefaultMaxTop("Products", 0)
 ### Example
 
 ```go
-service := odata.NewService(db)
+service, err := odata.NewService(db)
+if err != nil {
+    log.Fatal(err)
+}
 service.RegisterEntity(&Product{})
 service.RegisterEntity(&Order{})
 

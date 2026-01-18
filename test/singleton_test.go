@@ -46,7 +46,8 @@ func setupSingletonTestDB(t *testing.T) (*gorm.DB, *odata.Service) {
 		t.Fatalf("Failed to seed database: %v", err)
 	}
 
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	if err := service.RegisterSingleton(&CompanyInfo{}, "Company"); err != nil {
 		t.Fatalf("Failed to register singleton: %v", err)
 	}
@@ -65,7 +66,8 @@ func TestSingletonRegistration(t *testing.T) {
 		t.Fatalf("Failed to migrate database: %v", err)
 	}
 
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	err = service.RegisterSingleton(&CompanyInfo{}, "Company")
 	if err != nil {
 		t.Fatalf("Failed to register singleton: %v", err)
@@ -120,7 +122,8 @@ func TestSingletonGetNotFound(t *testing.T) {
 		t.Fatalf("Failed to migrate database: %v", err)
 	}
 
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	if err := service.RegisterSingleton(&CompanyInfo{}, "Company"); err != nil {
 		t.Fatalf("Failed to register singleton: %v", err)
 	}

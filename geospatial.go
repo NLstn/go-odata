@@ -17,7 +17,10 @@ import (
 //
 // Example:
 //
-//	service := odata.NewService(db)
+//	service, err := odata.NewService(db)
+//	if err != nil {
+//		panic(err)
+//	}
 //	service.EnableGeospatial() // Validates database support and panics if not available
 //	service.RegisterEntity(&Product{})
 func (s *Service) EnableGeospatial() {

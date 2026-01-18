@@ -89,7 +89,8 @@ func TestCustomEntitySetNameWithSelectFilter(t *testing.T) {
 	db.Create(&news3)
 
 	// Create OData service
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	if err := service.RegisterEntity(&NewsItem{}); err != nil {
 		t.Fatalf("Failed to register NewsItem entity: %v", err)
 	}
@@ -190,7 +191,8 @@ func TestCustomEntitySetNameWithSearch(t *testing.T) {
 	db.Create(&news2)
 
 	// Create OData service
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	if err := service.RegisterEntity(&NewsItem{}); err != nil {
 		t.Fatalf("Failed to register NewsItem entity: %v", err)
 	}
@@ -242,7 +244,8 @@ func TestCustomEntitySetNameMetadata(t *testing.T) {
 		t.Fatalf("Failed to migrate: %v", err)
 	}
 
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	if err := service.RegisterEntity(&NewsItem{}); err != nil {
 		t.Fatalf("Failed to register NewsItem entity: %v", err)
 	}

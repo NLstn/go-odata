@@ -74,7 +74,8 @@ func setupBindTestService(t *testing.T) (*odata.Service, *gorm.DB) {
 	}
 	db.Create(&products)
 
-	service := odata.NewService(db)
+	service, err := odata.NewService(db)
+	if err != nil { t.Fatalf("NewService() error: %v", err) }
 	if err := service.RegisterEntity(&BindTestCategory{}); err != nil {
 		t.Fatalf("Failed to register BindTestCategory: %v", err)
 	}

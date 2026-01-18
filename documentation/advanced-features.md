@@ -44,7 +44,10 @@ type CompanyInfo struct {
 ### Registering a Singleton
 
 ```go
-service := odata.NewService(db)
+service, err := odata.NewService(db)
+if err != nil {
+    log.Fatal(err)
+}
 
 // Register as a singleton
 err := service.RegisterSingleton(&CompanyInfo{}, "Company")
@@ -254,7 +257,10 @@ Use method restrictions when you want to:
 ### Disabling Methods
 
 ```go
-service := odata.NewService(db)
+service, err := odata.NewService(db)
+if err != nil {
+    log.Fatal(err)
+}
 
 // Register entity
 if err := service.RegisterEntity(&User{}); err != nil {
@@ -394,7 +400,10 @@ Use PreRequestHook when you need to:
 ### Setting Up PreRequestHook
 
 ```go
-service := odata.NewService(db)
+service, err := odata.NewService(db)
+if err != nil {
+    log.Fatal(err)
+}
 service.RegisterEntity(&Product{})
 
 // Define a context key for storing user info
@@ -816,7 +825,10 @@ For a single operation, hooks execute in this order:
 Use server-side key generation when you need identifiers that are independent of the database’s auto-increment behaviour. go-odata exposes a registry of key generators that you can populate at service startup.
 
 ```go
-service := odata.NewService(db)
+service, err := odata.NewService(db)
+if err != nil {
+    log.Fatal(err)
+}
 
 service.RegisterKeyGenerator("timestamp", func(ctx context.Context) (interface{}, error) {
         return time.Now().UnixNano(), nil
@@ -893,12 +905,18 @@ The FTS integration is completely automatic - no configuration required:
 ```go
 // SQLite setup - FTS is automatically initialized
 db, _ := gorm.Open(sqlite.Open("test.db"), &gorm.Config{})
-service := odata.NewService(db)
+service, err := odata.NewService(db)
+if err != nil {
+    log.Fatal(err)
+}
 service.RegisterEntity(&Product{})
 
 // PostgreSQL setup - FTS is automatically initialized
 db, _ := gorm.Open(postgres.Open(dsn), &gorm.Config{})
-service := odata.NewService(db)
+service, err := odata.NewService(db)
+if err != nil {
+    log.Fatal(err)
+}
 service.RegisterEntity(&Product{})
 
 // Clients can use $search as usual
@@ -1041,7 +1059,10 @@ If FTS is not available (e.g., unsupported database or FTS not available):
 ```go
 // Works with any database backend
 db, _ := gorm.Open(postgres.Open(dsn), &gorm.Config{})
-service := odata.NewService(db)
+service, err := odata.NewService(db)
+if err != nil {
+    log.Fatal(err)
+}
 // $search falls back to in-memory search automatically
 ```
 
@@ -1127,7 +1148,10 @@ func main() {
     db, _ := gorm.Open(sqlite.Open("articles.db"), &gorm.Config{})
     db.AutoMigrate(&Article{})
     
-    service := odata.NewService(db)
+    service, err := odata.NewService(db)
+    if err != nil {
+        log.Fatal(err)
+    }
     service.RegisterEntity(&Article{})
     
     http.Handle("/", service)
