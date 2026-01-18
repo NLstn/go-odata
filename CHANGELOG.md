@@ -39,6 +39,7 @@ rely on version numbers to reason about compatibility.
 - **Expanded service routing and operation handler coverage**: Added tests for OData version handling, async monitor path normalization, key serialization, function response formatting, action signature matching, and geospatial capability checks, and stabilized async runtime tests by using a file-backed SQLite database.
 - Added compliance coverage for parameter aliases in system query options ($filter/$top).
 - **Parameter alias support**: Added full support for OData v4.0 parameter aliases (section 11.2.5.8), allowing query options to reference aliases defined as query parameters (e.g., `$filter=Price gt @p&@p=10`). Parameter aliases can be used in $filter, $orderby, $top, $skip, and other query options. This enables more flexible and readable queries, especially when using the same value multiple times.
+- Added collection executor tests covering error handling and hook overrides.
 
 ### Changed
 - **Metadata cache now uses sync.Map for lock-free reads**: Converted metadata handler from `map[string]string` with `sync.RWMutex` to `sync.Map` for both XML and JSON caches, eliminating lock contention on cache hits (99%+ of requests). Benchmarks show 30% improvement in concurrent scenarios.
