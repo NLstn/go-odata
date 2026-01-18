@@ -47,7 +47,7 @@ func (h *EntityHandler) buildDeltaEntries(r *http.Request, events []trackchanges
 	includeMetadata := metadataLevel != "none"
 	baseURL := response.BuildBaseURL(r)
 	entityTypeAnnotation := ""
-	if metadataLevel == "full" {
+	if metadataLevel != "none" {
 		entityTypeAnnotation = "#" + h.qualifiedTypeName(h.metadata.EntityName)
 	}
 
