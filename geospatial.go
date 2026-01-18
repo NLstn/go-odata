@@ -32,12 +32,16 @@ func (s *Service) EnableGeospatial() {
 		panic(fmt.Sprintf("geospatial features cannot be enabled: %v", err))
 	}
 
+	s.geospatialMu.Lock()
 	s.geospatialEnabled = true
+	s.geospatialMu.Unlock()
 	s.logger.Info("Geospatial features enabled successfully")
 }
 
 // IsGeospatialEnabled returns whether geospatial features are enabled for this service
 func (s *Service) IsGeospatialEnabled() bool {
+	s.geospatialMu.RLock()
+	defer s.geospatialMu.RUnlock()
 	return s.geospatialEnabled
 }
 

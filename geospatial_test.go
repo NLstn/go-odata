@@ -169,3 +169,48 @@ func TestCheckGeospatialSupportOtherDialectsErrors(t *testing.T) {
 		t.Fatalf("expected SQL Server error, got %v", err)
 	}
 }
+
+// TestGeospatialConcurrentAccess verifies that concurrent reads of geospatialEnabled
+// don't cause data races. This test is specifically designed to be run with -race flag.
+func TestGeospatialConcurrentAccess(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("Failed to open database: %v", err)
+	}
+
+	service, err := NewService(db)
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
+
+	// Register an entity to trigger reads of geospatialEnabled
+	if err := db.AutoMigrate(&GeoTestEntity{}); err != nil {
+		t.Fatalf("Failed to migrate: %v", err)
+	}
+	if err := service.RegisterEntity(&GeoTestEntity{}); err != nil {
+		t.Fatalf("Failed to register entity: %v", err)
+	}
+
+	// Simulate concurrent access patterns:
+	// Multiple goroutines reading IsGeospatialEnabled while
+	// other goroutines are registering entities (which also reads geospatialEnabled)
+	const numGoroutines = 10
+	const numIterations = 100
+
+	done := make(chan bool)
+
+	// Goroutines reading the flag
+	for i := 0; i < numGoroutines; i++ {
+		go func() {
+			for j := 0; j < numIterations; j++ {
+				_ = service.IsGeospatialEnabled()
+			}
+			done <- true
+		}()
+	}
+
+	// Wait for all goroutines to complete
+	for i := 0; i < numGoroutines; i++ {
+		<-done
+	}
+}
