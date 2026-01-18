@@ -70,7 +70,7 @@ func (h *EntityHandler) handleGetCollectionOverwrite(w http.ResponseWriter, r *h
 
 	// Check if geospatial operations are used but not enabled
 	if queryOptions.Filter != nil && query.ContainsGeospatialOperations(queryOptions.Filter) {
-		if !h.geospatialEnabled {
+		if !h.IsGeospatialEnabled() {
 			if writeErr := response.WriteError(w, r, http.StatusNotImplemented, "Geospatial features not enabled", "geospatial features are not enabled for this service"); writeErr != nil {
 				h.logger.Error("Error writing error response", "error", writeErr)
 			}
@@ -134,7 +134,7 @@ func (h *EntityHandler) parseCollectionQueryOptions(w http.ResponseWriter, r *ht
 
 		// Check if geospatial operations are used but not enabled
 		if queryOptions.Filter != nil && query.ContainsGeospatialOperations(queryOptions.Filter) {
-			if !h.geospatialEnabled {
+			if !h.IsGeospatialEnabled() {
 				return nil, &GeospatialNotEnabledError{}
 			}
 		}

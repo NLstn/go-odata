@@ -51,9 +51,9 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
-	"time"
-
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/nlstn/go-odata/internal/actions"
 	"github.com/nlstn/go-odata/internal/async"
@@ -384,10 +384,9 @@ type Service struct {
 	// It allows injecting custom logic such as authentication, context enrichment, or logging.
 	preRequestHook PreRequestHook
 	// geospatialEnabled indicates if geospatial features are enabled.
-	// This flag must be configured during service initialization (for example, via EnableGeospatial)
-	// before the service starts handling any requests, and it must not be modified thereafter.
-	// Concurrent runtime toggling of this field is not supported and will result in a data race.
-	geospatialEnabled bool
+	// This flag is accessed atomically to prevent data races.
+	// Use 0 for disabled, 1 for enabled.
+	geospatialEnabled int32
 	// maxInClauseSize limits the number of values in an IN clause
 	maxInClauseSize int
 	// maxExpandDepth limits the depth of nested $expand operations
@@ -954,7 +953,7 @@ func (s *Service) RegisterEntity(entity interface{}) error {
 		handler.SetObservability(s.observability)
 	}
 	// Set geospatial enabled flag
-	handler.SetGeospatialEnabled(s.geospatialEnabled)
+	handler.SetGeospatialEnabled(atomic.LoadInt32(&s.geospatialEnabled) == 1)
 	// Set security limits
 	handler.SetMaxInClauseSize(s.maxInClauseSize)
 	handler.SetMaxExpandDepth(s.maxExpandDepth)
@@ -1035,7 +1034,7 @@ func (s *Service) RegisterSingleton(entity interface{}, singletonName string) er
 		handler.SetObservability(s.observability)
 	}
 	// Set geospatial enabled flag
-	handler.SetGeospatialEnabled(s.geospatialEnabled)
+	handler.SetGeospatialEnabled(atomic.LoadInt32(&s.geospatialEnabled) == 1)
 	// Set security limits
 	handler.SetMaxInClauseSize(s.maxInClauseSize)
 	handler.SetMaxExpandDepth(s.maxExpandDepth)
@@ -1122,7 +1121,7 @@ func (s *Service) RegisterVirtualEntity(entity interface{}) error {
 		handler.SetObservability(s.observability)
 	}
 	// Set geospatial enabled flag
-	handler.SetGeospatialEnabled(s.geospatialEnabled)
+	handler.SetGeospatialEnabled(atomic.LoadInt32(&s.geospatialEnabled) == 1)
 	// Set security limits
 	handler.SetMaxInClauseSize(s.maxInClauseSize)
 	handler.SetMaxExpandDepth(s.maxExpandDepth)

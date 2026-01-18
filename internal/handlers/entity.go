@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"reflect"
 	"strings"
+	"sync/atomic"
 
 	"github.com/nlstn/go-odata/internal/auth"
 	"github.com/nlstn/go-odata/internal/metadata"
@@ -32,8 +33,10 @@ type EntityHandler struct {
 	propertyMap map[string]*metadata.PropertyMetadata
 	// observability holds the OpenTelemetry configuration for tracing and metrics
 	observability *observability.Config
-	// geospatialEnabled indicates if geospatial features are enabled
-	geospatialEnabled bool
+	// geospatialEnabled indicates if geospatial features are enabled.
+	// This is accessed atomically to prevent data races.
+	// Use 0 for disabled, 1 for enabled.
+	geospatialEnabled int32
 	// maxInClauseSize limits the number of values in an IN clause
 	maxInClauseSize int
 	// maxExpandDepth limits the depth of nested $expand operations
@@ -142,7 +145,11 @@ func (h *EntityHandler) SetObservability(cfg *observability.Config) {
 
 // SetGeospatialEnabled sets whether geospatial features are enabled for this handler.
 func (h *EntityHandler) SetGeospatialEnabled(enabled bool) {
-	h.geospatialEnabled = enabled
+	var val int32
+	if enabled {
+		val = 1
+	}
+	atomic.StoreInt32(&h.geospatialEnabled, val)
 }
 
 // SetMaxInClauseSize sets the maximum number of values allowed in an IN clause.
@@ -165,7 +172,7 @@ func (h *EntityHandler) getParserConfig() *query.ParserConfig {
 
 // IsGeospatialEnabled returns whether geospatial features are enabled for this handler.
 func (h *EntityHandler) IsGeospatialEnabled() bool {
-	return h.geospatialEnabled
+	return atomic.LoadInt32(&h.geospatialEnabled) == 1
 }
 
 // HasEntityLevelDefaultMaxTop returns true if this handler has an entity-level default max top set

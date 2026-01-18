@@ -3,6 +3,7 @@ package odata
 import (
 	"fmt"
 	"log/slog"
+	"sync/atomic"
 
 	"gorm.io/gorm"
 )
@@ -32,13 +33,13 @@ func (s *Service) EnableGeospatial() {
 		panic(fmt.Sprintf("geospatial features cannot be enabled: %v", err))
 	}
 
-	s.geospatialEnabled = true
+	atomic.StoreInt32(&s.geospatialEnabled, 1)
 	s.logger.Info("Geospatial features enabled successfully")
 }
 
 // IsGeospatialEnabled returns whether geospatial features are enabled for this service
 func (s *Service) IsGeospatialEnabled() bool {
-	return s.geospatialEnabled
+	return atomic.LoadInt32(&s.geospatialEnabled) == 1
 }
 
 // checkGeospatialSupport validates that the database supports geospatial operations
