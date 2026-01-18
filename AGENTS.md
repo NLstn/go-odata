@@ -178,7 +178,6 @@ When reviewing or making code changes, ensure the following quality checks are p
 6. Run tests: `go test ./...`
 7. Build: `go build ./...`
 8. Commit only after all checks pass
-9. **CRITICAL**: Update `CHANGELOG.md` with any user-facing changes or release planning adjustments
 
 ### Configuration
 

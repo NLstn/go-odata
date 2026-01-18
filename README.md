@@ -256,16 +256,13 @@ See the [OData v4 specification](https://docs.oasis-open.org/odata/odata/v4.01/o
 }
 ```
 
-## Versioning and Changelog
+## Versioning
 
 This project follows [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html).
 Patch releases deliver backward-compatible fixes, minor releases add new
 backward-compatible functionality, and major releases are reserved for breaking
 changes. Planned release tags will start with `v0.1.0` and continue with the
 `vMAJOR.MINOR.PATCH` pattern.
-
-See the [CHANGELOG](CHANGELOG.md) for a curated list of notable updates and the
-release plan so downstream integrations can assess compatibility expectations.
 
 ## Requirements
 
