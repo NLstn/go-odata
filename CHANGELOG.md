@@ -42,6 +42,7 @@ rely on version numbers to reason about compatibility.
 - Added collection executor tests covering error handling and hook overrides.
 
 ### Changed
+- **Service struct organization improved**: Reorganized the Service struct fields with clear section headers to improve code readability and maintainability. Fields are now grouped into logical categories: Core Resources, Request Handling, Feature Managers, Cross-Cutting Concerns, and Configuration Settings. This makes it easier to understand the structure and responsibilities of the Service type.
 - **BREAKING: NewService now returns error instead of panicking**: The `NewService` function signature changed from `func NewService(db *gorm.DB) *Service` to `func NewService(db *gorm.DB) (*Service, error)`. This provides better error handling and prevents panics in production code. Code that calls `NewService` must now handle the error return value. Example: `service, err := odata.NewService(db); if err != nil { log.Fatal(err) }`
 - **Metadata cache now uses sync.Map for lock-free reads**: Converted metadata handler from `map[string]string` with `sync.RWMutex` to `sync.Map` for both XML and JSON caches, eliminating lock contention on cache hits (99%+ of requests). Benchmarks show 30% improvement in concurrent scenarios.
 - **Version headers now set automatically in router middleware**: The router now automatically sets the `OData-Version` response header based on client negotiation, eliminating the need for manual header management in most cases.

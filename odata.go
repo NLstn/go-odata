@@ -330,7 +330,14 @@ const (
 )
 
 // Service represents an OData service that can handle multiple entities.
+// This is the central coordination point for the OData service, managing:
+// - Database connection and entity metadata
+// - HTTP request routing and handling
+// - Feature managers (async, change tracking, FTS, key generation)
+// - Configuration settings (limits, paths, feature flags)
+// - Cross-cutting concerns (logging, auth, observability)
 type Service struct {
+	// ==================== Core Resources ====================
 	// db holds the GORM database connection
 	db *gorm.DB
 	// entities holds registered entity metadata keyed by entity set name
@@ -347,18 +354,22 @@ type Service struct {
 	actions map[string][]*actions.ActionDefinition
 	// functions holds registered functions keyed by function name (supports overloads)
 	functions map[string][]*actions.FunctionDefinition
-	// namespace used for metadata generation
-	namespace string
-	// deltaTracker tracks entity changes for change tracking requests
-	deltaTracker *trackchanges.Tracker
-	// changeTrackingPersistent indicates whether tracker state is backed by the database
-	changeTrackingPersistent bool
+
+	// ==================== Request Handling ====================
 	// router handles HTTP routing for the service
 	router *servrouter.Router
 	// operationsHandler orchestrates action and function execution
 	operationsHandler *operations.Handler
 	// runtime coordinates HTTP handling and async dispatch
 	runtime *servruntime.Runtime
+
+	// ==================== Feature Managers ====================
+	// deltaTracker tracks entity changes for change tracking requests
+	deltaTracker *trackchanges.Tracker
+	// changeTrackingPersistent indicates whether tracker state is backed by the database
+	changeTrackingPersistent bool
+	// ftsManager manages full-text search functionality for SQLite
+	ftsManager *query.FTSManager
 	// asyncManager manages asynchronous requests when enabled
 	asyncManager *async.Manager
 	// asyncConfig stores the configuration for async processing
@@ -367,22 +378,26 @@ type Service struct {
 	asyncQueue chan struct{}
 	// asyncMonitorPrefix is the normalized monitor path prefix
 	asyncMonitorPrefix string
+	// keyGenerators maintains registered key generator functions by name
+	keyGenerators   map[string]KeyGenerator
+	keyGeneratorsMu sync.RWMutex
+
+	// ==================== Cross-Cutting Concerns ====================
 	// logger is used for structured logging throughout the service
 	logger *slog.Logger
 	// policy handles authorization decisions when configured
 	policy auth.Policy
-	// ftsManager manages full-text search functionality for SQLite
-	ftsManager *query.FTSManager
-	// keyGenerators maintains registered key generator functions by name
-	keyGenerators   map[string]KeyGenerator
-	keyGeneratorsMu sync.RWMutex
-	// defaultMaxTop is the default maximum number of results to return if no explicit $top is set
-	defaultMaxTop *int
 	// observability holds the observability configuration (tracing, metrics)
 	observability *observability.Config
 	// preRequestHook is called before each request is processed (including batch sub-requests).
 	// It allows injecting custom logic such as authentication, context enrichment, or logging.
 	preRequestHook PreRequestHook
+
+	// ==================== Configuration Settings ====================
+	// namespace used for metadata generation
+	namespace string
+	// defaultMaxTop is the default maximum number of results to return if no explicit $top is set
+	defaultMaxTop *int
 	// geospatialEnabled indicates if geospatial features are enabled.
 	// Protected by geospatialMu for safe concurrent access.
 	geospatialEnabled bool
