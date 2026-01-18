@@ -21,6 +21,26 @@ type TestBook struct {
 	Author   *TestAuthor `json:"Author,omitempty" gorm:"foreignKey:AuthorID"`
 }
 
+type TestPublisher struct {
+	ID   uint   `json:"ID" gorm:"primaryKey" odata:"key"`
+	Name string `json:"Name"`
+}
+
+type TestAuthorWithPublisher struct {
+	ID          uint                    `json:"ID" gorm:"primaryKey" odata:"key"`
+	Name        string                  `json:"Name"`
+	PublisherID uint                    `json:"PublisherID"`
+	Publisher   *TestPublisher          `json:"Publisher,omitempty" gorm:"foreignKey:PublisherID"`
+	Books       []TestBookWithPublisher `json:"Books" gorm:"foreignKey:AuthorID"`
+}
+
+type TestBookWithPublisher struct {
+	ID       uint                     `json:"ID" gorm:"primaryKey" odata:"key"`
+	Title    string                   `json:"Title"`
+	AuthorID uint                     `json:"AuthorID"`
+	Author   *TestAuthorWithPublisher `json:"Author,omitempty" gorm:"foreignKey:AuthorID"`
+}
+
 func buildAuthorBookMetadata(t *testing.T) (*metadata.EntityMetadata, *metadata.EntityMetadata) {
 	t.Helper()
 
@@ -535,6 +555,7 @@ func TestSplitExpandParts(t *testing.T) {
 		input     string
 		expected  []string
 		expectErr bool
+		errMsg    string
 	}{
 		{
 			input:    "Books",
@@ -557,12 +578,21 @@ func TestSplitExpandParts(t *testing.T) {
 			expected: []string{"Books($filter=contains(Title,'a,b'))", "Author"},
 		},
 		{
+			input:    "Books($filter=contains(Title,'O''Reilly, Inc.')),Author",
+			expected: []string{"Books($filter=contains(Title,'O''Reilly, Inc.'))", "Author"},
+		},
+		{
 			input:     "Books)",
 			expectErr: true,
 		},
 		{
 			input:     "Books($top=5",
 			expectErr: true,
+		},
+		{
+			input:     "Books($filter=contains(Title,'unclosed))",
+			expectErr: true,
+			errMsg:    "invalid $expand syntax: missing closing quote",
 		},
 	}
 
@@ -573,6 +603,9 @@ func TestSplitExpandParts(t *testing.T) {
 				t.Fatalf("Expected error %v, got %v", tt.expectErr, err)
 			}
 			if tt.expectErr {
+				if tt.errMsg != "" && err != nil && err.Error() != tt.errMsg {
+					t.Fatalf("Expected error %q, got %q", tt.errMsg, err.Error())
+				}
 				return
 			}
 			if len(result) != len(tt.expected) {
@@ -876,6 +909,38 @@ func TestParseNestedExpandWithOptions(t *testing.T) {
 	// Check $select on nested Author
 	if len(nestedExpand.Select) != 1 || nestedExpand.Select[0] != "Name" {
 		t.Error("Expected $select=Name on nested Author expand")
+	}
+}
+
+func TestParseNestedExpandDepthLimit(t *testing.T) {
+	authorMeta, err := metadata.AnalyzeEntity(&TestAuthorWithPublisher{})
+	if err != nil {
+		t.Fatalf("Failed to analyze author entity: %v", err)
+	}
+
+	bookMeta, err := metadata.AnalyzeEntity(&TestBookWithPublisher{})
+	if err != nil {
+		t.Fatalf("Failed to analyze book entity: %v", err)
+	}
+
+	publisherMeta, err := metadata.AnalyzeEntity(&TestPublisher{})
+	if err != nil {
+		t.Fatalf("Failed to analyze publisher entity: %v", err)
+	}
+
+	setEntitiesRegistry(authorMeta, bookMeta, publisherMeta)
+
+	params := url.Values{}
+	params.Set("$expand", "Books($expand=Author($expand=Publisher))")
+
+	_, err = ParseQueryOptionsWithConfig(params, authorMeta, &ParserConfig{MaxExpandDepth: 1})
+	if err == nil {
+		t.Fatal("Expected expand depth error, got nil")
+	}
+
+	expectedErr := "invalid $expand: invalid nested $expand: $expand nesting level (2) exceeds maximum allowed depth (1)"
+	if err.Error() != expectedErr {
+		t.Fatalf("Expected error %q, got %q", expectedErr, err.Error())
 	}
 }
 
