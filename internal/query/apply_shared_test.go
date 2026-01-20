@@ -17,13 +17,6 @@ type sharedTestCategory struct {
 	Name string `json:"name"`
 }
 
-type sharedTestProductWithNav struct {
-	ID       int                 `json:"ID" odata:"key"`
-	Name     string              `json:"name"`
-	Price    float64             `json:"price"`
-	Category *sharedTestCategory `json:"category,omitempty"`
-}
-
 func TestApplySelectToExpandedEntity(t *testing.T) {
 	t.Run("nil value returns nil", func(t *testing.T) {
 		result := applySelectToExpandedEntity(nil, []string{"name"})
