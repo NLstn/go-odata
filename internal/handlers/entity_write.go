@@ -595,6 +595,12 @@ func (h *EntityHandler) validatePropertiesExistForUpdate(updateData map[string]i
 			if _, ok := h.propertyMap[propertyPart]; ok {
 				continue
 			}
+			// Property annotation refers to a non-existent property
+			err := fmt.Errorf("annotation '%s' refers to non-existent property '%s' on entity type '%s'", propName, propertyPart, h.metadata.EntityName)
+			if writeErr := response.WriteError(w, r, http.StatusBadRequest, "Invalid annotation", err.Error()); writeErr != nil {
+				h.logger.Error("Error writing error response", "error", writeErr)
+			}
+			return err
 		}
 		
 		if !validProperties[propName] {
