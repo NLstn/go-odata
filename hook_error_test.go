@@ -69,7 +69,9 @@ func TestHookError_CustomStatusCodes(t *testing.T) {
 
 	// Create OData service
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	if err := service.RegisterEntity(&EmployeeWithCustomHook{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
 	}
@@ -239,7 +241,9 @@ func TestHookError_WriteHooks(t *testing.T) {
 
 	// Create OData service
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	if err := service.RegisterEntity(&ProductWithWriteHook{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
 	}
@@ -271,7 +275,7 @@ func TestHookError_WriteHooks(t *testing.T) {
 	})
 
 	t.Run("BeforeCreate allows creation with payment token", func(t *testing.T) {
-		body := strings.NewReader(`{"id": 1, "name": "Test Product", "price": 99.99}`)
+		body := strings.NewReader(`{"ID": 1, "name": "Test Product", "price": 99.99}`)
 		req := httptest.NewRequest(http.MethodPost, "/ProductWithWriteHooks", body)
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("X-Payment-Token", "valid-token")
