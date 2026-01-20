@@ -280,11 +280,6 @@ func ParseAnnotationTag(tag string) (Annotation, error) {
 	parts := strings.SplitN(termValue, "=", 2)
 	term := strings.TrimSpace(parts[0])
 
-	// Validate that term is not empty after trimming
-	if term == "" {
-		return Annotation{}, fmt.Errorf("empty annotation term")
-	}
-
 	if strings.Contains(term, "#") {
 		termParts := strings.SplitN(term, "#", 2)
 		term = strings.TrimSpace(termParts[0])
@@ -296,6 +291,11 @@ func ParseAnnotationTag(tag string) (Annotation, error) {
 			return Annotation{}, fmt.Errorf("conflicting annotation qualifiers")
 		}
 		qualifier = hashQualifier
+	}
+
+	// Validate that term is not empty after trimming and extracting qualifier
+	if term == "" {
+		return Annotation{}, fmt.Errorf("empty annotation term")
 	}
 
 	var value interface{} = true // Default to boolean true for bare terms

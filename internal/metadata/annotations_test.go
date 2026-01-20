@@ -327,6 +327,18 @@ func TestParseAnnotationTag(t *testing.T) {
 			tag:         "Core.Description;qualifier=",
 			expectError: true,
 		},
+		{
+			name:        "empty term with hash qualifier",
+			tag:         "#Qualifier",
+			expectError: true,
+		},
+		{
+			name:              "duplicate qualifier specification (matching)",
+			tag:               "Core.Description#Short;qualifier=Short",
+			expectedTerm:      "Org.OData.Core.V1.Description",
+			expectedQualifier: "Short",
+			expectedValue:     true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -355,6 +367,67 @@ func TestParseAnnotationTag(t *testing.T) {
 
 			if annotation.Value != tt.expectedValue {
 				t.Errorf("Value = %v, want %v", annotation.Value, tt.expectedValue)
+			}
+		})
+	}
+}
+
+func TestQualifiedTerm(t *testing.T) {
+	tests := []struct {
+		name       string
+		annotation *Annotation
+		expected   string
+	}{
+		{
+			name: "term with qualifier",
+			annotation: &Annotation{
+				Term:      "Org.OData.Core.V1.Description",
+				Qualifier: "Short",
+			},
+			expected: "Org.OData.Core.V1.Description#Short",
+		},
+		{
+			name: "term without qualifier",
+			annotation: &Annotation{
+				Term: "Org.OData.Core.V1.Computed",
+			},
+			expected: "Org.OData.Core.V1.Computed",
+		},
+		{
+			name:       "nil annotation",
+			annotation: nil,
+			expected:   "",
+		},
+		{
+			name: "empty term",
+			annotation: &Annotation{
+				Term: "",
+			},
+			expected: "",
+		},
+		{
+			name: "empty term with qualifier",
+			annotation: &Annotation{
+				Term:      "",
+				Qualifier: "Short",
+			},
+			expected: "",
+		},
+		{
+			name: "term with empty qualifier",
+			annotation: &Annotation{
+				Term:      "Org.OData.Core.V1.Description",
+				Qualifier: "",
+			},
+			expected: "Org.OData.Core.V1.Description",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.annotation.QualifiedTerm()
+			if got != tt.expected {
+				t.Errorf("QualifiedTerm() = %q, want %q", got, tt.expected)
 			}
 		})
 	}
