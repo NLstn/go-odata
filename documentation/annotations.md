@@ -45,6 +45,18 @@ type Product struct {
 - Full namespace: `annotation:Org.OData.Core.V1.Computed`
 - Short alias: `annotation:Core.Computed` (automatically expanded)
 
+### Literal Parsing Rules
+
+The parser trims leading/trailing whitespace around terms, qualifiers, and values before interpretation. Literal values are parsed with the following rules:
+
+- **Boolean literals**: `true` or `false` (case-insensitive) become `bool`.
+- **Integer literals**: base-10 digits with optional `+`/`-` sign (example: `42`, `-7`) become `int64`.
+- **Float literals**: decimals or scientific notation (example: `3.14`, `1e3`, `-2.5E-2`) become `float64`.
+- **String literals**: any other value is treated as a string.
+- **Quoted strings**: values wrapped in matching single or double quotes (example: `"true"`, `'123'`) are always treated as strings, with the quotes removed.
+
+Invalid numeric formats (example: `1.2.3`, `1e`) are rejected with an error rather than being treated as strings. To force a string value that would otherwise parse as a boolean or number, wrap it in quotes.
+
 ### Supported Aliases
 
 | Alias | Full Namespace |

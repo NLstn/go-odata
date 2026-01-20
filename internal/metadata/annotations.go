@@ -2,6 +2,8 @@ package metadata
 
 import (
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -301,7 +303,12 @@ func ParseAnnotationTag(tag string) (Annotation, error) {
 	var value interface{} = true // Default to boolean true for bare terms
 
 	if len(parts) == 2 {
-		value = strings.TrimSpace(parts[1])
+		literal := strings.TrimSpace(parts[1])
+		parsedValue, err := parseAnnotationLiteral(literal)
+		if err != nil {
+			return Annotation{}, err
+		}
+		value = parsedValue
 	}
 
 	// Expand common aliases
@@ -312,6 +319,79 @@ func ParseAnnotationTag(tag string) (Annotation, error) {
 		Value:     value,
 		Qualifier: qualifier,
 	}, nil
+}
+
+var (
+	annotationIntLiteralPattern   = regexp.MustCompile(`^[+-]?\d+$`)
+	annotationFloatLiteralPattern = regexp.MustCompile(`^[+-]?(?:\d+\.\d*|\d*\.\d+|\d+[eE][+-]?\d+|\d+\.\d*[eE][+-]?\d+|\d*\.\d+[eE][+-]?\d+)$`)
+)
+
+func parseAnnotationLiteral(literal string) (interface{}, error) {
+	if literal == "" {
+		return "", nil
+	}
+
+	if unquoted, ok, err := parseQuotedLiteral(literal); ok {
+		return unquoted, err
+	}
+
+	if strings.EqualFold(literal, "true") {
+		return true, nil
+	}
+	if strings.EqualFold(literal, "false") {
+		return false, nil
+	}
+
+	if annotationIntLiteralPattern.MatchString(literal) {
+		parsed, err := strconv.ParseInt(literal, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid integer literal %q: %w", literal, err)
+		}
+		return parsed, nil
+	}
+
+	if annotationFloatLiteralPattern.MatchString(literal) {
+		parsed, err := strconv.ParseFloat(literal, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid float literal %q: %w", literal, err)
+		}
+		return parsed, nil
+	}
+
+	if looksNumericLiteral(literal) {
+		return nil, fmt.Errorf("invalid numeric literal %q", literal)
+	}
+
+	return literal, nil
+}
+
+func parseQuotedLiteral(literal string) (string, bool, error) {
+	if len(literal) < 2 {
+		return "", false, nil
+	}
+	quote := literal[0]
+	if quote != '"' && quote != '\'' {
+		return "", false, nil
+	}
+	if literal[len(literal)-1] != quote {
+		return "", true, fmt.Errorf("unterminated string literal %q", literal)
+	}
+	return literal[1 : len(literal)-1], true, nil
+}
+
+func looksNumericLiteral(literal string) bool {
+	hasDigit := false
+	for _, r := range literal {
+		switch {
+		case r >= '0' && r <= '9':
+			hasDigit = true
+		case r == '+' || r == '-' || r == '.' || r == 'e' || r == 'E':
+			continue
+		default:
+			return false
+		}
+	}
+	return hasDigit
 }
 
 // expandAnnotationAlias expands common vocabulary aliases to full namespaces
