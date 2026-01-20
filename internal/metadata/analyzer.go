@@ -646,12 +646,14 @@ func processODataTagPart(property *PropertyMetadata, part string, metadata *Enti
 	case strings.HasPrefix(part, "annotation:"):
 		// Handle annotation tags: annotation:Core.Computed or annotation:Org.OData.Core.V1.Description=Some description
 		annotationValue := strings.TrimPrefix(part, "annotation:")
-		if annotation, err := ParseAnnotationTag(annotationValue); err == nil {
-			if property.Annotations == nil {
-				property.Annotations = NewAnnotationCollection()
-			}
-			property.Annotations.Add(annotation)
+		annotation, err := ParseAnnotationTag(annotationValue)
+		if err != nil {
+			return fmt.Errorf("invalid annotation tag %q: %w", annotationValue, err)
 		}
+		if property.Annotations == nil {
+			property.Annotations = NewAnnotationCollection()
+		}
+		property.Annotations.Add(annotation)
 	}
 
 	return nil

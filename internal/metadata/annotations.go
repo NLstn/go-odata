@@ -244,6 +244,12 @@ func ParseAnnotationTag(tag string) (Annotation, error) {
 	// Check for term=value format
 	parts := strings.SplitN(tag, "=", 2)
 	term := strings.TrimSpace(parts[0])
+	
+	// Validate that term is not empty after trimming
+	if term == "" {
+		return Annotation{}, fmt.Errorf("empty annotation term")
+	}
+	
 	var value interface{} = true // Default to boolean true for bare terms
 
 	if len(parts) == 2 {

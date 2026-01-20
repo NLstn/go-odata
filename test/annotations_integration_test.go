@@ -17,7 +17,7 @@ type AnnotatedProduct struct {
 	ID        uint    `json:"ID" gorm:"primaryKey"`
 	Name      string  `json:"Name" odata:"required,annotation:Core.Description=Product display name"`
 	Price     float64 `json:"Price"`
-	CreatedAt string  `json:"CreatedAt" odata:"auto,annotation:Core.Computed"`
+	CreatedAt string  `json:"CreatedAt" odata:"auto"`
 }
 
 // ComputedFieldEntity tests auto-detection of annotations from property flags
