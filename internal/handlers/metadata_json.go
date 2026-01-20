@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/version"
@@ -82,6 +83,28 @@ func (h *MetadataHandler) buildMetadataJSON(model metadataModel, ver version.Ver
 	csdl := map[string]interface{}{
 		"$Version":         ver.String(),
 		"$EntityContainer": fmt.Sprintf("%s.Container", model.namespace),
+	}
+	usedVocabularies := model.collectUsedVocabularies()
+	if len(usedVocabularies) > 0 {
+		vocabularyAliases := metadata.VocabularyAliasMap()
+		references := make(map[string]interface{}, len(usedVocabularies))
+		for _, ns := range usedVocabularies {
+			alias := vocabularyAliases[ns]
+			if alias == "" {
+				parts := strings.Split(ns, ".")
+				alias = parts[len(parts)-1]
+			}
+			uri := vocabularyURI(ns)
+			references[uri] = map[string]interface{}{
+				"$Include": []map[string]interface{}{
+					{
+						"$Namespace": ns,
+						"$Alias":     alias,
+					},
+				},
+			}
+		}
+		csdl["$Reference"] = references
 	}
 	csdl[model.namespace] = odataService
 
