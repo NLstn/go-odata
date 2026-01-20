@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/nlstn/go-odata/internal/response"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // validateDataTypes validates that all values in updateData match the expected types
@@ -173,5 +174,76 @@ func validateContentType(w http.ResponseWriter, r *http.Request) error {
 		return fmt.Errorf("unsupported Content-Type: %s", contentType)
 	}
 
+	return nil
+}
+
+// validatePropertiesExist validates that all properties in the provided data map are valid entity properties.
+// It allows instance annotations (starting with @) and property-level annotations (property@annotation format),
+// but rejects unknown property names. When checkAutoProperties is true, it also rejects auto properties.
+func (h *EntityHandler) validatePropertiesExist(data map[string]interface{}, w http.ResponseWriter, r *http.Request, checkAutoProperties bool) error {
+	// Build a map of valid property names (both JSON names and struct field names)
+	validProperties := make(map[string]bool, len(h.metadata.Properties)*2)
+	autoProperties := make(map[string]bool)
+	
+	for _, prop := range h.metadata.Properties {
+		validProperties[prop.JsonName] = true
+		validProperties[prop.Name] = true
+		
+		// Track auto properties to reject client updates if needed
+		if checkAutoProperties && prop.IsAuto {
+			autoProperties[prop.JsonName] = true
+			autoProperties[prop.Name] = true
+		}
+	}
+
+	// Check each property in data
+	for propName := range data {
+		// Allow any property starting with @ (instance annotations at entity level)
+		// Per OData spec, clients can send instance annotations which should be ignored
+		if strings.HasPrefix(propName, "@") {
+			continue
+		}
+		
+		// Allow property-level annotations (property@annotation format)
+		// Check if this is a property annotation by looking for @ after the property name
+		if idx := strings.Index(propName, "@"); idx > 0 {
+			// Extract the property name part before the @
+			propertyPart := propName[:idx]
+			// Check if the property exists using the precomputed property map for O(1) lookup
+			if _, ok := h.propertyMap[propertyPart]; ok {
+				continue
+			}
+			// Property annotation refers to a non-existent property
+			err := fmt.Errorf("annotation '%s' refers to non-existent property '%s' on entity type '%s'", propName, propertyPart, h.metadata.EntityName)
+			span := trace.SpanFromContext(r.Context())
+			span.RecordError(err)
+			if writeErr := response.WriteError(w, r, http.StatusBadRequest, "Invalid annotation", err.Error()); writeErr != nil {
+				h.logger.Error("Error writing error response", "error", writeErr)
+			}
+			return err
+		}
+		
+		if !validProperties[propName] {
+			err := fmt.Errorf("property '%s' does not exist on entity type '%s'", propName, h.metadata.EntityName)
+			span := trace.SpanFromContext(r.Context())
+			span.RecordError(err)
+			if writeErr := response.WriteError(w, r, http.StatusBadRequest, "Invalid property", err.Error()); writeErr != nil {
+				h.logger.Error("Error writing error response", "error", writeErr)
+			}
+			return err
+		}
+		
+		// Reject attempts to update auto properties if checkAutoProperties is true
+		if checkAutoProperties && autoProperties[propName] {
+			err := fmt.Errorf("property '%s' is automatically set server-side and cannot be modified by clients", propName)
+			span := trace.SpanFromContext(r.Context())
+			span.RecordError(err)
+			if writeErr := response.WriteError(w, r, http.StatusBadRequest, "Invalid property modification", err.Error()); writeErr != nil {
+				h.logger.Error("Error writing error response", "error", writeErr)
+			}
+			return err
+		}
+	}
+	
 	return nil
 }
