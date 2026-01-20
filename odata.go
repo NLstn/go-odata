@@ -1948,19 +1948,31 @@ func (s *Service) RegisterEntityAnnotation(entitySetName string, term string, va
 		return fmt.Errorf("entity set '%s' is not registered", entitySetName)
 	}
 
-	term = metadata.ExpandAnnotationAlias(term)
+	parsedTerm, qualifier, err := metadata.ParseAnnotationTerm(term)
+	if err != nil {
+		return err
+	}
 
 	if entityMeta.Annotations == nil {
 		entityMeta.Annotations = metadata.NewAnnotationCollection()
 	}
-	entityMeta.Annotations.AddTerm(term, value)
+	entityMeta.Annotations.Add(metadata.Annotation{
+		Term:      parsedTerm,
+		Qualifier: qualifier,
+		Value:     value,
+	})
 
 	// Clear metadata cache since annotations changed
 	s.metadataHandler.ClearCache()
 
+	qualifiedTerm := parsedTerm
+	if qualifier != "" {
+		qualifiedTerm = parsedTerm + "#" + qualifier
+	}
+
 	s.logger.Debug("Registered entity annotation",
 		"entitySet", entitySetName,
-		"term", term)
+		"term", qualifiedTerm)
 	return nil
 }
 
@@ -2001,23 +2013,35 @@ func (s *Service) RegisterPropertyAnnotation(entitySetName string, propertyName 
 		return fmt.Errorf("property '%s' not found in entity set '%s'", propertyName, entitySetName)
 	}
 
-	term = metadata.ExpandAnnotationAlias(term)
+	parsedTerm, qualifier, err := metadata.ParseAnnotationTerm(term)
+	if err != nil {
+		return err
+	}
 
 	// Work on a copy of the property metadata to avoid mutating a slice element via pointer
 	prop := entityMeta.Properties[propIndex]
 	if prop.Annotations == nil {
 		prop.Annotations = metadata.NewAnnotationCollection()
 	}
-	prop.Annotations.AddTerm(term, value)
+	prop.Annotations.Add(metadata.Annotation{
+		Term:      parsedTerm,
+		Qualifier: qualifier,
+		Value:     value,
+	})
 	entityMeta.Properties[propIndex] = prop
 
 	// Clear metadata cache since annotations changed
 	s.metadataHandler.ClearCache()
 
+	qualifiedTerm := parsedTerm
+	if qualifier != "" {
+		qualifiedTerm = parsedTerm + "#" + qualifier
+	}
+
 	s.logger.Debug("Registered property annotation",
 		"entitySet", entitySetName,
 		"property", propertyName,
-		"term", term)
+		"term", qualifiedTerm)
 	return nil
 }
 

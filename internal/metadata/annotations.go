@@ -321,6 +321,15 @@ func ParseAnnotationTag(tag string) (Annotation, error) {
 	}, nil
 }
 
+// ParseAnnotationTerm parses an annotation term with optional qualifiers and expands aliases.
+func ParseAnnotationTerm(term string) (string, string, error) {
+	annotation, err := ParseAnnotationTag(term)
+	if err != nil {
+		return "", "", err
+	}
+	return annotation.Term, annotation.Qualifier, nil
+}
+
 var (
 	annotationIntLiteralPattern   = regexp.MustCompile(`^[+-]?\d+$`)
 	annotationFloatLiteralPattern = regexp.MustCompile(`^[+-]?(?:\d+\.\d*|\d*\.\d+|\d+[eE][+-]?\d+|\d+\.\d*[eE][+-]?\d+|\d*\.\d+[eE][+-]?\d+)$`)
