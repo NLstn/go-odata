@@ -331,6 +331,11 @@ func expandAnnotationAlias(term string) string {
 	return term
 }
 
+// ExpandAnnotationAlias expands common vocabulary aliases to full namespaces.
+func ExpandAnnotationAlias(term string) string {
+	return expandAnnotationAlias(term)
+}
+
 // VocabularyAliasMap returns a map of vocabulary namespace to preferred alias
 func VocabularyAliasMap() map[string]string {
 	return map[string]string{

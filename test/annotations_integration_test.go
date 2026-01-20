@@ -309,6 +309,106 @@ func TestAnnotations_RegisterPropertyAnnotation(t *testing.T) {
 	})
 }
 
+func TestAnnotations_RegisterEntityAnnotation_AliasExpansion(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("Failed to connect to database: %v", err)
+	}
+
+	type AliasEntity struct {
+		ID   uint   `json:"ID" gorm:"primaryKey"`
+		Name string `json:"Name"`
+	}
+
+	if err := db.AutoMigrate(&AliasEntity{}); err != nil {
+		t.Fatalf("Failed to migrate database: %v", err)
+	}
+
+	service, err := odata.NewService(db)
+	if err != nil {
+		t.Fatalf("Failed to create service: %v", err)
+	}
+
+	if err := service.RegisterEntity(&AliasEntity{}); err != nil {
+		t.Fatalf("Failed to register entity: %v", err)
+	}
+
+	err = service.RegisterEntityAnnotation("AliasEntities",
+		"Core.Description",
+		"Entity alias description")
+	if err != nil {
+		t.Fatalf("Failed to register entity annotation: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/$metadata", nil)
+	req.Header.Set("Accept", "application/json")
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status OK, got %d", w.Code)
+	}
+
+	body := w.Body.String()
+	if !strings.Contains(body, "@Org.OData.Core.V1.Description") {
+		t.Error("JSON metadata should contain expanded annotation term")
+	}
+	if strings.Contains(body, "@Core.Description") {
+		t.Error("JSON metadata should not contain alias annotation term")
+	}
+}
+
+func TestAnnotations_RegisterPropertyAnnotation_AliasExpansion(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("Failed to connect to database: %v", err)
+	}
+
+	type AliasPropertyEntity struct {
+		ID    uint   `json:"ID" gorm:"primaryKey"`
+		Email string `json:"Email"`
+	}
+
+	if err := db.AutoMigrate(&AliasPropertyEntity{}); err != nil {
+		t.Fatalf("Failed to migrate database: %v", err)
+	}
+
+	service, err := odata.NewService(db)
+	if err != nil {
+		t.Fatalf("Failed to create service: %v", err)
+	}
+
+	if err := service.RegisterEntity(&AliasPropertyEntity{}); err != nil {
+		t.Fatalf("Failed to register entity: %v", err)
+	}
+
+	err = service.RegisterPropertyAnnotation("AliasPropertyEntities", "Email",
+		"Core.Description",
+		"Alias property description")
+	if err != nil {
+		t.Fatalf("Failed to register property annotation: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/$metadata", nil)
+	req.Header.Set("Accept", "application/json")
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status OK, got %d", w.Code)
+	}
+
+	body := w.Body.String()
+	if !strings.Contains(body, "@Org.OData.Core.V1.Description") {
+		t.Error("JSON metadata should contain expanded annotation term")
+	}
+	if strings.Contains(body, "@Core.Description") {
+		t.Error("JSON metadata should not contain alias annotation term")
+	}
+}
+
 func TestAnnotations_RegisterAnnotation_InvalidEntitySet(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
