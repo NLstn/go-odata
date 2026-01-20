@@ -278,9 +278,14 @@ func (h *EntityHandler) validateAutoPropertiesNotProvided(requestData map[string
 		return fmt.Errorf("properties marked as 'auto' cannot be provided by clients and are set server-side: %s", strings.Join(autoFields, ", "))
 	}
 	
-	// Note: Instance annotations (properties starting with @) are allowed and will be ignored during entity creation
-	// They are handled by processODataBindAnnotations for @odata.bind, and other annotations are simply ignored
-	// by Go's JSON unmarshaling since they don't match entity struct fields
+	// Explicitly filter instance annotations (properties starting with "@") from the request payload.
+	// @odata.* annotations (such as @odata.bind) are handled separately (e.g., by processODataBindAnnotations)
+	// and are therefore preserved here; other instance annotations are removed from requestData.
+	for key := range requestData {
+		if strings.HasPrefix(key, "@") && !strings.HasPrefix(key, "@odata.") {
+			delete(requestData, key)
+		}
+	}
 
 	return nil
 }

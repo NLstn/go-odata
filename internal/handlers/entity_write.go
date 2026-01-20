@@ -591,15 +591,8 @@ func (h *EntityHandler) validatePropertiesExistForUpdate(updateData map[string]i
 		if idx := strings.Index(propName, "@"); idx > 0 {
 			// Extract the property name part before the @
 			propertyPart := propName[:idx]
-			// Check if the property exists
-			isValidPropertyAnnotation := false
-			for _, prop := range h.metadata.Properties {
-				if prop.JsonName == propertyPart || prop.Name == propertyPart {
-					isValidPropertyAnnotation = true
-					break
-				}
-			}
-			if isValidPropertyAnnotation {
+			// Check if the property exists using the precomputed property map for O(1) lookup
+			if _, ok := h.propertyMap[propertyPart]; ok {
 				continue
 			}
 		}
@@ -636,13 +629,11 @@ func (h *EntityHandler) removeODataBindAnnotations(updateData map[string]interfa
 		}
 		// Remove property-level annotations (property@annotation format)
 		// Check if @ appears and the part before @ is a valid property name
+		// Use pre-built propertyMap for O(1) property name lookup instead of scanning all properties
 		if idx := strings.Index(key, "@"); idx > 0 {
 			propertyPart := key[:idx]
-			for _, prop := range h.metadata.Properties {
-				if prop.JsonName == propertyPart || prop.Name == propertyPart {
-					keysToRemove = append(keysToRemove, key)
-					break
-				}
+			if _, ok := h.propertyMap[propertyPart]; ok {
+				keysToRemove = append(keysToRemove, key)
 			}
 		}
 	}
