@@ -177,6 +177,48 @@ if err != nil {
 }
 ```
 
+### Entity Set Annotations
+
+```go
+// Describe the Products entity set and restrict deletes
+err := service.RegisterEntitySetAnnotation("Products",
+    "Org.OData.Core.V1.Description",
+    "All products available for sale")
+if err != nil {
+    log.Fatal(err)
+}
+
+err = service.RegisterEntitySetAnnotation("Products",
+    "Org.OData.Capabilities.V1.DeleteRestrictions",
+    map[string]interface{}{"Deletable": false})
+if err != nil {
+    log.Fatal(err)
+}
+```
+
+### Singleton Annotations
+
+```go
+service.RegisterSingleton(&Company{}, "Company")
+
+err := service.RegisterSingletonAnnotation("Company",
+    "Org.OData.Core.V1.Description",
+    "Company-wide profile and settings")
+if err != nil {
+    log.Fatal(err)
+}
+```
+
+### Entity Container Annotations
+
+```go
+err := service.RegisterEntityContainerAnnotation("Org.OData.Core.V1.Description",
+    "Primary service container")
+if err != nil {
+    log.Fatal(err)
+}
+```
+
 ### Property-Level Annotations
 
 ```go

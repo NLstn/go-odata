@@ -335,6 +335,8 @@ type Service struct {
 	db *gorm.DB
 	// entities holds registered entity metadata keyed by entity set name
 	entities map[string]*metadata.EntityMetadata
+	// entityContainerAnnotations holds annotations applied to the entity container
+	entityContainerAnnotations *metadata.AnnotationCollection
 	// handlers holds entity handlers keyed by entity set name
 	handlers map[string]*handlers.EntityHandler
 	// metadataHandler handles metadata document requests
@@ -444,25 +446,27 @@ func NewServiceWithConfig(db *gorm.DB, cfg ServiceConfig) (*Service, error) {
 	}
 
 	s := &Service{
-		db:                       db,
-		entities:                 entities,
-		handlers:                 handlersMap,
-		metadataHandler:          handlers.NewMetadataHandler(entities),
-		serviceDocumentHandler:   handlers.NewServiceDocumentHandler(entities, logger),
-		actions:                  make(map[string][]*actions.ActionDefinition),
-		functions:                make(map[string][]*actions.FunctionDefinition),
-		namespace:                DefaultNamespace,
-		deltaTracker:             tracker,
-		changeTrackingPersistent: cfg.PersistentChangeTracking,
-		logger:                   logger,
-		ftsManager:               ftsManager,
-		keyGenerators:            make(map[string]KeyGenerator),
-		maxInClauseSize:          maxInClauseSize,
-		maxExpandDepth:           maxExpandDepth,
-		maxBatchSize:             maxBatchSize,
+		db:                         db,
+		entities:                   entities,
+		entityContainerAnnotations: metadata.NewAnnotationCollection(),
+		handlers:                   handlersMap,
+		metadataHandler:            handlers.NewMetadataHandler(entities),
+		serviceDocumentHandler:     handlers.NewServiceDocumentHandler(entities, logger),
+		actions:                    make(map[string][]*actions.ActionDefinition),
+		functions:                  make(map[string][]*actions.FunctionDefinition),
+		namespace:                  DefaultNamespace,
+		deltaTracker:               tracker,
+		changeTrackingPersistent:   cfg.PersistentChangeTracking,
+		logger:                     logger,
+		ftsManager:                 ftsManager,
+		keyGenerators:              make(map[string]KeyGenerator),
+		maxInClauseSize:            maxInClauseSize,
+		maxExpandDepth:             maxExpandDepth,
+		maxBatchSize:               maxBatchSize,
 	}
 	s.metadataHandler.SetNamespace(DefaultNamespace)
 	s.metadataHandler.SetPolicy(s.policy)
+	s.metadataHandler.SetEntityContainerAnnotations(s.entityContainerAnnotations)
 	s.serviceDocumentHandler.SetPolicy(s.policy)
 	s.operationsHandler = operations.NewHandler(s.actions, s.functions, s.handlers, s.entities, s.namespace, logger)
 	// Initialize batch handler with reference to service's internal handler (for changesets)
@@ -1960,6 +1964,98 @@ func (s *Service) RegisterEntityAnnotation(entitySetName string, term string, va
 
 	s.logger.Debug("Registered entity annotation",
 		"entitySet", entitySetName,
+		"term", term)
+	return nil
+}
+
+// RegisterEntitySetAnnotation adds an OData vocabulary annotation to an entity set.
+//
+// Entity set annotations describe collection-level capabilities, such as insert or
+// delete restrictions, paging limits, or custom metadata for the entity set itself.
+//
+// # Example
+//
+//	err := service.RegisterEntitySetAnnotation("Products",
+//	    "Org.OData.Capabilities.V1.DeleteRestrictions",
+//	    map[string]interface{}{"Deletable": false})
+func (s *Service) RegisterEntitySetAnnotation(entitySetName string, term string, value interface{}) error {
+	entityMeta, exists := s.entities[entitySetName]
+	if !exists {
+		return fmt.Errorf("entity set '%s' is not registered", entitySetName)
+	}
+	if entityMeta.IsSingleton {
+		return fmt.Errorf("entity set '%s' is a singleton; use RegisterSingletonAnnotation", entitySetName)
+	}
+
+	term = metadata.ExpandAnnotationAlias(term)
+
+	if entityMeta.EntitySetAnnotations == nil {
+		entityMeta.EntitySetAnnotations = metadata.NewAnnotationCollection()
+	}
+	entityMeta.EntitySetAnnotations.AddTerm(term, value)
+
+	s.metadataHandler.ClearCache()
+
+	s.logger.Debug("Registered entity set annotation",
+		"entitySet", entitySetName,
+		"term", term)
+	return nil
+}
+
+// RegisterSingletonAnnotation adds an OData vocabulary annotation to a singleton.
+//
+// Singleton annotations describe the singleton instance exposed by name in the entity container.
+//
+// # Example
+//
+//	err := service.RegisterSingletonAnnotation("Company",
+//	    "Org.OData.Core.V1.Description",
+//	    "Company-wide settings and information")
+func (s *Service) RegisterSingletonAnnotation(singletonName string, term string, value interface{}) error {
+	entityMeta, exists := s.entities[singletonName]
+	if !exists {
+		return fmt.Errorf("singleton '%s' is not registered", singletonName)
+	}
+	if !entityMeta.IsSingleton {
+		return fmt.Errorf("entity '%s' is not a singleton; use RegisterEntitySetAnnotation", singletonName)
+	}
+
+	term = metadata.ExpandAnnotationAlias(term)
+
+	if entityMeta.SingletonAnnotations == nil {
+		entityMeta.SingletonAnnotations = metadata.NewAnnotationCollection()
+	}
+	entityMeta.SingletonAnnotations.AddTerm(term, value)
+
+	s.metadataHandler.ClearCache()
+
+	s.logger.Debug("Registered singleton annotation",
+		"singleton", singletonName,
+		"term", term)
+	return nil
+}
+
+// RegisterEntityContainerAnnotation adds an OData vocabulary annotation to the entity container.
+//
+// Entity container annotations apply to the container itself and describe service-wide
+// capabilities or metadata.
+//
+// # Example
+//
+//	err := service.RegisterEntityContainerAnnotation("Org.OData.Core.V1.Description",
+//	    "Primary service container")
+func (s *Service) RegisterEntityContainerAnnotation(term string, value interface{}) error {
+	term = metadata.ExpandAnnotationAlias(term)
+
+	if s.entityContainerAnnotations == nil {
+		s.entityContainerAnnotations = metadata.NewAnnotationCollection()
+		s.metadataHandler.SetEntityContainerAnnotations(s.entityContainerAnnotations)
+	}
+	s.entityContainerAnnotations.AddTerm(term, value)
+
+	s.metadataHandler.ClearCache()
+
+	s.logger.Debug("Registered entity container annotation",
 		"term", term)
 	return nil
 }

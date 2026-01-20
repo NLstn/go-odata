@@ -307,6 +307,13 @@ func (h *MetadataHandler) buildJSONEntityContainer(model metadataModel) map[stri
 		"$Kind": "EntityContainer",
 	}
 
+	if model.containerAnnotations != nil {
+		for _, annotation := range model.containerAnnotations.Get() {
+			annotationKey := "@" + annotation.QualifiedTerm()
+			container[annotationKey] = h.annotationJSONValue(annotation.Value)
+		}
+	}
+
 	for entitySetName, entityMeta := range model.entities {
 		if entityMeta.IsSingleton {
 			singleton := map[string]interface{}{
@@ -316,6 +323,13 @@ func (h *MetadataHandler) buildJSONEntityContainer(model metadataModel) map[stri
 			navigationBindings := h.navigationBindings(model, entityMeta)
 			if len(navigationBindings) > 0 {
 				singleton["$NavigationPropertyBinding"] = h.navigationBindingsMap(navigationBindings)
+			}
+
+			if entityMeta.SingletonAnnotations != nil {
+				for _, annotation := range entityMeta.SingletonAnnotations.Get() {
+					annotationKey := "@" + annotation.QualifiedTerm()
+					singleton[annotationKey] = h.annotationJSONValue(annotation.Value)
+				}
 			}
 
 			container[entityMeta.SingletonName] = singleton
@@ -328,6 +342,13 @@ func (h *MetadataHandler) buildJSONEntityContainer(model metadataModel) map[stri
 			navigationBindings := h.navigationBindings(model, entityMeta)
 			if len(navigationBindings) > 0 {
 				entitySet["$NavigationPropertyBinding"] = h.navigationBindingsMap(navigationBindings)
+			}
+
+			if entityMeta.EntitySetAnnotations != nil {
+				for _, annotation := range entityMeta.EntitySetAnnotations.Get() {
+					annotationKey := "@" + annotation.QualifiedTerm()
+					entitySet[annotationKey] = h.annotationJSONValue(annotation.Value)
+				}
 			}
 
 			container[entitySetName] = entitySet

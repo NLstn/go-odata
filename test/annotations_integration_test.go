@@ -309,6 +309,130 @@ func TestAnnotations_RegisterPropertyAnnotation(t *testing.T) {
 	})
 }
 
+func TestAnnotations_EntitySetSingletonContainerAnnotations(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("Failed to connect to database: %v", err)
+	}
+
+	type InventoryItem struct {
+		ID   uint   `json:"ID" gorm:"primaryKey"`
+		Name string `json:"Name"`
+	}
+
+	type CompanySettings struct {
+		ID   uint   `json:"ID" gorm:"primaryKey"`
+		Name string `json:"Name"`
+	}
+
+	if err := db.AutoMigrate(&InventoryItem{}, &CompanySettings{}); err != nil {
+		t.Fatalf("Failed to migrate database: %v", err)
+	}
+
+	service, err := odata.NewService(db)
+	if err != nil {
+		t.Fatalf("Failed to create service: %v", err)
+	}
+
+	if err := service.RegisterEntity(&InventoryItem{}); err != nil {
+		t.Fatalf("Failed to register entity: %v", err)
+	}
+	if err := service.RegisterSingleton(&CompanySettings{}, "CompanySettings"); err != nil {
+		t.Fatalf("Failed to register singleton: %v", err)
+	}
+
+	if err := service.RegisterEntitySetAnnotation("InventoryItems",
+		"Org.OData.Core.V1.Description",
+		"Inventory items"); err != nil {
+		t.Fatalf("Failed to register entity set annotation: %v", err)
+	}
+
+	if err := service.RegisterSingletonAnnotation("CompanySettings",
+		"Org.OData.Core.V1.Description",
+		"Company settings"); err != nil {
+		t.Fatalf("Failed to register singleton annotation: %v", err)
+	}
+
+	if err := service.RegisterEntityContainerAnnotation("Org.OData.Core.V1.Description",
+		"Service container"); err != nil {
+		t.Fatalf("Failed to register container annotation: %v", err)
+	}
+
+	t.Run("JSON metadata includes entity set, singleton, and container annotations", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/$metadata", nil)
+		req.Header.Set("Accept", "application/json")
+		w := httptest.NewRecorder()
+
+		service.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Errorf("Expected status OK, got %d", w.Code)
+		}
+
+		var metadata map[string]interface{}
+		if err := json.Unmarshal(w.Body.Bytes(), &metadata); err != nil {
+			t.Fatalf("Failed to parse JSON metadata: %v", err)
+		}
+
+		namespace, ok := metadata["ODataService"].(map[string]interface{})
+		if !ok {
+			t.Fatal("Missing ODataService namespace in metadata")
+		}
+
+		container, ok := namespace["Container"].(map[string]interface{})
+		if !ok {
+			t.Fatal("Missing Container in metadata")
+		}
+
+		if container["@Org.OData.Core.V1.Description"] != "Service container" {
+			t.Error("Container annotation should be present in JSON metadata")
+		}
+
+		entitySet, ok := container["InventoryItems"].(map[string]interface{})
+		if !ok {
+			t.Fatal("Missing InventoryItems entity set in metadata")
+		}
+		if entitySet["@Org.OData.Core.V1.Description"] != "Inventory items" {
+			t.Error("Entity set annotation should be present in JSON metadata")
+		}
+
+		singleton, ok := container["CompanySettings"].(map[string]interface{})
+		if !ok {
+			t.Fatal("Missing CompanySettings singleton in metadata")
+		}
+		if singleton["@Org.OData.Core.V1.Description"] != "Company settings" {
+			t.Error("Singleton annotation should be present in JSON metadata")
+		}
+	})
+
+	t.Run("XML metadata includes entity set, singleton, and container annotations", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/$metadata", nil)
+		req.Header.Set("Accept", "application/xml")
+		w := httptest.NewRecorder()
+
+		service.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Errorf("Expected status OK, got %d", w.Code)
+		}
+
+		body := w.Body.String()
+
+		if !strings.Contains(body, `Target="ODataService.Container"`) {
+			t.Error("XML metadata should contain container annotations target")
+		}
+		if !strings.Contains(body, `Target="ODataService.Container/InventoryItems"`) {
+			t.Error("XML metadata should contain entity set annotations target")
+		}
+		if !strings.Contains(body, `Target="ODataService.Container/CompanySettings"`) {
+			t.Error("XML metadata should contain singleton annotations target")
+		}
+		if !strings.Contains(body, `Org.OData.Core.V1.Description`) {
+			t.Error("XML metadata should contain Core.Description annotations")
+		}
+	})
+}
+
 func TestAnnotations_RegisterEntityAnnotation_AliasExpansion(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {

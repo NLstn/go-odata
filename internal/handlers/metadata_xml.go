@@ -323,15 +323,48 @@ func (h *MetadataHandler) buildEntityContainer(model metadataModel) string {
 func (h *MetadataHandler) buildAnnotations(model metadataModel) string {
 	var builder strings.Builder
 
+	if model.containerAnnotations != nil && model.containerAnnotations.Len() > 0 {
+		target := fmt.Sprintf("%s.Container", model.namespace)
+		builder.WriteString(fmt.Sprintf(`      <Annotations Target="%s">
+`, target))
+		for _, annotation := range model.containerAnnotations.Get() {
+			builder.WriteString(h.buildAnnotationXML(annotation))
+		}
+		builder.WriteString(`      </Annotations>
+`)
+	}
+
 	// Build annotations for each entity type and its properties
 	for _, entityMeta := range model.entities {
+		if entityMeta.IsSingleton {
+			if entityMeta.SingletonAnnotations != nil && entityMeta.SingletonAnnotations.Len() > 0 {
+				target := fmt.Sprintf("%s.Container/%s", model.namespace, entityMeta.SingletonName)
+				builder.WriteString(fmt.Sprintf(`      <Annotations Target="%s">
+`, target))
+				for _, annotation := range entityMeta.SingletonAnnotations.Get() {
+					builder.WriteString(h.buildAnnotationXML(annotation))
+				}
+				builder.WriteString(`      </Annotations>
+`)
+			}
+		} else if entityMeta.EntitySetAnnotations != nil && entityMeta.EntitySetAnnotations.Len() > 0 {
+			target := fmt.Sprintf("%s.Container/%s", model.namespace, entityMeta.EntitySetName)
+			builder.WriteString(fmt.Sprintf(`      <Annotations Target="%s">
+`, target))
+			for _, annotation := range entityMeta.EntitySetAnnotations.Get() {
+				builder.WriteString(h.buildAnnotationXML(annotation))
+			}
+			builder.WriteString(`      </Annotations>
+`)
+		}
+
 		// Entity type annotations
 		if entityMeta.Annotations != nil && entityMeta.Annotations.Len() > 0 {
 			target := model.qualifiedTypeName(entityMeta.EntityName)
 			builder.WriteString(fmt.Sprintf(`      <Annotations Target="%s">
 `, target))
 			for _, annotation := range entityMeta.Annotations.Get() {
-				builder.WriteString(h.buildAnnotationXML(annotation, 8))
+				builder.WriteString(h.buildAnnotationXML(annotation))
 			}
 			builder.WriteString(`      </Annotations>
 `)
@@ -344,7 +377,7 @@ func (h *MetadataHandler) buildAnnotations(model metadataModel) string {
 				builder.WriteString(fmt.Sprintf(`      <Annotations Target="%s">
 `, target))
 				for _, annotation := range prop.Annotations.Get() {
-					builder.WriteString(h.buildAnnotationXML(annotation, 8))
+					builder.WriteString(h.buildAnnotationXML(annotation))
 				}
 				builder.WriteString(`      </Annotations>
 `)
@@ -356,8 +389,8 @@ func (h *MetadataHandler) buildAnnotations(model metadataModel) string {
 }
 
 // buildAnnotationXML builds the XML representation of a single annotation
-func (h *MetadataHandler) buildAnnotationXML(annotation metadata.Annotation, indent int) string {
-	indentStr := strings.Repeat(" ", indent)
+func (h *MetadataHandler) buildAnnotationXML(annotation metadata.Annotation) string {
+	indentStr := strings.Repeat(" ", 8)
 
 	escapedTerm := escapeXML(annotation.Term)
 	qualifierAttr := ""
@@ -369,7 +402,7 @@ func (h *MetadataHandler) buildAnnotationXML(annotation metadata.Annotation, ind
 		var builder strings.Builder
 		builder.WriteString(fmt.Sprintf(`%s<Annotation Term="%s"%s>
 `, indentStr, escapedTerm, qualifierAttr))
-		builder.WriteString(h.buildAnnotationCollectionXML(collectionValues, indent+2))
+		builder.WriteString(h.buildAnnotationCollectionXML(collectionValues, 10))
 		builder.WriteString(fmt.Sprintf(`%s</Annotation>
 `, indentStr))
 		return builder.String()
@@ -379,7 +412,7 @@ func (h *MetadataHandler) buildAnnotationXML(annotation metadata.Annotation, ind
 		var builder strings.Builder
 		builder.WriteString(fmt.Sprintf(`%s<Annotation Term="%s"%s>
 `, indentStr, escapedTerm, qualifierAttr))
-		builder.WriteString(h.buildAnnotationRecordXML(recordValues, indent+2))
+		builder.WriteString(h.buildAnnotationRecordXML(recordValues, 10))
 		builder.WriteString(fmt.Sprintf(`%s</Annotation>
 `, indentStr))
 		return builder.String()
@@ -566,8 +599,6 @@ func annotationPrimitiveAttribute(value interface{}) (string, string, bool) {
 		return "", "", false
 	}
 }
-
-
 
 // escapeXML escapes special characters for XML output
 func escapeXML(s string) string {
