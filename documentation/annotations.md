@@ -218,6 +218,16 @@ Accept: application/json
 {
   "$Version": "4.01",
   "$EntityContainer": "ODataService.Container",
+  "$Reference": {
+    "https://oasis-tcs.github.io/odata-vocabularies/vocabularies/Org.OData.Core.V1.xml": {
+      "$Include": [
+        {
+          "$Namespace": "Org.OData.Core.V1",
+          "$Alias": "Core"
+        }
+      ]
+    }
+  },
   "ODataService": {
     "Product": {
       "$Kind": "EntityType",
