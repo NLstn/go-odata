@@ -285,6 +285,11 @@ func TestParseAnnotationTag(t *testing.T) {
 			tag:         "   ",
 			expectError: true,
 		},
+		{
+			name:        "empty term with value",
+			tag:         "  =value",
+			expectError: true,
+		},
 	}
 
 	for _, tt := range tests {

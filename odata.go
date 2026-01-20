@@ -1986,23 +1986,26 @@ func (s *Service) RegisterPropertyAnnotation(entitySetName string, propertyName 
 		return fmt.Errorf("entity set '%s' is not registered", entitySetName)
 	}
 
-	// Find the property
-	var prop *metadata.PropertyMetadata
+	// Find the property index
+	propIndex := -1
 	for i := range entityMeta.Properties {
 		if entityMeta.Properties[i].Name == propertyName || entityMeta.Properties[i].JsonName == propertyName {
-			prop = &entityMeta.Properties[i]
+			propIndex = i
 			break
 		}
 	}
 
-	if prop == nil {
+	if propIndex == -1 {
 		return fmt.Errorf("property '%s' not found in entity set '%s'", propertyName, entitySetName)
 	}
 
+	// Work on a copy of the property metadata to avoid mutating a slice element via pointer
+	prop := entityMeta.Properties[propIndex]
 	if prop.Annotations == nil {
 		prop.Annotations = metadata.NewAnnotationCollection()
 	}
 	prop.Annotations.AddTerm(term, value)
+	entityMeta.Properties[propIndex] = prop
 
 	// Clear metadata cache since annotations changed
 	s.metadataHandler.ClearCache()

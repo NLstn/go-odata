@@ -358,37 +358,68 @@ func (h *MetadataHandler) buildAnnotations(model metadataModel) string {
 func (h *MetadataHandler) buildAnnotationXML(annotation metadata.Annotation, indent int) string {
 	indentStr := strings.Repeat(" ", indent)
 
+	escapedTerm := escapeXML(annotation.Term)
+
 	// Handle boolean values inline
 	if boolVal, ok := annotation.Value.(bool); ok {
 		return fmt.Sprintf(`%s<Annotation Term="%s" Bool="%t" />
-`, indentStr, annotation.Term, boolVal)
+`, indentStr, escapedTerm, boolVal)
 	}
 
 	// Handle string values
 	if strVal, ok := annotation.Value.(string); ok {
 		return fmt.Sprintf(`%s<Annotation Term="%s" String="%s" />
-`, indentStr, annotation.Term, escapeXML(strVal))
+`, indentStr, escapedTerm, escapeXML(strVal))
 	}
 
-	// Handle integer values
-	if intVal, ok := annotation.Value.(int); ok {
+	// Handle integer values (all signed integer types)
+	switch intVal := annotation.Value.(type) {
+	case int:
 		return fmt.Sprintf(`%s<Annotation Term="%s" Int="%d" />
-`, indentStr, annotation.Term, intVal)
-	}
-	if intVal, ok := annotation.Value.(int64); ok {
+`, indentStr, escapedTerm, intVal)
+	case int8:
 		return fmt.Sprintf(`%s<Annotation Term="%s" Int="%d" />
-`, indentStr, annotation.Term, intVal)
+`, indentStr, escapedTerm, intVal)
+	case int16:
+		return fmt.Sprintf(`%s<Annotation Term="%s" Int="%d" />
+`, indentStr, escapedTerm, intVal)
+	case int32:
+		return fmt.Sprintf(`%s<Annotation Term="%s" Int="%d" />
+`, indentStr, escapedTerm, intVal)
+	case int64:
+		return fmt.Sprintf(`%s<Annotation Term="%s" Int="%d" />
+`, indentStr, escapedTerm, intVal)
+	case uint:
+		return fmt.Sprintf(`%s<Annotation Term="%s" Int="%d" />
+`, indentStr, escapedTerm, intVal)
+	case uint8:
+		return fmt.Sprintf(`%s<Annotation Term="%s" Int="%d" />
+`, indentStr, escapedTerm, intVal)
+	case uint16:
+		return fmt.Sprintf(`%s<Annotation Term="%s" Int="%d" />
+`, indentStr, escapedTerm, intVal)
+	case uint32:
+		return fmt.Sprintf(`%s<Annotation Term="%s" Int="%d" />
+`, indentStr, escapedTerm, intVal)
+	case uint64:
+		return fmt.Sprintf(`%s<Annotation Term="%s" Int="%d" />
+`, indentStr, escapedTerm, intVal)
 	}
 
-	// Handle float values
+	// Handle float values (both float32 and float64)
 	if floatVal, ok := annotation.Value.(float64); ok {
 		return fmt.Sprintf(`%s<Annotation Term="%s" Float="%g" />
-`, indentStr, annotation.Term, floatVal)
+`, indentStr, escapedTerm, floatVal)
+	}
+	if floatVal, ok := annotation.Value.(float32); ok {
+		return fmt.Sprintf(`%s<Annotation Term="%s" Float="%g" />
+`, indentStr, escapedTerm, float64(floatVal))
 	}
 
-	// Default: treat as string
-	return fmt.Sprintf(`%s<Annotation Term="%s" String="%v" />
-`, indentStr, annotation.Term, annotation.Value)
+	// Default: treat as string with XML escaping
+	escapedValue := escapeXML(fmt.Sprintf("%v", annotation.Value))
+	return fmt.Sprintf(`%s<Annotation Term="%s" String="%s" />
+`, indentStr, escapedTerm, escapedValue)
 }
 
 // escapeXML escapes special characters for XML output
