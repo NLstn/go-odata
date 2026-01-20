@@ -628,6 +628,11 @@ func TestParseAnnotationTerm(t *testing.T) {
 			term:        "#Qualifier",
 			expectError: true,
 		},
+		{
+			name:        "term with embedded value",
+			term:        "Core.Description=SomeValue",
+			expectError: true,
+		},
 	}
 
 	for _, tt := range tests {

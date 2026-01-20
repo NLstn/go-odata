@@ -1956,23 +1956,19 @@ func (s *Service) RegisterEntityAnnotation(entitySetName string, term string, va
 	if entityMeta.Annotations == nil {
 		entityMeta.Annotations = metadata.NewAnnotationCollection()
 	}
-	entityMeta.Annotations.Add(metadata.Annotation{
+	annotation := metadata.Annotation{
 		Term:      parsedTerm,
 		Qualifier: qualifier,
 		Value:     value,
-	})
+	}
+	entityMeta.Annotations.Add(annotation)
 
 	// Clear metadata cache since annotations changed
 	s.metadataHandler.ClearCache()
 
-	qualifiedTerm := parsedTerm
-	if qualifier != "" {
-		qualifiedTerm = parsedTerm + "#" + qualifier
-	}
-
 	s.logger.Debug("Registered entity annotation",
 		"entitySet", entitySetName,
-		"term", qualifiedTerm)
+		"term", annotation.QualifiedTerm())
 	return nil
 }
 
@@ -2023,25 +2019,21 @@ func (s *Service) RegisterPropertyAnnotation(entitySetName string, propertyName 
 	if prop.Annotations == nil {
 		prop.Annotations = metadata.NewAnnotationCollection()
 	}
-	prop.Annotations.Add(metadata.Annotation{
+	ann := metadata.Annotation{
 		Term:      parsedTerm,
 		Qualifier: qualifier,
 		Value:     value,
-	})
+	}
+	prop.Annotations.Add(ann)
 	entityMeta.Properties[propIndex] = prop
 
 	// Clear metadata cache since annotations changed
 	s.metadataHandler.ClearCache()
 
-	qualifiedTerm := parsedTerm
-	if qualifier != "" {
-		qualifiedTerm = parsedTerm + "#" + qualifier
-	}
-
 	s.logger.Debug("Registered property annotation",
 		"entitySet", entitySetName,
 		"property", propertyName,
-		"term", qualifiedTerm)
+		"term", ann.QualifiedTerm())
 	return nil
 }
 
