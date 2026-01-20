@@ -592,6 +592,71 @@ func TestParseAnnotationTag(t *testing.T) {
 	}
 }
 
+func TestParseAnnotationTerm(t *testing.T) {
+	tests := []struct {
+		name              string
+		term              string
+		expectedTerm      string
+		expectedQualifier string
+		expectError       bool
+	}{
+		{
+			name:              "term without qualifier",
+			term:              "Core.Description",
+			expectedTerm:      "Org.OData.Core.V1.Description",
+			expectedQualifier: "",
+		},
+		{
+			name:              "term with hash qualifier",
+			term:              "Core.Description#Short",
+			expectedTerm:      "Org.OData.Core.V1.Description",
+			expectedQualifier: "Short",
+		},
+		{
+			name:              "term with qualifier segment",
+			term:              "Org.OData.Core.V1.Description;qualifier=Short",
+			expectedTerm:      "Org.OData.Core.V1.Description",
+			expectedQualifier: "Short",
+		},
+		{
+			name:        "empty term",
+			term:        "",
+			expectError: true,
+		},
+		{
+			name:        "empty term with hash qualifier",
+			term:        "#Qualifier",
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			term, qualifier, err := ParseAnnotationTerm(tt.term)
+
+			if tt.expectError {
+				if err == nil {
+					t.Error("expected error, got nil")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+				return
+			}
+
+			if term != tt.expectedTerm {
+				t.Errorf("Term = %v, want %v", term, tt.expectedTerm)
+			}
+
+			if qualifier != tt.expectedQualifier {
+				t.Errorf("Qualifier = %v, want %v", qualifier, tt.expectedQualifier)
+			}
+		})
+	}
+}
+
 func TestQualifiedTerm(t *testing.T) {
 	tests := []struct {
 		name       string
