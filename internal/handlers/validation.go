@@ -183,7 +183,10 @@ func validateContentType(w http.ResponseWriter, r *http.Request) error {
 func (h *EntityHandler) validatePropertiesExist(data map[string]interface{}, w http.ResponseWriter, r *http.Request, checkAutoProperties bool) error {
 	// Build a map of valid property names (both JSON names and struct field names)
 	validProperties := make(map[string]bool, len(h.metadata.Properties)*2)
-	autoProperties := make(map[string]bool)
+	var autoProperties map[string]bool
+	if checkAutoProperties {
+		autoProperties = make(map[string]bool)
+	}
 	
 	for _, prop := range h.metadata.Properties {
 		validProperties[prop.JsonName] = true
