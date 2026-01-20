@@ -99,7 +99,7 @@ Annotations can also take collection or record values. The library maps Go value
 - `map[string]interface{}`
 - Any map with string keys and values that are primitive values, nested collections, or nested records
 
-Nested values are emitted recursively. For example, a record value containing a collection will be represented as a `<PropertyValue>` containing a `<Collection>` in XML, and as a `$Record` with a `$Collection` entry in JSON.
+Nested values are emitted recursively. In JSON CSDL, collection values are wrapped in `{"$Collection": [...]}` and record values are wrapped in `{"$Record": {...}}`. A record containing a collection therefore becomes a `$Record` whose property value is a `$Collection`.
 
 Example (Core.OptimisticConcurrency as a collection of property names):
 
@@ -109,6 +109,22 @@ err := service.RegisterEntityAnnotation("Products",
   []string{"Version", "UpdatedAt"})
 if err != nil {
   log.Fatal(err)
+}
+```
+
+JSON metadata excerpt for collection and record values (from the `Products` entity type):
+
+```json
+"@Org.OData.Core.V1.OptimisticConcurrency": {
+  "$Collection": ["Version", "UpdatedAt"]
+},
+"@Org.OData.Core.V1.Example": {
+  "$Record": {
+    "DisplayName": "Product",
+    "Tags": {
+      "$Collection": ["Featured", "Seasonal"]
+    }
+  }
 }
 ```
 
