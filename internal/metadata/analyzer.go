@@ -43,6 +43,8 @@ type EntityMetadata struct {
 		HasODataBeforeReadEntity     bool
 		HasODataAfterReadEntity      bool
 	}
+	// Annotations holds OData vocabulary annotations for this entity type
+	Annotations           *AnnotationCollection
 	entitiesRegistry      map[string]*EntityMetadata
 	navigationTargetIndex map[string]*EntityMetadata // Index for fast navigation target lookup by EntityName or EntitySetName
 }
@@ -102,6 +104,8 @@ type PropertyMetadata struct {
 	StreamContentField     string // Name of the field containing the binary content for this stream
 	// Auto properties
 	IsAuto bool // True if this property is automatically set server-side (clients cannot provide/modify it)
+	// Annotations
+	Annotations *AnnotationCollection // OData vocabulary annotations for this property
 }
 
 // AnalyzeEntity extracts metadata from a Go struct for OData usage
@@ -397,6 +401,9 @@ func analyzeField(field reflect.StructField, metadata *EntityMetadata) (Property
 		property.EnumUnderlyingType = underlyingType
 	}
 
+	// Auto-detect annotations from property flags
+	autoDetectPropertyAnnotations(&property)
+
 	return property, nil
 }
 
@@ -636,9 +643,56 @@ func processODataTagPart(property *PropertyMetadata, part string, metadata *Enti
 		property.KeyGenerator = strings.TrimSpace(strings.TrimPrefix(part, "generate="))
 	case part == "auto":
 		property.IsAuto = true
+	case strings.HasPrefix(part, "annotation:"):
+		// Handle annotation tags: annotation:Core.Computed or annotation:Org.OData.Core.V1.Description=Some description
+		annotationValue := strings.TrimPrefix(part, "annotation:")
+		if annotation, err := ParseAnnotationTag(annotationValue); err == nil {
+			if property.Annotations == nil {
+				property.Annotations = NewAnnotationCollection()
+			}
+			property.Annotations.Add(annotation)
+		}
 	}
 
 	return nil
+}
+
+// autoDetectPropertyAnnotations automatically adds standard OData annotations based on property flags.
+// This enables automatic annotation generation for common patterns like computed properties,
+// immutable keys, ETag properties, and auto-generated fields.
+func autoDetectPropertyAnnotations(property *PropertyMetadata) {
+	if property == nil {
+		return
+	}
+
+	// Database-generated keys are computed (auto-increment)
+	if property.IsKey && property.DatabaseGenerated {
+		ensurePropertyAnnotation(property, CoreComputed, true)
+	}
+
+	// Auto properties are computed server-side
+	if property.IsAuto {
+		ensurePropertyAnnotation(property, CoreComputed, true)
+	}
+
+	// ETag properties use optimistic concurrency (we add a marker annotation)
+	// Note: The actual OptimisticConcurrency annotation is typically on the EntityType
+	if property.IsETag {
+		ensurePropertyAnnotation(property, CoreComputed, true)
+	}
+}
+
+// ensurePropertyAnnotation adds an annotation to a property if it doesn't already exist
+func ensurePropertyAnnotation(property *PropertyMetadata, term string, value interface{}) {
+	if property == nil {
+		return
+	}
+	if property.Annotations == nil {
+		property.Annotations = NewAnnotationCollection()
+	}
+	if !property.Annotations.Has(term) {
+		property.Annotations.AddTerm(term, value)
+	}
 }
 
 func upsertKeyProperty(metadata *EntityMetadata, property PropertyMetadata) {

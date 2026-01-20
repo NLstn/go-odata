@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"reflect"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -139,6 +140,22 @@ func (h *MetadataHandler) namespaceOrDefault() string {
 		return defaultNamespace
 	}
 	return h.namespace
+}
+
+// ClearCache clears all cached metadata documents.
+// This should be called when annotations or other metadata changes.
+func (h *MetadataHandler) ClearCache() {
+	// Clear all cached versions
+	h.cachedXML.Range(func(key, value interface{}) bool {
+		h.cachedXML.Delete(key)
+		return true
+	})
+	h.cachedJSON.Range(func(key, value interface{}) bool {
+		h.cachedJSON.Delete(key)
+		return true
+	})
+	h.cacheSizeXML.Store(0)
+	h.cacheSizeJSON.Store(0)
 }
 
 // maxCacheEntries defines the maximum number of cached metadata versions to keep
@@ -332,6 +349,37 @@ func (m metadataModel) collectEnumDefinitions() map[string]*enumTypeInfo {
 	}
 
 	return enumDefinitions
+}
+
+// collectUsedVocabularies returns a sorted list of unique vocabulary namespaces used in annotations
+func (m metadataModel) collectUsedVocabularies() []string {
+	seen := make(map[string]bool)
+
+	for _, entityMeta := range m.entities {
+		// Collect from entity annotations
+		if entityMeta.Annotations != nil {
+			for _, ns := range entityMeta.Annotations.UsedVocabularies() {
+				seen[ns] = true
+			}
+		}
+
+		// Collect from property annotations
+		for _, prop := range entityMeta.Properties {
+			if prop.Annotations != nil {
+				for _, ns := range prop.Annotations.UsedVocabularies() {
+					seen[ns] = true
+				}
+			}
+		}
+	}
+
+	// Convert to sorted slice
+	result := make([]string, 0, len(seen))
+	for ns := range seen {
+		result = append(result, ns)
+	}
+	sort.Strings(result)
+	return result
 }
 
 // buildEntityTypeToSetNameMap creates a reverse lookup map from EntityName to EntitySetName

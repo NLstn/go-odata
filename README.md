@@ -25,6 +25,7 @@ A Go library for building services that expose OData v4 APIs with automatic hand
 - 🔑 **Server-side key generation** - Validate directives during metadata analysis and plug in custom generators
 - 🌐 **Virtual entities** - Expose data from external APIs without database backing
 - 🛣️ **Custom base paths** - Mount your OData service at any path (e.g., `/api/odata`) with automatic URL generation
+- 📝 **Vocabulary annotations** - Add OData vocabulary annotations to entities and properties for rich metadata
 
 ### OData v4 Specification
 
@@ -106,6 +107,7 @@ errors—invalid struct tags or duplicate entity names will cause `RegisterEntit
 - **[Virtual Entities](documentation/virtual-entities.md)** - Expose data from external APIs without database backing
 - **[Actions and Functions](documentation/actions-and-functions.md)** - Implement custom OData operations
 - **[Geospatial Functions](documentation/geospatial.md)** - Query geographic data with spatial functions
+- **[Vocabulary Annotations](documentation/annotations.md)** - Add rich metadata annotations to entities and properties
 - **[Advanced Features](documentation/advanced-features.md)** - Singletons, ETags, lifecycle hooks, read hooks for tenant filtering or redaction, change tracking with delta tokens, and asynchronous processing
 - **[Testing](documentation/testing.md)** - Unit tests, compliance tests, and performance profiling
 

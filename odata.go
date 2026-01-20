@@ -1200,6 +1200,14 @@ type (
 	// EntityOverwrite contains all overwrite handlers for an entity set.
 	// Any handler that is nil will use the default GORM-based implementation.
 	EntityOverwrite = handlers.EntityOverwrite
+
+	// Annotation represents an OData vocabulary annotation.
+	// Annotations can be attached to entity types, properties, navigation properties,
+	// entity sets, singletons, and entity containers.
+	Annotation = metadata.Annotation
+
+	// AnnotationCollection holds a collection of annotations for a target.
+	AnnotationCollection = metadata.AnnotationCollection
 )
 
 // RegisterAction registers a custom OData action with the service.
@@ -1917,6 +1925,93 @@ func (s *Service) ResetFTS() {
 		s.ftsManager.ClearFTSCache()
 		s.logger.Debug("FTS cache cleared")
 	}
+}
+
+// RegisterEntityAnnotation adds an OData vocabulary annotation to an entity type.
+//
+// Annotations can be used to provide additional metadata about entities, such as
+// descriptions, permissions, or capabilities. Common annotations include:
+//   - Org.OData.Core.V1.Description: Human-readable description
+//   - Org.OData.Core.V1.OptimisticConcurrency: Properties used for ETag computation
+//   - Org.OData.Capabilities.V1.InsertRestrictions: Insert restrictions for the entity
+//
+// # Example
+//
+//	err := service.RegisterEntityAnnotation("Products",
+//	    "Org.OData.Core.V1.Description",
+//	    "Product catalog items")
+//
+// See https://docs.oasis-open.org/odata/odata/v4.01/os/vocabularies/ for standard vocabularies.
+func (s *Service) RegisterEntityAnnotation(entitySetName string, term string, value interface{}) error {
+	entityMeta, exists := s.entities[entitySetName]
+	if !exists {
+		return fmt.Errorf("entity set '%s' is not registered", entitySetName)
+	}
+
+	if entityMeta.Annotations == nil {
+		entityMeta.Annotations = metadata.NewAnnotationCollection()
+	}
+	entityMeta.Annotations.AddTerm(term, value)
+
+	// Clear metadata cache since annotations changed
+	s.metadataHandler.ClearCache()
+
+	s.logger.Debug("Registered entity annotation",
+		"entitySet", entitySetName,
+		"term", term)
+	return nil
+}
+
+// RegisterPropertyAnnotation adds an OData vocabulary annotation to a property.
+//
+// Property annotations provide metadata about specific properties, such as whether
+// they are computed, immutable, or have special formatting requirements.
+// Common annotations include:
+//   - Org.OData.Core.V1.Computed: Property is computed server-side (clients cannot set)
+//   - Org.OData.Core.V1.Immutable: Property cannot be changed after creation
+//   - Org.OData.Core.V1.Description: Human-readable description
+//
+// # Example
+//
+//	// Mark CreatedAt property as computed
+//	err := service.RegisterPropertyAnnotation("Products", "CreatedAt",
+//	    "Org.OData.Core.V1.Computed", true)
+//
+//	// Add description to Name property
+//	err := service.RegisterPropertyAnnotation("Products", "Name",
+//	    "Org.OData.Core.V1.Description", "The product display name")
+func (s *Service) RegisterPropertyAnnotation(entitySetName string, propertyName string, term string, value interface{}) error {
+	entityMeta, exists := s.entities[entitySetName]
+	if !exists {
+		return fmt.Errorf("entity set '%s' is not registered", entitySetName)
+	}
+
+	// Find the property
+	var prop *metadata.PropertyMetadata
+	for i := range entityMeta.Properties {
+		if entityMeta.Properties[i].Name == propertyName || entityMeta.Properties[i].JsonName == propertyName {
+			prop = &entityMeta.Properties[i]
+			break
+		}
+	}
+
+	if prop == nil {
+		return fmt.Errorf("property '%s' not found in entity set '%s'", propertyName, entitySetName)
+	}
+
+	if prop.Annotations == nil {
+		prop.Annotations = metadata.NewAnnotationCollection()
+	}
+	prop.Annotations.AddTerm(term, value)
+
+	// Clear metadata cache since annotations changed
+	s.metadataHandler.ClearCache()
+
+	s.logger.Debug("Registered property annotation",
+		"entitySet", entitySetName,
+		"property", propertyName,
+		"term", term)
+	return nil
 }
 
 func parameterDefinitionsCompatible(existing, derived []actions.ParameterDefinition) bool {
