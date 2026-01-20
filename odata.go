@@ -2055,10 +2055,6 @@ func (s *Service) RegisterSingletonAnnotation(singletonName string, term string,
 func (s *Service) RegisterEntityContainerAnnotation(term string, value interface{}) error {
 	term = metadata.ExpandAnnotationAlias(term)
 
-	if s.entityContainerAnnotations == nil {
-		s.entityContainerAnnotations = metadata.NewAnnotationCollection()
-		s.metadataHandler.SetEntityContainerAnnotations(s.entityContainerAnnotations)
-	}
 	s.entityContainerAnnotations.AddTerm(term, value)
 
 	s.metadataHandler.ClearCache()
