@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/nlstn/go-odata/internal/metadata"
@@ -364,6 +365,26 @@ func (h *MetadataHandler) buildAnnotationXML(annotation metadata.Annotation, ind
 		qualifierAttr = fmt.Sprintf(` Qualifier="%s"`, escapeXML(annotation.Qualifier))
 	}
 
+	if collectionValues, ok := annotationCollectionValues(annotation.Value); ok {
+		var builder strings.Builder
+		builder.WriteString(fmt.Sprintf(`%s<Annotation Term="%s"%s>
+`, indentStr, escapedTerm, qualifierAttr))
+		builder.WriteString(h.buildAnnotationCollectionXML(collectionValues, indent+2))
+		builder.WriteString(fmt.Sprintf(`%s</Annotation>
+`, indentStr))
+		return builder.String()
+	}
+
+	if recordValues, ok := annotationRecordValues(annotation.Value); ok {
+		var builder strings.Builder
+		builder.WriteString(fmt.Sprintf(`%s<Annotation Term="%s"%s>
+`, indentStr, escapedTerm, qualifierAttr))
+		builder.WriteString(h.buildAnnotationRecordXML(recordValues, indent+2))
+		builder.WriteString(fmt.Sprintf(`%s</Annotation>
+`, indentStr))
+		return builder.String()
+	}
+
 	// Handle boolean values inline
 	if boolVal, ok := annotation.Value.(bool); ok {
 		return fmt.Sprintf(`%s<Annotation Term="%s"%s Bool="%t" />
@@ -424,6 +445,134 @@ func (h *MetadataHandler) buildAnnotationXML(annotation metadata.Annotation, ind
 	escapedValue := escapeXML(fmt.Sprintf("%v", annotation.Value))
 	return fmt.Sprintf(`%s<Annotation Term="%s"%s String="%s" />
 `, indentStr, escapedTerm, qualifierAttr, escapedValue)
+}
+
+func (h *MetadataHandler) buildAnnotationCollectionXML(values []interface{}, indent int) string {
+	indentStr := strings.Repeat(" ", indent)
+	childIndent := indent + 2
+
+	var builder strings.Builder
+	builder.WriteString(fmt.Sprintf(`%s<Collection>
+`, indentStr))
+	for _, value := range values {
+		builder.WriteString(h.buildAnnotationValueElementXML(value, childIndent))
+	}
+	builder.WriteString(fmt.Sprintf(`%s</Collection>
+`, indentStr))
+	return builder.String()
+}
+
+func (h *MetadataHandler) buildAnnotationRecordXML(values map[string]interface{}, indent int) string {
+	indentStr := strings.Repeat(" ", indent)
+	childIndent := indent + 2
+
+	var builder strings.Builder
+	builder.WriteString(fmt.Sprintf(`%s<Record>
+`, indentStr))
+	for _, key := range sortedAnnotationKeys(values) {
+		builder.WriteString(h.buildAnnotationPropertyValueXML(key, values[key], childIndent))
+	}
+	builder.WriteString(fmt.Sprintf(`%s</Record>
+`, indentStr))
+	return builder.String()
+}
+
+func (h *MetadataHandler) buildAnnotationPropertyValueXML(property string, value interface{}, indent int) string {
+	indentStr := strings.Repeat(" ", indent)
+	escapedProperty := escapeXML(property)
+
+	if attrName, attrValue, ok := annotationPrimitiveAttribute(value); ok {
+		return fmt.Sprintf(`%s<PropertyValue Property="%s" %s="%s" />
+`, indentStr, escapedProperty, attrName, attrValue)
+	}
+
+	if collectionValues, ok := annotationCollectionValues(value); ok {
+		var builder strings.Builder
+		builder.WriteString(fmt.Sprintf(`%s<PropertyValue Property="%s">
+`, indentStr, escapedProperty))
+		builder.WriteString(h.buildAnnotationCollectionXML(collectionValues, indent+2))
+		builder.WriteString(fmt.Sprintf(`%s</PropertyValue>
+`, indentStr))
+		return builder.String()
+	}
+
+	if recordValues, ok := annotationRecordValues(value); ok {
+		var builder strings.Builder
+		builder.WriteString(fmt.Sprintf(`%s<PropertyValue Property="%s">
+`, indentStr, escapedProperty))
+		builder.WriteString(h.buildAnnotationRecordXML(recordValues, indent+2))
+		builder.WriteString(fmt.Sprintf(`%s</PropertyValue>
+`, indentStr))
+		return builder.String()
+	}
+
+	escapedValue := escapeXML(fmt.Sprintf("%v", value))
+	return fmt.Sprintf(`%s<PropertyValue Property="%s" String="%s" />
+`, indentStr, escapedProperty, escapedValue)
+}
+
+func (h *MetadataHandler) buildAnnotationValueElementXML(value interface{}, indent int) string {
+	indentStr := strings.Repeat(" ", indent)
+
+	if elementName, elementValue, ok := annotationPrimitiveElement(value); ok {
+		return fmt.Sprintf(`%s<%s>%s</%s>
+`, indentStr, elementName, elementValue, elementName)
+	}
+
+	if collectionValues, ok := annotationCollectionValues(value); ok {
+		return h.buildAnnotationCollectionXML(collectionValues, indent)
+	}
+
+	if recordValues, ok := annotationRecordValues(value); ok {
+		return h.buildAnnotationRecordXML(recordValues, indent)
+	}
+
+	escapedValue := escapeXML(fmt.Sprintf("%v", value))
+	return fmt.Sprintf(`%s<String>%s</String>
+`, indentStr, escapedValue)
+}
+
+func annotationPrimitiveAttribute(value interface{}) (string, string, bool) {
+	switch typed := value.(type) {
+	case bool:
+		return "Bool", strconv.FormatBool(typed), true
+	case string:
+		return "String", escapeXML(typed), true
+	case int:
+		return "Int", fmt.Sprintf("%d", typed), true
+	case int8:
+		return "Int", fmt.Sprintf("%d", typed), true
+	case int16:
+		return "Int", fmt.Sprintf("%d", typed), true
+	case int32:
+		return "Int", fmt.Sprintf("%d", typed), true
+	case int64:
+		return "Int", fmt.Sprintf("%d", typed), true
+	case uint:
+		return "Int", fmt.Sprintf("%d", typed), true
+	case uint8:
+		return "Int", fmt.Sprintf("%d", typed), true
+	case uint16:
+		return "Int", fmt.Sprintf("%d", typed), true
+	case uint32:
+		return "Int", fmt.Sprintf("%d", typed), true
+	case uint64:
+		return "Int", fmt.Sprintf("%d", typed), true
+	case float32:
+		return "Float", strconv.FormatFloat(float64(typed), 'g', -1, 32), true
+	case float64:
+		return "Float", strconv.FormatFloat(typed, 'g', -1, 64), true
+	default:
+		return "", "", false
+	}
+}
+
+func annotationPrimitiveElement(value interface{}) (string, string, bool) {
+	name, valueString, ok := annotationPrimitiveAttribute(value)
+	if !ok {
+		return "", "", false
+	}
+	return name, valueString, true
 }
 
 // escapeXML escapes special characters for XML output
