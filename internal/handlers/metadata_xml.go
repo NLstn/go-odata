@@ -79,15 +79,37 @@ func (h *MetadataHandler) handleMetadataXML(w http.ResponseWriter, r *http.Reque
 
 func (h *MetadataHandler) buildMetadataDocument(model metadataModel, ver version.Version) string {
 	var builder strings.Builder
+
+	// Collect all vocabulary namespaces used in annotations
+	usedVocabularies := model.collectUsedVocabularies()
+	vocabularyAliases := metadata.VocabularyAliasMap()
+
 	builder.WriteString(fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <edmx:Edmx xmlns:edmx="http://docs.oasis-open.org/odata/ns/edmx" Version="%s">
-  <edmx:DataServices>
+`, ver.String()))
+
+	// Add Reference elements for used vocabularies
+	for _, ns := range usedVocabularies {
+		alias := vocabularyAliases[ns]
+		if alias == "" {
+			// Use the last part of namespace as alias if not in map
+			parts := strings.Split(ns, ".")
+			alias = parts[len(parts)-1]
+		}
+		builder.WriteString(fmt.Sprintf(`  <edmx:Reference Uri="https://oasis-tcs.github.io/odata-vocabularies/vocabularies/%s.xml">
+    <edmx:Include Namespace="%s" Alias="%s" />
+  </edmx:Reference>
+`, alias, ns, alias))
+	}
+
+	builder.WriteString(fmt.Sprintf(`  <edmx:DataServices>
     <Schema xmlns="http://docs.oasis-open.org/odata/ns/edm" Namespace="%s">
-`, ver.String(), model.namespace))
+`, model.namespace))
 
 	builder.WriteString(h.buildEnumTypes(model))
 	builder.WriteString(h.buildEntityTypes(model))
 	builder.WriteString(h.buildEntityContainer(model))
+	builder.WriteString(h.buildAnnotations(model))
 
 	builder.WriteString(`    </Schema>
   </edmx:DataServices>
@@ -293,4 +315,87 @@ func (h *MetadataHandler) buildEntityContainer(model metadataModel) string {
 	builder.WriteString(`      </EntityContainer>
 `)
 	return builder.String()
+}
+
+// buildAnnotations builds the Annotations sections for all annotated targets
+func (h *MetadataHandler) buildAnnotations(model metadataModel) string {
+	var builder strings.Builder
+
+	// Build annotations for each entity type and its properties
+	for _, entityMeta := range model.entities {
+		// Entity type annotations
+		if entityMeta.Annotations != nil && entityMeta.Annotations.Len() > 0 {
+			target := model.qualifiedTypeName(entityMeta.EntityName)
+			builder.WriteString(fmt.Sprintf(`      <Annotations Target="%s">
+`, target))
+			for _, annotation := range entityMeta.Annotations.Get() {
+				builder.WriteString(h.buildAnnotationXML(annotation, 8))
+			}
+			builder.WriteString(`      </Annotations>
+`)
+		}
+
+		// Property annotations
+		for _, prop := range entityMeta.Properties {
+			if prop.Annotations != nil && prop.Annotations.Len() > 0 {
+				target := fmt.Sprintf("%s/%s", model.qualifiedTypeName(entityMeta.EntityName), prop.JsonName)
+				builder.WriteString(fmt.Sprintf(`      <Annotations Target="%s">
+`, target))
+				for _, annotation := range prop.Annotations.Get() {
+					builder.WriteString(h.buildAnnotationXML(annotation, 8))
+				}
+				builder.WriteString(`      </Annotations>
+`)
+			}
+		}
+	}
+
+	return builder.String()
+}
+
+// buildAnnotationXML builds the XML representation of a single annotation
+func (h *MetadataHandler) buildAnnotationXML(annotation metadata.Annotation, indent int) string {
+	indentStr := strings.Repeat(" ", indent)
+
+	// Handle boolean values inline
+	if boolVal, ok := annotation.Value.(bool); ok {
+		return fmt.Sprintf(`%s<Annotation Term="%s" Bool="%t" />
+`, indentStr, annotation.Term, boolVal)
+	}
+
+	// Handle string values
+	if strVal, ok := annotation.Value.(string); ok {
+		return fmt.Sprintf(`%s<Annotation Term="%s" String="%s" />
+`, indentStr, annotation.Term, escapeXML(strVal))
+	}
+
+	// Handle integer values
+	if intVal, ok := annotation.Value.(int); ok {
+		return fmt.Sprintf(`%s<Annotation Term="%s" Int="%d" />
+`, indentStr, annotation.Term, intVal)
+	}
+	if intVal, ok := annotation.Value.(int64); ok {
+		return fmt.Sprintf(`%s<Annotation Term="%s" Int="%d" />
+`, indentStr, annotation.Term, intVal)
+	}
+
+	// Handle float values
+	if floatVal, ok := annotation.Value.(float64); ok {
+		return fmt.Sprintf(`%s<Annotation Term="%s" Float="%g" />
+`, indentStr, annotation.Term, floatVal)
+	}
+
+	// Default: treat as string
+	return fmt.Sprintf(`%s<Annotation Term="%s" String="%v" />
+`, indentStr, annotation.Term, annotation.Value)
+}
+
+// escapeXML escapes special characters for XML output
+func escapeXML(s string) string {
+	s = strings.ReplaceAll(s, "&", "&amp;")
+	s = strings.ReplaceAll(s, "<", "&lt;")
+	s = strings.ReplaceAll(s, ">", "&gt;")
+	s = strings.ReplaceAll(s, "\"", "&quot;")
+	s = strings.ReplaceAll(s, "'", "&apos;")
+	return s
 }

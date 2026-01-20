@@ -148,6 +148,14 @@ func (h *MetadataHandler) buildJSONEntityType(model metadataModel, entityMeta *m
 	}
 	entityType["$Key"] = keyNames
 
+	// Add entity-level annotations
+	if entityMeta.Annotations != nil {
+		for _, annotation := range entityMeta.Annotations.Get() {
+			annotationKey := "@" + annotation.Term
+			entityType[annotationKey] = annotation.Value
+		}
+	}
+
 	h.addJSONRegularProperties(model, entityType, entityMeta)
 	h.addJSONNavigationProperties(model, entityType, entityMeta)
 
@@ -175,6 +183,14 @@ func (h *MetadataHandler) buildJSONPropertyDefinition(model metadataModel, prop 
 	}
 
 	h.addJSONPropertyFacets(propDef, prop)
+
+	// Add property-level annotations
+	if prop.Annotations != nil {
+		for _, annotation := range prop.Annotations.Get() {
+			annotationKey := "@" + annotation.Term
+			propDef[annotationKey] = annotation.Value
+		}
+	}
 
 	return propDef
 }
