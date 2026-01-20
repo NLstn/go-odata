@@ -1,6 +1,8 @@
 package metadata
 
 import (
+	"fmt"
+	"math"
 	"testing"
 )
 
@@ -415,19 +417,19 @@ func TestParseAnnotationTag(t *testing.T) {
 		},
 		{
 			name:        "int64 overflow",
-			tag:         "Core.Permissions=9223372036854775808",
+			tag:         fmt.Sprintf("Core.Permissions=%d", uint64(math.MaxInt64)+1), // math.MaxInt64 + 1
 			expectError: true,
 		},
 		{
 			name:              "very large float",
-			tag:               "Core.Permissions=1e308",
+			tag:               "Core.Permissions=1.7976931348623157e+308", // math.MaxFloat64
 			expectedTerm:      "Org.OData.Core.V1.Permissions",
 			expectedQualifier: "",
-			expectedValue:     1e308,
+			expectedValue:     math.MaxFloat64,
 		},
 		{
 			name:        "float infinity overflow",
-			tag:         "Core.Permissions=1e309",
+			tag:         "Core.Permissions=1e309", // Exceeds math.MaxFloat64 (≈1.8e308)
 			expectError: true,
 		},
 		{
