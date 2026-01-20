@@ -1948,6 +1948,8 @@ func (s *Service) RegisterEntityAnnotation(entitySetName string, term string, va
 		return fmt.Errorf("entity set '%s' is not registered", entitySetName)
 	}
 
+	term = metadata.ExpandAnnotationAlias(term)
+
 	if entityMeta.Annotations == nil {
 		entityMeta.Annotations = metadata.NewAnnotationCollection()
 	}
@@ -1998,6 +2000,8 @@ func (s *Service) RegisterPropertyAnnotation(entitySetName string, propertyName 
 	if propIndex == -1 {
 		return fmt.Errorf("property '%s' not found in entity set '%s'", propertyName, entitySetName)
 	}
+
+	term = metadata.ExpandAnnotationAlias(term)
 
 	// Work on a copy of the property metadata to avoid mutating a slice element via pointer
 	prop := entityMeta.Properties[propIndex]

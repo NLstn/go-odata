@@ -77,6 +77,8 @@ type Order struct {
 
 You can also add annotations programmatically after registering entities:
 
+The API accepts the same vocabulary aliases shown above (for example, `Core.Description`) and expands them to fully qualified terms.
+
 ### Entity-Level Annotations
 
 ```go
