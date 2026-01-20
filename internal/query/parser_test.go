@@ -488,3 +488,48 @@ func TestParseQueryOptions_WithSearch(t *testing.T) {
 		})
 	}
 }
+
+func TestSetMaxInClauseSizeRecursive(t *testing.T) {
+	t.Run("nil filter", func(t *testing.T) {
+		setMaxInClauseSizeRecursive(nil, 100)
+		// Should not panic
+	})
+
+	t.Run("simple filter", func(t *testing.T) {
+		filter := &FilterExpression{
+			Property: "ID",
+			Operator: OpEqual,
+			Value:    1,
+		}
+		setMaxInClauseSizeRecursive(filter, 500)
+		if filter.maxInClauseSize != 500 {
+			t.Errorf("expected maxInClauseSize to be 500, got %d", filter.maxInClauseSize)
+		}
+	})
+
+	t.Run("nested filter", func(t *testing.T) {
+		filter := &FilterExpression{
+			Left: &FilterExpression{
+				Property: "ID",
+				Operator: OpEqual,
+				Value:    1,
+			},
+			Right: &FilterExpression{
+				Property: "Name",
+				Operator: OpEqual,
+				Value:    "test",
+			},
+			Logical: LogicalAnd,
+		}
+		setMaxInClauseSizeRecursive(filter, 250)
+		if filter.maxInClauseSize != 250 {
+			t.Errorf("expected root maxInClauseSize to be 250, got %d", filter.maxInClauseSize)
+		}
+		if filter.Left.maxInClauseSize != 250 {
+			t.Errorf("expected left maxInClauseSize to be 250, got %d", filter.Left.maxInClauseSize)
+		}
+		if filter.Right.maxInClauseSize != 250 {
+			t.Errorf("expected right maxInClauseSize to be 250, got %d", filter.Right.maxInClauseSize)
+		}
+	})
+}
