@@ -96,10 +96,11 @@ func (h *MetadataHandler) buildMetadataDocument(model metadataModel, ver version
 			parts := strings.Split(ns, ".")
 			alias = parts[len(parts)-1]
 		}
-		builder.WriteString(fmt.Sprintf(`  <edmx:Reference Uri="https://oasis-tcs.github.io/odata-vocabularies/vocabularies/%s.xml">
+		uri := vocabularyURI(ns)
+		builder.WriteString(fmt.Sprintf(`  <edmx:Reference Uri="%s">
     <edmx:Include Namespace="%s" Alias="%s" />
   </edmx:Reference>
-`, alias, ns, alias))
+`, uri, ns, alias))
 	}
 
 	builder.WriteString(fmt.Sprintf(`  <edmx:DataServices>
@@ -398,4 +399,24 @@ func escapeXML(s string) string {
 	s = strings.ReplaceAll(s, "\"", "&quot;")
 	s = strings.ReplaceAll(s, "'", "&apos;")
 	return s
+}
+
+// vocabularyURI returns the canonical URI for a vocabulary namespace
+func vocabularyURI(namespace string) string {
+	// Standard OData vocabularies
+	standardVocabularyURIs := map[string]string{
+		"Org.OData.Core.V1":         "https://oasis-tcs.github.io/odata-vocabularies/vocabularies/Org.OData.Core.V1.xml",
+		"Org.OData.Capabilities.V1": "https://oasis-tcs.github.io/odata-vocabularies/vocabularies/Org.OData.Capabilities.V1.xml",
+		"Org.OData.Validation.V1":   "https://oasis-tcs.github.io/odata-vocabularies/vocabularies/Org.OData.Validation.V1.xml",
+		"Org.OData.Measures.V1":     "https://oasis-tcs.github.io/odata-vocabularies/vocabularies/Org.OData.Measures.V1.xml",
+		"Org.OData.Authorization.V1": "https://oasis-tcs.github.io/odata-vocabularies/vocabularies/Org.OData.Authorization.V1.xml",
+	}
+
+	if uri, ok := standardVocabularyURIs[namespace]; ok {
+		return uri
+	}
+
+	// For custom vocabularies, use a generic pattern
+	// Replace dots with slashes to create a reasonable URI
+	return "urn:custom:vocabulary:" + namespace
 }

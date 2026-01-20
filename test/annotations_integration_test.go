@@ -248,7 +248,7 @@ func TestAnnotations_RegisterPropertyAnnotation(t *testing.T) {
 		t.Fatalf("Failed to register property annotation: %v", err)
 	}
 
-	// Register Computed annotation to Password (write-only)
+	// Register Permissions annotation to Password (write-only)
 	err = service.RegisterPropertyAnnotation("PropertyAnnotationEntities", "Password",
 		"Org.OData.Core.V1.Permissions",
 		"Write")
