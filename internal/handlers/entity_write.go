@@ -580,6 +580,30 @@ func (h *EntityHandler) validatePropertiesExistForUpdate(updateData map[string]i
 
 	// Check each property in updateData
 	for propName := range updateData {
+		// Allow any property starting with @ (instance annotations at entity level)
+		// Per OData spec, clients can send instance annotations which should be ignored
+		if strings.HasPrefix(propName, "@") {
+			continue
+		}
+		
+		// Allow property-level annotations (property@annotation format)
+		// Check if this is a property annotation by looking for @ after the property name
+		if idx := strings.Index(propName, "@"); idx > 0 {
+			// Extract the property name part before the @
+			propertyPart := propName[:idx]
+			// Check if the property exists
+			isValidPropertyAnnotation := false
+			for _, prop := range h.metadata.Properties {
+				if prop.JsonName == propertyPart || prop.Name == propertyPart {
+					isValidPropertyAnnotation = true
+					break
+				}
+			}
+			if isValidPropertyAnnotation {
+				continue
+			}
+		}
+		
 		if !validProperties[propName] {
 			err := fmt.Errorf("property '%s' does not exist on entity type '%s'", propName, h.metadata.EntityName)
 			if writeErr := response.WriteError(w, r, http.StatusBadRequest, "Invalid property", err.Error()); writeErr != nil {
@@ -599,13 +623,31 @@ func (h *EntityHandler) validatePropertiesExistForUpdate(updateData map[string]i
 	return nil
 }
 
-// removeODataBindAnnotations removes @odata.bind annotations from the update data
-// as they are not actual entity properties and should not be passed to GORM
+// removeODataBindAnnotations removes @odata.bind annotations and all other instance annotations
+// from the update data as they are not actual entity properties and should not be passed to GORM
 func (h *EntityHandler) removeODataBindAnnotations(updateData map[string]interface{}) {
+	// Pre-allocate with small initial capacity; annotations are typically a small fraction of update data
+	keysToRemove := make([]string, 0, 8)
 	for key := range updateData {
-		if strings.HasSuffix(key, "@odata.bind") {
-			delete(updateData, key)
+		// Remove entity-level annotations (starting with @)
+		if strings.HasPrefix(key, "@") {
+			keysToRemove = append(keysToRemove, key)
+			continue
 		}
+		// Remove property-level annotations (property@annotation format)
+		// Check if @ appears and the part before @ is a valid property name
+		if idx := strings.Index(key, "@"); idx > 0 {
+			propertyPart := key[:idx]
+			for _, prop := range h.metadata.Properties {
+				if prop.JsonName == propertyPart || prop.Name == propertyPart {
+					keysToRemove = append(keysToRemove, key)
+					break
+				}
+			}
+		}
+	}
+	for _, key := range keysToRemove {
+		delete(updateData, key)
 	}
 }
 

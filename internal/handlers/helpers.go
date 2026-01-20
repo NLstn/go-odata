@@ -325,6 +325,14 @@ func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{
 	// Add @odata.type for full metadata
 	if metadataLevel == "full" {
 		odataResponse.Set("@odata.type", "#"+h.qualifiedTypeName(h.metadata.EntityName))
+		
+		// Add entity-level vocabulary annotations for full metadata
+		if h.metadata.Annotations != nil && h.metadata.Annotations.Len() > 0 {
+			for _, annotation := range h.metadata.Annotations.Get() {
+				annotationKey := "@" + annotation.Term
+				odataResponse.Set(annotationKey, annotation.Value)
+			}
+		}
 	}
 
 	// Add media link annotations for media entities
@@ -366,6 +374,19 @@ func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{
 			for _, key := range reflect.ValueOf(mapResult).MapKeys() {
 				keyStr := key.String()
 				value := reflect.ValueOf(mapResult).MapIndex(key)
+				
+				// Add property-level annotations for full metadata
+				if metadataLevel == "full" {
+					// Use findPropertyMetadata which now handles JsonName lookups via O(1) map
+					propMeta := h.findPropertyMetadata(keyStr)
+					if propMeta != nil && propMeta.Annotations != nil && propMeta.Annotations.Len() > 0 {
+						for _, annotation := range propMeta.Annotations.Get() {
+							annotationKey := keyStr + "@" + annotation.Term
+							odataResponse.Set(annotationKey, annotation.Value)
+						}
+					}
+				}
+				
 				odataResponse.Set(keyStr, value.Interface())
 			}
 		}
@@ -469,7 +490,14 @@ func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{
 				}
 			}
 		} else {
-			// Regular property - include its value
+			// Regular property - add property-level annotations first (for full metadata)
+			if metadataLevel == "full" && propMeta != nil && propMeta.Annotations != nil && propMeta.Annotations.Len() > 0 {
+				for _, annotation := range propMeta.Annotations.Get() {
+					annotationKey := jsonName + "@" + annotation.Term
+					odataResponse.Set(annotationKey, annotation.Value)
+				}
+			}
+			// Then include the property value
 			odataResponse.Set(jsonName, fieldValue.Interface())
 		}
 	}
@@ -496,7 +524,7 @@ func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{
 	return odataResponse
 }
 
-// findPropertyMetadata finds metadata for a property by field name
+// findPropertyMetadata finds metadata for a property by field name, JSON name, or FieldName
 // Uses the pre-computed property map for O(1) lookup instead of O(n) iteration
 func (h *EntityHandler) findPropertyMetadata(fieldName string) *metadata.PropertyMetadata {
 	if h.propertyMap != nil {
@@ -506,7 +534,7 @@ func (h *EntityHandler) findPropertyMetadata(fieldName string) *metadata.Propert
 	}
 	// Fallback to linear search if map not initialized (shouldn't happen normally)
 	for i := range h.metadata.Properties {
-		if h.metadata.Properties[i].Name == fieldName || h.metadata.Properties[i].FieldName == fieldName {
+		if h.metadata.Properties[i].Name == fieldName || h.metadata.Properties[i].FieldName == fieldName || h.metadata.Properties[i].JsonName == fieldName {
 			return &h.metadata.Properties[i]
 		}
 	}

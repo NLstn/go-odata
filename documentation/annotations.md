@@ -221,8 +221,131 @@ Accept: application/json
    Name string `json:"Name" odata:"required,maxlength=100,annotation:Core.Description=Display name"`
    ```
 
+## Instance Annotations in Payloads
+
+Instance annotations are vocabulary annotations that appear in entity payloads (JSON responses) rather than just in metadata documents. The library automatically includes instance annotations in responses based on the metadata level.
+
+### Metadata Levels and Annotations
+
+The OData protocol defines three metadata levels that control what annotations appear in responses:
+
+| Metadata Level | Control Annotations | Vocabulary Annotations | Example |
+|---------------|---------------------|------------------------|---------|
+| `full` | ✅ Included | ✅ Included | `?$format=application/json;odata.metadata=full` |
+| `minimal` | ✅ Included | ❌ Excluded | `?$format=application/json;odata.metadata=minimal` (default) |
+| `none` | ❌ Excluded | ❌ Excluded | `?$format=application/json;odata.metadata=none` |
+
+**Control annotations** are OData-defined annotations like `@odata.context`, `@odata.id`, `@odata.etag`, etc.
+
+**Vocabulary annotations** are semantic annotations from vocabularies like `Core`, `Capabilities`, etc.
+
+### Instance Annotation Format
+
+Instance annotations appear in JSON payloads with specific patterns:
+
+- **Entity-level annotations**: Appear as `@<term>` immediately after `@odata.type`
+- **Property-level annotations**: Appear as `<property>@<term>` immediately before the property value
+
+### Example Response with Full Metadata
+
+```http
+GET /Products(1)?$format=application/json;odata.metadata=full
+```
+
+```json
+{
+  "@odata.context": "http://localhost:8080/$metadata#Products/$entity",
+  "@odata.id": "Products(1)",
+  "@odata.type": "#ODataService.Product",
+  "@Org.OData.Core.V1.Description": "Product catalog item",
+  "ID": 1,
+  "Name@Org.OData.Core.V1.Description": "Product display name",
+  "Name": "Widget",
+  "CreatedAt@Org.OData.Core.V1.Computed": true,
+  "CreatedAt": "2025-01-01T00:00:00Z",
+  "Price": 99.99
+}
+```
+
+### Annotations in Collection Responses
+
+Instance annotations also appear in collection responses when using full metadata:
+
+```http
+GET /Products?$format=application/json;odata.metadata=full
+```
+
+```json
+{
+  "@odata.context": "http://localhost:8080/$metadata#Products",
+  "value": [
+    {
+      "@odata.id": "Products(1)",
+      "@odata.type": "#ODataService.Product",
+      "@Org.OData.Core.V1.Description": "Product catalog item",
+      "ID": 1,
+      "Name@Org.OData.Core.V1.Description": "Product display name",
+      "Name": "Widget",
+      "CreatedAt@Org.OData.Core.V1.Computed": true,
+      "CreatedAt": "2025-01-01T00:00:00Z",
+      "Price": 99.99
+    }
+  ]
+}
+```
+
+## Instance Annotations in Requests
+
+Clients can send instance annotations in POST and PATCH requests. The library ignores these annotations (they are not stored), but they are allowed per the OData specification.
+
+### Example POST Request with Instance Annotations
+
+```http
+POST /Products
+Content-Type: application/json
+
+{
+  "Name": "New Product",
+  "Price": 49.99,
+  "@Org.OData.Core.V1.Description": "Client annotation (ignored)",
+  "Name@CustomVocab.Priority": "High (also ignored)"
+}
+```
+
+The entity will be created with `Name="New Product"` and `Price=49.99`. The instance annotations are validated (to ensure they start with `@`) but are not persisted to the database.
+
+### Special Annotation: @odata.bind
+
+The `@odata.bind` annotation is a special OData control annotation used to bind navigation properties. Unlike vocabulary annotations, it is processed by the service:
+
+```json
+{
+  "Name": "Order Item",
+  "Product@odata.bind": "Products(1)",
+  "Order@odata.bind": "Orders(123)"
+}
+```
+
+## Best Practices
+
+1. **Use Descriptions**: Add `Core.Description` annotations to help API consumers understand your model.
+
+2. **Mark Computed Properties**: Use `Core.Computed` for server-generated fields like timestamps and auto-increment IDs.
+
+3. **Immutable Properties**: Use `Core.Immutable` for properties that shouldn't change after creation (like external IDs or creation timestamps).
+
+4. **Use Short Aliases**: Prefer `annotation:Core.Description` over the full namespace for readability.
+
+5. **Combine with odata Tags**: Annotations work alongside other odata tags:
+   ```go
+   Name string `json:"Name" odata:"required,maxlength=100,annotation:Core.Description=Display name"`
+   ```
+
+6. **Use Full Metadata Sparingly**: Request full metadata (`odata.metadata=full`) only when you need the annotations, as it increases response size.
+
 ## See Also
 
 - [OData Vocabularies Specification](https://docs.oasis-open.org/odata/odata/v4.01/os/vocabularies/)
 - [Core Vocabulary](https://github.com/oasis-tcs/odata-vocabularies/blob/main/vocabularies/Org.OData.Core.V1.md)
 - [Capabilities Vocabulary](https://github.com/oasis-tcs/odata-vocabularies/blob/main/vocabularies/Org.OData.Capabilities.V1.md)
+- [OData JSON Format Specification](https://docs.oasis-open.org/odata/odata-json-format/v4.01/odata-json-format-v4.01.html)
