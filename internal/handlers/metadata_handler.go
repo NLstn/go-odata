@@ -47,14 +47,15 @@ import (
 type MetadataHandler struct {
 	entities map[string]*metadata.EntityMetadata
 	// Lock-free cached metadata documents by version (key: version string)
-	cachedXML     sync.Map     // map[string]string
-	cachedJSON    sync.Map     // map[string][]byte
-	cacheSizeXML  atomic.Int64 // Tracks XML cache entries for eviction
-	cacheSizeJSON atomic.Int64 // Tracks JSON cache entries for eviction
-	namespace     string
-	namespaceMu   sync.RWMutex // Protects namespace field ONLY (not the caches)
-	logger        *slog.Logger
-	policy        auth.Policy
+	cachedXML            sync.Map     // map[string]string
+	cachedJSON           sync.Map     // map[string][]byte
+	cacheSizeXML         atomic.Int64 // Tracks XML cache entries for eviction
+	cacheSizeJSON        atomic.Int64 // Tracks JSON cache entries for eviction
+	namespace            string
+	namespaceMu          sync.RWMutex // Protects namespace field ONLY (not the caches)
+	containerAnnotations *metadata.AnnotationCollection
+	logger               *slog.Logger
+	policy               auth.Policy
 }
 
 const defaultNamespace = "ODataService"
@@ -125,6 +126,11 @@ func (h *MetadataHandler) SetNamespace(namespace string) {
 	})
 	h.cacheSizeXML.Store(0)
 	h.cacheSizeJSON.Store(0)
+}
+
+// SetEntityContainerAnnotations configures the annotations applied to the entity container.
+func (h *MetadataHandler) SetEntityContainerAnnotations(annotations *metadata.AnnotationCollection) {
+	h.containerAnnotations = annotations
 }
 
 // namespaceOrDefault returns the current namespace or the default if empty.
@@ -298,8 +304,9 @@ func (h *MetadataHandler) handleOptionsMetadata(w http.ResponseWriter) {
 
 func (h *MetadataHandler) newMetadataModel() metadataModel {
 	model := metadataModel{
-		namespace: h.namespaceOrDefault(),
-		entities:  h.entities,
+		namespace:            h.namespaceOrDefault(),
+		entities:             h.entities,
+		containerAnnotations: h.containerAnnotations,
 	}
 	model.buildEntityTypeToSetNameMap()
 	return model
@@ -308,6 +315,7 @@ func (h *MetadataHandler) newMetadataModel() metadataModel {
 type metadataModel struct {
 	namespace              string
 	entities               map[string]*metadata.EntityMetadata
+	containerAnnotations   *metadata.AnnotationCollection
 	entityTypeToSetNameMap map[string]string // Cache for EntityName -> EntitySetName lookups
 }
 
@@ -355,10 +363,28 @@ func (m metadataModel) collectEnumDefinitions() map[string]*enumTypeInfo {
 func (m metadataModel) collectUsedVocabularies() []string {
 	seen := make(map[string]bool)
 
+	if m.containerAnnotations != nil {
+		for _, ns := range m.containerAnnotations.UsedVocabularies() {
+			seen[ns] = true
+		}
+	}
+
 	for _, entityMeta := range m.entities {
 		// Collect from entity annotations
 		if entityMeta.Annotations != nil {
 			for _, ns := range entityMeta.Annotations.UsedVocabularies() {
+				seen[ns] = true
+			}
+		}
+
+		if entityMeta.EntitySetAnnotations != nil {
+			for _, ns := range entityMeta.EntitySetAnnotations.UsedVocabularies() {
+				seen[ns] = true
+			}
+		}
+
+		if entityMeta.SingletonAnnotations != nil {
+			for _, ns := range entityMeta.SingletonAnnotations.UsedVocabularies() {
 				seen[ns] = true
 			}
 		}

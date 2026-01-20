@@ -45,6 +45,8 @@ type EntityMetadata struct {
 	}
 	// Annotations holds OData vocabulary annotations for this entity type
 	Annotations           *AnnotationCollection
+	EntitySetAnnotations  *AnnotationCollection
+	SingletonAnnotations  *AnnotationCollection
 	entitiesRegistry      map[string]*EntityMetadata
 	navigationTargetIndex map[string]*EntityMetadata // Index for fast navigation target lookup by EntityName or EntitySetName
 }
