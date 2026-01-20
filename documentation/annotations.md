@@ -45,6 +45,34 @@ type Product struct {
 - Full namespace: `annotation:Org.OData.Core.V1.Computed`
 - Short alias: `annotation:Core.Computed` (automatically expanded)
 
+### Collection and Record Annotation Values
+
+Annotations can also take collection or record values. The library maps Go values into CSDL collection/record shapes in both XML and JSON metadata.
+
+**Supported collection shapes**
+
+- `[]string`
+- `[]interface{}`
+- Any slice/array whose elements are primitive values, nested slices, or records
+
+**Supported record shapes**
+
+- `map[string]interface{}`
+- Any map with string keys and values that are primitive values, nested collections, or nested records
+
+Nested values are emitted recursively. For example, a record value containing a collection will be represented as a `<PropertyValue>` containing a `<Collection>` in XML, and as a `$Record` with a `$Collection` entry in JSON.
+
+Example (Core.OptimisticConcurrency as a collection of property names):
+
+```go
+err := service.RegisterEntityAnnotation("Products",
+    "Org.OData.Core.V1.OptimisticConcurrency",
+    []string{"Version", "UpdatedAt"})
+if err != nil {
+    log.Fatal(err)
+}
+```
+
 ### Supported Aliases
 
 | Alias | Full Namespace |

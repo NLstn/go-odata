@@ -152,7 +152,7 @@ func (h *MetadataHandler) buildJSONEntityType(model metadataModel, entityMeta *m
 	if entityMeta.Annotations != nil {
 		for _, annotation := range entityMeta.Annotations.Get() {
 			annotationKey := "@" + annotation.QualifiedTerm()
-			entityType[annotationKey] = annotation.Value
+			entityType[annotationKey] = h.annotationJSONValue(annotation.Value)
 		}
 	}
 
@@ -188,7 +188,7 @@ func (h *MetadataHandler) buildJSONPropertyDefinition(model metadataModel, prop 
 	if prop.Annotations != nil {
 		for _, annotation := range prop.Annotations.Get() {
 			annotationKey := "@" + annotation.QualifiedTerm()
-			propDef[annotationKey] = annotation.Value
+			propDef[annotationKey] = h.annotationJSONValue(annotation.Value)
 		}
 	}
 
@@ -253,6 +253,30 @@ func (h *MetadataHandler) buildJSONNavigationProperty(model metadataModel, prop 
 	}
 
 	return navProp
+}
+
+func (h *MetadataHandler) annotationJSONValue(value interface{}) interface{} {
+	if collectionValues, ok := annotationCollectionValues(value); ok {
+		collection := make([]interface{}, 0, len(collectionValues))
+		for _, item := range collectionValues {
+			collection = append(collection, h.annotationJSONValue(item))
+		}
+		return map[string]interface{}{
+			"$Collection": collection,
+		}
+	}
+
+	if recordValues, ok := annotationRecordValues(value); ok {
+		record := make(map[string]interface{}, len(recordValues))
+		for _, key := range sortedAnnotationKeys(recordValues) {
+			record[key] = h.annotationJSONValue(recordValues[key])
+		}
+		return map[string]interface{}{
+			"$Record": record,
+		}
+	}
+
+	return value
 }
 
 func (h *MetadataHandler) buildJSONEntityContainer(model metadataModel) map[string]interface{} {
