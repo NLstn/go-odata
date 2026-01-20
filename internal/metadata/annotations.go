@@ -407,7 +407,7 @@ func parseQuotedLiteral(literal string) (string, bool, error) {
 
 // unescapeQuotedLiteral processes escape sequences in a quoted string literal.
 // Supported escape sequences: \\, \n, \r, \t, \b, \f, \", \'
-// Unknown escape sequences (e.g., \x) are preserved as-is (both backslash and character).
+// Unknown escape sequences (e.g., \x) are preserved as-is (both backslash and character, so \x becomes \\x in the output).
 func unescapeQuotedLiteral(inner string) (string, error) {
 	var b strings.Builder
 	b.Grow(len(inner))
@@ -452,7 +452,7 @@ func unescapeQuotedLiteral(inner string) (string, error) {
 
 	if escaped {
 		// Trailing backslash with nothing to escape.
-		return "", fmt.Errorf("unterminated escape sequence in string literal %q", inner)
+		return "", fmt.Errorf("unterminated escape sequence in quoted string content %q", inner)
 	}
 
 	return b.String(), nil
