@@ -631,11 +631,11 @@ func TestAnnotations_Phase6_InstanceAnnotationsInRequests(t *testing.T) {
 		}
 	})
 
-	t.Run("POST with unknown property (not annotation) should fail", func(t *testing.T) {
+	t.Run("POST with unknown property is silently ignored during JSON unmarshaling", func(t *testing.T) {
 		requestBody := strings.NewReader(`{
 			"Name": "Test",
 			"Value": 10,
-			"UnknownProperty": "should fail"
+			"UnknownProperty": "should be ignored"
 		}`)
 
 		req := httptest.NewRequest(http.MethodPost, "/RequestTestEntities", requestBody)
@@ -644,10 +644,10 @@ func TestAnnotations_Phase6_InstanceAnnotationsInRequests(t *testing.T) {
 
 		service.ServeHTTP(w, req)
 
-		// Go's JSON unmarshaling will silently ignore unknown fields,
-		// so the request should succeed but the unknown property is ignored
+		// Go's JSON unmarshaling silently ignores unknown fields that don't match struct fields
+		// This is expected behavior - unknown properties are simply not mapped to the entity
 		if w.Code != http.StatusCreated {
-			t.Logf("Note: Unknown non-annotation properties are silently ignored during JSON unmarshaling")
+			t.Errorf("Expected status Created, got %d: %s", w.Code, w.Body.String())
 		}
 	})
 
