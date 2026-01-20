@@ -322,7 +322,20 @@ func ParseAnnotationTag(tag string) (Annotation, error) {
 }
 
 // ParseAnnotationTerm parses an annotation term with optional qualifiers and expands aliases.
+// It returns an error if the term contains an embedded value (e.g., "Core.Description=SomeValue"),
+// since the value should be provided separately by the caller.
 func ParseAnnotationTerm(term string) (string, string, error) {
+	// Check if term contains an embedded value (term=value format)
+	// We need to distinguish between "term=value" and "term;qualifier=X"
+	// Split by semicolon first to separate term from qualifier segments
+	segments := strings.Split(term, ";")
+	termPart := strings.TrimSpace(segments[0])
+	
+	// Check if the main term part (before any semicolons) contains a value
+	if strings.Contains(termPart, "=") {
+		return "", "", fmt.Errorf("annotation term should not contain a value; got %q", term)
+	}
+	
 	annotation, err := ParseAnnotationTag(term)
 	if err != nil {
 		return "", "", err
