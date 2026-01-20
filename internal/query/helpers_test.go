@@ -80,3 +80,104 @@ func TestBuildComparisonConditionComplexPath(t *testing.T) {
 		t.Fatalf("expected args to contain 'Seattle', got %#v", args)
 	}
 }
+
+func TestGetPropertyFieldName(t *testing.T) {
+	meta := getHelperTestMetadata(t)
+
+	if got := GetPropertyFieldName("ID", meta); got != "ID" {
+		t.Errorf("expected 'ID', got %s", got)
+	}
+
+	if got := GetPropertyFieldName("shippingAddress", meta); got != "ShippingAddress" {
+		t.Errorf("expected 'ShippingAddress', got %s", got)
+	}
+
+	if got := GetPropertyFieldName("nonExistent", meta); got != "nonExistent" {
+		t.Errorf("expected 'nonExistent', got %s", got)
+	}
+}
+
+func TestMergeFilterExpressions(t *testing.T) {
+	left := &FilterExpression{
+		Property: "name",
+		Operator: OpEqual,
+		Value:    "John",
+	}
+	right := &FilterExpression{
+		Property: "age",
+		Operator: OpGreaterThan,
+		Value:    18,
+	}
+
+	t.Run("both non-nil", func(t *testing.T) {
+		result := MergeFilterExpressions(left, right)
+		if result == nil {
+			t.Fatal("expected non-nil result")
+		}
+		if result.Logical != LogicalAnd {
+			t.Errorf("expected LogicalAnd, got %v", result.Logical)
+		}
+		if result.Left != left {
+			t.Error("expected left to be preserved")
+		}
+		if result.Right != right {
+			t.Error("expected right to be preserved")
+		}
+	})
+
+	t.Run("left nil", func(t *testing.T) {
+		result := MergeFilterExpressions(nil, right)
+		if result != right {
+			t.Error("expected right to be returned")
+		}
+	})
+
+	t.Run("right nil", func(t *testing.T) {
+		result := MergeFilterExpressions(left, nil)
+		if result != left {
+			t.Error("expected left to be returned")
+		}
+	})
+
+	t.Run("both nil", func(t *testing.T) {
+		result := MergeFilterExpressions(nil, nil)
+		if result != nil {
+			t.Error("expected nil result")
+		}
+	})
+}
+
+func TestParseFilterExpression(t *testing.T) {
+	meta := getHelperTestMetadata(t)
+
+	t.Run("valid filter", func(t *testing.T) {
+		result, err := ParseFilterExpression("ID eq 1", meta)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if result == nil {
+			t.Fatal("expected non-nil result")
+		}
+	})
+
+	t.Run("invalid filter", func(t *testing.T) {
+		_, err := ParseFilterExpression("invalid filter syntax", meta)
+		if err == nil {
+			t.Error("expected error for invalid filter")
+		}
+	})
+}
+
+func TestParseFilterExpressionWithConfig(t *testing.T) {
+	meta := getHelperTestMetadata(t)
+
+	t.Run("valid filter with custom limit", func(t *testing.T) {
+		result, err := ParseFilterExpressionWithConfig("ID eq 1", meta, 500)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if result == nil {
+			t.Fatal("expected non-nil result")
+		}
+	})
+}
