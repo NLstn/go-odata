@@ -47,15 +47,42 @@ type Product struct {
 
 ### Literal Parsing Rules
 
-The parser trims leading/trailing whitespace around terms, qualifiers, and values before interpretation. Literal values are parsed with the following rules:
+The parser trims leading/trailing whitespace around terms, qualifiers, and values before interpretation. Literal values are detected in the following precedence order:
 
-- **Boolean literals**: `true` or `false` (case-insensitive) become `bool`.
-- **Integer literals**: base-10 digits with optional `+`/`-` sign (example: `42`, `-7`) become `int64`.
-- **Float literals**: decimals or scientific notation (example: `3.14`, `1e3`, `-2.5E-2`) become `float64`.
-- **String literals**: any other value is treated as a string.
-- **Quoted strings**: values wrapped in matching single or double quotes (example: `"true"`, `'123'`) are always treated as strings, with the quotes removed.
+1. **Quoted strings** (highest priority)
+2. **Boolean literals**
+3. **Integer literals**
+4. **Float literals**
+5. **String fallback** (anything that did not match the previous rules)
 
-Invalid numeric formats (example: `1.2.3`, `1e`) are rejected with an error rather than being treated as strings. To force a string value that would otherwise parse as a boolean or number, wrap it in quotes.
+With this precedence:
+
+- **Quoted strings** (highest priority): values wrapped in matching single or double quotes (examples: `"true"`, `'123'`) are always treated as strings, with the quotes removed. For example, `"true"` and `"42"` are parsed as strings, not as boolean or numeric values. Escape sequences are supported within quoted strings (see below).
+- **Boolean literals**: unquoted `true` or `false` (case-insensitive) become `bool`. For example, `true` is parsed as a boolean, while `"true"` is parsed as a string because quoting takes precedence.
+- **Integer literals**: base-10 digits with optional `+`/`-` sign (examples: `42`, `-7`, `007`) become `int64`. Leading zeros are allowed and are interpreted as decimal (not octal).
+- **Float literals**: decimals or scientific notation (examples: `3.14`, `1e3`, `-2.5E-2`, `.5`, `5.`) become `float64`.
+- **String literals**: any other unquoted value that does not match the boolean, integer, or float rules is treated as a string.
+
+Invalid numeric formats (examples: `1.2.3`, `1e`, `1e2e3`) are rejected with an error rather than being treated as strings. To force a string value that would otherwise parse as a boolean or number, wrap it in quotes (for example, `"true"`, `"1e3"`, or `"123"`).
+
+#### Escape Sequences in Quoted Strings
+
+Within quoted string literals, the following escape sequences are supported:
+
+- `\\` - Backslash
+- `\n` - Newline
+- `\r` - Carriage return
+- `\t` - Tab
+- `\b` - Backspace
+- `\f` - Form feed
+- `\"` - Double quote
+- `\'` - Single quote
+
+Examples:
+- `Core.Description="He said \"hello\""` → `He said "hello"`
+- `Core.Description='It\'s working'` → `It's working`
+- `Core.Description="path\\file"` → `path\file`
+- `Core.Description="line1\nline2"` → Multi-line string with newline character
 
 ### Supported Aliases
 

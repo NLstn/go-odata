@@ -373,10 +373,86 @@ func parseQuotedLiteral(literal string) (string, bool, error) {
 	if quote != '"' && quote != '\'' {
 		return "", false, nil
 	}
-	if literal[len(literal)-1] != quote {
-		return "", true, fmt.Errorf("unterminated string literal %q", literal)
+
+	// Scan for an unescaped closing quote that matches the opening quote.
+	escaped := false
+	for i := 1; i < len(literal); i++ {
+		ch := literal[i]
+		if escaped {
+			// Current character is escaped; take it as-is.
+			escaped = false
+			continue
+		}
+		if ch == '\\' {
+			escaped = true
+			continue
+		}
+		if ch == quote {
+			// Found the closing quote. Anything after this is an error.
+			if i != len(literal)-1 {
+				return "", true, fmt.Errorf("unexpected characters after string literal %q", literal)
+			}
+			inner := literal[1:i]
+			unescaped, err := unescapeQuotedLiteral(inner)
+			if err != nil {
+				return "", true, err
+			}
+			return unescaped, true, nil
+		}
 	}
-	return literal[1 : len(literal)-1], true, nil
+
+	// No matching unescaped closing quote found.
+	return "", true, fmt.Errorf("unterminated string literal %q", literal)
+}
+
+func unescapeQuotedLiteral(inner string) (string, error) {
+	var b strings.Builder
+	b.Grow(len(inner))
+
+	escaped := false
+	for i := 0; i < len(inner); i++ {
+		ch := inner[i]
+		if !escaped {
+			if ch == '\\' {
+				escaped = true
+				continue
+			}
+			b.WriteByte(ch)
+			continue
+		}
+
+		// Handle escape sequences.
+		switch ch {
+		case '\\':
+			b.WriteByte('\\')
+		case 'n':
+			b.WriteByte('\n')
+		case 'r':
+			b.WriteByte('\r')
+		case 't':
+			b.WriteByte('\t')
+		case 'b':
+			b.WriteByte('\b')
+		case 'f':
+			b.WriteByte('\f')
+		case '"':
+			b.WriteByte('"')
+		case '\'':
+			b.WriteByte('\'')
+		default:
+			// Unknown escape: keep the backslash and the character.
+			b.WriteByte('\\')
+			b.WriteByte(ch)
+		}
+		escaped = false
+	}
+
+	if escaped {
+		// Trailing backslash with nothing to escape.
+		return "", fmt.Errorf("unterminated escape sequence in string literal %q", inner)
+	}
+
+	return b.String(), nil
 }
 
 func looksNumericLiteral(literal string) bool {
