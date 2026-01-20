@@ -560,66 +560,9 @@ func (h *EntityHandler) validateKeyPropertiesNotUpdated(updateData map[string]in
 // validatePropertiesExistForUpdate validates that all properties in updateData are valid entity properties
 // This version allows @odata.bind annotations for navigation properties
 func (h *EntityHandler) validatePropertiesExistForUpdate(updateData map[string]interface{}, w http.ResponseWriter, r *http.Request) error {
-	// Build a map of valid property names (both JSON names and struct field names)
-	validProperties := make(map[string]bool)
-	autoProperties := make(map[string]bool)
-	for _, prop := range h.metadata.Properties {
-		validProperties[prop.JsonName] = true
-		validProperties[prop.Name] = true
-		// Track auto properties to reject client updates
-		if prop.IsAuto {
-			autoProperties[prop.JsonName] = true
-			autoProperties[prop.Name] = true
-		}
-		// Allow @odata.bind annotations for navigation properties
-		if prop.IsNavigationProp {
-			validProperties[prop.JsonName+"@odata.bind"] = true
-			validProperties[prop.Name+"@odata.bind"] = true
-		}
-	}
-
-	// Check each property in updateData
-	for propName := range updateData {
-		// Allow any property starting with @ (instance annotations at entity level)
-		// Per OData spec, clients can send instance annotations which should be ignored
-		if strings.HasPrefix(propName, "@") {
-			continue
-		}
-		
-		// Allow property-level annotations (property@annotation format)
-		// Check if this is a property annotation by looking for @ after the property name
-		if idx := strings.Index(propName, "@"); idx > 0 {
-			// Extract the property name part before the @
-			propertyPart := propName[:idx]
-			// Check if the property exists using the precomputed property map for O(1) lookup
-			if _, ok := h.propertyMap[propertyPart]; ok {
-				continue
-			}
-			// Property annotation refers to a non-existent property
-			err := fmt.Errorf("annotation '%s' refers to non-existent property '%s' on entity type '%s'", propName, propertyPart, h.metadata.EntityName)
-			if writeErr := response.WriteError(w, r, http.StatusBadRequest, "Invalid annotation", err.Error()); writeErr != nil {
-				h.logger.Error("Error writing error response", "error", writeErr)
-			}
-			return err
-		}
-		
-		if !validProperties[propName] {
-			err := fmt.Errorf("property '%s' does not exist on entity type '%s'", propName, h.metadata.EntityName)
-			if writeErr := response.WriteError(w, r, http.StatusBadRequest, "Invalid property", err.Error()); writeErr != nil {
-				h.logger.Error("Error writing error response", "error", writeErr)
-			}
-			return err
-		}
-		// Reject attempts to update auto properties
-		if autoProperties[propName] {
-			err := fmt.Errorf("property '%s' is automatically set server-side and cannot be modified by clients", propName)
-			if writeErr := response.WriteError(w, r, http.StatusBadRequest, "Invalid property modification", err.Error()); writeErr != nil {
-				h.logger.Error("Error writing error response", "error", writeErr)
-			}
-			return err
-		}
-	}
-	return nil
+	// Use shared validation function with checkAutoProperties=true
+	// (auto properties cannot be updated by clients)
+	return h.validatePropertiesExist(updateData, w, r, true)
 }
 
 // removeODataBindAnnotations removes @odata.bind annotations and all other instance annotations
