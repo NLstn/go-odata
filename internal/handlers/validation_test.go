@@ -741,6 +741,67 @@ func TestValidatePropertiesExistForUpdate_AutoFields(t *testing.T) {
 	}
 }
 
+func TestValidatePropertiesExistForCreate_InvalidProperties(t *testing.T) {
+	testMetadata := &metadata.EntityMetadata{
+		EntityName: "TestEntity",
+		Properties: []metadata.PropertyMetadata{
+			{Name: "ID", JsonName: "id", Type: reflect.TypeOf(0), IsKey: true},
+			{Name: "Name", JsonName: "name", Type: reflect.TypeOf(""), IsRequired: true},
+			{Name: "Category", JsonName: "category", Type: reflect.TypeOf("")},
+		},
+	}
+
+	handler := &EntityHandler{metadata: testMetadata}
+	handler.initPropertyMap()
+
+	tests := []struct {
+		name        string
+		requestData map[string]interface{}
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name: "Invalid property annotation on unknown property",
+			requestData: map[string]interface{}{
+				"unknown@odata.annotation": "value",
+			},
+			wantErr:     true,
+			errContains: "non-existent property",
+		},
+		{
+			name: "Unknown property on create",
+			requestData: map[string]interface{}{
+				"unknown": "value",
+			},
+			wantErr:     true,
+			errContains: "does not exist",
+		},
+		{
+			name: "Valid property annotation on existing property",
+			requestData: map[string]interface{}{
+				"name@custom.annotation": "value",
+				"name":                   "Sample",
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			err := handler.validatePropertiesExistForCreate(tt.requestData, w, httptest.NewRequest(http.MethodPost, "/", nil))
+			if (err != nil) != tt.wantErr {
+				t.Errorf("validatePropertiesExistForCreate() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr && err != nil && tt.errContains != "" {
+				if !containsString(err.Error(), tt.errContains) {
+					t.Errorf("Expected error to contain %q, got: %v", tt.errContains, err)
+				}
+			}
+		})
+	}
+}
+
 func TestValidateRequiredProperties_AutoFields(t *testing.T) {
 	testMetadata := &metadata.EntityMetadata{
 		Properties: []metadata.PropertyMetadata{
