@@ -40,6 +40,8 @@ type Product struct {
 
 - Simple boolean annotation: `annotation:Core.Computed` (sets value to `true`)
 - Annotation with value: `annotation:Core.Description=My description`
+- Annotation with qualifier (hash): `annotation:Core.Description#Short=Short description`
+- Annotation with qualifier (explicit): `annotation:Core.Description=Short description;qualifier=Short`
 - Full namespace: `annotation:Org.OData.Core.V1.Computed`
 - Short alias: `annotation:Core.Computed` (automatically expanded)
 
@@ -165,6 +167,7 @@ Accept: application/xml
       <!-- Annotations section -->
       <Annotations Target="ODataService.Product/Name">
         <Annotation Term="Org.OData.Core.V1.Description" String="Product display name" />
+        <Annotation Term="Org.OData.Core.V1.Description" Qualifier="Short" String="Short name" />
       </Annotations>
       <Annotations Target="ODataService.Product/CreatedAt">
         <Annotation Term="Org.OData.Core.V1.Computed" Bool="true" />
@@ -194,7 +197,8 @@ Accept: application/json
       },
       "Name": {
         "$Type": "Edm.String",
-        "@Org.OData.Core.V1.Description": "Product display name"
+        "@Org.OData.Core.V1.Description": "Product display name",
+        "@Org.OData.Core.V1.Description#Short": "Short name"
       },
       "CreatedAt": {
         "$Type": "Edm.DateTimeOffset",
@@ -245,6 +249,7 @@ Instance annotations appear in JSON payloads with specific patterns:
 
 - **Entity-level annotations**: Appear as `@<term>` immediately after `@odata.type`
 - **Property-level annotations**: Appear as `<property>@<term>` immediately before the property value
+- **Qualified annotations**: Append `#Qualifier` to the term (e.g., `@<term>#<Qualifier>` or `<property>@<term>#<Qualifier>`)
 
 ### Example Response with Full Metadata
 

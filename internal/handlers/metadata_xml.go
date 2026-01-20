@@ -359,67 +359,71 @@ func (h *MetadataHandler) buildAnnotationXML(annotation metadata.Annotation, ind
 	indentStr := strings.Repeat(" ", indent)
 
 	escapedTerm := escapeXML(annotation.Term)
+	qualifierAttr := ""
+	if annotation.Qualifier != "" {
+		qualifierAttr = fmt.Sprintf(` Qualifier="%s"`, escapeXML(annotation.Qualifier))
+	}
 
 	// Handle boolean values inline
 	if boolVal, ok := annotation.Value.(bool); ok {
-		return fmt.Sprintf(`%s<Annotation Term="%s" Bool="%t" />
-`, indentStr, escapedTerm, boolVal)
+		return fmt.Sprintf(`%s<Annotation Term="%s"%s Bool="%t" />
+`, indentStr, escapedTerm, qualifierAttr, boolVal)
 	}
 
 	// Handle string values
 	if strVal, ok := annotation.Value.(string); ok {
-		return fmt.Sprintf(`%s<Annotation Term="%s" String="%s" />
-`, indentStr, escapedTerm, escapeXML(strVal))
+		return fmt.Sprintf(`%s<Annotation Term="%s"%s String="%s" />
+`, indentStr, escapedTerm, qualifierAttr, escapeXML(strVal))
 	}
 
 	// Handle integer values (all signed integer types)
 	switch intVal := annotation.Value.(type) {
 	case int:
-		return fmt.Sprintf(`%s<Annotation Term="%s" Int="%d" />
-`, indentStr, escapedTerm, intVal)
+		return fmt.Sprintf(`%s<Annotation Term="%s"%s Int="%d" />
+`, indentStr, escapedTerm, qualifierAttr, intVal)
 	case int8:
-		return fmt.Sprintf(`%s<Annotation Term="%s" Int="%d" />
-`, indentStr, escapedTerm, intVal)
+		return fmt.Sprintf(`%s<Annotation Term="%s"%s Int="%d" />
+`, indentStr, escapedTerm, qualifierAttr, intVal)
 	case int16:
-		return fmt.Sprintf(`%s<Annotation Term="%s" Int="%d" />
-`, indentStr, escapedTerm, intVal)
+		return fmt.Sprintf(`%s<Annotation Term="%s"%s Int="%d" />
+`, indentStr, escapedTerm, qualifierAttr, intVal)
 	case int32:
-		return fmt.Sprintf(`%s<Annotation Term="%s" Int="%d" />
-`, indentStr, escapedTerm, intVal)
+		return fmt.Sprintf(`%s<Annotation Term="%s"%s Int="%d" />
+`, indentStr, escapedTerm, qualifierAttr, intVal)
 	case int64:
-		return fmt.Sprintf(`%s<Annotation Term="%s" Int="%d" />
-`, indentStr, escapedTerm, intVal)
+		return fmt.Sprintf(`%s<Annotation Term="%s"%s Int="%d" />
+`, indentStr, escapedTerm, qualifierAttr, intVal)
 	case uint:
-		return fmt.Sprintf(`%s<Annotation Term="%s" Int="%d" />
-`, indentStr, escapedTerm, intVal)
+		return fmt.Sprintf(`%s<Annotation Term="%s"%s Int="%d" />
+`, indentStr, escapedTerm, qualifierAttr, intVal)
 	case uint8:
-		return fmt.Sprintf(`%s<Annotation Term="%s" Int="%d" />
-`, indentStr, escapedTerm, intVal)
+		return fmt.Sprintf(`%s<Annotation Term="%s"%s Int="%d" />
+`, indentStr, escapedTerm, qualifierAttr, intVal)
 	case uint16:
-		return fmt.Sprintf(`%s<Annotation Term="%s" Int="%d" />
-`, indentStr, escapedTerm, intVal)
+		return fmt.Sprintf(`%s<Annotation Term="%s"%s Int="%d" />
+`, indentStr, escapedTerm, qualifierAttr, intVal)
 	case uint32:
-		return fmt.Sprintf(`%s<Annotation Term="%s" Int="%d" />
-`, indentStr, escapedTerm, intVal)
+		return fmt.Sprintf(`%s<Annotation Term="%s"%s Int="%d" />
+`, indentStr, escapedTerm, qualifierAttr, intVal)
 	case uint64:
-		return fmt.Sprintf(`%s<Annotation Term="%s" Int="%d" />
-`, indentStr, escapedTerm, intVal)
+		return fmt.Sprintf(`%s<Annotation Term="%s"%s Int="%d" />
+`, indentStr, escapedTerm, qualifierAttr, intVal)
 	}
 
 	// Handle float values (both float32 and float64)
 	if floatVal, ok := annotation.Value.(float64); ok {
-		return fmt.Sprintf(`%s<Annotation Term="%s" Float="%g" />
-`, indentStr, escapedTerm, floatVal)
+		return fmt.Sprintf(`%s<Annotation Term="%s"%s Float="%g" />
+`, indentStr, escapedTerm, qualifierAttr, floatVal)
 	}
 	if floatVal, ok := annotation.Value.(float32); ok {
-		return fmt.Sprintf(`%s<Annotation Term="%s" Float="%g" />
-`, indentStr, escapedTerm, float64(floatVal))
+		return fmt.Sprintf(`%s<Annotation Term="%s"%s Float="%g" />
+`, indentStr, escapedTerm, qualifierAttr, float64(floatVal))
 	}
 
 	// Default: treat as string with XML escaping
 	escapedValue := escapeXML(fmt.Sprintf("%v", annotation.Value))
-	return fmt.Sprintf(`%s<Annotation Term="%s" String="%s" />
-`, indentStr, escapedTerm, escapedValue)
+	return fmt.Sprintf(`%s<Annotation Term="%s"%s String="%s" />
+`, indentStr, escapedTerm, qualifierAttr, escapedValue)
 }
 
 // escapeXML escapes special characters for XML output
@@ -436,10 +440,10 @@ func escapeXML(s string) string {
 func vocabularyURI(namespace string) string {
 	// Standard OData vocabularies
 	standardVocabularyURIs := map[string]string{
-		"Org.OData.Core.V1":         "https://oasis-tcs.github.io/odata-vocabularies/vocabularies/Org.OData.Core.V1.xml",
-		"Org.OData.Capabilities.V1": "https://oasis-tcs.github.io/odata-vocabularies/vocabularies/Org.OData.Capabilities.V1.xml",
-		"Org.OData.Validation.V1":   "https://oasis-tcs.github.io/odata-vocabularies/vocabularies/Org.OData.Validation.V1.xml",
-		"Org.OData.Measures.V1":     "https://oasis-tcs.github.io/odata-vocabularies/vocabularies/Org.OData.Measures.V1.xml",
+		"Org.OData.Core.V1":          "https://oasis-tcs.github.io/odata-vocabularies/vocabularies/Org.OData.Core.V1.xml",
+		"Org.OData.Capabilities.V1":  "https://oasis-tcs.github.io/odata-vocabularies/vocabularies/Org.OData.Capabilities.V1.xml",
+		"Org.OData.Validation.V1":    "https://oasis-tcs.github.io/odata-vocabularies/vocabularies/Org.OData.Validation.V1.xml",
+		"Org.OData.Measures.V1":      "https://oasis-tcs.github.io/odata-vocabularies/vocabularies/Org.OData.Measures.V1.xml",
 		"Org.OData.Authorization.V1": "https://oasis-tcs.github.io/odata-vocabularies/vocabularies/Org.OData.Authorization.V1.xml",
 	}
 

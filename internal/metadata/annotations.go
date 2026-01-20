@@ -60,6 +60,17 @@ type Annotation struct {
 	Qualifier string
 }
 
+// QualifiedTerm returns the term combined with its qualifier if present (e.g., "Org.OData.Core.V1.Display#Short")
+func (a *Annotation) QualifiedTerm() string {
+	if a == nil || a.Term == "" {
+		return ""
+	}
+	if a.Qualifier != "" {
+		return a.Term + "#" + a.Qualifier
+	}
+	return a.Term
+}
+
 // TermName returns just the term name without the namespace (e.g., "Computed" from "Org.OData.Core.V1.Computed")
 func (a *Annotation) TermName() string {
 	if a == nil || a.Term == "" {
@@ -231,6 +242,7 @@ const (
 
 // ParseAnnotationTag parses an annotation tag value and returns the term and value.
 // Tag format: "term=value" or just "term" for boolean true.
+// Qualifiers can be specified as "term#Qualifier" or by appending ";qualifier=Qualifier".
 // Examples:
 //   - "Org.OData.Core.V1.Computed" -> term: "Org.OData.Core.V1.Computed", value: true
 //   - "Core.Computed" -> term: "Org.OData.Core.V1.Computed", value: true (with alias expansion)
@@ -241,15 +253,51 @@ func ParseAnnotationTag(tag string) (Annotation, error) {
 		return Annotation{}, fmt.Errorf("empty annotation tag")
 	}
 
+	segments := strings.Split(tag, ";")
+	termValue := strings.TrimSpace(segments[0])
+	var qualifier string
+
+	for _, segment := range segments[1:] {
+		segment = strings.TrimSpace(segment)
+		if segment == "" {
+			continue
+		}
+		if strings.HasPrefix(segment, "qualifier=") {
+			qualifierValue := strings.TrimSpace(strings.TrimPrefix(segment, "qualifier="))
+			if qualifierValue == "" {
+				return Annotation{}, fmt.Errorf("empty annotation qualifier")
+			}
+			if qualifier != "" && qualifier != qualifierValue {
+				return Annotation{}, fmt.Errorf("conflicting annotation qualifiers")
+			}
+			qualifier = qualifierValue
+			continue
+		}
+		return Annotation{}, fmt.Errorf("unsupported annotation tag segment: %q", segment)
+	}
+
 	// Check for term=value format
-	parts := strings.SplitN(tag, "=", 2)
+	parts := strings.SplitN(termValue, "=", 2)
 	term := strings.TrimSpace(parts[0])
-	
+
 	// Validate that term is not empty after trimming
 	if term == "" {
 		return Annotation{}, fmt.Errorf("empty annotation term")
 	}
-	
+
+	if strings.Contains(term, "#") {
+		termParts := strings.SplitN(term, "#", 2)
+		term = strings.TrimSpace(termParts[0])
+		hashQualifier := strings.TrimSpace(termParts[1])
+		if hashQualifier == "" {
+			return Annotation{}, fmt.Errorf("empty annotation qualifier")
+		}
+		if qualifier != "" && qualifier != hashQualifier {
+			return Annotation{}, fmt.Errorf("conflicting annotation qualifiers")
+		}
+		qualifier = hashQualifier
+	}
+
 	var value interface{} = true // Default to boolean true for bare terms
 
 	if len(parts) == 2 {
@@ -260,8 +308,9 @@ func ParseAnnotationTag(tag string) (Annotation, error) {
 	term = expandAnnotationAlias(term)
 
 	return Annotation{
-		Term:  term,
-		Value: value,
+		Term:      term,
+		Value:     value,
+		Qualifier: qualifier,
 	}, nil
 }
 

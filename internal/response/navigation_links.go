@@ -73,15 +73,15 @@ func processMapEntity(entity reflect.Value, metadata EntityMetadataProvider, exp
 	if metadataLevel == "full" {
 		entityTypeName := getEntityTypeFromSetName(entitySetName)
 		entityMap["@odata.type"] = "#" + metadata.GetNamespace() + "." + entityTypeName
-		
+
 		// Add entity-level vocabulary annotations for full metadata
 		if fullMetadata != nil && fullMetadata.Annotations != nil && fullMetadata.Annotations.Len() > 0 {
 			for _, annotation := range fullMetadata.Annotations.Get() {
-				annotationKey := "@" + annotation.Term
+				annotationKey := "@" + annotation.QualifiedTerm()
 				entityMap[annotationKey] = annotation.Value
 			}
 		}
-		
+
 		// Add property-level vocabulary annotations for full metadata
 		// Only add annotations for properties that are present in the response
 		if fullMetadata != nil {
@@ -92,7 +92,7 @@ func processMapEntity(entity reflect.Value, metadata EntityMetadataProvider, exp
 				}
 				if prop.Annotations != nil && prop.Annotations.Len() > 0 {
 					for _, annotation := range prop.Annotations.Get() {
-						annotationKey := prop.JsonName + "@" + annotation.Term
+						annotationKey := prop.JsonName + "@" + annotation.QualifiedTerm()
 						entityMap[annotationKey] = annotation.Value
 					}
 				}
@@ -201,11 +201,11 @@ func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataPro
 		typeStr.WriteByte('.')
 		typeStr.WriteString(entityTypeName)
 		entityMap.Set("@odata.type", typeStr.String())
-		
+
 		// Add entity-level vocabulary annotations for full metadata
 		if fullMetadata != nil && fullMetadata.Annotations != nil && fullMetadata.Annotations.Len() > 0 {
 			for _, annotation := range fullMetadata.Annotations.Get() {
-				annotationKey := "@" + annotation.Term
+				annotationKey := "@" + annotation.QualifiedTerm()
 				entityMap.Set(annotationKey, annotation.Value)
 			}
 		}
@@ -214,7 +214,7 @@ func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataPro
 	// Process entity fields - optimized to reduce reflection calls
 	// Cache property metadata lookups per entity type
 	propMetaMap := getCachedPropertyMetadataMap(metadata)
-	
+
 	// Pre-build a map for full property metadata by field name (for annotation lookup)
 	// Only build this map if we need it (full metadata level)
 	var fullPropMetaByName map[string]*internalMetadata.PropertyMetadata
@@ -256,7 +256,7 @@ func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataPro
 				if fullProp := fullPropMetaByName[field.Name]; fullProp != nil {
 					if fullProp.Annotations != nil && fullProp.Annotations.Len() > 0 {
 						for _, annotation := range fullProp.Annotations.Get() {
-							annotationKey := info.JsonName + "@" + annotation.Term
+							annotationKey := info.JsonName + "@" + annotation.QualifiedTerm()
 							entityMap.Set(annotationKey, annotation.Value)
 						}
 					}

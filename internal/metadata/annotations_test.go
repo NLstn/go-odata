@@ -239,41 +239,73 @@ func TestAnnotationCollection_NilCollection(t *testing.T) {
 
 func TestParseAnnotationTag(t *testing.T) {
 	tests := []struct {
-		name          string
-		tag           string
-		expectedTerm  string
-		expectedValue interface{}
-		expectError   bool
+		name              string
+		tag               string
+		expectedTerm      string
+		expectedQualifier string
+		expectedValue     interface{}
+		expectError       bool
 	}{
 		{
-			name:          "full term without value",
-			tag:           "Org.OData.Core.V1.Computed",
-			expectedTerm:  "Org.OData.Core.V1.Computed",
-			expectedValue: true,
+			name:              "full term without value",
+			tag:               "Org.OData.Core.V1.Computed",
+			expectedTerm:      "Org.OData.Core.V1.Computed",
+			expectedQualifier: "",
+			expectedValue:     true,
 		},
 		{
-			name:          "Core alias without value",
-			tag:           "Core.Computed",
-			expectedTerm:  "Org.OData.Core.V1.Computed",
-			expectedValue: true,
+			name:              "Core alias without value",
+			tag:               "Core.Computed",
+			expectedTerm:      "Org.OData.Core.V1.Computed",
+			expectedQualifier: "",
+			expectedValue:     true,
 		},
 		{
-			name:          "Capabilities alias without value",
-			tag:           "Capabilities.InsertRestrictions",
-			expectedTerm:  "Org.OData.Capabilities.V1.InsertRestrictions",
-			expectedValue: true,
+			name:              "Capabilities alias without value",
+			tag:               "Capabilities.InsertRestrictions",
+			expectedTerm:      "Org.OData.Capabilities.V1.InsertRestrictions",
+			expectedQualifier: "",
+			expectedValue:     true,
 		},
 		{
-			name:          "term with string value",
-			tag:           "Org.OData.Core.V1.Description=Product name",
-			expectedTerm:  "Org.OData.Core.V1.Description",
-			expectedValue: "Product name",
+			name:              "term with string value",
+			tag:               "Org.OData.Core.V1.Description=Product name",
+			expectedTerm:      "Org.OData.Core.V1.Description",
+			expectedQualifier: "",
+			expectedValue:     "Product name",
 		},
 		{
-			name:          "alias with string value",
-			tag:           "Core.Description=Product name",
-			expectedTerm:  "Org.OData.Core.V1.Description",
-			expectedValue: "Product name",
+			name:              "alias with string value",
+			tag:               "Core.Description=Product name",
+			expectedTerm:      "Org.OData.Core.V1.Description",
+			expectedQualifier: "",
+			expectedValue:     "Product name",
+		},
+		{
+			name:              "term with hash qualifier",
+			tag:               "Core.Description#Short=Product name",
+			expectedTerm:      "Org.OData.Core.V1.Description",
+			expectedQualifier: "Short",
+			expectedValue:     "Product name",
+		},
+		{
+			name:              "term with qualifier segment",
+			tag:               "Core.Description=Product name;qualifier=Short",
+			expectedTerm:      "Org.OData.Core.V1.Description",
+			expectedQualifier: "Short",
+			expectedValue:     "Product name",
+		},
+		{
+			name:              "qualifier without value",
+			tag:               "Core.Description;qualifier=Short",
+			expectedTerm:      "Org.OData.Core.V1.Description",
+			expectedQualifier: "Short",
+			expectedValue:     true,
+		},
+		{
+			name:        "conflicting qualifiers",
+			tag:         "Core.Description#Short;qualifier=Long",
+			expectError: true,
 		},
 		{
 			name:        "empty tag",
@@ -288,6 +320,11 @@ func TestParseAnnotationTag(t *testing.T) {
 		{
 			name:        "empty term with value",
 			tag:         "  =value",
+			expectError: true,
+		},
+		{
+			name:        "empty qualifier value",
+			tag:         "Core.Description;qualifier=",
 			expectError: true,
 		},
 	}
@@ -310,6 +347,10 @@ func TestParseAnnotationTag(t *testing.T) {
 
 			if annotation.Term != tt.expectedTerm {
 				t.Errorf("Term = %v, want %v", annotation.Term, tt.expectedTerm)
+			}
+
+			if annotation.Qualifier != tt.expectedQualifier {
+				t.Errorf("Qualifier = %v, want %v", annotation.Qualifier, tt.expectedQualifier)
 			}
 
 			if annotation.Value != tt.expectedValue {

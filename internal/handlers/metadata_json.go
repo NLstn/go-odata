@@ -151,7 +151,7 @@ func (h *MetadataHandler) buildJSONEntityType(model metadataModel, entityMeta *m
 	// Add entity-level annotations
 	if entityMeta.Annotations != nil {
 		for _, annotation := range entityMeta.Annotations.Get() {
-			annotationKey := "@" + annotation.Term
+			annotationKey := "@" + annotation.QualifiedTerm()
 			entityType[annotationKey] = annotation.Value
 		}
 	}
@@ -187,7 +187,7 @@ func (h *MetadataHandler) buildJSONPropertyDefinition(model metadataModel, prop 
 	// Add property-level annotations
 	if prop.Annotations != nil {
 		for _, annotation := range prop.Annotations.Get() {
-			annotationKey := "@" + annotation.Term
+			annotationKey := "@" + annotation.QualifiedTerm()
 			propDef[annotationKey] = annotation.Value
 		}
 	}

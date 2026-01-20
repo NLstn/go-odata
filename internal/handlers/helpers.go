@@ -325,11 +325,11 @@ func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{
 	// Add @odata.type for full metadata
 	if metadataLevel == "full" {
 		odataResponse.Set("@odata.type", "#"+h.qualifiedTypeName(h.metadata.EntityName))
-		
+
 		// Add entity-level vocabulary annotations for full metadata
 		if h.metadata.Annotations != nil && h.metadata.Annotations.Len() > 0 {
 			for _, annotation := range h.metadata.Annotations.Get() {
-				annotationKey := "@" + annotation.Term
+				annotationKey := "@" + annotation.QualifiedTerm()
 				odataResponse.Set(annotationKey, annotation.Value)
 			}
 		}
@@ -374,19 +374,19 @@ func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{
 			for _, key := range reflect.ValueOf(mapResult).MapKeys() {
 				keyStr := key.String()
 				value := reflect.ValueOf(mapResult).MapIndex(key)
-				
+
 				// Add property-level annotations for full metadata
 				if metadataLevel == "full" {
 					// Use findPropertyMetadata which now handles JsonName lookups via O(1) map
 					propMeta := h.findPropertyMetadata(keyStr)
 					if propMeta != nil && propMeta.Annotations != nil && propMeta.Annotations.Len() > 0 {
 						for _, annotation := range propMeta.Annotations.Get() {
-							annotationKey := keyStr + "@" + annotation.Term
+							annotationKey := keyStr + "@" + annotation.QualifiedTerm()
 							odataResponse.Set(annotationKey, annotation.Value)
 						}
 					}
 				}
-				
+
 				odataResponse.Set(keyStr, value.Interface())
 			}
 		}
@@ -493,7 +493,7 @@ func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{
 			// Regular property - add property-level annotations first (for full metadata)
 			if metadataLevel == "full" && propMeta != nil && propMeta.Annotations != nil && propMeta.Annotations.Len() > 0 {
 				for _, annotation := range propMeta.Annotations.Get() {
-					annotationKey := jsonName + "@" + annotation.Term
+					annotationKey := jsonName + "@" + annotation.QualifiedTerm()
 					odataResponse.Set(annotationKey, annotation.Value)
 				}
 			}
