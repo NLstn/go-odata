@@ -514,7 +514,7 @@ func (h *MetadataHandler) buildAnnotationPropertyValueXML(property string, value
 func (h *MetadataHandler) buildAnnotationValueElementXML(value interface{}, indent int) string {
 	indentStr := strings.Repeat(" ", indent)
 
-	if elementName, elementValue, ok := annotationPrimitiveElement(value); ok {
+	if elementName, elementValue, ok := annotationPrimitiveAttribute(value); ok {
 		return fmt.Sprintf(`%s<%s>%s</%s>
 `, indentStr, elementName, elementValue, elementName)
 	}
@@ -567,13 +567,7 @@ func annotationPrimitiveAttribute(value interface{}) (string, string, bool) {
 	}
 }
 
-func annotationPrimitiveElement(value interface{}) (string, string, bool) {
-	name, valueString, ok := annotationPrimitiveAttribute(value)
-	if !ok {
-		return "", "", false
-	}
-	return name, valueString, true
-}
+
 
 // escapeXML escapes special characters for XML output
 func escapeXML(s string) string {
