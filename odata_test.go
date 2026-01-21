@@ -135,7 +135,9 @@ func TestNewService(t *testing.T) {
 func TestServiceRegisterEntity(t *testing.T) {
 	db := setupTestDB(t)
 	service, err := NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 
 	// Test successful registration
 	err = service.RegisterEntity(Product{})
@@ -161,7 +163,9 @@ func TestServiceRegisterEntity(t *testing.T) {
 
 	// Test registration with pointer on a new service instance
 	pointerService, err := NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 
 	err = pointerService.RegisterEntity(&Product{})
 	if err != nil {
@@ -172,7 +176,9 @@ func TestServiceRegisterEntity(t *testing.T) {
 func TestServiceRegisterEntityDuplicate(t *testing.T) {
 	db := setupTestDB(t)
 	service, err := NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 
 	if err := service.RegisterEntity(Product{}); err != nil {
 		t.Fatalf("RegisterEntity(Product) error = %v", err)
@@ -192,7 +198,9 @@ func TestServiceRegisterEntityDuplicate(t *testing.T) {
 func TestEnableChangeTracking(t *testing.T) {
 	db := setupTestDB(t)
 	service, err := NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 
 	if err := service.RegisterEntity(Product{}); err != nil {
 		t.Fatalf("RegisterEntity() error = %v", err)
@@ -241,7 +249,9 @@ func TestEnableChangeTracking(t *testing.T) {
 func TestServiceRegisterSingletonDuplicate(t *testing.T) {
 	db := setupTestDB(t)
 	service, err := NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 
 	type singletonEntity struct {
 		ID int `json:"id" odata:"key"`
@@ -265,7 +275,9 @@ func TestServiceRegisterSingletonDuplicate(t *testing.T) {
 func TestServiceRegisterMultipleEntities(t *testing.T) {
 	db := setupTestDB(t)
 	service, err := NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 
 	type Category struct {
 		ID   int    `json:"id" odata:"key"`
@@ -309,7 +321,9 @@ func TestServiceRegisterMultipleEntities(t *testing.T) {
 func TestRegisterEnumType(t *testing.T) {
 	db := setupTestDB(t)
 	service, err := NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 
 	if err := RegisterEnumType(RegisteredEnum(0), map[string]int64{
 		"Foo": int64(RegisteredEnumFoo),
@@ -326,7 +340,9 @@ func TestRegisterEnumType(t *testing.T) {
 func TestRegisterActionValidation(t *testing.T) {
 	db := setupTestDB(t)
 	service, err := NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 
 	if err := service.RegisterEntity(Product{}); err != nil {
 		t.Fatalf("failed to register product entity: %v", err)
@@ -393,7 +409,9 @@ func TestRegisterActionValidation(t *testing.T) {
 func TestRegisterFunctionValidation(t *testing.T) {
 	db := setupTestDB(t)
 	service, err := NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 
 	if err := service.RegisterEntity(Product{}); err != nil {
 		t.Fatalf("failed to register product entity: %v", err)
@@ -474,7 +492,9 @@ func TestRegisterFunctionValidation(t *testing.T) {
 func TestRegisterActionWithParameterStructType(t *testing.T) {
 	db := setupTestDB(t)
 	service, err := NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 
 	handler := func(http.ResponseWriter, *http.Request, interface{}, map[string]interface{}) error { return nil }
 
@@ -531,7 +551,9 @@ func TestRegisterActionWithParameterStructType(t *testing.T) {
 func TestRegisterFunctionWithParameterStructType(t *testing.T) {
 	db := setupTestDB(t)
 	service, err := NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 
 	if err := service.RegisterEntity(Product{}); err != nil {
 		t.Fatalf("failed to register product entity: %v", err)
@@ -577,7 +599,9 @@ func TestRegisterFunctionWithParameterStructType(t *testing.T) {
 func TestRegisterActionWithMismatchedStructParameters(t *testing.T) {
 	db := setupTestDB(t)
 	service, err := NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 
 	handler := func(http.ResponseWriter, *http.Request, interface{}, map[string]interface{}) error { return nil }
 
@@ -605,7 +629,9 @@ func TestRegisterActionWithMismatchedStructParameters(t *testing.T) {
 func TestEntitySetNameInterface(t *testing.T) {
 	db := setupTestDB(t)
 	service, err := NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 
 	// Auto-migrate the News table
 	if err := db.AutoMigrate(&News{}); err != nil {

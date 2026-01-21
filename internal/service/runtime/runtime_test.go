@@ -30,7 +30,9 @@ func TestServiceRespondAsyncFlow(t *testing.T) {
 	}
 
 	svc, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	if err := svc.RegisterEntity(&asyncTestEntity{}); err != nil {
 		t.Fatalf("failed to register entity: %v", err)
 	}

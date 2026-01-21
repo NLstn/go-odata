@@ -23,7 +23,9 @@ func (p allowAllPolicy) Authorize(ctx AuthContext, resource ResourceDescriptor, 
 func TestSetPolicyAppliesToHandlers(t *testing.T) {
 	db := setupTestDB(t)
 	service, err := NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 
 	if err := service.RegisterEntity(Product{}); err != nil {
 		t.Fatalf("RegisterEntity error: %v", err)

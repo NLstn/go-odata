@@ -29,11 +29,11 @@ type NestedComplex struct {
 
 // ComplexPropertyTestEntity is a test entity with complex properties
 type ComplexPropertyTestEntity struct {
-	ID              uint              `json:"ID" gorm:"primaryKey" odata:"key"`
-	Name            string            `json:"Name"`
-	ShippingAddress ComplexAddress    `json:"ShippingAddress" gorm:"embedded;embeddedPrefix:shipping_"`
-	BillingAddress  *ComplexAddress   `json:"BillingAddress" gorm:"embedded;embeddedPrefix:billing_"`
-	Nested          *NestedComplex    `json:"Nested" gorm:"embedded;embeddedPrefix:nested_"`
+	ID              uint            `json:"ID" gorm:"primaryKey" odata:"key"`
+	Name            string          `json:"Name"`
+	ShippingAddress ComplexAddress  `json:"ShippingAddress" gorm:"embedded;embeddedPrefix:shipping_"`
+	BillingAddress  *ComplexAddress `json:"BillingAddress" gorm:"embedded;embeddedPrefix:billing_"`
+	Nested          *NestedComplex  `json:"Nested" gorm:"embedded;embeddedPrefix:nested_"`
 }
 
 func setupComplexPropertyHandler(t *testing.T) (*EntityHandler, *gorm.DB) {

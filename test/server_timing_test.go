@@ -35,7 +35,9 @@ func TestServerTimingHeaderPresent(t *testing.T) {
 	}
 
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	if err := service.RegisterEntity(&ServerTimingProduct{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
 	}
@@ -78,7 +80,9 @@ func TestServerTimingHeaderAbsentWhenDisabled(t *testing.T) {
 	}
 
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	if err := service.RegisterEntity(&ServerTimingProduct{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
 	}
@@ -116,7 +120,9 @@ func TestServerTimingHeaderContainsTotalMetric(t *testing.T) {
 	}
 
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	if err := service.RegisterEntity(&ServerTimingProduct{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
 	}
@@ -165,7 +171,9 @@ func TestServerTimingWithOtherObservabilityOptions(t *testing.T) {
 	}
 
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	if err := service.RegisterEntity(&ServerTimingProduct{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
 	}
@@ -217,7 +225,9 @@ func setupServerTimingService(t *testing.T) *odata.Service {
 	}
 
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	if err := service.RegisterEntity(&ServerTimingProduct{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
 	}
