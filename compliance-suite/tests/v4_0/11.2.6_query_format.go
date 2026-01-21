@@ -79,9 +79,33 @@ func QueryFormat() *framework.TestSuite {
 				return err
 			}
 
-			// Accept 400, 406, or implementations that are lenient (200)
-			if resp.StatusCode != 406 && resp.StatusCode != 400 && resp.StatusCode != 200 {
-				return fmt.Errorf("expected status 400, 406, or 200 (lenient), got %d", resp.StatusCode)
+			if resp.StatusCode != 406 && resp.StatusCode != 400 {
+				return fmt.Errorf("expected status 400 or 406 for invalid $format, got %d", resp.StatusCode)
+			}
+
+			contentType := resp.Headers.Get("Content-Type")
+			if !strings.Contains(strings.ToLower(contentType), "application/json") {
+				return fmt.Errorf("expected Content-Type to contain 'application/json', got: %s", contentType)
+			}
+
+			var result map[string]interface{}
+			if err := json.Unmarshal(resp.Body, &result); err != nil {
+				return fmt.Errorf("response is not valid JSON: %v", err)
+			}
+
+			errorObj, ok := result["error"].(map[string]interface{})
+			if !ok {
+				return fmt.Errorf("error response must have 'error' object property")
+			}
+
+			code, ok := errorObj["code"].(string)
+			if !ok || code == "" {
+				return fmt.Errorf("error object must have 'code' property as non-empty string")
+			}
+
+			message, ok := errorObj["message"].(string)
+			if !ok || message == "" {
+				return fmt.Errorf("error object must have 'message' property as non-empty string")
 			}
 
 			return nil
