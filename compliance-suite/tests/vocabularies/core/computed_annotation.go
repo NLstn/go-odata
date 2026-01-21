@@ -58,7 +58,7 @@ func ComputedAnnotation() *framework.TestSuite {
 			payload := `{
 				"Name": "Test Product",
 				"Price": 99.99,
-				"CreatedAt": "2026-01-21T00:00:00Z"
+				"CreatedAt": "2026-01-21 00:00:00"
 			}`
 
 			resp, err := ctx.POST("/Products", payload,
@@ -107,8 +107,8 @@ func ComputedAnnotation() *framework.TestSuite {
 				return fmt.Errorf("created entity missing ID field")
 			}
 
-			// Attempt to update computed property
-			updatePayload := `{"CreatedAt": "2030-01-01T00:00:00Z"}`
+			// Attempt to update computed property (using MySQL-compatible datetime format)
+			updatePayload := `{"CreatedAt": "2030-01-01 00:00:00"}`
 			resp, err := ctx.PATCH(fmt.Sprintf("/Products(%v)", id), updatePayload,
 				framework.Header{Key: "Content-Type", Value: "application/json"})
 			if err != nil {
