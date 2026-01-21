@@ -1,6 +1,8 @@
 package response
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"testing"
 
@@ -211,4 +213,121 @@ func TestExtractEntityKeysReflection(t *testing.T) {
 	if !reflect.DeepEqual(nameVal, "Reflection Test") {
 		t.Errorf("Name key value mismatch: got %v, want 'Reflection Test'", nameVal)
 	}
+}
+
+// TestBuildBaseURL tests BuildBaseURL function
+func TestBuildBaseURL(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func(*testing.T) *http.Request
+		expected string
+	}{
+		{
+			name: "basic HTTP request",
+			setup: func(t *testing.T) *http.Request {
+				req := httptest.NewRequest("GET", "http://example.com/Products", nil)
+				return req
+			},
+			expected: "http://example.com",
+		},
+		{
+			name: "with X-Forwarded-Proto",
+			setup: func(t *testing.T) *http.Request {
+				req := httptest.NewRequest("GET", "http://example.com/Products", nil)
+				req.Header.Set("X-Forwarded-Proto", "https")
+				return req
+			},
+			expected: "https://example.com",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := tt.setup(t)
+			result := BuildBaseURL(req)
+			if result != tt.expected {
+				t.Errorf("BuildBaseURL() = %q, want %q", result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestBuildNextLink tests BuildNextLink function
+func TestBuildNextLink(t *testing.T) {
+	req := httptest.NewRequest("GET", "http://example.com/Products?$top=10", nil)
+
+	result := BuildNextLink(req, 10)
+
+	// URLs are URL-encoded, so $ becomes %24
+	if !stringContains(result, "%24skip=10") && !stringContains(result, "$skip=10") {
+		t.Errorf("BuildNextLink() = %q, expected to contain skip parameter", result)
+	}
+	if !stringContains(result, "/Products") {
+		t.Errorf("BuildNextLink() = %q, expected to contain '/Products'", result)
+	}
+}
+
+// TestBuildNextLinkWithSkipToken tests BuildNextLinkWithSkipToken function
+func TestBuildNextLinkWithSkipToken(t *testing.T) {
+	req := httptest.NewRequest("GET", "http://example.com/Products?$top=10&$skip=5", nil)
+
+	result := BuildNextLinkWithSkipToken(req, "token123")
+
+	// URLs are URL-encoded, so $ becomes %24
+	if !stringContains(result, "%24skiptoken=token123") && !stringContains(result, "$skiptoken=token123") {
+		t.Errorf("BuildNextLinkWithSkipToken() = %q, expected to contain skiptoken parameter", result)
+	}
+	if stringContains(result, "%24skip=") && !stringContains(result, "%24skiptoken=") {
+		t.Errorf("BuildNextLinkWithSkipToken() = %q, should not contain non-token skip parameter", result)
+	}
+}
+
+// TestBuildDeltaLink tests BuildDeltaLink function
+func TestBuildDeltaLink(t *testing.T) {
+	req := httptest.NewRequest("GET", "http://example.com/Products", nil)
+
+	result := BuildDeltaLink(req, "deltatoken123")
+
+	// URLs are URL-encoded, so $ becomes %24
+	if !stringContains(result, "%24deltatoken=deltatoken123") && !stringContains(result, "$deltatoken=deltatoken123") {
+		t.Errorf("BuildDeltaLink() = %q, expected to contain deltatoken parameter", result)
+	}
+	if !stringContains(result, "/Products") {
+		t.Errorf("BuildDeltaLink() = %q, expected to contain '/Products'", result)
+	}
+}
+
+// TestGetEntityTypeFromSetName tests getEntityTypeFromSetName function
+func TestGetEntityTypeFromSetName(t *testing.T) {
+	tests := []struct {
+		entitySet string
+		expected  string
+	}{
+		{"Products", "Product"},
+		{"Categories", "Category"},
+		{"Boxes", "Box"},
+		{"Addresses", "Address"},
+		{"Matches", "Match"},
+		{"Bushes", "Bush"},
+		{"Company", "Company"}, // No 's' suffix
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.entitySet, func(t *testing.T) {
+			result := getEntityTypeFromSetName(tt.entitySet)
+			if result != tt.expected {
+				t.Errorf("getEntityTypeFromSetName(%q) = %q, want %q", tt.entitySet, result, tt.expected)
+			}
+		})
+	}
+}
+
+// stringContains is a helper function to check if a string contains a substring
+func stringContains(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }

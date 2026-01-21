@@ -359,3 +359,90 @@ func TestHandleNavigationPropertyCount_MethodNotAllowed(t *testing.T) {
 		})
 	}
 }
+
+// TestHandleNavigationCollectionItem tests accessing a specific item from a collection navigation property
+func TestHandleNavigationCollectionItem(t *testing.T) {
+	handler, db := setupNavTestHandler(t)
+
+	// Create parent with children
+	parent := NavTestParent{ID: 1, Name: "Parent 1"}
+	if err := db.Create(&parent).Error; err != nil {
+		t.Fatalf("Failed to create parent: %v", err)
+	}
+
+	children := []NavTestChild{
+		{ID: 1, Name: "Child 1", ParentID: 1},
+		{ID: 2, Name: "Child 2", ParentID: 1},
+	}
+	if err := db.Create(&children).Error; err != nil {
+		t.Fatalf("Failed to create children: %v", err)
+	}
+
+	// Find the Children navigation property
+	var navProp *metadata.PropertyMetadata
+	for i := range handler.metadata.Properties {
+		if handler.metadata.Properties[i].Name == "Children" {
+			navProp = &handler.metadata.Properties[i]
+			break
+		}
+	}
+
+	if navProp == nil {
+		t.Fatal("Children navigation property not found")
+	}
+
+	// Test getting a specific child from the collection
+	req := httptest.NewRequest(http.MethodGet, "/NavTestParents(1)/Children(1)", nil)
+	w := httptest.NewRecorder()
+
+	handler.handleNavigationCollectionItem(w, req, "1", navProp, "1", false)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	// Test getting a non-existent child
+	req = httptest.NewRequest(http.MethodGet, "/NavTestParents(1)/Children(999)", nil)
+	w = httptest.NewRecorder()
+
+	handler.handleNavigationCollectionItem(w, req, "1", navProp, "999", false)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("Status = %v, want %v", w.Code, http.StatusNotFound)
+	}
+
+	// Test getting a $ref for a specific child
+	req = httptest.NewRequest(http.MethodGet, "/NavTestParents(1)/Children(1)/$ref", nil)
+	w = httptest.NewRecorder()
+
+	handler.handleNavigationCollectionItem(w, req, "1", navProp, "1", true)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+}
+
+// TestParseCompositeKeyString tests parsing composite key strings
+func TestParseCompositeKeyString(t *testing.T) {
+	handler, _ := setupNavTestHandler(t)
+
+	// Test parsing a composite key string
+	keyMap, err := handler.parseCompositeKeyString("key1=value1,key2=value2")
+	if err != nil {
+		t.Fatalf("Failed to parse composite key: %v", err)
+	}
+
+	if keyMap["key1"] != "value1" {
+		t.Errorf("Expected key1=value1, got %s", keyMap["key1"])
+	}
+
+	if keyMap["key2"] != "value2" {
+		t.Errorf("Expected key2=value2, got %s", keyMap["key2"])
+	}
+
+	// Test with invalid format
+	_, err = handler.parseCompositeKeyString("invalidformat")
+	if err == nil {
+		t.Error("Expected error for invalid format")
+	}
+}
