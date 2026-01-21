@@ -75,7 +75,7 @@ func ImmutableAnnotation() *framework.TestSuite {
 
 	suite.AddTest(
 		"immutable_property_not_updatable",
-		"PATCH request should reject or ignore updates to immutable properties (enforcement not yet implemented)",
+		"PATCH request should reject updates to immutable properties or keep the immutable value unchanged",
 		func(ctx *framework.TestContext) error {
 			// First create an entity with an immutable property
 			createPayload := `{
@@ -101,6 +101,10 @@ func ImmutableAnnotation() *framework.TestSuite {
 			if !ok {
 				return fmt.Errorf("created entity missing ID field")
 			}
+			originalSerialNumber, ok := created["SerialNumber"]
+			if !ok {
+				return fmt.Errorf("created entity missing SerialNumber field")
+			}
 
 			// Attempt to update immutable property SerialNumber
 			updatePayload := `{"SerialNumber": "SN-MODIFIED"}`
@@ -110,14 +114,35 @@ func ImmutableAnnotation() *framework.TestSuite {
 				return err
 			}
 
-			// TODO: Once immutability enforcement is implemented, service should reject (400)
-			// For now, we just verify that the annotation is present in metadata
-			// Service behavior: currently allows updates (will be 200 or 204)
-			if resp.StatusCode != 200 && resp.StatusCode != 204 && resp.StatusCode != 400 {
+			if resp.StatusCode == 400 || resp.StatusCode == 409 {
+				return nil
+			}
+
+			if resp.StatusCode != 200 && resp.StatusCode != 204 {
 				return fmt.Errorf("unexpected status for immutable property update, got %d: %s", resp.StatusCode, string(resp.Body))
 			}
 
-			ctx.Log(fmt.Sprintf("Note: Immutability enforcement not yet implemented (got status %d)", resp.StatusCode))
+			fetchResp, err := ctx.GET(fmt.Sprintf("/Products(%v)", id),
+				framework.Header{Key: "Accept", Value: "application/json"})
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(fetchResp, 200); err != nil {
+				return err
+			}
+
+			var fetched map[string]interface{}
+			if err := ctx.GetJSON(fetchResp, &fetched); err != nil {
+				return err
+			}
+			currentSerialNumber, ok := fetched["SerialNumber"]
+			if !ok {
+				return fmt.Errorf("fetched entity missing SerialNumber field")
+			}
+			if currentSerialNumber != originalSerialNumber {
+				return fmt.Errorf("immutable property changed: expected %v, got %v", originalSerialNumber, currentSerialNumber)
+			}
+
 			return nil
 		},
 	)
