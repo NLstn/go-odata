@@ -116,7 +116,7 @@ func TestEntityHooks_Create(t *testing.T) {
 	}
 
 	// Create test server
-	server := httptest.NewServer(service.Handler())
+	server := httptest.NewServer(service)
 	defer server.Close()
 
 	// Create a new entity
@@ -172,7 +172,7 @@ func TestEntityHooks_CreateFailure(t *testing.T) {
 	}
 
 	// Create test server
-	server := httptest.NewServer(service.Handler())
+	server := httptest.NewServer(service)
 	defer server.Close()
 
 	// Try to create a new entity (should fail)
@@ -240,7 +240,7 @@ func TestEntityHooks_Update(t *testing.T) {
 	}
 
 	// Create test server
-	server := httptest.NewServer(service.Handler())
+	server := httptest.NewServer(service)
 	defer server.Close()
 
 	// Update the entity
@@ -300,7 +300,7 @@ func TestEntityHooks_UpdateFailure(t *testing.T) {
 	}
 
 	// Create test server
-	server := httptest.NewServer(service.Handler())
+	server := httptest.NewServer(service)
 	defer server.Close()
 
 	// Try to update the entity (should fail)
@@ -368,7 +368,7 @@ func TestEntityHooks_Delete(t *testing.T) {
 	}
 
 	// Create test server
-	server := httptest.NewServer(service.Handler())
+	server := httptest.NewServer(service)
 	defer server.Close()
 
 	// Delete the entity
@@ -422,7 +422,7 @@ func TestEntityHooks_DeleteFailure(t *testing.T) {
 	}
 
 	// Create test server
-	server := httptest.NewServer(service.Handler())
+	server := httptest.NewServer(service)
 	defer server.Close()
 
 	// Try to delete the entity (should fail)

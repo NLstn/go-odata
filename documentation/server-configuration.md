@@ -171,18 +171,13 @@ service.SetEntityDefaultMaxTop("Products", 25)
 
 ## Service as Handler
 
-The `Service` implements `http.Handler`, so you can use it in multiple ways:
+The `Service` implements `http.Handler`, so you can use it directly as a handler:
 
 ```go
 mux := http.NewServeMux()
 
-// Option 1: Use the Handler() method
-mux.Handle("/", service.Handler())
-
-// Option 2: Use the service directly (equivalent)
+// Use the service directly as an http.Handler
 mux.Handle("/", service)
-
-// Both are equivalent and provide the same functionality
 ```
 
 ## Custom Path Mounting
