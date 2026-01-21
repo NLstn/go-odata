@@ -289,3 +289,230 @@ func TestManagerPersistenceAcrossInstances(t *testing.T) {
 		t.Fatalf("expected persisted body, got %q", body)
 	}
 }
+
+func TestWithMonitorURL(t *testing.T) {
+	mgr, _ := newTestManager(t, 0)
+
+	monitorURL := "/async/jobs/test-123"
+	job, err := mgr.StartJob(context.Background(), func(ctx context.Context) (*StoredResponse, error) {
+		return &StoredResponse{StatusCode: http.StatusOK}, nil
+	}, WithMonitorURL(monitorURL))
+
+	if err != nil {
+		t.Fatalf("StartJob error: %v", err)
+	}
+
+	if job.MonitorURL() != monitorURL {
+		t.Errorf("expected monitor URL %q, got %q", monitorURL, job.MonitorURL())
+	}
+}
+
+func TestWithRetentionDisabled(t *testing.T) {
+	db := newTestDB(t)
+	mgr, err := NewManager(db, 0, WithRetentionDisabled())
+	if err != nil {
+		t.Fatalf("NewManager error: %v", err)
+	}
+	t.Cleanup(mgr.Close)
+
+	if mgr.ttl != 0 {
+		t.Errorf("expected TTL to be 0 when retention is disabled, got %v", mgr.ttl)
+	}
+
+	if mgr.cleanupTicker != nil {
+		t.Error("expected cleanup ticker to be nil when retention is disabled")
+	}
+}
+
+func TestJobRetryAfter(t *testing.T) {
+	mgr, _ := newTestManager(t, 0)
+
+	t.Run("with retry-after set", func(t *testing.T) {
+		retryDuration := 5 * time.Second
+		job, err := mgr.StartJob(context.Background(), func(ctx context.Context) (*StoredResponse, error) {
+			return &StoredResponse{StatusCode: http.StatusOK}, nil
+		}, WithRetryAfter(retryDuration))
+
+		if err != nil {
+			t.Fatalf("StartJob error: %v", err)
+		}
+
+		duration, ok := job.RetryAfter()
+		if !ok {
+			t.Error("expected retry-after to be set")
+		}
+		if duration != retryDuration {
+			t.Errorf("expected retry duration %v, got %v", retryDuration, duration)
+		}
+	})
+
+	t.Run("without retry-after", func(t *testing.T) {
+		job, err := mgr.StartJob(context.Background(), func(ctx context.Context) (*StoredResponse, error) {
+			return &StoredResponse{StatusCode: http.StatusOK}, nil
+		})
+
+		if err != nil {
+			t.Fatalf("StartJob error: %v", err)
+		}
+
+		_, ok := job.RetryAfter()
+		if ok {
+			t.Error("expected retry-after to not be set")
+		}
+	})
+}
+
+func TestJobSetRetryAfter(t *testing.T) {
+	mgr, _ := newTestManager(t, 0)
+
+	job, err := mgr.StartJob(context.Background(), func(ctx context.Context) (*StoredResponse, error) {
+		return &StoredResponse{StatusCode: http.StatusOK}, nil
+	})
+	if err != nil {
+		t.Fatalf("StartJob error: %v", err)
+	}
+	if err := job.SetMonitorURL("/async/jobs/" + job.ID); err != nil {
+		t.Fatalf("SetMonitorURL error: %v", err)
+	}
+
+	t.Run("set retry-after", func(t *testing.T) {
+		retryDuration := 10 * time.Second
+		err := job.SetRetryAfter(retryDuration)
+		if err != nil {
+			t.Errorf("SetRetryAfter error: %v", err)
+		}
+
+		duration, ok := job.RetryAfter()
+		if !ok {
+			t.Error("expected retry-after to be set")
+		}
+		if duration != retryDuration {
+			t.Errorf("expected retry duration %v, got %v", retryDuration, duration)
+		}
+	})
+
+	t.Run("clear retry-after with zero duration", func(t *testing.T) {
+		err := job.SetRetryAfter(0)
+		if err != nil {
+			t.Errorf("SetRetryAfter error: %v", err)
+		}
+
+		_, ok := job.RetryAfter()
+		if ok {
+			t.Error("expected retry-after to be cleared")
+		}
+	})
+
+	t.Run("clear retry-after with negative duration", func(t *testing.T) {
+		err := job.SetRetryAfter(-1 * time.Second)
+		if err != nil {
+			t.Errorf("SetRetryAfter error: %v", err)
+		}
+
+		_, ok := job.RetryAfter()
+		if ok {
+			t.Error("expected retry-after to be cleared")
+		}
+	})
+}
+
+func TestJobErrorMessage(t *testing.T) {
+	mgr, _ := newTestManager(t, 0)
+
+	expectedError := "test error message"
+	job, err := mgr.StartJob(context.Background(), func(ctx context.Context) (*StoredResponse, error) {
+		return nil, errors.New(expectedError)
+	})
+
+	if err != nil {
+		t.Fatalf("StartJob error: %v", err)
+	}
+	if err := job.SetMonitorURL("/async/jobs/" + job.ID); err != nil {
+		t.Fatalf("SetMonitorURL error: %v", err)
+	}
+
+	job.Wait()
+
+	if job.ErrorMessage() != expectedError {
+		t.Errorf("expected error message %q, got %q", expectedError, job.ErrorMessage())
+	}
+}
+
+func TestJobIsTerminal(t *testing.T) {
+	mgr, _ := newTestManager(t, 0)
+
+	tests := []struct {
+		name         string
+		handler      Handler
+		shouldCancel bool
+		wantTerminal bool
+	}{
+		{
+			name: "completed job is terminal",
+			handler: func(ctx context.Context) (*StoredResponse, error) {
+				return &StoredResponse{StatusCode: http.StatusOK}, nil
+			},
+			shouldCancel: false,
+			wantTerminal: true,
+		},
+		{
+			name: "failed job is terminal",
+			handler: func(ctx context.Context) (*StoredResponse, error) {
+				return nil, errors.New("job failed")
+			},
+			shouldCancel: false,
+			wantTerminal: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			job, err := mgr.StartJob(context.Background(), tt.handler)
+			if err != nil {
+				t.Fatalf("StartJob error: %v", err)
+			}
+			if err := job.SetMonitorURL("/async/jobs/" + job.ID); err != nil {
+				t.Fatalf("SetMonitorURL error: %v", err)
+			}
+
+			if tt.shouldCancel {
+				job.cancel()
+			}
+
+			job.Wait()
+
+			if got := job.IsTerminal(); got != tt.wantTerminal {
+				t.Errorf("IsTerminal() = %v, want %v (status: %v)", got, tt.wantTerminal, job.Status)
+			}
+		})
+	}
+
+	t.Run("canceled job is terminal", func(t *testing.T) {
+		job, err := mgr.StartJob(context.Background(), func(ctx context.Context) (*StoredResponse, error) {
+			// Wait for cancellation or completion
+			<-ctx.Done()
+			return nil, ctx.Err()
+		})
+		if err != nil {
+			t.Fatalf("StartJob error: %v", err)
+		}
+		if err := job.SetMonitorURL("/async/jobs/" + job.ID); err != nil {
+			t.Fatalf("SetMonitorURL error: %v", err)
+		}
+
+		// Give the job a moment to start
+		time.Sleep(10 * time.Millisecond)
+
+		// Cancel the job
+		req := httptest.NewRequest(http.MethodDelete, job.MonitorURL(), nil)
+		rec := httptest.NewRecorder()
+		mgr.ServeMonitor(rec, req)
+
+		job.Wait()
+
+		if !job.IsTerminal() {
+			t.Errorf("canceled job should be terminal (status: %v)", job.Status)
+		}
+	})
+}
+
