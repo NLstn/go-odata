@@ -240,7 +240,10 @@ func TestEntityHandler_HasEntityLevelDefaultMaxTop(t *testing.T) {
 func TestEntityHandler_SetDeltaTracker(t *testing.T) {
 	handler, _ := setupEntityHandlerTest(t)
 
-	tracker := trackchanges.NewTracker()
+	tracker, err := trackchanges.NewTracker()
+	if err != nil {
+		t.Fatalf("Failed to create tracker: %v", err)
+	}
 	handler.SetDeltaTracker(tracker)
 
 	if handler.tracker != tracker {

@@ -36,15 +36,9 @@ func TestGeospatialConcurrentAccess(t *testing.T) {
 	}
 
 	// This should not cause a race condition anymore
-	// Note: This will panic because SQLite doesn't have SpatiaLite,
+	// Note: This will return an error because SQLite doesn't have SpatiaLite,
 	// but that's okay for the test - we're just testing for races
-	// The panic is caught and the test continues
-	func() {
-		defer func() {
-			recover() // Ignore the panic from missing SpatiaLite
-		}()
-		service.EnableGeospatial()
-	}()
+	_ = service.EnableGeospatial() // Ignore the error from missing SpatiaLite
 
 	wg.Wait()
 }

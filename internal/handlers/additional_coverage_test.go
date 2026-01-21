@@ -38,7 +38,10 @@ func setupAdditionalCoverageHandler(t *testing.T) (*EntityHandler, *gorm.DB) {
 	}
 
 	handler := NewEntityHandler(db, entityMeta, nil)
-	tracker := trackchanges.NewTracker()
+	tracker, err := trackchanges.NewTracker()
+	if err != nil {
+		t.Fatalf("Failed to create tracker: %v", err)
+	}
 	tracker.RegisterEntity(entityMeta.EntitySetName)
 	handler.SetDeltaTracker(tracker)
 	return handler, db

@@ -48,12 +48,8 @@ type Tracker struct {
 }
 
 // NewTracker creates a new change tracker.
-func NewTracker() *Tracker {
-	tracker, err := newTracker(nil)
-	if err != nil {
-		panic(err)
-	}
-	return tracker
+func NewTracker() (*Tracker, error) {
+	return newTracker(nil)
 }
 
 // NewTrackerWithDB creates a tracker backed by persistent storage.

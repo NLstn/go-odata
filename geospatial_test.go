@@ -113,14 +113,11 @@ func TestGeospatialEnabledWithSQLiteNoSpatialite(t *testing.T) {
 		t.Fatalf("NewService() error: %v", err)
 	}
 
-	// Try to enable geospatial - should panic because SQLite doesn't have SpatiaLite
-	defer func() {
-		if r := recover(); r == nil {
-			t.Errorf("Expected panic when enabling geospatial without SpatiaLite, but no panic occurred")
-		}
-	}()
-
-	service.EnableGeospatial()
+	// Try to enable geospatial - should fail because SQLite doesn't have SpatiaLite
+	err = service.EnableGeospatial()
+	if err == nil {
+		t.Errorf("Expected error when enabling geospatial without SpatiaLite, but no error occurred")
+	}
 }
 
 func TestIsGeospatialEnabled(t *testing.T) {
