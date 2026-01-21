@@ -1,7 +1,6 @@
 package core
 
 import (
-	"encoding/xml"
 	"fmt"
 	"strings"
 
@@ -30,18 +29,27 @@ func DescriptionAnnotation() *framework.TestSuite {
 				return err
 			}
 
-			body := string(resp.Body)
-			if !strings.Contains(body, "Core.Description") && !strings.Contains(body, "Org.OData.Core.V1.Description") {
-				ctx.Log("Warning: No Core.Description annotations found in metadata")
+			namespace, err := metadataNamespace(resp.Body)
+			if err != nil {
+				return err
 			}
 
-			// Parse to ensure valid XML
-			type Metadata struct {
-				XMLName xml.Name `xml:"Edmx"`
+			nameTarget := fmt.Sprintf("%s.Product/Name", namespace)
+			nameFound, err := hasAnnotation(resp.Body, nameTarget, "Org.OData.Core.V1.Description")
+			if err != nil {
+				return err
 			}
-			var metadata Metadata
-			if err := xml.Unmarshal(resp.Body, &metadata); err != nil {
-				return fmt.Errorf("failed to parse metadata XML: %w", err)
+			if !nameFound {
+				return fmt.Errorf("expected Core.Description annotation on %s", nameTarget)
+			}
+
+			descTarget := fmt.Sprintf("%s.Product/Description", namespace)
+			descFound, err := hasAnnotation(resp.Body, descTarget, "Org.OData.Core.V1.Description")
+			if err != nil {
+				return err
+			}
+			if !descFound {
+				return fmt.Errorf("expected Core.Description annotation on %s", descTarget)
 			}
 
 			return nil

@@ -50,6 +50,10 @@ func (h *EntityHandler) handleDeleteEntity(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	if !h.enforceDeleteRestrictions(w, r) {
+		return
+	}
+
 	var (
 		entity       interface{}
 		changeEvents []changeEvent
@@ -133,6 +137,10 @@ func (h *EntityHandler) handlePatchEntity(w http.ResponseWriter, r *http.Request
 			"Virtual entities require an overwrite handler for Update operation"); err != nil {
 			h.logger.Error("Error writing error response", "error", err)
 		}
+		return
+	}
+
+	if !h.enforceUpdateRestrictions(w, r, "PATCH") {
 		return
 	}
 
@@ -332,6 +340,10 @@ func (h *EntityHandler) handlePutEntity(w http.ResponseWriter, r *http.Request, 
 			"Virtual entities require an overwrite handler for Update operation"); err != nil {
 			h.logger.Error("Error writing error response", "error", err)
 		}
+		return
+	}
+
+	if !h.enforceUpdateRestrictions(w, r, "PUT") {
 		return
 	}
 
