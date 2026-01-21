@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/response"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -184,8 +185,12 @@ func (h *EntityHandler) validatePropertiesExist(data map[string]interface{}, w h
 	// Build a map of valid property names (both JSON names and struct field names)
 	validProperties := make(map[string]bool, len(h.metadata.Properties)*2)
 	var autoProperties map[string]bool
+	var computedProperties map[string]bool
+	var immutableProperties map[string]bool
 	if checkAutoProperties {
 		autoProperties = make(map[string]bool)
+		computedProperties = make(map[string]bool)
+		immutableProperties = make(map[string]bool)
 	}
 
 	for _, prop := range h.metadata.Properties {
@@ -196,6 +201,16 @@ func (h *EntityHandler) validatePropertiesExist(data map[string]interface{}, w h
 		if checkAutoProperties && prop.IsAuto {
 			autoProperties[prop.JsonName] = true
 			autoProperties[prop.Name] = true
+		}
+
+		if checkAutoProperties && hasPropertyAnnotation(&prop, metadata.CoreComputed) && !prop.IsETag {
+			computedProperties[prop.JsonName] = true
+			computedProperties[prop.Name] = true
+		}
+
+		if checkAutoProperties && hasPropertyAnnotation(&prop, metadata.CoreImmutable) {
+			immutableProperties[prop.JsonName] = true
+			immutableProperties[prop.Name] = true
 		}
 	}
 
@@ -246,28 +261,63 @@ func (h *EntityHandler) validatePropertiesExist(data map[string]interface{}, w h
 			}
 			return err
 		}
-	}
 
-	return nil
-}
-
-// validateImmutablePropertiesNotUpdated validates that immutable properties are not being updated
-func (h *EntityHandler) validateImmutablePropertiesNotUpdated(updateData map[string]interface{}, w http.ResponseWriter, r *http.Request) error {
-	for propName := range updateData {
-		// Find the property metadata
-		propMeta := h.metadata.FindProperty(propName)
-		if propMeta == nil {
-			continue
+		if checkAutoProperties && computedProperties[propName] {
+			err := fmt.Errorf("property '%s' is computed by the service and cannot be modified by clients", propName)
+			span := trace.SpanFromContext(r.Context())
+			span.RecordError(err)
+			if writeErr := response.WriteError(w, r, http.StatusBadRequest, "Invalid property modification", err.Error()); writeErr != nil {
+				h.logger.Error("Error writing error response", "error", writeErr)
+			}
+			return err
 		}
 
-		// Check if the property has the Core.Immutable annotation
-		if propMeta.Annotations != nil && propMeta.Annotations.Has("Org.OData.Core.V1.Immutable") {
-			err := fmt.Errorf("property '%s' is immutable and cannot be modified", propMeta.JsonName)
-			if writeErr := response.WriteError(w, r, http.StatusBadRequest, "Cannot update immutable property", err.Error()); writeErr != nil {
+		if checkAutoProperties && immutableProperties[propName] {
+			err := fmt.Errorf("property '%s' is immutable and cannot be modified by clients", propName)
+			span := trace.SpanFromContext(r.Context())
+			span.RecordError(err)
+			if writeErr := response.WriteError(w, r, http.StatusBadRequest, "Invalid property modification", err.Error()); writeErr != nil {
 				h.logger.Error("Error writing error response", "error", writeErr)
 			}
 			return err
 		}
 	}
+
 	return nil
+}
+
+func (h *EntityHandler) validateComputedPropertiesNotProvided(data map[string]interface{}, w http.ResponseWriter, r *http.Request) error {
+	for propName := range data {
+		if strings.HasPrefix(propName, "@") {
+			continue
+		}
+		if idx := strings.Index(propName, "@"); idx > 0 {
+			propertyPart := propName[:idx]
+			if _, ok := h.propertyMap[propertyPart]; ok {
+				continue
+			}
+		}
+
+		prop := h.metadata.FindProperty(propName)
+		if prop == nil || prop.IsAuto || prop.IsETag || prop.IsKey || !hasPropertyAnnotation(prop, metadata.CoreComputed) {
+			continue
+		}
+
+		err := fmt.Errorf("property '%s' is computed by the service and cannot be set by clients", propName)
+		span := trace.SpanFromContext(r.Context())
+		span.RecordError(err)
+		if writeErr := response.WriteError(w, r, http.StatusBadRequest, "Invalid property modification", err.Error()); writeErr != nil {
+			h.logger.Error("Error writing error response", "error", writeErr)
+		}
+		return err
+	}
+
+	return nil
+}
+
+func hasPropertyAnnotation(prop *metadata.PropertyMetadata, term string) bool {
+	if prop == nil || prop.Annotations == nil {
+		return false
+	}
+	return prop.Annotations.Has(term)
 }

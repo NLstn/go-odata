@@ -2,7 +2,6 @@ package core
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/nlstn/go-odata/compliance-suite/framework"
 )
@@ -29,9 +28,18 @@ func ImmutableAnnotation() *framework.TestSuite {
 				return err
 			}
 
-			body := string(resp.Body)
-			if !strings.Contains(body, "Core.Immutable") && !strings.Contains(body, "Org.OData.Core.V1.Immutable") {
-				ctx.Log("Warning: No Core.Immutable annotations found in metadata")
+			namespace, err := metadataNamespace(resp.Body)
+			if err != nil {
+				return err
+			}
+
+			target := fmt.Sprintf("%s.Product/SerialNumber", namespace)
+			found, err := hasAnnotation(resp.Body, target, "Org.OData.Core.V1.Immutable")
+			if err != nil {
+				return err
+			}
+			if !found {
+				return fmt.Errorf("expected Core.Immutable annotation on %s", target)
 			}
 
 			return nil
@@ -75,7 +83,7 @@ func ImmutableAnnotation() *framework.TestSuite {
 
 	suite.AddTest(
 		"immutable_property_not_updatable",
-		"PATCH request should reject updates to immutable properties or keep the immutable value unchanged",
+		"PATCH request should reject or ignore updates to immutable properties (enforcement not yet implemented)",
 		func(ctx *framework.TestContext) error {
 			// First create an entity with an immutable property
 			createPayload := `{
@@ -101,10 +109,6 @@ func ImmutableAnnotation() *framework.TestSuite {
 			if !ok {
 				return fmt.Errorf("created entity missing ID field")
 			}
-			originalSerialNumber, ok := created["SerialNumber"]
-			if !ok {
-				return fmt.Errorf("created entity missing SerialNumber field")
-			}
 
 			// Attempt to update immutable property SerialNumber
 			updatePayload := `{"SerialNumber": "SN-MODIFIED"}`
@@ -114,33 +118,33 @@ func ImmutableAnnotation() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode == 400 || resp.StatusCode == 409 {
-				return nil
-			}
-
-			if resp.StatusCode != 200 && resp.StatusCode != 204 {
+			if resp.StatusCode != 200 && resp.StatusCode != 204 && (resp.StatusCode < 400 || resp.StatusCode >= 500) {
 				return fmt.Errorf("unexpected status for immutable property update, got %d: %s", resp.StatusCode, string(resp.Body))
 			}
 
-			fetchResp, err := ctx.GET(fmt.Sprintf("/Products(%v)", id),
-				framework.Header{Key: "Accept", Value: "application/json"})
+			if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+				return assertODataError(resp)
+			}
+
+			getResp, err := ctx.GET(fmt.Sprintf("/Products(%v)", id))
 			if err != nil {
 				return err
 			}
-			if err := ctx.AssertStatusCode(fetchResp, 200); err != nil {
+			if err := ctx.AssertStatusCode(getResp, 200); err != nil {
 				return err
 			}
 
 			var fetched map[string]interface{}
-			if err := ctx.GetJSON(fetchResp, &fetched); err != nil {
+			if err := ctx.GetJSON(getResp, &fetched); err != nil {
 				return err
 			}
-			currentSerialNumber, ok := fetched["SerialNumber"]
+
+			serialNumber, ok := fetched["SerialNumber"]
 			if !ok {
 				return fmt.Errorf("fetched entity missing SerialNumber field")
 			}
-			if currentSerialNumber != originalSerialNumber {
-				return fmt.Errorf("immutable property changed: expected %v, got %v", originalSerialNumber, currentSerialNumber)
+			if serialNumber != "SN-IMMUTABLE-001" {
+				return fmt.Errorf("immutable property changed unexpectedly: got %v", serialNumber)
 			}
 
 			return nil

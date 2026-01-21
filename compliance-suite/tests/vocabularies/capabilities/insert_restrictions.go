@@ -2,7 +2,6 @@ package capabilities
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/nlstn/go-odata/compliance-suite/framework"
 )
@@ -20,19 +19,18 @@ func InsertRestrictions() *framework.TestSuite {
 		"metadata_includes_insert_restrictions",
 		"Metadata document includes Capabilities.InsertRestrictions annotations where defined",
 		func(ctx *framework.TestContext) error {
-			resp, err := ctx.GET("/$metadata", framework.Header{Key: "Accept", Value: "application/xml"})
+			metadataXML, err := fetchMetadata(ctx)
 			if err != nil {
 				return err
 			}
 
-			if err := ctx.AssertStatusCode(resp, 200); err != nil {
+			metadataInfo, err := parseCapabilitiesMetadata(metadataXML)
+			if err != nil {
 				return err
 			}
 
-			body := string(resp.Body)
-			if !strings.Contains(body, "Capabilities.InsertRestrictions") &&
-				!strings.Contains(body, "Org.OData.Capabilities.V1.InsertRestrictions") {
-				ctx.Log("Warning: No Capabilities.InsertRestrictions annotations found in metadata")
+			if len(metadataInfo.insertRestricted) == 0 {
+				return fmt.Errorf("no entity sets with Insertable=false found in metadata")
 			}
 
 			return nil
@@ -43,9 +41,31 @@ func InsertRestrictions() *framework.TestSuite {
 		"non_insertable_entity_set_rejects_post",
 		"POST to entity set with Insertable=false returns appropriate error",
 		func(ctx *framework.TestContext) error {
-			// This test would need to know which entity sets are non-insertable
-			// For now, we'll skip it unless we can discover this from metadata
-			return ctx.Skip("Test requires entity set known to be non-insertable")
+			metadataXML, err := fetchMetadata(ctx)
+			if err != nil {
+				return err
+			}
+
+			metadataInfo, err := parseCapabilitiesMetadata(metadataXML)
+			if err != nil {
+				return err
+			}
+
+			if len(metadataInfo.insertRestricted) == 0 {
+				return fmt.Errorf("no entity sets with Insertable=false found in metadata")
+			}
+
+			for _, setInfo := range metadataInfo.insertRestricted {
+				resp, err := ctx.POST(fmt.Sprintf("/%s", setInfo.name), map[string]interface{}{})
+				if err != nil {
+					return err
+				}
+				if resp.StatusCode < 400 || resp.StatusCode >= 500 {
+					return fmt.Errorf("expected 4xx for non-insertable entity set %s, got %d: %s", setInfo.name, resp.StatusCode, string(resp.Body))
+				}
+			}
+
+			return nil
 		},
 	)
 
