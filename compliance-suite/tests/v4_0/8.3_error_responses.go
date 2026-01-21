@@ -21,6 +21,35 @@ func ErrorResponses() *framework.TestSuite {
 	return suite
 }
 
+// validateErrorCodeAndMessage validates that an error object has required 'code' and 'message' fields
+// per OData v4 specification. The 'code' must be a non-empty string, and 'message' must be either
+// a non-empty string or an object with a non-empty 'value' property.
+func validateErrorCodeAndMessage(errorObj map[string]interface{}) error {
+	code, ok := errorObj["code"].(string)
+	if !ok || code == "" {
+		return fmt.Errorf("missing or empty 'code' in error object")
+	}
+
+	message, ok := errorObj["message"]
+	if !ok {
+		return fmt.Errorf("missing 'message' in error object")
+	}
+	switch msg := message.(type) {
+	case string:
+		if msg == "" {
+			return fmt.Errorf("'message' must not be empty")
+		}
+	case map[string]interface{}:
+		value, ok := msg["value"].(string)
+		if !ok || value == "" {
+			return fmt.Errorf("message object must have non-empty 'value'")
+		}
+	default:
+		return fmt.Errorf("message must be string or object, got %T", message)
+	}
+	return nil
+}
+
 func registerErrorResponseTests(suite *framework.TestSuite) {
 	invalidProductPath := nonExistingEntityPath("Products")
 
@@ -279,27 +308,8 @@ func registerErrorResponseTests(suite *framework.TestSuite) {
 				return fmt.Errorf("no 'error' object in response")
 			}
 
-			code, ok := errorObj["code"].(string)
-			if !ok || code == "" {
-				return fmt.Errorf("missing or empty 'code' in error object")
-			}
-
-			message, ok := errorObj["message"]
-			if !ok {
-				return fmt.Errorf("missing 'message' in error object")
-			}
-			switch msg := message.(type) {
-			case string:
-				if msg == "" {
-					return fmt.Errorf("'message' must not be empty")
-				}
-			case map[string]interface{}:
-				value, ok := msg["value"].(string)
-				if !ok || value == "" {
-					return fmt.Errorf("message object must have non-empty 'value'")
-				}
-			default:
-				return fmt.Errorf("message must be string or object, got %T", message)
+			if err := validateErrorCodeAndMessage(errorObj); err != nil {
+				return err
 			}
 
 			// Target is optional, but if present should be a string
@@ -344,27 +354,8 @@ func registerErrorResponseTests(suite *framework.TestSuite) {
 				return fmt.Errorf("no 'error' object in response")
 			}
 
-			code, ok := errorObj["code"].(string)
-			if !ok || code == "" {
-				return fmt.Errorf("missing or empty 'code' in error object")
-			}
-
-			message, ok := errorObj["message"]
-			if !ok {
-				return fmt.Errorf("missing 'message' in error object")
-			}
-			switch msg := message.(type) {
-			case string:
-				if msg == "" {
-					return fmt.Errorf("'message' must not be empty")
-				}
-			case map[string]interface{}:
-				value, ok := msg["value"].(string)
-				if !ok || value == "" {
-					return fmt.Errorf("message object must have non-empty 'value'")
-				}
-			default:
-				return fmt.Errorf("message must be string or object, got %T", message)
+			if err := validateErrorCodeAndMessage(errorObj); err != nil {
+				return err
 			}
 
 			// Details is optional, but if present must be an array
@@ -472,27 +463,8 @@ func registerErrorResponseTests(suite *framework.TestSuite) {
 			}
 
 			// Must have code and message
-			code, ok := errorObj["code"].(string)
-			if !ok || code == "" {
-				return fmt.Errorf("missing or empty 'code' in error")
-			}
-
-			message, ok := errorObj["message"]
-			if !ok {
-				return fmt.Errorf("missing 'message' in error")
-			}
-			switch msg := message.(type) {
-			case string:
-				if msg == "" {
-					return fmt.Errorf("'message' must not be empty")
-				}
-			case map[string]interface{}:
-				value, ok := msg["value"].(string)
-				if !ok || value == "" {
-					return fmt.Errorf("message object must have non-empty 'value'")
-				}
-			default:
-				return fmt.Errorf("message must be string or object, got %T", message)
+			if err := validateErrorCodeAndMessage(errorObj); err != nil {
+				return err
 			}
 
 			// Server may include details for multiple validation errors
