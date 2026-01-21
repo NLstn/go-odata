@@ -79,12 +79,6 @@ func hasAnnotation(metadataXML []byte, target, term string) (bool, error) {
 				// Check if this is the target entity/complex type
 				for _, attr := range node.Attr {
 					if attr.Name.Local == "Name" {
-						// Construct full name with namespace if target contains namespace
-						fullName := attr.Value
-						if strings.Contains(targetEntityType, ".") {
-							// Target includes namespace, need to match exactly
-							// We'll check this when we know the namespace
-						}
 						if strings.HasSuffix(targetEntityType, "."+attr.Value) || targetEntityType == attr.Value {
 							inTargetElement = true
 							targetDepth = currentDepth
