@@ -395,8 +395,9 @@ func TestPreferHeader_CaseInsensitive(t *testing.T) {
 
 		service.ServeHTTP(w, req)
 
-		if w.Code != http.StatusNoContent {
-			t.Errorf("For Prefer header '%s', Status = %v, want %v", preferValue, w.Code, http.StatusNoContent)
+		// Per OData v4.01 spec, POST with return=minimal should return 201 Created
+		if w.Code != http.StatusCreated {
+			t.Errorf("For Prefer header '%s', Status = %v, want %v", preferValue, w.Code, http.StatusCreated)
 		}
 	}
 }
@@ -451,9 +452,9 @@ func TestPreferHeader_MultiplePreferences(t *testing.T) {
 
 	service.ServeHTTP(w, req)
 
-	// Should still honor return=minimal
-	if w.Code != http.StatusNoContent {
-		t.Errorf("Status = %v, want %v", w.Code, http.StatusNoContent)
+	// Per OData v4.01 spec, POST with return=minimal should return 201 Created
+	if w.Code != http.StatusCreated {
+		t.Errorf("Status = %v, want %v", w.Code, http.StatusCreated)
 	}
 
 	preferenceApplied := w.Header().Get("Preference-Applied")
