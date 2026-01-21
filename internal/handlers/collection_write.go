@@ -267,11 +267,12 @@ func (h *EntityHandler) validateRequiredProperties(requestData map[string]interf
 }
 
 // validatePropertiesExistForCreate validates that all properties in requestData are valid entity properties.
-// This version also validates computed and immutable properties to reject client-provided values.
+// This version also validates computed properties to reject client-provided values.
+// Immutable properties are allowed during creation (they can only be set once during POST).
 func (h *EntityHandler) validatePropertiesExistForCreate(requestData map[string]interface{}, w http.ResponseWriter, r *http.Request) error {
-	// Use shared validation function with checkAutoProperties=true
-	// This will validate auto, computed, and immutable properties
-	return h.validatePropertiesExist(requestData, w, r, true)
+	// Use shared validation function with checkAutoProperties=true and checkImmutableProperties=false
+	// This will validate auto and computed properties, but NOT immutable properties (allowed during create)
+	return h.validatePropertiesExist(requestData, w, r, true, false)
 }
 
 // filterInstanceAnnotations removes instance annotations from the request payload.
