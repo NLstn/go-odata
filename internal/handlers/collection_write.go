@@ -76,10 +76,6 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if err := h.validateComputedPropertiesNotProvided(requestData, w, r); err != nil {
-		return
-	}
-
 	entity := reflect.New(h.metadata.EntityType).Interface()
 
 	jsonData, err := json.Marshal(requestData)
@@ -106,10 +102,7 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 			return newTransactionHandledError(err)
 		}
 
-		if err := h.validateAutoPropertiesNotProvided(requestData); err != nil {
-			WriteError(w, r, http.StatusBadRequest, "Invalid property", err.Error())
-			return newTransactionHandledError(err)
-		}
+		h.filterInstanceAnnotations(requestData)
 
 		if err := h.validateRequiredProperties(requestData); err != nil {
 			WriteError(w, r, http.StatusBadRequest, "Missing required properties", err.Error())
@@ -274,13 +267,28 @@ func (h *EntityHandler) validateRequiredProperties(requestData map[string]interf
 }
 
 // validatePropertiesExistForCreate validates that all properties in requestData are valid entity properties.
-// This version allows @odata.bind annotations for navigation properties and ignores entity-level annotations.
+// This version also validates computed and immutable properties to reject client-provided values.
 func (h *EntityHandler) validatePropertiesExistForCreate(requestData map[string]interface{}, w http.ResponseWriter, r *http.Request) error {
-	// Use shared validation function with checkAutoProperties=false
-	// (auto properties are validated separately via validateAutoPropertiesNotProvided)
-	return h.validatePropertiesExist(requestData, w, r, false)
+	// Use shared validation function with checkAutoProperties=true
+	// This will validate auto, computed, and immutable properties
+	return h.validatePropertiesExist(requestData, w, r, true)
 }
 
+// filterInstanceAnnotations removes instance annotations from the request payload.
+// @odata.* annotations (such as @odata.bind) are preserved and handled separately.
+func (h *EntityHandler) filterInstanceAnnotations(requestData map[string]interface{}) {
+	// Explicitly filter instance annotations (properties starting with "@") from the request payload.
+	// @odata.* annotations (such as @odata.bind) are handled separately (e.g., by processODataBindAnnotations)
+	// and are therefore preserved here; other instance annotations are removed from requestData.
+	for key := range requestData {
+		if strings.HasPrefix(key, "@") && !strings.HasPrefix(key, "@odata.") {
+			delete(requestData, key)
+		}
+	}
+}
+
+// validateAutoPropertiesNotProvided is deprecated. Use validatePropertiesExistForCreate instead.
+// This function is kept for backward compatibility with existing tests.
 func (h *EntityHandler) validateAutoPropertiesNotProvided(requestData map[string]interface{}) error {
 	var autoFields []string
 	for _, prop := range h.metadata.Properties {
