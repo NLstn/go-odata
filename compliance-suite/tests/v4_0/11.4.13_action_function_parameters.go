@@ -108,12 +108,11 @@ func ActionFunctionParameters() *framework.TestSuite {
 				return err
 			}
 
-			// Should return 400 or 500
 			if err := ctx.AssertStatusCode(resp, 400); err != nil {
-				return ctx.AssertStatusCode(resp, 500)
+				return err
 			}
 
-			return nil
+			return ctx.AssertJSONField(resp, "error")
 		},
 	)
 
@@ -135,12 +134,11 @@ func ActionFunctionParameters() *framework.TestSuite {
 				return err
 			}
 
-			// Should return 400 or 500
 			if err := ctx.AssertStatusCode(resp, 400); err != nil {
-				return ctx.AssertStatusCode(resp, 500)
+				return err
 			}
 
-			return nil
+			return ctx.AssertJSONField(resp, "error")
 		},
 	)
 
