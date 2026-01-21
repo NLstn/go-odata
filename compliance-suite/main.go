@@ -14,6 +14,8 @@ import (
 	"github.com/nlstn/go-odata/compliance-suite/framework"
 	v4_0 "github.com/nlstn/go-odata/compliance-suite/tests/v4_0"
 	v4_01 "github.com/nlstn/go-odata/compliance-suite/tests/v4_01"
+	"github.com/nlstn/go-odata/compliance-suite/tests/vocabularies/capabilities"
+	"github.com/nlstn/go-odata/compliance-suite/tests/vocabularies/core"
 )
 
 var (
@@ -649,6 +651,43 @@ func main() {
 			Name:    "14.1_vocabulary_annotations",
 			Version: "4.0",
 			Suite:   v4_0.VocabularyAnnotations,
+		})
+	}
+
+	// Register vocabulary tests (separate from protocol versions)
+	if *version == "all" || *version == "vocabularies" || *version == "vocab" {
+		// Core vocabulary tests
+		testSuites = append(testSuites, TestSuiteInfo{
+			Name:    "vocab_core_computed",
+			Version: "vocabularies",
+			Suite:   core.ComputedAnnotation,
+		})
+		testSuites = append(testSuites, TestSuiteInfo{
+			Name:    "vocab_core_immutable",
+			Version: "vocabularies",
+			Suite:   core.ImmutableAnnotation,
+		})
+		testSuites = append(testSuites, TestSuiteInfo{
+			Name:    "vocab_core_description",
+			Version: "vocabularies",
+			Suite:   core.DescriptionAnnotation,
+		})
+
+		// Capabilities vocabulary tests
+		testSuites = append(testSuites, TestSuiteInfo{
+			Name:    "vocab_capabilities_insert",
+			Version: "vocabularies",
+			Suite:   capabilities.InsertRestrictions,
+		})
+		testSuites = append(testSuites, TestSuiteInfo{
+			Name:    "vocab_capabilities_update",
+			Version: "vocabularies",
+			Suite:   capabilities.UpdateRestrictions,
+		})
+		testSuites = append(testSuites, TestSuiteInfo{
+			Name:    "vocab_capabilities_delete",
+			Version: "vocabularies",
+			Suite:   capabilities.DeleteRestrictions,
 		})
 	}
 

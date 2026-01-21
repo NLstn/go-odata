@@ -37,13 +37,14 @@ func (ProductStatus) EnumMembers() map[string]int {
 // Product represents a product entity for the compliance server
 type Product struct {
 	ID              uuid.UUID     `json:"ID" gorm:"type:char(36);primaryKey" odata:"key,generate=uuid"`
-	Name            string        `json:"Name" gorm:"not null" odata:"required,maxlength=100,searchable"`
-	Description     *string       `json:"Description" odata:"nullable,maxlength=500"` // Nullable description field
+	Name            string        `json:"Name" gorm:"not null" odata:"required,maxlength=100,searchable,annotation:Core.Description=Product display name"`
+	Description     *string       `json:"Description" odata:"nullable,maxlength=500,annotation:Core.Description=Detailed product description"` // Nullable description field
 	Price           float64       `json:"Price" gorm:"not null" odata:"required,precision=10,scale=2"`
 	CategoryID      *uuid.UUID    `json:"CategoryID" gorm:"type:char(36)" odata:"nullable"` // Foreign key for Category navigation property
 	Status          ProductStatus `json:"Status" gorm:"not null" odata:"enum=ProductStatus,flags"`
 	Version         int           `json:"Version" gorm:"default:1" odata:"etag"` // Version field used for optimistic concurrency control via ETag
-	CreatedAt       time.Time     `json:"CreatedAt" gorm:"not null"`
+	CreatedAt       time.Time     `json:"CreatedAt" gorm:"not null" odata:"annotation:Core.Computed"`
+	SerialNumber    *string       `json:"SerialNumber,omitempty" gorm:"type:varchar(50)" odata:"nullable,maxlength=50,annotation:Core.Immutable,annotation:Core.Description=Unique serial number assigned at creation"`
 	ProductType     string        `json:"ProductType,omitempty" gorm:"default:'Product'" odata:"maxlength=50"` // Discriminator for type inheritance
 	SpecialProperty *string       `json:"SpecialProperty,omitempty" odata:"nullable,maxlength=200"`            // Property for SpecialProduct derived type
 	SpecialFeature  *string       `json:"SpecialFeature,omitempty" odata:"nullable,maxlength=100"`             // Property for SpecialProduct derived type
