@@ -20,10 +20,10 @@ type expandTestTag struct {
 }
 
 type expandTestProduct struct {
-	ID       int                  `json:"ID" odata:"key"`
-	Name     string               `json:"name"`
-	Category *expandTestCategory  `json:"category,omitempty" gorm:"foreignKey:CategoryID"`
-	Tags     []expandTestTag      `json:"tags,omitempty" gorm:"foreignKey:ProductID"`
+	ID       int                 `json:"ID" odata:"key"`
+	Name     string              `json:"name"`
+	Category *expandTestCategory `json:"category,omitempty" gorm:"foreignKey:CategoryID"`
+	Tags     []expandTestTag     `json:"tags,omitempty" gorm:"foreignKey:ProductID"`
 }
 
 func getExpandTestMetadata(t *testing.T) *metadata.EntityMetadata {
@@ -58,7 +58,7 @@ func TestNeedsPerParentExpand(t *testing.T) {
 	t.Run("non-navigation prop returns false", func(t *testing.T) {
 		expandOpt := ExpandOption{}
 		navProp := &metadata.PropertyMetadata{
-			Name:            "Name",
+			Name:             "Name",
 			IsNavigationProp: false,
 		}
 		result := needsPerParentExpand(expandOpt, navProp)

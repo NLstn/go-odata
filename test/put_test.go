@@ -41,7 +41,9 @@ func setupPutTestService(t *testing.T) (*odata.Service, *gorm.DB) {
 	}
 
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	if err := service.RegisterEntity(PutTestProduct{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
 	}
@@ -60,7 +62,9 @@ func setupPutCompositeKeyTestService(t *testing.T) (*odata.Service, *gorm.DB) {
 	}
 
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	if err := service.RegisterEntity(PutTestProductCompositeKey{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
 	}

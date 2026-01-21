@@ -69,7 +69,9 @@ func TestSingleEntityNavigationPropertyFilter(t *testing.T) {
 
 	// Create OData service
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	service.RegisterEntity(&Club{})
 	service.RegisterEntity(&Team{})
 	service.RegisterEntity(&TeamMember{})
@@ -198,7 +200,9 @@ func TestCollectionNavigationPropertyStillRequiresLambda(t *testing.T) {
 
 	// Create OData service
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	service.RegisterEntity(&Product{})
 	service.RegisterEntity(&ProductDescription{})
 
@@ -251,7 +255,9 @@ func TestMultiLevelNavigationPathRejection(t *testing.T) {
 
 	// Create OData service
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	service.RegisterEntity(&Country{})
 	service.RegisterEntity(&Club{})
 	service.RegisterEntity(&Team{})

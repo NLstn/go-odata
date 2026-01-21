@@ -61,7 +61,9 @@ func setupTestDB(t *testing.T) *gorm.DB {
 func TestIssue1_ExpandWithSelect(t *testing.T) {
 	db := setupTestDB(t)
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	if err := service.RegisterEntity(&Product{}); err != nil {
 		t.Fatalf("Failed to register Product entity: %v", err)
 	}
@@ -166,7 +168,9 @@ func TestIssue1_ExpandWithSelect(t *testing.T) {
 func TestIssue2_SelectExpandedEntityProperty(t *testing.T) {
 	db := setupTestDB(t)
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	if err := service.RegisterEntity(&Product{}); err != nil {
 		t.Fatalf("Failed to register Product entity: %v", err)
 	}

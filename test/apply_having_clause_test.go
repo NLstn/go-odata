@@ -280,7 +280,9 @@ func setupHavingTestDB(t *testing.T) *gorm.DB {
 
 func setupHavingTestService(t *testing.T, db *gorm.DB) http.Handler {
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	if err := service.RegisterEntity(&HavingProduct{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
 	}

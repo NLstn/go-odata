@@ -41,7 +41,9 @@ func setupOverwriteTestService(t *testing.T) *Service {
 	t.Helper()
 	db := setupOverwriteTestDB(t)
 	service, err := NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 
 	if err := service.RegisterEntity(&TestOverwriteProduct{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
@@ -53,7 +55,9 @@ func setupOverwriteTestService(t *testing.T) *Service {
 func TestSetEntityOverwrite_EntityNotFound(t *testing.T) {
 	db := setupOverwriteTestDB(t)
 	service, err := NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 
 	err = service.SetEntityOverwrite("NonExistent", &EntityOverwrite{})
 	if err == nil {
@@ -702,7 +706,9 @@ func TestOverwriteWithInvalidQueryOptionStillValidated(t *testing.T) {
 func TestSetOverwriteMethodsForUnregisteredEntity(t *testing.T) {
 	db := setupOverwriteTestDB(t)
 	service, err := NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 
 	tests := []struct {
 		name   string

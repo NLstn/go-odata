@@ -32,7 +32,9 @@ func setupVirtualTestDB(t *testing.T) *gorm.DB {
 func TestRegisterVirtualEntity(t *testing.T) {
 	db := setupVirtualTestDB(t)
 	service, err := NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 
 	err = service.RegisterVirtualEntity(&TestVirtualProduct{})
 	if err != nil {
@@ -54,7 +56,9 @@ func TestRegisterVirtualEntity(t *testing.T) {
 func TestRegisterVirtualEntity_DuplicateEntitySet(t *testing.T) {
 	db := setupVirtualTestDB(t)
 	service, err := NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 
 	// Register once
 	err = service.RegisterVirtualEntity(&TestVirtualProduct{})
@@ -77,7 +81,9 @@ func TestRegisterVirtualEntity_DuplicateEntitySet(t *testing.T) {
 func TestVirtualEntity_GetCollection_WithoutOverwrite(t *testing.T) {
 	db := setupVirtualTestDB(t)
 	service, err := NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 
 	err = service.RegisterVirtualEntity(&TestVirtualProduct{})
 	if err != nil {
@@ -113,7 +119,9 @@ func TestVirtualEntity_GetCollection_WithoutOverwrite(t *testing.T) {
 func TestVirtualEntity_GetEntity_WithoutOverwrite(t *testing.T) {
 	db := setupVirtualTestDB(t)
 	service, err := NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 
 	err = service.RegisterVirtualEntity(&TestVirtualProduct{})
 	if err != nil {
@@ -138,7 +146,9 @@ func TestVirtualEntity_GetEntity_WithoutOverwrite(t *testing.T) {
 func TestVirtualEntity_Create_WithoutOverwrite(t *testing.T) {
 	db := setupVirtualTestDB(t)
 	service, err := NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 
 	err = service.RegisterVirtualEntity(&TestVirtualProduct{})
 	if err != nil {
@@ -164,7 +174,9 @@ func TestVirtualEntity_Create_WithoutOverwrite(t *testing.T) {
 func TestVirtualEntity_Update_WithoutOverwrite(t *testing.T) {
 	db := setupVirtualTestDB(t)
 	service, err := NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 
 	err = service.RegisterVirtualEntity(&TestVirtualProduct{})
 	if err != nil {
@@ -193,7 +205,9 @@ func TestVirtualEntity_Update_WithoutOverwrite(t *testing.T) {
 func TestVirtualEntity_Delete_WithoutOverwrite(t *testing.T) {
 	db := setupVirtualTestDB(t)
 	service, err := NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 
 	err = service.RegisterVirtualEntity(&TestVirtualProduct{})
 	if err != nil {
@@ -219,7 +233,9 @@ func TestVirtualEntity_Delete_WithoutOverwrite(t *testing.T) {
 func TestVirtualEntity_WithOverwriteHandlers(t *testing.T) {
 	db := setupVirtualTestDB(t)
 	service, err := NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 
 	err = service.RegisterVirtualEntity(&TestVirtualProduct{})
 	if err != nil {
@@ -376,7 +392,9 @@ func TestVirtualEntity_WithOverwriteHandlers(t *testing.T) {
 func TestVirtualEntity_PartialOverwriteHandlers(t *testing.T) {
 	db := setupVirtualTestDB(t)
 	service, err := NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 
 	err = service.RegisterVirtualEntity(&TestVirtualProduct{})
 	if err != nil {
@@ -426,7 +444,9 @@ func TestVirtualEntity_PartialOverwriteHandlers(t *testing.T) {
 func TestVirtualEntity_AppearsInServiceDocument(t *testing.T) {
 	db := setupVirtualTestDB(t)
 	service, err := NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 
 	err = service.RegisterVirtualEntity(&TestVirtualProduct{})
 	if err != nil {
@@ -475,7 +495,9 @@ func TestVirtualEntity_AppearsInServiceDocument(t *testing.T) {
 func TestVirtualEntity_ErrorHandling(t *testing.T) {
 	db := setupVirtualTestDB(t)
 	service, err := NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 
 	err = service.RegisterVirtualEntity(&TestVirtualProduct{})
 	if err != nil {

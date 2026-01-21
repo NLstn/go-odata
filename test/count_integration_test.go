@@ -48,7 +48,9 @@ func TestIntegrationCountEndpoint(t *testing.T) {
 
 	// Initialize OData service
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	_ = service.RegisterEntity(&CountTestProduct{})
 
 	tests := []struct {
@@ -152,7 +154,9 @@ func TestIntegrationCountEndpointVerifyCollectionStillWorks(t *testing.T) {
 
 	// Initialize OData service
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	_ = service.RegisterEntity(&CountTestProduct{})
 
 	// Test that regular collection endpoint still works
@@ -206,7 +210,9 @@ func TestIntegrationCountEndpointODataV4Compliance(t *testing.T) {
 
 	// Initialize OData service
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	_ = service.RegisterEntity(&CountTestProduct{})
 
 	tests := []struct {

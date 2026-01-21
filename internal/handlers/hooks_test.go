@@ -84,32 +84,32 @@ func createHandlerWithHook(hookName string, enabled bool) *EntityHandler {
 
 func TestCallBeforeCreate(t *testing.T) {
 	tests := []struct {
-		name       string
-		entity     interface{}
-		hasHook    bool
-		wantErr    bool
-		wantName   string
+		name     string
+		entity   interface{}
+		hasHook  bool
+		wantErr  bool
+		wantName string
 	}{
 		{
-			name:       "With hook that succeeds",
-			entity:     &HookedTestEntity{Name: "test"},
-			hasHook:    true,
-			wantErr:    false,
-			wantName:   "beforeCreate:test",
+			name:     "With hook that succeeds",
+			entity:   &HookedTestEntity{Name: "test"},
+			hasHook:  true,
+			wantErr:  false,
+			wantName: "beforeCreate:test",
 		},
 		{
-			name:       "With hook that fails",
-			entity:     &HookedTestEntity{Name: "error"},
-			hasHook:    true,
-			wantErr:    true,
-			wantName:   "error",
+			name:     "With hook that fails",
+			entity:   &HookedTestEntity{Name: "error"},
+			hasHook:  true,
+			wantErr:  true,
+			wantName: "error",
 		},
 		{
-			name:       "Without hook",
-			entity:     &HookedTestEntity{Name: "test"},
-			hasHook:    false,
-			wantErr:    false,
-			wantName:   "test",
+			name:     "Without hook",
+			entity:   &HookedTestEntity{Name: "test"},
+			hasHook:  false,
+			wantErr:  false,
+			wantName: "test",
 		},
 	}
 

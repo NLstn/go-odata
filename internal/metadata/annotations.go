@@ -330,12 +330,12 @@ func ParseAnnotationTerm(term string) (string, string, error) {
 	// Split by semicolon first to separate term from qualifier segments
 	segments := strings.Split(term, ";")
 	termPart := strings.TrimSpace(segments[0])
-	
+
 	// Check if the main term part (before any semicolons) contains a value
 	if strings.Contains(termPart, "=") {
 		return "", "", fmt.Errorf("annotation term should not contain a value; got %q", term)
 	}
-	
+
 	annotation, err := ParseAnnotationTag(term)
 	if err != nil {
 		return "", "", err

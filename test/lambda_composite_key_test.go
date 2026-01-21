@@ -58,7 +58,9 @@ func setupLambdaCompositeKeyTest(t *testing.T) (*odata.Service, *gorm.DB) {
 	db.Create(&OrderLine{LineID: 4, OrderID: 2, Version: "v1", ProductName: "Monitor", Quantity: 1, UnitPrice: 300.0})
 
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 
 	if err := service.RegisterEntity(&OrderHeader{}); err != nil {
 		t.Fatalf("Failed to register OrderHeader entity: %v", err)

@@ -81,7 +81,9 @@ func TestEnumHasFunction(t *testing.T) {
 
 	// Create OData service
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	if err := service.RegisterEntity(&EnumProduct{}); err != nil {
 		t.Fatalf("Failed to register EnumProduct entity: %v", err)
 	}
@@ -188,7 +190,9 @@ func TestEnumHasFunctionWithNot(t *testing.T) {
 
 	// Create OData service
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	if err := service.RegisterEntity(&EnumProduct{}); err != nil {
 		t.Fatalf("Failed to register EnumProduct entity: %v", err)
 	}
@@ -260,7 +264,9 @@ func TestEnumMetadata(t *testing.T) {
 
 	// Create OData service
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	if err := service.RegisterEntity(&EnumProduct{}); err != nil {
 		t.Fatalf("Failed to register EnumProduct entity: %v", err)
 	}
@@ -395,7 +401,9 @@ func TestEnumStatusValues(t *testing.T) {
 
 	// Create OData service
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	if err := service.RegisterEntity(&EnumProduct{}); err != nil {
 		t.Fatalf("Failed to register EnumProduct entity: %v", err)
 	}
