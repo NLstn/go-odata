@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/nlstn/go-odata/internal/metadata"
 )
 
 // Additional simple tests to boost coverage
@@ -75,15 +77,18 @@ func TestIsMethodDisabled(t *testing.T) {
 
 // TestHasEntityLevelDefaultMaxTop tests default max top checking
 func TestHasEntityLevelDefaultMaxTop(t *testing.T) {
-	handler := NewEntityHandler(nil, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	meta := &metadata.EntityMetadata{
+		EntityName: "Test",
+	}
+	handler := NewEntityHandler(nil, meta, slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 	has := handler.HasEntityLevelDefaultMaxTop()
 	if has {
-		t.Log("Has entity level default max top")
+		t.Error("Expected HasEntityLevelDefaultMaxTop to return false initially")
 	}
 
 	maxTop := 100
-	handler.SetDefaultMaxTop(&maxTop)
+	handler.metadata.DefaultMaxTop = &maxTop
 	has = handler.HasEntityLevelDefaultMaxTop()
 	if !has {
 		t.Error("Expected HasEntityLevelDefaultMaxTop to return true")
@@ -108,11 +113,21 @@ func TestIsGeospatialEnabled(t *testing.T) {
 
 // TestIsSingleton tests singleton check
 func TestIsSingleton(t *testing.T) {
-	handler := NewEntityHandler(nil, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	meta := &metadata.EntityMetadata{
+		EntityName:  "Test",
+		IsSingleton: false,
+	}
+	handler := NewEntityHandler(nil, meta, slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 	isSingleton := handler.IsSingleton()
 	if isSingleton {
-		t.Log("Is singleton")
+		t.Error("Expected IsSingleton to return false")
+	}
+
+	handler.metadata.IsSingleton = true
+	isSingleton = handler.IsSingleton()
+	if !isSingleton {
+		t.Error("Expected IsSingleton to return true")
 	}
 }
 
