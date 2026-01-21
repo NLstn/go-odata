@@ -4,7 +4,12 @@ A Go-based compliance test suite for validating OData v4 protocol implementation
 
 ## Overview
 
-The compliance test suite validates that an OData service correctly implements the OData v4 specification. Tests are organized by OData version (4.0 and 4.01) and cover various aspects of the protocol including:
+The compliance test suite validates that an OData service correctly implements the OData v4 specification and standard vocabularies. Tests are organized into:
+
+- **Protocol tests** (v4_0/ and v4_01/): Core OData protocol compliance
+- **Vocabulary tests** (vocabularies/): Standard OData vocabulary/annotation compliance
+
+Tests cover various aspects including:
 
 - Service document and metadata
 - Query options ($filter, $select, $orderby, etc.)
@@ -14,6 +19,7 @@ The compliance test suite validates that an OData service correctly implements t
 - Entity relationships and navigation
 - Batch requests
 - String function edge cases, including literal wildcard handling in contains/startswith/endswith
+- Vocabulary annotations (Core, Capabilities, Validation)
 - And more...
 
 The test suite runs on both **SQLite** and **PostgreSQL** databases to ensure cross-database compatibility. CI tracks the exact suite and test totals as new suites are added.
@@ -27,11 +33,24 @@ compliance-suite/
 ├── framework/
 │   └── framework.go           # Test framework with HTTP client and assertions
 ├── tests/
-│   ├── v4_0/                  # OData 4.0 compliance tests
-│   │   └── introduction.go   # Example: 1.1 Introduction tests
-│   └── v4_01/                 # OData 4.01 compliance tests
+│   ├── v4_0/                  # OData 4.0 protocol tests
+│   ├── v4_01/                 # OData 4.01 protocol tests
+│   └── vocabularies/          # Vocabulary/annotation tests
+│       ├── core/              # Core vocabulary (Computed, Immutable, Description, etc.)
+│       ├── capabilities/      # Capabilities vocabulary (InsertRestrictions, etc.)
+│       └── validation/        # Validation vocabulary (future)
 └── README.md                  # This file
 ```
+
+### Test Organization
+
+Tests are separated into distinct categories reflecting the OData specification structure:
+
+1. **Protocol Tests (v4_0/, v4_01/)**: Core protocol requirements as defined in the OData v4.0 and v4.01 specifications
+2. **Vocabulary Tests (vocabularies/)**: Standard OData vocabularies that provide semantic annotations:
+   - **Core**: Basic annotations like Computed, Immutable, Description
+   - **Capabilities**: Service capabilities (insert, update, delete restrictions)
+   - **Validation**: Input validation patterns (future)
 
 ## Features
 
@@ -110,14 +129,40 @@ Current v4.01 suites include:
 - 11.2.5.13 Query Index
 - 12.2 Function and Action Overloading
 
+## Vocabulary Test Suites
+
+Vocabulary tests validate support for standard OData vocabularies that provide semantic annotations:
+
+### Core Vocabulary (`Org.OData.Core.V1`)
+
+- **Core.Computed**: Properties that are calculated by the service and read-only
+- **Core.Immutable**: Properties that can only be set during creation
+- **Core.Description**: Human-readable descriptions for metadata elements
+
+### Capabilities Vocabulary (`Org.OData.Capabilities.V1`)
+
+- **Capabilities.InsertRestrictions**: Control over entity creation
+- **Capabilities.UpdateRestrictions**: Control over entity updates
+- **Capabilities.DeleteRestrictions**: Control over entity deletion
+
+These tests verify that services properly:
+1. Expose vocabulary annotations in metadata
+2. Enforce the semantic constraints defined by annotations
+3. Handle client attempts to violate annotation constraints appropriately
+
 ## Usage
 
 ### Running Tests
 
 ```bash
-# Run all tests (auto-starts compliance server)
+# Run all tests including vocabularies (auto-starts compliance server)
 cd compliance-suite
 go run main.go
+
+# Run only vocabulary tests
+go run main.go -version vocabularies
+# or
+go run main.go -version vocab
 
 # Run with verbose mode to see all test results
 go run main.go -verbose
@@ -125,10 +170,10 @@ go run main.go -verbose
 # Run with debug mode for full HTTP details
 go run main.go -debug
 
-# Run only OData 4.0 tests
+# Run only OData 4.0 protocol tests
 go run main.go -version 4.0
 
-# Run only OData 4.01 tests
+# Run only OData 4.01 protocol tests
 go run main.go -version 4.01
 
 # Run specific tests by pattern
@@ -353,6 +398,47 @@ To migrate an existing Bash test to Go:
 3. For each `run_test` call in Bash, create `suite.AddTest()` in Go
 4. Replace `http_get`, `check_status`, etc. with `ctx.GET()`, `ctx.AssertStatusCode()`, etc.
 5. Replace `check_json_field` with `ctx.AssertJSONField()`
+
+## Adding Vocabulary Tests
+
+To add tests for a new vocabulary or annotation:
+
+1. Create a directory under `tests/vocabularies/` for the vocabulary (e.g., `core/`, `capabilities/`)
+2. Create a `.go` file for each annotation or group of related annotations
+3. Follow the pattern used in existing vocabulary tests:
+   - Test that annotations appear correctly in metadata (XML and JSON)
+   - Test that the service enforces the semantic constraints
+   - Test both positive and negative cases (what should work, what should fail)
+4. Register the test suite in `main.go` under the vocabulary test section
+5. Run with `go run main.go -version vocabularies` to test
+
+Example structure for a new annotation:
+
+```go
+package myVocab
+
+import (
+    "github.com/nlstn/go-odata/compliance-suite/framework"
+)
+
+func MyAnnotation() *framework.TestSuite {
+    return &framework.TestSuite{
+        Name:        "MyVocab.MyAnnotation",
+        Description: "Tests for MyVocab.MyAnnotation behavior",
+        SpecURL:     "https://github.com/oasis-tcs/odata-vocabularies/...",
+        Tests: []framework.Test{
+            {
+                Name:        "metadata_includes_annotation",
+                Description: "Verify annotation appears in metadata",
+                Run: func(ctx *framework.TestContext) error {
+                    // Test implementation
+                    return nil
+                },
+            },
+        },
+    }
+}
+```
 6. Register the suite in `main.go`
 
 ## Benefits Over Bash
