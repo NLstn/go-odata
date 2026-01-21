@@ -76,6 +76,14 @@ func isValidMetadataLevel(value string) bool {
 	return value == MetadataMinimal || value == MetadataFull || value == MetadataNone
 }
 
+// validateMetadataValue returns an error if the value is not a valid metadata level
+func validateMetadataValue(value string) error {
+	if !isValidMetadataLevel(value) {
+		return fmt.Errorf("invalid odata.metadata value: %s (valid values are: minimal, full, none)", value)
+	}
+	return nil
+}
+
 // ValidateODataMetadata checks if the odata.metadata parameter in the request is valid.
 // Returns an error if an invalid metadata value is specified.
 // Valid values are: "minimal", "full", "none"
@@ -137,8 +145,8 @@ func validateMetadataInFormat(format string) error {
 		if strings.HasPrefix(part, "odata.metadata=") {
 			value := strings.TrimPrefix(part, "odata.metadata=")
 			value = strings.TrimSpace(value)
-			if !isValidMetadataLevel(value) {
-				return fmt.Errorf("invalid odata.metadata value: %s (valid values are: minimal, full, none)", value)
+			if err := validateMetadataValue(value); err != nil {
+				return err
 			}
 		}
 	}
@@ -178,8 +186,8 @@ func validateMetadataInAccept(accept string) error {
 				if strings.HasPrefix(param, "odata.metadata=") {
 					value := strings.TrimPrefix(param, "odata.metadata=")
 					value = strings.TrimSpace(value)
-					if !isValidMetadataLevel(value) {
-						return fmt.Errorf("invalid odata.metadata value: %s (valid values are: minimal, full, none)", value)
+					if err := validateMetadataValue(value); err != nil {
+						return err
 					}
 				}
 			}
