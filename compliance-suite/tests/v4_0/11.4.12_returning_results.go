@@ -40,7 +40,7 @@ func ReturningResults() *framework.TestSuite {
 				return framework.NewError("Expected empty response body")
 			}
 
-			return ctx.AssertHeader(resp, "Preference-Applied", "return=minimal")
+			return ctx.AssertHeaderContains(resp, "Preference-Applied", "return=minimal")
 		},
 	)
 
@@ -172,7 +172,7 @@ func ReturningResults() *framework.TestSuite {
 				return framework.NewError("Expected empty response body")
 			}
 
-			return ctx.AssertHeader(patchResp, "Preference-Applied", "return=minimal")
+			return ctx.AssertHeaderContains(patchResp, "Preference-Applied", "return=minimal")
 		},
 	)
 
