@@ -32,7 +32,7 @@ func InsertRestrictions() *framework.TestSuite {
 			body := string(resp.Body)
 			if !strings.Contains(body, "Capabilities.InsertRestrictions") &&
 				!strings.Contains(body, "Org.OData.Capabilities.V1.InsertRestrictions") {
-				ctx.Log("Info: No Capabilities.InsertRestrictions annotations found in metadata")
+				ctx.Log("Warning: No Capabilities.InsertRestrictions annotations found in metadata")
 			}
 
 			return nil
