@@ -20,9 +20,9 @@ type NavTestParent struct {
 
 // NavTestChild is a child entity for navigation tests
 type NavTestChild struct {
-	ID       uint          `json:"ID" gorm:"primaryKey" odata:"key"`
-	Name     string        `json:"Name"`
-	ParentID uint          `json:"ParentID"`
+	ID       uint           `json:"ID" gorm:"primaryKey" odata:"key"`
+	Name     string         `json:"Name"`
+	ParentID uint           `json:"ParentID"`
 	Parent   *NavTestParent `json:"Parent,omitempty" gorm:"foreignKey:ParentID"`
 }
 

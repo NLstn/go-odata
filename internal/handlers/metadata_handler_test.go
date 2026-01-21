@@ -289,9 +289,9 @@ func TestMetadataHandler_AcceptHeaderParsing(t *testing.T) {
 	handler := NewMetadataHandler(entitiesMetadata)
 
 	tests := []struct {
-		name           string
-		acceptHeader   string
-		expectXML      bool
+		name         string
+		acceptHeader string
+		expectXML    bool
 	}{
 		{
 			name:         "application/xml",

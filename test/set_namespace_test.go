@@ -25,7 +25,9 @@ func setupSetNamespaceTestService(t *testing.T) (*odata.Service, *gorm.DB) {
 	}
 
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	if err := service.RegisterEntity(NamespaceTestProduct{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
 	}
@@ -113,7 +115,9 @@ func TestSetNamespace_BeforeEntityRegistration(t *testing.T) {
 	}
 
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 
 	// Set namespace before registering entities
 	err = service.SetNamespace("EarlyNamespace")
@@ -149,7 +153,9 @@ func TestSetNamespace_VariousFormats(t *testing.T) {
 				t.Fatalf("Failed to connect to database: %v", err)
 			}
 			service, err := odata.NewService(db)
-			if err != nil { t.Fatalf("NewService() error: %v", err) }
+			if err != nil {
+				t.Fatalf("NewService() error: %v", err)
+			}
 
 			err = service.SetNamespace(tt.namespace)
 			if tt.wantErr && err == nil {

@@ -187,11 +187,11 @@ func (h *EntityHandler) validatePropertiesExist(data map[string]interface{}, w h
 	if checkAutoProperties {
 		autoProperties = make(map[string]bool)
 	}
-	
+
 	for _, prop := range h.metadata.Properties {
 		validProperties[prop.JsonName] = true
 		validProperties[prop.Name] = true
-		
+
 		// Track auto properties to reject client updates if needed
 		if checkAutoProperties && prop.IsAuto {
 			autoProperties[prop.JsonName] = true
@@ -206,7 +206,7 @@ func (h *EntityHandler) validatePropertiesExist(data map[string]interface{}, w h
 		if strings.HasPrefix(propName, "@") {
 			continue
 		}
-		
+
 		// Allow property-level annotations (property@annotation format)
 		// Check if this is a property annotation by looking for @ after the property name
 		if idx := strings.Index(propName, "@"); idx > 0 {
@@ -225,7 +225,7 @@ func (h *EntityHandler) validatePropertiesExist(data map[string]interface{}, w h
 			}
 			return err
 		}
-		
+
 		if !validProperties[propName] {
 			err := fmt.Errorf("property '%s' does not exist on entity type '%s'", propName, h.metadata.EntityName)
 			span := trace.SpanFromContext(r.Context())
@@ -235,7 +235,7 @@ func (h *EntityHandler) validatePropertiesExist(data map[string]interface{}, w h
 			}
 			return err
 		}
-		
+
 		// Reject attempts to update auto properties if checkAutoProperties is true
 		if checkAutoProperties && autoProperties[propName] {
 			err := fmt.Errorf("property '%s' is automatically set server-side and cannot be modified by clients", propName)
@@ -247,6 +247,6 @@ func (h *EntityHandler) validatePropertiesExist(data map[string]interface{}, w h
 			return err
 		}
 	}
-	
+
 	return nil
 }

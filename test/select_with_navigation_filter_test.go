@@ -55,7 +55,9 @@ func TestSelectWithNavigationFilter(t *testing.T) {
 
 	// Create OData service
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	service.RegisterEntity(&Club{})
 	service.RegisterEntity(&Member{})
 
@@ -207,7 +209,9 @@ func TestSelectWithoutNavigationFilter(t *testing.T) {
 	db.Create(&SimpleEntity{ID: "2", Name: "Bob", Age: 25})
 
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	service.RegisterEntity(&SimpleEntity{})
 
 	// Test that $select still works without JOINs

@@ -49,7 +49,9 @@ func TestBoundFunctionThroughRenamedNavigation(t *testing.T) {
 	}
 
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	if err := service.RegisterEntity(&NavigationFunctionStore{}); err != nil {
 		t.Fatalf("failed to register store entity: %v", err)
 	}

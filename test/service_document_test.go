@@ -35,7 +35,9 @@ func setupServiceDocTestService(t *testing.T) *odata.Service {
 	}
 
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	if err := service.RegisterEntity(ServiceDocProduct{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
 	}
@@ -291,7 +293,9 @@ func TestServiceDocument_EmptyService(t *testing.T) {
 	}
 
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()

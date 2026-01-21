@@ -51,7 +51,9 @@ func setupConcatTestDB(t *testing.T) *gorm.DB {
 func TestConcat_TwoLiterals(t *testing.T) {
 	db := setupConcatTestDB(t)
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 
 	err = service.RegisterEntity(ConcatTestProduct{})
 	if err != nil {
@@ -88,7 +90,9 @@ func TestConcat_TwoLiterals(t *testing.T) {
 func TestConcat_LiteralAndProperty(t *testing.T) {
 	db := setupConcatTestDB(t)
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 
 	err = service.RegisterEntity(ConcatTestProduct{})
 	if err != nil {
@@ -131,7 +135,9 @@ func TestConcat_LiteralAndProperty(t *testing.T) {
 func TestConcat_TwoLiteralsNonEmpty(t *testing.T) {
 	db := setupConcatTestDB(t)
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 
 	err = service.RegisterEntity(ConcatTestProduct{})
 	if err != nil {
@@ -168,7 +174,9 @@ func TestConcat_TwoLiteralsNonEmpty(t *testing.T) {
 func TestConcat_LiteralFirstEmptyString(t *testing.T) {
 	db := setupConcatTestDB(t)
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 
 	err = service.RegisterEntity(ConcatTestProduct{})
 	if err != nil {
@@ -211,7 +219,9 @@ func TestConcat_LiteralFirstEmptyString(t *testing.T) {
 func TestConcat_PropertyAndProperty(t *testing.T) {
 	db := setupConcatTestDB(t)
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 
 	err = service.RegisterEntity(ConcatTestProduct{})
 	if err != nil {
@@ -254,7 +264,9 @@ func TestConcat_PropertyAndProperty(t *testing.T) {
 func TestConcat_NestedWithPropertyAndLiteral(t *testing.T) {
 	db := setupConcatTestDB(t)
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 
 	err = service.RegisterEntity(ConcatTestProduct{})
 	if err != nil {
@@ -297,7 +309,9 @@ func TestConcat_NestedWithPropertyAndLiteral(t *testing.T) {
 func TestConcat_LiteralWithFunctionCall(t *testing.T) {
 	db := setupConcatTestDB(t)
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 
 	err = service.RegisterEntity(ConcatTestProduct{})
 	if err != nil {
@@ -333,7 +347,9 @@ func TestConcat_LiteralWithFunctionCall(t *testing.T) {
 func TestConcat_SpecialCharactersInLiterals(t *testing.T) {
 	db := setupConcatTestDB(t)
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 
 	err = service.RegisterEntity(ConcatTestProduct{})
 	if err != nil {
@@ -370,7 +386,9 @@ func TestConcat_SpecialCharactersInLiterals(t *testing.T) {
 func TestConcat_ComplexExpression(t *testing.T) {
 	db := setupConcatTestDB(t)
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 
 	err = service.RegisterEntity(ConcatTestProduct{})
 	if err != nil {

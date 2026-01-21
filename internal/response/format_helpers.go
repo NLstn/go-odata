@@ -64,6 +64,27 @@ func ExtractEntityKeys(entity interface{}, keyProperties []metadata.PropertyMeta
 	return keyValues
 }
 
+// ValidateODataMetadata checks if the odata.metadata parameter in the request is valid.
+// Returns an error if an invalid metadata value is specified.
+// Valid values are: "minimal", "full", "none"
+func ValidateODataMetadata(r *http.Request) error {
+	format := getFormatParameter(r.URL.RawQuery)
+	if format != "" {
+		if err := validateMetadataInFormat(format); err != nil {
+			return err
+		}
+	}
+
+	accept := r.Header.Get("Accept")
+	if accept != "" {
+		if err := validateMetadataInAccept(accept); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // GetODataMetadataLevel extracts the odata.metadata parameter value from the request
 // Returns "minimal" (default), "full", or "none" based on Accept header or $format parameter
 func GetODataMetadataLevel(r *http.Request) string {
@@ -97,6 +118,24 @@ func getFormatParameter(rawQuery string) string {
 	return ""
 }
 
+func validateMetadataInFormat(format string) error {
+	parts := strings.Split(format, ";")
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if strings.HasPrefix(part, "odata.metadata=") {
+			value := strings.TrimPrefix(part, "odata.metadata=")
+			value = strings.TrimSpace(value)
+			switch value {
+			case "full", "none", "minimal":
+				return nil
+			default:
+				return fmt.Errorf("invalid odata.metadata value: %s (valid values are: minimal, full, none)", value)
+			}
+		}
+	}
+	return nil
+}
+
 func extractMetadataFromFormat(format string) string {
 	parts := strings.Split(format, ";")
 	for _, part := range parts {
@@ -112,6 +151,36 @@ func extractMetadataFromFormat(format string) string {
 	}
 
 	return "minimal"
+}
+
+func validateMetadataInAccept(accept string) error {
+	parts := strings.Split(accept, ",")
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+
+		subparts := strings.Split(part, ";")
+		mimeType := strings.TrimSpace(subparts[0])
+
+		if mimeType == "application/json" || mimeType == "*/*" || mimeType == "application/*" {
+			for _, param := range subparts[1:] {
+				param = strings.TrimSpace(param)
+				if strings.HasPrefix(param, "odata.metadata=") {
+					value := strings.TrimPrefix(param, "odata.metadata=")
+					value = strings.TrimSpace(value)
+					switch value {
+					case "full", "none", "minimal":
+						return nil
+					default:
+						return fmt.Errorf("invalid odata.metadata value: %s (valid values are: minimal, full, none)", value)
+					}
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func extractMetadataFromAccept(accept string) string {

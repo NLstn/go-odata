@@ -37,7 +37,9 @@ func setupPreRequestHookTest(t *testing.T) (*odata.Service, *gorm.DB) {
 	}
 
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	if err := service.RegisterEntity(&PreRequestHookProduct{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
 	}

@@ -59,7 +59,9 @@ func TestNavigationPropertyQueryOptions(t *testing.T) {
 
 	// Create OData service
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	service.RegisterEntity(&Product{})
 	service.RegisterEntity(&ProductDescription{})
 
@@ -273,7 +275,9 @@ func TestNavigationPropertyQueryOptionsODataContext(t *testing.T) {
 	db.Create(&ProductDescription{ProductID: 1, LanguageKey: "EN", Description: "Test"})
 
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	service.RegisterEntity(&Product{})
 	service.RegisterEntity(&ProductDescription{})
 

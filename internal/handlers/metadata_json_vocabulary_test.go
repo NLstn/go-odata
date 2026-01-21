@@ -178,7 +178,7 @@ func TestMetadataJSON_VocabularyReferences(t *testing.T) {
 	t.Run("CustomVocabulary_UsesFallbackAlias", func(t *testing.T) {
 		// Create an entity with a custom vocabulary annotation
 		meta, _ := metadata.AnalyzeEntity(CustomVocabTestProduct{})
-		
+
 		// Manually add a custom vocabulary annotation (not in the standard map)
 		if meta.Annotations == nil {
 			meta.Annotations = metadata.NewAnnotationCollection()
@@ -293,7 +293,7 @@ func TestMetadataJSON_VocabularyReferences(t *testing.T) {
 		}
 
 		referencesMap := references.(map[string]interface{})
-		
+
 		// Test each standard vocabulary uses its mapped alias
 		testCases := []struct {
 			uri       string

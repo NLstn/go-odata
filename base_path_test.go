@@ -19,7 +19,9 @@ type BasePathProduct struct {
 func TestSetBasePath_Validation(t *testing.T) {
 	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	service, err := NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 
 	tests := []struct {
 		name    string
@@ -49,7 +51,9 @@ func TestSetBasePath_Validation(t *testing.T) {
 func TestSetBasePath_GetBasePath(t *testing.T) {
 	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	service, err := NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 
 	tests := []struct {
 		name     string
@@ -80,7 +84,9 @@ func TestBasePath_URLGeneration(t *testing.T) {
 	db.Create(&BasePathProduct{ID: 1, Name: "Test Product"})
 
 	service, err := NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	if err := service.RegisterEntity(&BasePathProduct{}); err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +140,9 @@ func TestBasePath_PathStripping(t *testing.T) {
 	db.AutoMigrate(&BasePathProduct{})
 
 	service, err := NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	if err := service.RegisterEntity(&BasePathProduct{}); err != nil {
 		t.Fatal(err)
 	}
@@ -173,7 +181,9 @@ func TestBasePath_ServiceDocument(t *testing.T) {
 	db.AutoMigrate(&BasePathProduct{})
 
 	service, err := NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	if err := service.RegisterEntity(&BasePathProduct{}); err != nil {
 		t.Fatal(err)
 	}
@@ -213,7 +223,9 @@ func TestBasePath_RootMounting(t *testing.T) {
 	db.Create(&BasePathProduct{ID: 1, Name: "Test"})
 
 	service, err := NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	if err := service.RegisterEntity(&BasePathProduct{}); err != nil {
 		t.Fatal(err)
 	}
@@ -251,7 +263,9 @@ func TestBasePath_RootMounting(t *testing.T) {
 func TestBasePath_ConcurrentGetBasePath(t *testing.T) {
 	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	service, err := NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 
 	if err := service.SetBasePath("/odata"); err != nil {
 		t.Fatal(err)
@@ -278,7 +292,9 @@ func TestBasePath_MultipleServicesWithDifferentPaths(t *testing.T) {
 	db1.Create(&BasePathProduct{ID: 1, Name: "Service1 Product"})
 
 	service1, err := NewService(db1)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	if err := service1.RegisterEntity(&BasePathProduct{}); err != nil {
 		t.Fatal(err)
 	}
@@ -291,7 +307,9 @@ func TestBasePath_MultipleServicesWithDifferentPaths(t *testing.T) {
 	db2.Create(&BasePathProduct{ID: 2, Name: "Service2 Product"})
 
 	service2, err := NewService(db2)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	if err := service2.RegisterEntity(&BasePathProduct{}); err != nil {
 		t.Fatal(err)
 	}

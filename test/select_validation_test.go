@@ -32,7 +32,9 @@ func setupValidationTestService(t *testing.T) *odata.Service {
 	}
 
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	if err := service.RegisterEntity(TestProductValidation{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
 	}

@@ -64,7 +64,9 @@ func TestIntegrationSearch_WithSearchableFields(t *testing.T) {
 
 	// Initialize OData service
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	_ = service.RegisterEntity(&SearchTestProduct{})
 
 	tests := []struct {
@@ -211,7 +213,9 @@ func TestIntegrationSearch_NoSearchableFields(t *testing.T) {
 
 	// Initialize OData service
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	_ = service.RegisterEntity(&SearchTestProductNoTags{})
 
 	tests := []struct {
@@ -283,7 +287,9 @@ func TestIntegrationSearch_InvalidQuery(t *testing.T) {
 
 	// Initialize OData service
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	_ = service.RegisterEntity(&SearchTestProduct{})
 
 	tests := []struct {
