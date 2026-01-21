@@ -2,6 +2,7 @@ package query
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 )
@@ -60,6 +61,30 @@ func (p *ASTParser) parseTerm() (ASTNode, error) {
 // parsePrimary handles primary expressions (literals, identifiers, function calls, grouped expressions)
 func (p *ASTParser) parsePrimary() (ASTNode, error) {
 	token := p.currentToken()
+
+	// Handle -INF and -NaN (OData v4 spec special float literals)
+	if token.Type == TokenArithmetic && token.Value == "-" {
+		// Peek at next token to see if it's INF or NaN
+		nextPos := p.current + 1
+		if nextPos < len(p.tokens) {
+			nextToken := p.tokens[nextPos]
+			if nextToken.Type == TokenNumber {
+				lowerValue := strings.ToLower(nextToken.Value)
+				if lowerValue == "inf" || lowerValue == "nan" {
+					// Consume the minus sign
+					p.advance()
+					// Consume INF/NaN and return negative value
+					p.advance()
+					if lowerValue == "inf" {
+						return &LiteralExpr{Value: math.Inf(-1), Type: "number"}, nil // -INF
+					} else {
+						// Note: -NaN is technically the same as NaN, but we handle it for completeness
+						return &LiteralExpr{Value: math.NaN(), Type: "number"}, nil // NaN
+					}
+				}
+			}
+		}
+	}
 
 	// Grouped expression
 	if token.Type == TokenLParen {
@@ -127,6 +152,17 @@ func (p *ASTParser) parseLiteral(token *Token) ASTNode {
 
 // parseNumberLiteral parses a number literal (integer or float)
 func (p *ASTParser) parseNumberLiteral(value string) ASTNode {
+	// Check for special floating-point literals (OData v4 spec)
+	lowerValue := strings.ToLower(value)
+	switch lowerValue {
+	case "inf":
+		return &LiteralExpr{Value: math.Inf(1), Type: "number"}
+	case "-inf":
+		return &LiteralExpr{Value: math.Inf(-1), Type: "number"}
+	case "nan":
+		return &LiteralExpr{Value: math.NaN(), Type: "number"}
+	}
+
 	// Try to parse as integer first, then as float
 	if intVal, err := strconv.ParseInt(value, 10, 64); err == nil {
 		return &LiteralExpr{Value: intVal, Type: "number"}
