@@ -648,4 +648,3 @@ func TestConvertNavEntityToMapWithCompute(t *testing.T) {
 		}
 	})
 }
-

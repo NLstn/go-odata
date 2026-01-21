@@ -282,13 +282,16 @@ func validateValueAgainstPropertyType(property string, value interface{}, entity
 	// Check for Int64 overflow
 	// Per OData v4 spec, numeric literals that overflow the target integer type should be rejected
 	if propType.Kind() == reflect.Int64 || propType.Kind() == reflect.Uint64 {
-		const maxInt64 = float64(9223372036854775807)
-		const minInt64 = float64(-9223372036854775808)
-		
-		// Check if the value is out of Int64 range
-		// For very large integer literals (like 9223372036854775808), they overflow int64
-		// and are parsed as float64, but should still be rejected for Int64 properties
-		if floatVal > maxInt64 || floatVal < minInt64 {
+		// Use 2^63 as the threshold instead of 2^63-1 to avoid float64 precision issues
+		// Max int64 is 2^63-1 (9223372036854775807), which rounds to 9.223372036854776e+18 in float64
+		// 2^63 (9223372036854775808) is exactly representable in float64 as 9.223372036854776e+18
+		// So we check if the value is >= 2^63 to catch overflow
+		const maxInt64Plus1 = 9223372036854775808.0 // 2^63
+		const minInt64 = -9223372036854775808.0     // -2^63
+
+		// Check if the value is out of Int64 range (including the exact boundary)
+		// Values >= 2^63 or < -2^63 overflow Int64
+		if floatVal >= maxInt64Plus1 || floatVal < minInt64 {
 			return fmt.Errorf("numeric literal value out of range for Edm.Int64")
 		}
 	}
