@@ -1,6 +1,10 @@
 package v4_0
 
 import (
+	"encoding/json"
+	"fmt"
+	"math"
+
 	"github.com/nlstn/go-odata/compliance-suite/framework"
 )
 
@@ -44,7 +48,30 @@ func InstanceAnnotations() *framework.TestSuite {
 				return err
 			}
 
-			return ctx.AssertJSONField(resp, "@odata.count")
+			var result map[string]interface{}
+			if err := json.Unmarshal(resp.Body, &result); err != nil {
+				return fmt.Errorf("invalid JSON response: %w", err)
+			}
+
+			countVal, ok := result["@odata.count"]
+			if !ok {
+				return fmt.Errorf("@odata.count required when $count=true is specified")
+			}
+
+			countNum, ok := countVal.(float64)
+			if !ok {
+				return fmt.Errorf("@odata.count must be a number, got %T", countVal)
+			}
+
+			if countNum < 0 {
+				return fmt.Errorf("@odata.count must be non-negative, got %f", countNum)
+			}
+
+			if math.Trunc(countNum) != countNum {
+				return fmt.Errorf("@odata.count must be an integer value, got %f", countNum)
+			}
+
+			return nil
 		},
 	)
 
