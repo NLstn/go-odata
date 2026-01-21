@@ -347,3 +347,107 @@ func TestExecuteCollectionQueryHappyPath(t *testing.T) {
 		}
 	}
 }
+
+func TestExecuteCollectionQuery_MissingCallbacks(t *testing.T) {
+	handler := NewEntityHandler(nil, &metadata.EntityMetadata{EntityName: "Widget", EntitySetName: "Widgets"}, nil)
+
+	t.Run("nil context", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/widgets", nil)
+
+		handler.executeCollectionQuery(recorder, request, nil)
+
+		if recorder.Code != http.StatusInternalServerError {
+			t.Fatalf("expected status %d, got %d", http.StatusInternalServerError, recorder.Code)
+		}
+
+		resp := decodeODataError(t, recorder)
+		if resp.Error.Code != "500" {
+			t.Fatalf("expected error code '500', got %q", resp.Error.Code)
+		}
+		if resp.Error.Message != "Internal error" {
+			t.Fatalf("expected message 'Internal error', got %q", resp.Error.Message)
+		}
+	})
+
+	t.Run("missing ParseQueryOptions", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/widgets", nil)
+
+		handler.executeCollectionQuery(recorder, request, &collectionExecutionContext{
+			ParseQueryOptions: nil,
+			FetchFunc: func(*query.QueryOptions, []func(*gorm.DB) *gorm.DB) (interface{}, error) {
+				return nil, nil
+			},
+			WriteResponse: func(*query.QueryOptions, interface{}, *int64, *string) error {
+				return nil
+			},
+		})
+
+		if recorder.Code != http.StatusInternalServerError {
+			t.Fatalf("expected status %d, got %d", http.StatusInternalServerError, recorder.Code)
+		}
+
+		resp := decodeODataError(t, recorder)
+		if resp.Error.Code != "500" {
+			t.Fatalf("expected error code '500', got %q", resp.Error.Code)
+		}
+		if resp.Error.Message != "Internal error" {
+			t.Fatalf("expected message 'Internal error', got %q", resp.Error.Message)
+		}
+	})
+
+	t.Run("missing FetchFunc", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/widgets", nil)
+
+		handler.executeCollectionQuery(recorder, request, &collectionExecutionContext{
+			ParseQueryOptions: func() (*query.QueryOptions, error) {
+				return &query.QueryOptions{}, nil
+			},
+			FetchFunc: nil,
+			WriteResponse: func(*query.QueryOptions, interface{}, *int64, *string) error {
+				return nil
+			},
+		})
+
+		if recorder.Code != http.StatusInternalServerError {
+			t.Fatalf("expected status %d, got %d", http.StatusInternalServerError, recorder.Code)
+		}
+
+		resp := decodeODataError(t, recorder)
+		if resp.Error.Code != "500" {
+			t.Fatalf("expected error code '500', got %q", resp.Error.Code)
+		}
+		if resp.Error.Message != "Internal error" {
+			t.Fatalf("expected message 'Internal error', got %q", resp.Error.Message)
+		}
+	})
+
+	t.Run("missing WriteResponse", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/widgets", nil)
+
+		handler.executeCollectionQuery(recorder, request, &collectionExecutionContext{
+			ParseQueryOptions: func() (*query.QueryOptions, error) {
+				return &query.QueryOptions{}, nil
+			},
+			FetchFunc: func(*query.QueryOptions, []func(*gorm.DB) *gorm.DB) (interface{}, error) {
+				return nil, nil
+			},
+			WriteResponse: nil,
+		})
+
+		if recorder.Code != http.StatusInternalServerError {
+			t.Fatalf("expected status %d, got %d", http.StatusInternalServerError, recorder.Code)
+		}
+
+		resp := decodeODataError(t, recorder)
+		if resp.Error.Code != "500" {
+			t.Fatalf("expected error code '500', got %q", resp.Error.Code)
+		}
+		if resp.Error.Message != "Internal error" {
+			t.Fatalf("expected message 'Internal error', got %q", resp.Error.Message)
+		}
+	})
+}
