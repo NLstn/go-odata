@@ -80,9 +80,9 @@ func TestEntityMatchesType(t *testing.T) {
 			"name": "test",
 		}
 		result := handler.entityMatchesType(entity, "OtherType")
-		// Might still match by entity name
+		// The entity name is "Product", so "OtherType" should not match
 		if result {
-			t.Log("Entity matched by name fallback")
+			t.Error("Expected entity to not match OtherType")
 		}
 	})
 
@@ -604,13 +604,7 @@ func createTestHandler() *EntityHandler {
 		metadata: &metadata.EntityMetadata{
 			EntityName: "TestEntity",
 		},
-		logger: createNilLogger(),
+		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
 	return handler
-}
-
-// Helper function to create a nil logger
-func createNilLogger() *slog.Logger {
-	// Return a logger that discards output instead of nil
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
