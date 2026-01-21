@@ -44,7 +44,11 @@ type collectionExecutionContext struct {
 
 func (h *EntityHandler) executeCollectionQuery(w http.ResponseWriter, r *http.Request, ctx *collectionExecutionContext) {
 	if ctx == nil || ctx.ParseQueryOptions == nil || ctx.FetchFunc == nil || ctx.WriteResponse == nil {
-		panic("executeCollectionQuery requires ParseQueryOptions, FetchFunc, and WriteResponse callbacks")
+		h.logger.Error("executeCollectionQuery: missing required callbacks - this is a programming error")
+		if err := response.WriteError(w, r, http.StatusInternalServerError, "Internal error", "executeCollectionQuery requires ParseQueryOptions, FetchFunc, and WriteResponse callbacks"); err != nil {
+			h.logger.Error("Error writing error response", "error", err)
+		}
+		return
 	}
 
 	queryOptions, err := ctx.ParseQueryOptions()

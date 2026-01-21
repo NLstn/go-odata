@@ -9,7 +9,10 @@ import (
 )
 
 func TestTrackerRecordAndRetrieve(t *testing.T) {
-	tracker := NewTracker()
+	tracker, err := NewTracker()
+	if err != nil {
+		t.Fatalf("NewTracker failed: %v", err)
+	}
 	tracker.RegisterEntity("Products")
 
 	token, err := tracker.CurrentToken("Products")
@@ -51,7 +54,10 @@ func TestTrackerRecordAndRetrieve(t *testing.T) {
 }
 
 func TestTrackerInvalidToken(t *testing.T) {
-	tracker := NewTracker()
+	tracker, err := NewTracker()
+	if err != nil {
+		t.Fatalf("NewTracker failed: %v", err)
+	}
 	tracker.RegisterEntity("Products")
 
 	if _, _, err := tracker.ChangesSince("not-a-token"); err == nil {

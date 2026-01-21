@@ -12,29 +12,32 @@ import (
 // the underlying database supports spatial operations. This method must be called
 // during service startup before handling requests if geospatial features are needed.
 //
-// If the database does not support the required spatial features, the service will
-// panic with a detailed error message indicating what extension, configuration, or
+// If the database does not support the required spatial features, an error is returned
+// with a detailed error message indicating what extension, configuration, or
 // dependency is missing.
 //
 // Example:
 //
 //	service, err := odata.NewService(db)
 //	if err != nil {
-//		panic(err)
+//		log.Fatalf("Failed to create service: %v", err)
 //	}
-//	service.EnableGeospatial() // Validates database support and panics if not available
+//	if err := service.EnableGeospatial(); err != nil {
+//		log.Fatalf("Failed to enable geospatial: %v", err)
+//	}
 //	service.RegisterEntity(&Product{})
-func (s *Service) EnableGeospatial() {
+func (s *Service) EnableGeospatial() error {
 	s.logger.Info("Enabling geospatial features")
 
 	// Check if database supports geospatial features
 	if err := checkGeospatialSupport(s.db, s.logger); err != nil {
 		s.logger.Error("Failed to enable geospatial features", "error", err)
-		panic(fmt.Sprintf("geospatial features cannot be enabled: %v", err))
+		return fmt.Errorf("geospatial features cannot be enabled: %w", err)
 	}
 
 	atomic.StoreInt32(&s.geospatialEnabled, 1)
 	s.logger.Info("Geospatial features enabled successfully")
+	return nil
 }
 
 // IsGeospatialEnabled returns whether geospatial features are enabled for this service

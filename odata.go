@@ -425,7 +425,10 @@ func NewServiceWithConfig(db *gorm.DB, cfg ServiceConfig) (*Service, error) {
 			return nil, fmt.Errorf("failed to initialize persistent change tracker: %w", err)
 		}
 	} else {
-		tracker = trackchanges.NewTracker()
+		tracker, err = trackchanges.NewTracker()
+		if err != nil {
+			return nil, fmt.Errorf("failed to initialize change tracker: %w", err)
+		}
 	}
 
 	// Initialize FTS manager for SQLite full-text search
