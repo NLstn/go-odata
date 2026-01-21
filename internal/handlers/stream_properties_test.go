@@ -283,3 +283,92 @@ func TestHandleStreamProperty_MethodNotAllowed(t *testing.T) {
 		})
 	}
 }
+
+// TestHandleStreamProperty_Put tests uploading stream property content via PUT
+func TestHandleStreamProperty_Put(t *testing.T) {
+	handler, db := setupStreamPropertyHandler(t)
+
+	// Create an entity first
+	entity := StreamPropertyTestEntity{
+		ID:        1,
+		Name:      "Test Entity",
+	}
+	if err := db.Create(&entity).Error; err != nil {
+		t.Fatalf("Failed to create entity: %v", err)
+	}
+
+	// Upload new photo content
+	newContent := []byte("new photo binary data")
+	req := httptest.NewRequest(http.MethodPut, "/StreamPropertyTestEntities(1)/Photo/$value", bytes.NewReader(newContent))
+	req.Header.Set("Content-Type", "image/png")
+	w := httptest.NewRecorder()
+
+	handler.HandleStreamProperty(w, req, "1", "Photo", true)
+
+	if w.Code != http.StatusNoContent {
+		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusNoContent, w.Body.String())
+	}
+
+	// Verify the content was updated
+	var updated StreamPropertyTestEntity
+	if err := db.First(&updated, 1).Error; err != nil {
+		t.Fatalf("Failed to fetch updated entity: %v", err)
+	}
+
+	if string(updated.PhotoContent) != string(newContent) {
+		t.Errorf("PhotoContent = %v, want %v", string(updated.PhotoContent), string(newContent))
+	}
+
+	if updated.PhotoContentType != "image/png" {
+		t.Errorf("PhotoContentType = %v, want 'image/png'", updated.PhotoContentType)
+	}
+}
+
+// TestHandleStreamProperty_PutDefaultContentType tests uploading stream property without content type
+func TestHandleStreamProperty_PutDefaultContentType(t *testing.T) {
+	handler, db := setupStreamPropertyHandler(t)
+
+	// Create an entity first
+	entity := StreamPropertyTestEntity{
+		ID:   1,
+		Name: "Test Entity",
+	}
+	if err := db.Create(&entity).Error; err != nil {
+		t.Fatalf("Failed to create entity: %v", err)
+	}
+
+	// Upload without Content-Type header
+	newContent := []byte("binary data")
+	req := httptest.NewRequest(http.MethodPut, "/StreamPropertyTestEntities(1)/Photo/$value", bytes.NewReader(newContent))
+	w := httptest.NewRecorder()
+
+	handler.HandleStreamProperty(w, req, "1", "Photo", true)
+
+	if w.Code != http.StatusNoContent {
+		t.Errorf("Status = %v, want %v", w.Code, http.StatusNoContent)
+	}
+
+	// Verify default content type was used
+	var updated StreamPropertyTestEntity
+	if err := db.First(&updated, 1).Error; err != nil {
+		t.Fatalf("Failed to fetch updated entity: %v", err)
+	}
+
+	if updated.PhotoContentType != "application/octet-stream" {
+		t.Errorf("PhotoContentType = %v, want 'application/octet-stream'", updated.PhotoContentType)
+	}
+}
+
+// TestHandleStreamProperty_PutNonExistentEntity tests PUT on non-existent entity
+func TestHandleStreamProperty_PutNonExistentEntity(t *testing.T) {
+	handler, _ := setupStreamPropertyHandler(t)
+
+	req := httptest.NewRequest(http.MethodPut, "/StreamPropertyTestEntities(999)/Photo/$value", bytes.NewReader([]byte("data")))
+	w := httptest.NewRecorder()
+
+	handler.HandleStreamProperty(w, req, "999", "Photo", true)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("Status = %v, want %v", w.Code, http.StatusNotFound)
+	}
+}

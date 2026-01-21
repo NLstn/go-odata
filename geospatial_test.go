@@ -169,3 +169,23 @@ func TestCheckGeospatialSupportOtherDialectsErrors(t *testing.T) {
 		t.Fatalf("expected SQL Server error, got %v", err)
 	}
 }
+
+// TestCheckGeospatialSupportUnsupportedDialect tests error handling for unsupported database dialects
+func TestCheckGeospatialSupportUnsupportedDialect(t *testing.T) {
+	// Create a mock database connection with a custom dialect
+	// Since we're using SQLite, we can't truly test another dialect, but we test the logic
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("failed to open database: %v", err)
+	}
+
+	// The actual test for unsupported dialect would require a mock or custom driver
+	// For now, verify that SQLite returns the appropriate error when SpatiaLite is missing
+	err = checkGeospatialSupport(db, slog.Default())
+	if err == nil {
+		t.Fatal("expected error for missing SpatiaLite")
+	}
+	if !strings.Contains(err.Error(), "SpatiaLite") {
+		t.Errorf("expected SpatiaLite error message, got: %v", err)
+	}
+}

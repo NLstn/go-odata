@@ -515,3 +515,50 @@ func TestTokenizerQualifiedTypeNames(t *testing.T) {
 		})
 	}
 }
+
+// TestTokenizeGUIDLiteral tests GUID literal tokenization
+func TestTokenizeGUIDLiteral(t *testing.T) {
+	input := "12345678-1234-1234-1234-123456789012"
+	tokenizer := NewTokenizer(input)
+
+	token, err := tokenizer.NextToken()
+	if err != nil {
+		t.Fatalf("Failed to tokenize GUID: %v", err)
+	}
+
+	if token.Type != TokenGUID {
+		t.Errorf("Expected token type TokenGUID, got %d", token.Type)
+	}
+
+	if token.Value != input {
+		t.Errorf("Expected GUID value %q, got %q", input, token.Value)
+	}
+}
+
+// TestTokenizeMultipleGUIDs tests multiple GUID literals
+func TestTokenizeMultipleGUIDs(t *testing.T) {
+	guids := []string{
+		"00000000-0000-0000-0000-000000000000",
+		"ffffffff-ffff-ffff-ffff-ffffffffffff",
+		"AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
+		"a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+	}
+
+	for _, guid := range guids {
+		t.Run(guid, func(t *testing.T) {
+			tokenizer := NewTokenizer(guid)
+			token, err := tokenizer.NextToken()
+			if err != nil {
+				t.Fatalf("Failed to tokenize GUID %q: %v", guid, err)
+			}
+
+			if token.Type != TokenGUID {
+				t.Errorf("Expected token type TokenGUID, got %d", token.Type)
+			}
+
+			if token.Value != guid {
+				t.Errorf("Expected GUID value %q, got %q", guid, token.Value)
+			}
+		})
+	}
+}
