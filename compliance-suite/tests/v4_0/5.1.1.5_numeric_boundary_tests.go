@@ -25,17 +25,11 @@ func NumericBoundaryTests() *framework.TestSuite {
 			// Int64 max: 2^63 - 1 = 9223372036854775807
 			maxInt64 := "9223372036854775807"
 
-			// Try to filter with max Int64
-			// Note: Product.ID is UUID, so this tests type mismatch handling
-			filter := fmt.Sprintf("ID eq %s", maxInt64)
-			resp, err := ctx.GET("/Products?$filter=" + filter)
+			// Try to filter with max Int64 on an Int64 property
+			filter := fmt.Sprintf("Size eq %s", maxInt64)
+			resp, err := ctx.GET("/MediaItems?$filter=" + filter)
 			if err != nil {
 				return err
-			}
-
-			// Should ideally return 400 for type mismatch, but 500 indicates library issue
-			if resp.StatusCode == 400 || resp.StatusCode == 500 {
-				return ctx.Skip(fmt.Sprintf("Server does not handle Int64 on UUID field (got %d) - library should improve type checking", resp.StatusCode))
 			}
 
 			// Should parse without error (even if no match)
@@ -62,17 +56,11 @@ func NumericBoundaryTests() *framework.TestSuite {
 			// Int64 min: -2^63 = -9223372036854775808
 			minInt64 := "-9223372036854775808"
 
-			// Try to filter with min Int64
-			// Note: Product.ID is UUID, so this tests type mismatch handling
-			filter := fmt.Sprintf("ID ne %s", minInt64)
-			resp, err := ctx.GET("/Products?$filter=" + filter)
+			// Try to filter with min Int64 on an Int64 property
+			filter := fmt.Sprintf("Size ne %s", minInt64)
+			resp, err := ctx.GET("/MediaItems?$filter=" + filter)
 			if err != nil {
 				return err
-			}
-
-			// Should ideally return 400 for type mismatch, but 500 indicates library issue
-			if resp.StatusCode == 400 || resp.StatusCode == 500 {
-				return ctx.Skip(fmt.Sprintf("Server does not handle Int64 on UUID field (got %d) - library should improve type checking", resp.StatusCode))
 			}
 
 			// Should parse without error
@@ -99,16 +87,15 @@ func NumericBoundaryTests() *framework.TestSuite {
 			// Value exceeds Int64 max
 			overflowValue := "9223372036854775808" // Max + 1
 
-			filter := fmt.Sprintf("ID eq %s", overflowValue)
-			resp, err := ctx.GET("/Products?$filter=" + filter)
+			filter := fmt.Sprintf("Size eq %s", overflowValue)
+			resp, err := ctx.GET("/MediaItems?$filter=" + filter)
 			if err != nil {
 				return err
 			}
 
 			// Should return 400 for overflow
 			if resp.StatusCode != 400 {
-				// Some implementations might handle this differently
-				return ctx.Skip(fmt.Sprintf("Expected 400 for Int64 overflow, got %d", resp.StatusCode))
+				return fmt.Errorf("expected 400 for Int64 overflow, got %d", resp.StatusCode)
 			}
 
 			ctx.Log("Int64 overflow correctly rejected with 400")
@@ -216,23 +203,18 @@ func NumericBoundaryTests() *framework.TestSuite {
 			}
 
 			// OData should support INF literal
-			if resp.StatusCode == 200 {
-				var result struct {
-					Value []interface{} `json:"value"`
-				}
-				if err := json.Unmarshal(resp.Body, &result); err != nil {
-					return fmt.Errorf("response should be valid JSON: %w", err)
-				}
-				ctx.Log("Positive infinity (INF) supported in filters")
-				return nil
+			if resp.StatusCode != 200 {
+				return fmt.Errorf("expected 200 for INF literal, got %d", resp.StatusCode)
 			}
 
-			// Some implementations might not support INF
-			if resp.StatusCode == 400 {
-				return ctx.Skip("INF literal not supported")
+			var result struct {
+				Value []interface{} `json:"value"`
 			}
-
-			return fmt.Errorf("unexpected status %d for INF literal", resp.StatusCode)
+			if err := json.Unmarshal(resp.Body, &result); err != nil {
+				return fmt.Errorf("response should be valid JSON: %w", err)
+			}
+			ctx.Log("Positive infinity (INF) supported in filters")
+			return nil
 		},
 	)
 
@@ -247,23 +229,18 @@ func NumericBoundaryTests() *framework.TestSuite {
 			}
 
 			// OData should support -INF literal
-			if resp.StatusCode == 200 {
-				var result struct {
-					Value []interface{} `json:"value"`
-				}
-				if err := json.Unmarshal(resp.Body, &result); err != nil {
-					return fmt.Errorf("response should be valid JSON: %w", err)
-				}
-				ctx.Log("Negative infinity (-INF) supported in filters")
-				return nil
+			if resp.StatusCode != 200 {
+				return fmt.Errorf("expected 200 for -INF literal, got %d", resp.StatusCode)
 			}
 
-			// Some implementations might not support -INF
-			if resp.StatusCode == 400 {
-				return ctx.Skip("-INF literal not supported")
+			var result struct {
+				Value []interface{} `json:"value"`
 			}
-
-			return fmt.Errorf("unexpected status %d for -INF literal", resp.StatusCode)
+			if err := json.Unmarshal(resp.Body, &result); err != nil {
+				return fmt.Errorf("response should be valid JSON: %w", err)
+			}
+			ctx.Log("Negative infinity (-INF) supported in filters")
+			return nil
 		},
 	)
 
@@ -278,24 +255,19 @@ func NumericBoundaryTests() *framework.TestSuite {
 			}
 
 			// OData should support NaN literal
-			if resp.StatusCode == 200 {
-				var result struct {
-					Value []interface{} `json:"value"`
-				}
-				if err := json.Unmarshal(resp.Body, &result); err != nil {
-					return fmt.Errorf("response should be valid JSON: %w", err)
-				}
-				ctx.Log("NaN supported in filters")
-				// Note: NaN eq NaN is false per IEEE 754, so empty result is expected
-				return nil
+			if resp.StatusCode != 200 {
+				return fmt.Errorf("expected 200 for NaN literal, got %d", resp.StatusCode)
 			}
 
-			// Some implementations might not support NaN
-			if resp.StatusCode == 400 {
-				return ctx.Skip("NaN literal not supported")
+			var result struct {
+				Value []interface{} `json:"value"`
 			}
-
-			return fmt.Errorf("unexpected status %d for NaN literal", resp.StatusCode)
+			if err := json.Unmarshal(resp.Body, &result); err != nil {
+				return fmt.Errorf("response should be valid JSON: %w", err)
+			}
+			ctx.Log("NaN supported in filters")
+			// Note: NaN eq NaN is false per IEEE 754, so empty result is expected
+			return nil
 		},
 	)
 
