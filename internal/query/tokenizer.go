@@ -534,6 +534,9 @@ func (t *Tokenizer) classifyKeyword(lower string, pos int) *Token {
 		return &Token{Type: TokenOperator, Value: lower, Pos: pos}
 	case "add", "sub", "mul", "div", "mod":
 		return &Token{Type: TokenArithmetic, Value: lower, Pos: pos}
+	case "inf", "nan":
+		// OData v4 spec special floating-point literals
+		return &Token{Type: TokenNumber, Value: lower, Pos: pos}
 	}
 	return nil
 }

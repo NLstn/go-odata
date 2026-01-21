@@ -2,6 +2,7 @@ package query
 
 import (
 	"fmt"
+	"reflect"
 
 	"github.com/nlstn/go-odata/internal/metadata"
 )
@@ -242,11 +243,57 @@ func convertComparisonExprWithContext(n *ComparisonExpr, ctx *conversionContext)
 		return nil, err
 	}
 
+	// Validate numeric value against property type (OData v4 spec compliance)
+	if entityMetadata != nil {
+		if err := validateValueAgainstPropertyType(property, value, entityMetadata); err != nil {
+			return nil, err
+		}
+	}
+
 	return &FilterExpression{
 		Property: property,
 		Operator: FilterOperator(n.Operator),
 		Value:    value,
 	}, nil
+}
+
+// validateValueAgainstPropertyType validates that a filter value is appropriate for the target property type.
+// Returns an error if the value would overflow or is incompatible with the property type.
+func validateValueAgainstPropertyType(property string, value interface{}, entityMetadata *metadata.EntityMetadata) error {
+	// Only validate numeric values
+	floatVal, ok := value.(float64)
+	if !ok {
+		return nil
+	}
+
+	// Get property metadata
+	prop := entityMetadata.FindProperty(property)
+	if prop == nil {
+		// Property might be a navigation path or computed property - skip validation
+		return nil
+	}
+
+	// Get the property's Go type (handling pointers)
+	propType := prop.Type
+	if propType.Kind() == reflect.Ptr {
+		propType = propType.Elem()
+	}
+
+	// Check for Int64 overflow
+	// Per OData v4 spec, numeric literals that overflow the target integer type should be rejected
+	if propType.Kind() == reflect.Int64 || propType.Kind() == reflect.Uint64 {
+		const maxInt64 = float64(9223372036854775807)
+		const minInt64 = float64(-9223372036854775808)
+		
+		// Check if the value is out of Int64 range
+		// For very large integer literals (like 9223372036854775808), they overflow int64
+		// and are parsed as float64, but should still be rejected for Int64 properties
+		if floatVal > maxInt64 || floatVal < minInt64 {
+			return fmt.Errorf("numeric literal value out of range for Edm.Int64")
+		}
+	}
+
+	return nil
 }
 
 // extractPropertyFromComparisonWithContext extracts property name from the left side of a comparison
