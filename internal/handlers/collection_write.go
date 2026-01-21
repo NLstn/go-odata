@@ -585,7 +585,8 @@ func (h *EntityHandler) handlePostEntityOverwrite(w http.ResponseWriter, r *http
 		SetODataHeader(w, HeaderODataEntityId, location)
 		h.writeEntityResponseWithETag(w, r, result, "", http.StatusCreated, nil)
 	} else {
+		// Per OData v4.01 spec, POST with return=minimal should return 201 Created with empty body
 		SetODataHeader(w, HeaderODataEntityId, location)
-		w.WriteHeader(http.StatusNoContent)
+		w.WriteHeader(http.StatusCreated)
 	}
 }
