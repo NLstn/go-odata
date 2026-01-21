@@ -1,6 +1,9 @@
 package v4_0
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/nlstn/go-odata/compliance-suite/framework"
 )
 
@@ -76,9 +79,27 @@ func DataValidation() *framework.TestSuite {
 				return err
 			}
 
-			// Should return 415 or 400
 			if err := ctx.AssertStatusCode(resp, 415); err != nil {
-				return ctx.AssertStatusCode(resp, 400)
+				return err
+			}
+
+			if err := ctx.AssertJSONField(resp, "error"); err != nil {
+				return err
+			}
+
+			var payload map[string]interface{}
+			if err := ctx.GetJSON(resp, &payload); err != nil {
+				return err
+			}
+
+			errorValue, ok := payload["error"].(map[string]interface{})
+			if !ok {
+				return fmt.Errorf("error field is not an object")
+			}
+
+			message, ok := errorValue["message"].(string)
+			if !ok || strings.TrimSpace(message) == "" {
+				return fmt.Errorf("error.message is missing or empty")
 			}
 
 			return nil
