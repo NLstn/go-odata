@@ -41,7 +41,15 @@ func Deny(reason string) Decision {
 }
 
 // SetPolicy registers an authorization policy for the service.
-func (s *Service) SetPolicy(policy Policy) {
+// Pass nil to clear the policy (all requests will be allowed).
+//
+// # Example
+//
+//	err := service.SetPolicy(myAuthPolicy)
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
+func (s *Service) SetPolicy(policy Policy) error {
 	s.policy = policy
 	if s.metadataHandler != nil {
 		s.metadataHandler.SetPolicy(policy)
@@ -56,4 +64,5 @@ func (s *Service) SetPolicy(policy Policy) {
 			}
 		}
 	}
+	return nil
 }

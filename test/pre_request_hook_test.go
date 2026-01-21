@@ -59,7 +59,7 @@ func TestPreRequestHook_SingleRequest_ContextEnrichment(t *testing.T) {
 	var tokenSeen string
 
 	// Set the pre-request hook to capture authorization header
-	service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
+	if err := service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
 		hookCalled = true
 		tokenSeen = r.Header.Get("Authorization")
 		if tokenSeen != "" {
@@ -67,7 +67,9 @@ func TestPreRequestHook_SingleRequest_ContextEnrichment(t *testing.T) {
 			return context.WithValue(r.Context(), userContextKey, "test-user"), nil
 		}
 		return nil, nil
-	})
+	}); err != nil {
+		t.Fatalf("Failed to set pre-request hook: %v", err)
+	}
 
 	// Make request with Authorization header
 	req := httptest.NewRequest(http.MethodGet, "/PreRequestHookProducts(1)", nil)
@@ -93,13 +95,15 @@ func TestPreRequestHook_SingleRequest_AuthenticationFailure(t *testing.T) {
 	service, _ := setupPreRequestHookTest(t)
 
 	// Set the pre-request hook to reject invalid tokens
-	service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
+	if err := service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
 		token := r.Header.Get("Authorization")
 		if token == "Bearer invalid-token" {
 			return nil, fmt.Errorf("authentication failed: invalid token")
 		}
 		return nil, nil
-	})
+	}); err != nil {
+		t.Fatalf("Failed to set pre-request hook: %v", err)
+	}
 
 	// Make request with invalid token
 	req := httptest.NewRequest(http.MethodGet, "/PreRequestHookProducts(1)", nil)
@@ -125,14 +129,16 @@ func TestPreRequestHook_BatchSubRequest_NonChangeset(t *testing.T) {
 	var authHeadersFromHook []string
 
 	// Set the pre-request hook
-	service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
+	if err := service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
 		hookCallCount++
 		auth := r.Header.Get("Authorization")
 		if auth != "" {
 			authHeadersFromHook = append(authHeadersFromHook, auth)
 		}
 		return nil, nil
-	})
+	}); err != nil {
+		t.Fatalf("Failed to set pre-request hook: %v", err)
+	}
 
 	// Create batch request with Authorization header in sub-request
 	boundary := "batch_pre_request_hook"
@@ -194,14 +200,16 @@ func TestPreRequestHook_BatchChangeset_ContextEnrichment(t *testing.T) {
 	var authHeadersSeen []string
 
 	// Set the pre-request hook
-	service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
+	if err := service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
 		hookCallCount++
 		auth := r.Header.Get("Authorization")
 		if auth != "" {
 			authHeadersSeen = append(authHeadersSeen, auth)
 		}
 		return context.WithValue(r.Context(), userContextKey, "changeset-user"), nil
-	})
+	}); err != nil {
+		t.Fatalf("Failed to set pre-request hook: %v", err)
+	}
 
 	// Create batch request with changeset
 	batchBoundary := "batch_changeset_hook"
@@ -267,13 +275,15 @@ func TestPreRequestHook_BatchChangeset_AuthenticationFailure(t *testing.T) {
 	service, _ := setupPreRequestHookTest(t)
 
 	// Set the pre-request hook to reject invalid tokens
-	service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
+	if err := service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
 		token := r.Header.Get("Authorization")
 		if token == "Bearer invalid-changeset-token" {
 			return nil, fmt.Errorf("changeset authentication failed")
 		}
 		return nil, nil
-	})
+	}); err != nil {
+		t.Fatalf("Failed to set pre-request hook: %v", err)
+	}
 
 	// Create batch request with changeset containing invalid token
 	batchBoundary := "batch_changeset_auth_fail"
@@ -342,9 +352,11 @@ func TestPreRequestHook_NilContextReturn(t *testing.T) {
 	db.Create(&product)
 
 	// Set hook that returns nil context (no enrichment)
-	service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
+	if err := service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
 		return nil, nil
-	})
+	}); err != nil {
+		t.Fatalf("Failed to set pre-request hook: %v", err)
+	}
 
 	req := httptest.NewRequest(http.MethodGet, "/PreRequestHookProducts(1)", nil)
 	w := httptest.NewRecorder()
@@ -371,10 +383,12 @@ func TestPreRequestHook_MultipleSubRequests(t *testing.T) {
 	// Track hook calls
 	hookCallCount := 0
 
-	service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
+	if err := service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
 		hookCallCount++
 		return nil, nil
-	})
+	}); err != nil {
+		t.Fatalf("Failed to set pre-request hook: %v", err)
+	}
 
 	// Create batch request with multiple GET requests
 	boundary := "batch_multiple_sub"
@@ -429,10 +443,12 @@ func TestPreRequestHook_MultipleHookUpdates(t *testing.T) {
 	var hook1Called, hook2Called bool
 
 	// Set the first hook
-	service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
+	if err := service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
 		hook1Called = true
 		return nil, nil
-	})
+	}); err != nil {
+		t.Fatalf("Failed to set pre-request hook: %v", err)
+	}
 
 	// Make a request to verify hook 1 is called
 	req1 := httptest.NewRequest(http.MethodGet, "/PreRequestHookProducts(1)", nil)
@@ -449,10 +465,12 @@ func TestPreRequestHook_MultipleHookUpdates(t *testing.T) {
 	// Reset tracking and set the second hook
 	hook1Called = false
 	hook2Called = false
-	service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
+	if err := service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
 		hook2Called = true
 		return nil, nil
-	})
+	}); err != nil {
+		t.Fatalf("Failed to set pre-request hook: %v", err)
+	}
 
 	// Make another request to verify hook 2 is now called
 	req2 := httptest.NewRequest(http.MethodGet, "/PreRequestHookProducts(1)", nil)
@@ -474,10 +492,12 @@ func TestPreRequestHook_MultipleHookUpdates_BatchChangeset(t *testing.T) {
 	var hook1Called, hook2Called bool
 
 	// Set the first hook
-	service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
+	if err := service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
 		hook1Called = true
 		return nil, nil
-	})
+	}); err != nil {
+		t.Fatalf("Failed to set pre-request hook: %v", err)
+	}
 
 	// Create a batch request with changeset
 	batchBoundary := "batch_multi_hook"
@@ -515,10 +535,12 @@ Content-Type: application/json
 	// Reset tracking and set the second hook
 	hook1Called = false
 	hook2Called = false
-	service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
+	if err := service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
 		hook2Called = true
 		return nil, nil
-	})
+	}); err != nil {
+		t.Fatalf("Failed to set pre-request hook: %v", err)
+	}
 
 	// Make another batch request with changeset
 	body2 := fmt.Sprintf(`--%s

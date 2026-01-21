@@ -1355,10 +1355,12 @@ func TestBatchIntegration_CookieForwarding(t *testing.T) {
 
 	// Set up a PreRequestHook that checks for cookies
 	var receivedCookies []*http.Cookie
-	service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
+	if err := service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
 		receivedCookies = r.Cookies()
 		return r.Context(), nil
-	})
+	}); err != nil {
+		t.Fatalf("Failed to set pre-request hook: %v", err)
+	}
 
 	// Create batch request with a GET request
 	boundary := "batch_36d5c8c6"
@@ -1429,7 +1431,7 @@ func TestBatchIntegration_CookieBasedAuthentication(t *testing.T) {
 
 	// Set up a PreRequestHook that requires authentication via cookie
 	// Allow $batch endpoint through, but check cookies for actual data requests
-	service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
+	if err := service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
 		// Allow $batch endpoint to pass through without authentication
 		// The sub-requests within the batch will be authenticated individually
 		if r.URL.Path == "/$batch" {
@@ -1441,7 +1443,9 @@ func TestBatchIntegration_CookieBasedAuthentication(t *testing.T) {
 			return nil, fmt.Errorf("authentication required")
 		}
 		return r.Context(), nil
-	})
+	}); err != nil {
+		t.Fatalf("Failed to set pre-request hook: %v", err)
+	}
 
 	t.Run("with valid cookie", func(t *testing.T) {
 		boundary := "batch_36d5c8c6"
@@ -1547,10 +1551,12 @@ func TestBatchIntegration_CookieForwardingInChangeset(t *testing.T) {
 
 	// Set up a PreRequestHook that checks for cookies
 	var receivedCookies []*http.Cookie
-	service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
+	if err := service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
 		receivedCookies = r.Cookies()
 		return r.Context(), nil
-	})
+	}); err != nil {
+		t.Fatalf("Failed to set pre-request hook: %v", err)
+	}
 
 	// Create batch request with changeset
 	batchBoundary := "batch_36d5c8c6"
@@ -1623,7 +1629,7 @@ func TestBatchIntegration_CookieForwardingMultipleRequests(t *testing.T) {
 
 	// Track how many times the hook is called and verify cookies each time
 	hookCallCount := 0
-	service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
+	if err := service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
 		hookCallCount++
 		// Allow $batch endpoint to pass through
 		if r.URL.Path == "/$batch" {
@@ -1634,7 +1640,9 @@ func TestBatchIntegration_CookieForwardingMultipleRequests(t *testing.T) {
 			return nil, fmt.Errorf("cookie not found or incorrect")
 		}
 		return r.Context(), nil
-	})
+	}); err != nil {
+		t.Fatalf("Failed to set pre-request hook: %v", err)
+	}
 
 	// Create batch request with multiple GET requests
 	boundary := "batch_36d5c8c6"
