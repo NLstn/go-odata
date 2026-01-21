@@ -52,7 +52,9 @@ func TestIntegrationApplyGroupBy(t *testing.T) {
 
 	// Initialize OData service
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	_ = service.RegisterEntity(&ApplyTestProduct{})
 
 	tests := []struct {
@@ -217,7 +219,9 @@ func TestIntegrationApplyAggregate(t *testing.T) {
 
 	// Initialize OData service
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	_ = service.RegisterEntity(&ApplyTestProduct{})
 
 	tests := []struct {
@@ -419,7 +423,9 @@ func TestIntegrationApplyFilter(t *testing.T) {
 
 	// Initialize OData service
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	_ = service.RegisterEntity(&ApplyTestProduct{})
 
 	tests := []struct {

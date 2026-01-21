@@ -14,7 +14,9 @@ func TestDateFunctions_ComputeIntegration(t *testing.T) {
 	db := setupDateFunctionTestDB(t)
 
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	if err := service.RegisterEntity(&OrderWithDate{}); err != nil {
 		t.Fatalf("Failed to register OrderWithDate entity: %v", err)
 	}
@@ -253,7 +255,9 @@ func TestDateFunctions_ComputeWithFilter(t *testing.T) {
 	db := setupDateFunctionTestDB(t)
 
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	if err := service.RegisterEntity(&OrderWithDate{}); err != nil {
 		t.Fatalf("Failed to register OrderWithDate entity: %v", err)
 	}

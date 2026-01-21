@@ -68,7 +68,9 @@ func setupTestServer(t *testing.T) *httptest.Server {
 
 	// Create OData service
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	_ = service.RegisterEntity(&Customer{})
 	_ = service.RegisterEntity(&Order{})
 	_ = service.RegisterEntity(&OrderItem{})

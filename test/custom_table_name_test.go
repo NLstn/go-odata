@@ -93,7 +93,9 @@ func TestCustomTableNameWithNavigationFilter(t *testing.T) {
 
 	// Create OData service
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	service.RegisterEntity(&CustomClub{})
 	service.RegisterEntity(&CustomTeam{})
 	service.RegisterEntity(&CustomTeamMember{})
@@ -153,7 +155,9 @@ func TestCustomTableNameWithExpand(t *testing.T) {
 
 	// Create OData service
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	service.RegisterEntity(&CustomClub{})
 	service.RegisterEntity(&CustomTeam{})
 	service.RegisterEntity(&CustomTeamMember{})

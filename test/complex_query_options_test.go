@@ -41,7 +41,9 @@ func setupComplexQueryService(t *testing.T) (*odata.Service, *gorm.DB) {
 	}
 
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	if err := service.RegisterEntity(ComplexQueryProduct{}); err != nil {
 		t.Fatalf("failed to register entity: %v", err)
 	}

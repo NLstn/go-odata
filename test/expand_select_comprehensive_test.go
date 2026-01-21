@@ -12,7 +12,9 @@ import (
 func TestExpandSelectComprehensive(t *testing.T) {
 	db := setupTestDB(t)
 	service, err := odata.NewService(db)
-	if err != nil { t.Fatalf("NewService() error: %v", err) }
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
 	if err := service.RegisterEntity(&Product{}); err != nil {
 		t.Fatalf("Failed to register Product entity: %v", err)
 	}

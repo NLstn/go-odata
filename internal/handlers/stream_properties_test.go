@@ -21,9 +21,9 @@ import (
 type StreamPropertyTestEntity struct {
 	ID               uint   `json:"ID" gorm:"primaryKey" odata:"key"`
 	Name             string `json:"Name"`
-	Photo            []byte `json:"-" odata:"stream"`    // Stream property marker
-	PhotoContent     []byte `json:"-" gorm:"type:blob"`  // Actual binary content
-	PhotoContentType string `json:"-"`                   // Content type following convention
+	Photo            []byte `json:"-" odata:"stream"`   // Stream property marker
+	PhotoContent     []byte `json:"-" gorm:"type:blob"` // Actual binary content
+	PhotoContentType string `json:"-"`                  // Content type following convention
 }
 
 func setupStreamPropertyHandler(t *testing.T) (*EntityHandler, *gorm.DB) {
@@ -85,9 +85,9 @@ func TestHandleStreamProperty_GetStreamMetadata(t *testing.T) {
 
 	// Insert test data
 	entity := StreamPropertyTestEntity{
-		ID:        1,
-		Name:      "Test Entity",
-		PhotoContent: []byte("binary photo data"),
+		ID:               1,
+		Name:             "Test Entity",
+		PhotoContent:     []byte("binary photo data"),
 		PhotoContentType: "image/jpeg",
 	}
 	if err := db.Create(&entity).Error; err != nil {
@@ -124,9 +124,9 @@ func TestHandleStreamProperty_GetDefaultContentType(t *testing.T) {
 
 	// Insert test data with no content type
 	entity := StreamPropertyTestEntity{
-		ID:        1,
-		Name:      "Test Entity",
-		PhotoContent: []byte("binary photo data"),
+		ID:               1,
+		Name:             "Test Entity",
+		PhotoContent:     []byte("binary photo data"),
 		PhotoContentType: "", // Empty content type
 	}
 	if err := db.Create(&entity).Error; err != nil {
@@ -167,9 +167,9 @@ func TestHandleStreamProperty_PropertyNotFound(t *testing.T) {
 
 	// Insert test data
 	entity := StreamPropertyTestEntity{
-		ID:        1,
-		Name:      "Test Entity",
-		PhotoContent: []byte("binary photo data"),
+		ID:               1,
+		Name:             "Test Entity",
+		PhotoContent:     []byte("binary photo data"),
 		PhotoContentType: "image/jpeg",
 	}
 	if err := db.Create(&entity).Error; err != nil {
@@ -191,9 +191,9 @@ func TestHandleStreamProperty_Head(t *testing.T) {
 
 	// Insert test data
 	entity := StreamPropertyTestEntity{
-		ID:        1,
-		Name:      "Test Entity",
-		PhotoContent: []byte("binary photo data"),
+		ID:               1,
+		Name:             "Test Entity",
+		PhotoContent:     []byte("binary photo data"),
 		PhotoContentType: "image/jpeg",
 	}
 	if err := db.Create(&entity).Error; err != nil {

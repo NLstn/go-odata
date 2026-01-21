@@ -44,6 +44,14 @@ func (s *Service) serveHTTP(w http.ResponseWriter, r *http.Request, allowAsync b
 		}
 	}
 
+	// Validate odata.metadata parameter before processing
+	if err := response.ValidateODataMetadata(r); err != nil {
+		if writeErr := response.WriteError(w, r, http.StatusBadRequest, "InvalidMetadataValue", err.Error()); writeErr != nil {
+			http.Error(w, writeErr.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+
 	// Call the pre-request hook if configured
 	if s.preRequestHook != nil {
 		ctx, err := s.preRequestHook(r)
