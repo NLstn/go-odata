@@ -14,13 +14,13 @@ type selectTestCategory struct {
 }
 
 type selectTestProduct struct {
-	ID          int                  `json:"ID" odata:"key"`
-	Name        string               `json:"name"`
-	Price       float64              `json:"price"`
-	Description string               `json:"description"`
-	CategoryID  int                  `json:"categoryID"`
-	Category    *selectTestCategory  `json:"category,omitempty" gorm:"foreignKey:CategoryID"`
-	Tags        []selectTestTag      `json:"tags,omitempty" gorm:"foreignKey:ProductID"`
+	ID          int                 `json:"ID" odata:"key"`
+	Name        string              `json:"name"`
+	Price       float64             `json:"price"`
+	Description string              `json:"description"`
+	CategoryID  int                 `json:"categoryID"`
+	Category    *selectTestCategory `json:"category,omitempty" gorm:"foreignKey:CategoryID"`
+	Tags        []selectTestTag     `json:"tags,omitempty" gorm:"foreignKey:ProductID"`
 }
 
 type selectTestTag struct {
