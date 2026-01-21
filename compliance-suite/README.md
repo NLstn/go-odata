@@ -422,21 +422,22 @@ import (
 )
 
 func MyAnnotation() *framework.TestSuite {
-    return &framework.TestSuite{
-        Name:        "MyVocab.MyAnnotation",
-        Description: "Tests for MyVocab.MyAnnotation behavior",
-        SpecURL:     "https://github.com/oasis-tcs/odata-vocabularies/...",
-        Tests: []framework.Test{
-            {
-                Name:        "metadata_includes_annotation",
-                Description: "Verify annotation appears in metadata",
-                Run: func(ctx *framework.TestContext) error {
-                    // Test implementation
-                    return nil
-                },
-            },
+    suite := framework.NewTestSuite(
+        "MyVocab.MyAnnotation",
+        "Tests for MyVocab.MyAnnotation behavior",
+        "https://github.com/oasis-tcs/odata-vocabularies/...",
+    )
+
+    suite.AddTest(
+        "metadata_includes_annotation",
+        "Verify annotation appears in metadata",
+        func(ctx *framework.TestContext) error {
+            // Test implementation
+            return nil
         },
-    }
+    )
+
+    return suite
 }
 ```
 6. Register the suite in `main.go`

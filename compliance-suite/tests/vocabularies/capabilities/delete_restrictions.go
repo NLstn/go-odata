@@ -32,7 +32,7 @@ func DeleteRestrictions() *framework.TestSuite {
 			body := string(resp.Body)
 			if !strings.Contains(body, "Capabilities.DeleteRestrictions") &&
 				!strings.Contains(body, "Org.OData.Capabilities.V1.DeleteRestrictions") {
-				ctx.Log("Info: No Capabilities.DeleteRestrictions annotations found in metadata")
+				ctx.Log("Warning: No Capabilities.DeleteRestrictions annotations found in metadata")
 			}
 
 			return nil
