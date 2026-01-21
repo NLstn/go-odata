@@ -266,8 +266,7 @@ func registerErrorResponseTests(suite *framework.TestSuite) {
 
 			// Should return 400 for validation error
 			if resp.StatusCode != 400 {
-				// Some servers might be lenient and convert types
-				return ctx.Skip(fmt.Sprintf("Expected 400 for invalid data, got %d", resp.StatusCode))
+				return fmt.Errorf("expected 400 for invalid data, got %d", resp.StatusCode)
 			}
 
 			var result map[string]interface{}
@@ -278,6 +277,29 @@ func registerErrorResponseTests(suite *framework.TestSuite) {
 			errorObj, ok := result["error"].(map[string]interface{})
 			if !ok {
 				return fmt.Errorf("no 'error' object in response")
+			}
+
+			code, ok := errorObj["code"].(string)
+			if !ok || code == "" {
+				return fmt.Errorf("missing or empty 'code' in error object")
+			}
+
+			message, ok := errorObj["message"]
+			if !ok {
+				return fmt.Errorf("missing 'message' in error object")
+			}
+			switch msg := message.(type) {
+			case string:
+				if msg == "" {
+					return fmt.Errorf("'message' must not be empty")
+				}
+			case map[string]interface{}:
+				value, ok := msg["value"].(string)
+				if !ok || value == "" {
+					return fmt.Errorf("message object must have non-empty 'value'")
+				}
+			default:
+				return fmt.Errorf("message must be string or object, got %T", message)
 			}
 
 			// Target is optional, but if present should be a string
@@ -309,7 +331,7 @@ func registerErrorResponseTests(suite *framework.TestSuite) {
 			}
 
 			if resp.StatusCode != 400 {
-				return ctx.Skip("No validation error triggered")
+				return fmt.Errorf("expected 400 for invalid filter, got %d", resp.StatusCode)
 			}
 
 			var result map[string]interface{}
@@ -320,6 +342,29 @@ func registerErrorResponseTests(suite *framework.TestSuite) {
 			errorObj, ok := result["error"].(map[string]interface{})
 			if !ok {
 				return fmt.Errorf("no 'error' object in response")
+			}
+
+			code, ok := errorObj["code"].(string)
+			if !ok || code == "" {
+				return fmt.Errorf("missing or empty 'code' in error object")
+			}
+
+			message, ok := errorObj["message"]
+			if !ok {
+				return fmt.Errorf("missing 'message' in error object")
+			}
+			switch msg := message.(type) {
+			case string:
+				if msg == "" {
+					return fmt.Errorf("'message' must not be empty")
+				}
+			case map[string]interface{}:
+				value, ok := msg["value"].(string)
+				if !ok || value == "" {
+					return fmt.Errorf("message object must have non-empty 'value'")
+				}
+			default:
+				return fmt.Errorf("message must be string or object, got %T", message)
 			}
 
 			// Details is optional, but if present must be an array
@@ -413,8 +458,7 @@ func registerErrorResponseTests(suite *framework.TestSuite) {
 
 			// Should return 400 for validation errors
 			if resp.StatusCode != 400 {
-				// Might be lenient with defaults
-				return ctx.Skip(fmt.Sprintf("Expected 400 for invalid data, got %d", resp.StatusCode))
+				return fmt.Errorf("expected 400 for invalid data, got %d", resp.StatusCode)
 			}
 
 			var result map[string]interface{}
@@ -428,11 +472,27 @@ func registerErrorResponseTests(suite *framework.TestSuite) {
 			}
 
 			// Must have code and message
-			if _, ok := errorObj["code"].(string); !ok {
-				return fmt.Errorf("missing 'code' in error")
+			code, ok := errorObj["code"].(string)
+			if !ok || code == "" {
+				return fmt.Errorf("missing or empty 'code' in error")
 			}
-			if _, ok := errorObj["message"].(string); !ok {
+
+			message, ok := errorObj["message"]
+			if !ok {
 				return fmt.Errorf("missing 'message' in error")
+			}
+			switch msg := message.(type) {
+			case string:
+				if msg == "" {
+					return fmt.Errorf("'message' must not be empty")
+				}
+			case map[string]interface{}:
+				value, ok := msg["value"].(string)
+				if !ok || value == "" {
+					return fmt.Errorf("message object must have non-empty 'value'")
+				}
+			default:
+				return fmt.Errorf("message must be string or object, got %T", message)
 			}
 
 			// Server may include details for multiple validation errors
