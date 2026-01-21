@@ -261,9 +261,46 @@ func MetadataLevels() *framework.TestSuite {
 				return err
 			}
 
-			// Accept 400 (error) or 200 (lenient implementation)
-			if resp.StatusCode != 400 && resp.StatusCode != 200 {
-				return fmt.Errorf("expected status 400 or 200, got %d", resp.StatusCode)
+			if resp.StatusCode != 400 && resp.StatusCode != 406 {
+				return fmt.Errorf("expected status 400 or 406, got %d", resp.StatusCode)
+			}
+
+			if err := ctx.AssertHeaderContains(resp, "Content-Type", "application/json"); err != nil {
+				return err
+			}
+
+			if resp.Headers.Get("OData-Version") == "" {
+				return framework.NewError("missing OData-Version header")
+			}
+
+			var result map[string]interface{}
+			if err := json.Unmarshal(resp.Body, &result); err != nil {
+				return fmt.Errorf("response is not valid JSON: %w", err)
+			}
+
+			errorObj, ok := result["error"].(map[string]interface{})
+			if !ok {
+				return fmt.Errorf("error response must have 'error' object")
+			}
+
+			code, ok := errorObj["code"].(string)
+			if !ok || code == "" {
+				return fmt.Errorf("error object must include non-empty 'code' property")
+			}
+
+			message := errorObj["message"]
+			switch msg := message.(type) {
+			case string:
+				if msg == "" {
+					return fmt.Errorf("error.message must be non-empty string")
+				}
+			case map[string]interface{}:
+				value, ok := msg["value"].(string)
+				if !ok || value == "" {
+					return fmt.Errorf("error.message.value must be non-empty string")
+				}
+			default:
+				return fmt.Errorf("error.message must be string or object, got %T", message)
 			}
 
 			return nil
