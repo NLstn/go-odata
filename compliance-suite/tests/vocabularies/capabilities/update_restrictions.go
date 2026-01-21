@@ -32,7 +32,7 @@ func UpdateRestrictions() *framework.TestSuite {
 			body := string(resp.Body)
 			if !strings.Contains(body, "Capabilities.UpdateRestrictions") &&
 				!strings.Contains(body, "Org.OData.Capabilities.V1.UpdateRestrictions") {
-				ctx.Log("Info: No Capabilities.UpdateRestrictions annotations found in metadata")
+				ctx.Log("Warning: No Capabilities.UpdateRestrictions annotations found in metadata")
 			}
 
 			return nil
