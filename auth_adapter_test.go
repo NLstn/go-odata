@@ -31,7 +31,9 @@ func TestSetPolicyAppliesToHandlers(t *testing.T) {
 		t.Fatalf("RegisterEntity error: %v", err)
 	}
 
-	service.SetPolicy(denyAllPolicy{reason: "blocked"})
+	if err := service.SetPolicy(denyAllPolicy{reason: "blocked"}); err != nil {
+		t.Fatalf("SetPolicy error: %v", err)
+	}
 
 	requests := []struct {
 		name string
@@ -68,7 +70,9 @@ func TestAllowPolicyPermitsAccess(t *testing.T) {
 		t.Fatalf("RegisterEntity error: %v", err)
 	}
 
-	service.SetPolicy(allowAllPolicy{})
+	if err := service.SetPolicy(allowAllPolicy{}); err != nil {
+		t.Fatalf("SetPolicy error: %v", err)
+	}
 
 	requests := []struct {
 		name           string

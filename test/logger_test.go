@@ -51,7 +51,9 @@ func TestSetLogger_CustomLogger(t *testing.T) {
 	}))
 
 	// Set the custom logger
-	service.SetLogger(logger)
+	if err := service.SetLogger(logger); err != nil {
+		t.Fatalf("Failed to set logger: %v", err)
+	}
 
 	// Insert test data
 	db.Create(&LoggerTestProduct{ID: 1, Name: "Test"})
@@ -74,7 +76,9 @@ func TestSetLogger_NilLogger(t *testing.T) {
 	service, db := setupLoggerTestService(t)
 
 	// Set nil logger (should fall back to default)
-	service.SetLogger(nil)
+	if err := service.SetLogger(nil); err != nil {
+		t.Fatalf("Failed to set nil logger: %v", err)
+	}
 
 	// Insert test data
 	db.Create(&LoggerTestProduct{ID: 1, Name: "Test"})
@@ -96,7 +100,9 @@ func TestSetLogger_AfterRegistration(t *testing.T) {
 	// Set logger after entity registration
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&buf, nil))
-	service.SetLogger(logger)
+	if err := service.SetLogger(logger); err != nil {
+		t.Fatalf("Failed to set logger: %v", err)
+	}
 
 	// Insert test data
 	db.Create(&LoggerTestProduct{ID: 1, Name: "Test"})
@@ -135,10 +141,18 @@ func TestSetLogger_MultipleSetCalls(t *testing.T) {
 	logger1 := slog.New(slog.NewTextHandler(&buf1, nil))
 	logger2 := slog.New(slog.NewTextHandler(&buf2, nil))
 
-	service.SetLogger(logger1)
-	service.SetLogger(logger2)
-	service.SetLogger(nil) // Back to default
-	service.SetLogger(logger1)
+	if err := service.SetLogger(logger1); err != nil {
+		t.Fatalf("Failed to set logger1: %v", err)
+	}
+	if err := service.SetLogger(logger2); err != nil {
+		t.Fatalf("Failed to set logger2: %v", err)
+	}
+	if err := service.SetLogger(nil); err != nil { // Back to default
+		t.Fatalf("Failed to set nil logger: %v", err)
+	}
+	if err := service.SetLogger(logger1); err != nil {
+		t.Fatalf("Failed to set logger1 again: %v", err)
+	}
 
 	// Insert test data
 	db.Create(&LoggerTestProduct{ID: 1, Name: "Test"})
@@ -160,7 +174,9 @@ func TestSetLogger_WithEntityOperations(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{
 		Level: slog.LevelDebug,
 	}))
-	service.SetLogger(logger)
+	if err := service.SetLogger(logger); err != nil {
+		t.Fatalf("Failed to set logger: %v", err)
+	}
 
 	// Test POST
 	postBody := `{"name": "New Product"}`

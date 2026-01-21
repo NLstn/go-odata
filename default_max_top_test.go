@@ -77,7 +77,9 @@ func TestSetDefaultMaxTop_ServiceLevel(t *testing.T) {
 	service, _ := setupTestServiceWithProducts(t, 50)
 
 	// Set service-level default max top
-	service.SetDefaultMaxTop(10)
+	if err := service.SetDefaultMaxTop(10); err != nil {
+		t.Fatalf("Failed to set default max top: %v", err)
+	}
 
 	// Test without explicit $top - should return 10 results
 	req := httptest.NewRequest(http.MethodGet, "/TestProducts", nil)
@@ -113,7 +115,9 @@ func TestSetDefaultMaxTop_WithExplicitTop(t *testing.T) {
 	service, _ := setupTestServiceWithProducts(t, 50)
 
 	// Set service-level default max top
-	service.SetDefaultMaxTop(10)
+	if err := service.SetDefaultMaxTop(10); err != nil {
+		t.Fatalf("Failed to set default max top: %v", err)
+	}
 
 	// Test with explicit $top=5 - should return 5 results
 	req := httptest.NewRequest(http.MethodGet, "/TestProducts?$top=5", nil)
@@ -144,8 +148,12 @@ func TestSetDefaultMaxTop_RemoveDefault(t *testing.T) {
 	service, _ := setupTestServiceWithProducts(t, 20)
 
 	// Set and then remove default max top
-	service.SetDefaultMaxTop(10)
-	service.SetDefaultMaxTop(0) // Remove the default
+	if err := service.SetDefaultMaxTop(10); err != nil {
+		t.Fatalf("Failed to set default max top: %v", err)
+	}
+	if err := service.SetDefaultMaxTop(0); err != nil { // Remove the default
+		t.Fatalf("Failed to remove default max top: %v", err)
+	}
 
 	// Test without explicit $top - should return all 20 results
 	req := httptest.NewRequest(http.MethodGet, "/TestProducts", nil)
@@ -238,7 +246,9 @@ func TestSetEntityDefaultMaxTop_EntityOverridesService(t *testing.T) {
 	service, _ := setupTestServiceWithProducts(t, 50)
 
 	// Set service-level default
-	service.SetDefaultMaxTop(20)
+	if err := service.SetDefaultMaxTop(20); err != nil {
+		t.Fatalf("Failed to set default max top: %v", err)
+	}
 
 	// Set entity-level default that overrides service default
 	if err := service.SetEntityDefaultMaxTop("TestProducts", 5); err != nil {
@@ -298,7 +308,9 @@ func TestSetEntityDefaultMaxTop_ExplicitTopOverridesAll(t *testing.T) {
 	service, _ := setupTestServiceWithProducts(t, 50)
 
 	// Set both service and entity defaults
-	service.SetDefaultMaxTop(20)
+	if err := service.SetDefaultMaxTop(20); err != nil {
+		t.Fatalf("Failed to set default max top: %v", err)
+	}
 	if err := service.SetEntityDefaultMaxTop("TestProducts", 10); err != nil {
 		t.Fatalf("Failed to set entity default max top: %v", err)
 	}
@@ -346,7 +358,9 @@ func TestSetDefaultMaxTop_WithMaxPageSizePreference(t *testing.T) {
 	service, _ := setupTestServiceWithProducts(t, 50)
 
 	// Set service-level default max top
-	service.SetDefaultMaxTop(20)
+	if err := service.SetDefaultMaxTop(20); err != nil {
+		t.Fatalf("Failed to set default max top: %v", err)
+	}
 
 	// Test with Prefer: odata.maxpagesize=5 header
 	req := httptest.NewRequest(http.MethodGet, "/TestProducts", nil)
@@ -379,7 +393,9 @@ func TestSetEntityDefaultMaxTop_RemoveEntityDefault(t *testing.T) {
 	service, _ := setupTestServiceWithProducts(t, 50)
 
 	// Set service-level default
-	service.SetDefaultMaxTop(20)
+	if err := service.SetDefaultMaxTop(20); err != nil {
+		t.Fatalf("Failed to set default max top: %v", err)
+	}
 
 	// Set entity-level default
 	if err := service.SetEntityDefaultMaxTop("TestProducts", 5); err != nil {
@@ -420,7 +436,9 @@ func TestSetDefaultMaxTop_WithSkipAndTop(t *testing.T) {
 	service, _ := setupTestServiceWithProducts(t, 50)
 
 	// Set service-level default max top
-	service.SetDefaultMaxTop(10)
+	if err := service.SetDefaultMaxTop(10); err != nil {
+		t.Fatalf("Failed to set default max top: %v", err)
+	}
 
 	// Test with $skip=5 (no explicit $top, should use default)
 	req := httptest.NewRequest(http.MethodGet, "/TestProducts?$skip=5", nil)
@@ -459,7 +477,9 @@ func TestSetEntityDefaultMaxTop_ServiceDefaultChangesAfterEntitySet(t *testing.T
 	service, _ := setupTestServiceWithProducts(t, 50)
 
 	// Step 1: Set service-level default
-	service.SetDefaultMaxTop(20)
+	if err := service.SetDefaultMaxTop(20); err != nil {
+		t.Fatalf("Failed to set default max top: %v", err)
+	}
 
 	// Step 2: Set entity-level default
 	if err := service.SetEntityDefaultMaxTop("TestProducts", 10); err != nil {
@@ -467,7 +487,9 @@ func TestSetEntityDefaultMaxTop_ServiceDefaultChangesAfterEntitySet(t *testing.T
 	}
 
 	// Step 3: Change service-level default
-	service.SetDefaultMaxTop(30)
+	if err := service.SetDefaultMaxTop(30); err != nil {
+		t.Fatalf("Failed to set default max top: %v", err)
+	}
 
 	// Step 4: Remove entity-level default - should fall back to current service default (30)
 	if err := service.SetEntityDefaultMaxTop("TestProducts", 0); err != nil {

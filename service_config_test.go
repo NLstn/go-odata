@@ -24,7 +24,9 @@ func TestSetLogger(t *testing.T) {
 	// Test setting a custom logger
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	service.SetLogger(logger)
+	if err := service.SetLogger(logger); err != nil {
+		t.Fatalf("Failed to set logger: %v", err)
+	}
 
 	// Verify logger was set by checking that debug logs are written
 	if err := service.RegisterEntity(&Product{}); err != nil {
@@ -37,7 +39,9 @@ func TestSetLogger(t *testing.T) {
 	}
 
 	// Test setting nil logger (should use default)
-	service.SetLogger(nil)
+	if err := service.SetLogger(nil); err != nil {
+		t.Fatalf("Failed to set nil logger: %v", err)
+	}
 	// Service should still work with default logger
 }
 
@@ -192,10 +196,12 @@ func TestSetPreRequestHook(t *testing.T) {
 	const userKey contextKey = "user"
 
 	hookCalled := false
-	service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
+	if err := service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
 		hookCalled = true
 		return context.WithValue(r.Context(), userKey, "test-user"), nil
-	})
+	}); err != nil {
+		t.Fatalf("Failed to set pre-request hook: %v", err)
+	}
 
 	// Make a request to trigger the hook
 	req := httptest.NewRequest("GET", "/Products", nil)
@@ -207,9 +213,11 @@ func TestSetPreRequestHook(t *testing.T) {
 	}
 
 	// Test hook that returns error
-	service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
+	if err := service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
 		return nil, http.ErrAbortHandler
-	})
+	}); err != nil {
+		t.Fatalf("Failed to set pre-request hook: %v", err)
+	}
 
 	req = httptest.NewRequest("GET", "/Products", nil)
 	w = httptest.NewRecorder()

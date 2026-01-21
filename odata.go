@@ -518,8 +518,14 @@ func generateUUIDBytes() ([16]byte, error) {
 }
 
 // SetLogger sets a custom logger for the service.
-// If not called, slog.Default() is used.
-func (s *Service) SetLogger(logger *slog.Logger) {
+// If logger is nil, slog.Default() is used.
+//
+// # Example
+//
+//	if err := service.SetLogger(slog.New(slog.NewJSONHandler(os.Stdout, nil))); err != nil {
+//	    log.Fatal(err)
+//	}
+func (s *Service) SetLogger(logger *slog.Logger) error {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -536,6 +542,7 @@ func (s *Service) SetLogger(logger *slog.Logger) {
 	for _, handler := range s.handlers {
 		handler.SetLogger(logger)
 	}
+	return nil
 }
 
 // ObservabilityConfig configures observability features (tracing, metrics) for the service.
@@ -810,6 +817,8 @@ func (s *Service) AsyncMonitorPrefix() string {
 // The hook is called for all requests including batch sub-requests (both changeset and
 // non-changeset operations), providing a unified mechanism for request preprocessing.
 //
+// Pass nil to clear the hook.
+//
 // This is the recommended way to implement authentication and context enrichment that
 // works consistently for both single requests and batch operations. This hook is
 // automatically invoked for batch sub-requests without any additional configuration.
@@ -830,7 +839,7 @@ func (s *Service) AsyncMonitorPrefix() string {
 //
 // # Example - Loading user from JWT
 //
-//	service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
+//	err := service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
 //	    token := r.Header.Get("Authorization")
 //	    if token == "" {
 //	        return nil, nil // Allow anonymous access
@@ -841,7 +850,7 @@ func (s *Service) AsyncMonitorPrefix() string {
 //	    }
 //	    return context.WithValue(r.Context(), userContextKey, user), nil
 //	})
-func (s *Service) SetPreRequestHook(hook PreRequestHook) {
+func (s *Service) SetPreRequestHook(hook PreRequestHook) error {
 	s.preRequestHook = hook
 	if s.batchHandler != nil {
 		// Wrap the hook for the batch handler. The wrapper reads s.preRequestHook on each
@@ -853,6 +862,7 @@ func (s *Service) SetPreRequestHook(hook PreRequestHook) {
 			return s.preRequestHook(r)
 		})
 	}
+	return nil
 }
 
 // Close releases resources held by the service, including background managers.
@@ -1863,8 +1873,10 @@ func (s *Service) DisableHTTPMethods(entitySetName string, methods ...string) er
 //
 // # Example
 //
-//	service.SetDefaultMaxTop(100) // Default limit of 100 results for all entities
-func (s *Service) SetDefaultMaxTop(maxTop int) {
+//	if err := service.SetDefaultMaxTop(100); err != nil {
+//	    log.Fatal(err)
+//	}
+func (s *Service) SetDefaultMaxTop(maxTop int) error {
 	if maxTop <= 0 {
 		s.defaultMaxTop = nil
 		s.logger.Debug("Removed default max top for service")
@@ -1874,6 +1886,7 @@ func (s *Service) SetDefaultMaxTop(maxTop int) {
 	}
 	// Update all existing handlers that don't have entity-level defaults
 	s.updateHandlersDefaultMaxTop()
+	return nil
 }
 
 // updateHandlersDefaultMaxTop updates all handlers with the service-level default,
