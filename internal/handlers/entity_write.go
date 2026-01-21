@@ -198,10 +198,6 @@ func (h *EntityHandler) handlePatchEntity(w http.ResponseWriter, r *http.Request
 			return newTransactionHandledError(err)
 		}
 
-		if err := h.validateImmutablePropertiesNotUpdated(updateData, w, r); err != nil {
-			return newTransactionHandledError(err)
-		}
-
 		if err := h.validatePropertiesExistForUpdate(updateData, w, r); err != nil {
 			return newTransactionHandledError(err)
 		}
