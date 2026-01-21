@@ -203,7 +203,11 @@ func (h *EntityHandler) validatePropertiesExist(data map[string]interface{}, w h
 			autoProperties[prop.Name] = true
 		}
 
-		if checkAutoProperties && hasPropertyAnnotation(&prop, metadata.CoreComputed) && !prop.IsETag {
+		// Track computed properties, but exclude keys and ETags
+		// Keys are excluded because database-generated keys (auto-increment) are marked as computed,
+		// but clients may need to provide them in batch requests for referencing entities.
+		// ETags are excluded because they're handled separately in the update flow.
+		if checkAutoProperties && hasPropertyAnnotation(&prop, metadata.CoreComputed) && !prop.IsETag && !prop.IsKey {
 			computedProperties[prop.JsonName] = true
 			computedProperties[prop.Name] = true
 		}
@@ -281,35 +285,6 @@ func (h *EntityHandler) validatePropertiesExist(data map[string]interface{}, w h
 			}
 			return err
 		}
-	}
-
-	return nil
-}
-
-func (h *EntityHandler) validateComputedPropertiesNotProvided(data map[string]interface{}, w http.ResponseWriter, r *http.Request) error {
-	for propName := range data {
-		if strings.HasPrefix(propName, "@") {
-			continue
-		}
-		if idx := strings.Index(propName, "@"); idx > 0 {
-			propertyPart := propName[:idx]
-			if _, ok := h.propertyMap[propertyPart]; ok {
-				continue
-			}
-		}
-
-		prop := h.metadata.FindProperty(propName)
-		if prop == nil || prop.IsAuto || prop.IsETag || prop.IsKey || !hasPropertyAnnotation(prop, metadata.CoreComputed) {
-			continue
-		}
-
-		err := fmt.Errorf("property '%s' is computed by the service and cannot be set by clients", propName)
-		span := trace.SpanFromContext(r.Context())
-		span.RecordError(err)
-		if writeErr := response.WriteError(w, r, http.StatusBadRequest, "Invalid property modification", err.Error()); writeErr != nil {
-			h.logger.Error("Error writing error response", "error", writeErr)
-		}
-		return err
 	}
 
 	return nil

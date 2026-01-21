@@ -8,7 +8,7 @@ import (
 	"github.com/nlstn/go-odata/internal/metadata"
 )
 
-func entitySetRestrictionDisabled(annotations *metadata.AnnotationCollection, term, field string) bool {
+func isOperationProhibited(annotations *metadata.AnnotationCollection, term, field string) bool {
 	if annotations == nil {
 		return false
 	}
@@ -44,28 +44,28 @@ func boolFromAnnotationValue(value interface{}) (bool, bool) {
 }
 
 func (h *EntityHandler) enforceInsertRestrictions(w http.ResponseWriter, r *http.Request) bool {
-	if !entitySetRestrictionDisabled(h.metadata.EntitySetAnnotations, metadata.CapInsertRestrictions, "Insertable") {
-		return true
+	if isOperationProhibited(h.metadata.EntitySetAnnotations, metadata.CapInsertRestrictions, "Insertable") {
+		h.writeMethodNotAllowedError(w, r, "POST", fmt.Sprintf("entity set '%s'", h.metadata.EntitySetName))
+		return false
 	}
 
-	h.writeMethodNotAllowedError(w, r, "POST", fmt.Sprintf("entity set '%s'", h.metadata.EntitySetName))
-	return false
+	return true
 }
 
 func (h *EntityHandler) enforceUpdateRestrictions(w http.ResponseWriter, r *http.Request, method string) bool {
-	if !entitySetRestrictionDisabled(h.metadata.EntitySetAnnotations, metadata.CapUpdateRestrictions, "Updatable") {
-		return true
+	if isOperationProhibited(h.metadata.EntitySetAnnotations, metadata.CapUpdateRestrictions, "Updatable") {
+		h.writeMethodNotAllowedError(w, r, method, fmt.Sprintf("entity set '%s'", h.metadata.EntitySetName))
+		return false
 	}
 
-	h.writeMethodNotAllowedError(w, r, method, fmt.Sprintf("entity set '%s'", h.metadata.EntitySetName))
-	return false
+	return true
 }
 
 func (h *EntityHandler) enforceDeleteRestrictions(w http.ResponseWriter, r *http.Request) bool {
-	if !entitySetRestrictionDisabled(h.metadata.EntitySetAnnotations, metadata.CapDeleteRestrictions, "Deletable") {
-		return true
+	if isOperationProhibited(h.metadata.EntitySetAnnotations, metadata.CapDeleteRestrictions, "Deletable") {
+		h.writeMethodNotAllowedError(w, r, "DELETE", fmt.Sprintf("entity set '%s'", h.metadata.EntitySetName))
+		return false
 	}
 
-	h.writeMethodNotAllowedError(w, r, "DELETE", fmt.Sprintf("entity set '%s'", h.metadata.EntitySetName))
-	return false
+	return true
 }
