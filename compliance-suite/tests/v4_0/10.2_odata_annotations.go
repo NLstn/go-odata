@@ -3,6 +3,8 @@ package v4_0
 import (
 	"encoding/json"
 	"fmt"
+	"math"
+	"net/url"
 	"strings"
 
 	"github.com/nlstn/go-odata/compliance-suite/framework"
@@ -261,6 +263,10 @@ func ODataAnnotations() *framework.TestSuite {
 				return fmt.Errorf("@odata.count must be non-negative, got %f", countNum)
 			}
 
+			if math.Trunc(countNum) != countNum {
+				return fmt.Errorf("@odata.count must be an integer value, got %f", countNum)
+			}
+
 			ctx.Log(fmt.Sprintf("@odata.count: %f", countNum))
 			return nil
 		},
@@ -270,8 +276,8 @@ func ODataAnnotations() *framework.TestSuite {
 		"test_odata_nextlink_with_pagination",
 		"@odata.nextLink present when results are paginated",
 		func(ctx *framework.TestContext) error {
-			// Request with very small $top to force pagination
-			resp, err := ctx.GET("/Products?$top=2")
+			// Request with $count=true to confirm pagination is required
+			resp, err := ctx.GET("/Products?$count=true&$top=1")
 			if err != nil {
 				return err
 			}
@@ -281,22 +287,29 @@ func ODataAnnotations() *framework.TestSuite {
 
 			var result struct {
 				Value    []map[string]interface{} `json:"value"`
+				Count    float64                  `json:"@odata.count"`
 				NextLink string                   `json:"@odata.nextLink"`
 			}
 			if err := json.Unmarshal(resp.Body, &result); err != nil {
 				return fmt.Errorf("invalid JSON response: %w", err)
 			}
 
-			// If there are more results, nextLink should be present
-			// This test verifies the format if present
-			if result.NextLink != "" {
-				// Should be a URL with skiptoken or skip parameter
-				if !strings.Contains(result.NextLink, "skip") && !strings.Contains(result.NextLink, "token") {
-					ctx.Log(fmt.Sprintf("Warning: @odata.nextLink present but doesn't contain skip/token: %s", result.NextLink))
-				}
-				ctx.Log(fmt.Sprintf("@odata.nextLink: %s", result.NextLink))
-			} else {
-				ctx.Log("No @odata.nextLink - all results fit in one page")
+			if result.Count <= 1 {
+				return ctx.Skip("Not enough entities to require pagination for $top=1")
+			}
+
+			if result.NextLink == "" {
+				return fmt.Errorf("@odata.nextLink required when @odata.count exceeds $top=1")
+			}
+
+			parsed, err := url.Parse(result.NextLink)
+			if err != nil {
+				return fmt.Errorf("invalid @odata.nextLink URL: %w", err)
+			}
+
+			query := parsed.Query()
+			if !query.Has("$skip") && !query.Has("$skiptoken") {
+				return fmt.Errorf("@odata.nextLink must include $skip or $skiptoken parameter, got: %s", result.NextLink)
 			}
 
 			return nil
