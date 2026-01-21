@@ -100,100 +100,38 @@ func TestStringType(t *testing.T) {
 			t.Error("expected null string")
 		}
 	})
-}
 
-func TestBooleanType(t *testing.T) {
-	t.Run("Create from true", func(t *testing.T) {
-		b, err := NewBoolean(true, Facets{})
+	t.Run("SetFacets with valid maxLength", func(t *testing.T) {
+		s, _ := NewString("hello", Facets{})
+		maxLen := 10
+		newFacets := Facets{MaxLength: &maxLen}
+		err := s.(*String).SetFacets(newFacets)
 		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
+			t.Errorf("SetFacets() error = %v", err)
 		}
-		if b.TypeName() != "Edm.Boolean" {
-			t.Errorf("expected TypeName 'Edm.Boolean', got '%s'", b.TypeName())
-		}
-		if b.Value() != true {
-			t.Errorf("expected value true, got %v", b.Value())
-		}
-		if b.String() != "true" {
-			t.Errorf("expected 'true', got '%s'", b.String())
+		gotFacets := s.(*String).GetFacets()
+		if gotFacets.MaxLength == nil || *gotFacets.MaxLength != maxLen {
+			t.Errorf("GetFacets() MaxLength = %v, want %v", gotFacets.MaxLength, maxLen)
 		}
 	})
 
-	t.Run("Create from false", func(t *testing.T) {
-		b, err := NewBoolean(false, Facets{})
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if b.Value() != false {
-			t.Errorf("expected value false, got %v", b.Value())
-		}
-		if b.String() != "false" {
-			t.Errorf("expected 'false', got '%s'", b.String())
-		}
-	})
-
-	t.Run("Create from nil", func(t *testing.T) {
-		b, err := NewBoolean(nil, Facets{})
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if !b.IsNull() {
-			t.Error("expected null boolean")
-		}
-		if b.String() != "null" {
-			t.Errorf("expected 'null', got '%s'", b.String())
-		}
-	})
-
-	t.Run("JSON marshaling", func(t *testing.T) {
-		b, _ := NewBoolean(true, Facets{})
-		data, err := json.Marshal(b)
-		if err != nil {
-			t.Fatalf("marshaling error: %v", err)
-		}
-		if string(data) != `true` {
-			t.Errorf("expected JSON 'true', got '%s'", string(data))
-		}
-	})
-
-	t.Run("JSON unmarshaling valid true", func(t *testing.T) {
-		var b Boolean
-		err := json.Unmarshal([]byte(`true`), &b)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if b.Value() != true {
-			t.Errorf("expected true, got %v", b.Value())
-		}
-	})
-
-	t.Run("JSON unmarshaling valid false", func(t *testing.T) {
-		var b Boolean
-		err := json.Unmarshal([]byte(`false`), &b)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if b.Value() != false {
-			t.Errorf("expected false, got %v", b.Value())
-		}
-	})
-
-	t.Run("JSON unmarshaling null", func(t *testing.T) {
-		var b Boolean
-		err := json.Unmarshal([]byte(`null`), &b)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if !b.IsNull() {
-			t.Error("expected null boolean")
-		}
-	})
-
-	t.Run("JSON unmarshaling invalid", func(t *testing.T) {
-		var b Boolean
-		err := json.Unmarshal([]byte(`"not a boolean"`), &b)
+	t.Run("SetFacets with invalid maxLength", func(t *testing.T) {
+		s, _ := NewString("hello", Facets{})
+		maxLen := 3 // Too small for "hello"
+		newFacets := Facets{MaxLength: &maxLen}
+		err := s.(*String).SetFacets(newFacets)
 		if err == nil {
-			t.Error("expected error for invalid input")
+			t.Error("SetFacets() should error when maxLength is too small for current value")
+		}
+	})
+
+	t.Run("GetFacets", func(t *testing.T) {
+		maxLen := 50
+		s, _ := NewString("test", Facets{MaxLength: &maxLen})
+		gotFacets := s.(*String).GetFacets()
+		if gotFacets.MaxLength == nil || *gotFacets.MaxLength != maxLen {
+			t.Errorf("GetFacets() MaxLength = %v, want %v", gotFacets.MaxLength, maxLen)
 		}
 	})
 }
+

@@ -201,4 +201,49 @@ func TestDecimalType(t *testing.T) {
 			t.Error("expected error for invalid decimal string")
 		}
 	})
+
+	t.Run("SetFacets with valid facets", func(t *testing.T) {
+		d, _ := NewDecimal("123.45", Facets{})
+		precision := 5
+		scale := 2
+		newFacets := Facets{Precision: &precision, Scale: &scale}
+		err := d.(*Decimal).SetFacets(newFacets)
+		if err != nil {
+			t.Errorf("SetFacets() error = %v", err)
+		}
+		gotFacets := d.(*Decimal).GetFacets()
+		if gotFacets.Precision == nil || *gotFacets.Precision != precision {
+			t.Errorf("GetFacets() Precision = %v, want %v", gotFacets.Precision, precision)
+		}
+		if gotFacets.Scale == nil || *gotFacets.Scale != scale {
+			t.Errorf("GetFacets() Scale = %v, want %v", gotFacets.Scale, scale)
+		}
+	})
+
+	t.Run("SetFacets with invalid facets", func(t *testing.T) {
+		d, _ := NewDecimal("123.45", Facets{})
+		precision := 3 // Too small for 123.45 (needs at least 5 digits)
+		newFacets := Facets{Precision: &precision}
+		err := d.(*Decimal).SetFacets(newFacets)
+		if err == nil {
+			t.Error("SetFacets() should error when facets are invalid for current value")
+		}
+	})
+
+	t.Run("GetDecimalValue", func(t *testing.T) {
+		expected := decimal.NewFromFloat(123.45)
+		d, _ := NewDecimal(expected, Facets{})
+		result := d.(*Decimal).GetDecimalValue()
+		if !result.Equal(expected) {
+			t.Errorf("GetDecimalValue() = %v, want %v", result, expected)
+		}
+	})
+
+	t.Run("GetDecimalValue with null", func(t *testing.T) {
+		d, _ := NewDecimal(nil, Facets{})
+		result := d.(*Decimal).GetDecimalValue()
+		if !result.IsZero() {
+			t.Errorf("GetDecimalValue() for null decimal should return zero value, got %v", result)
+		}
+	})
 }

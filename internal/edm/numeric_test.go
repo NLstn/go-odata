@@ -74,6 +74,27 @@ func TestInt32Type(t *testing.T) {
 			t.Errorf("expected value 123, got %v", i.Value())
 		}
 	})
+
+	t.Run("Validate", func(t *testing.T) {
+		i, _ := NewInt32(42, Facets{})
+		err := i.(*Int32).Validate()
+		if err != nil {
+			t.Errorf("Validate() should not error, got %v", err)
+		}
+	})
+
+	t.Run("SetFacets and GetFacets", func(t *testing.T) {
+		i, _ := NewInt32(42, Facets{})
+		newFacets := Facets{Nullable: false}
+		err := i.(*Int32).SetFacets(newFacets)
+		if err != nil {
+			t.Errorf("SetFacets() error = %v", err)
+		}
+		gotFacets := i.(*Int32).GetFacets()
+		if gotFacets.Nullable != newFacets.Nullable {
+			t.Errorf("GetFacets() = %v, want %v", gotFacets, newFacets)
+		}
+	})
 }
 
 func TestInt64Type(t *testing.T) {
@@ -130,6 +151,45 @@ func TestInt64Type(t *testing.T) {
 		}
 		if !i.IsNull() {
 			t.Error("expected null int64")
+		}
+	})
+
+	t.Run("String representation", func(t *testing.T) {
+		i, _ := NewInt64(123456, Facets{})
+		if i.(*Int64).String() != "123456" {
+			t.Errorf("String() = %v, want '123456'", i.(*Int64).String())
+		}
+	})
+
+	t.Run("Validate", func(t *testing.T) {
+		i, _ := NewInt64(123456, Facets{})
+		err := i.(*Int64).Validate()
+		if err != nil {
+			t.Errorf("Validate() should not error, got %v", err)
+		}
+	})
+
+	t.Run("SetFacets and GetFacets", func(t *testing.T) {
+		i, _ := NewInt64(123456, Facets{})
+		newFacets := Facets{Nullable: false}
+		err := i.(*Int64).SetFacets(newFacets)
+		if err != nil {
+			t.Errorf("SetFacets() error = %v", err)
+		}
+		gotFacets := i.(*Int64).GetFacets()
+		if gotFacets.Nullable != newFacets.Nullable {
+			t.Errorf("GetFacets() = %v, want %v", gotFacets, newFacets)
+		}
+	})
+
+	t.Run("MarshalJSON with null", func(t *testing.T) {
+		i, _ := NewInt64(nil, Facets{})
+		data, err := json.Marshal(i)
+		if err != nil {
+			t.Fatalf("MarshalJSON error: %v", err)
+		}
+		if string(data) != "null" {
+			t.Errorf("MarshalJSON() = %v, want 'null'", string(data))
 		}
 	})
 }
@@ -192,6 +252,45 @@ func TestInt16Type(t *testing.T) {
 		_, err := NewInt16(int32(40000), Facets{})
 		if err == nil {
 			t.Error("expected error for out of range value")
+		}
+	})
+
+	t.Run("String representation", func(t *testing.T) {
+		i, _ := NewInt16(int16(1000), Facets{})
+		if i.(*Int16).String() != "1000" {
+			t.Errorf("String() = %v, want '1000'", i.(*Int16).String())
+		}
+	})
+
+	t.Run("Validate", func(t *testing.T) {
+		i, _ := NewInt16(int16(1000), Facets{})
+		err := i.(*Int16).Validate()
+		if err != nil {
+			t.Errorf("Validate() should not error, got %v", err)
+		}
+	})
+
+	t.Run("SetFacets and GetFacets", func(t *testing.T) {
+		i, _ := NewInt16(int16(1000), Facets{})
+		newFacets := Facets{Nullable: true}
+		err := i.(*Int16).SetFacets(newFacets)
+		if err != nil {
+			t.Errorf("SetFacets() error = %v", err)
+		}
+		gotFacets := i.(*Int16).GetFacets()
+		if gotFacets.Nullable != newFacets.Nullable {
+			t.Errorf("GetFacets() = %v, want %v", gotFacets, newFacets)
+		}
+	})
+
+	t.Run("MarshalJSON with null", func(t *testing.T) {
+		i, _ := NewInt16(nil, Facets{})
+		data, err := json.Marshal(i)
+		if err != nil {
+			t.Fatalf("MarshalJSON error: %v", err)
+		}
+		if string(data) != "null" {
+			t.Errorf("MarshalJSON() = %v, want 'null'", string(data))
 		}
 	})
 }
@@ -261,6 +360,45 @@ func TestByteType(t *testing.T) {
 			t.Error("expected error for negative value")
 		}
 	})
+
+	t.Run("String representation", func(t *testing.T) {
+		b, _ := NewByte(uint8(200), Facets{})
+		if b.(*Byte).String() != "200" {
+			t.Errorf("String() = %v, want '200'", b.(*Byte).String())
+		}
+	})
+
+	t.Run("Validate", func(t *testing.T) {
+		b, _ := NewByte(uint8(200), Facets{})
+		err := b.(*Byte).Validate()
+		if err != nil {
+			t.Errorf("Validate() should not error, got %v", err)
+		}
+	})
+
+	t.Run("SetFacets and GetFacets", func(t *testing.T) {
+		b, _ := NewByte(uint8(200), Facets{})
+		newFacets := Facets{Nullable: false}
+		err := b.(*Byte).SetFacets(newFacets)
+		if err != nil {
+			t.Errorf("SetFacets() error = %v", err)
+		}
+		gotFacets := b.(*Byte).GetFacets()
+		if gotFacets.Nullable != newFacets.Nullable {
+			t.Errorf("GetFacets() = %v, want %v", gotFacets, newFacets)
+		}
+	})
+
+	t.Run("MarshalJSON with null", func(t *testing.T) {
+		b, _ := NewByte(nil, Facets{})
+		data, err := json.Marshal(b)
+		if err != nil {
+			t.Fatalf("MarshalJSON error: %v", err)
+		}
+		if string(data) != "null" {
+			t.Errorf("MarshalJSON() = %v, want 'null'", string(data))
+		}
+	})
 }
 
 func TestSByteType(t *testing.T) {
@@ -321,6 +459,45 @@ func TestSByteType(t *testing.T) {
 		_, err := NewSByte(int(200), Facets{})
 		if err == nil {
 			t.Error("expected error for out of range value")
+		}
+	})
+
+	t.Run("String representation", func(t *testing.T) {
+		s, _ := NewSByte(int8(-50), Facets{})
+		if s.(*SByte).String() != "-50" {
+			t.Errorf("String() = %v, want '-50'", s.(*SByte).String())
+		}
+	})
+
+	t.Run("Validate", func(t *testing.T) {
+		s, _ := NewSByte(int8(-50), Facets{})
+		err := s.(*SByte).Validate()
+		if err != nil {
+			t.Errorf("Validate() should not error, got %v", err)
+		}
+	})
+
+	t.Run("SetFacets and GetFacets", func(t *testing.T) {
+		s, _ := NewSByte(int8(-50), Facets{})
+		newFacets := Facets{Nullable: true}
+		err := s.(*SByte).SetFacets(newFacets)
+		if err != nil {
+			t.Errorf("SetFacets() error = %v", err)
+		}
+		gotFacets := s.(*SByte).GetFacets()
+		if gotFacets.Nullable != newFacets.Nullable {
+			t.Errorf("GetFacets() = %v, want %v", gotFacets, newFacets)
+		}
+	})
+
+	t.Run("MarshalJSON with null", func(t *testing.T) {
+		s, _ := NewSByte(nil, Facets{})
+		data, err := json.Marshal(s)
+		if err != nil {
+			t.Fatalf("MarshalJSON error: %v", err)
+		}
+		if string(data) != "null" {
+			t.Errorf("MarshalJSON() = %v, want 'null'", string(data))
 		}
 	})
 }
@@ -387,6 +564,38 @@ func TestDoubleType(t *testing.T) {
 			t.Error("expected null double")
 		}
 	})
+
+	t.Run("Validate", func(t *testing.T) {
+		d, _ := NewDouble(3.14, Facets{})
+		err := d.(*Double).Validate()
+		if err != nil {
+			t.Errorf("Validate() should not error, got %v", err)
+		}
+	})
+
+	t.Run("SetFacets and GetFacets", func(t *testing.T) {
+		d, _ := NewDouble(3.14, Facets{})
+		newFacets := Facets{Nullable: false}
+		err := d.(*Double).SetFacets(newFacets)
+		if err != nil {
+			t.Errorf("SetFacets() error = %v", err)
+		}
+		gotFacets := d.(*Double).GetFacets()
+		if gotFacets.Nullable != newFacets.Nullable {
+			t.Errorf("GetFacets() = %v, want %v", gotFacets, newFacets)
+		}
+	})
+
+	t.Run("MarshalJSON with null", func(t *testing.T) {
+		d, _ := NewDouble(nil, Facets{})
+		data, err := json.Marshal(d)
+		if err != nil {
+			t.Fatalf("MarshalJSON error: %v", err)
+		}
+		if string(data) != "null" {
+			t.Errorf("MarshalJSON() = %v, want 'null'", string(data))
+		}
+	})
 }
 
 func TestSingleType(t *testing.T) {
@@ -440,6 +649,38 @@ func TestSingleType(t *testing.T) {
 		}
 		if !s.IsNull() {
 			t.Error("expected null single")
+		}
+	})
+
+	t.Run("Validate", func(t *testing.T) {
+		s, _ := NewSingle(float32(2.5), Facets{})
+		err := s.(*Single).Validate()
+		if err != nil {
+			t.Errorf("Validate() should not error, got %v", err)
+		}
+	})
+
+	t.Run("SetFacets and GetFacets", func(t *testing.T) {
+		s, _ := NewSingle(float32(2.5), Facets{})
+		newFacets := Facets{Nullable: true}
+		err := s.(*Single).SetFacets(newFacets)
+		if err != nil {
+			t.Errorf("SetFacets() error = %v", err)
+		}
+		gotFacets := s.(*Single).GetFacets()
+		if gotFacets.Nullable != newFacets.Nullable {
+			t.Errorf("GetFacets() = %v, want %v", gotFacets, newFacets)
+		}
+	})
+
+	t.Run("MarshalJSON with null", func(t *testing.T) {
+		s, _ := NewSingle(nil, Facets{})
+		data, err := json.Marshal(s)
+		if err != nil {
+			t.Fatalf("MarshalJSON error: %v", err)
+		}
+		if string(data) != "null" {
+			t.Errorf("MarshalJSON() = %v, want 'null'", string(data))
 		}
 	})
 }

@@ -480,15 +480,20 @@ func parseEntityReference(refURL string) (entitySetName string, entityKey string
 		refURL = strings.TrimPrefix(refURL, "/")
 	}
 
-	// Now we should have something like "Categories(1)" or "Products(ProductID=1,LanguageKey='en')"
+	// Now we should have something like "Categories(1)" or "service/Categories(1)" or "Products(ProductID=1,LanguageKey='en')"
 	// Find the opening parenthesis
 	openParen := strings.Index(refURL, "(")
 	if openParen == -1 {
 		return "", "", fmt.Errorf("entity reference must include key in parentheses: %s", refURL)
 	}
 
-	// Extract entity set name
+	// Extract entity set name (everything before the opening parenthesis)
 	entitySetName = refURL[:openParen]
+
+	// If there are path segments, extract just the last segment (the entity set name)
+	if lastSlash := strings.LastIndex(entitySetName, "/"); lastSlash != -1 {
+		entitySetName = entitySetName[lastSlash+1:]
+	}
 
 	// Find the closing parenthesis
 	closeParen := strings.LastIndex(refURL, ")")
