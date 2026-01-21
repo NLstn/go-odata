@@ -579,9 +579,9 @@ func (h *EntityHandler) validateKeyPropertiesNotUpdated(updateData map[string]in
 // validatePropertiesExistForUpdate validates that all properties in updateData are valid entity properties
 // This version allows @odata.bind annotations for navigation properties
 func (h *EntityHandler) validatePropertiesExistForUpdate(updateData map[string]interface{}, w http.ResponseWriter, r *http.Request) error {
-	// Use shared validation function with checkAutoProperties=true
-	// (auto properties cannot be updated by clients)
-	return h.validatePropertiesExist(updateData, w, r, true)
+	// Use shared validation function with checkAutoProperties=true and checkImmutableProperties=true
+	// (auto, computed, and immutable properties cannot be updated by clients)
+	return h.validatePropertiesExist(updateData, w, r, true, true)
 }
 
 // removeODataBindAnnotations removes @odata.bind annotations and all other instance annotations

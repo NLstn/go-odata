@@ -181,7 +181,8 @@ func validateContentType(w http.ResponseWriter, r *http.Request) error {
 // validatePropertiesExist validates that all properties in the provided data map are valid entity properties.
 // It allows instance annotations (starting with @) and property-level annotations (property@annotation format),
 // but rejects unknown property names. When checkAutoProperties is true, it also rejects auto properties.
-func (h *EntityHandler) validatePropertiesExist(data map[string]interface{}, w http.ResponseWriter, r *http.Request, checkAutoProperties bool) error {
+// When checkImmutableProperties is true, it also rejects immutable properties (used for updates, not creates).
+func (h *EntityHandler) validatePropertiesExist(data map[string]interface{}, w http.ResponseWriter, r *http.Request, checkAutoProperties bool, checkImmutableProperties bool) error {
 	// Build a map of valid property names (both JSON names and struct field names)
 	validProperties := make(map[string]bool, len(h.metadata.Properties)*2)
 	var autoProperties map[string]bool
@@ -190,6 +191,8 @@ func (h *EntityHandler) validatePropertiesExist(data map[string]interface{}, w h
 	if checkAutoProperties {
 		autoProperties = make(map[string]bool)
 		computedProperties = make(map[string]bool)
+	}
+	if checkImmutableProperties {
 		immutableProperties = make(map[string]bool)
 	}
 
@@ -212,7 +215,7 @@ func (h *EntityHandler) validatePropertiesExist(data map[string]interface{}, w h
 			computedProperties[prop.Name] = true
 		}
 
-		if checkAutoProperties && hasPropertyAnnotation(&prop, metadata.CoreImmutable) {
+		if checkImmutableProperties && hasPropertyAnnotation(&prop, metadata.CoreImmutable) {
 			immutableProperties[prop.JsonName] = true
 			immutableProperties[prop.Name] = true
 		}
@@ -276,7 +279,7 @@ func (h *EntityHandler) validatePropertiesExist(data map[string]interface{}, w h
 			return err
 		}
 
-		if checkAutoProperties && immutableProperties[propName] {
+		if checkImmutableProperties && immutableProperties[propName] {
 			err := fmt.Errorf("property '%s' is immutable and cannot be modified by clients", propName)
 			span := trace.SpanFromContext(r.Context())
 			span.RecordError(err)
