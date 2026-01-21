@@ -3,7 +3,6 @@ package v4_0
 import (
 	"encoding/xml"
 	"fmt"
-	"strings"
 
 	"github.com/nlstn/go-odata/compliance-suite/framework"
 )
@@ -71,14 +70,22 @@ func entitySetConcurrencyDeclared(ctx *framework.TestContext, entitySet string) 
 	}
 
 	entityTypeName := ""
+	found := false
 	for _, schema := range doc.DataServices.Schemas {
 		for _, container := range schema.EntityContainers {
 			for _, set := range container.EntitySets {
 				if set.Name == entitySet {
 					entityTypeName = set.EntityType
+					found = true
 					break
 				}
 			}
+			if found {
+				break
+			}
+		}
+		if found {
+			break
 		}
 	}
 	if entityTypeName == "" {
@@ -90,12 +97,7 @@ func entitySetConcurrencyDeclared(ctx *framework.TestContext, entitySet string) 
 		return false, fmt.Errorf("entity type %q not found in metadata", entityTypeName)
 	}
 
-	fullName := entityType.Name
-	if strings.Contains(entityTypeName, ".") {
-		fullName = entityTypeName
-	} else if namespace != "" {
-		fullName = namespace + "." + entityType.Name
-	}
+	fullName := namespace + "." + entityType.Name
 
 	if entityTypeHasConcurrencyToken(entityType) {
 		return true, nil
@@ -215,7 +217,7 @@ func ConditionalRequests() *framework.TestSuite {
 				return nil
 			}
 
-			return framework.NewError("Entity type declares concurrency token; response must include ETag header or @odata.etag payload")
+			return framework.NewError("Products entity type declares concurrency token; response must include ETag header or @odata.etag payload")
 		},
 	)
 
