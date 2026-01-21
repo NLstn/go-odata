@@ -337,7 +337,7 @@ func TestResetFTS(t *testing.T) {
 	// No assertion needed - just verifying it doesn't panic
 }
 
-// TestHandler verifies the HTTP handler function
+// TestHandler verifies that Service implements http.Handler
 func TestHandler(t *testing.T) {
 	db := setupTestDB(t)
 	service, err := NewService(db)
@@ -345,21 +345,18 @@ func TestHandler(t *testing.T) {
 		t.Fatalf("Failed to create service: %v", err)
 	}
 
-	// Get the handler
-	handler := service.Handler()
-	if handler == nil {
-		t.Fatal("Expected non-nil handler")
-	}
+	// Verify service implements http.Handler
+	var _ http.Handler = service
 
 	// Register entity to test
 	if err := service.RegisterEntity(&Product{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
 	}
 
-	// Test that handler works
+	// Test that service works as http.Handler
 	req := httptest.NewRequest("GET", "/Products", nil)
 	w := httptest.NewRecorder()
-	handler.ServeHTTP(w, req)
+	service.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", w.Code)
