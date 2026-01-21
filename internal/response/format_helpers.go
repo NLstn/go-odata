@@ -11,6 +11,13 @@ import (
 	"github.com/nlstn/go-odata/internal/metadata"
 )
 
+// Valid OData metadata levels per OData v4 specification
+const (
+	MetadataMinimal = "minimal"
+	MetadataFull    = "full"
+	MetadataNone    = "none"
+)
+
 // BuildEntityID constructs the entity ID path from entity set name and key values
 // For single key: "Products(1)"
 // For composite key: "ProductDescriptions(ProductID=1,LanguageKey='EN')"
@@ -64,6 +71,11 @@ func ExtractEntityKeys(entity interface{}, keyProperties []metadata.PropertyMeta
 	return keyValues
 }
 
+// isValidMetadataLevel checks if the given value is a valid OData metadata level
+func isValidMetadataLevel(value string) bool {
+	return value == MetadataMinimal || value == MetadataFull || value == MetadataNone
+}
+
 // ValidateODataMetadata checks if the odata.metadata parameter in the request is valid.
 // Returns an error if an invalid metadata value is specified.
 // Valid values are: "minimal", "full", "none"
@@ -98,7 +110,7 @@ func GetODataMetadataLevel(r *http.Request) string {
 		return extractMetadataFromAccept(accept)
 	}
 
-	return "minimal"
+	return MetadataMinimal
 }
 
 func getFormatParameter(rawQuery string) string {
@@ -125,10 +137,7 @@ func validateMetadataInFormat(format string) error {
 		if strings.HasPrefix(part, "odata.metadata=") {
 			value := strings.TrimPrefix(part, "odata.metadata=")
 			value = strings.TrimSpace(value)
-			switch value {
-			case "full", "none", "minimal":
-				return nil
-			default:
+			if !isValidMetadataLevel(value) {
 				return fmt.Errorf("invalid odata.metadata value: %s (valid values are: minimal, full, none)", value)
 			}
 		}
@@ -143,14 +152,13 @@ func extractMetadataFromFormat(format string) string {
 		if strings.HasPrefix(part, "odata.metadata=") {
 			value := strings.TrimPrefix(part, "odata.metadata=")
 			value = strings.TrimSpace(value)
-			switch value {
-			case "full", "none", "minimal":
+			if isValidMetadataLevel(value) {
 				return value
 			}
 		}
 	}
 
-	return "minimal"
+	return MetadataMinimal
 }
 
 func validateMetadataInAccept(accept string) error {
@@ -170,10 +178,7 @@ func validateMetadataInAccept(accept string) error {
 				if strings.HasPrefix(param, "odata.metadata=") {
 					value := strings.TrimPrefix(param, "odata.metadata=")
 					value = strings.TrimSpace(value)
-					switch value {
-					case "full", "none", "minimal":
-						return nil
-					default:
+					if !isValidMetadataLevel(value) {
 						return fmt.Errorf("invalid odata.metadata value: %s (valid values are: minimal, full, none)", value)
 					}
 				}
@@ -200,8 +205,7 @@ func extractMetadataFromAccept(accept string) string {
 				if strings.HasPrefix(param, "odata.metadata=") {
 					value := strings.TrimPrefix(param, "odata.metadata=")
 					value = strings.TrimSpace(value)
-					switch value {
-					case "full", "none", "minimal":
+					if isValidMetadataLevel(value) {
 						return value
 					}
 				}
@@ -209,7 +213,7 @@ func extractMetadataFromAccept(accept string) string {
 		}
 	}
 
-	return "minimal"
+	return MetadataMinimal
 }
 
 // IsAcceptableFormat checks if the requested format via Accept header or $format is supported
