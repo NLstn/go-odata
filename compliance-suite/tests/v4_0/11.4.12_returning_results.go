@@ -17,7 +17,7 @@ func ReturningResults() *framework.TestSuite {
 	// Test 1: POST with return=minimal returns 201 with no body
 	suite.AddTest(
 		"test_post_return_minimal",
-		"POST with return=minimal returns 201/204 with no body",
+		"POST with return=minimal returns 201 with no body",
 		func(ctx *framework.TestContext) error {
 			payload := map[string]interface{}{
 				"Name":   "Minimal Return Test",
@@ -32,12 +32,15 @@ func ReturningResults() *framework.TestSuite {
 				return err
 			}
 
-			// Should return 201 or 204
 			if err := ctx.AssertStatusCode(resp, 201); err != nil {
-				return ctx.AssertStatusCode(resp, 204)
+				return err
 			}
 
-			return nil
+			if len(resp.Body) != 0 {
+				return framework.NewError("Expected empty response body")
+			}
+
+			return ctx.AssertHeader(resp, "Preference-Applied", "return=minimal")
 		},
 	)
 
@@ -121,7 +124,7 @@ func ReturningResults() *framework.TestSuite {
 	// Test 4: PATCH with return=minimal returns 204 No Content
 	suite.AddTest(
 		"test_patch_return_minimal",
-		"PATCH with return=minimal returns 204/200 with no body",
+		"PATCH with return=minimal returns 204 with no body",
 		func(ctx *framework.TestContext) error {
 			// First create an entity
 			createPayload := map[string]interface{}{
@@ -161,12 +164,15 @@ func ReturningResults() *framework.TestSuite {
 				return err
 			}
 
-			// Should return 204 or 200
 			if err := ctx.AssertStatusCode(patchResp, 204); err != nil {
-				return ctx.AssertStatusCode(patchResp, 200)
+				return err
 			}
 
-			return nil
+			if len(patchResp.Body) != 0 {
+				return framework.NewError("Expected empty response body")
+			}
+
+			return ctx.AssertHeader(patchResp, "Preference-Applied", "return=minimal")
 		},
 	)
 
