@@ -250,3 +250,24 @@ func (h *EntityHandler) validatePropertiesExist(data map[string]interface{}, w h
 
 	return nil
 }
+
+// validateImmutablePropertiesNotUpdated validates that immutable properties are not being updated
+func (h *EntityHandler) validateImmutablePropertiesNotUpdated(updateData map[string]interface{}, w http.ResponseWriter, r *http.Request) error {
+	for propName := range updateData {
+		// Find the property metadata
+		propMeta := h.metadata.FindProperty(propName)
+		if propMeta == nil {
+			continue
+		}
+
+		// Check if the property has the Core.Immutable annotation
+		if propMeta.Annotations != nil && propMeta.Annotations.Has("Org.OData.Core.V1.Immutable") {
+			err := fmt.Errorf("property '%s' is immutable and cannot be modified", propMeta.JsonName)
+			if writeErr := response.WriteError(w, r, http.StatusBadRequest, "Cannot update immutable property", err.Error()); writeErr != nil {
+				h.logger.Error("Error writing error response", "error", writeErr)
+			}
+			return err
+		}
+	}
+	return nil
+}

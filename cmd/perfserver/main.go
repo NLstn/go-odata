@@ -147,7 +147,9 @@ func main() {
 
 	// Create OData service
 	service, err := odata.NewService(Db)
-	if err != nil { log.Fatalf("Failed to create service: %v", err) }
+	if err != nil {
+		log.Fatalf("Failed to create service: %v", err)
+	}
 
 	if err := service.SetNamespace("PerfService"); err != nil {
 		log.Fatal("Failed to set service namespace:", err)

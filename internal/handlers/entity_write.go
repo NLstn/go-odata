@@ -190,6 +190,10 @@ func (h *EntityHandler) handlePatchEntity(w http.ResponseWriter, r *http.Request
 			return newTransactionHandledError(err)
 		}
 
+		if err := h.validateImmutablePropertiesNotUpdated(updateData, w, r); err != nil {
+			return newTransactionHandledError(err)
+		}
+
 		if err := h.validatePropertiesExistForUpdate(updateData, w, r); err != nil {
 			return newTransactionHandledError(err)
 		}
@@ -392,6 +396,9 @@ func (h *EntityHandler) handlePutEntity(w http.ResponseWriter, r *http.Request, 
 
 		// Preserve server-managed timestamp fields (like CreatedAt) to avoid MySQL zero datetime issues
 		h.preserveTimestampFields(entity, replacementEntity)
+
+		// Preserve immutable properties (annotated with Core.Immutable)
+		h.preserveImmutableProperties(entity, replacementEntity)
 
 		if err := h.callBeforeUpdate(entity, hookReq); err != nil {
 			h.writeHookError(w, r, err, http.StatusForbidden, "Authorization failed")
@@ -631,6 +638,33 @@ func (h *EntityHandler) copyETagProperty(source, destination interface{}) {
 	}
 
 	destField.Set(sourceField)
+}
+
+// preserveImmutableProperties copies immutable property values from source to destination
+// This ensures that immutable properties annotated with Core.Immutable cannot be changed in PUT operations
+func (h *EntityHandler) preserveImmutableProperties(source, destination interface{}) {
+	sourceVal := reflect.ValueOf(source).Elem()
+	destVal := reflect.ValueOf(destination).Elem()
+
+	// Iterate over all properties to find immutable ones
+	for _, prop := range h.metadata.Properties {
+		// Skip if not immutable
+		if prop.Annotations == nil || !prop.Annotations.Has("Org.OData.Core.V1.Immutable") {
+			continue
+		}
+
+		// Get the source and destination fields
+		sourceField := sourceVal.FieldByName(prop.FieldName)
+		destField := destVal.FieldByName(prop.FieldName)
+
+		if !sourceField.IsValid() || !destField.IsValid() || !destField.CanSet() {
+			h.logger.Warn("Cannot preserve immutable property", "property", prop.FieldName)
+			continue
+		}
+
+		// Copy the value from source to destination to preserve it
+		destField.Set(sourceField)
+	}
 }
 
 // handleDeleteEntityOverwrite handles DELETE entity requests using the overwrite handler
