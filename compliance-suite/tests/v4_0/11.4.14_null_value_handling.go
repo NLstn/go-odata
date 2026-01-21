@@ -68,13 +68,17 @@ func NullValueHandling() *framework.TestSuite {
 				return err
 			}
 
-			// Description should be null or absent
-			body := string(resp.Body)
-			if framework.ContainsAny(body, `"Description":null`, `"Description"`) || !framework.ContainsAny(body, `"Description"`) {
-				return nil
+			var data map[string]interface{}
+			if err := ctx.GetJSON(resp, &data); err != nil {
+				return err
 			}
 
-			return framework.NewError("Expected null or absent Description property")
+			description, ok := data["Description"]
+			if ok && description != nil {
+				return framework.NewError("Expected Description to be null when present")
+			}
+
+			return nil
 		},
 	)
 
