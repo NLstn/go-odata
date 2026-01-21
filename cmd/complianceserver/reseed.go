@@ -34,6 +34,8 @@ func seedDatabase(db *gorm.DB) error {
 	//nolint:errcheck
 	_ = db.Migrator().DropTable(&entities.ProductDescription{})
 	//nolint:errcheck
+	_ = db.Migrator().DropTable(&entities.ReadOnlyItem{})
+	//nolint:errcheck
 	_ = db.Migrator().DropTable(&entities.Product{})
 	//nolint:errcheck
 	_ = db.Migrator().DropTable(&entities.Category{})
@@ -58,7 +60,7 @@ func seedDatabase(db *gorm.DB) error {
 	}
 
 	// Recreate tables with fresh schema (auto-increment counters are automatically reset)
-	if err := db.AutoMigrate(&entities.Category{}, &entities.Product{}, &entities.ProductDescription{}, &entities.CompanyInfo{}, &entities.MediaItem{}); err != nil {
+	if err := db.AutoMigrate(&entities.Category{}, &entities.Product{}, &entities.ProductDescription{}, &entities.CompanyInfo{}, &entities.MediaItem{}, &entities.ReadOnlyItem{}); err != nil {
 		return fmt.Errorf("failed to migrate database: %w", err)
 	}
 
@@ -133,8 +135,17 @@ func seedDatabase(db *gorm.DB) error {
 		return fmt.Errorf("failed to seed media items: %w", err)
 	}
 
-	fmt.Printf("Database seeded with %d categories, %d products, %d descriptions, %d media items, and company info\n",
-		len(sampleCategories), len(sampleProducts), len(sampleDescriptions), len(sampleMediaItems))
+	// Seed read-only items
+	sampleReadOnlyItems := entities.GetSampleReadOnlyItems()
+	for i := range sampleReadOnlyItems {
+		sampleReadOnlyItems[i].ID = uuid.New()
+	}
+	if err := db.Create(&sampleReadOnlyItems).Error; err != nil {
+		return fmt.Errorf("failed to seed read-only items: %w", err)
+	}
+
+	fmt.Printf("Database seeded with %d categories, %d products, %d descriptions, %d media items, %d read-only items, and company info\n",
+		len(sampleCategories), len(sampleProducts), len(sampleDescriptions), len(sampleMediaItems), len(sampleReadOnlyItems))
 	return nil
 }
 

@@ -45,6 +45,10 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	if !h.enforceInsertRestrictions(w, r) {
+		return
+	}
+
 	if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, "", nil), auth.OperationCreate, h.logger) {
 		return
 	}
@@ -69,6 +73,10 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 	}
 
 	if err := h.validatePropertiesExistForCreate(requestData, w, r); err != nil {
+		return
+	}
+
+	if err := h.validateComputedPropertiesNotProvided(requestData, w, r); err != nil {
 		return
 	}
 

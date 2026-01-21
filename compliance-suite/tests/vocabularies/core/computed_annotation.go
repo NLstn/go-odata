@@ -1,9 +1,7 @@
 package core
 
 import (
-	"encoding/xml"
 	"fmt"
-	"strings"
 
 	"github.com/nlstn/go-odata/compliance-suite/framework"
 )
@@ -31,19 +29,18 @@ func ComputedAnnotation() *framework.TestSuite {
 				return err
 			}
 
-			body := string(resp.Body)
-			// Check for Core.Computed annotation in XML metadata
-			if !strings.Contains(body, "Core.Computed") && !strings.Contains(body, "Org.OData.Core.V1.Computed") {
-				ctx.Log("Warning: No Core.Computed annotations found in metadata. This may be expected if no properties are computed.")
+			namespace, err := metadataNamespace(resp.Body)
+			if err != nil {
+				return err
 			}
 
-			// Parse XML to validate structure
-			type Metadata struct {
-				XMLName xml.Name `xml:"Edmx"`
+			target := fmt.Sprintf("%s.Product/CreatedAt", namespace)
+			found, err := hasAnnotation(resp.Body, target, "Org.OData.Core.V1.Computed")
+			if err != nil {
+				return err
 			}
-			var metadata Metadata
-			if err := xml.Unmarshal(resp.Body, &metadata); err != nil {
-				return fmt.Errorf("failed to parse metadata XML: %w", err)
+			if !found {
+				return fmt.Errorf("expected Core.Computed annotation on %s", target)
 			}
 
 			return nil
@@ -55,11 +52,12 @@ func ComputedAnnotation() *framework.TestSuite {
 		"POST request ignores computed properties in request body",
 		func(ctx *framework.TestContext) error {
 			// Attempt to create an entity with a computed property set
-			payload := `{
+			clientValue := "2026-01-21T00:00:00Z"
+			payload := fmt.Sprintf(`{
 				"Name": "Test Product",
 				"Price": 99.99,
-				"CreatedAt": "2026-01-21 00:00:00"
-			}`
+				"CreatedAt": "%s"
+			}`, clientValue)
 
 			resp, err := ctx.POST("/Products", payload,
 				framework.Header{Key: "Content-Type", Value: "application/json"},
@@ -73,8 +71,37 @@ func ComputedAnnotation() *framework.TestSuite {
 				return fmt.Errorf("expected status 201 or 400, got %d: %s", resp.StatusCode, string(resp.Body))
 			}
 
-			if resp.StatusCode == 201 {
-				ctx.Log("Creation succeeded - service handled computed property appropriately")
+			if resp.StatusCode != 201 {
+				return nil
+			}
+
+			var created map[string]interface{}
+			if err := ctx.GetJSON(resp, &created); err != nil {
+				return err
+			}
+			id, ok := created["ID"]
+			if !ok {
+				return fmt.Errorf("created entity missing ID field")
+			}
+
+			fetchResp, err := ctx.GET(fmt.Sprintf("/Products(%v)", id))
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(fetchResp, 200); err != nil {
+				return err
+			}
+
+			var fetched map[string]interface{}
+			if err := ctx.GetJSON(fetchResp, &fetched); err != nil {
+				return err
+			}
+			createdAt, ok := fetched["CreatedAt"].(string)
+			if !ok {
+				return fmt.Errorf("fetched entity missing CreatedAt field")
+			}
+			if createdAt == clientValue {
+				return fmt.Errorf("computed CreatedAt should be server-controlled, got client value %s", createdAt)
 			}
 
 			return nil
@@ -107,8 +134,8 @@ func ComputedAnnotation() *framework.TestSuite {
 				return fmt.Errorf("created entity missing ID field")
 			}
 
-			// Attempt to update computed property (using MySQL-compatible datetime format)
-			updatePayload := `{"CreatedAt": "2030-01-01 00:00:00"}`
+			clientValue := "2030-01-01T00:00:00Z"
+			updatePayload := fmt.Sprintf(`{"CreatedAt": "%s"}`, clientValue)
 			resp, err := ctx.PATCH(fmt.Sprintf("/Products(%v)", id), updatePayload,
 				framework.Header{Key: "Content-Type", Value: "application/json"})
 			if err != nil {
@@ -120,7 +147,30 @@ func ComputedAnnotation() *framework.TestSuite {
 				return fmt.Errorf("expected status 200, 204, or 400, got %d: %s", resp.StatusCode, string(resp.Body))
 			}
 
-			ctx.Log("Update handled appropriately by service")
+			if resp.StatusCode != 200 && resp.StatusCode != 204 {
+				return nil
+			}
+
+			fetchResp, err := ctx.GET(fmt.Sprintf("/Products(%v)", id))
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(fetchResp, 200); err != nil {
+				return err
+			}
+
+			var fetched map[string]interface{}
+			if err := ctx.GetJSON(fetchResp, &fetched); err != nil {
+				return err
+			}
+			createdAt, ok := fetched["CreatedAt"].(string)
+			if !ok {
+				return fmt.Errorf("fetched entity missing CreatedAt field")
+			}
+			if createdAt == clientValue {
+				return fmt.Errorf("computed CreatedAt should be server-controlled, got client value %s", createdAt)
+			}
+
 			return nil
 		},
 	)

@@ -2,7 +2,6 @@ package core
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/nlstn/go-odata/compliance-suite/framework"
 )
@@ -29,9 +28,18 @@ func ImmutableAnnotation() *framework.TestSuite {
 				return err
 			}
 
-			body := string(resp.Body)
-			if !strings.Contains(body, "Core.Immutable") && !strings.Contains(body, "Org.OData.Core.V1.Immutable") {
-				ctx.Log("Warning: No Core.Immutable annotations found in metadata")
+			namespace, err := metadataNamespace(resp.Body)
+			if err != nil {
+				return err
+			}
+
+			target := fmt.Sprintf("%s.Product/SerialNumber", namespace)
+			found, err := hasAnnotation(resp.Body, target, "Org.OData.Core.V1.Immutable")
+			if err != nil {
+				return err
+			}
+			if !found {
+				return fmt.Errorf("expected Core.Immutable annotation on %s", target)
 			}
 
 			return nil
@@ -110,14 +118,35 @@ func ImmutableAnnotation() *framework.TestSuite {
 				return err
 			}
 
-			// TODO: Once immutability enforcement is implemented, service should reject (400)
-			// For now, we just verify that the annotation is present in metadata
-			// Service behavior: currently allows updates (will be 200 or 204)
-			if resp.StatusCode != 200 && resp.StatusCode != 204 && resp.StatusCode != 400 {
+			if resp.StatusCode != 200 && resp.StatusCode != 204 && (resp.StatusCode < 400 || resp.StatusCode >= 500) {
 				return fmt.Errorf("unexpected status for immutable property update, got %d: %s", resp.StatusCode, string(resp.Body))
 			}
 
-			ctx.Log(fmt.Sprintf("Note: Immutability enforcement not yet implemented (got status %d)", resp.StatusCode))
+			if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+				return assertODataError(resp)
+			}
+
+			getResp, err := ctx.GET(fmt.Sprintf("/Products(%v)", id))
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(getResp, 200); err != nil {
+				return err
+			}
+
+			var fetched map[string]interface{}
+			if err := ctx.GetJSON(getResp, &fetched); err != nil {
+				return err
+			}
+
+			serialNumber, ok := fetched["SerialNumber"]
+			if !ok {
+				return fmt.Errorf("fetched entity missing SerialNumber field")
+			}
+			if serialNumber != "SN-IMMUTABLE-001" {
+				return fmt.Errorf("immutable property changed unexpectedly: got %v", serialNumber)
+			}
+
 			return nil
 		},
 	)

@@ -103,7 +103,9 @@ func main() {
 
 	// Create OData service
 	service, err := odata.NewService(Db)
-	if err != nil { log.Fatalf("Failed to create service: %v", err) }
+	if err != nil {
+		log.Fatalf("Failed to create service: %v", err)
+	}
 
 	if err := service.SetNamespace("ComplianceService"); err != nil {
 		log.Fatal("Failed to set service namespace:", err)
@@ -132,6 +134,27 @@ func main() {
 	// Register the MediaItem entity for media entity compliance testing
 	if err := service.RegisterEntity(&entities.MediaItem{}); err != nil {
 		log.Fatal("Failed to register MediaItem entity:", err)
+	}
+
+	// Register the ReadOnlyItem entity for capability restriction tests
+	if err := service.RegisterEntity(&entities.ReadOnlyItem{}); err != nil {
+		log.Fatal("Failed to register ReadOnlyItem entity:", err)
+	}
+
+	if err := service.RegisterEntitySetAnnotation("ReadOnlyItems",
+		"Org.OData.Capabilities.V1.InsertRestrictions",
+		map[string]interface{}{"Insertable": false}); err != nil {
+		log.Fatal("Failed to register ReadOnlyItems insert restrictions:", err)
+	}
+	if err := service.RegisterEntitySetAnnotation("ReadOnlyItems",
+		"Org.OData.Capabilities.V1.UpdateRestrictions",
+		map[string]interface{}{"Updatable": false}); err != nil {
+		log.Fatal("Failed to register ReadOnlyItems update restrictions:", err)
+	}
+	if err := service.RegisterEntitySetAnnotation("ReadOnlyItems",
+		"Org.OData.Capabilities.V1.DeleteRestrictions",
+		map[string]interface{}{"Deletable": false}); err != nil {
+		log.Fatal("Failed to register ReadOnlyItems delete restrictions:", err)
 	}
 
 	// Register functions for compliance testing
