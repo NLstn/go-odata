@@ -106,30 +106,27 @@ func UpdateEntity() *framework.TestSuite {
 	// Test 4: Content-Type header validation
 	suite.AddTest(
 		"test_patch_no_content_type",
-		"PATCH without Content-Type validation",
+		"PATCH without Content-Type returns 400 or 415",
 		func(ctx *framework.TestContext) error {
 			productID, err := createTestProduct(ctx, "UpdateEntityNoContentType", 250.00)
 			if err != nil {
 				return err
 			}
 			productPath := fmt.Sprintf("/Products(%s)", productID)
-			// This test checks Content-Type handling
-			// Some implementations may be lenient
-			resp, err := ctx.PATCH(productPath, map[string]interface{}{
+			payload, err := json.Marshal(map[string]interface{}{
 				"Price": 99.99,
 			})
+			if err != nil {
+				return fmt.Errorf("failed to marshal payload: %w", err)
+			}
+			resp, err := ctx.PATCHRawNoContentType(productPath, payload)
 			if err != nil {
 				return err
 			}
 
-			// Should return 400 or 415 for missing/incorrect Content-Type
-			// But some implementations may be lenient and accept it
-			if resp.StatusCode == 400 || resp.StatusCode == 415 {
-				return nil
+			if resp.StatusCode != 400 && resp.StatusCode != 415 {
+				return fmt.Errorf("expected status 400 or 415, got %d", resp.StatusCode)
 			}
-
-			// Lenient implementation
-			ctx.Log(fmt.Sprintf("Status: %d (lenient implementation)", resp.StatusCode))
 			return nil
 		},
 	)

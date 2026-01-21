@@ -280,6 +280,11 @@ func (c *TestContext) PATCH(path string, body interface{}, headers ...Header) (*
 	return c.request("PATCH", path, body, headers...)
 }
 
+// PATCHRawNoContentType performs an HTTP PATCH request with raw bytes and no default Content-Type.
+func (c *TestContext) PATCHRawNoContentType(path string, body []byte, headers ...Header) (*HTTPResponse, error) {
+	return c.requestWithOptions("PATCH", path, body, requestOptions{skipDefaultContentType: true}, headers...)
+}
+
 // PUT performs an HTTP PUT request
 func (c *TestContext) PUT(path string, body interface{}, headers ...Header) (*HTTPResponse, error) {
 	return c.request("PUT", path, body, headers...)
@@ -336,6 +341,14 @@ type Header struct {
 
 // request performs an HTTP request
 func (c *TestContext) request(method, path string, body interface{}, headers ...Header) (*HTTPResponse, error) {
+	return c.requestWithOptions(method, path, body, requestOptions{}, headers...)
+}
+
+type requestOptions struct {
+	skipDefaultContentType bool
+}
+
+func (c *TestContext) requestWithOptions(method, path string, body interface{}, options requestOptions, headers ...Header) (*HTTPResponse, error) {
 	// Normalize query strings so callers don't need to URL encode manually
 	if strings.Contains(path, "?") {
 		if parsed, err := url.Parse(path); err == nil {
@@ -379,7 +392,7 @@ func (c *TestContext) request(method, path string, body interface{}, headers ...
 		}
 		req.Header.Set(h.Key, h.Value)
 	}
-	if body != nil && !contentTypeSet {
+	if body != nil && !contentTypeSet && !options.skipDefaultContentType {
 		// Default to JSON for structured payloads
 		req.Header.Set("Content-Type", "application/json")
 	}
