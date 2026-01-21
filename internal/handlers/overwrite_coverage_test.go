@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -458,8 +460,10 @@ func TestGetNamespace(t *testing.T) {
 		adapter := newMetadataAdapter(handler.metadata, handler.namespace)
 		ns := adapter.GetNamespace()
 
-		// Should return empty string or default
-		t.Logf("Namespace: %s", ns)
+		// GetNamespace returns defaultNamespace when namespace is empty
+		if ns != "ODataService" {
+			t.Errorf("Expected default namespace 'ODataService', got %s", ns)
+		}
 	})
 }
 
@@ -483,7 +487,7 @@ func createTestHandlerWithMetadata() *EntityHandler {
 				},
 			},
 		},
-		logger:    createNilLogger(),
+		logger:    slog.New(slog.NewTextHandler(io.Discard, nil)),
 		namespace: "TestNamespace",
 	}
 }

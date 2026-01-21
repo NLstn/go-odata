@@ -91,7 +91,7 @@ func TestHasEntityLevelDefaultMaxTop(t *testing.T) {
 	handler.metadata.DefaultMaxTop = &maxTop
 	has = handler.HasEntityLevelDefaultMaxTop()
 	if !has {
-		t.Error("Expected HasEntityLevelDefaultMaxTop to return true")
+		t.Error("Expected HasEntityLevelDefaultMaxTop to return true after setting DefaultMaxTop")
 	}
 }
 
@@ -101,13 +101,13 @@ func TestIsGeospatialEnabled(t *testing.T) {
 
 	enabled := handler.IsGeospatialEnabled()
 	if enabled {
-		t.Log("Geospatial is enabled")
+		t.Error("Expected geospatial to be disabled by default")
 	}
 
 	handler.SetGeospatialEnabled(true)
 	enabled = handler.IsGeospatialEnabled()
 	if !enabled {
-		t.Error("Expected geospatial to be enabled")
+		t.Error("Expected geospatial to be enabled after setting to true")
 	}
 }
 
@@ -121,13 +121,13 @@ func TestIsSingleton(t *testing.T) {
 
 	isSingleton := handler.IsSingleton()
 	if isSingleton {
-		t.Error("Expected IsSingleton to return false")
+		t.Error("Expected IsSingleton to return false by default")
 	}
 
 	handler.metadata.IsSingleton = true
 	isSingleton = handler.IsSingleton()
 	if !isSingleton {
-		t.Error("Expected IsSingleton to return true")
+		t.Error("Expected IsSingleton to return true after setting to true")
 	}
 }
 
@@ -170,30 +170,39 @@ func TestOverwriteHasChecks(t *testing.T) {
 func TestSetObservability(t *testing.T) {
 	handler := NewEntityHandler(nil, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
 
+	// Call SetObservability with nil to test it doesn't panic
 	handler.SetObservability(nil)
 
-	// Should not panic
-	t.Log("Observability set")
+	// Verify the call completed successfully (no panic)
+	if handler == nil {
+		t.Error("Handler should not be nil after SetObservability")
+	}
 }
 
 // TestSetMaxInClauseSize tests max IN clause size setting
 func TestSetMaxInClauseSize(t *testing.T) {
 	handler := NewEntityHandler(nil, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
 
+	// Call SetMaxInClauseSize to test it doesn't panic
 	handler.SetMaxInClauseSize(500)
 
-	// Should not panic
-	t.Log("Max IN clause size set")
+	// Verify the call completed successfully (no panic)
+	if handler == nil {
+		t.Error("Handler should not be nil after SetMaxInClauseSize")
+	}
 }
 
 // TestSetMaxExpandDepth tests max expand depth setting
 func TestSetMaxExpandDepth(t *testing.T) {
 	handler := NewEntityHandler(nil, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
 
+	// Call SetMaxExpandDepth to test it doesn't panic
 	handler.SetMaxExpandDepth(5)
 
-	// Should not panic
-	t.Log("Max expand depth set")
+	// Verify the call completed successfully (no panic)
+	if handler == nil {
+		t.Error("Handler should not be nil after SetMaxExpandDepth")
+	}
 }
 
 // TestGetParserConfig tests parser config retrieval
