@@ -1,10 +1,6 @@
 package v4_0
 
-import (
-	"fmt"
-
-	"github.com/nlstn/go-odata/compliance-suite/framework"
-)
+import "github.com/nlstn/go-odata/compliance-suite/framework"
 
 // InvalidQueryParameters creates the 8.1.6 Invalid Query Parameters test suite
 func InvalidQueryParameters() *framework.TestSuite {
@@ -90,18 +86,16 @@ func InvalidQueryParameters() *framework.TestSuite {
 		"Duplicate system query options should return 400 Bad Request",
 		func(ctx *framework.TestContext) error {
 			// Per OData spec, duplicate system query options are not allowed
-			// Note: Some implementations may allow this and use the last value (lenient behavior)
 			resp, err := ctx.GET("/Products?$top=5&$top=10")
 			if err != nil {
 				return err
 			}
 
-			// This test allows both 200 (lenient) and 400 (strict) responses
-			if resp.StatusCode != 200 && resp.StatusCode != 400 {
-				return framework.NewError(fmt.Sprintf("Expected 200 or 400, got: %d", resp.StatusCode))
+			if err := ctx.AssertStatusCode(resp, 400); err != nil {
+				return err
 			}
 
-			return nil
+			return ctx.AssertJSONField(resp, "error")
 		},
 	)
 
