@@ -30,6 +30,10 @@ type Decision = auth.Decision
 // Policy defines the interface for authorization decisions.
 type Policy = auth.Policy
 
+// QueryFilterProvider defines an optional extension point for providing additional
+// query filters based on authorization policy.
+type QueryFilterProvider = auth.QueryFilterProvider
+
 // Allow returns an allow decision.
 func Allow() Decision {
 	return auth.Allow()
