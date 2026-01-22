@@ -762,4 +762,4 @@ GetCollection: func(ctx *odata.OverwriteContext) (*odata.CollectionResult, error
 - [Overwrite Handlers](advanced-features.md#overwrite-handlers) - Learn more about overwrite handlers
 - [Actions and Functions](actions-and-functions.md) - Extend virtual entities with custom operations
 - [Advanced Features](advanced-features.md) - Other advanced OData features
-- [Error Handling](../errors.go) - Complete reference for error types
+- Error Handling - See the `errors.go` file in the root of the repository for complete error types reference
