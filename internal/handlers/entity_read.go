@@ -158,9 +158,10 @@ func (h *EntityHandler) handleGetEntityOverwrite(w http.ResponseWriter, r *http.
 
 	// Create overwrite context
 	ctx := &OverwriteContext{
-		QueryOptions: queryOptions,
-		EntityKey:    entityKey,
-		Request:      r,
+		QueryOptions:    queryOptions,
+		EntityKey:       entityKey,
+		EntityKeyValues: parseEntityKeyValues(entityKey, h.metadata.KeyProperties),
+		Request:         r,
 	}
 
 	// Call the overwrite handler
