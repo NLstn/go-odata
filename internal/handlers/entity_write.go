@@ -680,9 +680,10 @@ func (h *EntityHandler) handleDeleteEntityOverwrite(w http.ResponseWriter, r *ht
 	// Create overwrite context with empty query options (DELETE doesn't use query options,
 	// but we provide a consistent context interface across all operations)
 	ctx := &OverwriteContext{
-		QueryOptions: &query.QueryOptions{},
-		EntityKey:    entityKey,
-		Request:      r,
+		QueryOptions:    &query.QueryOptions{},
+		EntityKey:       entityKey,
+		EntityKeyValues: parseEntityKeyValues(entityKey, h.metadata.KeyProperties),
+		Request:         r,
 	}
 
 	// Call the overwrite handler
@@ -717,9 +718,10 @@ func (h *EntityHandler) handleUpdateEntityOverwrite(w http.ResponseWriter, r *ht
 
 	// Create overwrite context
 	ctx := &OverwriteContext{
-		QueryOptions: &query.QueryOptions{},
-		EntityKey:    entityKey,
-		Request:      r,
+		QueryOptions:    &query.QueryOptions{},
+		EntityKey:       entityKey,
+		EntityKeyValues: parseEntityKeyValues(entityKey, h.metadata.KeyProperties),
+		Request:         r,
 	}
 
 	// Call the overwrite handler

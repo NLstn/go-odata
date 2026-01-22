@@ -347,4 +347,52 @@ func TestOverwriteContext(t *testing.T) {
 			t.Errorf("EntityKey should be empty for collection, got %v", ctx.EntityKey)
 		}
 	})
+
+	t.Run("OverwriteContext with EntityKeyValues for single key", func(t *testing.T) {
+		keyValues := map[string]interface{}{
+			"ID": int64(123),
+		}
+		ctx := &OverwriteContext{
+			QueryOptions:    nil,
+			EntityKey:       "123",
+			EntityKeyValues: keyValues,
+			Request:         nil,
+		}
+
+		if ctx.EntityKeyValues == nil {
+			t.Fatal("EntityKeyValues should not be nil")
+		}
+		if len(ctx.EntityKeyValues) != 1 {
+			t.Errorf("Expected 1 key-value pair, got %d", len(ctx.EntityKeyValues))
+		}
+		if val, ok := ctx.EntityKeyValues["ID"]; !ok || val != int64(123) {
+			t.Errorf("Expected ID=123, got %v", ctx.EntityKeyValues)
+		}
+	})
+
+	t.Run("OverwriteContext with EntityKeyValues for composite key", func(t *testing.T) {
+		keyValues := map[string]interface{}{
+			"OrderID":   int64(1),
+			"ProductID": int64(5),
+		}
+		ctx := &OverwriteContext{
+			QueryOptions:    nil,
+			EntityKey:       "OrderID=1,ProductID=5",
+			EntityKeyValues: keyValues,
+			Request:         nil,
+		}
+
+		if ctx.EntityKeyValues == nil {
+			t.Fatal("EntityKeyValues should not be nil")
+		}
+		if len(ctx.EntityKeyValues) != 2 {
+			t.Errorf("Expected 2 key-value pairs, got %d", len(ctx.EntityKeyValues))
+		}
+		if val, ok := ctx.EntityKeyValues["OrderID"]; !ok || val != int64(1) {
+			t.Errorf("Expected OrderID=1, got %v", ctx.EntityKeyValues["OrderID"])
+		}
+		if val, ok := ctx.EntityKeyValues["ProductID"]; !ok || val != int64(5) {
+			t.Errorf("Expected ProductID=5, got %v", ctx.EntityKeyValues["ProductID"])
+		}
+	})
 }

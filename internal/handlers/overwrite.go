@@ -13,6 +13,11 @@ type OverwriteContext struct {
 	QueryOptions *query.QueryOptions
 	// EntityKey is the key value for single entity operations (empty for collection operations)
 	EntityKey string
+	// EntityKeyValues contains parsed key-value pairs for composite keys
+	// For single keys: map with one entry (key name -> key value)
+	// For composite keys: map with multiple entries (e.g., {"OrderID": 1, "ProductID": 5})
+	// Empty for collection operations
+	EntityKeyValues map[string]interface{}
 	// Request is the original HTTP request
 	Request *http.Request
 }

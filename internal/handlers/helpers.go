@@ -15,6 +15,81 @@ import (
 	"gorm.io/gorm"
 )
 
+// parseEntityKeyValues parses an entity key string into a map of key-value pairs.
+// For single keys like "42", returns map with one entry using the provided keyPropertyName.
+// For composite keys like "OrderID=1,ProductID=5", returns map with multiple entries.
+// Returns nil if entityKey is empty (for collection operations).
+func parseEntityKeyValues(entityKey string, keyProperties []metadata.PropertyMetadata) map[string]interface{} {
+	if entityKey == "" {
+		return nil
+	}
+
+	keyValues := make(map[string]interface{})
+
+	// Try to parse as composite key format first
+	components := &response.ODataURLComponents{
+		EntityKeyMap: make(map[string]string),
+	}
+
+	if err := parseCompositeKey(entityKey, components); err == nil && len(components.EntityKeyMap) > 0 {
+		// Composite key format: key1=value1,key2=value2
+		for key, value := range components.EntityKeyMap {
+			// Convert string value to appropriate type based on metadata
+			keyValues[key] = convertKeyValue(value, key, keyProperties)
+		}
+	} else {
+		// Single key - use the first key property name
+		if len(keyProperties) > 0 {
+			keyValues[keyProperties[0].JsonName] = convertKeyValue(entityKey, keyProperties[0].JsonName, keyProperties)
+		}
+	}
+
+	return keyValues
+}
+
+// convertKeyValue attempts to convert a string key value to the appropriate type
+// based on the property metadata. Returns string if conversion fails or type is unknown.
+func convertKeyValue(value string, keyName string, keyProperties []metadata.PropertyMetadata) interface{} {
+	// Find the property metadata for this key
+	var propType reflect.Type
+	for _, prop := range keyProperties {
+		if prop.JsonName == keyName || prop.Name == keyName {
+			propType = prop.Type
+			break
+		}
+	}
+
+	// If we didn't find the type or type is nil, return string
+	if propType == nil {
+		return value
+	}
+
+	// Try to convert based on type kind
+	switch propType.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		if intVal, err := strconv.ParseInt(value, 10, 64); err == nil {
+			return intVal
+		}
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		if uintVal, err := strconv.ParseUint(value, 10, 64); err == nil {
+			return uintVal
+		}
+	case reflect.Float32, reflect.Float64:
+		if floatVal, err := strconv.ParseFloat(value, 64); err == nil {
+			return floatVal
+		}
+	case reflect.Bool:
+		if boolVal, err := strconv.ParseBool(value); err == nil {
+			return boolVal
+		}
+	case reflect.String:
+		return value
+	}
+
+	// Default to string if conversion fails or type is unknown
+	return value
+}
+
 // SetODataHeader sets an HTTP header preserving the exact capitalization.
 // This is needed for OData-specific headers like "OData-Version" and "OData-EntityId"
 // which do not follow Go's standard HTTP header canonicalization (which would turn them into "Odata-Version").

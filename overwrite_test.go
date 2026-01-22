@@ -829,3 +829,184 @@ func TestExpandOptionTypeAccessibility(t *testing.T) {
 		t.Errorf("Expected status 200, got %d", resp.StatusCode)
 	}
 }
+
+func TestOverwriteContext_EntityKeyValuesWithCompositeKey(t *testing.T) {
+	db := setupOverwriteTestDB(t)
+	service, err := NewService(db)
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
+
+	// Create a test entity with composite keys
+	type TestCompositeKeyEntity struct {
+		OrderID   int    `json:"OrderID" odata:"key" gorm:"primaryKey"`
+		ProductID int    `json:"ProductID" odata:"key" gorm:"primaryKey"`
+		Quantity  int    `json:"Quantity"`
+		Name      string `json:"Name"`
+	}
+
+	if err := db.AutoMigrate(&TestCompositeKeyEntity{}); err != nil {
+		t.Fatalf("Failed to migrate: %v", err)
+	}
+
+	if err := service.RegisterEntity(&TestCompositeKeyEntity{}); err != nil {
+		t.Fatalf("Failed to register entity: %v", err)
+	}
+
+	// Test GetEntity overwrite with composite key
+	t.Run("GetEntity with composite key", func(t *testing.T) {
+		var capturedContext *OverwriteContext
+
+		err := service.SetGetEntityOverwrite("TestCompositeKeyEntities", func(ctx *OverwriteContext) (interface{}, error) {
+			capturedContext = ctx
+			return &TestCompositeKeyEntity{
+				OrderID:   1,
+				ProductID: 5,
+				Quantity:  10,
+				Name:      "Test Product",
+			}, nil
+		})
+		if err != nil {
+			t.Fatalf("Failed to set overwrite: %v", err)
+		}
+
+		server := httptest.NewServer(service)
+		defer server.Close()
+
+		resp, err := http.Get(server.URL + "/TestCompositeKeyEntities(OrderID=1,ProductID=5)")
+		if err != nil {
+			t.Fatalf("Request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, body)
+		}
+
+		// Verify EntityKey is set
+		if capturedContext.EntityKey != "OrderID=1,ProductID=5" {
+			t.Errorf("Expected EntityKey 'OrderID=1,ProductID=5', got '%s'", capturedContext.EntityKey)
+		}
+
+		// Verify EntityKeyValues is populated
+		if capturedContext.EntityKeyValues == nil {
+			t.Fatal("EntityKeyValues should not be nil")
+		}
+
+		if len(capturedContext.EntityKeyValues) != 2 {
+			t.Fatalf("Expected 2 key-value pairs, got %d", len(capturedContext.EntityKeyValues))
+		}
+
+		// Check OrderID
+		if orderID, ok := capturedContext.EntityKeyValues["OrderID"]; !ok {
+			t.Error("OrderID not found in EntityKeyValues")
+		} else if orderID != int64(1) {
+			t.Errorf("Expected OrderID=1, got %v (%T)", orderID, orderID)
+		}
+
+		// Check ProductID
+		if productID, ok := capturedContext.EntityKeyValues["ProductID"]; !ok {
+			t.Error("ProductID not found in EntityKeyValues")
+		} else if productID != int64(5) {
+			t.Errorf("Expected ProductID=5, got %v (%T)", productID, productID)
+		}
+	})
+
+	// Test Update overwrite with composite key
+	t.Run("Update with composite key", func(t *testing.T) {
+		var capturedContext *OverwriteContext
+
+		err := service.SetUpdateOverwrite("TestCompositeKeyEntities", func(ctx *OverwriteContext, data map[string]interface{}, isFullReplace bool) (interface{}, error) {
+			capturedContext = ctx
+			return &TestCompositeKeyEntity{
+				OrderID:   1,
+				ProductID: 5,
+				Quantity:  20,
+				Name:      "Updated Product",
+			}, nil
+		})
+		if err != nil {
+			t.Fatalf("Failed to set overwrite: %v", err)
+		}
+
+		server := httptest.NewServer(service)
+		defer server.Close()
+
+		body := `{"Quantity": 20, "Name": "Updated Product"}`
+		req, _ := http.NewRequest(http.MethodPatch, server.URL+"/TestCompositeKeyEntities(OrderID=1,ProductID=5)", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("Request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusNoContent {
+			bodyContent, _ := io.ReadAll(resp.Body)
+			t.Fatalf("Expected status 204, got %d: %s", resp.StatusCode, bodyContent)
+		}
+
+		// Verify EntityKeyValues is populated
+		if capturedContext.EntityKeyValues == nil {
+			t.Fatal("EntityKeyValues should not be nil")
+		}
+
+		if len(capturedContext.EntityKeyValues) != 2 {
+			t.Fatalf("Expected 2 key-value pairs, got %d", len(capturedContext.EntityKeyValues))
+		}
+
+		if orderID, ok := capturedContext.EntityKeyValues["OrderID"]; !ok || orderID != int64(1) {
+			t.Errorf("Expected OrderID=1, got %v", capturedContext.EntityKeyValues["OrderID"])
+		}
+
+		if productID, ok := capturedContext.EntityKeyValues["ProductID"]; !ok || productID != int64(5) {
+			t.Errorf("Expected ProductID=5, got %v", capturedContext.EntityKeyValues["ProductID"])
+		}
+	})
+
+	// Test Delete overwrite with composite key
+	t.Run("Delete with composite key", func(t *testing.T) {
+		var capturedContext *OverwriteContext
+
+		err := service.SetDeleteOverwrite("TestCompositeKeyEntities", func(ctx *OverwriteContext) error {
+			capturedContext = ctx
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("Failed to set overwrite: %v", err)
+		}
+
+		server := httptest.NewServer(service)
+		defer server.Close()
+
+		req, _ := http.NewRequest(http.MethodDelete, server.URL+"/TestCompositeKeyEntities(OrderID=1,ProductID=5)", nil)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("Request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusNoContent {
+			t.Fatalf("Expected status 204, got %d", resp.StatusCode)
+		}
+
+		// Verify EntityKeyValues is populated
+		if capturedContext.EntityKeyValues == nil {
+			t.Fatal("EntityKeyValues should not be nil")
+		}
+
+		if len(capturedContext.EntityKeyValues) != 2 {
+			t.Fatalf("Expected 2 key-value pairs, got %d", len(capturedContext.EntityKeyValues))
+		}
+
+		if orderID, ok := capturedContext.EntityKeyValues["OrderID"]; !ok || orderID != int64(1) {
+			t.Errorf("Expected OrderID=1, got %v", capturedContext.EntityKeyValues["OrderID"])
+		}
+
+		if productID, ok := capturedContext.EntityKeyValues["ProductID"]; !ok || productID != int64(5) {
+			t.Errorf("Expected ProductID=5, got %v", capturedContext.EntityKeyValues["ProductID"])
+		}
+	})
+}
