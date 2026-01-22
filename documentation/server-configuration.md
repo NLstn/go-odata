@@ -330,6 +330,7 @@ Use go-odata with popular routing frameworks by adapting the `Service` (which im
 
 ```go
 import (
+    "log"
     "net/http"
 
     "github.com/go-chi/chi/v5"
@@ -360,6 +361,7 @@ func configureChiRouter(service *odata.Service) http.Handler {
 
 ```go
 import (
+    "log"
     "net/http"
 
     "github.com/gin-gonic/gin"
@@ -390,6 +392,7 @@ func configureGinEngine(service *odata.Service) *gin.Engine {
 
 ```go
 import (
+    "log"
     "net/http"
 
     "github.com/labstack/echo/v4"
