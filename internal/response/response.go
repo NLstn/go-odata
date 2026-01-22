@@ -11,34 +11,8 @@ import (
 )
 
 const (
-	// ODataVersionValue is the default OData version for responses.
-	//
-	// Deprecated: This constant always returns "4.01" and does not support version negotiation.
-	// Use version.GetVersion(ctx) to get the negotiated version from request context.
-	// This constant will be removed in v2.0.0 (target: June 2026).
-	ODataVersionValue  = "4.01"
 	HeaderODataVersion = "OData-Version"
 )
-
-// SetODataVersionHeader sets the OData-Version header to a fixed value (4.01).
-//
-// Deprecated: This function always returns "4.01" and does not respect client version negotiation.
-// Use SetODataVersionHeaderFromRequest(w, r) instead for context-aware version handling.
-// This function will be removed in v2.0.0 (target: June 2026).
-//
-// Migration:
-//
-//	// Old (deprecated - always 4.01):
-//	response.SetODataVersionHeader(w)
-//
-//	// New (context-aware - respects negotiation):
-//	response.SetODataVersionHeaderFromRequest(w, r)
-//
-// Note: The router middleware automatically sets the version header, so manual
-// calls are rarely needed unless implementing custom handlers.
-func SetODataVersionHeader(w http.ResponseWriter) {
-	w.Header()[HeaderODataVersion] = []string{ODataVersionValue}
-}
 
 // SetODataVersionHeaderFromRequest sets the OData-Version header based on the negotiated version in the request context.
 func SetODataVersionHeaderFromRequest(w http.ResponseWriter, r *http.Request) {

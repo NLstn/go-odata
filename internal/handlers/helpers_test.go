@@ -30,20 +30,6 @@ func TestSetODataHeader(t *testing.T) {
 	}
 }
 
-func TestSetODataVersionHeader(t *testing.T) {
-	w := httptest.NewRecorder()
-
-	SetODataVersionHeader(w)
-
-	// Verify header was set with correct value - use direct map access
-	// OData spec requires exact "OData-Version" capitalization which is non-canonical in Go
-	header := w.Header()
-	values := header["OData-Version"] //nolint:staticcheck // OData headers require non-canonical keys
-	if len(values) == 0 {
-		t.Error("Expected OData-Version header to be set")
-	}
-}
-
 func TestSetODataVersionHeaderForRequest(t *testing.T) {
 	tests := []struct {
 		name            string
