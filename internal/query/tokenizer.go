@@ -82,35 +82,63 @@ func (t *Tokenizer) skipWhitespace() {
 }
 
 // readString reads a quoted string
-// Per OData v4 spec, single quotes within string literals are escaped by doubling them (”)
+// Per OData v4 spec, single quotes within string literals are escaped by doubling them (")
 func (t *Tokenizer) readString() string {
-	quote := t.ch
-	t.advance() // skip opening quote
+quote := t.ch
+t.advance() // skip opening quote
 
-	var result strings.Builder
-	for t.ch != 0 {
-		if t.ch == quote {
-			// Check if this is an escaped quote (doubled)
-			if t.peek() == quote {
-				// This is an escaped quote - add one quote to result and skip both
-				result.WriteRune(quote)
-				t.advance() // skip first quote
-				t.advance() // skip second quote
-			} else {
-				// This is the closing quote
-				break
-			}
-		} else {
-			result.WriteRune(t.ch)
-			t.advance()
-		}
-	}
+start := t.pos
+hasEscapes := false
 
-	if t.ch == quote {
-		t.advance() // skip closing quote
-	}
+// Fast path: scan for simple strings without escape sequences
+for t.ch != 0 {
+if t.ch == quote {
+if t.peek() == quote {
+// Found an escaped quote - need to use slow path
+hasEscapes = true
+break
+}
+// This is the closing quote
+result := t.input[start:t.pos]
+t.advance() // skip closing quote
+return result
+}
+t.advance()
+}
 
-	return result.String()
+// Slow path: handle escape sequences
+if hasEscapes {
+var result strings.Builder
+// Pre-size buffer: content so far plus extra for potential escape sequence growth
+result.Grow(t.pos - start + stringBuilderExtraCapacity)
+// Write what we've read so far
+result.WriteString(t.input[start:t.pos])
+
+for t.ch != 0 {
+if t.ch == quote {
+if t.peek() == quote {
+// This is an escaped quote - add one quote to result and skip both
+result.WriteRune(quote)
+t.advance() // skip first quote
+t.advance() // skip second quote
+} else {
+// This is the closing quote
+break
+}
+} else {
+result.WriteRune(t.ch)
+t.advance()
+}
+}
+
+if t.ch == quote {
+t.advance() // skip closing quote
+}
+return result.String()
+}
+
+// String ended without closing quote
+return t.input[start:t.pos]
 }
 
 // readNumber reads a number
@@ -156,23 +184,44 @@ func (t *Tokenizer) readNumber() string {
 	return result.String()
 }
 
+// isIdentifierChar checks if a character is valid within an identifier (ASCII fast path)
+func isIdentifierChar(ch rune) bool {
+	// Fast path for common ASCII characters
+	if ch <= 127 {
+		return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
+			(ch >= '0' && ch <= '9') || ch == '_' || ch == '.'
+	}
+	// Fallback to unicode for non-ASCII
+	return unicode.IsLetter(ch) || unicode.IsDigit(ch)
+}
+
+// isIdentifierStart checks if a character can start an identifier (ASCII fast path)
+func isIdentifierStart(ch rune) bool {
+	// Fast path for common ASCII characters
+	if ch <= 127 {
+		return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '$'
+	}
+	// Fallback to unicode for non-ASCII
+	return unicode.IsLetter(ch)
+}
+
 // readIdentifier reads an identifier or keyword
 // In OData v4, identifiers can contain dots for qualified names (e.g., Edm.String)
 func (t *Tokenizer) readIdentifier() string {
-	var result strings.Builder
+	start := t.pos
 
 	// Allow $ at the beginning for special properties like $count
 	if t.ch == '$' {
-		result.WriteRune(t.ch)
 		t.advance()
 	}
 
-	for t.ch != 0 && (unicode.IsLetter(t.ch) || unicode.IsDigit(t.ch) || t.ch == '_' || t.ch == '.') {
-		result.WriteRune(t.ch)
+	// Fast path: use direct slice access for ASCII-only identifiers
+	for t.ch != 0 && isIdentifierChar(t.ch) {
 		t.advance()
 	}
 
-	return result.String()
+	// Return a slice of the input string to avoid allocation
+	return t.input[start:t.pos]
 }
 
 // isDateLiteral checks if current position starts a date literal (YYYY-MM-DD)
@@ -477,10 +526,34 @@ func (t *Tokenizer) tokenizeSpecialChar(pos int) *Token {
 	return nil
 }
 
+// toLowerASCII converts an ASCII byte to lowercase without allocation
+func toLowerASCII(ch byte) byte {
+	if ch >= 'A' && ch <= 'Z' {
+		return ch + 32 // Convert to lowercase
+	}
+	return ch
+}
+
+// equalsFoldASCII compares two strings for equality, ignoring ASCII case.
+// The target string MUST be lowercase for correct comparison.
+// This is more efficient than strings.EqualFold for short ASCII strings
+// because it avoids Unicode handling overhead.
+func equalsFoldASCII(s, target string) bool {
+	if len(s) != len(target) {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if toLowerASCII(s[i]) != target[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // tokenizeIdentifierOrKeyword tokenizes identifiers and keywords
 func (t *Tokenizer) tokenizeIdentifierOrKeyword(pos int) *Token {
 	// Allow identifiers starting with letters or $ (for special properties like $count)
-	if !unicode.IsLetter(t.ch) && t.ch != '$' {
+	if !isIdentifierStart(t.ch) {
 		return nil
 	}
 
@@ -492,23 +565,21 @@ func (t *Tokenizer) tokenizeIdentifierOrKeyword(pos int) *Token {
 	}
 
 	value := t.readIdentifier()
-	lower := strings.ToLower(value)
 
 	// Check for arithmetic functions: add, sub, mul, div, mod can be either
 	// functions (when followed by '(') or infix operators
-	if (lower == "add" || lower == "sub" || lower == "mul" || lower == "div" || lower == "mod") && t.ch == '(' {
-		// Treat as identifier (function name) when followed by '('
-		return &Token{Type: TokenIdentifier, Value: value, Pos: pos}
+	// Use fast ASCII case-insensitive comparison
+	if t.ch == '(' {
+		if equalsFoldASCII(value, "add") || equalsFoldASCII(value, "sub") ||
+			equalsFoldASCII(value, "mul") || equalsFoldASCII(value, "div") ||
+			equalsFoldASCII(value, "mod") || equalsFoldASCII(value, "has") {
+			// Treat as identifier (function name) when followed by '('
+			return &Token{Type: TokenIdentifier, Value: value, Pos: pos}
+		}
 	}
 
-	// Check for 'has' function: can be either a function (when followed by '(') or infix operator
-	if lower == "has" && t.ch == '(' {
-		// Treat as identifier (function name) when followed by '('
-		return &Token{Type: TokenIdentifier, Value: value, Pos: pos}
-	}
-
-	// Check for keywords
-	if token := t.classifyKeyword(lower, pos); token != nil {
+	// Check for keywords using fast ASCII comparison
+	if token := t.classifyKeywordFast(value, pos); token != nil {
 		return token
 	}
 
@@ -517,33 +588,105 @@ func (t *Tokenizer) tokenizeIdentifierOrKeyword(pos int) *Token {
 	return &Token{Type: TokenIdentifier, Value: value, Pos: pos}
 }
 
-// classifyKeyword classifies a keyword and returns the appropriate token
-func (t *Tokenizer) classifyKeyword(lower string, pos int) *Token {
-	switch lower {
-	case "and":
-		return &Token{Type: TokenLogical, Value: "and", Pos: pos}
-	case "or":
-		return &Token{Type: TokenLogical, Value: "or", Pos: pos}
-	case "not":
-		return &Token{Type: TokenNot, Value: "not", Pos: pos}
-	case "true", "false":
-		return &Token{Type: TokenBoolean, Value: lower, Pos: pos}
-	case "null":
-		return &Token{Type: TokenNull, Value: "null", Pos: pos}
-	case "eq", "ne", "gt", "ge", "lt", "le", "in", "has":
-		return &Token{Type: TokenOperator, Value: lower, Pos: pos}
-	case "add", "sub", "mul", "div", "mod":
-		return &Token{Type: TokenArithmetic, Value: lower, Pos: pos}
-	case "inf", "nan":
-		// OData v4 spec special floating-point literals
-		return &Token{Type: TokenNumber, Value: lower, Pos: pos}
+// classifyKeywordFast classifies a keyword using fast ASCII case-insensitive comparison
+// Returns the appropriate token or nil if not a keyword
+func (t *Tokenizer) classifyKeywordFast(value string, pos int) *Token {
+	// Use length as first discriminator for efficiency
+	switch len(value) {
+	case 2:
+		if equalsFoldASCII(value, "or") {
+			return &Token{Type: TokenLogical, Value: "or", Pos: pos}
+		}
+		if equalsFoldASCII(value, "eq") {
+			return &Token{Type: TokenOperator, Value: "eq", Pos: pos}
+		}
+		if equalsFoldASCII(value, "ne") {
+			return &Token{Type: TokenOperator, Value: "ne", Pos: pos}
+		}
+		if equalsFoldASCII(value, "gt") {
+			return &Token{Type: TokenOperator, Value: "gt", Pos: pos}
+		}
+		if equalsFoldASCII(value, "ge") {
+			return &Token{Type: TokenOperator, Value: "ge", Pos: pos}
+		}
+		if equalsFoldASCII(value, "lt") {
+			return &Token{Type: TokenOperator, Value: "lt", Pos: pos}
+		}
+		if equalsFoldASCII(value, "le") {
+			return &Token{Type: TokenOperator, Value: "le", Pos: pos}
+		}
+		if equalsFoldASCII(value, "in") {
+			return &Token{Type: TokenOperator, Value: "in", Pos: pos}
+		}
+	case 3:
+		if equalsFoldASCII(value, "and") {
+			return &Token{Type: TokenLogical, Value: "and", Pos: pos}
+		}
+		if equalsFoldASCII(value, "not") {
+			return &Token{Type: TokenNot, Value: "not", Pos: pos}
+		}
+		if equalsFoldASCII(value, "has") {
+			return &Token{Type: TokenOperator, Value: "has", Pos: pos}
+		}
+		if equalsFoldASCII(value, "add") {
+			return &Token{Type: TokenArithmetic, Value: "add", Pos: pos}
+		}
+		if equalsFoldASCII(value, "sub") {
+			return &Token{Type: TokenArithmetic, Value: "sub", Pos: pos}
+		}
+		if equalsFoldASCII(value, "mul") {
+			return &Token{Type: TokenArithmetic, Value: "mul", Pos: pos}
+		}
+		if equalsFoldASCII(value, "div") {
+			return &Token{Type: TokenArithmetic, Value: "div", Pos: pos}
+		}
+		if equalsFoldASCII(value, "mod") {
+			return &Token{Type: TokenArithmetic, Value: "mod", Pos: pos}
+		}
+		if equalsFoldASCII(value, "inf") {
+			return &Token{Type: TokenNumber, Value: "inf", Pos: pos}
+		}
+		if equalsFoldASCII(value, "nan") {
+			return &Token{Type: TokenNumber, Value: "nan", Pos: pos}
+		}
+	case 4:
+		if equalsFoldASCII(value, "true") {
+			return &Token{Type: TokenBoolean, Value: "true", Pos: pos}
+		}
+		if equalsFoldASCII(value, "null") {
+			return &Token{Type: TokenNull, Value: "null", Pos: pos}
+		}
+	case 5:
+		if equalsFoldASCII(value, "false") {
+			return &Token{Type: TokenBoolean, Value: "false", Pos: pos}
+		}
 	}
 	return nil
 }
 
+const (
+	// estimatedAvgTokenLength is the estimated average length of a token in characters.
+	// OData tokens like "and", "eq", "Name" average around 4 characters.
+	// Used for pre-allocating token slice capacity.
+	estimatedAvgTokenLength = 4
+
+	// minTokenSliceCapacity is the minimum capacity for the pre-allocated token slice.
+	// Ensures small inputs don't result in tiny allocations that need immediate growth.
+	minTokenSliceCapacity = 8
+
+	// stringBuilderExtraCapacity is additional capacity added to strings.Builder
+	// when handling escape sequences, to account for potential growth.
+	stringBuilderExtraCapacity = 16
+)
+
 // TokenizeAll returns all tokens from the input
 func (t *Tokenizer) TokenizeAll() ([]*Token, error) {
-	var tokens []*Token
+	// Pre-allocate token slice with estimated capacity based on input length
+	estimatedTokens := len(t.input)/estimatedAvgTokenLength + 1
+	if estimatedTokens < minTokenSliceCapacity {
+		estimatedTokens = minTokenSliceCapacity
+	}
+	tokens := make([]*Token, 0, estimatedTokens)
 
 	for {
 		token, err := t.NextToken()
