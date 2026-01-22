@@ -1,3 +1,5 @@
+// +build example
+
 // Package main demonstrates usage of key exported types in go-odata.
 //
 // This example shows how to use:
