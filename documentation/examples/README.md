@@ -2,7 +2,7 @@
 
 This directory contains example code demonstrating various features of the go-odata library.
 
-**Important Note**: Each example file in this directory is a standalone program with its own `main()` function. They are intended to be viewed as reference documentation and cannot be compiled together. To run an individual example, copy it to a separate directory or run it individually.
+**Important Note**: Each example file in this directory is a standalone program with its own `main()` function. They are tagged with the `example` build tag to exclude them from normal builds. To run an individual example, use the `-tags example` flag.
 
 ## Available Examples
 
@@ -20,13 +20,19 @@ Demonstrates the use of newly exported query types, constants, and functions:
 #### Running the Example
 
 ```bash
-# Copy to a temporary directory and run
+# Option 1: Run directly with the example tag
+cd documentation/examples
+go run -tags example query_types_usage.go
+
+# Option 2: Copy to a temporary directory
 mkdir -p /tmp/query-example
-cp query_types_usage.go /tmp/query-example/
+cp query_types_usage.go /tmp/query-example/main.go
+# Remove the build tag line from main.go
+sed -i '/^\/\/ +build example$/d' /tmp/query-example/main.go
 cd /tmp/query-example
 go mod init example
 go get github.com/nlstn/go-odata
-go run query_types_usage.go
+go run main.go
 ```
 
 ### 2. Authorization Examples (`auth_examples.go`)
@@ -43,15 +49,9 @@ Demonstrates authorization patterns including:
 #### Running the Example
 
 ```bash
-# Copy to a temporary directory and run
-mkdir -p /tmp/auth-example
-cp auth_examples.go /tmp/auth-example/
-cd /tmp/auth-example
-go mod init example
-go get github.com/nlstn/go-odata
-go get gorm.io/driver/sqlite
-go get gorm.io/gorm
-go run auth_examples.go
+# Run with the example tag
+cd documentation/examples
+go run -tags example auth_examples.go
 ```
 
 ### 3. Overwrite Context Examples (`overwrite_context_examples.go`)
@@ -66,15 +66,9 @@ Demonstrates usage of key exported types:
 #### Running the Example
 
 ```bash
-# Copy to a temporary directory and run
-mkdir -p /tmp/overwrite-example
-cp overwrite_context_examples.go /tmp/overwrite-example/
-cd /tmp/overwrite-example
-go mod init example
-go get github.com/nlstn/go-odata
-go get gorm.io/driver/sqlite
-go get gorm.io/gorm
-go run overwrite_context_examples.go
+# Run with the example tag
+cd documentation/examples
+go run -tags example overwrite_context_examples.go
 ```
 
 ## Use Cases
