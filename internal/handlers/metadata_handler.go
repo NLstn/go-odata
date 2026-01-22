@@ -444,6 +444,8 @@ func getEdmType(goType reflect.Type) string {
 		return "Edm.DateTimeOffset"
 	case "uuid.UUID", "github.com/google/uuid.UUID":
 		return "Edm.Guid"
+	case "decimal.Decimal", "github.com/shopspring/decimal.Decimal":
+		return "Edm.Decimal"
 	}
 
 	switch goType.Kind() {
