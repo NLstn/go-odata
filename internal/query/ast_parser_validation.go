@@ -14,6 +14,7 @@ type conversionContext struct {
 	computedAliases map[string]bool
 	entityMetadata  *metadata.EntityMetadata
 	maxInClauseSize int
+	cache           *parserCache // Cache for resolved navigation paths
 }
 
 // hasComputedAlias checks if an alias is registered as a computed property
@@ -24,12 +25,29 @@ func (ctx *conversionContext) hasComputedAlias(alias string) bool {
 	return ctx.computedAliases[alias]
 }
 
+// propertyExists checks if a property exists, using cache when available
+func (ctx *conversionContext) propertyExists(propertyName string) bool {
+	if ctx == nil {
+		return false
+	}
+	// If entityMetadata is nil, we can't validate properties
+	// This happens for lambda predicates where properties refer to collection element types
+	if ctx.entityMetadata == nil {
+		return true // Allow properties when metadata is unavailable
+	}
+	if ctx.cache != nil {
+		return ctx.cache.propertyExistsWithCache(propertyName, ctx.entityMetadata)
+	}
+	return propertyExists(propertyName, ctx.entityMetadata)
+}
+
 // ASTToFilterExpressionWithComputed converts an AST to a FilterExpression with computed alias support
 func ASTToFilterExpressionWithComputed(node ASTNode, entityMetadata *metadata.EntityMetadata, computedAliases map[string]bool, maxInClauseSize int) (*FilterExpression, error) {
 	ctx := &conversionContext{
 		computedAliases: computedAliases,
 		entityMetadata:  entityMetadata,
 		maxInClauseSize: maxInClauseSize,
+		cache:           newParserCache(),
 	}
 	return astToFilterExpressionWithContext(node, ctx)
 }
@@ -301,16 +319,11 @@ func validateValueAgainstPropertyType(property string, value interface{}, entity
 
 // extractPropertyFromComparisonWithContext extracts property name from the left side of a comparison
 func extractPropertyFromComparisonWithContext(node ASTNode, ctx *conversionContext) (string, error) {
-	var entityMetadata *metadata.EntityMetadata
-	if ctx != nil {
-		entityMetadata = ctx.entityMetadata
-	}
-
 	if ident, ok := node.(*IdentifierExpr); ok {
 		property := ident.Name
 		// Validate property exists (either in entity metadata or as a computed alias)
 		hasComputedAlias := ctx != nil && ctx.hasComputedAlias(property)
-		if entityMetadata != nil && !propertyExists(property, entityMetadata) && !hasComputedAlias {
+		if ctx != nil && !ctx.propertyExists(property) && !hasComputedAlias {
 			return "", fmt.Errorf("property '%s' does not exist", property)
 		}
 		return property, nil
@@ -330,11 +343,6 @@ func extractPropertyFromComparisonWithContext(node ASTNode, ctx *conversionConte
 
 // convertBinaryArithmeticExprWithContext converts a binary arithmetic expression to a filter expression
 func convertBinaryArithmeticExprWithContext(binExpr *BinaryExpr, ctx *conversionContext) (*FilterExpression, error) {
-	var entityMetadata *metadata.EntityMetadata
-	if ctx != nil {
-		entityMetadata = ctx.entityMetadata
-	}
-
 	// Map operator to FilterOperator
 	var op FilterOperator
 	switch binExpr.Operator {
@@ -358,7 +366,7 @@ func convertBinaryArithmeticExprWithContext(binExpr *BinaryExpr, ctx *conversion
 		property = leftIdent.Name
 		// Validate property exists (either in entity metadata or as a computed alias)
 		hasComputedAlias := ctx != nil && ctx.hasComputedAlias(property)
-		if entityMetadata != nil && !propertyExists(property, entityMetadata) && !hasComputedAlias {
+		if ctx != nil && !ctx.propertyExists(property) && !hasComputedAlias {
 			return nil, fmt.Errorf("property '%s' does not exist", property)
 		}
 	} else if leftBinExpr, ok := binExpr.Left.(*BinaryExpr); ok {
@@ -404,16 +412,11 @@ func convertBinaryArithmeticExprWithContext(binExpr *BinaryExpr, ctx *conversion
 
 // extractPropertyFromArithmeticExprWithContext extracts property from arithmetic expression
 func extractPropertyFromArithmeticExprWithContext(binExpr *BinaryExpr, ctx *conversionContext) (string, error) {
-	var entityMetadata *metadata.EntityMetadata
-	if ctx != nil {
-		entityMetadata = ctx.entityMetadata
-	}
-
 	if leftIdent, ok := binExpr.Left.(*IdentifierExpr); ok {
 		property := leftIdent.Name
 		// Validate property exists (either in entity metadata or as a computed alias)
 		hasComputedAlias := ctx != nil && ctx.hasComputedAlias(property)
-		if entityMetadata != nil && !propertyExists(property, entityMetadata) && !hasComputedAlias {
+		if ctx != nil && !ctx.propertyExists(property) && !hasComputedAlias {
 			return "", fmt.Errorf("property '%s' does not exist", property)
 		}
 		return property, nil

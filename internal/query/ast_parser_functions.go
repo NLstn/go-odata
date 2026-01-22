@@ -132,7 +132,7 @@ func extractPropertyFromFunctionArgWithContext(arg ASTNode, functionName string,
 		property := ident.Name
 		// Validate property exists (either in entity metadata or as a computed alias)
 		hasComputedAlias := ctx != nil && ctx.hasComputedAlias(property)
-		if entityMetadata != nil && !propertyExists(property, entityMetadata) && !hasComputedAlias {
+		if ctx != nil && !ctx.propertyExists(property) && !hasComputedAlias {
 			return "", fmt.Errorf("property '%s' does not exist", property)
 		}
 		return property, nil
@@ -233,7 +233,7 @@ func convertConcatFunctionWithContext(n *FunctionCallExpr, entityMetadata *metad
 		property = ident.Name
 		// Validate property exists (either in entity metadata or as a computed alias)
 		hasComputedAlias := ctx != nil && ctx.hasComputedAlias(property)
-		if entityMetadata != nil && !propertyExists(property, entityMetadata) && !hasComputedAlias {
+		if ctx != nil && !ctx.propertyExists(property) && !hasComputedAlias {
 			return nil, fmt.Errorf("property '%s' does not exist", property)
 		}
 		firstArg = nil // Property is stored in Property field
@@ -344,7 +344,7 @@ func convertSubstringFunctionWithContext(n *FunctionCallExpr, entityMetadata *me
 }
 
 // convertArithmeticFunctionWithContext converts arithmetic functions using the provided context
-func convertArithmeticFunctionWithContext(n *FunctionCallExpr, functionName string, entityMetadata *metadata.EntityMetadata, ctx *conversionContext) (*FilterExpression, error) {
+func convertArithmeticFunctionWithContext(n *FunctionCallExpr, functionName string, _ *metadata.EntityMetadata, ctx *conversionContext) (*FilterExpression, error) {
 	if len(n.Args) != 2 {
 		return nil, fmt.Errorf("function %s requires 2 arguments", functionName)
 	}
@@ -357,7 +357,7 @@ func convertArithmeticFunctionWithContext(n *FunctionCallExpr, functionName stri
 		property = ident.Name
 		// Validate property exists (either in entity metadata or as a computed alias)
 		hasComputedAlias := ctx != nil && ctx.hasComputedAlias(property)
-		if entityMetadata != nil && !propertyExists(property, entityMetadata) && !hasComputedAlias {
+		if ctx != nil && !ctx.propertyExists(property) && !hasComputedAlias {
 			return nil, fmt.Errorf("property '%s' does not exist", property)
 		}
 	} else {
