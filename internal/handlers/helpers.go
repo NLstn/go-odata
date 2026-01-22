@@ -16,9 +16,10 @@ import (
 )
 
 // parseEntityKeyValues parses an entity key string into a map of key-value pairs.
-// For single keys like "42", returns map with one entry using the provided keyPropertyName.
+// For single keys like "42", returns a map with one entry using the first key property's name.
 // For composite keys like "OrderID=1,ProductID=5", returns map with multiple entries.
 // Returns nil if entityKey is empty (for collection operations).
+// Returns an empty map if keyProperties is empty/nil but entityKey is non-empty (missing metadata).
 func parseEntityKeyValues(entityKey string, keyProperties []metadata.PropertyMetadata) map[string]interface{} {
 	if entityKey == "" {
 		return nil
@@ -48,7 +49,8 @@ func parseEntityKeyValues(entityKey string, keyProperties []metadata.PropertyMet
 }
 
 // convertKeyValue attempts to convert a string key value to the appropriate type
-// based on the property metadata. Returns string if conversion fails or type is unknown.
+// based on the property metadata. Returns the value with the exact type from metadata.
+// Returns string if conversion fails or type is unknown.
 func convertKeyValue(value string, keyName string, keyProperties []metadata.PropertyMetadata) interface{} {
 	// Find the property metadata for this key
 	var propType reflect.Type
@@ -64,19 +66,25 @@ func convertKeyValue(value string, keyName string, keyProperties []metadata.Prop
 		return value
 	}
 
-	// Try to convert based on type kind
+	// Try to convert based on type kind, returning the exact type from metadata
 	switch propType.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		if intVal, err := strconv.ParseInt(value, 10, 64); err == nil {
-			return intVal
+		if intVal, err := strconv.ParseInt(value, 10, propType.Bits()); err == nil {
+			v := reflect.New(propType).Elem()
+			v.SetInt(intVal)
+			return v.Interface()
 		}
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		if uintVal, err := strconv.ParseUint(value, 10, 64); err == nil {
-			return uintVal
+		if uintVal, err := strconv.ParseUint(value, 10, propType.Bits()); err == nil {
+			v := reflect.New(propType).Elem()
+			v.SetUint(uintVal)
+			return v.Interface()
 		}
 	case reflect.Float32, reflect.Float64:
-		if floatVal, err := strconv.ParseFloat(value, 64); err == nil {
-			return floatVal
+		if floatVal, err := strconv.ParseFloat(value, propType.Bits()); err == nil {
+			v := reflect.New(propType).Elem()
+			v.SetFloat(floatVal)
+			return v.Interface()
 		}
 	case reflect.Bool:
 		if boolVal, err := strconv.ParseBool(value); err == nil {

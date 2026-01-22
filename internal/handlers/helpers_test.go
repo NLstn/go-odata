@@ -377,7 +377,7 @@ keyProperties: []metadata.PropertyMetadata{
 {JsonName: "LanguageKey", Name: "LanguageKey", Type: reflect.TypeOf(string(""))},
 },
 expected: map[string]interface{}{
-"ProductID":   uint64(1),
+"ProductID":   uint(1),
 "LanguageKey": "EN",
 },
 },
@@ -400,8 +400,20 @@ keyProperties: []metadata.PropertyMetadata{
 {JsonName: "ID", Name: "ID", Type: reflect.TypeOf(int(0))},
 },
 expected: map[string]interface{}{
-"ID": int64(123),
+"ID": int(123),
 },
+},
+{
+name:          "Non-empty entity key with nil keyProperties",
+entityKey:     "42",
+keyProperties: nil,
+expected:      map[string]interface{}{},
+},
+{
+name:          "Non-empty entity key with empty keyProperties",
+entityKey:     "123",
+keyProperties: []metadata.PropertyMetadata{},
+expected:      map[string]interface{}{},
 },
 }
 
@@ -448,6 +460,42 @@ keyProperties []metadata.PropertyMetadata
 expected      interface{}
 }{
 {
+name:    "Convert to int",
+value:   "42",
+keyName: "ID",
+keyProperties: []metadata.PropertyMetadata{
+{JsonName: "ID", Name: "ID", Type: reflect.TypeOf(int(0))},
+},
+expected: int(42),
+},
+{
+name:    "Convert to int8",
+value:   "42",
+keyName: "ID",
+keyProperties: []metadata.PropertyMetadata{
+{JsonName: "ID", Name: "ID", Type: reflect.TypeOf(int8(0))},
+},
+expected: int8(42),
+},
+{
+name:    "Convert to int16",
+value:   "100",
+keyName: "ID",
+keyProperties: []metadata.PropertyMetadata{
+{JsonName: "ID", Name: "ID", Type: reflect.TypeOf(int16(0))},
+},
+expected: int16(100),
+},
+{
+name:    "Convert to int32",
+value:   "1000",
+keyName: "ID",
+keyProperties: []metadata.PropertyMetadata{
+{JsonName: "ID", Name: "ID", Type: reflect.TypeOf(int32(0))},
+},
+expected: int32(1000),
+},
+{
 name:    "Convert to int64",
 value:   "42",
 keyName: "ID",
@@ -457,6 +505,42 @@ keyProperties: []metadata.PropertyMetadata{
 expected: int64(42),
 },
 {
+name:    "Convert to uint",
+value:   "50",
+keyName: "Count",
+keyProperties: []metadata.PropertyMetadata{
+{JsonName: "Count", Name: "Count", Type: reflect.TypeOf(uint(0))},
+},
+expected: uint(50),
+},
+{
+name:    "Convert to uint8",
+value:   "255",
+keyName: "Count",
+keyProperties: []metadata.PropertyMetadata{
+{JsonName: "Count", Name: "Count", Type: reflect.TypeOf(uint8(0))},
+},
+expected: uint8(255),
+},
+{
+name:    "Convert to uint16",
+value:   "1000",
+keyName: "Count",
+keyProperties: []metadata.PropertyMetadata{
+{JsonName: "Count", Name: "Count", Type: reflect.TypeOf(uint16(0))},
+},
+expected: uint16(1000),
+},
+{
+name:    "Convert to uint32",
+value:   "50000",
+keyName: "Count",
+keyProperties: []metadata.PropertyMetadata{
+{JsonName: "Count", Name: "Count", Type: reflect.TypeOf(uint32(0))},
+},
+expected: uint32(50000),
+},
+{
 name:    "Convert to uint64",
 value:   "100",
 keyName: "Count",
@@ -464,6 +548,15 @@ keyProperties: []metadata.PropertyMetadata{
 {JsonName: "Count", Name: "Count", Type: reflect.TypeOf(uint64(0))},
 },
 expected: uint64(100),
+},
+{
+name:    "Convert to float32",
+value:   "3.14",
+keyName: "Price",
+keyProperties: []metadata.PropertyMetadata{
+{JsonName: "Price", Name: "Price", Type: reflect.TypeOf(float32(0))},
+},
+expected: float32(3.14),
 },
 {
 name:    "Convert to float64",
