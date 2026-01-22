@@ -1,20 +1,14 @@
-name: CodeQL Analysis
+name: CodeQL Analysis - Actions
 
 on:
   push:
     branches: [ main ]
     paths:
-      - '**.go'
-      - 'go.mod'
-      - 'go.sum'
       - '.github/workflows/*.yml'
       - '.github/workflows/*.yaml'
   pull_request:
     branches: [ main ]
     paths:
-      - '**.go'
-      - 'go.mod'
-      - 'go.sum'
       - '.github/workflows/*.yml'
       - '.github/workflows/*.yaml'
   schedule:
@@ -26,34 +20,6 @@ permissions:
   security-events: write
 
 jobs:
-  analyze-go:
-    name: Analyze Go
-    runs-on: ubuntu-latest
-    timeout-minutes: 360
-
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v6
-
-    - name: Set up Go
-      uses: actions/setup-go@v6
-      with:
-        go-version: '1.24'
-
-    - name: Initialize CodeQL
-      uses: github/codeql-action/init@v4
-      with:
-        languages: go
-        queries: security-extended,security-and-quality
-
-    - name: Autobuild
-      uses: github/codeql-action/autobuild@v4
-
-    - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v4
-      with:
-        category: "/language:go"
-
   analyze-actions:
     name: Analyze Actions
     runs-on: ubuntu-latest
