@@ -113,26 +113,6 @@ func SetODataHeader(w http.ResponseWriter, key, value string) {
 	w.Header()[key] = []string{value}
 }
 
-// SetODataVersionHeader sets the OData-Version header with the correct version value.
-// This centralizes the version header setting to ensure consistency across all responses.
-//
-// Deprecated: The version header is now set automatically in the router middleware.
-// This function will be removed in v2.0.0 (target: June 2026).
-//
-// Migration:
-//
-//	// Old (deprecated):
-//	handlers.SetODataVersionHeader(w)
-//
-//	// New (context-aware):
-//	response.SetODataVersionHeaderFromRequest(w, r)
-//
-// Note: In most cases, you don't need to call this manually as the router
-// automatically sets the version header based on client negotiation.
-func SetODataVersionHeader(w http.ResponseWriter) {
-	SetODataHeader(w, HeaderODataVersion, response.ODataVersionValue)
-}
-
 // buildKeyQuery builds a GORM query with WHERE conditions for the entity key(s)
 // Supports both single keys and composite keys. When db is nil the handler's default
 // database handle is used.
