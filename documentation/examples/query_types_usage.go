@@ -1,4 +1,4 @@
-// +build example
+//go:build example
 
 // Package main demonstrates the usage of exported query types and functions from the go-odata library.
 //

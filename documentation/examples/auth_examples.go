@@ -1,4 +1,4 @@
-// +build example
+//go:build example
 
 // Package main demonstrates authorization patterns in go-odata.
 //
