@@ -35,7 +35,7 @@ func parseApplyOption(queryParams map[string][]string, entityMetadata *metadata.
 func parseApply(applyStr string, entityMetadata *metadata.EntityMetadata, maxInClauseSize int) ([]ApplyTransformation, error) {
 	applyStr = strings.TrimSpace(applyStr)
 	if applyStr == "" {
-		return nil, fmt.Errorf("empty apply string")
+		return nil, errEmptyApplyString
 	}
 
 	// Split by '/' to get individual transformations in sequence
@@ -63,7 +63,7 @@ func parseApply(applyStr string, entityMetadata *metadata.EntityMetadata, maxInC
 	}
 
 	if len(transformations) == 0 {
-		return nil, fmt.Errorf("no valid transformations found")
+		return nil, errNoValidTransformations
 	}
 
 	return transformations, nil
@@ -171,13 +171,13 @@ func extractAliasesFromTransformation(trans *ApplyTransformation, aliases map[st
 // or: groupby((prop1,prop2))
 func parseGroupBy(transStr string, entityMetadata *metadata.EntityMetadata) (*ApplyTransformation, error) {
 	if !strings.HasPrefix(transStr, "groupby(") {
-		return nil, fmt.Errorf("invalid groupby format")
+		return nil, errInvalidGroupByFormat
 	}
 
 	// Extract content between groupby( and final )
 	content := transStr[8:] // Skip "groupby("
 	if !strings.HasSuffix(content, ")") {
-		return nil, fmt.Errorf("missing closing parenthesis in groupby")
+		return nil, errMissingClosingParenGroupBy
 	}
 	content = content[:len(content)-1] // Remove final )
 	content = strings.TrimSpace(content)
@@ -188,13 +188,13 @@ func parseGroupBy(transStr string, entityMetadata *metadata.EntityMetadata) (*Ap
 
 	// Find the properties section (first parenthesized section)
 	if !strings.HasPrefix(content, "(") {
-		return nil, fmt.Errorf("groupby properties must be in parentheses")
+		return nil, errGroupByPropsNeedParens
 	}
 
 	// Find matching closing parenthesis for properties
 	propsEndIdx := findMatchingCloseParen(content, 0)
 	if propsEndIdx == -1 {
-		return nil, fmt.Errorf("missing closing parenthesis for groupby properties")
+		return nil, errMissingClosingParenGroupByProps
 	}
 
 	propsStr := content[1:propsEndIdx] // Extract properties without outer parentheses
@@ -216,7 +216,7 @@ func parseGroupBy(transStr string, entityMetadata *metadata.EntityMetadata) (*Ap
 	if remaining != "" {
 		// Should start with comma
 		if !strings.HasPrefix(remaining, ",") {
-			return nil, fmt.Errorf("expected comma after groupby properties")
+			return nil, errExpectedCommaAfterGroupByProps
 		}
 		remaining = strings.TrimSpace(remaining[1:]) // Skip comma
 
@@ -256,12 +256,12 @@ func parseGroupByProperties(propsStr string) []string {
 // Format: aggregate(prop1 with sum as Total, prop2 with average as Avg)
 func parseAggregate(transStr string, entityMetadata *metadata.EntityMetadata) (*ApplyTransformation, error) {
 	if !strings.HasPrefix(transStr, "aggregate(") {
-		return nil, fmt.Errorf("invalid aggregate format")
+		return nil, errInvalidAggregateFormat
 	}
 
 	content := transStr[10:] // Skip "aggregate("
 	if !strings.HasSuffix(content, ")") {
-		return nil, fmt.Errorf("missing closing parenthesis in aggregate")
+		return nil, errMissingClosingParenAggregate
 	}
 	content = content[:len(content)-1] // Remove final )
 	content = strings.TrimSpace(content)
@@ -279,7 +279,7 @@ func parseAggregate(transStr string, entityMetadata *metadata.EntityMetadata) (*
 	}
 
 	if len(expressions) == 0 {
-		return nil, fmt.Errorf("no valid aggregate expressions found")
+		return nil, errNoValidAggregateExpressions
 	}
 
 	return &ApplyTransformation{
@@ -339,7 +339,7 @@ func parseAggregateExpression(exprStr string, entityMetadata *metadata.EntityMet
 		// Format: $count as alias
 		parts := strings.Fields(exprStr)
 		if len(parts) != 3 || parts[1] != "as" {
-			return nil, fmt.Errorf("invalid $count format, expected '$count as alias'")
+			return nil, errInvalidCountFormat
 		}
 		return &AggregateExpression{
 			Property: "$count",
@@ -352,7 +352,7 @@ func parseAggregateExpression(exprStr string, entityMetadata *metadata.EntityMet
 	// Split by " with " to get property and method/alias
 	withIdx := strings.Index(exprStr, " with ")
 	if withIdx == -1 {
-		return nil, fmt.Errorf("invalid aggregate expression format, expected 'property with method as alias'")
+		return nil, errInvalidAggregateExprFormat
 	}
 
 	property := strings.TrimSpace(exprStr[:withIdx])
@@ -361,7 +361,7 @@ func parseAggregateExpression(exprStr string, entityMetadata *metadata.EntityMet
 	// Split remainder by " as " to get method and alias
 	asIdx := strings.Index(remainder, " as ")
 	if asIdx == -1 {
-		return nil, fmt.Errorf("invalid aggregate expression format, missing 'as alias'")
+		return nil, errInvalidAggregateExprMissingAs
 	}
 
 	methodStr := strings.TrimSpace(remainder[:asIdx])
@@ -409,12 +409,12 @@ func parseAggregationMethod(methodStr string) (AggregationMethod, error) {
 // Format: filter(expression)
 func parseFilterTransformation(transStr string, entityMetadata *metadata.EntityMetadata, computedAliases map[string]bool, maxInClauseSize int) (*ApplyTransformation, error) {
 	if !strings.HasPrefix(transStr, "filter(") {
-		return nil, fmt.Errorf("invalid filter format")
+		return nil, errInvalidFilterFormat
 	}
 
 	content := transStr[7:] // Skip "filter("
 	if !strings.HasSuffix(content, ")") {
-		return nil, fmt.Errorf("missing closing parenthesis in filter")
+		return nil, errMissingClosingParenFilter
 	}
 	content = content[:len(content)-1] // Remove final )
 	content = strings.TrimSpace(content)
@@ -435,12 +435,12 @@ func parseFilterTransformation(transStr string, entityMetadata *metadata.EntityM
 // Format: compute(expression as alias, ...)
 func parseCompute(transStr string, entityMetadata *metadata.EntityMetadata, maxInClauseSize int) (*ApplyTransformation, error) {
 	if !strings.HasPrefix(transStr, "compute(") {
-		return nil, fmt.Errorf("invalid compute format")
+		return nil, errInvalidComputeFormat
 	}
 
 	content := transStr[8:] // Skip "compute("
 	if !strings.HasSuffix(content, ")") {
-		return nil, fmt.Errorf("missing closing parenthesis in compute")
+		return nil, errMissingClosingParenCompute
 	}
 	content = content[:len(content)-1] // Remove final )
 	content = strings.TrimSpace(content)
@@ -458,7 +458,7 @@ func parseCompute(transStr string, entityMetadata *metadata.EntityMetadata, maxI
 	}
 
 	if len(expressions) == 0 {
-		return nil, fmt.Errorf("no valid compute expressions found")
+		return nil, errNoValidComputeExpressions
 	}
 
 	return &ApplyTransformation{
@@ -513,7 +513,7 @@ func parseComputeExpression(exprStr string, entityMetadata *metadata.EntityMetad
 	// Split by " as " to get expression and alias
 	asIdx := strings.Index(exprStr, " as ")
 	if asIdx == -1 {
-		return nil, fmt.Errorf("invalid compute expression format, expected 'expression as alias'")
+		return nil, errInvalidComputeExprFormat
 	}
 
 	expressionStr := strings.TrimSpace(exprStr[:asIdx])
@@ -536,7 +536,7 @@ func parseComputeExpression(exprStr string, entityMetadata *metadata.EntityMetad
 func parseComputeWithoutMetadata(computeStr string) (*ComputeTransformation, error) {
 	computeStr = strings.TrimSpace(computeStr)
 	if computeStr == "" {
-		return nil, fmt.Errorf("empty compute expression")
+		return nil, errEmptyComputeExpression
 	}
 
 	// Parse individual compute expressions
@@ -552,7 +552,7 @@ func parseComputeWithoutMetadata(computeStr string) (*ComputeTransformation, err
 	}
 
 	if len(expressions) == 0 {
-		return nil, fmt.Errorf("no valid compute expressions found")
+		return nil, errNoValidComputeExpressions
 	}
 
 	return &ComputeTransformation{
@@ -568,7 +568,7 @@ func parseComputeExpressionWithoutMetadata(exprStr string) (*ComputeExpression, 
 	lowerExprStr := strings.ToLower(exprStr)
 	asIdx := strings.Index(lowerExprStr, " as ")
 	if asIdx == -1 {
-		return nil, fmt.Errorf("invalid compute expression format, expected 'expression as alias'")
+		return nil, errInvalidComputeExprFormat
 	}
 
 	expressionStr := strings.TrimSpace(exprStr[:asIdx])

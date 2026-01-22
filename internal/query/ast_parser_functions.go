@@ -217,7 +217,7 @@ func convertTwoArgFunctionWithContext(n *FunctionCallExpr, functionName string, 
 // convertConcatFunctionWithContext converts concat function using the provided context
 func convertConcatFunctionWithContext(n *FunctionCallExpr, entityMetadata *metadata.EntityMetadata, ctx *conversionContext) (*FilterExpression, error) {
 	if len(n.Args) != 2 {
-		return nil, fmt.Errorf("function concat requires 2 arguments")
+		return nil, errConcatRequires2Args
 	}
 
 	// First argument can be a literal, property, or function call
@@ -246,7 +246,7 @@ func convertConcatFunctionWithContext(n *FunctionCallExpr, entityMetadata *metad
 		property = innerExpr.Property
 		firstArg = funcCall // Store function call for later processing
 	} else {
-		return nil, fmt.Errorf("first argument of concat must be a literal, property, or function")
+		return nil, errFirstArgOfConcatMustBeLitPropFunc
 	}
 
 	// Second argument can be literal, property, or function call
@@ -258,7 +258,7 @@ func convertConcatFunctionWithContext(n *FunctionCallExpr, entityMetadata *metad
 	} else if funcCall, ok := n.Args[1].(*FunctionCallExpr); ok {
 		secondArg = funcCall
 	} else {
-		return nil, fmt.Errorf("second argument of concat must be a literal, property, or function")
+		return nil, errSecondArgOfConcatMustBeLitPropFunc
 	}
 
 	// Store both arguments in Value as a slice for special handling
@@ -281,7 +281,7 @@ func convertConcatFunctionWithContext(n *FunctionCallExpr, entityMetadata *metad
 // convertSubstringFunctionWithContext converts substring function using the provided context
 func convertSubstringFunctionWithContext(n *FunctionCallExpr, entityMetadata *metadata.EntityMetadata, ctx *conversionContext) (*FilterExpression, error) {
 	if len(n.Args) < 2 || len(n.Args) > 3 {
-		return nil, fmt.Errorf("function substring requires 2 or 3 arguments")
+		return nil, errSubstringRequires2Or3Args
 	}
 
 	property, err := extractPropertyFromFunctionArgWithContext(n.Args[0], "substring", entityMetadata, ctx)
@@ -293,7 +293,7 @@ func convertSubstringFunctionWithContext(n *FunctionCallExpr, entityMetadata *me
 	for i := 1; i < len(n.Args); i++ {
 		lit, ok := n.Args[i].(*LiteralExpr)
 		if !ok {
-			return nil, fmt.Errorf("substring arguments must be literals")
+			return nil, errSubstringArgsMustBeLiterals
 		}
 
 		// Validate start index (argument 2, index 1)
@@ -301,15 +301,15 @@ func convertSubstringFunctionWithContext(n *FunctionCallExpr, entityMetadata *me
 			switch v := lit.Value.(type) {
 			case int:
 				if v < 0 {
-					return nil, fmt.Errorf("substring start parameter must be non-negative")
+					return nil, errSubstringStartNonNegative
 				}
 			case int64:
 				if v < 0 {
-					return nil, fmt.Errorf("substring start parameter must be non-negative")
+					return nil, errSubstringStartNonNegative
 				}
 			case float64:
 				if v < 0 {
-					return nil, fmt.Errorf("substring start parameter must be non-negative")
+					return nil, errSubstringStartNonNegative
 				}
 			}
 		}
@@ -320,15 +320,15 @@ func convertSubstringFunctionWithContext(n *FunctionCallExpr, entityMetadata *me
 			switch v := lit.Value.(type) {
 			case int:
 				if v < 0 {
-					return nil, fmt.Errorf("substring length parameter must be non-negative")
+					return nil, errSubstringLengthNonNegative
 				}
 			case int64:
 				if v < 0 {
-					return nil, fmt.Errorf("substring length parameter must be non-negative")
+					return nil, errSubstringLengthNonNegative
 				}
 			case float64:
 				if v < 0 {
-					return nil, fmt.Errorf("substring length parameter must be non-negative")
+					return nil, errSubstringLengthNonNegative
 				}
 			}
 		}
@@ -386,7 +386,7 @@ func convertArithmeticFunctionWithContext(n *FunctionCallExpr, functionName stri
 // convertCastFunctionWithContext converts cast function using the provided context
 func convertCastFunctionWithContext(n *FunctionCallExpr, entityMetadata *metadata.EntityMetadata, ctx *conversionContext) (*FilterExpression, error) {
 	if len(n.Args) != 2 {
-		return nil, fmt.Errorf("function cast requires 2 arguments")
+		return nil, errCastRequires2Args
 	}
 
 	// First argument can be a property or another function call
@@ -405,11 +405,11 @@ func convertCastFunctionWithContext(n *FunctionCallExpr, entityMetadata *metadat
 		// Also accept string literals for backwards compatibility
 		typeNameVal, ok := lit.Value.(string)
 		if !ok {
-			return nil, fmt.Errorf("second argument of cast must be a type name")
+			return nil, errSecondArgOfCastMustBeType
 		}
 		typeName = typeNameVal
 	} else {
-		return nil, fmt.Errorf("second argument of cast must be a type name")
+		return nil, errSecondArgOfCastMustBeType
 	}
 
 	// Validate the type name (basic validation)
@@ -446,7 +446,7 @@ func convertCastFunctionWithContext(n *FunctionCallExpr, entityMetadata *metadat
 func convertIsOfFunctionWithContext(n *FunctionCallExpr, entityMetadata *metadata.EntityMetadata, ctx *conversionContext) (*FilterExpression, error) {
 	// isof can have 1 or 2 arguments
 	if len(n.Args) < 1 || len(n.Args) > 2 {
-		return nil, fmt.Errorf("function isof requires 1 or 2 arguments")
+		return nil, errIsOfRequires1Or2Args
 	}
 
 	var property string
@@ -463,11 +463,11 @@ func convertIsOfFunctionWithContext(n *FunctionCallExpr, entityMetadata *metadat
 			// Also accept string literals for backwards compatibility
 			typeNameVal, ok := lit.Value.(string)
 			if !ok {
-				return nil, fmt.Errorf("argument of isof must be a type name")
+				return nil, errArgOfIsOfMustBeType
 			}
 			typeName = typeNameVal
 		} else {
-			return nil, fmt.Errorf("argument of isof must be a type name")
+			return nil, errArgOfIsOfMustBeType
 		}
 
 		property = "$it" // Special marker for current instance
@@ -487,11 +487,11 @@ func convertIsOfFunctionWithContext(n *FunctionCallExpr, entityMetadata *metadat
 			// Also accept string literals for backwards compatibility
 			typeNameVal, ok := lit.Value.(string)
 			if !ok {
-				return nil, fmt.Errorf("second argument of isof must be a type name")
+				return nil, errSecondArgOfIsOfMustBeType
 			}
 			typeName = typeNameVal
 		} else {
-			return nil, fmt.Errorf("second argument of isof must be a type name")
+			return nil, errSecondArgOfIsOfMustBeType
 		}
 	}
 
@@ -547,7 +547,7 @@ func convertGeospatialFunctionWithContext(n *FunctionCallExpr, functionName stri
 	case "geo.distance":
 		// geo.distance(point1, point2) - requires 2 arguments
 		if len(n.Args) != 2 {
-			return nil, fmt.Errorf("function geo.distance requires 2 arguments")
+			return nil, errGeoDistanceRequires2Args
 		}
 
 		// First argument should be a property (the location field)
@@ -561,7 +561,7 @@ func convertGeospatialFunctionWithContext(n *FunctionCallExpr, functionName stri
 		if lit, ok := n.Args[1].(*LiteralExpr); ok {
 			geoValue = lit.Value
 		} else {
-			return nil, fmt.Errorf("second argument of geo.distance must be a geography or geometry literal")
+			return nil, errSecondArgOfGeoDistanceMustBeGeoLit
 		}
 
 		return &FilterExpression{
@@ -573,7 +573,7 @@ func convertGeospatialFunctionWithContext(n *FunctionCallExpr, functionName stri
 	case "geo.length":
 		// geo.length(linestring) - requires 1 argument
 		if len(n.Args) != 1 {
-			return nil, fmt.Errorf("function geo.length requires 1 argument")
+			return nil, errGeoLengthRequires1Arg
 		}
 
 		property, err := extractPropertyFromFunctionArgWithContext(n.Args[0], "geo.length", entityMetadata, ctx)
@@ -590,7 +590,7 @@ func convertGeospatialFunctionWithContext(n *FunctionCallExpr, functionName stri
 	case "geo.intersects":
 		// geo.intersects(geo1, geo2) - requires 2 arguments
 		if len(n.Args) != 2 {
-			return nil, fmt.Errorf("function geo.intersects requires 2 arguments")
+			return nil, errGeoIntersectsRequires2Args
 		}
 
 		// First argument should be a property
@@ -604,7 +604,7 @@ func convertGeospatialFunctionWithContext(n *FunctionCallExpr, functionName stri
 		if lit, ok := n.Args[1].(*LiteralExpr); ok {
 			geoValue = lit.Value
 		} else {
-			return nil, fmt.Errorf("second argument of geo.intersects must be a geography or geometry literal")
+			return nil, errSecondArgOfGeoIntersectsMustBeGeoLit
 		}
 
 		return &FilterExpression{

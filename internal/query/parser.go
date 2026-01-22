@@ -608,7 +608,7 @@ func parseSkipTokenOption(queryParams url.Values, options *QueryOptions) error {
 	if skipTokenStr := queryParams.Get("$skiptoken"); skipTokenStr != "" {
 		// $skiptoken and $skip are mutually exclusive according to OData spec
 		if options.Skip != nil {
-			return fmt.Errorf("$skiptoken and $skip cannot be used together")
+			return errSkipTokenAndSkipTogether
 		}
 		options.SkipToken = &skipTokenStr
 	}
@@ -629,7 +629,7 @@ func parseCountOption(queryParams url.Values, options *QueryOptions) error {
 		if countLower == "true" {
 			options.Count = true
 		} else if countLower != "false" {
-			return fmt.Errorf("invalid $count: must be 'true' or 'false'")
+			return errInvalidCount
 		}
 	}
 	return nil
@@ -640,7 +640,7 @@ func parseSearchOption(queryParams url.Values, options *QueryOptions) error {
 	if searchStr := queryParams.Get("$search"); searchStr != "" {
 		searchStr = strings.TrimSpace(searchStr)
 		if searchStr == "" {
-			return fmt.Errorf("invalid $search: search query cannot be empty")
+			return errInvalidSearch
 		}
 		options.Search = searchStr
 	}
@@ -663,7 +663,7 @@ func parseComputeOption(queryParams url.Values, entityMetadata *metadata.EntityM
 		}
 
 		if computeTransformation == nil || computeTransformation.Compute == nil {
-			return fmt.Errorf("invalid $compute: failed to parse compute transformation")
+			return errInvalidComputeFailedToParse
 		}
 
 		options.Compute = computeTransformation.Compute
@@ -678,7 +678,7 @@ func parseIndexOption(queryParams url.Values, options *QueryOptions) error {
 	if _, exists := queryParams["$index"]; exists {
 		// If it has a non-empty value, reject it
 		if val := queryParams.Get("$index"); val != "" {
-			return fmt.Errorf("invalid $index: must not have a value")
+			return errInvalidIndex
 		}
 		options.Index = true
 	}
@@ -692,7 +692,7 @@ func parseSchemaVersionOption(queryParams url.Values, options *QueryOptions) err
 		schemaVersion := queryParams.Get("$schemaversion")
 		schemaVersion = strings.TrimSpace(schemaVersion)
 		if schemaVersion == "" {
-			return fmt.Errorf("invalid $schemaversion: schema version cannot be empty")
+			return errInvalidSchemaVersion
 		}
 		options.SchemaVersion = &schemaVersion
 	}
@@ -784,7 +784,7 @@ func extractParameterAliases(queryParams url.Values) (map[string]string, error) 
 	for key, values := range queryParams {
 		if strings.HasPrefix(key, "@") {
 			if len(key) == 1 {
-				return nil, fmt.Errorf("invalid parameter alias: empty alias name")
+				return nil, errEmptyAliasName
 			}
 			aliasName := key[1:] // Remove the @ prefix
 

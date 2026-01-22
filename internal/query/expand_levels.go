@@ -62,12 +62,12 @@ func maxExpandLevels(config *ParserConfig) int {
 func resolveExpandLevels(levels int, limit int) (int, error) {
 	if levels == -1 {
 		if limit < 1 {
-			return 0, fmt.Errorf("$levels=max requires a positive maximum expand depth")
+			return 0, errLevelsMaxRequiresDepth
 		}
 		return limit, nil
 	}
 	if levels < 1 {
-		return 0, fmt.Errorf("$levels must be a positive integer or 'max'")
+		return 0, errLevelsMustBeIntOrMax
 	}
 	if limit > 0 && levels > limit {
 		return 0, fmt.Errorf("$levels value (%d) exceeds maximum allowed depth (%d)", levels, limit)
