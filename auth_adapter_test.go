@@ -4,8 +4,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	"github.com/nlstn/go-odata/internal/query"
 )
 
 type denyAllPolicy struct {
@@ -31,11 +29,11 @@ func (p tenantFilterPolicy) Authorize(ctx AuthContext, resource ResourceDescript
 	return Allow()
 }
 
-func (p tenantFilterPolicy) QueryFilter(ctx AuthContext, resource ResourceDescriptor, operation Operation) (*query.FilterExpression, error) {
+func (p tenantFilterPolicy) QueryFilter(ctx AuthContext, resource ResourceDescriptor, operation Operation) (*FilterExpression, error) {
 	// This demonstrates the row-level security use case - filtering entities by tenant
-	return &query.FilterExpression{
+	return &FilterExpression{
 		Property: "TenantID",
-		Operator: query.OpEqual,
+		Operator: FilterOperator("eq"),
 		Value:    p.tenantID,
 	}, nil
 }
