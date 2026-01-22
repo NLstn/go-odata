@@ -31,10 +31,10 @@ package odata
 //
 // Implement these methods to customize query behavior and response data:
 //
-//	func (p Product) ODataBeforeReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error)
-//	func (p Product) ODataAfterReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions, results interface{}) (interface{}, error)
-//	func (p Product) ODataBeforeReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error)
-//	func (p Product) ODataAfterReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions, entity interface{}) (interface{}, error)
+//	func (p Product) ODataBeforeReadCollection(ctx context.Context, r *http.Request, opts *odata.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error)
+//	func (p Product) ODataAfterReadCollection(ctx context.Context, r *http.Request, opts *odata.QueryOptions, results interface{}) (interface{}, error)
+//	func (p Product) ODataBeforeReadEntity(ctx context.Context, r *http.Request, opts *odata.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error)
+//	func (p Product) ODataAfterReadEntity(ctx context.Context, r *http.Request, opts *odata.QueryOptions, entity interface{}) (interface{}, error)
 //
 // Before* read hooks return GORM scopes that are applied before OData query options
 // ($filter, $orderby, $top, $skip). Use them for authorization filters and eager-loading.
@@ -226,7 +226,7 @@ type EntityHook interface {
 // ODataBeforeReadCollection is called before fetching a collection. It returns GORM scopes
 // that are applied before OData query options ($filter, $orderby, $top, $skip).
 //
-//	func (p Product) ODataBeforeReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
+//	func (p Product) ODataBeforeReadCollection(ctx context.Context, r *http.Request, opts *odata.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
 //	    // Apply tenant filter
 //	    tenantID := r.Header.Get("X-Tenant-ID")
 //	    if tenantID == "" {
@@ -247,7 +247,7 @@ type EntityHook interface {
 // after all query processing and can redact sensitive data or transform the response.
 // Return nil, nil to keep the original response.
 //
-//	func (p Product) ODataAfterReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions, results interface{}) (interface{}, error) {
+//	func (p Product) ODataAfterReadCollection(ctx context.Context, r *http.Request, opts *odata.QueryOptions, results interface{}) (interface{}, error) {
 //	    products, ok := results.([]Product)
 //	    if !ok {
 //	        return results, nil
@@ -276,21 +276,21 @@ type ReadHook interface {
 	// ODataBeforeReadCollection is called before fetching a collection.
 	// Return GORM scopes to apply before OData options ($filter, $orderby, etc).
 	// These scopes are ideal for authorization filters and eager-loading.
-	ODataBeforeReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error)
+	ODataBeforeReadCollection(ctx context.Context, r *http.Request, opts *QueryOptions) ([]func(*gorm.DB) *gorm.DB, error)
 
 	// ODataAfterReadCollection is called after fetching a collection.
 	// It receives the results after all query processing and can redact or transform them.
 	// Return nil, nil to keep the original response.
-	ODataAfterReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions, results interface{}) (interface{}, error)
+	ODataAfterReadCollection(ctx context.Context, r *http.Request, opts *QueryOptions, results interface{}) (interface{}, error)
 
 	// ODataBeforeReadEntity is called before fetching a single entity.
 	// Return GORM scopes to apply before OData options. Ideal for authorization and eager-loading.
-	ODataBeforeReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error)
+	ODataBeforeReadEntity(ctx context.Context, r *http.Request, opts *QueryOptions) ([]func(*gorm.DB) *gorm.DB, error)
 
 	// ODataAfterReadEntity is called after fetching a single entity.
 	// It receives the entity after all query processing and can redact or transform it.
 	// Return nil, nil to keep the original response.
-	ODataAfterReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions, entity interface{}) (interface{}, error)
+	ODataAfterReadEntity(ctx context.Context, r *http.Request, opts *QueryOptions, entity interface{}) (interface{}, error)
 }
 
 // ServiceConfig controls optional service behaviours.

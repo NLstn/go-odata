@@ -12,7 +12,6 @@ import (
 	"testing"
 
 	odata "github.com/nlstn/go-odata"
-	"github.com/nlstn/go-odata/internal/query"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -29,7 +28,7 @@ func (EmployeeWithCustomHook) TableName() string {
 }
 
 // ODataBeforeReadEntity returns a 401 Unauthorized status code
-func (e *EmployeeWithCustomHook) ODataBeforeReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
+func (e *EmployeeWithCustomHook) ODataBeforeReadEntity(ctx context.Context, r *http.Request, opts *odata.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
 	// Simulate checking if user is authenticated by checking a header
 	if r.Header.Get("Authorization") == "" {
 		return nil, &odata.HookError{
@@ -41,7 +40,7 @@ func (e *EmployeeWithCustomHook) ODataBeforeReadEntity(ctx context.Context, r *h
 }
 
 // ODataBeforeReadCollection returns a 404 Not Found for demonstration
-func (e *EmployeeWithCustomHook) ODataBeforeReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
+func (e *EmployeeWithCustomHook) ODataBeforeReadCollection(ctx context.Context, r *http.Request, opts *odata.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
 	// Simulate a scenario where the collection doesn't exist for this user
 	if r.Header.Get("X-Tenant-ID") == "missing" {
 		return nil, odata.NewHookError(http.StatusNotFound, "Collection not found for this tenant")

@@ -351,7 +351,7 @@ type User struct {
     Name string `json:"name"`
 }
 
-func (u User) ODataBeforeReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
+func (u User) ODataBeforeReadCollection(ctx context.Context, r *http.Request, opts *odata.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
     // Add tenant filter
     tenantID := r.Header.Get("X-Tenant-ID")
     if tenantID == "" {
@@ -721,10 +721,10 @@ Read hooks let you shape read behavior without forking handlers:
 Hook signatures:
 
 ```go
-func (Product) ODataBeforeReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error)
-func (Product) ODataAfterReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions, results interface{}) (interface{}, error)
-func (Product) ODataBeforeReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error)
-func (Product) ODataAfterReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions, entity interface{}) (interface{}, error)
+func (Product) ODataBeforeReadCollection(ctx context.Context, r *http.Request, opts *odata.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error)
+func (Product) ODataAfterReadCollection(ctx context.Context, r *http.Request, opts *odata.QueryOptions, results interface{}) (interface{}, error)
+func (Product) ODataBeforeReadEntity(ctx context.Context, r *http.Request, opts *odata.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error)
+func (Product) ODataAfterReadEntity(ctx context.Context, r *http.Request, opts *odata.QueryOptions, entity interface{}) (interface{}, error)
 ```
 
 Each hook receives the active HTTP request, context, and parsed OData query options. Returning an error aborts the request and surfaces the error to the client.
@@ -748,7 +748,7 @@ func (Product) tenantScope(tenantID string) func(*gorm.DB) *gorm.DB {
     }
 }
 
-func (Product) ODataBeforeReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
+func (Product) ODataBeforeReadCollection(ctx context.Context, r *http.Request, opts *odata.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
     tenantID := r.Header.Get("X-Tenant-ID")
     if tenantID == "" {
         return nil, fmt.Errorf("missing tenant header")
@@ -756,7 +756,7 @@ func (Product) ODataBeforeReadCollection(ctx context.Context, r *http.Request, o
     return []func(*gorm.DB) *gorm.DB{Product{}.tenantScope(tenantID)}, nil
 }
 
-func (Product) ODataBeforeReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
+func (Product) ODataBeforeReadEntity(ctx context.Context, r *http.Request, opts *odata.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
     tenantID := r.Header.Get("X-Tenant-ID")
     if tenantID == "" {
         return nil, fmt.Errorf("missing tenant header")
@@ -772,7 +772,7 @@ By returning scopes instead of mutating the request, the same tenant filter is a
 Use `ODataAfterReadEntity` or `ODataAfterReadCollection` to redact fields just before they leave the service:
 
 ```go
-func (Product) ODataAfterReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions, entity interface{}) (interface{}, error) {
+func (Product) ODataAfterReadEntity(ctx context.Context, r *http.Request, opts *odata.QueryOptions, entity interface{}) (interface{}, error) {
     product, ok := entity.(*Product)
     if !ok {
         return entity, nil
@@ -784,7 +784,7 @@ func (Product) ODataAfterReadEntity(ctx context.Context, r *http.Request, opts *
     return product, nil
 }
 
-func (Product) ODataAfterReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions, results interface{}) (interface{}, error) {
+func (Product) ODataAfterReadCollection(ctx context.Context, r *http.Request, opts *odata.QueryOptions, results interface{}) (interface{}, error) {
     products, ok := results.([]Product)
     if !ok {
         return results, nil
