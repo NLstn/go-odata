@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/nlstn/go-odata/internal/metadata"
+	"github.com/shopspring/decimal"
 )
 
 // TestPrecisionScaleOnlyForDecimal verifies that Precision and Scale attributes
@@ -119,21 +120,62 @@ func TestPrecisionScaleOnlyForDecimal(t *testing.T) {
 	}
 }
 
-// TestDecimalTypeShouldHavePrecisionScale verifies that when using proper decimal type,
-// Precision and Scale ARE emitted. This test documents the expected behavior when
-// using a type that maps to Edm.Decimal (currently not implemented, but planned).
+// TestDecimalTypeShouldHavePrecisionScale verifies that when using decimal.Decimal type,
+// Precision and Scale ARE emitted in the metadata. This test verifies the expected behavior
+// when using a type that maps to Edm.Decimal.
 func TestDecimalTypeShouldHavePrecisionScale(t *testing.T) {
-	t.Skip("Skipping until Edm.Decimal type mapping is implemented in metadata generation")
+	// Define entity with decimal.Decimal type
+	entityDef := struct {
+		ID    int             `json:"id" odata:"key"`
+		Total decimal.Decimal `json:"total" odata:"precision=18,scale=4"`
+	}{}
 
-	// TODO: When edm.Decimal or decimal.Decimal is properly mapped to Edm.Decimal,
-	// this test should verify that Precision and Scale ARE included in metadata.
-	//
-	// Expected behavior:
-	// type Order struct {
-	//     ID     int             `json:"id" odata:"key"`
-	//     Total  decimal.Decimal `json:"total" odata:"precision=18,scale=4"`
-	// }
-	//
-	// Should generate:
-	// <Property Name="total" Type="Edm.Decimal" Nullable="false" Precision="18" Scale="4" />
+	entities := make(map[string]*metadata.EntityMetadata)
+	entityMeta, err := metadata.AnalyzeEntity(entityDef)
+	if err != nil {
+		t.Fatalf("Failed to analyze entity: %v", err)
+	}
+	entities["TestEntity"] = entityMeta
+
+	handler := NewMetadataHandler(entities)
+	req := httptest.NewRequest(http.MethodGet, "/$metadata", nil)
+	w := httptest.NewRecorder()
+
+	handler.HandleMetadata(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Status = %v, want %v", w.Code, http.StatusOK)
+	}
+
+	body := w.Body.String()
+
+	// Find the property definition
+	propStart := strings.Index(body, `Name="total"`)
+	if propStart == -1 {
+		t.Fatalf("Property 'total' not found in metadata")
+	}
+
+	// Extract the property line (up to the closing />)
+	propEnd := strings.Index(body[propStart:], "/>")
+	if propEnd == -1 {
+		t.Fatalf("Property closing tag not found")
+	}
+	propertyLine := body[propStart : propStart+propEnd]
+
+	t.Logf("Property line: %s", propertyLine)
+
+	// Verify it's Edm.Decimal type
+	if !strings.Contains(propertyLine, `Type="Edm.Decimal"`) {
+		t.Errorf("Expected Type=Edm.Decimal in: %s", propertyLine)
+	}
+
+	// Verify Precision is present
+	if !strings.Contains(propertyLine, `Precision="18"`) {
+		t.Errorf("Expected Precision=18 for Edm.Decimal, got: %s", propertyLine)
+	}
+
+	// Verify Scale is present
+	if !strings.Contains(propertyLine, `Scale="4"`) {
+		t.Errorf("Expected Scale=4 for Edm.Decimal, got: %s", propertyLine)
+	}
 }
