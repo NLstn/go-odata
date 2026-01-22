@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 
@@ -475,8 +476,16 @@ func (r *Router) serializeKeyMap(keyMap map[string]string) string {
 		return ""
 	}
 
+	// Sort keys to ensure deterministic ordering
+	keys := make([]string, 0, len(keyMap))
+	for key := range keyMap {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
 	var parts []string
-	for key, value := range keyMap {
+	for _, key := range keys {
+		value := keyMap[key]
 		isNumeric := true
 		for _, ch := range value {
 			if ch < '0' || ch > '9' {
