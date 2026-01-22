@@ -182,11 +182,21 @@ mux.Handle("/", service)
 
 ## Custom Path Mounting
 
-Mount the OData service at a custom path prefix:
+Mount the OData service at a custom path prefix using `SetBasePath`:
 
 ```go
+service, err := odata.NewService(db)
+if err != nil {
+    log.Fatal(err)
+}
+
+// Configure base path before registering the service
+if err := service.SetBasePath("/api/odata"); err != nil {
+    log.Fatal(err)
+}
+
 // Mount OData service at /api/odata/
-mux.Handle("/api/odata/", http.StripPrefix("/api/odata", service))
+mux.Handle("/api/odata/", service)
 
 // Now access entities via:
 // http://localhost:8080/api/odata/Products
@@ -194,7 +204,8 @@ mux.Handle("/api/odata/", http.StripPrefix("/api/odata", service))
 ```
 
 **Important:** When using a custom path:
-- Use `http.StripPrefix` to remove the prefix before the service handles the request
+- Use `SetBasePath` to configure the base path - this ensures response URLs (`@odata.context`, `@odata.id`, etc.) include the correct prefix
+- Do NOT use `http.StripPrefix` - the service handles path stripping automatically
 - The trailing slash in the pattern is important: `/api/odata/`
 - All OData URLs will be relative to this path
 
@@ -331,6 +342,11 @@ func configureChiRouter(service *odata.Service) http.Handler {
     // Register shared middleware first; it will run before the OData handler.
     r.Use(loggingMiddleware, authMiddleware)
 
+    // Configure the service base path
+    if err := service.SetBasePath("/odata"); err != nil {
+        log.Fatal(err)
+    }
+
     // Mount at a sub-route so Chi preserves the request context chain.
     r.Mount("/odata", service)
 
@@ -338,7 +354,7 @@ func configureChiRouter(service *odata.Service) http.Handler {
 }
 ```
 
-**Middleware ordering:** Chi executes router-level middleware in the order you call `Use` before delegating to mounted handlers, so register request-scoped middleware (tracing, auth) before `Mount`. Handler-specific middleware can be applied with `chi.Chain` if you need logic that runs only for the OData routes. Because Chi relies on `context.Context`, any values stored in the request context are preserved automatically when the service handles the request.
+**Middleware ordering:** Chi executes router-level middleware in the order you call `Use` before delegating to mounted handlers, so register request-scoped middleware (tracing, auth) before `Mount`. Handler-specific middleware can be applied with `chi.Chain` if you need logic that runs only for the OData routes. Because Chi relies on `context.Context`, any values stored in the request context are preserved automatically when the service handles the request. When using a custom base path, call `SetBasePath` before mounting to ensure response URLs are generated correctly.
 
 ### Gin (`gin.Engine`)
 
@@ -356,14 +372,19 @@ func configureGinEngine(service *odata.Service) *gin.Engine {
     // Register global middleware before wrapping the OData handler.
     router.Use(gin.Logger(), gin.Recovery())
 
+    // Configure the service base path
+    if err := service.SetBasePath("/odata"); err != nil {
+        log.Fatal(err)
+    }
+
     // gin.WrapH adapts http.Handler to gin.HandlerFunc.
-    router.Any("/odata/*path", gin.WrapH(http.StripPrefix("/odata", service)))
+    router.Any("/odata/*path", gin.WrapH(service))
 
     return router
 }
 ```
 
-**Middleware ordering:** Gin executes handlers and middleware in the order registered. Call `router.Use(...)` before `router.Any` so global middleware runs first. Because `gin.WrapH` passes the underlying `*http.Request` through to go-odata, request-scoped context values and cancellations remain available within the service.
+**Middleware ordering:** Gin executes handlers and middleware in the order registered. Call `router.Use(...)` before `router.Any` so global middleware runs first. Because `gin.WrapH` passes the underlying `*http.Request` through to go-odata, request-scoped context values and cancellations remain available within the service. When using a custom base path, call `SetBasePath` before registering routes to ensure response URLs are generated correctly.
 
 ### Echo (`echo.Echo`)
 
@@ -381,14 +402,19 @@ func configureEchoServer(service *odata.Service) *echo.Echo {
     // Global middleware should be added before wrapping the handler.
     e.Use(requestIDMiddleware, loggingMiddleware)
 
+    // Configure the service base path
+    if err := service.SetBasePath("/odata"); err != nil {
+        log.Fatal(err)
+    }
+
     // echo.WrapHandler converts http.Handler to echo.HandlerFunc.
-    e.Any("/odata/*", echo.WrapHandler(http.StripPrefix("/odata", service)))
+    e.Any("/odata/*", echo.WrapHandler(service))
 
     return e
 }
 ```
 
-**Middleware ordering:** Echo middleware wraps handlers in the order they are registered; add `e.Use` calls before `e.Any` so they execute before go-odata. Echo stores route-scoped data on `echo.Context`, but the wrapped handler still receives the original `*http.Request`, so ensure any context values you expect are attached to `c.Request().Context()` before invoking go-odata. For per-route middleware, wrap the handler with `e.Group("/odata")` and call `group.Use(...)` before registering the route.
+**Middleware ordering:** Echo middleware wraps handlers in the order they are registered; add `e.Use` calls before `e.Any` so they execute before go-odata. Echo stores route-scoped data on `echo.Context`, but the wrapped handler still receives the original `*http.Request`, so ensure any context values you expect are attached to `c.Request().Context()` before invoking go-odata. For per-route middleware, wrap the handler with `e.Group("/odata")` and call `group.Use(...)` before registering the route. When using a custom base path, call `SetBasePath` before registering routes to ensure response URLs are generated correctly.
 
 ## Multiple Handlers
 
