@@ -777,3 +777,55 @@ func TestSetOverwriteMethodsForUnregisteredEntity(t *testing.T) {
 		})
 	}
 }
+
+// TestExpandOptionTypeAccessibility verifies that ExpandOption is re-exported
+// and can be accessed by external code without importing internal packages.
+// This test validates the fix for issue where QueryOptions.Expand used []query.ExpandOption
+// but ExpandOption was not accessible to users implementing handlers.
+func TestExpandOptionTypeAccessibility(t *testing.T) {
+	service := setupOverwriteTestService(t)
+
+	// Register a handler that accesses expand options from QueryOptions
+	err := service.SetGetCollectionOverwrite("TestOverwriteProducts", func(ctx *OverwriteContext) (*CollectionResult, error) {
+		// This should compile because ExpandOption is now re-exported
+		var expandOpts []ExpandOption
+		if ctx.QueryOptions != nil && ctx.QueryOptions.Expand != nil {
+			expandOpts = ctx.QueryOptions.Expand
+			// Access fields from ExpandOption to verify it's fully functional
+			for _, exp := range expandOpts {
+				_ = exp.NavigationProperty
+				_ = exp.Select
+				_ = exp.Expand // Nested expand
+				_ = exp.Filter
+				_ = exp.OrderBy
+				_ = exp.Top
+				_ = exp.Skip
+				_ = exp.Count
+				_ = exp.Levels
+			}
+		}
+
+		// Return empty result for test purposes
+		return &CollectionResult{
+			Items: []TestOverwriteProduct{},
+		}, nil
+	})
+
+	if err != nil {
+		t.Fatalf("Failed to set overwrite handler: %v", err)
+	}
+
+	// Make a request to verify the handler works
+	server := httptest.NewServer(service)
+	defer server.Close()
+
+	resp, err := http.Get(server.URL + "/TestOverwriteProducts")
+	if err != nil {
+		t.Fatalf("Failed to make request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", resp.StatusCode)
+	}
+}

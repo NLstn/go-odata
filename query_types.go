@@ -11,6 +11,9 @@ type FilterExpression = query.FilterExpression
 // OrderByItem re-exports the parsed $orderby item type for external consumers.
 type OrderByItem = query.OrderByItem
 
+// ExpandOption re-exports the parsed $expand option type for external consumers.
+type ExpandOption = query.ExpandOption
+
 // FilterOperator re-exports supported filter operators for external consumers.
 type FilterOperator = query.FilterOperator
 
