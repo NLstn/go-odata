@@ -179,3 +179,48 @@ func TestDecimalTypeShouldHavePrecisionScale(t *testing.T) {
 		t.Errorf("Expected Scale=4 for Edm.Decimal, got: %s", propertyLine)
 	}
 }
+
+// TestDecimalTypeJSONMetadata verifies that decimal.Decimal type
+// emits Precision and Scale in JSON metadata format as well.
+func TestDecimalTypeJSONMetadata(t *testing.T) {
+	// Define entity with decimal.Decimal type
+	entityDef := struct {
+		ID     int             `json:"id" odata:"key"`
+		Amount decimal.Decimal `json:"amount" odata:"precision=10,scale=2"`
+	}{}
+
+	entities := make(map[string]*metadata.EntityMetadata)
+	entityMeta, err := metadata.AnalyzeEntity(entityDef)
+	if err != nil {
+		t.Fatalf("Failed to analyze entity: %v", err)
+	}
+	entities["TestEntity"] = entityMeta
+
+	handler := NewMetadataHandler(entities)
+	req := httptest.NewRequest(http.MethodGet, "/$metadata", nil)
+	req.Header.Set("Accept", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.HandleMetadata(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Status = %v, want %v", w.Code, http.StatusOK)
+	}
+
+	body := w.Body.String()
+	t.Logf("JSON Metadata: %s", body)
+
+	// Verify the JSON contains the decimal type with precision and scale
+	// Note: JSON may have whitespace differences
+	if !strings.Contains(body, `"$Type": "Edm.Decimal"`) && !strings.Contains(body, `"$Type":"Edm.Decimal"`) {
+		t.Errorf("Expected $Type:Edm.Decimal in JSON metadata, got: %s", body)
+	}
+
+	if !strings.Contains(body, `"$Precision": 10`) && !strings.Contains(body, `"$Precision":10`) {
+		t.Errorf("Expected $Precision:10 for Edm.Decimal in JSON metadata, got: %s", body)
+	}
+
+	if !strings.Contains(body, `"$Scale": 2`) && !strings.Contains(body, `"$Scale":2`) {
+		t.Errorf("Expected $Scale:2 for Edm.Decimal in JSON metadata, got: %s", body)
+	}
+}
