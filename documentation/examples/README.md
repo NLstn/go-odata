@@ -28,7 +28,7 @@ go run -tags example query_types_usage.go
 mkdir -p /tmp/query-example
 cp query_types_usage.go /tmp/query-example/main.go
 # Remove the build tag line from main.go
-sed -i '/^\/\/ +build example$/d' /tmp/query-example/main.go
+sed -i '/^\/\/go:build example$/d' /tmp/query-example/main.go
 cd /tmp/query-example
 go mod init example
 go get github.com/nlstn/go-odata

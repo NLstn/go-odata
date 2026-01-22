@@ -556,11 +556,13 @@ GetCollection: func(ctx *odata.OverwriteContext) (*odata.CollectionResult, error
         
         // Generate next skip token (implementation depends on your data source)
         // For example, use the last item's ID or timestamp
-        lastItem := items[len(items)-1]
-        nextSkipToken := generateSkipToken(lastItem)
+        // Note: Implement generateSkipToken based on your pagination strategy
+        // (e.g., encode the last item's ID, timestamp, or offset)
+        // lastItem := items[len(items)-1]
+        // nextSkipToken := generateSkipToken(lastItem)
         
         // The library will automatically add @odata.nextLink to the response
-        // when you set SkipToken in the result
+        // when you configure server-driven paging in your service
         // Note: The library handles this automatically based on service configuration
     }
     
@@ -649,7 +651,9 @@ GetCount: func(ctx *odata.OverwriteContext) (int64, error) {
     // Apply any filters from query options
     var filter string
     if ctx.QueryOptions.Filter != nil {
-        // Convert filter expression to your external API's format
+        // Convert filter expression to your external API's format.
+        // Note: convertFilterToAPIFormat is a placeholder helper; implement this to match your API's filtering syntax.
+        // Example: convert OData filter "Name eq 'Product1'" to your API's query format
         filter = convertFilterToAPIFormat(ctx.QueryOptions.Filter)
     }
     
@@ -688,6 +692,7 @@ GetCollection: func(ctx *odata.OverwriteContext) (*odata.CollectionResult, error
 }
 
 // Strategy 2: Cache count for frequently accessed, relatively static data
+// Note: This example requires importing "sync" and "time" packages
 var countCache = struct {
     sync.RWMutex
     value     int64
