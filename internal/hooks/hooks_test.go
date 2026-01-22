@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// mockEntity is a test entity that implements EntityHooks interface methods.
+// mockEntity is a test entity that implements optional hook methods.
 type mockEntity struct {
 	ID                   int
 	Name                 string
@@ -90,9 +90,9 @@ type entityWithoutHooks struct {
 	Name string
 }
 
-func TestEntityHooksInterface(t *testing.T) {
-	// Test that mockEntity implements EntityHooks interface
-	var _ EntityHooks = &mockEntity{}
+func TestEntityHookMethods(t *testing.T) {
+	// Test that hook methods are called correctly when they exist on an entity.
+	// Hooks are discovered via reflection, not through interface implementation.
 
 	t.Run("BeforeCreate hook called", func(t *testing.T) {
 		entity := &mockEntity{}

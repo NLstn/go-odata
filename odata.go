@@ -9,11 +9,11 @@ package odata
 //
 // Entity types can optionally implement hook methods to inject custom business logic
 // at specific points in the request lifecycle. All hook methods are optional and are
-// automatically discovered via reflection.
+// automatically discovered via reflection - there is no interface to implement.
 //
 // ## Lifecycle Hooks
 //
-// Implement these methods on your entity type to handle lifecycle events:
+// Implement any of these methods on your entity type to handle lifecycle events:
 //
 //	func (p *Product) ODataBeforeCreate(ctx context.Context, r *http.Request) error
 //	func (p *Product) ODataAfterCreate(ctx context.Context, r *http.Request) error
@@ -29,7 +29,7 @@ package odata
 //
 // ## Read Hooks
 //
-// Implement these methods to customize query behavior and response data:
+// Implement any of these methods to customize query behavior and response data:
 //
 //	func (p Product) ODataBeforeReadCollection(ctx context.Context, r *http.Request, opts *odata.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error)
 //	func (p Product) ODataAfterReadCollection(ctx context.Context, r *http.Request, opts *odata.QueryOptions, results interface{}) (interface{}, error)
@@ -41,8 +41,9 @@ package odata
 // After* read hooks receive the final results after all query processing and can redact
 // sensitive data or append computed fields.
 //
-// See the EntityHook interface documentation for detailed hook descriptions and
-// the documentation directory for comprehensive examples and use cases.
+// See the EntityHook and ReadHook interface documentation for detailed hook descriptions
+// and the documentation directory for comprehensive examples and use cases. Note that these
+// interfaces are purely for documentation - entities do not need to implement them.
 
 import (
 	"context"
@@ -112,6 +113,11 @@ type PreRequestHook func(r *http.Request) (context.Context, error)
 
 // EntityHook defines optional lifecycle hooks that entity types can implement to inject
 // custom business logic at specific points in the request lifecycle.
+//
+// IMPORTANT: This interface is provided for documentation purposes only. Entities do NOT
+// need to implement this interface. Hook methods are discovered via reflection - simply
+// define any subset of these methods on your entity type and they will be automatically
+// detected and called at the appropriate time.
 //
 // All hook methods are optional. If a method exists on an entity type, it will be
 // automatically detected and called at the appropriate time.
@@ -218,8 +224,11 @@ type EntityHook interface {
 // ReadHook defines optional read hooks that entity types can implement to customize
 // query behavior and response data.
 //
-// All read hook methods are optional. Unlike EntityHook which is an interface,
-// these are standalone methods that are discovered via reflection on your entity type.
+// IMPORTANT: This interface is provided for documentation purposes only. Like EntityHook,
+// entities do NOT need to implement this interface. Read hook methods are discovered via
+// reflection - simply define any subset of these methods on your entity type.
+//
+// All read hook methods are optional and are discovered via reflection on your entity type.
 //
 // # Before Read Hooks
 //
