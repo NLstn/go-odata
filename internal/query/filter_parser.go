@@ -27,8 +27,8 @@ func parseFilter(filterStr string, entityMetadata *metadata.EntityMetadata, comp
 	return ASTToFilterExpressionWithComputed(ast, entityMetadata, computedAliases, maxInClauseSize)
 }
 
-// parseFilterWithoutMetadata parses a filter expression without metadata validation
-func parseFilterWithoutMetadata(filterStr string) (*FilterExpression, error) {
+// ParseFilterWithoutMetadata parses a filter expression without metadata validation
+func ParseFilterWithoutMetadata(filterStr string) (*FilterExpression, error) {
 	filterStr = strings.TrimSpace(filterStr)
 
 	// Use the AST parser

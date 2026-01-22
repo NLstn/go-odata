@@ -575,7 +575,7 @@ func parseComputeExpressionWithoutMetadata(exprStr string) (*ComputeExpression, 
 	alias := strings.TrimSpace(exprStr[asIdx+4:]) // Skip " as "
 
 	// Parse the expression without metadata validation
-	expression, err := parseFilterWithoutMetadata(expressionStr)
+	expression, err := ParseFilterWithoutMetadata(expressionStr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse compute expression: %w", err)
 	}
