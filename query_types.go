@@ -2,7 +2,45 @@ package odata
 
 import "github.com/nlstn/go-odata/internal/query"
 
-// QueryOptions re-exports the parsed OData query options type for external consumers.
+// QueryOptions represents parsed OData query options from an HTTP request.
+//
+// QueryOptions contains all standard OData v4.01 query options:
+//   - Filter: $filter expression for filtering entities
+//   - Select: $select properties to include in response
+//   - Expand: $expand navigation properties to include
+//   - OrderBy: $orderby sorting specification
+//   - Top: $top maximum number of entities to return
+//   - Skip: $skip number of entities to skip
+//   - SkipToken: $skiptoken for server-driven paging
+//   - DeltaToken: $deltatoken for change tracking
+//   - Count: $count whether to include total count
+//   - Apply: $apply data aggregation transformations
+//   - Search: $search full-text search query
+//   - Compute: $compute computed properties
+//   - Index: $index whether to add @odata.index annotations (OData v4.01)
+//   - SchemaVersion: $schemaversion for metadata versioning (OData v4.01)
+//
+// The Index field, when true, adds @odata.index annotations to each item in a
+// collection response, indicating the item's position in the original result set
+// before any Top or Skip operations.
+//
+// The SchemaVersion field allows clients to request a specific version of the
+// service's metadata schema, enabling metadata versioning scenarios.
+//
+// Example accessing query options in an overwrite handler:
+//
+//	func(ctx *OverwriteContext) (*CollectionResult, error) {
+//	    if ctx.QueryOptions.Top != nil {
+//	        log.Printf("Client requested top %d items", *ctx.QueryOptions.Top)
+//	    }
+//	    if ctx.QueryOptions.Index {
+//	        log.Println("Client requested index annotations")
+//	    }
+//	    if ctx.QueryOptions.SchemaVersion != nil {
+//	        log.Printf("Client requested schema version: %s", *ctx.QueryOptions.SchemaVersion)
+//	    }
+//	    // ... fetch and return data
+//	}
 type QueryOptions = query.QueryOptions
 
 // FilterExpression re-exports the parsed $filter expression type for external consumers.
