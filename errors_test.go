@@ -199,7 +199,9 @@ func TestIsNotFoundError(t *testing.T) {
 	}
 }
 
-func TestErrorCode_String(t *testing.T) {
+func TestErrorCode_Values(t *testing.T) {
+	// This test verifies that the ErrorCode constants have the expected string values.
+	// ErrorCode is a type alias for string, so this ensures the constants are defined correctly.
 	tests := []struct {
 		code     ErrorCode
 		expected string
@@ -222,7 +224,7 @@ func TestErrorCode_String(t *testing.T) {
 		t.Run(string(tt.code), func(t *testing.T) {
 			got := string(tt.code)
 			if got != tt.expected {
-				t.Errorf("ErrorCode string = %q, want %q", got, tt.expected)
+				t.Errorf("ErrorCode value = %q, want %q", got, tt.expected)
 			}
 		})
 	}

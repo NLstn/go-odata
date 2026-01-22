@@ -107,11 +107,41 @@ func setupCompositeKeyExample(service *odata.Service) error {
 		},
 
 		Update: func(ctx *odata.OverwriteContext, updateData map[string]interface{}, isFullReplace bool) (interface{}, error) {
-			// Access composite key values
-			orderID := ctx.EntityKeyValues["OrderID"].(int)
-			productID := ctx.EntityKeyValues["ProductID"].(int)
+			// Access composite key values with type checking
+			orderIDRaw, ok := ctx.EntityKeyValues["OrderID"]
+			if !ok {
+				return nil, fmt.Errorf("OrderID not found in key")
+			}
+			productIDRaw, ok := ctx.EntityKeyValues["ProductID"]
+			if !ok {
+				return nil, fmt.Errorf("ProductID not found in key")
+			}
 
-			key := fmt.Sprintf("%d-%d", orderID, productID)
+			// Convert to appropriate types (handle various numeric types)
+			var orderIDInt, productIDInt int
+			switch v := orderIDRaw.(type) {
+			case int:
+				orderIDInt = v
+			case int64:
+				orderIDInt = int(v)
+			case float64:
+				orderIDInt = int(v)
+			default:
+				return nil, fmt.Errorf("unexpected type for OrderID: %T", orderIDRaw)
+			}
+
+			switch v := productIDRaw.(type) {
+			case int:
+				productIDInt = v
+			case int64:
+				productIDInt = int(v)
+			case float64:
+				productIDInt = int(v)
+			default:
+				return nil, fmt.Errorf("unexpected type for ProductID: %T", productIDRaw)
+			}
+
+			key := fmt.Sprintf("%d-%d", orderIDInt, productIDInt)
 			item, exists := orderItems[key]
 			if !exists {
 				return nil, odata.ErrEntityNotFound
@@ -129,11 +159,41 @@ func setupCompositeKeyExample(service *odata.Service) error {
 		},
 
 		Delete: func(ctx *odata.OverwriteContext) error {
-			// Delete using composite key
-			orderID := ctx.EntityKeyValues["OrderID"].(int)
-			productID := ctx.EntityKeyValues["ProductID"].(int)
+			// Delete using composite key with type checking
+			orderIDRaw, ok := ctx.EntityKeyValues["OrderID"]
+			if !ok {
+				return fmt.Errorf("OrderID not found in key")
+			}
+			productIDRaw, ok := ctx.EntityKeyValues["ProductID"]
+			if !ok {
+				return fmt.Errorf("ProductID not found in key")
+			}
 
-			key := fmt.Sprintf("%d-%d", orderID, productID)
+			// Convert to appropriate types
+			var orderIDInt, productIDInt int
+			switch v := orderIDRaw.(type) {
+			case int:
+				orderIDInt = v
+			case int64:
+				orderIDInt = int(v)
+			case float64:
+				orderIDInt = int(v)
+			default:
+				return fmt.Errorf("unexpected type for OrderID: %T", orderIDRaw)
+			}
+
+			switch v := productIDRaw.(type) {
+			case int:
+				productIDInt = v
+			case int64:
+				productIDInt = int(v)
+			case float64:
+				productIDInt = int(v)
+			default:
+				return fmt.Errorf("unexpected type for ProductID: %T", productIDRaw)
+			}
+
+			key := fmt.Sprintf("%d-%d", orderIDInt, productIDInt)
 			if _, exists := orderItems[key]; !exists {
 				return odata.ErrEntityNotFound
 			}
