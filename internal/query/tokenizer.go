@@ -39,21 +39,59 @@ type Token struct {
 
 // Tokenizer tokenizes OData filter expressions
 type Tokenizer struct {
-	input string
-	pos   int
-	ch    rune
+	input       string
+	pos         int
+	ch          rune
+	tokenBuffer []Token // Pre-allocated buffer for tokens
+	tokenIndex  int     // Current position in token buffer
 }
 
 // NewTokenizer creates a new tokenizer
 func NewTokenizer(input string) *Tokenizer {
+	// Pre-allocate token buffer based on estimated number of tokens
+	estimatedTokens := len(input)/estimatedAvgTokenLength + 1
+	if estimatedTokens < minTokenSliceCapacity {
+		estimatedTokens = minTokenSliceCapacity
+	}
+	
 	t := &Tokenizer{
-		input: input,
-		pos:   0,
+		input:       input,
+		pos:         0,
+		tokenBuffer: make([]Token, 0, estimatedTokens),
+		tokenIndex:  0,
 	}
 	if len(input) > 0 {
 		t.ch = rune(input[0])
 	}
 	return t
+}
+
+// getToken gets a token from the pre-allocated buffer and initializes it
+func (t *Tokenizer) getToken(typ TokenType, value string, pos int) *Token {
+	// Check if we need to grow the buffer
+	if t.tokenIndex >= cap(t.tokenBuffer) {
+		// Grow the buffer by 50%
+		newCap := cap(t.tokenBuffer) + cap(t.tokenBuffer)/2
+		if newCap < minTokenSliceCapacity {
+			newCap = minTokenSliceCapacity
+		}
+		newBuffer := make([]Token, t.tokenIndex, newCap)
+		copy(newBuffer, t.tokenBuffer)
+		t.tokenBuffer = newBuffer
+	}
+	
+	// Extend slice if needed
+	if t.tokenIndex >= len(t.tokenBuffer) {
+		t.tokenBuffer = t.tokenBuffer[:t.tokenIndex+1]
+	}
+	
+	// Reuse token from buffer
+	tok := &t.tokenBuffer[t.tokenIndex]
+	tok.Type = typ
+	tok.Value = value
+	tok.Pos = pos
+	t.tokenIndex++
+	return tok
 }
 
 // advance moves to the next character
@@ -381,7 +419,7 @@ func (t *Tokenizer) NextToken() (*Token, error) {
 	t.skipWhitespace()
 
 	if t.ch == 0 {
-		return &Token{Type: TokenEOF, Pos: t.pos}, nil
+		return t.getToken(TokenEOF, "", t.pos), nil
 	}
 
 	pos := t.pos
@@ -410,7 +448,7 @@ func (t *Tokenizer) NextToken() (*Token, error) {
 func (t *Tokenizer) tokenizeString(pos int) *Token {
 	if t.ch == '\'' || t.ch == '"' {
 		value := t.readString()
-		return &Token{Type: TokenString, Value: value, Pos: pos}
+		return t.getToken(TokenString, value, pos)
 	}
 	return nil
 }
@@ -424,25 +462,25 @@ func (t *Tokenizer) tokenizeNumber(pos int) *Token {
 		// e.g., "2024-01-01" will fail GUID check and be handled as a date
 		if t.isGUIDLiteral() {
 			value := t.readGUIDLiteral()
-			return &Token{Type: TokenGUID, Value: value, Pos: pos}
+			return t.getToken(TokenGUID, value, pos)
 		}
 		if literal, ok := t.readDateTimeLiteralIfPresent(); ok {
-			return &Token{Type: TokenDateTime, Value: literal, Pos: pos}
+			return t.getToken(TokenDateTime, literal, pos)
 		}
 		if t.isDateLiteral() {
 			value := t.readDateLiteral()
-			return &Token{Type: TokenDate, Value: value, Pos: pos}
+			return t.getToken(TokenDate, value, pos)
 		}
 		if t.isTimeLiteral() {
 			value := t.readTimeLiteral()
-			return &Token{Type: TokenTime, Value: value, Pos: pos}
+			return t.getToken(TokenTime, value, pos)
 		}
 	}
 
 	// Otherwise parse as number
 	if unicode.IsDigit(t.ch) || (t.ch == '-' && unicode.IsDigit(t.peek())) {
 		value := t.readNumber()
-		return &Token{Type: TokenNumber, Value: value, Pos: pos}
+		return t.getToken(TokenNumber, value, pos)
 	}
 	return nil
 }
@@ -508,20 +546,20 @@ func (t *Tokenizer) tokenizeSpecialChar(pos int) *Token {
 	switch t.ch {
 	case '(':
 		t.advance()
-		return &Token{Type: TokenLParen, Value: "(", Pos: pos}
+		return t.getToken(TokenLParen, "(", pos)
 	case ')':
 		t.advance()
-		return &Token{Type: TokenRParen, Value: ")", Pos: pos}
+		return t.getToken(TokenRParen, ")", pos)
 	case ',':
 		t.advance()
-		return &Token{Type: TokenComma, Value: ",", Pos: pos}
+		return t.getToken(TokenComma, ",", pos)
 	case ':':
 		t.advance()
-		return &Token{Type: TokenColon, Value: ":", Pos: pos}
+		return t.getToken(TokenColon, ":", pos)
 	case '+', '-', '*', '/':
 		op := string(t.ch)
 		t.advance()
-		return &Token{Type: TokenArithmetic, Value: op, Pos: pos}
+		return t.getToken(TokenArithmetic, op, pos)
 	}
 	return nil
 }
@@ -561,7 +599,7 @@ func (t *Tokenizer) tokenizeIdentifierOrKeyword(pos int) *Token {
 	// GUIDs can start with letters and look like: abcdef12-3456-7890-abcd-ef1234567890
 	if t.isGUIDLiteral() {
 		value := t.readGUIDLiteral()
-		return &Token{Type: TokenGUID, Value: value, Pos: pos}
+		return t.getToken(TokenGUID, value, pos)
 	}
 
 	value := t.readIdentifier()
@@ -574,7 +612,7 @@ func (t *Tokenizer) tokenizeIdentifierOrKeyword(pos int) *Token {
 			equalsFoldASCII(value, "mul") || equalsFoldASCII(value, "div") ||
 			equalsFoldASCII(value, "mod") || equalsFoldASCII(value, "has") {
 			// Treat as identifier (function name) when followed by '('
-			return &Token{Type: TokenIdentifier, Value: value, Pos: pos}
+			return t.getToken(TokenIdentifier, value, pos)
 		}
 	}
 
@@ -585,7 +623,7 @@ func (t *Tokenizer) tokenizeIdentifierOrKeyword(pos int) *Token {
 
 	// Functions like contains, startswith, endswith are identifiers
 	// that will be recognized as function calls when followed by '('
-	return &Token{Type: TokenIdentifier, Value: value, Pos: pos}
+	return t.getToken(TokenIdentifier, value, pos)
 }
 
 // classifyKeywordFast classifies a keyword using fast ASCII case-insensitive comparison
@@ -595,70 +633,70 @@ func (t *Tokenizer) classifyKeywordFast(value string, pos int) *Token {
 	switch len(value) {
 	case 2:
 		if equalsFoldASCII(value, "or") {
-			return &Token{Type: TokenLogical, Value: "or", Pos: pos}
+			return t.getToken(TokenLogical, "or", pos)
 		}
 		if equalsFoldASCII(value, "eq") {
-			return &Token{Type: TokenOperator, Value: "eq", Pos: pos}
+			return t.getToken(TokenOperator, "eq", pos)
 		}
 		if equalsFoldASCII(value, "ne") {
-			return &Token{Type: TokenOperator, Value: "ne", Pos: pos}
+			return t.getToken(TokenOperator, "ne", pos)
 		}
 		if equalsFoldASCII(value, "gt") {
-			return &Token{Type: TokenOperator, Value: "gt", Pos: pos}
+			return t.getToken(TokenOperator, "gt", pos)
 		}
 		if equalsFoldASCII(value, "ge") {
-			return &Token{Type: TokenOperator, Value: "ge", Pos: pos}
+			return t.getToken(TokenOperator, "ge", pos)
 		}
 		if equalsFoldASCII(value, "lt") {
-			return &Token{Type: TokenOperator, Value: "lt", Pos: pos}
+			return t.getToken(TokenOperator, "lt", pos)
 		}
 		if equalsFoldASCII(value, "le") {
-			return &Token{Type: TokenOperator, Value: "le", Pos: pos}
+			return t.getToken(TokenOperator, "le", pos)
 		}
 		if equalsFoldASCII(value, "in") {
-			return &Token{Type: TokenOperator, Value: "in", Pos: pos}
+			return t.getToken(TokenOperator, "in", pos)
 		}
 	case 3:
 		if equalsFoldASCII(value, "and") {
-			return &Token{Type: TokenLogical, Value: "and", Pos: pos}
+			return t.getToken(TokenLogical, "and", pos)
 		}
 		if equalsFoldASCII(value, "not") {
-			return &Token{Type: TokenNot, Value: "not", Pos: pos}
+			return t.getToken(TokenNot, "not", pos)
 		}
 		if equalsFoldASCII(value, "has") {
-			return &Token{Type: TokenOperator, Value: "has", Pos: pos}
+			return t.getToken(TokenOperator, "has", pos)
 		}
 		if equalsFoldASCII(value, "add") {
-			return &Token{Type: TokenArithmetic, Value: "add", Pos: pos}
+			return t.getToken(TokenArithmetic, "add", pos)
 		}
 		if equalsFoldASCII(value, "sub") {
-			return &Token{Type: TokenArithmetic, Value: "sub", Pos: pos}
+			return t.getToken(TokenArithmetic, "sub", pos)
 		}
 		if equalsFoldASCII(value, "mul") {
-			return &Token{Type: TokenArithmetic, Value: "mul", Pos: pos}
+			return t.getToken(TokenArithmetic, "mul", pos)
 		}
 		if equalsFoldASCII(value, "div") {
-			return &Token{Type: TokenArithmetic, Value: "div", Pos: pos}
+			return t.getToken(TokenArithmetic, "div", pos)
 		}
 		if equalsFoldASCII(value, "mod") {
-			return &Token{Type: TokenArithmetic, Value: "mod", Pos: pos}
+			return t.getToken(TokenArithmetic, "mod", pos)
 		}
 		if equalsFoldASCII(value, "inf") {
-			return &Token{Type: TokenNumber, Value: "inf", Pos: pos}
+			return t.getToken(TokenNumber, "inf", pos)
 		}
 		if equalsFoldASCII(value, "nan") {
-			return &Token{Type: TokenNumber, Value: "nan", Pos: pos}
+			return t.getToken(TokenNumber, "nan", pos)
 		}
 	case 4:
 		if equalsFoldASCII(value, "true") {
-			return &Token{Type: TokenBoolean, Value: "true", Pos: pos}
+			return t.getToken(TokenBoolean, "true", pos)
 		}
 		if equalsFoldASCII(value, "null") {
-			return &Token{Type: TokenNull, Value: "null", Pos: pos}
+			return t.getToken(TokenNull, "null", pos)
 		}
 	case 5:
 		if equalsFoldASCII(value, "false") {
-			return &Token{Type: TokenBoolean, Value: "false", Pos: pos}
+			return t.getToken(TokenBoolean, "false", pos)
 		}
 	}
 	return nil
