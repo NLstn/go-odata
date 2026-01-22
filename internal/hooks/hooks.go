@@ -11,8 +11,9 @@ package hooks
 //
 // # Lifecycle Hook Methods
 //
-// Hook methods should be defined on the entity type (not pointer receivers unless the entity
-// is always passed by pointer):
+// Hook methods can be defined with either value or pointer receivers, depending on whether
+// they need to modify the entity. Lifecycle hooks typically use pointer receivers since they
+// often modify entity fields:
 //
 //	type Product struct {
 //	    ID    uint    `json:"ID" odata:"key"`
@@ -40,16 +41,16 @@ package hooks
 // Additional optional read hooks can be implemented on entity types with the following signatures:
 //
 //  // ODataBeforeReadCollection lets you add GORM scopes to the underlying query before it is executed.
-//  func (Product) ODataBeforeReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error)
+//  func (Product) ODataBeforeReadCollection(ctx context.Context, r *http.Request, opts *odata.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error)
 //
 //  // ODataAfterReadCollection lets you replace or mutate the collection returned to the client.
-//  func (Product) ODataAfterReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions, results interface{}) (interface{}, error)
+//  func (Product) ODataAfterReadCollection(ctx context.Context, r *http.Request, opts *odata.QueryOptions, results interface{}) (interface{}, error)
 //
 //  // ODataBeforeReadEntity lets you add GORM scopes before reading a single entity.
-//  func (Product) ODataBeforeReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error)
+//  func (Product) ODataBeforeReadEntity(ctx context.Context, r *http.Request, opts *odata.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error)
 //
 //  // ODataAfterReadEntity lets you replace or mutate the entity returned to the client.
-//  func (Product) ODataAfterReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions, entity interface{}) (interface{}, error)
+//  func (Product) ODataAfterReadEntity(ctx context.Context, r *http.Request, opts *odata.QueryOptions, entity interface{}) (interface{}, error)
 //
 // All read hooks receive the same context, HTTP request, and parsed OData query options that the handler uses.
 // Before* hooks return additional GORM scopes to apply (`nil` means no extra scopes), while After* hooks
