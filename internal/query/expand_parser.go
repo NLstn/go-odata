@@ -225,7 +225,7 @@ func parseNestedExpandOptionsCoreWithConfig(expand *ExpandOption, optionsStr str
 				}
 				expand.Filter = filter
 			} else {
-				filter, err := parseFilterWithoutMetadata(value)
+				filter, err := ParseFilterWithoutMetadata(value)
 				if err != nil {
 					return fmt.Errorf("invalid nested $filter: %w", err)
 				}

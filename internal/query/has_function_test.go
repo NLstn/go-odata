@@ -106,7 +106,7 @@ func TestHasInfixParsing(t *testing.T) {
 	// Test basic has infix parsing
 	filterStr := "Status has 1"
 
-	filter, err := parseFilterWithoutMetadata(filterStr)
+	filter, err := ParseFilterWithoutMetadata(filterStr)
 	if err != nil {
 		t.Fatalf("Failed to parse filter: %v", err)
 	}
