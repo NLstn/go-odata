@@ -3,9 +3,48 @@ package query
 import (
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/nlstn/go-odata/internal/metadata"
 )
+
+// parserCache provides per-request caching for expensive operations
+type parserCache struct {
+	resolvedPaths map[string]bool
+	mu            sync.RWMutex
+}
+
+// newParserCache creates a new parser cache
+func newParserCache() *parserCache {
+	return &parserCache{
+		resolvedPaths: make(map[string]bool),
+	}
+}
+
+// propertyExistsWithCache checks if a property exists using cache
+func (c *parserCache) propertyExistsWithCache(propertyName string, entityMetadata *metadata.EntityMetadata) bool {
+	if c == nil {
+		return propertyExists(propertyName, entityMetadata)
+	}
+
+	// Try to get from cache first
+	c.mu.RLock()
+	if exists, cached := c.resolvedPaths[propertyName]; cached {
+		c.mu.RUnlock()
+		return exists
+	}
+	c.mu.RUnlock()
+
+	// Not in cache, compute it
+	exists := propertyExists(propertyName, entityMetadata)
+
+	// Store in cache
+	c.mu.Lock()
+	c.resolvedPaths[propertyName] = exists
+	c.mu.Unlock()
+
+	return exists
+}
 
 // parseSelect parses the $select query option
 func parseSelect(selectStr string) []string {
