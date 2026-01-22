@@ -151,7 +151,7 @@ Customize queries with tenant filters and redact sensitive data:
 
 ```go
 // Apply tenant filter before querying
-func (p Product) ODataBeforeReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
+func (p Product) ODataBeforeReadCollection(ctx context.Context, r *http.Request, opts *odata.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
     tenantID := r.Header.Get("X-Tenant-ID")
     if tenantID == "" {
         return nil, fmt.Errorf("missing tenant header")
@@ -162,7 +162,7 @@ func (p Product) ODataBeforeReadCollection(ctx context.Context, r *http.Request,
 }
 
 // Redact sensitive fields before returning
-func (p Product) ODataAfterReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions, entity interface{}) (interface{}, error) {
+func (p Product) ODataAfterReadEntity(ctx context.Context, r *http.Request, opts *odata.QueryOptions, entity interface{}) (interface{}, error) {
     product, ok := entity.(*Product)
     if !ok || isPrivileged(r) {
         return entity, nil
