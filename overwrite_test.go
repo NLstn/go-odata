@@ -901,14 +901,14 @@ func TestOverwriteContext_EntityKeyValuesWithCompositeKey(t *testing.T) {
 		// Check OrderID
 		if orderID, ok := capturedContext.EntityKeyValues["OrderID"]; !ok {
 			t.Error("OrderID not found in EntityKeyValues")
-		} else if orderID != int64(1) {
+		} else if orderID != int(1) {
 			t.Errorf("Expected OrderID=1, got %v (%T)", orderID, orderID)
 		}
 
 		// Check ProductID
 		if productID, ok := capturedContext.EntityKeyValues["ProductID"]; !ok {
 			t.Error("ProductID not found in EntityKeyValues")
-		} else if productID != int64(5) {
+		} else if productID != int(5) {
 			t.Errorf("Expected ProductID=5, got %v (%T)", productID, productID)
 		}
 	})
@@ -957,11 +957,11 @@ func TestOverwriteContext_EntityKeyValuesWithCompositeKey(t *testing.T) {
 			t.Fatalf("Expected 2 key-value pairs, got %d", len(capturedContext.EntityKeyValues))
 		}
 
-		if orderID, ok := capturedContext.EntityKeyValues["OrderID"]; !ok || orderID != int64(1) {
+		if orderID, ok := capturedContext.EntityKeyValues["OrderID"]; !ok || orderID != int(1) {
 			t.Errorf("Expected OrderID=1, got %v", capturedContext.EntityKeyValues["OrderID"])
 		}
 
-		if productID, ok := capturedContext.EntityKeyValues["ProductID"]; !ok || productID != int64(5) {
+		if productID, ok := capturedContext.EntityKeyValues["ProductID"]; !ok || productID != int(5) {
 			t.Errorf("Expected ProductID=5, got %v", capturedContext.EntityKeyValues["ProductID"])
 		}
 	})
@@ -1001,11 +1001,11 @@ func TestOverwriteContext_EntityKeyValuesWithCompositeKey(t *testing.T) {
 			t.Fatalf("Expected 2 key-value pairs, got %d", len(capturedContext.EntityKeyValues))
 		}
 
-		if orderID, ok := capturedContext.EntityKeyValues["OrderID"]; !ok || orderID != int64(1) {
+		if orderID, ok := capturedContext.EntityKeyValues["OrderID"]; !ok || orderID != int(1) {
 			t.Errorf("Expected OrderID=1, got %v", capturedContext.EntityKeyValues["OrderID"])
 		}
 
-		if productID, ok := capturedContext.EntityKeyValues["ProductID"]; !ok || productID != int64(5) {
+		if productID, ok := capturedContext.EntityKeyValues["ProductID"]; !ok || productID != int(5) {
 			t.Errorf("Expected ProductID=5, got %v", capturedContext.EntityKeyValues["ProductID"])
 		}
 	})
