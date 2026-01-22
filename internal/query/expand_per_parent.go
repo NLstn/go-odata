@@ -84,12 +84,12 @@ func ApplyPerParentExpand(db *gorm.DB, results interface{}, expandOptions []Expa
 func collectParentValues(results interface{}) ([]reflect.Value, error) {
 	val := reflect.ValueOf(results)
 	if !val.IsValid() {
-		return nil, fmt.Errorf("invalid results")
+		return nil, errInvalidResults
 	}
 
 	for val.Kind() == reflect.Ptr {
 		if val.IsNil() {
-			return nil, fmt.Errorf("nil results")
+			return nil, errNilResults
 		}
 		val = val.Elem()
 	}

@@ -62,7 +62,7 @@ func convertLambdaExprWithContext(n *LambdaExpr, ctx *conversionContext) (*Filte
 	if collIdent, ok := n.Collection.(*IdentifierExpr); ok {
 		collectionPath = collIdent.Name
 	} else {
-		return nil, fmt.Errorf("lambda collection must be a property path")
+		return nil, errLambdaCollMustBePropPath
 	}
 
 	// Create the lambda filter expression

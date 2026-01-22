@@ -78,7 +78,7 @@ func astToFilterExpressionWithContext(node ASTNode, ctx *conversionContext) (*Fi
 		return astToFilterExpressionWithContext(n.Expr, ctx)
 	}
 
-	return nil, fmt.Errorf("unsupported AST node type")
+	return nil, errUnsupportedASTNodeType
 }
 
 // convertBinaryExprWithContext converts a binary expression to a filter expression
@@ -208,7 +208,7 @@ func convertComparisonExprWithContext(n *ComparisonExpr, ctx *conversionContext)
 		// Right side must be a collection
 		collExpr, ok := n.Right.(*CollectionExpr)
 		if !ok {
-			return nil, fmt.Errorf("'in' operator requires a collection on the right side")
+			return nil, errInOperatorRequiresCollection
 		}
 
 		// Extract values from collection
@@ -217,7 +217,7 @@ func convertComparisonExprWithContext(n *ComparisonExpr, ctx *conversionContext)
 			if lit, ok := valueNode.(*LiteralExpr); ok {
 				values[i] = lit.Value
 			} else {
-				return nil, fmt.Errorf("collection values must be literals")
+				return nil, errCollectionValuesMustBeLiterals
 			}
 		}
 
@@ -292,7 +292,7 @@ func validateValueAgainstPropertyType(property string, value interface{}, entity
 		// Check if the value is out of Int64 range (including the exact boundary)
 		// Values >= 2^63 or < -2^63 overflow Int64
 		if floatVal >= maxInt64Plus1 || floatVal < minInt64 {
-			return fmt.Errorf("numeric literal value out of range for Edm.Int64")
+			return errNumericLiteralOutOfRange
 		}
 	}
 
@@ -325,7 +325,7 @@ func extractPropertyFromComparisonWithContext(node ASTNode, ctx *conversionConte
 		return extractPropertyFromComparisonWithContext(groupExpr.Expr, ctx)
 	}
 
-	return "", fmt.Errorf("left side of comparison must be a property name or arithmetic expression")
+	return "", errLeftSideOfCompMustBeProp
 }
 
 // convertBinaryArithmeticExprWithContext converts a binary arithmetic expression to a filter expression
@@ -392,7 +392,7 @@ func convertBinaryArithmeticExprWithContext(binExpr *BinaryExpr, ctx *conversion
 		// The actual SQL generation will need to handle this
 		value = rightFilterExpr
 	} else {
-		return nil, fmt.Errorf("right side of arithmetic expression must be a literal, property, or arithmetic expression")
+		return nil, errRightSideOfArithMustBeLitPropArith
 	}
 
 	return &FilterExpression{
@@ -437,5 +437,5 @@ func extractValueFromComparison(node ASTNode) (interface{}, error) {
 		// The actual function will be processed during SQL generation
 		return funcCall, nil
 	}
-	return nil, fmt.Errorf("right side of comparison must be a literal, property, or function")
+	return nil, errRightSideOfCompMustBeLitPropFunc
 }

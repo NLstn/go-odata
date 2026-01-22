@@ -138,7 +138,7 @@ func (m *FTSManager) ClearFTSCache() {
 // EnsureFTSTable creates an FTS table for the given entity if it doesn't exist
 func (m *FTSManager) EnsureFTSTable(tableName string, entityMetadata *metadata.EntityMetadata) error {
 	if !m.ftsAvailable {
-		return fmt.Errorf("FTS is not available")
+		return errFTSNotAvailable
 	}
 
 	// Check if FTS table already exists
@@ -213,7 +213,7 @@ func (m *FTSManager) createFTSTable(tableName, ftsTableName string, searchableCo
 		// Use cached column name from metadata
 		keyCol = entityMetadata.KeyProperties[0].ColumnName
 	} else {
-		return fmt.Errorf("entity has no key properties")
+		return errEntityHasNoKeyProps
 	}
 
 	// Build the column list including the key column
@@ -236,7 +236,7 @@ func (m *FTSManager) createFTSTable(tableName, ftsTableName string, searchableCo
 func (m *FTSManager) createSQLiteFTSTable(tableName, ftsTableName string, allCols []string, keyCol string) error {
 	// Validate identifiers to prevent SQL injection
 	if !isValidSQLIdentifier(tableName) || !isValidSQLIdentifier(ftsTableName) || !isValidSQLIdentifier(keyCol) {
-		return fmt.Errorf("invalid SQL identifier in table or column name")
+		return errInvalidSQLIdentifier
 	}
 	for _, col := range allCols {
 		if !isValidSQLIdentifier(col) {
@@ -275,7 +275,7 @@ func (m *FTSManager) createSQLiteFTSTable(tableName, ftsTableName string, allCol
 func (m *FTSManager) createPostgresFTSTable(tableName, ftsTableName string, searchableCols []string, keyCol string, entityMetadata *metadata.EntityMetadata) error {
 	// Validate identifiers to prevent SQL injection
 	if !isValidSQLIdentifier(tableName) || !isValidSQLIdentifier(ftsTableName) || !isValidSQLIdentifier(keyCol) {
-		return fmt.Errorf("invalid SQL identifier in table or column name")
+		return errInvalidSQLIdentifier
 	}
 	for _, col := range searchableCols {
 		if !isValidSQLIdentifier(col) {
@@ -488,7 +488,7 @@ func (m *FTSManager) buildPostgresTSVectorExpr(cols []string) string {
 func (m *FTSManager) populatePostgresFTSTable(tableName, ftsTableName string, searchableCols []string, keyCol string) error {
 	// Validate identifiers for defense in depth
 	if !isValidSQLIdentifier(tableName) || !isValidSQLIdentifier(ftsTableName) || !isValidSQLIdentifier(keyCol) {
-		return fmt.Errorf("invalid SQL identifier in table or column name")
+		return errInvalidSQLIdentifier
 	}
 	for _, col := range searchableCols {
 		if !isValidSQLIdentifier(col) {
@@ -520,7 +520,7 @@ func (m *FTSManager) populatePostgresFTSTable(tableName, ftsTableName string, se
 // ApplyFTSSearch applies FTS search to a GORM query
 func (m *FTSManager) ApplyFTSSearch(db *gorm.DB, tableName string, searchQuery string, entityMetadata *metadata.EntityMetadata) (*gorm.DB, error) {
 	if !m.ftsAvailable {
-		return db, fmt.Errorf("FTS is not available")
+		return db, errFTSNotAvailable
 	}
 
 	if searchQuery == "" {
@@ -529,15 +529,15 @@ func (m *FTSManager) ApplyFTSSearch(db *gorm.DB, tableName string, searchQuery s
 
 	// Validate inputs
 	if entityMetadata == nil {
-		return db, fmt.Errorf("entity metadata is required")
+		return db, errEntityMetadataRequired
 	}
 
 	if tableName == "" {
-		return db, fmt.Errorf("table name is required")
+		return db, errTableNameRequired
 	}
 
 	if len(entityMetadata.KeyProperties) == 0 {
-		return db, fmt.Errorf("entity has no key properties")
+		return db, errEntityHasNoKeyProps
 	}
 
 	// Ensure FTS table exists
@@ -551,7 +551,7 @@ func (m *FTSManager) ApplyFTSSearch(db *gorm.DB, tableName string, searchQuery s
 
 	// Validate identifiers to prevent SQL injection
 	if !isValidSQLIdentifier(tableName) || !isValidSQLIdentifier(ftsTableName) || !isValidSQLIdentifier(keyCol) {
-		return db, fmt.Errorf("invalid SQL identifier in table or column name")
+		return db, errInvalidSQLIdentifier
 	}
 
 	// Apply FTS search using JOIN

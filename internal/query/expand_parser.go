@@ -68,7 +68,7 @@ func splitExpandParts(expandStr string) ([]string, error) {
 			current.WriteByte(ch)
 		} else if !inString && ch == ')' {
 			if depth == 0 {
-				return nil, fmt.Errorf("invalid $expand syntax: unexpected ')'")
+				return nil, errInvalidExpandSyntaxUnexpectedParen
 			}
 			depth--
 			current.WriteByte(ch)
@@ -83,11 +83,11 @@ func splitExpandParts(expandStr string) ([]string, error) {
 	}
 
 	if inString {
-		return nil, fmt.Errorf("invalid $expand syntax: missing closing quote")
+		return nil, errInvalidExpandSyntaxMissingQuote
 	}
 
 	if depth != 0 {
-		return nil, fmt.Errorf("invalid $expand syntax: missing ')'")
+		return nil, errInvalidExpandSyntaxMissingParen
 	}
 
 	if current.Len() != 0 {
@@ -184,7 +184,7 @@ func parseNestedExpandOptionsCoreWithConfig(expand *ExpandOption, optionsStr str
 			expand.Select = parseSelect(value)
 			if validateMetadata {
 				if targetMetadata == nil {
-					return fmt.Errorf("navigation target metadata is missing for $select")
+					return errNavMetadataMissingForSelect
 				}
 				if err := validateExpandSelect(expand.Select, targetMetadata, computedAliases); err != nil {
 					return err
@@ -193,7 +193,7 @@ func parseNestedExpandOptionsCoreWithConfig(expand *ExpandOption, optionsStr str
 		case "$expand":
 			if validateMetadata {
 				if targetMetadata == nil {
-					return fmt.Errorf("navigation target metadata is missing for $expand")
+					return errNavMetadataMissingForExpand
 				}
 				// Increment depth for nested expand to enforce depth limits
 				nestedExpand, err := parseExpandWithConfig(value, targetMetadata, config, currentDepth+1)
@@ -213,7 +213,7 @@ func parseNestedExpandOptionsCoreWithConfig(expand *ExpandOption, optionsStr str
 		case "$filter":
 			if validateMetadata {
 				if targetMetadata == nil {
-					return fmt.Errorf("navigation target metadata is missing for $filter")
+					return errNavMetadataMissingForFilter
 				}
 				maxInClauseSize := 0
 				if config != nil {
@@ -234,7 +234,7 @@ func parseNestedExpandOptionsCoreWithConfig(expand *ExpandOption, optionsStr str
 		case "$orderby":
 			if validateMetadata {
 				if targetMetadata == nil {
-					return fmt.Errorf("navigation target metadata is missing for $orderby")
+					return errNavMetadataMissingForOrderBy
 				}
 				orderBy, err := parseOrderBy(value, targetMetadata, computedAliases)
 				if err != nil {
@@ -264,7 +264,7 @@ func parseNestedExpandOptionsCoreWithConfig(expand *ExpandOption, optionsStr str
 		case "$compute":
 			if validateMetadata {
 				if targetMetadata == nil {
-					return fmt.Errorf("navigation target metadata is missing for $compute")
+					return errNavMetadataMissingForCompute
 				}
 				maxInClauseSize := 0
 				if config != nil {
@@ -289,7 +289,7 @@ func parseNestedExpandOptionsCoreWithConfig(expand *ExpandOption, optionsStr str
 			if countLower == "true" {
 				expand.Count = true
 			} else if countLower != "false" {
-				return fmt.Errorf("invalid nested $count: must be 'true' or 'false'")
+				return errNestedCountInvalid
 			}
 		case "$levels":
 			// Parse $levels option (positive integer or "max")
@@ -300,10 +300,10 @@ func parseNestedExpandOptionsCoreWithConfig(expand *ExpandOption, optionsStr str
 			} else {
 				levels, err := strconv.Atoi(value)
 				if err != nil {
-					return fmt.Errorf("invalid nested $levels: must be a positive integer or 'max'")
+					return errNestedLevelsMustBeIntOrMax
 				}
 				if levels < 1 {
-					return fmt.Errorf("invalid nested $levels: must be a positive integer or 'max'")
+					return errNestedLevelsMustBeIntOrMax
 				}
 				expand.Levels = &levels
 			}
@@ -315,7 +315,7 @@ func parseNestedExpandOptionsCoreWithConfig(expand *ExpandOption, optionsStr str
 
 func validateExpandSelect(selectedProps []string, entityMetadata *metadata.EntityMetadata, computedAliases map[string]bool) error {
 	if entityMetadata == nil {
-		return fmt.Errorf("entity metadata is nil")
+		return errEntityMetadataIsNil
 	}
 
 	for _, propName := range selectedProps {

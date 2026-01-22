@@ -38,7 +38,7 @@ func propertyExists(propertyName string, entityMetadata *metadata.EntityMetadata
 
 func resolveNavigationPropertyPath(propertyName string, entityMetadata *metadata.EntityMetadata) (*metadata.EntityMetadata, []string, *metadata.PropertyMetadata, string, error) {
 	if entityMetadata == nil {
-		return nil, nil, nil, "", fmt.Errorf("entity metadata is nil")
+		return nil, nil, nil, "", errEntityMetadataIsNil
 	}
 
 	targetMetadata, navSegments, remainingPath, err := entityMetadata.ResolveSingleEntityNavigationPath(propertyName)
