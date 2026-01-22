@@ -4,6 +4,9 @@
 // 1. Use Apply transformation types for programmatic query building
 // 2. Access filter operator constants for type-safe filter construction
 // 3. Parse filter strings using the public ParseFilter function
+//
+// Note: This is a standalone example file that demonstrates query types usage.
+// It cannot be run directly with other example files due to package conflicts.
 package main
 
 import (

@@ -384,17 +384,371 @@ service.RegisterVirtualEntity(&FileInfo{})
 // Implement handlers to list/read files
 ```
 
+## Error Handling in Overwrite Handlers
+
+Errors returned from overwrite handlers are automatically mapped to OData-compliant error responses. The library provides several ways to control error responses:
+
+### Using Standard Errors
+
+Simple errors are automatically converted to HTTP 500 Internal Server Error:
+
+```go
+GetEntity: func(ctx *odata.OverwriteContext) (interface{}, error) {
+    entity, err := externalAPI.GetEntity(ctx.EntityKey)
+    if err != nil {
+        return nil, err // Returns HTTP 500 with error message
+    }
+    return entity, nil
+}
+```
+
+### Using Sentinel Errors
+
+The library provides sentinel errors that map to specific HTTP status codes:
+
+```go
+GetEntity: func(ctx *odata.OverwriteContext) (interface{}, error) {
+    entity, err := externalAPI.GetEntity(ctx.EntityKey)
+    if err != nil {
+        if errors.Is(err, externalAPI.ErrNotFound) {
+            return nil, odata.ErrEntityNotFound // Returns HTTP 404
+        }
+        if errors.Is(err, externalAPI.ErrUnauthorized) {
+            return nil, odata.ErrUnauthorized // Returns HTTP 401
+        }
+        return nil, err // Returns HTTP 500 for other errors
+    }
+    return entity, nil
+}
+```
+
+Available sentinel errors:
+- `odata.ErrEntityNotFound` → HTTP 404 Not Found
+- `odata.ErrValidationError` → HTTP 400 Bad Request
+- `odata.ErrUnauthorized` → HTTP 401 Unauthorized
+- `odata.ErrForbidden` → HTTP 403 Forbidden
+- `odata.ErrMethodNotAllowed` → HTTP 405 Method Not Allowed
+- `odata.ErrConflict` → HTTP 409 Conflict
+- `odata.ErrPreconditionFailed` → HTTP 412 Precondition Failed
+- `odata.ErrUnsupportedMediaType` → HTTP 415 Unsupported Media Type
+- `odata.ErrInternalServerError` → HTTP 500 Internal Server Error
+
+### Using ODataError for Fine-Grained Control
+
+For complete control over error responses, use `odata.ODataError`:
+
+```go
+Create: func(ctx *odata.OverwriteContext, entity interface{}) (interface{}, error) {
+    product := entity.(*Product)
+    
+    // Validate input
+    if product.Price < 0 {
+        return nil, &odata.ODataError{
+            StatusCode: http.StatusBadRequest,
+            Code:       odata.ErrorCodeBadRequest,
+            Message:    "Invalid product data",
+            Target:     "Price",
+            Details: []odata.ErrorDetail{
+                {
+                    Code:    "NegativePrice",
+                    Target:  "Price",
+                    Message: "Price must be non-negative",
+                },
+            },
+        }
+    }
+    
+    // Call external API
+    created, err := externalAPI.CreateProduct(product)
+    if err != nil {
+        return nil, &odata.ODataError{
+            StatusCode: http.StatusInternalServerError,
+            Code:       odata.ErrorCodeInternalServerError,
+            Message:    "Failed to create product in external system",
+            Err:        err, // Wrap the original error
+        }
+    }
+    
+    return created, nil
+}
+```
+
+### Using HookError
+
+Similar to entity hooks, overwrite handlers can return `odata.HookError` for custom status codes:
+
+```go
+GetEntity: func(ctx *odata.OverwriteContext) (interface{}, error) {
+    entity, err := externalAPI.GetEntity(ctx.EntityKey)
+    if err != nil {
+        if errors.Is(err, externalAPI.ErrNotFound) {
+            return nil, odata.NewHookError(http.StatusNotFound, "Entity not found")
+        }
+        return nil, odata.NewHookError(http.StatusBadGateway, "External service unavailable")
+    }
+    return entity, nil
+}
+```
+
+## Implementing Pagination for Virtual Entities
+
+Virtual entities should implement pagination to handle large result sets efficiently. The library provides query options that you can use to implement pagination:
+
+### Basic Pagination with $top and $skip
+
+```go
+GetCollection: func(ctx *odata.OverwriteContext) (*odata.CollectionResult, error) {
+    // Get pagination parameters
+    skip := 0
+    if ctx.QueryOptions.Skip != nil {
+        skip = *ctx.QueryOptions.Skip
+    }
+    
+    top := 100 // Default page size
+    if ctx.QueryOptions.Top != nil {
+        top = *ctx.QueryOptions.Top
+    }
+    
+    // Fetch paginated data from external source
+    items, total, err := externalAPI.GetItemsPaginated(skip, top)
+    if err != nil {
+        return nil, err
+    }
+    
+    // Return with count if requested
+    var count *int64
+    if ctx.QueryOptions.Count {
+        c := int64(total)
+        count = &c
+    }
+    
+    return &odata.CollectionResult{
+        Items: items,
+        Count: count,
+    }, nil
+}
+```
+
+### Server-Driven Pagination with NextLink
+
+For very large datasets, implement server-driven pagination:
+
+```go
+GetCollection: func(ctx *odata.OverwriteContext) (*odata.CollectionResult, error) {
+    pageSize := 100
+    
+    // Check for skip token (continuation)
+    var skipToken string
+    if ctx.QueryOptions.SkipToken != nil {
+        skipToken = *ctx.QueryOptions.SkipToken
+    }
+    
+    // Fetch one extra item to detect if there's a next page
+    items, err := externalAPI.GetItems(skipToken, pageSize+1)
+    if err != nil {
+        return nil, err
+    }
+    
+    // Check if there are more results
+    hasMore := len(items) > pageSize
+    if hasMore {
+        items = items[:pageSize] // Trim to page size
+        
+        // Generate next skip token (implementation depends on your data source)
+        // For example, use the last item's ID or timestamp
+        lastItem := items[len(items)-1]
+        nextSkipToken := generateSkipToken(lastItem)
+        
+        // The library will automatically add @odata.nextLink to the response
+        // when you set SkipToken in the result
+        // Note: The library handles this automatically based on service configuration
+    }
+    
+    return &odata.CollectionResult{
+        Items: items,
+    }, nil
+}
+```
+
+### In-Memory Pagination with ApplyQueryOptionsToSlice
+
+For smaller datasets or when fetching all data at once, use the built-in helper:
+
+```go
+GetCollection: func(ctx *odata.OverwriteContext) (*odata.CollectionResult, error) {
+    // Fetch all items from external source
+    allItems, err := externalAPI.GetAllItems()
+    if err != nil {
+        return nil, err
+    }
+    
+    // Apply OData query options including $top, $skip, $filter, $orderby
+    filtered, err := odata.ApplyQueryOptionsToSlice(
+        allItems,
+        ctx.QueryOptions,
+        myFilterFunc, // Custom filter evaluator
+    )
+    if err != nil {
+        return nil, err
+    }
+    
+    // Calculate count if requested
+    var count *int64
+    if ctx.QueryOptions.Count {
+        c := int64(len(filtered))
+        count = &c
+    }
+    
+    return &odata.CollectionResult{
+        Items: filtered,
+        Count: count,
+    }, nil
+}
+```
+
+## Handling $count Requests
+
+The `$count` query option requests the total number of entities in the collection. There are two ways to handle this:
+
+### 1. Inline Count with $count=true
+
+When `$count=true` is specified, include the total count in the result:
+
+```go
+GetCollection: func(ctx *odata.OverwriteContext) (*odata.CollectionResult, error) {
+    // Fetch paginated items
+    items, err := externalAPI.GetItems(skip, top)
+    if err != nil {
+        return nil, err
+    }
+    
+    // If count is requested, fetch total count
+    var count *int64
+    if ctx.QueryOptions.Count {
+        total, err := externalAPI.GetTotalCount()
+        if err != nil {
+            return nil, err
+        }
+        c := int64(total)
+        count = &c
+    }
+    
+    return &odata.CollectionResult{
+        Items: items,
+        Count: count, // Include count in response
+    }, nil
+}
+```
+
+### 2. $count Segment (GET /EntitySet/$count)
+
+To support direct count queries (`GET /EntitySet/$count`), implement the `GetCount` handler:
+
+```go
+GetCount: func(ctx *odata.OverwriteContext) (int64, error) {
+    // Apply any filters from query options
+    var filter string
+    if ctx.QueryOptions.Filter != nil {
+        // Convert filter expression to your external API's format
+        filter = convertFilterToAPIFormat(ctx.QueryOptions.Filter)
+    }
+    
+    // Get count from external source
+    count, err := externalAPI.GetCount(filter)
+    if err != nil {
+        return 0, err
+    }
+    
+    return count, nil
+}
+```
+
+### Efficient Count Implementation
+
+For performance, consider these strategies:
+
+```go
+GetCollection: func(ctx *odata.OverwriteContext) (*odata.CollectionResult, error) {
+    // Strategy 1: If your API returns count with results, use it
+    response, err := externalAPI.GetItemsWithCount(skip, top)
+    if err != nil {
+        return nil, err
+    }
+    
+    var count *int64
+    if ctx.QueryOptions.Count && response.TotalCount != nil {
+        c := int64(*response.TotalCount)
+        count = &c
+    }
+    
+    return &odata.CollectionResult{
+        Items: response.Items,
+        Count: count,
+    }, nil
+}
+
+// Strategy 2: Cache count for frequently accessed, relatively static data
+var countCache = struct {
+    sync.RWMutex
+    value     int64
+    expiresAt time.Time
+}{}
+
+GetCollection: func(ctx *odata.OverwriteContext) (*odata.CollectionResult, error) {
+    items, err := externalAPI.GetItems(skip, top)
+    if err != nil {
+        return nil, err
+    }
+    
+    var count *int64
+    if ctx.QueryOptions.Count {
+        countCache.RLock()
+        if time.Now().Before(countCache.expiresAt) {
+            c := countCache.value
+            count = &c
+            countCache.RUnlock()
+        } else {
+            countCache.RUnlock()
+            
+            // Fetch fresh count
+            total, err := externalAPI.GetTotalCount()
+            if err != nil {
+                return nil, err
+            }
+            
+            // Update cache
+            countCache.Lock()
+            countCache.value = int64(total)
+            countCache.expiresAt = time.Now().Add(5 * time.Minute)
+            countCache.Unlock()
+            
+            c := int64(total)
+            count = &c
+        }
+    }
+    
+    return &odata.CollectionResult{
+        Items: items,
+        Count: count,
+    }, nil
+}
+```
+
 ## Best Practices
 
-1. **Error Handling**: Return appropriate errors from your handlers. The library will convert them to proper OData error responses.
+1. **Error Handling**: Use `odata.ODataError` or sentinel errors for precise error responses. Wrap underlying errors to preserve error chains.
 
-2. **Performance**: Consider caching and pagination when dealing with large datasets from external sources.
+2. **Pagination**: Always implement pagination for collections. Use $top and $skip for client-driven paging, or server-driven paging for very large datasets.
 
-3. **Security**: Implement authorization checks within your handlers, especially when exposing external data.
+3. **Count Performance**: Optimize $count operations by caching counts for static data or requesting counts alongside results from your data source.
 
-4. **Query Options**: Leverage the parsed query options to implement efficient filtering and pagination at the source.
+4. **Security**: Implement authorization checks within your handlers, especially when exposing external data.
 
-5. **Documentation**: Document which operations are supported for each virtual entity.
+5. **Query Options**: Leverage the parsed query options to implement efficient filtering and pagination at the source rather than fetching all data.
+
+6. **Documentation**: Document which operations and query options are supported for each virtual entity.
+
+7. **Testing**: Write tests for your overwrite handlers, including error cases and edge conditions.
 
 ## Limitations
 
@@ -408,3 +762,4 @@ service.RegisterVirtualEntity(&FileInfo{})
 - [Overwrite Handlers](advanced-features.md#overwrite-handlers) - Learn more about overwrite handlers
 - [Actions and Functions](actions-and-functions.md) - Extend virtual entities with custom operations
 - [Advanced Features](advanced-features.md) - Other advanced OData features
+- [Error Handling](../errors.go) - Complete reference for error types
