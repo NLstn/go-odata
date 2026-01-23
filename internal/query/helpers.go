@@ -42,7 +42,15 @@ var parserCachePool = sync.Pool{
 
 // acquireParserCache gets a parserCache from the pool
 func acquireParserCache() *parserCache {
-	return parserCachePool.Get().(*parserCache)
+	if v := parserCachePool.Get(); v != nil {
+		if c, ok := v.(*parserCache); ok {
+			return c
+		}
+	}
+	return &parserCache{
+		resolvedPaths: make(map[string]bool, defaultCacheCapacity),
+		navPathCache:  make(map[string]*navPathCacheEntry, defaultCacheCapacity),
+	}
 }
 
 // releaseParserCache returns a parserCache to the pool after clearing it
@@ -106,7 +114,10 @@ func (c *parserCache) resolveSingleEntityNavPathWithCache(path string, entityMet
 		if entry.err != nil {
 			return nil, nil, "", entry.err
 		}
-		targetMeta, _ := entry.targetMetadata.(*metadata.EntityMetadata)
+		targetMeta, ok := entry.targetMetadata.(*metadata.EntityMetadata)
+		if !ok {
+			return nil, nil, "", nil
+		}
 		return targetMeta, entry.navigationSegments, entry.remainingPath, nil
 	}
 	c.mu.RUnlock()
