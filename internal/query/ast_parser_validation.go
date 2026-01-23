@@ -424,11 +424,6 @@ func extractPropertyFromArithmeticExprWithContext(binExpr *BinaryExpr, ctx *conv
 	return "arithmetic_expr", nil
 }
 
-// extractValueFromComparison extracts value from the right side of a comparison
-func extractValueFromComparison(node ASTNode) (interface{}, error) {
-	return extractValueFromComparisonWithContext(node, nil, nil)
-}
-
 // extractValueFromComparisonWithContext extracts value from the right side of a comparison with context
 func extractValueFromComparisonWithContext(node ASTNode, entityMetadata *metadata.EntityMetadata, ctx *conversionContext) (interface{}, error) {
 	if lit, ok := node.(*LiteralExpr); ok {
