@@ -238,13 +238,13 @@ func convertConcatFunctionWithContext(n *FunctionCallExpr, entityMetadata *metad
 		}
 		firstArg = nil // Property is stored in Property field
 	} else if funcCall, ok := n.Args[0].(*FunctionCallExpr); ok {
-		// First argument is a function call
+		// First argument is a function call - convert it to FilterExpression
 		innerExpr, err := convertFunctionCallExprWithContext(funcCall, entityMetadata, ctx)
 		if err != nil {
 			return nil, err
 		}
 		property = innerExpr.Property
-		firstArg = funcCall // Store function call for later processing
+		firstArg = innerExpr // Store the converted FilterExpression, not the AST node
 	} else {
 		return nil, errFirstArgOfConcatMustBeLitPropFunc
 	}
@@ -256,7 +256,12 @@ func convertConcatFunctionWithContext(n *FunctionCallExpr, entityMetadata *metad
 	} else if ident, ok := n.Args[1].(*IdentifierExpr); ok {
 		secondArg = ident.Name
 	} else if funcCall, ok := n.Args[1].(*FunctionCallExpr); ok {
-		secondArg = funcCall
+		// Convert function call to FilterExpression instead of storing AST node
+		innerExpr, err := convertFunctionCallExprWithContext(funcCall, entityMetadata, ctx)
+		if err != nil {
+			return nil, err
+		}
+		secondArg = innerExpr
 	} else {
 		return nil, errSecondArgOfConcatMustBeLitPropFunc
 	}

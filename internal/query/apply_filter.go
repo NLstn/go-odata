@@ -915,15 +915,9 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 			var leftSQL string
 			var leftArgs []interface{}
 
-			if funcCall, ok := firstArg.(*FunctionCallExpr); ok {
-				leftExpr, err := convertFunctionCallExpr(funcCall, nil)
-				if err == nil {
-					leftSQL, leftArgs = buildFunctionSQL(dialect, leftExpr.Operator, leftExpr.Property, leftExpr.Value)
-				}
-				if leftSQL == "" {
-					leftSQL = "?"
-					leftArgs = []interface{}{firstArg}
-				}
+			// First argument can be a FilterExpression (nested function) or a literal
+			if filterExpr, ok := firstArg.(*FilterExpression); ok {
+				leftSQL, leftArgs = buildFunctionSQL(dialect, filterExpr.Operator, filterExpr.Property, filterExpr.Value)
 			} else {
 				leftSQL = "?"
 				leftArgs = []interface{}{firstArg}
@@ -932,15 +926,9 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 			var rightSQL string
 			var rightArgs []interface{}
 
-			if funcCall, ok := secondArg.(*FunctionCallExpr); ok {
-				rightExpr, err := convertFunctionCallExpr(funcCall, nil)
-				if err == nil {
-					rightSQL, rightArgs = buildFunctionSQL(dialect, rightExpr.Operator, rightExpr.Property, rightExpr.Value)
-				}
-				if rightSQL == "" {
-					rightSQL = "?"
-					rightArgs = []interface{}{secondArg}
-				}
+			// Second argument can be a FilterExpression (nested function), string (property), or literal
+			if filterExpr, ok := secondArg.(*FilterExpression); ok {
+				rightSQL, rightArgs = buildFunctionSQL(dialect, filterExpr.Operator, filterExpr.Property, filterExpr.Value)
 			} else if strVal, ok := secondArg.(string); ok {
 				// Note: This heuristic (starts with uppercase or contains underscore) may incorrectly
 				// treat some literal strings as column references. A proper fix would require passing

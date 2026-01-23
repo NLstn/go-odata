@@ -44,9 +44,12 @@ func TestASTParser_Parentheses(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
-			defer ReleaseASTNode(ast)
 			if (err != nil) != tt.expectErr {
 				t.Errorf("Expected error: %v, got: %v", tt.expectErr, err)
+			}
+
+			if ast != nil {
+				defer ReleaseASTNode(ast)
 			}
 
 			if !tt.expectErr && ast == nil {
@@ -104,9 +107,12 @@ func TestASTParser_NotOperator(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
-			defer ReleaseASTNode(ast)
 			if (err != nil) != tt.expectErr {
 				t.Errorf("Expected error: %v, got: %v", tt.expectErr, err)
+			}
+
+			if ast != nil {
+				defer ReleaseASTNode(ast)
 			}
 
 			if !tt.expectErr {
@@ -177,9 +183,12 @@ func TestASTParser_ArithmeticOperators(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
-			defer ReleaseASTNode(ast)
 			if (err != nil) != tt.expectErr {
 				t.Errorf("Expected error: %v, got: %v", tt.expectErr, err)
+			}
+
+			if ast != nil {
+				defer ReleaseASTNode(ast)
 			}
 
 			if !tt.expectErr && ast == nil {
@@ -246,9 +255,12 @@ func TestASTParser_LiteralTyping(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
-			defer ReleaseASTNode(ast)
 			if (err != nil) != tt.expectErr {
 				t.Errorf("Expected error: %v, got: %v", tt.expectErr, err)
+			}
+
+			if ast != nil {
+				defer ReleaseASTNode(ast)
 			}
 
 			if !tt.expectErr {
@@ -322,9 +334,12 @@ func TestASTParser_FunctionCalls(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
-			defer ReleaseASTNode(ast)
 			if (err != nil) != tt.expectErr {
 				t.Errorf("Expected error: %v, got: %v", tt.expectErr, err)
+			}
+
+			if ast != nil {
+				defer ReleaseASTNode(ast)
 			}
 
 			if !tt.expectErr {
@@ -373,9 +388,12 @@ func TestASTParser_ComplexExpressions(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
-			defer ReleaseASTNode(ast)
 			if (err != nil) != tt.expectErr {
 				t.Errorf("Expected error: %v, got: %v", tt.expectErr, err)
+			}
+
+			if ast != nil {
+				defer ReleaseASTNode(ast)
 			}
 
 			if !tt.expectErr {
