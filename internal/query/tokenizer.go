@@ -59,7 +59,17 @@ var tokenizerPool = sync.Pool{
 
 // AcquireTokenizer gets a Tokenizer from the pool and initializes it with the input
 func AcquireTokenizer(input string) *Tokenizer {
-	t := tokenizerPool.Get().(*Tokenizer)
+	var t *Tokenizer
+	if v := tokenizerPool.Get(); v != nil {
+		if tok, ok := v.(*Tokenizer); ok {
+			t = tok
+		}
+	}
+	if t == nil {
+		t = &Tokenizer{
+			tokenBuffer: make([]Token, 0, minTokenSliceCapacity),
+		}
+	}
 	t.input = input
 	t.pos = 0
 	t.tokenIndex = 0
