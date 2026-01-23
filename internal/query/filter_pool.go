@@ -14,7 +14,9 @@ var filterExpressionPool = sync.Pool{
 }
 
 // acquireFilterExpression gets a FilterExpression from the pool.
-// The returned expression has all fields reset to their zero values.
+// The returned expression may contain previous values - callers should
+// set all required fields. Fields are reset when expressions are returned
+// to the pool via releaseFilterExpression.
 func acquireFilterExpression() *FilterExpression {
 	//nolint:errcheck // Type assertion is guaranteed by pool's New function
 	return filterExpressionPool.Get().(*FilterExpression)
@@ -46,6 +48,10 @@ func (f *FilterExpression) reset() {
 }
 
 // ReleaseFilterTree recursively releases a FilterExpression and all its children to the pool.
+// This is provided for advanced use cases where callers want to explicitly return
+// FilterExpressions to the pool after they are done with query processing.
+// This is optional - expressions will be garbage collected normally if not released.
+//
 // This should only be called when the entire filter tree is no longer needed.
 // WARNING: After calling this, the FilterExpression and all children are invalid.
 func ReleaseFilterTree(expr *FilterExpression) {
