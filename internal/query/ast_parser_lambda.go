@@ -1,7 +1,6 @@
 package query
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/nlstn/go-odata/internal/metadata"
@@ -34,14 +33,14 @@ func (p *ASTParser) parseLambdaExpression(collectionPath, operator string) (ASTN
 
 		// Expect colon
 		if err := p.expect(TokenColon); err != nil {
-			return nil, fmt.Errorf("expected ':' after lambda range variable: %w", err)
+			return nil, errExpectedColonAfterLambdaVar
 		}
 
 		// Parse the predicate
 		var err error
 		predicate, err = p.parseOr()
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse lambda predicate: %w", err)
+			return nil, errFailedToParseLambdaPred
 		}
 	}
 
@@ -85,7 +84,7 @@ func convertLambdaExprWithContext(n *LambdaExpr, ctx *conversionContext) (*Filte
 		}
 		predicate, err := convertLambdaPredicateWithRangeVariable(n.Predicate, n.RangeVariable, entityMeta)
 		if err != nil {
-			return nil, fmt.Errorf("failed to convert lambda predicate: %w", err)
+			return nil, errFailedToConvertLambdaPred
 		}
 
 		// Store the predicate as the Left field

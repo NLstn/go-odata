@@ -11,12 +11,14 @@ import (
 func parseFilter(filterStr string, entityMetadata *metadata.EntityMetadata, computedAliases map[string]bool, maxInClauseSize int) (*FilterExpression, error) {
 	filterStr = strings.TrimSpace(filterStr)
 
-	// Use the tokenizer and AST parser
-	tokenizer := NewTokenizer(filterStr)
+	// Use pooled tokenizer and AST parser
+	tokenizer := AcquireTokenizer(filterStr)
 	tokens, err := tokenizer.TokenizeAll()
 	if err != nil {
+		ReleaseTokenizer(tokenizer)
 		return nil, fmt.Errorf("tokenization failed: %w", err)
 	}
+	ReleaseTokenizer(tokenizer)
 
 	parser := NewASTParser(tokens)
 	ast, err := parser.Parse()
@@ -35,12 +37,14 @@ func parseFilter(filterStr string, entityMetadata *metadata.EntityMetadata, comp
 func ParseFilterWithoutMetadata(filterStr string) (*FilterExpression, error) {
 	filterStr = strings.TrimSpace(filterStr)
 
-	// Use the AST parser
-	tokenizer := NewTokenizer(filterStr)
+	// Use pooled tokenizer and AST parser
+	tokenizer := AcquireTokenizer(filterStr)
 	tokens, err := tokenizer.TokenizeAll()
 	if err != nil {
+		ReleaseTokenizer(tokenizer)
 		return nil, fmt.Errorf("tokenization failed: %w", err)
 	}
+	ReleaseTokenizer(tokenizer)
 
 	parser := NewASTParser(tokens)
 	ast, err := parser.Parse()

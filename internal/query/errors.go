@@ -111,4 +111,34 @@ var (
 
 	// $compute transformation errors
 	errInvalidComputeFailedToParse = errors.New("invalid $compute: failed to parse compute transformation")
+
+	// Navigation path errors
+	errNavPathNoRemainingProperty = errors.New("navigation path has no remaining property")
+	errNavPathEndsWithNavProp     = errors.New("navigation path ends with a navigation property")
+
+	// Orderby errors
+	errOrderByInvalidDirection = errors.New("invalid direction for property, expected 'asc' or 'desc'")
+
+	// Function argument count errors
+	errFunctionRequires0Args = errors.New("function requires 0 arguments")
+	errFunctionRequires1Arg  = errors.New("function requires 1 argument")
+	errFunctionRequires2Args = errors.New("function requires 2 arguments")
+
+	// Unary operator errors
+	errUnsupportedUnaryOperator = errors.New("unsupported unary operator")
+
+	// Lambda parsing errors
+	errExpectedColonAfterLambdaVar = errors.New("expected ':' after lambda range variable")
+	errFailedToParseLambdaPred     = errors.New("failed to parse lambda predicate")
+	errFailedToConvertLambdaPred   = errors.New("failed to convert lambda predicate")
+
+	// Expected token errors
+	errExpectedLParen        = errors.New("expected '(' after 'in' operator")
+	errExpectedIdentAfterNav = errors.New("expected identifier after '/' in property path")
+
+	// Second argument type errors
+	errSecondArgMustBeLitOrProp      = errors.New("second argument must be a literal or property")
+	errSecondArgMustBeLitPropOrFunc  = errors.New("second argument must be a literal, property, or function")
+	errFirstArgMustBePropOrFuncCall  = errors.New("first argument must be a property name or function call")
+	errUnsupportedGeospatialFunction = errors.New("unsupported geospatial function")
 )
