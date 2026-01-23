@@ -47,6 +47,7 @@ func TestStringFunctions_ToLower(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
+			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectErr {
 					t.Fatalf("Parsing failed: %v", err)
@@ -101,6 +102,7 @@ func TestStringFunctions_ToUpper(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
+			defer ReleaseASTNode(ast)
 			if err != nil {
 				t.Fatalf("Parsing failed: %v", err)
 			}
@@ -152,6 +154,7 @@ func TestStringFunctions_Trim(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
+			defer ReleaseASTNode(ast)
 			if err != nil {
 				t.Fatalf("Parsing failed: %v", err)
 			}
@@ -208,6 +211,7 @@ func TestStringFunctions_Length(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
+			defer ReleaseASTNode(ast)
 			if err != nil {
 				t.Fatalf("Parsing failed: %v", err)
 			}
@@ -264,6 +268,7 @@ func TestStringFunctions_IndexOf(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
+			defer ReleaseASTNode(ast)
 			if err != nil {
 				t.Fatalf("Parsing failed: %v", err)
 			}
@@ -328,6 +333,7 @@ func TestStringFunctions_Substring(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
+			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectErr {
 					t.Fatalf("Parsing failed: %v", err)
@@ -382,6 +388,7 @@ func TestStringFunctions_Concat(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
+			defer ReleaseASTNode(ast)
 			if err != nil {
 				t.Fatalf("Parsing failed: %v", err)
 			}
@@ -468,6 +475,7 @@ func TestStringFunctions_ConcatWithLiterals(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
+			defer ReleaseASTNode(ast)
 			if err != nil {
 				t.Fatalf("Parsing failed: %v", err)
 			}
@@ -524,6 +532,7 @@ func TestStringFunctions_Combined(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
+			defer ReleaseASTNode(ast)
 			if err != nil {
 				t.Fatalf("Parsing failed: %v", err)
 			}

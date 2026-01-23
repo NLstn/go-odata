@@ -62,6 +62,7 @@ func TestMathFunctions_Ceiling(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
+			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectErr {
 					t.Fatalf("Parsing failed: %v", err)
@@ -139,6 +140,7 @@ func TestMathFunctions_Floor(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
+			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectErr {
 					t.Fatalf("Parsing failed: %v", err)
@@ -216,6 +218,7 @@ func TestMathFunctions_Round(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
+			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectErr {
 					t.Fatalf("Parsing failed: %v", err)
@@ -288,6 +291,7 @@ func TestMathFunctions_Combined(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
+			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectErr {
 					t.Fatalf("Parsing failed: %v", err)
@@ -445,6 +449,7 @@ func TestMathFunctions_EdgeCases(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
+			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectErr {
 					t.Fatalf("Parsing failed: %v", err)

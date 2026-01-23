@@ -56,6 +56,7 @@ func TestURLEncodingEscapedQuotes(t *testing.T) {
 			// Parse
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
+			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectedError {
 					t.Fatalf("Parsing failed: %v", err)

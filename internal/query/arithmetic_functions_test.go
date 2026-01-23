@@ -47,6 +47,7 @@ func TestArithmeticFunctions_Add(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
+			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectErr {
 					t.Fatalf("Parsing failed: %v", err)
@@ -101,6 +102,7 @@ func TestArithmeticFunctions_Sub(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
+			defer ReleaseASTNode(ast)
 			if err != nil {
 				t.Fatalf("Parsing failed: %v", err)
 			}
@@ -152,6 +154,7 @@ func TestArithmeticFunctions_Mul(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
+			defer ReleaseASTNode(ast)
 			if err != nil {
 				t.Fatalf("Parsing failed: %v", err)
 			}
@@ -203,6 +206,7 @@ func TestArithmeticFunctions_Div(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
+			defer ReleaseASTNode(ast)
 			if err != nil {
 				t.Fatalf("Parsing failed: %v", err)
 			}
@@ -259,6 +263,7 @@ func TestArithmeticFunctions_Combined(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
+			defer ReleaseASTNode(ast)
 			if err != nil {
 				t.Fatalf("Parsing failed: %v", err)
 			}

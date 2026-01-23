@@ -65,6 +65,7 @@ func TestDateFunctions_Year(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
+			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectErr {
 					t.Fatalf("Parsing failed: %v", err)
@@ -127,6 +128,7 @@ func TestDateFunctions_Month(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
+			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectErr {
 					t.Fatalf("Parsing failed: %v", err)
@@ -184,6 +186,7 @@ func TestDateFunctions_Day(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
+			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectErr {
 					t.Fatalf("Parsing failed: %v", err)
@@ -241,6 +244,7 @@ func TestDateFunctions_Hour(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
+			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectErr {
 					t.Fatalf("Parsing failed: %v", err)
@@ -293,6 +297,7 @@ func TestDateFunctions_Minute(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
+			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectErr {
 					t.Fatalf("Parsing failed: %v", err)
@@ -345,6 +350,7 @@ func TestDateFunctions_Second(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
+			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectErr {
 					t.Fatalf("Parsing failed: %v", err)
@@ -402,6 +408,7 @@ func TestDateFunctions_Date(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
+			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectErr {
 					t.Fatalf("Parsing failed: %v", err)
@@ -454,6 +461,7 @@ func TestDateFunctions_Time(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
+			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectErr {
 					t.Fatalf("Parsing failed: %v", err)
@@ -516,6 +524,7 @@ func TestDateFunctions_Combined(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
+			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectErr {
 					t.Fatalf("Parsing failed: %v", err)
@@ -630,6 +639,7 @@ func TestDateFunctions_SQLGeneration(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
+			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectErr {
 					t.Fatalf("Parsing failed: %v", err)

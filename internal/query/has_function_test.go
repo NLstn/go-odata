@@ -226,6 +226,7 @@ func TestHasInfixInComplexExpression(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
+			defer ReleaseASTNode(ast)
 			if err != nil {
 				t.Fatalf("Parsing failed: %v", err)
 			}
