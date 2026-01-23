@@ -43,13 +43,16 @@ func (ctx *conversionContext) propertyExists(propertyName string) bool {
 
 // ASTToFilterExpressionWithComputed converts an AST to a FilterExpression with computed alias support
 func ASTToFilterExpressionWithComputed(node ASTNode, entityMetadata *metadata.EntityMetadata, computedAliases map[string]bool, maxInClauseSize int) (*FilterExpression, error) {
+	cache := newParserCache()
 	ctx := &conversionContext{
 		computedAliases: computedAliases,
 		entityMetadata:  entityMetadata,
 		maxInClauseSize: maxInClauseSize,
-		cache:           newParserCache(),
+		cache:           cache,
 	}
-	return astToFilterExpressionWithContext(node, ctx)
+	result, err := astToFilterExpressionWithContext(node, ctx)
+	releaseParserCache(cache)
+	return result, err
 }
 
 // ASTToFilterExpression converts an AST to a FilterExpression
@@ -139,7 +142,7 @@ func convertUnaryExprWithContext(n *UnaryExpr, ctx *conversionContext) (*FilterE
 		operand.IsNot = true
 		return operand, nil
 	}
-	return nil, fmt.Errorf("unsupported unary operator: %s", n.Operator)
+	return nil, errUnsupportedUnaryOperator
 }
 
 // convertComparisonExprWithContext converts a comparison expression to a filter expression
