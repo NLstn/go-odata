@@ -110,13 +110,14 @@ func TestLambdaASTParser_BasicAny(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
-			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectErr {
 					t.Errorf("AST parsing failed: %v", err)
 				}
 				return
 			}
+
+			defer ReleaseASTNode(ast)
 
 			if tt.expectErr {
 				t.Error("Expected parsing to fail but it succeeded")
@@ -173,13 +174,14 @@ func TestLambdaASTParser_BasicAll(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
-			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectErr {
 					t.Errorf("AST parsing failed: %v", err)
 				}
 				return
 			}
+
+			defer ReleaseASTNode(ast)
 
 			if tt.expectErr {
 				t.Error("Expected parsing to fail but it succeeded")
@@ -241,13 +243,14 @@ func TestLambdaASTParser_ComplexConditions(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
-			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectErr {
 					t.Errorf("AST parsing failed: %v", err)
 				}
 				return
 			}
+
+			defer ReleaseASTNode(ast)
 
 			if tt.expectErr {
 				t.Error("Expected parsing to fail but it succeeded")
@@ -299,13 +302,14 @@ func TestLambdaASTParser_NestedLambdas(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
-			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectErr {
 					t.Errorf("AST parsing failed: %v", err)
 				}
 				return
 			}
+
+			defer ReleaseASTNode(ast)
 
 			if tt.expectErr {
 				t.Error("Expected parsing to fail but it succeeded")
@@ -362,13 +366,14 @@ func TestLambdaWithOtherOperators(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
-			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectErr {
 					t.Errorf("AST parsing failed: %v", err)
 				}
 				return
 			}
+
+			defer ReleaseASTNode(ast)
 
 			if tt.expectErr {
 				t.Error("Expected parsing to fail but it succeeded")
@@ -424,13 +429,14 @@ func TestLambdaToFilterExpression(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
-			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectErr {
 					t.Errorf("AST parsing failed: %v", err)
 				}
 				return
 			}
+
+			defer ReleaseASTNode(ast)
 
 			// Convert to FilterExpression - note we pass nil for metadata
 			// because lambda is a new feature and may not have full metadata support yet

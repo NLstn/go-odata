@@ -52,13 +52,14 @@ func TestInOperator_Basic(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
-			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectErr {
 					t.Errorf("AST parsing failed: %v", err)
 				}
 				return
 			}
+
+			defer ReleaseASTNode(ast)
 
 			filterExpr, err := ASTToFilterExpression(ast, meta)
 			if tt.expectErr {
@@ -133,13 +134,14 @@ func TestInOperator_WithLogicalOperators(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
-			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectErr {
 					t.Errorf("AST parsing failed: %v", err)
 				}
 				return
 			}
+
+			defer ReleaseASTNode(ast)
 
 			_, err = ASTToFilterExpression(ast, meta)
 			if tt.expectErr {
@@ -209,13 +211,14 @@ func TestInOperator_SQLGeneration(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
-			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectErr {
 					t.Errorf("AST parsing failed: %v", err)
 				}
 				return
 			}
+
+			defer ReleaseASTNode(ast)
 
 			filterExpr, err := ASTToFilterExpression(ast, meta)
 			if err != nil {
@@ -287,13 +290,14 @@ func TestInOperator_ValueValidation(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
-			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectErr {
 					t.Errorf("AST parsing failed: %v", err)
 				}
 				return
 			}
+
+			defer ReleaseASTNode(ast)
 
 			filterExpr, err := ASTToFilterExpression(ast, meta)
 			if tt.expectErr {
@@ -365,13 +369,14 @@ func TestInOperator_Integration(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
-			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectErr {
 					t.Errorf("AST parsing failed: %v", err)
 				}
 				return
 			}
+
+			defer ReleaseASTNode(ast)
 
 			filterExpr, err := ASTToFilterExpression(ast, meta)
 			if tt.expectErr {

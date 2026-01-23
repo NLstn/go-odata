@@ -65,13 +65,14 @@ func TestDateFunctions_Year(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
-			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectErr {
 					t.Fatalf("Parsing failed: %v", err)
 				}
 				return
 			}
+
+			defer ReleaseASTNode(ast)
 
 			filterExpr, err := ASTToFilterExpression(ast, meta)
 			if (err != nil) != tt.expectErr {
@@ -128,13 +129,14 @@ func TestDateFunctions_Month(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
-			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectErr {
 					t.Fatalf("Parsing failed: %v", err)
 				}
 				return
 			}
+
+			defer ReleaseASTNode(ast)
 
 			filterExpr, err := ASTToFilterExpression(ast, meta)
 			if (err != nil) != tt.expectErr {
@@ -186,13 +188,14 @@ func TestDateFunctions_Day(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
-			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectErr {
 					t.Fatalf("Parsing failed: %v", err)
 				}
 				return
 			}
+
+			defer ReleaseASTNode(ast)
 
 			filterExpr, err := ASTToFilterExpression(ast, meta)
 			if (err != nil) != tt.expectErr {
@@ -244,13 +247,14 @@ func TestDateFunctions_Hour(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
-			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectErr {
 					t.Fatalf("Parsing failed: %v", err)
 				}
 				return
 			}
+
+			defer ReleaseASTNode(ast)
 
 			filterExpr, err := ASTToFilterExpression(ast, meta)
 			if (err != nil) != tt.expectErr {
@@ -297,13 +301,14 @@ func TestDateFunctions_Minute(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
-			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectErr {
 					t.Fatalf("Parsing failed: %v", err)
 				}
 				return
 			}
+
+			defer ReleaseASTNode(ast)
 
 			filterExpr, err := ASTToFilterExpression(ast, meta)
 			if (err != nil) != tt.expectErr {
@@ -350,13 +355,14 @@ func TestDateFunctions_Second(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
-			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectErr {
 					t.Fatalf("Parsing failed: %v", err)
 				}
 				return
 			}
+
+			defer ReleaseASTNode(ast)
 
 			filterExpr, err := ASTToFilterExpression(ast, meta)
 			if (err != nil) != tt.expectErr {
@@ -408,13 +414,14 @@ func TestDateFunctions_Date(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
-			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectErr {
 					t.Fatalf("Parsing failed: %v", err)
 				}
 				return
 			}
+
+			defer ReleaseASTNode(ast)
 
 			filterExpr, err := ASTToFilterExpression(ast, meta)
 			if (err != nil) != tt.expectErr {
@@ -461,13 +468,14 @@ func TestDateFunctions_Time(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
-			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectErr {
 					t.Fatalf("Parsing failed: %v", err)
 				}
 				return
 			}
+
+			defer ReleaseASTNode(ast)
 
 			filterExpr, err := ASTToFilterExpression(ast, meta)
 			if (err != nil) != tt.expectErr {
@@ -524,13 +532,14 @@ func TestDateFunctions_Combined(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
-			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectErr {
 					t.Fatalf("Parsing failed: %v", err)
 				}
 				return
 			}
+
+			defer ReleaseASTNode(ast)
 
 			filterExpr, err := ASTToFilterExpression(ast, meta)
 			if (err != nil) != tt.expectErr {
@@ -639,13 +648,14 @@ func TestDateFunctions_SQLGeneration(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
-			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectErr {
 					t.Fatalf("Parsing failed: %v", err)
 				}
 				return
 			}
+
+			defer ReleaseASTNode(ast)
 
 			filterExpr, err := ASTToFilterExpression(ast, meta)
 			if err != nil {
