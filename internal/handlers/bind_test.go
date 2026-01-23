@@ -26,9 +26,9 @@ type BindTestProduct struct {
 
 // BindTestOrder is a test entity for collection binding tests
 type BindTestOrder struct {
-	ID       uint               `json:"ID" gorm:"primaryKey" odata:"key"`
-	Number   string             `json:"Number"`
-	Products []BindTestProduct  `json:"Products" gorm:"many2many:order_products"`
+	ID       uint              `json:"ID" gorm:"primaryKey" odata:"key"`
+	Number   string            `json:"Number"`
+	Products []BindTestProduct `json:"Products" gorm:"many2many:order_products"`
 }
 
 func setupBindTestHandler(t *testing.T) (*EntityHandler, *gorm.DB, map[string]*metadata.EntityMetadata) {
@@ -70,11 +70,11 @@ func setupBindTestHandler(t *testing.T) (*EntityHandler, *gorm.DB, map[string]*m
 
 func TestParseEntityReference(t *testing.T) {
 	tests := []struct {
-		name            string
-		refURL          string
-		wantEntitySet   string
-		wantEntityKey   string
-		wantErr         bool
+		name          string
+		refURL        string
+		wantEntitySet string
+		wantEntityKey string
+		wantErr       bool
 	}{
 		{
 			name:          "simple reference",
@@ -129,8 +129,8 @@ func TestParseEntityReference(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:    "empty key",
-			refURL:  "Categories()",
+			name:          "empty key",
+			refURL:        "Categories()",
 			wantEntitySet: "Categories",
 			wantEntityKey: "",
 			wantErr:       false,

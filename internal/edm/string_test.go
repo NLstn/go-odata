@@ -134,4 +134,3 @@ func TestStringType(t *testing.T) {
 		}
 	})
 }
-

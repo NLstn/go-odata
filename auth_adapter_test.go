@@ -41,17 +41,17 @@ func (p tenantFilterPolicy) QueryFilter(ctx AuthContext, resource ResourceDescri
 func TestQueryFilterProviderExported(t *testing.T) {
 	// Verify QueryFilterProvider interface is accessible and can be implemented
 	var policy QueryFilterProvider = tenantFilterPolicy{tenantID: "tenant-123"}
-	
+
 	// Verify it implements Policy interface
 	var _ Policy = policy
-	
+
 	// Verify it can be used with SetPolicy
 	db := setupTestDB(t)
 	service, err := NewService(db)
 	if err != nil {
 		t.Fatalf("NewService() error: %v", err)
 	}
-	
+
 	if err := service.SetPolicy(policy); err != nil {
 		t.Fatalf("SetPolicy error: %v", err)
 	}

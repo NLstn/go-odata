@@ -290,8 +290,8 @@ func TestHandleStreamProperty_Put(t *testing.T) {
 
 	// Create an entity first
 	entity := StreamPropertyTestEntity{
-		ID:        1,
-		Name:      "Test Entity",
+		ID:   1,
+		Name: "Test Entity",
 	}
 	if err := db.Create(&entity).Error; err != nil {
 		t.Fatalf("Failed to create entity: %v", err)

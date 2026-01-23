@@ -158,106 +158,106 @@ func BenchmarkTokenizer_NextToken(b *testing.B) {
 
 // getTestEntityMetadataWithNavigationProperties returns test entity metadata with navigation properties for benchmarks
 func getTestEntityMetadataWithNavigationProperties() *metadata.EntityMetadata {
-// Define related entities first
-categoryMeta := &metadata.EntityMetadata{
-EntitySetName: "Categories",
-EntityName:    "Category",
-EntityType: reflect.TypeOf(struct {
-ID   string
-Name string
-}{}),
-Properties: []metadata.PropertyMetadata{
-{JsonName: "ID", FieldName: "ID", Name: "ID", Type: reflect.TypeOf(""), IsKey: true, IsRequired: true, ColumnName: "id"},
-{JsonName: "Name", FieldName: "Name", Name: "Name", Type: reflect.TypeOf(""), ColumnName: "name"},
-},
-KeyProperties: []metadata.PropertyMetadata{
-{JsonName: "ID", FieldName: "ID", Name: "ID", Type: reflect.TypeOf(""), IsKey: true, IsRequired: true, ColumnName: "id"},
-},
-}
+	// Define related entities first
+	categoryMeta := &metadata.EntityMetadata{
+		EntitySetName: "Categories",
+		EntityName:    "Category",
+		EntityType: reflect.TypeOf(struct {
+			ID   string
+			Name string
+		}{}),
+		Properties: []metadata.PropertyMetadata{
+			{JsonName: "ID", FieldName: "ID", Name: "ID", Type: reflect.TypeOf(""), IsKey: true, IsRequired: true, ColumnName: "id"},
+			{JsonName: "Name", FieldName: "Name", Name: "Name", Type: reflect.TypeOf(""), ColumnName: "name"},
+		},
+		KeyProperties: []metadata.PropertyMetadata{
+			{JsonName: "ID", FieldName: "ID", Name: "ID", Type: reflect.TypeOf(""), IsKey: true, IsRequired: true, ColumnName: "id"},
+		},
+	}
 
-supplierMeta := &metadata.EntityMetadata{
-EntitySetName: "Suppliers",
-EntityName:    "Supplier",
-EntityType: reflect.TypeOf(struct {
-ID      string
-Name    string
-Country string
-}{}),
-Properties: []metadata.PropertyMetadata{
-{JsonName: "ID", FieldName: "ID", Name: "ID", Type: reflect.TypeOf(""), IsKey: true, IsRequired: true, ColumnName: "id"},
-{JsonName: "Name", FieldName: "Name", Name: "Name", Type: reflect.TypeOf(""), ColumnName: "name"},
-{JsonName: "Country", FieldName: "Country", Name: "Country", Type: reflect.TypeOf(""), ColumnName: "country"},
-},
-KeyProperties: []metadata.PropertyMetadata{
-{JsonName: "ID", FieldName: "ID", Name: "ID", Type: reflect.TypeOf(""), IsKey: true, IsRequired: true, ColumnName: "id"},
-},
-}
+	supplierMeta := &metadata.EntityMetadata{
+		EntitySetName: "Suppliers",
+		EntityName:    "Supplier",
+		EntityType: reflect.TypeOf(struct {
+			ID      string
+			Name    string
+			Country string
+		}{}),
+		Properties: []metadata.PropertyMetadata{
+			{JsonName: "ID", FieldName: "ID", Name: "ID", Type: reflect.TypeOf(""), IsKey: true, IsRequired: true, ColumnName: "id"},
+			{JsonName: "Name", FieldName: "Name", Name: "Name", Type: reflect.TypeOf(""), ColumnName: "name"},
+			{JsonName: "Country", FieldName: "Country", Name: "Country", Type: reflect.TypeOf(""), ColumnName: "country"},
+		},
+		KeyProperties: []metadata.PropertyMetadata{
+			{JsonName: "ID", FieldName: "ID", Name: "ID", Type: reflect.TypeOf(""), IsKey: true, IsRequired: true, ColumnName: "id"},
+		},
+	}
 
-productMeta := &metadata.EntityMetadata{
-EntitySetName: "Products",
-EntityName:    "Product",
-EntityType: reflect.TypeOf(struct {
-ID          string
-Name        string
-Price       float64
-CategoryID  string
-SupplierID  string
-Description string
-}{}),
-Properties: []metadata.PropertyMetadata{
-{JsonName: "ID", FieldName: "ID", Name: "ID", Type: reflect.TypeOf(""), IsKey: true, IsRequired: true, ColumnName: "id"},
-{JsonName: "Name", FieldName: "Name", Name: "Name", Type: reflect.TypeOf(""), ColumnName: "name"},
-{JsonName: "Price", FieldName: "Price", Name: "Price", Type: reflect.TypeOf(0.0), ColumnName: "price"},
-{JsonName: "CategoryID", FieldName: "CategoryID", Name: "CategoryID", Type: reflect.TypeOf(""), ColumnName: "category_id"},
-{JsonName: "SupplierID", FieldName: "SupplierID", Name: "SupplierID", Type: reflect.TypeOf(""), ColumnName: "supplier_id"},
-{JsonName: "Description", FieldName: "Description", Name: "Description", Type: reflect.TypeOf(""), ColumnName: "description"},
-{JsonName: "Category", FieldName: "Category", Name: "Category", Type: reflect.TypeOf(categoryMeta), IsNavigationProp: true, NavigationIsArray: false, NavigationTarget: "Category", ColumnName: "category"},
-{JsonName: "Supplier", FieldName: "Supplier", Name: "Supplier", Type: reflect.TypeOf(supplierMeta), IsNavigationProp: true, NavigationIsArray: false, NavigationTarget: "Supplier", ColumnName: "supplier"},
-},
-KeyProperties: []metadata.PropertyMetadata{
-{JsonName: "ID", FieldName: "ID", Name: "ID", Type: reflect.TypeOf(""), IsKey: true, IsRequired: true, ColumnName: "id"},
-},
-}
+	productMeta := &metadata.EntityMetadata{
+		EntitySetName: "Products",
+		EntityName:    "Product",
+		EntityType: reflect.TypeOf(struct {
+			ID          string
+			Name        string
+			Price       float64
+			CategoryID  string
+			SupplierID  string
+			Description string
+		}{}),
+		Properties: []metadata.PropertyMetadata{
+			{JsonName: "ID", FieldName: "ID", Name: "ID", Type: reflect.TypeOf(""), IsKey: true, IsRequired: true, ColumnName: "id"},
+			{JsonName: "Name", FieldName: "Name", Name: "Name", Type: reflect.TypeOf(""), ColumnName: "name"},
+			{JsonName: "Price", FieldName: "Price", Name: "Price", Type: reflect.TypeOf(0.0), ColumnName: "price"},
+			{JsonName: "CategoryID", FieldName: "CategoryID", Name: "CategoryID", Type: reflect.TypeOf(""), ColumnName: "category_id"},
+			{JsonName: "SupplierID", FieldName: "SupplierID", Name: "SupplierID", Type: reflect.TypeOf(""), ColumnName: "supplier_id"},
+			{JsonName: "Description", FieldName: "Description", Name: "Description", Type: reflect.TypeOf(""), ColumnName: "description"},
+			{JsonName: "Category", FieldName: "Category", Name: "Category", Type: reflect.TypeOf(categoryMeta), IsNavigationProp: true, NavigationIsArray: false, NavigationTarget: "Category", ColumnName: "category"},
+			{JsonName: "Supplier", FieldName: "Supplier", Name: "Supplier", Type: reflect.TypeOf(supplierMeta), IsNavigationProp: true, NavigationIsArray: false, NavigationTarget: "Supplier", ColumnName: "supplier"},
+		},
+		KeyProperties: []metadata.PropertyMetadata{
+			{JsonName: "ID", FieldName: "ID", Name: "ID", Type: reflect.TypeOf(""), IsKey: true, IsRequired: true, ColumnName: "id"},
+		},
+	}
 
-// Set up registry for navigation resolution
-registry := map[string]*metadata.EntityMetadata{
-"Category": categoryMeta,
-"Supplier": supplierMeta,
-"Product":  productMeta,
-}
-productMeta.SetEntitiesRegistry(registry)
+	// Set up registry for navigation resolution
+	registry := map[string]*metadata.EntityMetadata{
+		"Category": categoryMeta,
+		"Supplier": supplierMeta,
+		"Product":  productMeta,
+	}
+	productMeta.SetEntitiesRegistry(registry)
 
-return productMeta
+	return productMeta
 }
 
 // BenchmarkParseQueryOptions_WithNavigationPaths benchmarks parsing with navigation property paths
 func BenchmarkParseQueryOptions_WithNavigationPaths(b *testing.B) {
-entityMeta := getTestEntityMetadataWithNavigationProperties()
-params := url.Values{
-"$filter": []string{"Category/Name eq 'Electronics' and Supplier/Country eq 'USA' and Price gt 100"},
-"$select": []string{"Name,Price,Category/Name,Supplier/Name,Supplier/Country"},
-}
-b.ResetTimer()
-for i := 0; i < b.N; i++ {
-_, _ = ParseQueryOptions(params, entityMeta)
-}
+	entityMeta := getTestEntityMetadataWithNavigationProperties()
+	params := url.Values{
+		"$filter": []string{"Category/Name eq 'Electronics' and Supplier/Country eq 'USA' and Price gt 100"},
+		"$select": []string{"Name,Price,Category/Name,Supplier/Name,Supplier/Country"},
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = ParseQueryOptions(params, entityMeta)
+	}
 }
 
 // BenchmarkParseQueryOptions_ComplexNavigationPaths benchmarks complex queries with many repeated navigation paths
 func BenchmarkParseQueryOptions_ComplexNavigationPaths(b *testing.B) {
-entityMeta := getTestEntityMetadataWithNavigationProperties()
-// This filter uses the same navigation paths multiple times to test cache effectiveness
-params := url.Values{
-"$filter": []string{
-"(Category/Name eq 'Electronics' or Category/Name eq 'Computers') and " +
-"(Supplier/Country eq 'USA' or Supplier/Country eq 'Canada') and " +
-"(Price gt 100 and Price lt 1000)",
-},
-"$select":  []string{"Name,Price,Category/Name,Supplier/Name"},
-"$orderby": []string{"Category/Name,Supplier/Country,Price"},
-}
-b.ResetTimer()
-for i := 0; i < b.N; i++ {
-_, _ = ParseQueryOptions(params, entityMeta)
-}
+	entityMeta := getTestEntityMetadataWithNavigationProperties()
+	// This filter uses the same navigation paths multiple times to test cache effectiveness
+	params := url.Values{
+		"$filter": []string{
+			"(Category/Name eq 'Electronics' or Category/Name eq 'Computers') and " +
+				"(Supplier/Country eq 'USA' or Supplier/Country eq 'Canada') and " +
+				"(Price gt 100 and Price lt 1000)",
+		},
+		"$select":  []string{"Name,Price,Category/Name,Supplier/Name"},
+		"$orderby": []string{"Category/Name,Supplier/Country,Price"},
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = ParseQueryOptions(params, entityMeta)
+	}
 }

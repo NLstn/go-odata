@@ -40,7 +40,7 @@ func hasAnnotation(metadataXML []byte, target, term string) (bool, error) {
 	inTargetElement := false
 	targetDepth := 0
 	currentDepth := 0
-	
+
 	// Parse target to extract entity type and property if present
 	// Format: "Namespace.EntityType/PropertyName" or "Namespace.EntityType"
 	var targetEntityType, targetProperty string
@@ -53,7 +53,7 @@ func hasAnnotation(metadataXML []byte, target, term string) (bool, error) {
 	} else {
 		targetEntityType = target
 	}
-	
+
 	for {
 		token, err := decoder.Token()
 		if err != nil {
