@@ -151,14 +151,13 @@ func cloneFilterExpression(filter *FilterExpression) *FilterExpression {
 	if filter == nil {
 		return nil
 	}
-	clone := &FilterExpression{
-		Property:        filter.Property,
-		Operator:        filter.Operator,
-		Value:           filter.Value,
-		Logical:         filter.Logical,
-		IsNot:           filter.IsNot,
-		maxInClauseSize: filter.maxInClauseSize,
-	}
+	clone := acquireFilterExpression()
+	clone.Property = filter.Property
+	clone.Operator = filter.Operator
+	clone.Value = filter.Value
+	clone.Logical = filter.Logical
+	clone.IsNot = filter.IsNot
+	clone.maxInClauseSize = filter.maxInClauseSize
 	if filter.Left != nil {
 		clone.Left = cloneFilterExpression(filter.Left)
 	}

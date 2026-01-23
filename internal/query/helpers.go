@@ -224,11 +224,11 @@ func MergeFilterExpressions(left *FilterExpression, right *FilterExpression) *Fi
 	if right == nil {
 		return left
 	}
-	return &FilterExpression{
-		Left:    left,
-		Right:   right,
-		Logical: LogicalAnd,
-	}
+	expr := acquireFilterExpression()
+	expr.Left = left
+	expr.Right = right
+	expr.Logical = LogicalAnd
+	return expr
 }
 
 // ParseFilterExpression parses a raw filter string into a filter expression with metadata validation.
