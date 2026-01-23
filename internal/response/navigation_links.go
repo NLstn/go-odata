@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"strconv"
 	"strings"
 
 	"github.com/nlstn/go-odata/internal/etag"
@@ -149,7 +150,8 @@ func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataPro
 
 	// Pre-calculate capacity: fields + potential metadata annotations (etag, id, type)
 	capacity := entity.NumField() + 3
-	entityMap := NewOrderedMapWithCapacity(capacity)
+	// Use pooled OrderedMap for better performance
+	entityMap := AcquireOrderedMapWithCapacity(capacity)
 
 	// Pre-compute key segment and entity ID if needed (reuse across annotations)
 	var keySegment string
@@ -316,6 +318,66 @@ func BuildKeySegmentFromEntity(entity reflect.Value, metadata EntityMetadataProv
 	return buildKeySegmentFromEntityCached(entity, metadata)
 }
 
+// formatKeyValue converts a reflect.Value to its string representation without using fmt.Sprintf
+// This is significantly faster than fmt.Sprintf("%v", ...) for common types
+func formatKeyValue(v reflect.Value) string {
+	switch v.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return strconv.FormatInt(v.Int(), 10)
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return strconv.FormatUint(v.Uint(), 10)
+	case reflect.Float32:
+		return strconv.FormatFloat(v.Float(), 'f', -1, 32)
+	case reflect.Float64:
+		return strconv.FormatFloat(v.Float(), 'f', -1, 64)
+	case reflect.String:
+		return v.String()
+	case reflect.Bool:
+		return strconv.FormatBool(v.Bool())
+	default:
+		// Fallback for complex types (UUIDs, etc.)
+		return fmt.Sprintf("%v", v.Interface())
+	}
+}
+
+// formatInterfaceValue converts an interface{} to its string representation without using fmt.Sprintf
+// This is significantly faster than fmt.Sprintf("%v", ...) for common types
+func formatInterfaceValue(v interface{}) string {
+	switch val := v.(type) {
+	case int:
+		return strconv.Itoa(val)
+	case int64:
+		return strconv.FormatInt(val, 10)
+	case int32:
+		return strconv.FormatInt(int64(val), 10)
+	case int16:
+		return strconv.FormatInt(int64(val), 10)
+	case int8:
+		return strconv.FormatInt(int64(val), 10)
+	case uint:
+		return strconv.FormatUint(uint64(val), 10)
+	case uint64:
+		return strconv.FormatUint(val, 10)
+	case uint32:
+		return strconv.FormatUint(uint64(val), 10)
+	case uint16:
+		return strconv.FormatUint(uint64(val), 10)
+	case uint8:
+		return strconv.FormatUint(uint64(val), 10)
+	case float64:
+		return strconv.FormatFloat(val, 'f', -1, 64)
+	case float32:
+		return strconv.FormatFloat(float64(val), 'f', -1, 32)
+	case string:
+		return val
+	case bool:
+		return strconv.FormatBool(val)
+	default:
+		// Fallback for complex types (UUIDs, etc.)
+		return fmt.Sprintf("%v", v)
+	}
+}
+
 // buildKeySegmentFromEntityCached is an internal helper for building key segments
 func buildKeySegmentFromEntityCached(entity reflect.Value, metadata EntityMetadataProvider) string {
 	keyProps := metadata.GetKeyProperties()
@@ -326,26 +388,35 @@ func buildKeySegmentFromEntityCached(entity reflect.Value, metadata EntityMetada
 	if len(keyProps) == 1 {
 		keyFieldValue := entity.FieldByName(keyProps[0].Name)
 		if keyFieldValue.IsValid() {
-			return fmt.Sprintf("%v", keyFieldValue.Interface())
+			return formatKeyValue(keyFieldValue)
 		}
 		return ""
 	}
 
 	// For composite keys, build the key segment
-	var parts []string
-	for _, keyProp := range keyProps {
+	var builder strings.Builder
+	// Estimate capacity: name=value, separated by commas
+	builder.Grow(len(keyProps) * 20)
+
+	for i, keyProp := range keyProps {
 		keyFieldValue := entity.FieldByName(keyProp.Name)
 		if keyFieldValue.IsValid() {
-			keyValue := keyFieldValue.Interface()
+			if i > 0 {
+				builder.WriteByte(',')
+			}
+			builder.WriteString(keyProp.JsonName)
 			if keyFieldValue.Kind() == reflect.String {
-				parts = append(parts, fmt.Sprintf("%s='%v'", keyProp.JsonName, keyValue))
+				builder.WriteString("='")
+				builder.WriteString(keyFieldValue.String())
+				builder.WriteByte('\'')
 			} else {
-				parts = append(parts, fmt.Sprintf("%s=%v", keyProp.JsonName, keyValue))
+				builder.WriteByte('=')
+				builder.WriteString(formatKeyValue(keyFieldValue))
 			}
 		}
 	}
 
-	return strings.Join(parts, ",")
+	return builder.String()
 }
 
 func buildKeySegmentFromMap(entityMap map[string]interface{}, metadata EntityMetadataProvider) string {
@@ -356,21 +427,33 @@ func buildKeySegmentFromMap(entityMap map[string]interface{}, metadata EntityMet
 
 	if len(keyProps) == 1 {
 		if keyValue := entityMap[keyProps[0].JsonName]; keyValue != nil {
-			return fmt.Sprintf("%v", keyValue)
+			return formatInterfaceValue(keyValue)
 		}
 		return ""
 	}
 
-	var parts []string
+	var builder strings.Builder
+	// Estimate capacity: name=value, separated by commas
+	builder.Grow(len(keyProps) * 20)
+
+	first := true
 	for _, keyProp := range keyProps {
 		if keyValue := entityMap[keyProp.JsonName]; keyValue != nil {
+			if !first {
+				builder.WriteByte(',')
+			}
+			first = false
+			builder.WriteString(keyProp.JsonName)
 			if strVal, ok := keyValue.(string); ok {
-				parts = append(parts, fmt.Sprintf("%s='%s'", keyProp.JsonName, strVal))
+				builder.WriteString("='")
+				builder.WriteString(strVal)
+				builder.WriteByte('\'')
 			} else {
-				parts = append(parts, fmt.Sprintf("%s=%v", keyProp.JsonName, keyValue))
+				builder.WriteByte('=')
+				builder.WriteString(formatInterfaceValue(keyValue))
 			}
 		}
 	}
 
-	return strings.Join(parts, ",")
+	return builder.String()
 }

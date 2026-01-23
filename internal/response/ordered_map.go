@@ -3,6 +3,7 @@ package response
 import (
 	"bytes"
 	"encoding/json"
+	"strconv"
 	"sync"
 	"unicode/utf8"
 )
@@ -13,6 +14,17 @@ var bufferPool = sync.Pool{
 		buf := new(bytes.Buffer)
 		buf.Grow(512) // Pre-allocate reasonable capacity for typical JSON responses
 		return buf
+	},
+}
+
+// orderedMapPool is a sync.Pool for reusing OrderedMap instances
+// This significantly reduces allocation overhead for collection responses
+var orderedMapPool = sync.Pool{
+	New: func() interface{} {
+		return &OrderedMap{
+			keys:   make([]string, 0, 16),
+			values: make(map[string]interface{}, 16),
+		}
 	},
 }
 
@@ -35,6 +47,52 @@ func NewOrderedMapWithCapacity(capacity int) *OrderedMap {
 	return &OrderedMap{
 		keys:   make([]string, 0, capacity),
 		values: make(map[string]interface{}, capacity),
+	}
+}
+
+// AcquireOrderedMap gets an OrderedMap from the pool
+// The returned map is reset and ready for use
+func AcquireOrderedMap() *OrderedMap {
+	om := orderedMapPool.Get().(*OrderedMap) //nolint:errcheck // sync.Pool.Get() doesn't return error
+	return om
+}
+
+// AcquireOrderedMapWithCapacity gets an OrderedMap from the pool and ensures capacity
+// The returned map is reset and ready for use
+func AcquireOrderedMapWithCapacity(capacity int) *OrderedMap {
+	om := orderedMapPool.Get().(*OrderedMap) //nolint:errcheck // sync.Pool.Get() doesn't return error
+	// Ensure we have enough capacity
+	if cap(om.keys) < capacity {
+		om.keys = make([]string, 0, capacity)
+	}
+	// For the map, we can't resize it, but we can check if it needs recreation
+	// Only recreate if significantly undersized (avoids thrashing)
+	if len(om.values) == 0 && capacity > 16 {
+		om.values = make(map[string]interface{}, capacity)
+	}
+	return om
+}
+
+// Release returns the OrderedMap to the pool for reuse
+// After calling Release, the OrderedMap must not be used
+func (om *OrderedMap) Release() {
+	if om == nil {
+		return
+	}
+	om.Reset()
+	// Only return to pool if not too large (prevents memory bloat)
+	if cap(om.keys) <= 128 {
+		orderedMapPool.Put(om)
+	}
+}
+
+// Reset clears the OrderedMap for reuse
+func (om *OrderedMap) Reset() {
+	// Clear the keys slice (reuse underlying array)
+	om.keys = om.keys[:0]
+	// Clear the map (delete all entries, reuse map structure)
+	for k := range om.values {
+		delete(om.values, k)
 	}
 }
 
@@ -92,7 +150,7 @@ func (om *OrderedMap) ToMap() map[string]interface{} {
 }
 
 // MarshalJSON implements json.Marshaler to maintain field order
-// Optimized version using sync.Pool for buffer reuse
+// Optimized version using streaming encoder to avoid per-value allocations
 func (om *OrderedMap) MarshalJSON() ([]byte, error) {
 	if len(om.keys) == 0 {
 		return []byte("{}"), nil
@@ -112,6 +170,11 @@ func (om *OrderedMap) MarshalJSON() ([]byte, error) {
 	// Estimate initial capacity
 	estimatedSize := len(om.keys) * 100
 	buf.Grow(estimatedSize)
+
+	// Create a streaming encoder - this avoids intermediate allocations
+	enc := json.NewEncoder(buf)
+	// Disable HTML escaping for better performance (not needed for OData responses)
+	enc.SetEscapeHTML(false)
 
 	buf.WriteByte('{')
 
@@ -138,12 +201,55 @@ func (om *OrderedMap) MarshalJSON() ([]byte, error) {
 
 		buf.WriteByte(':')
 
-		// Marshal the value
-		valueBytes, err := json.Marshal(om.values[key])
-		if err != nil {
-			return nil, err
+		// Use streaming encoder for values - avoids intermediate []byte allocation
+		value := om.values[key]
+
+		// Fast path for common types to avoid encoder overhead
+		switch v := value.(type) {
+		case string:
+			if needsEscaping(v) {
+				if err := enc.Encode(v); err != nil {
+					return nil, err
+				}
+				// Remove trailing newline added by Encode
+				buf.Truncate(buf.Len() - 1)
+			} else {
+				buf.WriteByte('"')
+				buf.WriteString(v)
+				buf.WriteByte('"')
+			}
+		case int:
+			writeInt(buf, int64(v))
+		case int64:
+			writeInt(buf, v)
+		case int32:
+			writeInt(buf, int64(v))
+		case uint:
+			writeUint(buf, uint64(v))
+		case uint64:
+			writeUint(buf, v)
+		case uint32:
+			writeUint(buf, uint64(v))
+		case float64:
+			writeFloat(buf, v)
+		case float32:
+			writeFloat(buf, float64(v))
+		case bool:
+			if v {
+				buf.WriteString("true")
+			} else {
+				buf.WriteString("false")
+			}
+		case nil:
+			buf.WriteString("null")
+		default:
+			// Fall back to streaming encoder for complex types
+			if err := enc.Encode(value); err != nil {
+				return nil, err
+			}
+			// Remove trailing newline added by Encode
+			buf.Truncate(buf.Len() - 1)
 		}
-		buf.Write(valueBytes)
 	}
 
 	buf.WriteByte('}')
@@ -152,6 +258,48 @@ func (om *OrderedMap) MarshalJSON() ([]byte, error) {
 	result := make([]byte, buf.Len())
 	copy(result, buf.Bytes())
 	return result, nil
+}
+
+// writeInt writes an int64 to the buffer without allocation
+func writeInt(buf *bytes.Buffer, v int64) {
+	var b [20]byte // max int64 is 19 digits + sign
+	i := len(b)
+	neg := v < 0
+	if neg {
+		v = -v
+	}
+	for v >= 10 {
+		i--
+		b[i] = byte('0' + v%10)
+		v /= 10
+	}
+	i--
+	b[i] = byte('0' + v)
+	if neg {
+		i--
+		b[i] = '-'
+	}
+	buf.Write(b[i:])
+}
+
+// writeUint writes a uint64 to the buffer without allocation
+func writeUint(buf *bytes.Buffer, v uint64) {
+	var b [20]byte // max uint64 is 20 digits
+	i := len(b)
+	for v >= 10 {
+		i--
+		b[i] = byte('0' + v%10)
+		v /= 10
+	}
+	i--
+	b[i] = byte('0' + v)
+	buf.Write(b[i:])
+}
+
+// writeFloat writes a float64 to the buffer
+func writeFloat(buf *bytes.Buffer, v float64) {
+	// Use strconv for proper float formatting
+	buf.WriteString(strconv.FormatFloat(v, 'f', -1, 64))
 }
 
 // needsEscaping checks if a string needs JSON escaping
