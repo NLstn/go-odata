@@ -189,10 +189,11 @@ func TestBooleanLiteralASTParsing(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
-			defer ReleaseASTNode(ast)
 			if err != nil {
 				t.Fatalf("Parsing failed: %v", err)
 			}
+
+			defer ReleaseASTNode(ast)
 
 			compExpr, ok := ast.(*ComparisonExpr)
 			if !ok {
@@ -254,10 +255,11 @@ func TestBooleanLiteralFilterConversion(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
-			defer ReleaseASTNode(ast)
 			if err != nil {
 				t.Fatalf("Parsing failed: %v", err)
 			}
+
+			defer ReleaseASTNode(ast)
 
 			filterExpr, err := ASTToFilterExpression(ast, meta)
 			if err != nil {
@@ -323,10 +325,11 @@ func TestBooleanLiteralCaseInsensitive(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
-			defer ReleaseASTNode(ast)
 			if err != nil {
 				t.Fatalf("Parsing failed: %v", err)
 			}
+
+			defer ReleaseASTNode(ast)
 
 			compExpr, ok := ast.(*ComparisonExpr)
 			if !ok {

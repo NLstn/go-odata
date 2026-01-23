@@ -47,13 +47,14 @@ func TestArithmeticFunctions_Add(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
-			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectErr {
 					t.Fatalf("Parsing failed: %v", err)
 				}
 				return
 			}
+
+			defer ReleaseASTNode(ast)
 
 			filterExpr, err := ASTToFilterExpression(ast, meta)
 			if (err != nil) != tt.expectErr {
@@ -102,10 +103,11 @@ func TestArithmeticFunctions_Sub(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
-			defer ReleaseASTNode(ast)
 			if err != nil {
 				t.Fatalf("Parsing failed: %v", err)
 			}
+
+			defer ReleaseASTNode(ast)
 
 			filterExpr, err := ASTToFilterExpression(ast, meta)
 			if (err != nil) != tt.expectErr {
@@ -154,10 +156,11 @@ func TestArithmeticFunctions_Mul(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
-			defer ReleaseASTNode(ast)
 			if err != nil {
 				t.Fatalf("Parsing failed: %v", err)
 			}
+
+			defer ReleaseASTNode(ast)
 
 			filterExpr, err := ASTToFilterExpression(ast, meta)
 			if (err != nil) != tt.expectErr {
@@ -206,10 +209,11 @@ func TestArithmeticFunctions_Div(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
-			defer ReleaseASTNode(ast)
 			if err != nil {
 				t.Fatalf("Parsing failed: %v", err)
 			}
+
+			defer ReleaseASTNode(ast)
 
 			filterExpr, err := ASTToFilterExpression(ast, meta)
 			if (err != nil) != tt.expectErr {
@@ -263,10 +267,11 @@ func TestArithmeticFunctions_Combined(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
-			defer ReleaseASTNode(ast)
 			if err != nil {
 				t.Fatalf("Parsing failed: %v", err)
 			}
+
+			defer ReleaseASTNode(ast)
 
 			filterExpr, err := ASTToFilterExpression(ast, meta)
 			if (err != nil) != tt.expectErr {

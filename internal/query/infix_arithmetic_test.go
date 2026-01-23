@@ -44,10 +44,11 @@ func TestInfixArithmetic_Add(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
-			defer ReleaseASTNode(ast)
 			if err != nil {
 				t.Fatalf("Parsing failed: %v", err)
 			}
+
+			defer ReleaseASTNode(ast)
 
 			filterExpr, err := ASTToFilterExpression(ast, meta)
 			if (err != nil) != tt.expectErr {
@@ -96,10 +97,11 @@ func TestInfixArithmetic_Sub(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
-			defer ReleaseASTNode(ast)
 			if err != nil {
 				t.Fatalf("Parsing failed: %v", err)
 			}
+
+			defer ReleaseASTNode(ast)
 
 			filterExpr, err := ASTToFilterExpression(ast, meta)
 			if (err != nil) != tt.expectErr {
@@ -148,10 +150,11 @@ func TestInfixArithmetic_Mul(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
-			defer ReleaseASTNode(ast)
 			if err != nil {
 				t.Fatalf("Parsing failed: %v", err)
 			}
+
+			defer ReleaseASTNode(ast)
 
 			filterExpr, err := ASTToFilterExpression(ast, meta)
 			if (err != nil) != tt.expectErr {
@@ -200,10 +203,11 @@ func TestInfixArithmetic_Div(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
-			defer ReleaseASTNode(ast)
 			if err != nil {
 				t.Fatalf("Parsing failed: %v", err)
 			}
+
+			defer ReleaseASTNode(ast)
 
 			filterExpr, err := ASTToFilterExpression(ast, meta)
 			if (err != nil) != tt.expectErr {
@@ -247,10 +251,11 @@ func TestInfixArithmetic_Mod(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
-			defer ReleaseASTNode(ast)
 			if err != nil {
 				t.Fatalf("Parsing failed: %v", err)
 			}
+
+			defer ReleaseASTNode(ast)
 
 			filterExpr, err := ASTToFilterExpression(ast, meta)
 			if (err != nil) != tt.expectErr {
@@ -304,10 +309,11 @@ func TestInfixArithmetic_Combined(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
-			defer ReleaseASTNode(ast)
 			if err != nil {
 				t.Fatalf("Parsing failed: %v", err)
 			}
+
+			defer ReleaseASTNode(ast)
 
 			filterExpr, err := ASTToFilterExpression(ast, meta)
 			if (err != nil) != tt.expectErr {
@@ -361,10 +367,11 @@ func TestInfixArithmetic_MixedSymbolsAndKeywords(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
-			defer ReleaseASTNode(ast)
 			if err != nil {
 				t.Fatalf("Parsing failed: %v", err)
 			}
+
+			defer ReleaseASTNode(ast)
 
 			filterExpr, err := ASTToFilterExpression(ast, meta)
 			if (err != nil) != tt.expectErr {

@@ -24,8 +24,9 @@ func parseFilter(filterStr string, entityMetadata *metadata.EntityMetadata, comp
 		return nil, fmt.Errorf("parsing failed: %w", err)
 	}
 
-	// Release AST nodes after conversion to reduce memory usage
-	defer ReleaseASTNode(ast)
+	// Note: We do NOT release the AST here because the FilterExpression may hold
+	// references to AST nodes (e.g., for nested function calls like concat).
+	// The AST nodes will be garbage collected when no longer referenced.
 
 	return ASTToFilterExpressionWithComputed(ast, entityMetadata, computedAliases, maxInClauseSize)
 }
@@ -47,8 +48,9 @@ func ParseFilterWithoutMetadata(filterStr string) (*FilterExpression, error) {
 		return nil, fmt.Errorf("parsing failed: %w", err)
 	}
 
-	// Release AST nodes after conversion to reduce memory usage
-	defer ReleaseASTNode(ast)
+	// Note: We do NOT release the AST here because the FilterExpression may hold
+	// references to AST nodes (e.g., for nested function calls like concat).
+	// The AST nodes will be garbage collected when no longer referenced.
 
 	// Convert AST to FilterExpression without metadata validation
 	return ASTToFilterExpression(ast, nil)
