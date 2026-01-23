@@ -394,13 +394,9 @@ func resolveColumnName(db *gorm.DB, dialect string, propertyName string, entityM
 // tryBuildRightSideFunctionComparison attempts to build a comparison when the right side is a function call.
 // Returns the SQL string, arguments, and a boolean indicating if the comparison was successfully built.
 func tryBuildRightSideFunctionComparison(dialect string, leftColumn string, operator FilterOperator, rightValue interface{}, entityMetadata *metadata.EntityMetadata) (string, []interface{}, bool) {
-	funcCall, ok := rightValue.(*FunctionCallExpr)
+	// Check if right side is a FilterExpression (converted from FunctionCallExpr)
+	rightExpr, ok := rightValue.(*FilterExpression)
 	if !ok {
-		return "", nil, false
-	}
-
-	rightExpr, err := convertFunctionCallExpr(funcCall, entityMetadata)
-	if err != nil || rightExpr == nil {
 		return "", nil, false
 	}
 
@@ -830,17 +826,8 @@ func buildFunctionComparison(dialect string, filter *FilterExpression, entityMet
 		return "", nil
 	}
 
-	if rightFunc, ok := filter.Value.(*FunctionCallExpr); ok {
-		rightFuncExpr, err := convertFunctionCallExpr(rightFunc, entityMetadata)
-		if err != nil {
-			compSQL := buildComparisonSQL(filter.Operator, funcSQL)
-			if compSQL == "" {
-				return "", nil
-			}
-			allArgs := append(funcArgs, filter.Value)
-			return compSQL, allArgs
-		}
-
+	// Check if right side is a FilterExpression (converted from FunctionCallExpr)
+	if rightFuncExpr, ok := filter.Value.(*FilterExpression); ok {
 		rightColumnName := getQuotedColumnName(dialect, rightFuncExpr.Property, entityMetadata)
 		rightFuncSQL, rightFuncArgs := buildFunctionSQL(dialect, rightFuncExpr.Operator, rightColumnName, rightFuncExpr.Value)
 		if rightFuncSQL == "" {
@@ -953,16 +940,10 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 			return fmt.Sprintf("CONCAT(%s, %s)", leftSQL, rightSQL), allArgs
 		}
 
-		if funcCall, ok := value.(*FunctionCallExpr); ok {
-			rightExpr, err := convertFunctionCallExpr(funcCall, nil)
-			if err != nil {
-				if dialect == "postgres" {
-					return fmt.Sprintf("(%s || ?)", columnName), []interface{}{value}
-				}
-				return fmt.Sprintf("CONCAT(%s, ?)", columnName), []interface{}{value}
-			}
-			rightColumnName := rightExpr.Property
-			rightSQL, rightArgs := buildFunctionSQL(dialect, rightExpr.Operator, rightColumnName, rightExpr.Value)
+		// Handle FilterExpression (converted from nested function call)
+		if filterExpr, ok := value.(*FilterExpression); ok {
+			rightColumnName := filterExpr.Property
+			rightSQL, rightArgs := buildFunctionSQL(dialect, filterExpr.Operator, rightColumnName, filterExpr.Value)
 			if rightSQL == "" {
 				if dialect == "postgres" {
 					return fmt.Sprintf("(%s || ?)", columnName), []interface{}{value}

@@ -158,7 +158,7 @@ func convertComparisonExprWithContext(n *ComparisonExpr, ctx *conversionContext)
 		}
 
 		// Get value from right side
-		value, err := extractValueFromComparison(n.Right)
+		value, err := extractValueFromComparisonWithContext(n.Right, entityMetadata, ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -191,7 +191,7 @@ func convertComparisonExprWithContext(n *ComparisonExpr, ctx *conversionContext)
 		}
 
 		// Get value from right side
-		value, err := extractValueFromComparison(n.Right)
+		value, err := extractValueFromComparisonWithContext(n.Right, entityMetadata, ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -255,7 +255,7 @@ func convertComparisonExprWithContext(n *ComparisonExpr, ctx *conversionContext)
 		return nil, err
 	}
 
-	value, err := extractValueFromComparison(n.Right)
+	value, err := extractValueFromComparisonWithContext(n.Right, entityMetadata, ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -426,6 +426,11 @@ func extractPropertyFromArithmeticExprWithContext(binExpr *BinaryExpr, ctx *conv
 
 // extractValueFromComparison extracts value from the right side of a comparison
 func extractValueFromComparison(node ASTNode) (interface{}, error) {
+	return extractValueFromComparisonWithContext(node, nil, nil)
+}
+
+// extractValueFromComparisonWithContext extracts value from the right side of a comparison with context
+func extractValueFromComparisonWithContext(node ASTNode, entityMetadata *metadata.EntityMetadata, ctx *conversionContext) (interface{}, error) {
 	if lit, ok := node.(*LiteralExpr); ok {
 		return lit.Value, nil
 	}
@@ -435,9 +440,13 @@ func extractValueFromComparison(node ASTNode) (interface{}, error) {
 	}
 	// Support function calls on the right side (e.g., tolower(Name) eq tolower(Name))
 	if funcCall, ok := node.(*FunctionCallExpr); ok {
-		// Return a special marker that this is a function call
-		// The actual function will be processed during SQL generation
-		return funcCall, nil
+		// Convert the FunctionCallExpr to FilterExpression to avoid storing AST nodes
+		funcExpr, err := convertFunctionCallExprWithContext(funcCall, entityMetadata, ctx)
+		if err != nil {
+			return nil, err
+		}
+		// Return the FilterExpression instead of the AST node
+		return funcExpr, nil
 	}
 	return nil, errRightSideOfCompMustBeLitPropFunc
 }
