@@ -81,17 +81,17 @@ func astToFilterExpressionWithContext(node ASTNode, ctx *conversionContext) (*Fi
 		return convertLambdaExprWithContext(n, ctx)
 	case *IdentifierExpr:
 		// Standalone identifier (e.g., for boolean properties)
-		return &FilterExpression{
-			Property: n.Name,
-			Operator: OpEqual,
-			Value:    true,
-		}, nil
+		expr := acquireFilterExpression()
+		expr.Property = n.Name
+		expr.Operator = OpEqual
+		expr.Value = true
+		return expr, nil
 	case *LiteralExpr:
 		// Standalone literal
-		return &FilterExpression{
-			Value:    n.Value,
-			Operator: OpEqual,
-		}, nil
+		expr := acquireFilterExpression()
+		expr.Value = n.Value
+		expr.Operator = OpEqual
+		return expr, nil
 	case *GroupExpr:
 		return astToFilterExpressionWithContext(n.Expr, ctx)
 	}
@@ -112,20 +112,20 @@ func convertBinaryExprWithContext(n *BinaryExpr, ctx *conversionContext) (*Filte
 
 	// Check if this is a logical operator
 	if n.Operator == "and" || n.Operator == "or" {
-		return &FilterExpression{
-			Left:    left,
-			Right:   right,
-			Logical: LogicalOperator(n.Operator),
-		}, nil
+		expr := acquireFilterExpression()
+		expr.Left = left
+		expr.Right = right
+		expr.Logical = LogicalOperator(n.Operator)
+		return expr, nil
 	}
 
 	// Arithmetic operators - for now, we'll convert them to a simple expression
 	// In a full implementation, this would need more sophisticated handling
-	return &FilterExpression{
-		Left:    left,
-		Right:   right,
-		Logical: LogicalOperator(n.Operator), // Store arithmetic operators as logical for now
-	}, nil
+	expr := acquireFilterExpression()
+	expr.Left = left
+	expr.Right = right
+	expr.Logical = LogicalOperator(n.Operator) // Store arithmetic operators as logical for now
+	return expr, nil
 }
 
 // convertUnaryExprWithContext converts a unary expression to a filter expression
@@ -166,11 +166,10 @@ func convertComparisonExprWithContext(n *ComparisonExpr, ctx *conversionContext)
 		// Store the function operator and the comparison operator together
 		// The property holds the column, the operator holds the function,
 		// and we store the comparison operator and value separately
-		filterExpr := &FilterExpression{
-			Property: funcExpr.Property,
-			Operator: funcExpr.Operator, // The function (tolower, length, etc.)
-			Value:    value,
-		}
+		filterExpr := acquireFilterExpression()
+		filterExpr.Property = funcExpr.Property
+		filterExpr.Operator = funcExpr.Operator // The function (tolower, length, etc.)
+		filterExpr.Value = value
 
 		// Store comparison info for SQL generation
 		// We'll use a special marker in the property name to indicate this is a function comparison
@@ -197,12 +196,12 @@ func convertComparisonExprWithContext(n *ComparisonExpr, ctx *conversionContext)
 			return nil, err
 		}
 
-		return &FilterExpression{
-			Property: arithExpr.Property,
-			Operator: FilterOperator(n.Operator),
-			Value:    value,
-			Left:     arithExpr,
-		}, nil
+		expr := acquireFilterExpression()
+		expr.Property = arithExpr.Property
+		expr.Operator = FilterOperator(n.Operator)
+		expr.Value = value
+		expr.Left = arithExpr
+		return expr, nil
 	}
 
 	// Check if left side is a grouped expression
@@ -244,11 +243,11 @@ func convertComparisonExprWithContext(n *ComparisonExpr, ctx *conversionContext)
 			return nil, fmt.Errorf("IN clause size (%d) exceeds maximum allowed (%d)", len(values), ctx.maxInClauseSize)
 		}
 
-		return &FilterExpression{
-			Property: property,
-			Operator: OpIn,
-			Value:    values,
-		}, nil
+		expr := acquireFilterExpression()
+		expr.Property = property
+		expr.Operator = OpIn
+		expr.Value = values
+		return expr, nil
 	}
 
 	property, err := extractPropertyFromComparisonWithContext(n.Left, ctx)
@@ -268,11 +267,11 @@ func convertComparisonExprWithContext(n *ComparisonExpr, ctx *conversionContext)
 		}
 	}
 
-	return &FilterExpression{
-		Property: property,
-		Operator: FilterOperator(n.Operator),
-		Value:    value,
-	}, nil
+	expr := acquireFilterExpression()
+	expr.Property = property
+	expr.Operator = FilterOperator(n.Operator)
+	expr.Value = value
+	return expr, nil
 }
 
 // validateValueAgainstPropertyType validates that a filter value is appropriate for the target property type.
@@ -403,11 +402,11 @@ func convertBinaryArithmeticExprWithContext(binExpr *BinaryExpr, ctx *conversion
 		return nil, errRightSideOfArithMustBeLitPropArith
 	}
 
-	return &FilterExpression{
-		Property: property,
-		Operator: op,
-		Value:    value,
-	}, nil
+	expr := acquireFilterExpression()
+	expr.Property = property
+	expr.Operator = op
+	expr.Value = value
+	return expr, nil
 }
 
 // extractPropertyFromArithmeticExprWithContext extracts property from arithmetic expression

@@ -65,11 +65,10 @@ func convertLambdaExprWithContext(n *LambdaExpr, ctx *conversionContext) (*Filte
 		return nil, errLambdaCollMustBePropPath
 	}
 
-	// Create the lambda filter expression
-	lambdaFilter := &FilterExpression{
-		Property: collectionPath,
-		Operator: FilterOperator(n.Operator),
-	}
+	// Create the lambda filter expression from the pool
+	lambdaFilter := acquireFilterExpression()
+	lambdaFilter.Property = collectionPath
+	lambdaFilter.Operator = FilterOperator(n.Operator)
 
 	// If there's a predicate, convert it
 	if n.Predicate != nil {

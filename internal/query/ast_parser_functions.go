@@ -155,11 +155,11 @@ func convertZeroArgFunction(n *FunctionCallExpr, functionName string) (*FilterEx
 		return nil, fmt.Errorf("function %s requires 0 arguments", functionName)
 	}
 
-	return &FilterExpression{
-		Property: "", // Zero-arg functions don't operate on a property
-		Operator: FilterOperator(functionName),
-		Value:    nil,
-	}, nil
+	expr := acquireFilterExpression()
+	expr.Property = "" // Zero-arg functions don't operate on a property
+	expr.Operator = FilterOperator(functionName)
+	expr.Value = nil
+	return expr, nil
 }
 
 // convertSingleArgFunctionWithContext converts single-argument functions using the provided context
@@ -173,11 +173,11 @@ func convertSingleArgFunctionWithContext(n *FunctionCallExpr, functionName strin
 		return nil, err
 	}
 
-	return &FilterExpression{
-		Property: property,
-		Operator: FilterOperator(functionName),
-		Value:    nil,
-	}, nil
+	expr := acquireFilterExpression()
+	expr.Property = property
+	expr.Operator = FilterOperator(functionName)
+	expr.Value = nil
+	return expr, nil
 }
 
 // convertTwoArgFunctionWithContext converts two-argument functions using the provided context
@@ -207,11 +207,11 @@ func convertTwoArgFunctionWithContext(n *FunctionCallExpr, functionName string, 
 		return nil, fmt.Errorf("second argument of %s must be a literal, property, or function", functionName)
 	}
 
-	return &FilterExpression{
-		Property: property,
-		Operator: FilterOperator(functionName),
-		Value:    value,
-	}, nil
+	expr := acquireFilterExpression()
+	expr.Property = property
+	expr.Operator = FilterOperator(functionName)
+	expr.Value = value
+	return expr, nil
 }
 
 // convertConcatFunctionWithContext converts concat function using the provided context
@@ -271,11 +271,11 @@ func convertConcatFunctionWithContext(n *FunctionCallExpr, entityMetadata *metad
 		value = secondArg
 	}
 
-	return &FilterExpression{
-		Property: property,
-		Operator: OpConcat,
-		Value:    value,
-	}, nil
+	expr := acquireFilterExpression()
+	expr.Property = property
+	expr.Operator = OpConcat
+	expr.Value = value
+	return expr, nil
 }
 
 // convertSubstringFunctionWithContext converts substring function using the provided context
@@ -336,11 +336,11 @@ func convertSubstringFunctionWithContext(n *FunctionCallExpr, entityMetadata *me
 		args = append(args, lit.Value)
 	}
 
-	return &FilterExpression{
-		Property: property,
-		Operator: OpSubstring,
-		Value:    args,
-	}, nil
+	expr := acquireFilterExpression()
+	expr.Property = property
+	expr.Operator = OpSubstring
+	expr.Value = args
+	return expr, nil
 }
 
 // convertArithmeticFunctionWithContext converts arithmetic functions using the provided context
@@ -376,11 +376,11 @@ func convertArithmeticFunctionWithContext(n *FunctionCallExpr, functionName stri
 		return nil, fmt.Errorf("second argument of %s must be a literal or property", functionName)
 	}
 
-	return &FilterExpression{
-		Property: property,
-		Operator: FilterOperator(functionName),
-		Value:    value,
-	}, nil
+	expr := acquireFilterExpression()
+	expr.Property = property
+	expr.Operator = FilterOperator(functionName)
+	expr.Value = value
+	return expr, nil
 }
 
 // convertCastFunctionWithContext converts cast function using the provided context
@@ -435,11 +435,11 @@ func convertCastFunctionWithContext(n *FunctionCallExpr, entityMetadata *metadat
 		return nil, fmt.Errorf("unsupported cast type: %s", typeName)
 	}
 
-	return &FilterExpression{
-		Property: property,
-		Operator: OpCast,
-		Value:    typeName,
-	}, nil
+	expr := acquireFilterExpression()
+	expr.Property = property
+	expr.Operator = OpCast
+	expr.Value = typeName
+	return expr, nil
 }
 
 // convertIsOfFunctionWithContext converts isof function using the provided context
@@ -534,11 +534,11 @@ func convertIsOfFunctionWithContext(n *FunctionCallExpr, entityMetadata *metadat
 		return nil, fmt.Errorf("unsupported isof type: %s", typeName)
 	}
 
-	return &FilterExpression{
-		Property: property,
-		Operator: OpIsOf,
-		Value:    typeName,
-	}, nil
+	expr := acquireFilterExpression()
+	expr.Property = property
+	expr.Operator = OpIsOf
+	expr.Value = typeName
+	return expr, nil
 }
 
 // convertGeospatialFunctionWithContext converts geospatial functions using the provided context
@@ -564,11 +564,11 @@ func convertGeospatialFunctionWithContext(n *FunctionCallExpr, functionName stri
 			return nil, errSecondArgOfGeoDistanceMustBeGeoLit
 		}
 
-		return &FilterExpression{
-			Property: property,
-			Operator: OpGeoDistance,
-			Value:    geoValue,
-		}, nil
+		expr := acquireFilterExpression()
+		expr.Property = property
+		expr.Operator = OpGeoDistance
+		expr.Value = geoValue
+		return expr, nil
 
 	case "geo.length":
 		// geo.length(linestring) - requires 1 argument
@@ -581,11 +581,11 @@ func convertGeospatialFunctionWithContext(n *FunctionCallExpr, functionName stri
 			return nil, err
 		}
 
-		return &FilterExpression{
-			Property: property,
-			Operator: OpGeoLength,
-			Value:    nil,
-		}, nil
+		expr := acquireFilterExpression()
+		expr.Property = property
+		expr.Operator = OpGeoLength
+		expr.Value = nil
+		return expr, nil
 
 	case "geo.intersects":
 		// geo.intersects(geo1, geo2) - requires 2 arguments
@@ -607,11 +607,11 @@ func convertGeospatialFunctionWithContext(n *FunctionCallExpr, functionName stri
 			return nil, errSecondArgOfGeoIntersectsMustBeGeoLit
 		}
 
-		return &FilterExpression{
-			Property: property,
-			Operator: OpGeoIntersects,
-			Value:    geoValue,
-		}, nil
+		expr := acquireFilterExpression()
+		expr.Property = property
+		expr.Operator = OpGeoIntersects
+		expr.Value = geoValue
+		return expr, nil
 
 	default:
 		return nil, fmt.Errorf("unsupported geospatial function: %s", functionName)
