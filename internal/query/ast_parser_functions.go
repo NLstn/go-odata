@@ -39,11 +39,6 @@ func (p *ASTParser) parseFunctionCall(functionName string) (ASTNode, error) {
 	return funcExpr, nil
 }
 
-// convertFunctionCallExpr converts a function call expression to a filter expression
-func convertFunctionCallExpr(n *FunctionCallExpr, entityMetadata *metadata.EntityMetadata) (*FilterExpression, error) {
-	return convertFunctionCallExprWithContext(n, entityMetadata, nil)
-}
-
 // convertFunctionCallExprWithContext converts a function call expression to a filter expression using the provided context
 func convertFunctionCallExprWithContext(n *FunctionCallExpr, entityMetadata *metadata.EntityMetadata, ctx *conversionContext) (*FilterExpression, error) {
 	functionName := n.Function
