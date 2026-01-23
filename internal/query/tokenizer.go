@@ -53,7 +53,7 @@ func NewTokenizer(input string) *Tokenizer {
 	if estimatedTokens < minTokenSliceCapacity {
 		estimatedTokens = minTokenSliceCapacity
 	}
-	
+
 	t := &Tokenizer{
 		input:       input,
 		pos:         0,
@@ -79,12 +79,12 @@ func (t *Tokenizer) getToken(typ TokenType, value string, pos int) *Token {
 		copy(newBuffer, t.tokenBuffer)
 		t.tokenBuffer = newBuffer
 	}
-	
+
 	// Extend slice if needed
 	if t.tokenIndex >= len(t.tokenBuffer) {
 		t.tokenBuffer = t.tokenBuffer[:t.tokenIndex+1]
 	}
-	
+
 	// Reuse token from buffer
 	tok := &t.tokenBuffer[t.tokenIndex]
 	tok.Type = typ
@@ -122,61 +122,61 @@ func (t *Tokenizer) skipWhitespace() {
 // readString reads a quoted string
 // Per OData v4 spec, single quotes within string literals are escaped by doubling them (")
 func (t *Tokenizer) readString() string {
-quote := t.ch
-t.advance() // skip opening quote
+	quote := t.ch
+	t.advance() // skip opening quote
 
-start := t.pos
-hasEscapes := false
+	start := t.pos
+	hasEscapes := false
 
-// Fast path: scan for simple strings without escape sequences
-for t.ch != 0 {
-if t.ch == quote {
-if t.peek() == quote {
-// Found an escaped quote - need to use slow path
-hasEscapes = true
-break
-}
-// This is the closing quote
-result := t.input[start:t.pos]
-t.advance() // skip closing quote
-return result
-}
-t.advance()
-}
+	// Fast path: scan for simple strings without escape sequences
+	for t.ch != 0 {
+		if t.ch == quote {
+			if t.peek() == quote {
+				// Found an escaped quote - need to use slow path
+				hasEscapes = true
+				break
+			}
+			// This is the closing quote
+			result := t.input[start:t.pos]
+			t.advance() // skip closing quote
+			return result
+		}
+		t.advance()
+	}
 
-// Slow path: handle escape sequences
-if hasEscapes {
-var result strings.Builder
-// Pre-size buffer: content so far plus extra for potential escape sequence growth
-result.Grow(t.pos - start + stringBuilderExtraCapacity)
-// Write what we've read so far
-result.WriteString(t.input[start:t.pos])
+	// Slow path: handle escape sequences
+	if hasEscapes {
+		var result strings.Builder
+		// Pre-size buffer: content so far plus extra for potential escape sequence growth
+		result.Grow(t.pos - start + stringBuilderExtraCapacity)
+		// Write what we've read so far
+		result.WriteString(t.input[start:t.pos])
 
-for t.ch != 0 {
-if t.ch == quote {
-if t.peek() == quote {
-// This is an escaped quote - add one quote to result and skip both
-result.WriteRune(quote)
-t.advance() // skip first quote
-t.advance() // skip second quote
-} else {
-// This is the closing quote
-break
-}
-} else {
-result.WriteRune(t.ch)
-t.advance()
-}
-}
+		for t.ch != 0 {
+			if t.ch == quote {
+				if t.peek() == quote {
+					// This is an escaped quote - add one quote to result and skip both
+					result.WriteRune(quote)
+					t.advance() // skip first quote
+					t.advance() // skip second quote
+				} else {
+					// This is the closing quote
+					break
+				}
+			} else {
+				result.WriteRune(t.ch)
+				t.advance()
+			}
+		}
 
-if t.ch == quote {
-t.advance() // skip closing quote
-}
-return result.String()
-}
+		if t.ch == quote {
+			t.advance() // skip closing quote
+		}
+		return result.String()
+	}
 
-// String ended without closing quote
-return t.input[start:t.pos]
+	// String ended without closing quote
+	return t.input[start:t.pos]
 }
 
 // readNumber reads a number

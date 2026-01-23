@@ -22,11 +22,11 @@ func (p *ASTParser) parseArithmetic() (ASTNode, error) {
 		if err != nil {
 			return nil, err
 		}
-		left = &BinaryExpr{
-			Left:     left,
-			Operator: op.Value,
-			Right:    right,
-		}
+		expr := AcquireBinaryExpr()
+		expr.Left = left
+		expr.Operator = op.Value
+		expr.Right = right
+		left = expr
 	}
 
 	return left, nil
@@ -48,11 +48,11 @@ func (p *ASTParser) parseTerm() (ASTNode, error) {
 		if err != nil {
 			return nil, err
 		}
-		left = &BinaryExpr{
-			Left:     left,
-			Operator: op.Value,
-			Right:    right,
-		}
+		expr := AcquireBinaryExpr()
+		expr.Left = left
+		expr.Operator = op.Value
+		expr.Right = right
+		left = expr
 	}
 
 	return left, nil
@@ -76,10 +76,16 @@ func (p *ASTParser) parsePrimary() (ASTNode, error) {
 					// Consume INF/NaN and return negative value
 					p.advance()
 					if lowerValue == "inf" {
-						return &LiteralExpr{Value: math.Inf(-1), Type: "number"}, nil // -INF
+						expr := AcquireLiteralExpr()
+						expr.Value = math.Inf(-1)
+						expr.Type = "number"
+						return expr, nil // -INF
 					} else {
 						// Note: -NaN is technically the same as NaN, but we handle it for completeness
-						return &LiteralExpr{Value: math.NaN(), Type: "number"}, nil // NaN
+						expr := AcquireLiteralExpr()
+						expr.Value = math.NaN()
+						expr.Type = "number"
+						return expr, nil // NaN
 					}
 				}
 			}
@@ -114,7 +120,9 @@ func (p *ASTParser) parseGroupedExpression() (ASTNode, error) {
 	if err := p.expect(TokenRParen); err != nil {
 		return nil, err
 	}
-	return &GroupExpr{Expr: expr}, nil
+	groupExpr := AcquireGroupExpr()
+	groupExpr.Expr = expr
+	return groupExpr, nil
 }
 
 // parseLiteral parses literal values (string, number, boolean, null, date, time, GUID)
@@ -122,29 +130,50 @@ func (p *ASTParser) parseLiteral(token *Token) ASTNode {
 	switch token.Type {
 	case TokenString:
 		p.advance()
-		return &LiteralExpr{Value: token.Value, Type: "string"}
+		expr := AcquireLiteralExpr()
+		expr.Value = token.Value
+		expr.Type = "string"
+		return expr
 	case TokenNumber:
 		p.advance()
 		return p.parseNumberLiteral(token.Value)
 	case TokenBoolean:
 		p.advance()
 		boolVal := token.Value == "true"
-		return &LiteralExpr{Value: boolVal, Type: "boolean"}
+		expr := AcquireLiteralExpr()
+		expr.Value = boolVal
+		expr.Type = "boolean"
+		return expr
 	case TokenNull:
 		p.advance()
-		return &LiteralExpr{Value: nil, Type: "null"}
+		expr := AcquireLiteralExpr()
+		expr.Value = nil
+		expr.Type = "null"
+		return expr
 	case TokenDate:
 		p.advance()
-		return &LiteralExpr{Value: token.Value, Type: "date"}
+		expr := AcquireLiteralExpr()
+		expr.Value = token.Value
+		expr.Type = "date"
+		return expr
 	case TokenTime:
 		p.advance()
-		return &LiteralExpr{Value: token.Value, Type: "time"}
+		expr := AcquireLiteralExpr()
+		expr.Value = token.Value
+		expr.Type = "time"
+		return expr
 	case TokenDateTime:
 		p.advance()
-		return &LiteralExpr{Value: token.Value, Type: "datetime"}
+		expr := AcquireLiteralExpr()
+		expr.Value = token.Value
+		expr.Type = "datetime"
+		return expr
 	case TokenGUID:
 		p.advance()
-		return &LiteralExpr{Value: token.Value, Type: "guid"}
+		expr := AcquireLiteralExpr()
+		expr.Value = token.Value
+		expr.Type = "guid"
+		return expr
 	default:
 		return nil
 	}
@@ -156,21 +185,39 @@ func (p *ASTParser) parseNumberLiteral(value string) ASTNode {
 	lowerValue := strings.ToLower(value)
 	switch lowerValue {
 	case "inf":
-		return &LiteralExpr{Value: math.Inf(1), Type: "number"}
+		expr := AcquireLiteralExpr()
+		expr.Value = math.Inf(1)
+		expr.Type = "number"
+		return expr
 	case "-inf":
-		return &LiteralExpr{Value: math.Inf(-1), Type: "number"}
+		expr := AcquireLiteralExpr()
+		expr.Value = math.Inf(-1)
+		expr.Type = "number"
+		return expr
 	case "nan":
-		return &LiteralExpr{Value: math.NaN(), Type: "number"}
+		expr := AcquireLiteralExpr()
+		expr.Value = math.NaN()
+		expr.Type = "number"
+		return expr
 	}
 
 	// Try to parse as integer first, then as float
 	if intVal, err := strconv.ParseInt(value, 10, 64); err == nil {
-		return &LiteralExpr{Value: intVal, Type: "number"}
+		expr := AcquireLiteralExpr()
+		expr.Value = intVal
+		expr.Type = "number"
+		return expr
 	}
 	if floatVal, err := strconv.ParseFloat(value, 64); err == nil {
-		return &LiteralExpr{Value: floatVal, Type: "number"}
+		expr := AcquireLiteralExpr()
+		expr.Value = floatVal
+		expr.Type = "number"
+		return expr
 	}
-	return &LiteralExpr{Value: value, Type: "number"}
+	expr := AcquireLiteralExpr()
+	expr.Value = value
+	expr.Type = "number"
+	return expr
 }
 
 // parseIdentifierOrFunctionCall parses an identifier or function call
@@ -183,7 +230,10 @@ func (p *ASTParser) parseIdentifierOrFunctionCall(token *Token) (ASTNode, error)
 		geoType := lowerIdent
 		geoValue := p.currentToken().Value
 		p.advance()
-		return &LiteralExpr{Value: geoValue, Type: geoType}, nil
+		expr := AcquireLiteralExpr()
+		expr.Value = geoValue
+		expr.Type = geoType
+		return expr, nil
 	}
 
 	// Check for property path with slashes (e.g., Orders/Items or Tags/any)
@@ -201,7 +251,9 @@ func (p *ASTParser) parseIdentifierOrFunctionCall(token *Token) (ASTNode, error)
 		return p.parseFunctionCall(token.Value)
 	}
 
-	return &IdentifierExpr{Name: token.Value}, nil
+	identExpr := AcquireIdentifierExpr()
+	identExpr.Name = token.Value
+	return identExpr, nil
 }
 
 // parsePropertyPath parses a property path with slashes (e.g., Orders/Items/any)
@@ -248,5 +300,7 @@ func (p *ASTParser) parsePropertyPath(initialProp string) (ASTNode, error) {
 		return p.parseFunctionCall(path)
 	}
 
-	return &IdentifierExpr{Name: path}, nil
+	identExpr := AcquireIdentifierExpr()
+	identExpr.Name = path
+	return identExpr, nil
 }

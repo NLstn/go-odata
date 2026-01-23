@@ -515,4 +515,3 @@ func TestJobIsTerminal(t *testing.T) {
 		}
 	})
 }
-

@@ -15,11 +15,11 @@ func (p *ASTParser) parseAnd() (ASTNode, error) {
 		if err != nil {
 			return nil, err
 		}
-		left = &BinaryExpr{
-			Left:     left,
-			Operator: op.Value,
-			Right:    right,
-		}
+		expr := AcquireBinaryExpr()
+		expr.Left = left
+		expr.Operator = op.Value
+		expr.Right = right
+		left = expr
 	}
 
 	return left, nil
@@ -33,10 +33,10 @@ func (p *ASTParser) parseNot() (ASTNode, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &UnaryExpr{
-			Operator: op.Value,
-			Operand:  operand,
-		}, nil
+		expr := AcquireUnaryExpr()
+		expr.Operator = op.Value
+		expr.Operand = operand
+		return expr, nil
 	}
 
 	return p.parseComparison()
@@ -59,22 +59,22 @@ func (p *ASTParser) parseComparison() (ASTNode, error) {
 			if err != nil {
 				return nil, err
 			}
-			return &ComparisonExpr{
-				Left:     left,
-				Operator: op.Value,
-				Right:    right,
-			}, nil
+			expr := AcquireComparisonExpr()
+			expr.Left = left
+			expr.Operator = op.Value
+			expr.Right = right
+			return expr, nil
 		}
 
 		right, err := p.parseArithmetic()
 		if err != nil {
 			return nil, err
 		}
-		return &ComparisonExpr{
-			Left:     left,
-			Operator: op.Value,
-			Right:    right,
-		}, nil
+		expr := AcquireComparisonExpr()
+		expr.Left = left
+		expr.Operator = op.Value
+		expr.Right = right
+		return expr, nil
 	}
 
 	return left, nil
@@ -110,5 +110,7 @@ func (p *ASTParser) parseCollection() (ASTNode, error) {
 		return nil, err
 	}
 
-	return &CollectionExpr{Values: values}, nil
+	expr := AcquireCollectionExpr()
+	expr.Values = values
+	return expr, nil
 }

@@ -36,21 +36,21 @@ var (
 	errExpectedCommaAfterGroupByProps = errors.New("expected comma after groupby properties")
 
 	// Parenthesis errors
-	errMissingClosingParenAggregate        = errors.New("missing closing parenthesis in aggregate")
-	errMissingClosingParenCompute          = errors.New("missing closing parenthesis in compute")
-	errMissingClosingParenFilter           = errors.New("missing closing parenthesis in filter")
-	errMissingClosingParenGroupBy          = errors.New("missing closing parenthesis in groupby")
-	errMissingClosingParenGroupByProps     = errors.New("missing closing parenthesis for groupby properties")
+	errMissingClosingParenAggregate    = errors.New("missing closing parenthesis in aggregate")
+	errMissingClosingParenCompute      = errors.New("missing closing parenthesis in compute")
+	errMissingClosingParenFilter       = errors.New("missing closing parenthesis in filter")
+	errMissingClosingParenGroupBy      = errors.New("missing closing parenthesis in groupby")
+	errMissingClosingParenGroupByProps = errors.New("missing closing parenthesis for groupby properties")
 
 	// $expand errors
-	errInvalidExpandSyntaxMissingQuote = errors.New("invalid $expand syntax: missing closing quote")
-	errInvalidExpandSyntaxMissingParen = errors.New("invalid $expand syntax: missing ')'")
+	errInvalidExpandSyntaxMissingQuote    = errors.New("invalid $expand syntax: missing closing quote")
+	errInvalidExpandSyntaxMissingParen    = errors.New("invalid $expand syntax: missing ')'")
 	errInvalidExpandSyntaxUnexpectedParen = errors.New("invalid $expand syntax: unexpected ')'")
 
 	// $levels errors
-	errLevelsMustBeIntOrMax          = errors.New("$levels must be a positive integer or 'max'")
-	errLevelsMaxRequiresDepth        = errors.New("$levels=max requires a positive maximum expand depth")
-	errNestedLevelsMustBeIntOrMax    = errors.New("invalid nested $levels: must be a positive integer or 'max'")
+	errLevelsMustBeIntOrMax       = errors.New("$levels must be a positive integer or 'max'")
+	errLevelsMaxRequiresDepth     = errors.New("$levels=max requires a positive maximum expand depth")
+	errNestedLevelsMustBeIntOrMax = errors.New("invalid nested $levels: must be a positive integer or 'max'")
 
 	// Navigation metadata errors
 	errNavMetadataMissingForCompute = errors.New("navigation target metadata is missing for $compute")
@@ -60,40 +60,40 @@ var (
 	errNavMetadataMissingForSelect  = errors.New("navigation target metadata is missing for $select")
 
 	// Query option errors
-	errSkipTokenAndSkipTogether  = errors.New("$skiptoken and $skip cannot be used together")
-	errInvalidCount              = errors.New("invalid $count: must be 'true' or 'false'")
-	errNestedCountInvalid        = errors.New("invalid nested $count: must be 'true' or 'false'")
-	errInvalidIndex              = errors.New("invalid $index: must not have a value")
-	errInvalidSchemaVersion      = errors.New("invalid $schemaversion: schema version cannot be empty")
-	errInvalidSearch             = errors.New("invalid $search: search query cannot be empty")
+	errSkipTokenAndSkipTogether = errors.New("$skiptoken and $skip cannot be used together")
+	errInvalidCount             = errors.New("invalid $count: must be 'true' or 'false'")
+	errNestedCountInvalid       = errors.New("invalid nested $count: must be 'true' or 'false'")
+	errInvalidIndex             = errors.New("invalid $index: must not have a value")
+	errInvalidSchemaVersion     = errors.New("invalid $schemaversion: schema version cannot be empty")
+	errInvalidSearch            = errors.New("invalid $search: search query cannot be empty")
 
 	// Parameter alias errors
 	errEmptyAliasName = errors.New("invalid parameter alias: empty alias name")
 
 	// Function argument errors
-	errCastRequires2Args        = errors.New("function cast requires 2 arguments")
-	errConcatRequires2Args      = errors.New("function concat requires 2 arguments")
-	errSubstringRequires2Or3Args = errors.New("function substring requires 2 or 3 arguments")
-	errGeoDistanceRequires2Args = errors.New("function geo.distance requires 2 arguments")
+	errCastRequires2Args          = errors.New("function cast requires 2 arguments")
+	errConcatRequires2Args        = errors.New("function concat requires 2 arguments")
+	errSubstringRequires2Or3Args  = errors.New("function substring requires 2 or 3 arguments")
+	errGeoDistanceRequires2Args   = errors.New("function geo.distance requires 2 arguments")
 	errGeoIntersectsRequires2Args = errors.New("function geo.intersects requires 2 arguments")
-	errGeoLengthRequires1Arg    = errors.New("function geo.length requires 1 argument")
-	errIsOfRequires1Or2Args     = errors.New("function isof requires 1 or 2 arguments")
+	errGeoLengthRequires1Arg      = errors.New("function geo.length requires 1 argument")
+	errIsOfRequires1Or2Args       = errors.New("function isof requires 1 or 2 arguments")
 
 	// Function argument type errors
-	errSubstringArgsMustBeLiterals  = errors.New("substring arguments must be literals")
-	errSubstringStartNonNegative    = errors.New("substring start parameter must be non-negative")
-	errSubstringLengthNonNegative   = errors.New("substring length parameter must be non-negative")
-	errSecondArgOfCastMustBeType    = errors.New("second argument of cast must be a type name")
-	errSecondArgOfIsOfMustBeType    = errors.New("second argument of isof must be a type name")
-	errArgOfIsOfMustBeType          = errors.New("argument of isof must be a type name")
-	errFirstArgOfConcatMustBeLitPropFunc = errors.New("first argument of concat must be a literal, property, or function")
-	errSecondArgOfConcatMustBeLitPropFunc = errors.New("second argument of concat must be a literal, property, or function")
-	errSecondArgOfGeoDistanceMustBeGeoLit = errors.New("second argument of geo.distance must be a geography or geometry literal")
+	errSubstringArgsMustBeLiterals          = errors.New("substring arguments must be literals")
+	errSubstringStartNonNegative            = errors.New("substring start parameter must be non-negative")
+	errSubstringLengthNonNegative           = errors.New("substring length parameter must be non-negative")
+	errSecondArgOfCastMustBeType            = errors.New("second argument of cast must be a type name")
+	errSecondArgOfIsOfMustBeType            = errors.New("second argument of isof must be a type name")
+	errArgOfIsOfMustBeType                  = errors.New("argument of isof must be a type name")
+	errFirstArgOfConcatMustBeLitPropFunc    = errors.New("first argument of concat must be a literal, property, or function")
+	errSecondArgOfConcatMustBeLitPropFunc   = errors.New("second argument of concat must be a literal, property, or function")
+	errSecondArgOfGeoDistanceMustBeGeoLit   = errors.New("second argument of geo.distance must be a geography or geometry literal")
 	errSecondArgOfGeoIntersectsMustBeGeoLit = errors.New("second argument of geo.intersects must be a geography or geometry literal")
 
 	// Comparison/arithmetic errors
-	errLeftSideOfCompMustBeProp      = errors.New("left side of comparison must be a property name or arithmetic expression")
-	errRightSideOfCompMustBeLitPropFunc = errors.New("right side of comparison must be a literal, property, or function")
+	errLeftSideOfCompMustBeProp           = errors.New("left side of comparison must be a property name or arithmetic expression")
+	errRightSideOfCompMustBeLitPropFunc   = errors.New("right side of comparison must be a literal, property, or function")
 	errRightSideOfArithMustBeLitPropArith = errors.New("right side of arithmetic expression must be a literal, property, or arithmetic expression")
 
 	// Lambda errors

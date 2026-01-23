@@ -72,11 +72,11 @@ func (p *ASTParser) parseOr() (ASTNode, error) {
 		if err != nil {
 			return nil, err
 		}
-		left = &BinaryExpr{
-			Left:     left,
-			Operator: op.Value,
-			Right:    right,
-		}
+		expr := AcquireBinaryExpr()
+		expr.Left = left
+		expr.Operator = op.Value
+		expr.Right = right
+		left = expr
 	}
 
 	return left, nil

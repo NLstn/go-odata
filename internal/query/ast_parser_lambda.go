@@ -17,12 +17,14 @@ func (p *ASTParser) parseLambdaExpression(collectionPath, operator string) (ASTN
 	// Check if this is parameterless any/all (e.g., Tags/any())
 	if p.currentToken().Type == TokenRParen {
 		p.advance() // consume ')'
-		return &LambdaExpr{
-			Collection:    &IdentifierExpr{Name: collectionPath},
-			Operator:      operator,
-			RangeVariable: "",
-			Predicate:     nil,
-		}, nil
+		collIdent := AcquireIdentifierExpr()
+		collIdent.Name = collectionPath
+		lambdaExpr := AcquireLambdaExpr()
+		lambdaExpr.Collection = collIdent
+		lambdaExpr.Operator = operator
+		lambdaExpr.RangeVariable = ""
+		lambdaExpr.Predicate = nil
+		return lambdaExpr, nil
 	}
 
 	// Parse range variable (e.g., "t" in "t: ...")
@@ -47,12 +49,14 @@ func (p *ASTParser) parseLambdaExpression(collectionPath, operator string) (ASTN
 		return nil, err
 	}
 
-	return &LambdaExpr{
-		Collection:    &IdentifierExpr{Name: collectionPath},
-		Operator:      operator,
-		RangeVariable: rangeVariable,
-		Predicate:     predicate,
-	}, nil
+	collIdent := AcquireIdentifierExpr()
+	collIdent.Name = collectionPath
+	lambdaExpr := AcquireLambdaExpr()
+	lambdaExpr.Collection = collIdent
+	lambdaExpr.Operator = operator
+	lambdaExpr.RangeVariable = rangeVariable
+	lambdaExpr.Predicate = predicate
+	return lambdaExpr, nil
 }
 
 // convertLambdaExprWithContext converts a lambda expression (any/all) to a filter expression using the provided context
@@ -120,58 +124,62 @@ func replaceRangeVariableInAST(node ASTNode, rangeVariable string) ASTNode {
 		if n.Name == rangeVariable {
 			// This is a direct reference to the collection element
 			// We'll represent this as a special marker
-			return &IdentifierExpr{Name: "$it"}
+			expr := AcquireIdentifierExpr()
+			expr.Name = "$it"
+			return expr
 		}
 		// Check if this is a property path starting with range variable
 		if strings.HasPrefix(n.Name, rangeVariable+"/") {
 			// Strip the range variable prefix
-			return &IdentifierExpr{Name: strings.TrimPrefix(n.Name, rangeVariable+"/")}
+			expr := AcquireIdentifierExpr()
+			expr.Name = strings.TrimPrefix(n.Name, rangeVariable+"/")
+			return expr
 		}
 		return n
 
 	case *BinaryExpr:
-		return &BinaryExpr{
-			Left:     replaceRangeVariableInAST(n.Left, rangeVariable),
-			Operator: n.Operator,
-			Right:    replaceRangeVariableInAST(n.Right, rangeVariable),
-		}
+		expr := AcquireBinaryExpr()
+		expr.Left = replaceRangeVariableInAST(n.Left, rangeVariable)
+		expr.Operator = n.Operator
+		expr.Right = replaceRangeVariableInAST(n.Right, rangeVariable)
+		return expr
 
 	case *UnaryExpr:
-		return &UnaryExpr{
-			Operator: n.Operator,
-			Operand:  replaceRangeVariableInAST(n.Operand, rangeVariable),
-		}
+		expr := AcquireUnaryExpr()
+		expr.Operator = n.Operator
+		expr.Operand = replaceRangeVariableInAST(n.Operand, rangeVariable)
+		return expr
 
 	case *ComparisonExpr:
-		return &ComparisonExpr{
-			Left:     replaceRangeVariableInAST(n.Left, rangeVariable),
-			Operator: n.Operator,
-			Right:    replaceRangeVariableInAST(n.Right, rangeVariable),
-		}
+		expr := AcquireComparisonExpr()
+		expr.Left = replaceRangeVariableInAST(n.Left, rangeVariable)
+		expr.Operator = n.Operator
+		expr.Right = replaceRangeVariableInAST(n.Right, rangeVariable)
+		return expr
 
 	case *FunctionCallExpr:
 		newArgs := make([]ASTNode, len(n.Args))
 		for i, arg := range n.Args {
 			newArgs[i] = replaceRangeVariableInAST(arg, rangeVariable)
 		}
-		return &FunctionCallExpr{
-			Function: n.Function,
-			Args:     newArgs,
-		}
+		expr := AcquireFunctionCallExpr()
+		expr.Function = n.Function
+		expr.Args = newArgs
+		return expr
 
 	case *GroupExpr:
-		return &GroupExpr{
-			Expr: replaceRangeVariableInAST(n.Expr, rangeVariable),
-		}
+		expr := AcquireGroupExpr()
+		expr.Expr = replaceRangeVariableInAST(n.Expr, rangeVariable)
+		return expr
 
 	case *LambdaExpr:
 		// Nested lambda - recursively replace
-		return &LambdaExpr{
-			Collection:    replaceRangeVariableInAST(n.Collection, rangeVariable),
-			Operator:      n.Operator,
-			RangeVariable: n.RangeVariable,
-			Predicate:     replaceRangeVariableInAST(n.Predicate, rangeVariable),
-		}
+		expr := AcquireLambdaExpr()
+		expr.Collection = replaceRangeVariableInAST(n.Collection, rangeVariable)
+		expr.Operator = n.Operator
+		expr.RangeVariable = n.RangeVariable
+		expr.Predicate = replaceRangeVariableInAST(n.Predicate, rangeVariable)
+		return expr
 	}
 
 	// For literal expressions and other types, return as is

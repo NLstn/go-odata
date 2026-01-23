@@ -33,10 +33,10 @@ func (p *ASTParser) parseFunctionCall(functionName string) (ASTNode, error) {
 		return nil, err
 	}
 
-	return &FunctionCallExpr{
-		Function: functionName,
-		Args:     args,
-	}, nil
+	funcExpr := AcquireFunctionCallExpr()
+	funcExpr.Function = functionName
+	funcExpr.Args = args
+	return funcExpr, nil
 }
 
 // convertFunctionCallExpr converts a function call expression to a filter expression

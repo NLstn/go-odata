@@ -309,293 +309,293 @@ func TestEntityHandlerHandleFetchError(t *testing.T) {
 }
 
 func TestParseEntityKeyValues(t *testing.T) {
-tests := []struct {
-name          string
-entityKey     string
-keyProperties []metadata.PropertyMetadata
-expected      map[string]interface{}
-}{
-{
-name:      "Empty entity key",
-entityKey: "",
-keyProperties: []metadata.PropertyMetadata{
-{JsonName: "ID", Name: "ID", Type: reflect.TypeOf(int(0))},
-},
-expected: nil,
-},
-{
-name:      "Single numeric key",
-entityKey: "42",
-keyProperties: []metadata.PropertyMetadata{
-{JsonName: "ID", Name: "ID", Type: reflect.TypeOf(int64(0))},
-},
-expected: map[string]interface{}{
-"ID": int64(42),
-},
-},
-{
-name:      "Single string key",
-entityKey: "abc123",
-keyProperties: []metadata.PropertyMetadata{
-{JsonName: "Code", Name: "Code", Type: reflect.TypeOf(string(""))},
-},
-expected: map[string]interface{}{
-"Code": "abc123",
-},
-},
-{
-name:      "Composite key with two integers",
-entityKey: "OrderID=1,ProductID=5",
-keyProperties: []metadata.PropertyMetadata{
-{JsonName: "OrderID", Name: "OrderID", Type: reflect.TypeOf(int64(0))},
-{JsonName: "ProductID", Name: "ProductID", Type: reflect.TypeOf(int64(0))},
-},
-expected: map[string]interface{}{
-"OrderID":   int64(1),
-"ProductID": int64(5),
-},
-},
-{
-name:      "Composite key with integer and string",
-entityKey: "ProductID=1,LanguageKey='EN'",
-keyProperties: []metadata.PropertyMetadata{
-{JsonName: "ProductID", Name: "ProductID", Type: reflect.TypeOf(uint(0))},
-{JsonName: "LanguageKey", Name: "LanguageKey", Type: reflect.TypeOf(string(""))},
-},
-expected: map[string]interface{}{
-"ProductID":   uint(1),
-"LanguageKey": "EN",
-},
-},
-{
-name:      "Composite key with quoted strings",
-entityKey: "FirstName='John',LastName='Doe'",
-keyProperties: []metadata.PropertyMetadata{
-{JsonName: "FirstName", Name: "FirstName", Type: reflect.TypeOf(string(""))},
-{JsonName: "LastName", Name: "LastName", Type: reflect.TypeOf(string(""))},
-},
-expected: map[string]interface{}{
-"FirstName": "John",
-"LastName":  "Doe",
-},
-},
-{
-name:      "Single key with equals sign (treated as composite)",
-entityKey: "ID=123",
-keyProperties: []metadata.PropertyMetadata{
-{JsonName: "ID", Name: "ID", Type: reflect.TypeOf(int(0))},
-},
-expected: map[string]interface{}{
-"ID": int(123),
-},
-},
-{
-name:          "Non-empty entity key with nil keyProperties",
-entityKey:     "42",
-keyProperties: nil,
-expected:      map[string]interface{}{},
-},
-{
-name:          "Non-empty entity key with empty keyProperties",
-entityKey:     "123",
-keyProperties: []metadata.PropertyMetadata{},
-expected:      map[string]interface{}{},
-},
-}
+	tests := []struct {
+		name          string
+		entityKey     string
+		keyProperties []metadata.PropertyMetadata
+		expected      map[string]interface{}
+	}{
+		{
+			name:      "Empty entity key",
+			entityKey: "",
+			keyProperties: []metadata.PropertyMetadata{
+				{JsonName: "ID", Name: "ID", Type: reflect.TypeOf(int(0))},
+			},
+			expected: nil,
+		},
+		{
+			name:      "Single numeric key",
+			entityKey: "42",
+			keyProperties: []metadata.PropertyMetadata{
+				{JsonName: "ID", Name: "ID", Type: reflect.TypeOf(int64(0))},
+			},
+			expected: map[string]interface{}{
+				"ID": int64(42),
+			},
+		},
+		{
+			name:      "Single string key",
+			entityKey: "abc123",
+			keyProperties: []metadata.PropertyMetadata{
+				{JsonName: "Code", Name: "Code", Type: reflect.TypeOf(string(""))},
+			},
+			expected: map[string]interface{}{
+				"Code": "abc123",
+			},
+		},
+		{
+			name:      "Composite key with two integers",
+			entityKey: "OrderID=1,ProductID=5",
+			keyProperties: []metadata.PropertyMetadata{
+				{JsonName: "OrderID", Name: "OrderID", Type: reflect.TypeOf(int64(0))},
+				{JsonName: "ProductID", Name: "ProductID", Type: reflect.TypeOf(int64(0))},
+			},
+			expected: map[string]interface{}{
+				"OrderID":   int64(1),
+				"ProductID": int64(5),
+			},
+		},
+		{
+			name:      "Composite key with integer and string",
+			entityKey: "ProductID=1,LanguageKey='EN'",
+			keyProperties: []metadata.PropertyMetadata{
+				{JsonName: "ProductID", Name: "ProductID", Type: reflect.TypeOf(uint(0))},
+				{JsonName: "LanguageKey", Name: "LanguageKey", Type: reflect.TypeOf(string(""))},
+			},
+			expected: map[string]interface{}{
+				"ProductID":   uint(1),
+				"LanguageKey": "EN",
+			},
+		},
+		{
+			name:      "Composite key with quoted strings",
+			entityKey: "FirstName='John',LastName='Doe'",
+			keyProperties: []metadata.PropertyMetadata{
+				{JsonName: "FirstName", Name: "FirstName", Type: reflect.TypeOf(string(""))},
+				{JsonName: "LastName", Name: "LastName", Type: reflect.TypeOf(string(""))},
+			},
+			expected: map[string]interface{}{
+				"FirstName": "John",
+				"LastName":  "Doe",
+			},
+		},
+		{
+			name:      "Single key with equals sign (treated as composite)",
+			entityKey: "ID=123",
+			keyProperties: []metadata.PropertyMetadata{
+				{JsonName: "ID", Name: "ID", Type: reflect.TypeOf(int(0))},
+			},
+			expected: map[string]interface{}{
+				"ID": int(123),
+			},
+		},
+		{
+			name:          "Non-empty entity key with nil keyProperties",
+			entityKey:     "42",
+			keyProperties: nil,
+			expected:      map[string]interface{}{},
+		},
+		{
+			name:          "Non-empty entity key with empty keyProperties",
+			entityKey:     "123",
+			keyProperties: []metadata.PropertyMetadata{},
+			expected:      map[string]interface{}{},
+		},
+	}
 
-for _, tt := range tests {
-t.Run(tt.name, func(t *testing.T) {
-result := parseEntityKeyValues(tt.entityKey, tt.keyProperties)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parseEntityKeyValues(tt.entityKey, tt.keyProperties)
 
-if tt.expected == nil {
-if result != nil {
-t.Errorf("Expected nil result, got %v", result)
-}
-return
-}
+			if tt.expected == nil {
+				if result != nil {
+					t.Errorf("Expected nil result, got %v", result)
+				}
+				return
+			}
 
-if result == nil {
-t.Fatalf("Expected non-nil result, got nil")
-}
+			if result == nil {
+				t.Fatalf("Expected non-nil result, got nil")
+			}
 
-if len(result) != len(tt.expected) {
-t.Errorf("Expected %d key-value pairs, got %d", len(tt.expected), len(result))
-}
+			if len(result) != len(tt.expected) {
+				t.Errorf("Expected %d key-value pairs, got %d", len(tt.expected), len(result))
+			}
 
-for key, expectedValue := range tt.expected {
-actualValue, ok := result[key]
-if !ok {
-t.Errorf("Expected key %s not found in result", key)
-continue
-}
-if actualValue != expectedValue {
-t.Errorf("For key %s: expected %v (%T), got %v (%T)",
-key, expectedValue, expectedValue, actualValue, actualValue)
-}
-}
-})
-}
+			for key, expectedValue := range tt.expected {
+				actualValue, ok := result[key]
+				if !ok {
+					t.Errorf("Expected key %s not found in result", key)
+					continue
+				}
+				if actualValue != expectedValue {
+					t.Errorf("For key %s: expected %v (%T), got %v (%T)",
+						key, expectedValue, expectedValue, actualValue, actualValue)
+				}
+			}
+		})
+	}
 }
 
 func TestConvertKeyValue(t *testing.T) {
-tests := []struct {
-name          string
-value         string
-keyName       string
-keyProperties []metadata.PropertyMetadata
-expected      interface{}
-}{
-{
-name:    "Convert to int",
-value:   "42",
-keyName: "ID",
-keyProperties: []metadata.PropertyMetadata{
-{JsonName: "ID", Name: "ID", Type: reflect.TypeOf(int(0))},
-},
-expected: int(42),
-},
-{
-name:    "Convert to int8",
-value:   "42",
-keyName: "ID",
-keyProperties: []metadata.PropertyMetadata{
-{JsonName: "ID", Name: "ID", Type: reflect.TypeOf(int8(0))},
-},
-expected: int8(42),
-},
-{
-name:    "Convert to int16",
-value:   "100",
-keyName: "ID",
-keyProperties: []metadata.PropertyMetadata{
-{JsonName: "ID", Name: "ID", Type: reflect.TypeOf(int16(0))},
-},
-expected: int16(100),
-},
-{
-name:    "Convert to int32",
-value:   "1000",
-keyName: "ID",
-keyProperties: []metadata.PropertyMetadata{
-{JsonName: "ID", Name: "ID", Type: reflect.TypeOf(int32(0))},
-},
-expected: int32(1000),
-},
-{
-name:    "Convert to int64",
-value:   "42",
-keyName: "ID",
-keyProperties: []metadata.PropertyMetadata{
-{JsonName: "ID", Name: "ID", Type: reflect.TypeOf(int64(0))},
-},
-expected: int64(42),
-},
-{
-name:    "Convert to uint",
-value:   "50",
-keyName: "Count",
-keyProperties: []metadata.PropertyMetadata{
-{JsonName: "Count", Name: "Count", Type: reflect.TypeOf(uint(0))},
-},
-expected: uint(50),
-},
-{
-name:    "Convert to uint8",
-value:   "255",
-keyName: "Count",
-keyProperties: []metadata.PropertyMetadata{
-{JsonName: "Count", Name: "Count", Type: reflect.TypeOf(uint8(0))},
-},
-expected: uint8(255),
-},
-{
-name:    "Convert to uint16",
-value:   "1000",
-keyName: "Count",
-keyProperties: []metadata.PropertyMetadata{
-{JsonName: "Count", Name: "Count", Type: reflect.TypeOf(uint16(0))},
-},
-expected: uint16(1000),
-},
-{
-name:    "Convert to uint32",
-value:   "50000",
-keyName: "Count",
-keyProperties: []metadata.PropertyMetadata{
-{JsonName: "Count", Name: "Count", Type: reflect.TypeOf(uint32(0))},
-},
-expected: uint32(50000),
-},
-{
-name:    "Convert to uint64",
-value:   "100",
-keyName: "Count",
-keyProperties: []metadata.PropertyMetadata{
-{JsonName: "Count", Name: "Count", Type: reflect.TypeOf(uint64(0))},
-},
-expected: uint64(100),
-},
-{
-name:    "Convert to float32",
-value:   "3.14",
-keyName: "Price",
-keyProperties: []metadata.PropertyMetadata{
-{JsonName: "Price", Name: "Price", Type: reflect.TypeOf(float32(0))},
-},
-expected: float32(3.14),
-},
-{
-name:    "Convert to float64",
-value:   "3.14",
-keyName: "Price",
-keyProperties: []metadata.PropertyMetadata{
-{JsonName: "Price", Name: "Price", Type: reflect.TypeOf(float64(0))},
-},
-expected: float64(3.14),
-},
-{
-name:    "Convert to bool",
-value:   "true",
-keyName: "IsActive",
-keyProperties: []metadata.PropertyMetadata{
-{JsonName: "IsActive", Name: "IsActive", Type: reflect.TypeOf(bool(false))},
-},
-expected: true,
-},
-{
-name:    "Keep as string",
-value:   "abc123",
-keyName: "Code",
-keyProperties: []metadata.PropertyMetadata{
-{JsonName: "Code", Name: "Code", Type: reflect.TypeOf(string(""))},
-},
-expected: "abc123",
-},
-{
-name:    "Invalid int - return string",
-value:   "not-a-number",
-keyName: "ID",
-keyProperties: []metadata.PropertyMetadata{
-{JsonName: "ID", Name: "ID", Type: reflect.TypeOf(int64(0))},
-},
-expected: "not-a-number",
-},
-{
-name:          "Unknown type - return string",
-value:         "value",
-keyName:       "Unknown",
-keyProperties: []metadata.PropertyMetadata{},
-expected:      "value",
-},
-}
+	tests := []struct {
+		name          string
+		value         string
+		keyName       string
+		keyProperties []metadata.PropertyMetadata
+		expected      interface{}
+	}{
+		{
+			name:    "Convert to int",
+			value:   "42",
+			keyName: "ID",
+			keyProperties: []metadata.PropertyMetadata{
+				{JsonName: "ID", Name: "ID", Type: reflect.TypeOf(int(0))},
+			},
+			expected: int(42),
+		},
+		{
+			name:    "Convert to int8",
+			value:   "42",
+			keyName: "ID",
+			keyProperties: []metadata.PropertyMetadata{
+				{JsonName: "ID", Name: "ID", Type: reflect.TypeOf(int8(0))},
+			},
+			expected: int8(42),
+		},
+		{
+			name:    "Convert to int16",
+			value:   "100",
+			keyName: "ID",
+			keyProperties: []metadata.PropertyMetadata{
+				{JsonName: "ID", Name: "ID", Type: reflect.TypeOf(int16(0))},
+			},
+			expected: int16(100),
+		},
+		{
+			name:    "Convert to int32",
+			value:   "1000",
+			keyName: "ID",
+			keyProperties: []metadata.PropertyMetadata{
+				{JsonName: "ID", Name: "ID", Type: reflect.TypeOf(int32(0))},
+			},
+			expected: int32(1000),
+		},
+		{
+			name:    "Convert to int64",
+			value:   "42",
+			keyName: "ID",
+			keyProperties: []metadata.PropertyMetadata{
+				{JsonName: "ID", Name: "ID", Type: reflect.TypeOf(int64(0))},
+			},
+			expected: int64(42),
+		},
+		{
+			name:    "Convert to uint",
+			value:   "50",
+			keyName: "Count",
+			keyProperties: []metadata.PropertyMetadata{
+				{JsonName: "Count", Name: "Count", Type: reflect.TypeOf(uint(0))},
+			},
+			expected: uint(50),
+		},
+		{
+			name:    "Convert to uint8",
+			value:   "255",
+			keyName: "Count",
+			keyProperties: []metadata.PropertyMetadata{
+				{JsonName: "Count", Name: "Count", Type: reflect.TypeOf(uint8(0))},
+			},
+			expected: uint8(255),
+		},
+		{
+			name:    "Convert to uint16",
+			value:   "1000",
+			keyName: "Count",
+			keyProperties: []metadata.PropertyMetadata{
+				{JsonName: "Count", Name: "Count", Type: reflect.TypeOf(uint16(0))},
+			},
+			expected: uint16(1000),
+		},
+		{
+			name:    "Convert to uint32",
+			value:   "50000",
+			keyName: "Count",
+			keyProperties: []metadata.PropertyMetadata{
+				{JsonName: "Count", Name: "Count", Type: reflect.TypeOf(uint32(0))},
+			},
+			expected: uint32(50000),
+		},
+		{
+			name:    "Convert to uint64",
+			value:   "100",
+			keyName: "Count",
+			keyProperties: []metadata.PropertyMetadata{
+				{JsonName: "Count", Name: "Count", Type: reflect.TypeOf(uint64(0))},
+			},
+			expected: uint64(100),
+		},
+		{
+			name:    "Convert to float32",
+			value:   "3.14",
+			keyName: "Price",
+			keyProperties: []metadata.PropertyMetadata{
+				{JsonName: "Price", Name: "Price", Type: reflect.TypeOf(float32(0))},
+			},
+			expected: float32(3.14),
+		},
+		{
+			name:    "Convert to float64",
+			value:   "3.14",
+			keyName: "Price",
+			keyProperties: []metadata.PropertyMetadata{
+				{JsonName: "Price", Name: "Price", Type: reflect.TypeOf(float64(0))},
+			},
+			expected: float64(3.14),
+		},
+		{
+			name:    "Convert to bool",
+			value:   "true",
+			keyName: "IsActive",
+			keyProperties: []metadata.PropertyMetadata{
+				{JsonName: "IsActive", Name: "IsActive", Type: reflect.TypeOf(bool(false))},
+			},
+			expected: true,
+		},
+		{
+			name:    "Keep as string",
+			value:   "abc123",
+			keyName: "Code",
+			keyProperties: []metadata.PropertyMetadata{
+				{JsonName: "Code", Name: "Code", Type: reflect.TypeOf(string(""))},
+			},
+			expected: "abc123",
+		},
+		{
+			name:    "Invalid int - return string",
+			value:   "not-a-number",
+			keyName: "ID",
+			keyProperties: []metadata.PropertyMetadata{
+				{JsonName: "ID", Name: "ID", Type: reflect.TypeOf(int64(0))},
+			},
+			expected: "not-a-number",
+		},
+		{
+			name:          "Unknown type - return string",
+			value:         "value",
+			keyName:       "Unknown",
+			keyProperties: []metadata.PropertyMetadata{},
+			expected:      "value",
+		},
+	}
 
-for _, tt := range tests {
-t.Run(tt.name, func(t *testing.T) {
-result := convertKeyValue(tt.value, tt.keyName, tt.keyProperties)
-if result != tt.expected {
-t.Errorf("Expected %v (%T), got %v (%T)",
-tt.expected, tt.expected, result, result)
-}
-})
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := convertKeyValue(tt.value, tt.keyName, tt.keyProperties)
+			if result != tt.expected {
+				t.Errorf("Expected %v (%T), got %v (%T)",
+					tt.expected, tt.expected, result, result)
+			}
+		})
+	}
 }
