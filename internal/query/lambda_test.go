@@ -110,6 +110,7 @@ func TestLambdaASTParser_BasicAny(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
+			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectErr {
 					t.Errorf("AST parsing failed: %v", err)
@@ -172,6 +173,7 @@ func TestLambdaASTParser_BasicAll(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
+			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectErr {
 					t.Errorf("AST parsing failed: %v", err)
@@ -239,6 +241,7 @@ func TestLambdaASTParser_ComplexConditions(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
+			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectErr {
 					t.Errorf("AST parsing failed: %v", err)
@@ -296,6 +299,7 @@ func TestLambdaASTParser_NestedLambdas(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
+			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectErr {
 					t.Errorf("AST parsing failed: %v", err)
@@ -358,6 +362,7 @@ func TestLambdaWithOtherOperators(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
+			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectErr {
 					t.Errorf("AST parsing failed: %v", err)
@@ -419,6 +424,7 @@ func TestLambdaToFilterExpression(t *testing.T) {
 
 			parser := NewASTParser(tokens)
 			ast, err := parser.Parse()
+			defer ReleaseASTNode(ast)
 			if err != nil {
 				if !tt.expectErr {
 					t.Errorf("AST parsing failed: %v", err)
