@@ -26,6 +26,12 @@ EXTERNAL_SERVER=0          # Don't start/stop server automatically
 ENABLE_CPU_PROFILE=0       # Enable CPU profiling
 ENABLE_SQL_TRACE=0         # Enable SQL query tracing
 
+# Connection pooling settings
+MAX_OPEN_CONNS=25          # Maximum number of open database connections
+MAX_IDLE_CONNS=25          # Maximum number of idle database connections
+CONN_MAX_LIFETIME="5m"     # Maximum connection lifetime
+CONN_MAX_IDLE_TIME="5m"    # Maximum connection idle time
+
 # Variables to track if we started the server
 SERVER_PID=""
 TMP_SERVER_DIR=""
@@ -207,15 +213,22 @@ start_server() {
     fi
 
     echo "Starting performance server from $TMP_SERVER_DIR/perfserver (db=$DB_TYPE)"
-    
+
     # Add CPU profiling and SQL tracing arguments if enabled
     SERVER_ARGS=( "${DB_ARGS[@]}" -extensive=true )
-    
+
+    # Add connection pooling settings
+    SERVER_ARGS+=( -max-open-conns "$MAX_OPEN_CONNS" )
+    SERVER_ARGS+=( -max-idle-conns "$MAX_IDLE_CONNS" )
+    SERVER_ARGS+=( -conn-max-lifetime "$CONN_MAX_LIFETIME" )
+    SERVER_ARGS+=( -conn-max-idle-time "$CONN_MAX_IDLE_TIME" )
+    echo "🔗 Connection pool: maxOpen=$MAX_OPEN_CONNS, maxIdle=$MAX_IDLE_CONNS, lifetime=$CONN_MAX_LIFETIME, idleTime=$CONN_MAX_IDLE_TIME"
+
     if [ $ENABLE_CPU_PROFILE -eq 1 ]; then
         SERVER_ARGS+=( -cpuprofile /tmp/perfserver-cpu.prof )
         echo "📊 CPU profiling: ENABLED"
     fi
-    
+
     if [ $ENABLE_SQL_TRACE -eq 1 ]; then
         SERVER_ARGS+=( -trace-sql -trace-sql-file /tmp/perfserver-sql-trace.txt )
         echo "🔍 SQL tracing: ENABLED"
@@ -394,6 +407,12 @@ OPTIONS:
     --cpu-profile          Enable CPU profiling (saves to OUTPUT_DIR/cpu.prof)
     --sql-trace            Enable SQL query tracing (saves to OUTPUT_DIR/sql-trace.txt)
 
+    Connection Pooling:
+    --max-open-conns NUM    Maximum open database connections (default: 25)
+    --max-idle-conns NUM    Maximum idle database connections (default: 25)
+    --conn-max-lifetime DUR Maximum connection lifetime (default: 5m)
+    --conn-max-idle-time DUR Maximum connection idle time (default: 5m)
+
 EXAMPLES:
     # Run with default settings - auto-starts perfserver
     $0
@@ -471,6 +490,22 @@ while [[ $# -gt 0 ]]; do
         --sql-trace)
             ENABLE_SQL_TRACE=1
             shift
+            ;;
+        --max-open-conns)
+            MAX_OPEN_CONNS="$2"
+            shift 2
+            ;;
+        --max-idle-conns)
+            MAX_IDLE_CONNS="$2"
+            shift 2
+            ;;
+        --conn-max-lifetime)
+            CONN_MAX_LIFETIME="$2"
+            shift 2
+            ;;
+        --conn-max-idle-time)
+            CONN_MAX_IDLE_TIME="$2"
+            shift 2
             ;;
         *)
             echo -e "${RED}Unknown option: $1${NC}"

@@ -30,6 +30,13 @@ func main() {
 	traceSQL := flag.Bool("trace-sql", false, "Enable SQL query tracing and optimization analysis")
 	traceSQLFile := flag.String("trace-sql-file", "", "Write SQL trace analysis to file (requires --trace-sql)")
 	extensive := flag.Bool("extensive", true, "Use extensive seeding with large datasets for performance testing")
+
+	// Connection pooling flags
+	maxOpenConns := flag.Int("max-open-conns", 25, "Maximum number of open database connections")
+	maxIdleConns := flag.Int("max-idle-conns", 25, "Maximum number of idle database connections")
+	connMaxLifetime := flag.Duration("conn-max-lifetime", 5*time.Minute, "Maximum connection lifetime")
+	connMaxIdleTime := flag.Duration("conn-max-idle-time", 5*time.Minute, "Maximum connection idle time")
+
 	flag.Parse()
 
 	// Create SQL tracer if requested (declared early so signal handler can access it)
@@ -130,6 +137,20 @@ func main() {
 	default:
 		log.Fatalf("Unsupported database type: %s. Use 'sqlite' or 'postgres'", *dbType)
 	}
+
+	// Configure connection pooling
+	sqlDB, err := Db.DB()
+	if err != nil {
+		log.Fatal("Failed to get underlying sql.DB:", err)
+	}
+
+	sqlDB.SetMaxOpenConns(*maxOpenConns)
+	sqlDB.SetMaxIdleConns(*maxIdleConns)
+	sqlDB.SetConnMaxLifetime(*connMaxLifetime)
+	sqlDB.SetConnMaxIdleTime(*connMaxIdleTime)
+
+	fmt.Printf("🔗 Connection pool configured: maxOpen=%d, maxIdle=%d, maxLifetime=%v, maxIdleTime=%v\n",
+		*maxOpenConns, *maxIdleConns, *connMaxLifetime, *connMaxIdleTime)
 
 	// Auto-migrate the Product, ProductDescription, Category, and CompanyInfo models
 	if err := Db.AutoMigrate(&entities.Category{}, &entities.Product{}, &entities.ProductDescription{}, &entities.CompanyInfo{}, &entities.APIKey{}); err != nil {
