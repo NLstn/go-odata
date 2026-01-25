@@ -12,36 +12,20 @@ type fieldInfo struct {
 	IsExported bool
 }
 
-// structFieldCache caches field information for struct types
-type structFieldCache struct {
-	mu     sync.RWMutex
-	fields map[reflect.Type][]fieldInfo
-}
-
-var globalFieldCache = &structFieldCache{
-	fields: make(map[reflect.Type][]fieldInfo),
-}
+// globalFieldCache uses sync.Map for lock-free reads under high concurrency
+// sync.Map is optimized for cases where entries are written once and read many times
+var globalFieldCache sync.Map // map[reflect.Type][]fieldInfo
 
 // getFieldInfos returns cached field information for a struct type
+// Uses sync.Map for lock-free reads, eliminating RWMutex contention
 func getFieldInfos(t reflect.Type) []fieldInfo {
-	// Fast path: read lock for cache hit
-	globalFieldCache.mu.RLock()
-	if infos, ok := globalFieldCache.fields[t]; ok {
-		globalFieldCache.mu.RUnlock()
-		return infos
-	}
-	globalFieldCache.mu.RUnlock()
-
-	// Slow path: compute and cache
-	globalFieldCache.mu.Lock()
-	defer globalFieldCache.mu.Unlock()
-
-	// Double-check after acquiring write lock
-	if infos, ok := globalFieldCache.fields[t]; ok {
-		return infos
+	// Fast path: lock-free read from sync.Map
+	if cached, ok := globalFieldCache.Load(t); ok {
+		return cached.([]fieldInfo) //nolint:errcheck // type is guaranteed by our Store calls
 	}
 
-	// Compute field information
+	// Slow path: compute field information
+	// sync.Map handles concurrent writes safely
 	numFields := t.NumField()
 	infos := make([]fieldInfo, numFields)
 
@@ -53,8 +37,9 @@ func getFieldInfos(t reflect.Type) []fieldInfo {
 		}
 	}
 
-	globalFieldCache.fields[t] = infos
-	return infos
+	// Store and return (LoadOrStore ensures we don't lose concurrent computations)
+	actual, _ := globalFieldCache.LoadOrStore(t, infos)
+	return actual.([]fieldInfo) //nolint:errcheck // type is guaranteed by our Store calls
 }
 
 // extractJsonFieldName extracts the JSON field name from struct tags
@@ -81,42 +66,26 @@ func extractJsonFieldName(field reflect.StructField) string {
 	return field.Name
 }
 
-// propertyMetadataCache caches property metadata lookups by field name
-type propertyMetadataCache struct {
-	mu    sync.RWMutex
-	cache map[EntityMetadataProvider]map[string]*PropertyMetadata
-}
-
-var globalPropMetaCache = &propertyMetadataCache{
-	cache: make(map[EntityMetadataProvider]map[string]*PropertyMetadata),
-}
+// globalPropMetaCache uses sync.Map for lock-free reads under high concurrency
+// Keys are EntityMetadataProvider, values are map[string]*PropertyMetadata
+var globalPropMetaCache sync.Map
 
 // getCachedPropertyMetadataMap returns the entire property metadata map for a metadata provider
+// Uses sync.Map for lock-free reads, eliminating RWMutex contention
 func getCachedPropertyMetadataMap(metadata EntityMetadataProvider) map[string]*PropertyMetadata {
-	// Fast path: read lock for cache hit
-	globalPropMetaCache.mu.RLock()
-	if fieldMap, ok := globalPropMetaCache.cache[metadata]; ok {
-		globalPropMetaCache.mu.RUnlock()
-		return fieldMap
+	// Fast path: lock-free read from sync.Map
+	if cached, ok := globalPropMetaCache.Load(metadata); ok {
+		return cached.(map[string]*PropertyMetadata) //nolint:errcheck // type is guaranteed by our Store calls
 	}
-	globalPropMetaCache.mu.RUnlock()
 
 	// Slow path: build cache for this metadata provider
-	globalPropMetaCache.mu.Lock()
-	defer globalPropMetaCache.mu.Unlock()
-
-	// Double-check after acquiring write lock
-	if fieldMap, ok := globalPropMetaCache.cache[metadata]; ok {
-		return fieldMap
-	}
-
-	// Build cache for this metadata provider
 	props := metadata.GetProperties()
 	fieldMap := make(map[string]*PropertyMetadata, len(props))
 	for i := range props {
 		fieldMap[props[i].Name] = &props[i]
 	}
-	globalPropMetaCache.cache[metadata] = fieldMap
 
-	return fieldMap
+	// Store and return (LoadOrStore ensures we don't lose concurrent computations)
+	actual, _ := globalPropMetaCache.LoadOrStore(metadata, fieldMap)
+	return actual.(map[string]*PropertyMetadata) //nolint:errcheck // type is guaranteed by our Store calls
 }
