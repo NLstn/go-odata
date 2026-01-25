@@ -61,13 +61,13 @@ func AcquireOrderedMap() *OrderedMap {
 // The returned map is reset and ready for use
 func AcquireOrderedMapWithCapacity(capacity int) *OrderedMap {
 	om := orderedMapPool.Get().(*OrderedMap) //nolint:errcheck // sync.Pool.Get() doesn't return error
-	// Ensure we have enough capacity
+	// Ensure we have enough capacity for keys slice
 	if cap(om.keys) < capacity {
 		om.keys = make([]string, 0, capacity)
 	}
-	// For the map, we can't resize it, but we can check if it needs recreation
-	// Only recreate if significantly undersized (avoids thrashing)
-	if len(om.values) == 0 && capacity > 16 {
+	// Recreate map only if significantly undersized to avoid thrashing
+	// Check current map capacity vs needed - maps can't be resized, only recreated
+	if capacity > 16 && len(om.values) == 0 {
 		om.values = make(map[string]interface{}, capacity)
 	}
 	return om

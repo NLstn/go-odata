@@ -1,88 +1,85 @@
 package etag
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"reflect"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
+	"github.com/cespare/xxhash/v2"
 	"github.com/nlstn/go-odata/internal/metadata"
 )
 
-// fieldIndexCache caches field indices by type and field name
-type fieldIndexCache struct {
-	mu       sync.RWMutex
-	cache    map[reflect.Type]map[string]int
-	maxTypes int
-}
+// hexTable for fast hex encoding without allocation
+const hexTable = "0123456789abcdef"
 
-var globalFieldIndexCache = &fieldIndexCache{
-	cache:    make(map[reflect.Type]map[string]int),
-	maxTypes: 1000, // Limit cache to 1000 types to prevent unbounded growth
-}
+// globalFieldIndexCache uses sync.Map for lock-free reads under high concurrency
+// Keys are reflect.Type, values are map[string]int (field name to index)
+var globalFieldIndexCache sync.Map
 
 // getFieldIndex returns the cached field index for a type and field name
+// Uses sync.Map for lock-free reads, eliminating RWMutex contention
 func getFieldIndex(t reflect.Type, fieldName string) (int, bool) {
-	globalFieldIndexCache.mu.RLock()
-	if typeCache, ok := globalFieldIndexCache.cache[t]; ok {
-		idx, found := typeCache[fieldName]
-		globalFieldIndexCache.mu.RUnlock()
-		return idx, found
-	}
-	globalFieldIndexCache.mu.RUnlock()
-
-	globalFieldIndexCache.mu.Lock()
-	defer globalFieldIndexCache.mu.Unlock()
-
-	// Double-check after acquiring write lock
-	if typeCache, ok := globalFieldIndexCache.cache[t]; ok {
+	// Fast path: lock-free read from sync.Map
+	if cached, ok := globalFieldIndexCache.Load(t); ok {
+		typeCache := cached.(map[string]int) //nolint:errcheck // type is guaranteed by our Store calls
 		idx, found := typeCache[fieldName]
 		return idx, found
 	}
 
-	// Check cache size limit to prevent unbounded growth
-	// If limit reached, clear half the cache to avoid complete cache thrashing
-	if len(globalFieldIndexCache.cache) >= globalFieldIndexCache.maxTypes {
-		// Clear approximately half the cache by recreating with reduced size
-		// This is a simple strategy that avoids complete performance degradation
-		newCache := make(map[reflect.Type]map[string]int, globalFieldIndexCache.maxTypes/2)
-		count := 0
-		for k, v := range globalFieldIndexCache.cache {
-			if count >= globalFieldIndexCache.maxTypes/2 {
-				break
-			}
-			newCache[k] = v
-			count++
-		}
-		globalFieldIndexCache.cache = newCache
-	}
-
-	// Build cache for this type
+	// Slow path: build cache for this type
 	typeCache := make(map[string]int)
 	for i := 0; i < t.NumField(); i++ {
 		typeCache[t.Field(i).Name] = i
 	}
-	globalFieldIndexCache.cache[t] = typeCache
 
-	idx, found := typeCache[fieldName]
+	// Store and use result (LoadOrStore ensures we don't lose concurrent computations)
+	actual, _ := globalFieldIndexCache.LoadOrStore(t, typeCache)
+	actualCache := actual.(map[string]int) //nolint:errcheck // type is guaranteed by our Store calls
+	idx, found := actualCache[fieldName]
 	return idx, found
 }
 
-// stringBuilderPool is a sync.Pool for reusing strings.Builder instances
-var stringBuilderPool = sync.Pool{
+// etagBufferPool is a sync.Pool for reusing fixed-size byte buffers for ETag generation
+// ETag format: W/"<16 hex chars>" = 20 bytes total (xxhash64 produces 8 bytes = 16 hex chars)
+var etagBufferPool = sync.Pool{
 	New: func() interface{} {
-		sb := &strings.Builder{}
-		sb.Grow(68) // Pre-allocate for "W/\"" + 64 hex chars + "\"" = 68 bytes
-		return sb
+		// Pre-allocate buffer for W/" + 16 hex chars + " = 20 bytes
+		buf := make([]byte, 20)
+		// Pre-fill the constant parts
+		buf[0] = 'W'
+		buf[1] = '/'
+		buf[2] = '"'
+		buf[19] = '"'
+		return &buf
 	},
+}
+
+// encodeHex16 encodes an 8-byte value as 16 hex characters into dst[3:19]
+// This is a zero-allocation hex encoding for xxhash64 output
+func encodeHex16(dst []byte, v uint64) {
+	dst[3] = hexTable[(v>>60)&0xf]
+	dst[4] = hexTable[(v>>56)&0xf]
+	dst[5] = hexTable[(v>>52)&0xf]
+	dst[6] = hexTable[(v>>48)&0xf]
+	dst[7] = hexTable[(v>>44)&0xf]
+	dst[8] = hexTable[(v>>40)&0xf]
+	dst[9] = hexTable[(v>>36)&0xf]
+	dst[10] = hexTable[(v>>32)&0xf]
+	dst[11] = hexTable[(v>>28)&0xf]
+	dst[12] = hexTable[(v>>24)&0xf]
+	dst[13] = hexTable[(v>>20)&0xf]
+	dst[14] = hexTable[(v>>16)&0xf]
+	dst[15] = hexTable[(v>>12)&0xf]
+	dst[16] = hexTable[(v>>8)&0xf]
+	dst[17] = hexTable[(v>>4)&0xf]
+	dst[18] = hexTable[v&0xf]
 }
 
 // Generate creates an ETag value for an entity based on its ETag property
 // Returns an empty string if no ETag property is defined
+// Uses xxhash64 for fast non-cryptographic hashing (ETag doesn't need cryptographic strength)
 func Generate(entity interface{}, meta *metadata.EntityMetadata) string {
 	if meta.ETagProperty == nil {
 		return ""
@@ -130,29 +127,27 @@ func Generate(entity interface{}, meta *metadata.EntityMetadata) string {
 		etagSource = fmt.Sprintf("%v", fieldValue.Interface())
 	}
 
-	// Generate SHA256 hash of the ETag source
-	hash := sha256.Sum256([]byte(etagSource))
+	// Generate xxhash64 of the ETag source (much faster than SHA256)
+	hash := xxhash.Sum64String(etagSource)
 
-	// Use strings.Builder from pool for efficient string concatenation
-	sb := stringBuilderPool.Get().(*strings.Builder) //nolint:errcheck // sync.Pool.Get() doesn't return error
-	sb.Reset()
-	sb.Grow(68) // Pre-allocate for "W/\"" + 64 hex chars + "\"" = 68 bytes
-	defer func() {
-		// Only return builders to pool if they're not too large (< 1KB)
-		// This prevents unbounded memory growth from large strings
-		if sb.Cap() < 1024 {
-			stringBuilderPool.Put(sb)
-		}
-	}()
+	// Get pre-allocated buffer from pool
+	bufPtr := etagBufferPool.Get().(*[]byte) //nolint:errcheck // sync.Pool.Get() doesn't return error
+	buf := *bufPtr
 
-	sb.WriteString("W/\"")
-	sb.WriteString(hex.EncodeToString(hash[:]))
-	sb.WriteString("\"")
+	// Encode hash directly into buffer (zero allocation hex encoding)
+	encodeHex16(buf, hash)
 
-	return sb.String()
+	// Create result string (single allocation)
+	result := string(buf)
+
+	// Return buffer to pool
+	etagBufferPool.Put(bufPtr)
+
+	return result
 }
 
 // generateFromMap generates an ETag from a map entity (from $select operations)
+// Uses xxhash64 for fast hashing with zero-allocation hex encoding
 func generateFromMap(entity interface{}, meta *metadata.EntityMetadata) string {
 	entityMap, ok := entity.(map[string]interface{})
 	if !ok {
@@ -182,24 +177,53 @@ func generateFromMap(entity interface{}, meta *metadata.EntityMetadata) string {
 	switch v := fieldValue.(type) {
 	case string:
 		etagSource = v
-	case int, int8, int16, int32, int64:
-		etagSource = fmt.Sprintf("%d", v)
-	case uint, uint8, uint16, uint32, uint64:
-		etagSource = fmt.Sprintf("%d", v)
-	case float32, float64:
-		etagSource = fmt.Sprintf("%v", v)
+	case int:
+		etagSource = strconv.FormatInt(int64(v), 10)
+	case int8:
+		etagSource = strconv.FormatInt(int64(v), 10)
+	case int16:
+		etagSource = strconv.FormatInt(int64(v), 10)
+	case int32:
+		etagSource = strconv.FormatInt(int64(v), 10)
+	case int64:
+		etagSource = strconv.FormatInt(v, 10)
+	case uint:
+		etagSource = strconv.FormatUint(uint64(v), 10)
+	case uint8:
+		etagSource = strconv.FormatUint(uint64(v), 10)
+	case uint16:
+		etagSource = strconv.FormatUint(uint64(v), 10)
+	case uint32:
+		etagSource = strconv.FormatUint(uint64(v), 10)
+	case uint64:
+		etagSource = strconv.FormatUint(v, 10)
+	case float32:
+		etagSource = strconv.FormatFloat(float64(v), 'f', -1, 32)
+	case float64:
+		etagSource = strconv.FormatFloat(v, 'f', -1, 64)
 	case time.Time:
 		etagSource = strconv.FormatInt(v.Unix(), 10)
 	default:
 		etagSource = fmt.Sprintf("%v", v)
 	}
 
-	// Generate SHA256 hash of the ETag source
-	hash := sha256.Sum256([]byte(etagSource))
-	hashStr := hex.EncodeToString(hash[:])
+	// Generate xxhash64 of the ETag source (much faster than SHA256)
+	hash := xxhash.Sum64String(etagSource)
 
-	// Return as quoted ETag (weak ETag format: W/"hash")
-	return fmt.Sprintf("W/\"%s\"", hashStr)
+	// Get pre-allocated buffer from pool
+	bufPtr := etagBufferPool.Get().(*[]byte) //nolint:errcheck // sync.Pool.Get() doesn't return error
+	buf := *bufPtr
+
+	// Encode hash directly into buffer (zero allocation hex encoding)
+	encodeHex16(buf, hash)
+
+	// Create result string (single allocation)
+	result := string(buf)
+
+	// Return buffer to pool
+	etagBufferPool.Put(bufPtr)
+
+	return result
 }
 
 // Parse extracts the ETag value from a quoted ETag string
