@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/nlstn/go-odata/internal/query"
@@ -44,6 +45,8 @@ const (
 	OperationDelete
 	OperationQuery
 	OperationMetadata
+	OperationAction
+	OperationFunction
 )
 
 // Decision represents the result of an authorization check.
@@ -72,4 +75,47 @@ type Policy interface {
 type QueryFilterProvider interface {
 	Policy
 	QueryFilter(ctx AuthContext, resource ResourceDescriptor, operation Operation) (*query.FilterExpression, error)
+}
+
+// Context keys for standard auth data that can be stored in request context.
+// Users can store auth data using these keys in PreRequestHook, and it will be
+// automatically extracted by the authorization framework.
+type contextKey string
+
+const (
+	// PrincipalContextKey is the context key for the authenticated principal/user identifier
+	PrincipalContextKey contextKey = "odata_auth_principal"
+	// RolesContextKey is the context key for user roles (should be []string)
+	RolesContextKey contextKey = "odata_auth_roles"
+	// ClaimsContextKey is the context key for additional claims (should be map[string]interface{})
+	ClaimsContextKey contextKey = "odata_auth_claims"
+	// ScopesContextKey is the context key for OAuth scopes (should be []string)
+	ScopesContextKey contextKey = "odata_auth_scopes"
+)
+
+// ExtractFromContext extracts authentication data from the request context using
+// the standard context keys. This allows PreRequestHook to populate auth data
+// that will be automatically used by the authorization framework.
+func ExtractFromContext(ctx context.Context) (principal interface{}, roles []string, claims map[string]interface{}, scopes []string) {
+	if ctx == nil {
+		return nil, nil, nil, nil
+	}
+
+	if p := ctx.Value(PrincipalContextKey); p != nil {
+		principal = p
+	}
+
+	if r, ok := ctx.Value(RolesContextKey).([]string); ok {
+		roles = r
+	}
+
+	if c, ok := ctx.Value(ClaimsContextKey).(map[string]interface{}); ok {
+		claims = c
+	}
+
+	if s, ok := ctx.Value(ScopesContextKey).([]string); ok {
+		scopes = s
+	}
+
+	return principal, roles, claims, scopes
 }

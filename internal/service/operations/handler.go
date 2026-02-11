@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/nlstn/go-odata/internal/actions"
+	"github.com/nlstn/go-odata/internal/auth"
 	"github.com/nlstn/go-odata/internal/handlers"
 	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/response"
@@ -20,6 +21,7 @@ type Handler struct {
 	entities  map[string]*metadata.EntityMetadata
 	namespace string
 	logger    Logger
+	policy    auth.Policy
 }
 
 // Logger captures the subset of slog.Logger functionality required by the handler.
@@ -56,6 +58,11 @@ func (h *Handler) SetNamespace(namespace string) {
 	h.namespace = namespace
 }
 
+// SetPolicy sets the authorization policy for the handler.
+func (h *Handler) SetPolicy(policy auth.Policy) {
+	h.policy = policy
+}
+
 type invocationError struct {
 	status  int
 	message string
@@ -71,6 +78,12 @@ func (h *Handler) HandleActionOrFunction(w http.ResponseWriter, r *http.Request,
 		actionDef, params, invErr := resolveInvocation(r, name, "Action", h.actions, actions.ResolveActionOverload, isBound, entitySet)
 		if invErr != nil {
 			h.writeError(w, r, invErr)
+			return
+		}
+
+		// Check authorization before executing action
+		resource := h.buildResourceDescriptor(entitySet, name, isBound)
+		if !h.authorizeRequest(w, r, resource, auth.OperationAction) {
 			return
 		}
 
@@ -94,6 +107,12 @@ func (h *Handler) HandleActionOrFunction(w http.ResponseWriter, r *http.Request,
 		functionDef, params, invErr := resolveInvocation(r, name, "Function", h.functions, actions.ResolveFunctionOverload, isBound, entitySet)
 		if invErr != nil {
 			h.writeError(w, r, invErr)
+			return
+		}
+
+		// Check authorization before executing function
+		resource := h.buildResourceDescriptor(entitySet, name, isBound)
+		if !h.authorizeRequest(w, r, resource, auth.OperationFunction) {
 			return
 		}
 
@@ -178,6 +197,70 @@ func (h *Handler) logError(msg string, err error) {
 		return
 	}
 	h.logger.Error(msg, "error", err)
+}
+
+func (h *Handler) buildAuthContext(r *http.Request) auth.AuthContext {
+	if r == nil {
+		return auth.AuthContext{}
+	}
+
+	authCtx := auth.AuthContext{
+		Request: auth.RequestMetadata{
+			Method:     r.Method,
+			Path:       r.URL.Path,
+			Headers:    r.Header.Clone(),
+			Query:      r.URL.Query(),
+			RemoteAddr: r.RemoteAddr,
+		},
+	}
+
+	// Extract authentication data from request context if present
+	principal, roles, claims, scopes := auth.ExtractFromContext(r.Context())
+	authCtx.Principal = principal
+	authCtx.Roles = roles
+	authCtx.Claims = claims
+	authCtx.Scopes = scopes
+
+	return authCtx
+}
+
+func (h *Handler) authorizeRequest(w http.ResponseWriter, r *http.Request, resource auth.ResourceDescriptor, operation auth.Operation) bool {
+	if h.policy == nil {
+		return true
+	}
+
+	decision := h.policy.Authorize(h.buildAuthContext(r), resource, operation)
+	if decision.Allowed {
+		return true
+	}
+
+	statusCode := http.StatusForbidden
+	message := "Forbidden"
+	if r != nil && r.Header.Get("Authorization") == "" {
+		statusCode = http.StatusUnauthorized
+		message = "Unauthorized"
+	}
+
+	if err := response.WriteError(w, r, statusCode, message, decision.Reason); err != nil {
+		h.logError("Error writing authorization response", err)
+	}
+	return false
+}
+
+func (h *Handler) buildResourceDescriptor(entitySet string, name string, isBound bool) auth.ResourceDescriptor {
+	resource := auth.ResourceDescriptor{}
+	
+	if isBound && entitySet != "" {
+		if entityMetadata, exists := h.entities[entitySet]; exists {
+			resource.EntitySetName = entityMetadata.EntitySetName
+			resource.EntityType = entityMetadata.EntityName
+		}
+	}
+	
+	// Store the action/function name in PropertyPath for clarity
+	resource.PropertyPath = []string{name}
+	
+	return resource
 }
 
 func (h *Handler) loadBoundContext(entitySet, key string) (interface{}, *invocationError) {
