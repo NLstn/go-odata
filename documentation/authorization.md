@@ -199,9 +199,9 @@ func (p *TenantPolicy) QueryFilter(
     
     // Return filter: tenantId eq '{tenant_id}'
     return &odata.FilterExpression{
+        Property: "tenantId",
         Operator: "eq",
-        Left:     "tenantId",
-        Right:    tenantID,
+        Value:    tenantID,
     }, nil
 }
 ```
@@ -301,9 +301,9 @@ func (p *PerEntityPolicy) QueryFilter(
     if len(memberships) == 0 {
         // No memberships - return filter that matches nothing
         return &odata.FilterExpression{
+            Property: "id",
             Operator: "eq",
-            Left:     "id",
-            Right:    -1,
+            Value:    -1,
         }, nil
     }
     
@@ -311,9 +311,9 @@ func (p *PerEntityPolicy) QueryFilter(
     var filters []*odata.FilterExpression
     for _, m := range memberships {
         filters = append(filters, &odata.FilterExpression{
+            Property: "id",
             Operator: "eq",
-            Left:     "id",
-            Right:    m.ClubID,
+            Value:    m.ClubID,
         })
     }
     
@@ -321,9 +321,9 @@ func (p *PerEntityPolicy) QueryFilter(
     result := filters[0]
     for i := 1; i < len(filters); i++ {
         result = &odata.FilterExpression{
-            Operator: "or",
-            Left:     result,
-            Right:    filters[i],
+            Logical: "or",
+            Left:    result,
+            Right:   filters[i],
         }
     }
     
