@@ -249,17 +249,17 @@ func (h *Handler) authorizeRequest(w http.ResponseWriter, r *http.Request, resou
 
 func (h *Handler) buildResourceDescriptor(entitySet string, name string, isBound bool) auth.ResourceDescriptor {
 	resource := auth.ResourceDescriptor{}
-	
+
 	if isBound && entitySet != "" {
 		if entityMetadata, exists := h.entities[entitySet]; exists {
 			resource.EntitySetName = entityMetadata.EntitySetName
 			resource.EntityType = entityMetadata.EntityName
 		}
 	}
-	
+
 	// Store the action/function name in PropertyPath for clarity
 	resource.PropertyPath = []string{name}
-	
+
 	return resource
 }
 
