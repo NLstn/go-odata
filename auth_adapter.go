@@ -22,6 +22,8 @@ const (
 	OperationDelete   = auth.OperationDelete
 	OperationQuery    = auth.OperationQuery
 	OperationMetadata = auth.OperationMetadata
+	OperationAction   = auth.OperationAction
+	OperationFunction = auth.OperationFunction
 )
 
 // Decision represents the result of an authorization check.
@@ -43,6 +45,31 @@ func Allow() Decision {
 func Deny(reason string) Decision {
 	return auth.Deny(reason)
 }
+
+// Context keys for standard auth data that can be stored in request context.
+// Users can store auth data using these keys in PreRequestHook, and it will be
+// automatically extracted by the authorization framework.
+//
+// Example usage in PreRequestHook:
+//
+//	service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
+//	    // Parse and validate authentication token
+//	    token := r.Header.Get("Authorization")
+//	    principal, roles, claims := validateToken(token)
+//
+//	    // Store auth data in context using standard keys
+//	    ctx := r.Context()
+//	    ctx = context.WithValue(ctx, odata.PrincipalContextKey, principal)
+//	    ctx = context.WithValue(ctx, odata.RolesContextKey, roles)
+//	    ctx = context.WithValue(ctx, odata.ClaimsContextKey, claims)
+//	    return ctx, nil
+//	})
+const (
+	PrincipalContextKey = auth.PrincipalContextKey
+	RolesContextKey     = auth.RolesContextKey
+	ClaimsContextKey    = auth.ClaimsContextKey
+	ScopesContextKey    = auth.ScopesContextKey
+)
 
 // SetPolicy registers an authorization policy for the service.
 // Pass nil to clear the policy (all requests will be allowed).
@@ -67,6 +94,9 @@ func (s *Service) SetPolicy(policy Policy) error {
 				handler.SetPolicy(policy)
 			}
 		}
+	}
+	if s.operationsHandler != nil {
+		s.operationsHandler.SetPolicy(policy)
 	}
 	return nil
 }

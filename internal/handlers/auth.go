@@ -15,7 +15,8 @@ func buildAuthContext(r *http.Request) auth.AuthContext {
 	if r == nil {
 		return auth.AuthContext{}
 	}
-	return auth.AuthContext{
+
+	authCtx := auth.AuthContext{
 		Request: auth.RequestMetadata{
 			Method:     r.Method,
 			Path:       r.URL.Path,
@@ -24,6 +25,15 @@ func buildAuthContext(r *http.Request) auth.AuthContext {
 			RemoteAddr: r.RemoteAddr,
 		},
 	}
+
+	// Extract authentication data from request context if present
+	principal, roles, claims, scopes := auth.ExtractFromContext(r.Context())
+	authCtx.Principal = principal
+	authCtx.Roles = roles
+	authCtx.Claims = claims
+	authCtx.Scopes = scopes
+
+	return authCtx
 }
 
 func authorizeRequest(w http.ResponseWriter, r *http.Request, policy auth.Policy, resource auth.ResourceDescriptor, operation auth.Operation, logger *slog.Logger) bool {
