@@ -12,6 +12,7 @@ Welcome to the go-odata documentation! This library implements the OData v4.01 s
 
 ### Advanced Usage
 
+- **[Authorization](authorization.md)** - Implement role-based access control, row-level security, and per-entity authorization
 - **[Actions and Functions](actions-and-functions.md)** - Implement custom OData operations beyond standard CRUD
 - **[Advanced Features](advanced-features.md)** - Use singletons, ETags for concurrency control, lifecycle hooks, and read hooks for authorization/redaction
 - **[Geospatial Functions](geospatial.md)** - Query geographic data with geo.distance, geo.length, and geo.intersects
@@ -47,6 +48,16 @@ Set up and configure your OData service. Topics include:
 - Combining with other HTTP handlers
 - Database configuration
 - Production considerations
+
+### Authorization
+Implement fine-grained access control for your OData service:
+- Role-based access control (RBAC)
+- Row-level security with automatic query filtering
+- Per-entity authorization (e.g., per-club roles)
+- Populating auth context from JWT tokens
+- Authorization for actions and functions
+- Field-level redaction
+- Best practices for security
 
 ### Actions and Functions
 Extend your service with custom operations. Learn about:

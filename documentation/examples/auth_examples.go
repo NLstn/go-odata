@@ -342,3 +342,297 @@ func (u User) ODataAfterReadEntity(ctx context.Context, r *http.Request, opts *o
 
 	return user, nil
 }
+
+// Example 8: Per-Entity Authorization (e.g., Per-Club Roles)
+// ===========================================================
+//
+// This example demonstrates how to implement authorization where users have
+// different roles per entity (e.g., a user can be an owner of Club A but just
+// a member of Club B). This requires database access in the Policy to resolve
+// entity-specific roles.
+
+// Club entity
+type Club struct {
+	ID          int    `json:"id" odata:"key"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	OwnerID     string `json:"ownerId"`
+}
+
+// ClubMembership represents a user's membership in a club
+type ClubMembership struct {
+	ID     int    `gorm:"primarykey" json:"id" odata:"key"`
+	UserID string `json:"userId"`
+	ClubID int    `json:"clubId"`
+	Role   string `json:"role"` // "owner", "admin", "member", "viewer"
+}
+
+// PerEntityPolicy implements authorization that depends on per-entity roles.
+// It requires database access to resolve a user's role for specific entities.
+type PerEntityPolicy struct {
+	db *gorm.DB
+}
+
+func NewPerEntityPolicy(db *gorm.DB) *PerEntityPolicy {
+	return &PerEntityPolicy{db: db}
+}
+
+func (p *PerEntityPolicy) Authorize(ctx odata.AuthContext, resource odata.ResourceDescriptor, op odata.Operation) odata.Decision {
+	// Allow metadata operations
+	if op == odata.OperationMetadata {
+		return odata.Allow()
+	}
+
+	// Extract user ID from auth context
+	userID, ok := ctx.Principal.(string)
+	if !ok {
+		return odata.Deny("Authentication required")
+	}
+
+	// Check for global admin role
+	for _, role := range ctx.Roles {
+		if role == "global-admin" {
+			return odata.Allow()
+		}
+	}
+
+	// For Club entity operations, check per-club roles
+	if resource.EntitySetName == "Clubs" {
+		// For collection operations (query, list), allow authenticated users to see all clubs
+		// but use QueryFilter to restrict based on membership
+		if op == odata.OperationQuery {
+			return odata.Allow()
+		}
+
+		// For specific club operations, check the user's role for that club
+		if len(resource.KeyValues) > 0 {
+			clubID, ok := resource.KeyValues["id"].(int)
+			if !ok {
+				return odata.Deny("Invalid club ID")
+			}
+
+			role := p.getUserRoleForClub(userID, clubID)
+
+			// Determine if operation is allowed based on role
+			switch op {
+			case odata.OperationRead:
+				// Anyone with any role can read
+				if role != "" {
+					return odata.Allow()
+				}
+			case odata.OperationUpdate:
+				// Only owners and admins can update
+				if role == "owner" || role == "admin" {
+					return odata.Allow()
+				}
+			case odata.OperationDelete:
+				// Only owners can delete
+				if role == "owner" {
+					return odata.Allow()
+				}
+			case odata.OperationAction, odata.OperationFunction:
+				// Check action/function name from PropertyPath
+				if len(resource.PropertyPath) > 0 {
+					actionName := resource.PropertyPath[0]
+					switch actionName {
+					case "PromoteMember":
+						// Only owners can promote members
+						if role == "owner" {
+							return odata.Allow()
+						}
+					case "PostMessage":
+						// Members and above can post messages
+						if role == "owner" || role == "admin" || role == "member" {
+							return odata.Allow()
+						}
+					}
+				}
+			}
+
+			return odata.Deny(fmt.Sprintf("User does not have required role for this club (current role: %s)", role))
+		}
+
+		// For creation, allow authenticated users (they become the owner)
+		if op == odata.OperationCreate {
+			return odata.Allow()
+		}
+	}
+
+	return odata.Deny("Access denied")
+}
+
+// QueryFilter implements row-level security by filtering clubs to only show
+// those where the user has membership.
+func (p *PerEntityPolicy) QueryFilter(ctx odata.AuthContext, resource odata.ResourceDescriptor, op odata.Operation) (*odata.FilterExpression, error) {
+	// Only filter Clubs collection
+	if resource.EntitySetName != "Clubs" {
+		return nil, nil
+	}
+
+	// Extract user ID
+	userID, ok := ctx.Principal.(string)
+	if !ok {
+		return nil, nil
+	}
+
+	// Check for global admin
+	for _, role := range ctx.Roles {
+		if role == "global-admin" {
+			return nil, nil // No filter needed for global admins
+		}
+	}
+
+	// Get all club IDs where user has membership
+	var memberships []ClubMembership
+	if err := p.db.Where("user_id = ?", userID).Find(&memberships).Error; err != nil {
+		return nil, fmt.Errorf("failed to query memberships: %w", err)
+	}
+
+	if len(memberships) == 0 {
+		// User has no memberships, return filter that matches nothing
+		// This is represented as "id eq -1" (assuming -1 is never a valid ID)
+		return &odata.FilterExpression{
+			Operator: "eq",
+			Left:     "id",
+			Right:    -1,
+		}, nil
+	}
+
+	// Build OR filter for all club IDs
+	var filters []*odata.FilterExpression
+	for _, membership := range memberships {
+		filters = append(filters, &odata.FilterExpression{
+			Operator: "eq",
+			Left:     "id",
+			Right:    membership.ClubID,
+		})
+	}
+
+	// If only one club, return single filter
+	if len(filters) == 1 {
+		return filters[0], nil
+	}
+
+	// Build OR chain for multiple clubs
+	result := filters[0]
+	for i := 1; i < len(filters); i++ {
+		result = &odata.FilterExpression{
+			Operator: "or",
+			Left:     result,
+			Right:    filters[i],
+		}
+	}
+
+	return result, nil
+}
+
+// getUserRoleForClub queries the database to get the user's role for a specific club
+func (p *PerEntityPolicy) getUserRoleForClub(userID string, clubID int) string {
+	var membership ClubMembership
+	if err := p.db.Where("user_id = ? AND club_id = ?", userID, clubID).First(&membership).Error; err != nil {
+		return "" // No membership found
+	}
+	return membership.Role
+}
+
+// Example 9: Setup with Per-Entity Authorization
+// ==============================================
+
+func setupPerEntityAuthorization() {
+	// Initialize database
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Migrate tables
+	if err := db.AutoMigrate(&Club{}, &ClubMembership{}); err != nil {
+		log.Fatal(err)
+	}
+
+	// Create OData service
+	service, err := odata.NewService(db)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Register entities
+	if err := service.RegisterEntity(&Club{}); err != nil {
+		log.Fatal(err)
+	}
+
+	// Set up PreRequestHook to populate auth context with standard keys
+	// This extracts user authentication from the request and stores it in
+	// the request context using the standard keys that the framework will
+	// automatically extract in buildAuthContext.
+	if err := service.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
+		// Extract and validate JWT token (simplified example)
+		token := r.Header.Get("Authorization")
+		if token == "" {
+			// Allow anonymous access - let policy decide
+			return r.Context(), nil
+		}
+
+		// In production: validate JWT and extract claims
+		// For example: claims := validateJWT(token)
+
+		// Simulate extracting user info from token
+		userID := "user-123" // Extract from JWT claims
+		globalRoles := []string{"user"} // Extract from JWT claims
+
+		// Store auth data in context using the standard keys
+		ctx := r.Context()
+		ctx = context.WithValue(ctx, odata.PrincipalContextKey, userID)
+		ctx = context.WithValue(ctx, odata.RolesContextKey, globalRoles)
+		ctx = context.WithValue(ctx, odata.ClaimsContextKey, map[string]interface{}{
+			"email": "user@example.com",
+		})
+
+		return ctx, nil
+	}); err != nil {
+		log.Fatal(err)
+	}
+
+	// Set the per-entity authorization policy
+	policy := NewPerEntityPolicy(db)
+	if err := service.SetPolicy(policy); err != nil {
+		log.Fatal(err)
+	}
+
+	// Start server
+	log.Println("Server with per-entity authorization running on :8080")
+	log.Fatal(http.ListenAndServe(":8080", service))
+}
+
+// Key Takeaways for Per-Entity Authorization:
+// ============================================
+//
+// 1. Store Entity Relationships in Database
+//    - Create a membership/role table linking users to entities
+//    - Store per-entity roles (owner, admin, member, etc.)
+//
+// 2. Policy Needs Database Access
+//    - Pass *gorm.DB to policy constructor
+//    - Query database in Authorize() to resolve entity-specific roles
+//
+// 3. Use QueryFilterProvider for Collection Queries
+//    - Implement QueryFilter() to restrict visible entities
+//    - Build filter expressions that match user's accessible entities
+//
+// 4. Use Standard Context Keys in PreRequestHook
+//    - Store Principal using odata.PrincipalContextKey
+//    - Store global Roles using odata.RolesContextKey
+//    - Store Claims using odata.ClaimsContextKey
+//    - The framework automatically extracts these in buildAuthContext
+//
+// 5. Check Both Global and Entity-Specific Roles
+//    - Check ctx.Roles for global roles (e.g., "global-admin")
+//    - Query database for entity-specific roles when needed
+//    - Combine both to make authorization decisions
+//
+// 6. Handle Different Operations Appropriately
+//    - Read: Allow if user has any role for entity
+//    - Update: Require elevated role (admin, owner)
+//    - Delete: Require highest role (owner)
+//    - Actions/Functions: Check operation name and apply custom logic
+
