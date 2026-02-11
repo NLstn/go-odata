@@ -492,9 +492,9 @@ func (p *PerEntityPolicy) QueryFilter(ctx odata.AuthContext, resource odata.Reso
 		// User has no memberships, return filter that matches nothing
 		// This is represented as "id eq -1" (assuming -1 is never a valid ID)
 		return &odata.FilterExpression{
+			Property: "id",
 			Operator: "eq",
-			Left:     "id",
-			Right:    -1,
+			Value:    -1,
 		}, nil
 	}
 
@@ -502,9 +502,9 @@ func (p *PerEntityPolicy) QueryFilter(ctx odata.AuthContext, resource odata.Reso
 	var filters []*odata.FilterExpression
 	for _, membership := range memberships {
 		filters = append(filters, &odata.FilterExpression{
+			Property: "id",
 			Operator: "eq",
-			Left:     "id",
-			Right:    membership.ClubID,
+			Value:    membership.ClubID,
 		})
 	}
 
@@ -517,9 +517,9 @@ func (p *PerEntityPolicy) QueryFilter(ctx odata.AuthContext, resource odata.Reso
 	result := filters[0]
 	for i := 1; i < len(filters); i++ {
 		result = &odata.FilterExpression{
-			Operator: "or",
-			Left:     result,
-			Right:    filters[i],
+			Logical: "or",
+			Left:    result,
+			Right:   filters[i],
 		}
 	}
 
