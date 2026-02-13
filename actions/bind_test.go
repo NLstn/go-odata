@@ -216,6 +216,173 @@ func TestCollectFieldBindings_Metadata(t *testing.T) {
 	}
 }
 
+func TestNewDecodeTarget(t *testing.T) {
+	t.Run("struct type", func(t *testing.T) {
+		value, err := NewDecodeTarget(reflect.TypeOf(discountInput{}))
+		if err != nil {
+			t.Fatalf("NewDecodeTarget() error: %v", err)
+		}
+		if value.Kind() != reflect.Ptr || value.Elem().Type() != reflect.TypeOf(discountInput{}) {
+			t.Fatalf("NewDecodeTarget() = %v (%v), want pointer to %v", value, value.Type(), reflect.TypeOf(discountInput{}))
+		}
+	})
+
+	t.Run("pointer to struct type", func(t *testing.T) {
+		value, err := NewDecodeTarget(reflect.TypeOf(&discountInput{}))
+		if err != nil {
+			t.Fatalf("NewDecodeTarget() error: %v", err)
+		}
+		if value.Kind() != reflect.Ptr || value.Elem().Type() != reflect.TypeOf(discountInput{}) {
+			t.Fatalf("NewDecodeTarget() = %v (%v), want pointer to %v", value, value.Type(), reflect.TypeOf(discountInput{}))
+		}
+	})
+
+	t.Run("non struct types", func(t *testing.T) {
+		nonStructTypes := []reflect.Type{reflect.TypeOf(0), reflect.TypeOf(new(int))}
+		for _, tt := range nonStructTypes {
+			_, err := NewDecodeTarget(tt)
+			if err == nil {
+				t.Fatalf("NewDecodeTarget(%v) expected error, got nil", tt)
+			}
+			if !strings.Contains(err.Error(), "BindParams target type must be a struct or pointer to struct") {
+				t.Fatalf("NewDecodeTarget(%v) error = %q, want type error", tt, err)
+			}
+		}
+	})
+}
+
+func TestNormalizeStructType(t *testing.T) {
+	structType, err := NormalizeStructType(reflect.TypeOf(discountInput{}))
+	if err != nil {
+		t.Fatalf("NormalizeStructType() struct error: %v", err)
+	}
+	if structType != reflect.TypeOf(discountInput{}) {
+		t.Fatalf("NormalizeStructType() struct = %v, want %v", structType, reflect.TypeOf(discountInput{}))
+	}
+
+	ptrType, err := NormalizeStructType(reflect.TypeOf(&discountInput{}))
+	if err != nil {
+		t.Fatalf("NormalizeStructType() pointer error: %v", err)
+	}
+	if ptrType != reflect.TypeOf(discountInput{}) {
+		t.Fatalf("NormalizeStructType() pointer = %v, want %v", ptrType, reflect.TypeOf(discountInput{}))
+	}
+
+	_, err = NormalizeStructType(reflect.TypeOf(0))
+	if err == nil {
+		t.Fatal("NormalizeStructType() non-struct expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "parameter binding target must be a struct or pointer to struct") {
+		t.Fatalf("NormalizeStructType() non-struct error = %q, want type error", err)
+	}
+}
+
+func TestResolveFieldValue(t *testing.T) {
+	t.Run("non pointer target", func(t *testing.T) {
+		field, ok := reflect.TypeOf(discountInput{}).FieldByName("Percentage")
+		if !ok {
+			t.Fatal("missing Percentage field")
+		}
+
+		_, err := ResolveFieldValue(reflect.ValueOf(discountInput{}), field)
+		if err == nil {
+			t.Fatal("ResolveFieldValue() expected error for non-pointer target, got nil")
+		}
+		if !strings.Contains(err.Error(), "target must be a pointer to struct") {
+			t.Fatalf("ResolveFieldValue() error = %q, want pointer target error", err)
+		}
+	})
+
+	t.Run("nil pointer target gets allocated", func(t *testing.T) {
+		type outer struct {
+			Inner *discountInput
+		}
+
+		field, ok := reflect.TypeOf(outer{}).FieldByName("Inner")
+		if !ok {
+			t.Fatal("missing Inner field")
+		}
+
+		var target *outer
+		targetVal := reflect.ValueOf(&target).Elem()
+		fieldVal, err := ResolveFieldValue(targetVal, field)
+		if err != nil {
+			t.Fatalf("ResolveFieldValue() error: %v", err)
+		}
+
+		if target == nil {
+			t.Fatal("ResolveFieldValue() did not allocate nil pointer target")
+		}
+		if fieldVal.Kind() != reflect.Ptr || !fieldVal.IsNil() {
+			t.Fatalf("ResolveFieldValue() field = %v, want nil pointer field", fieldVal)
+		}
+	})
+
+	t.Run("invalid intermediate path", func(t *testing.T) {
+		type invalidIntermediate struct {
+			Value int
+		}
+
+		target := &invalidIntermediate{}
+		_, err := ResolveFieldValue(reflect.ValueOf(target), reflect.StructField{Name: "Value", Index: []int{0, 0}})
+		if err == nil {
+			t.Fatal("ResolveFieldValue() expected error for invalid intermediate path, got nil")
+		}
+		if !strings.Contains(err.Error(), "intermediate field int is not addressable") {
+			t.Fatalf("ResolveFieldValue() error = %q, want intermediate field error", err)
+		}
+	})
+}
+
+func TestApplyBindings(t *testing.T) {
+	t.Run("success with mixed present and missing params", func(t *testing.T) {
+		target := &assignTarget{}
+		typeOfTarget := reflect.TypeOf(*target)
+		nameField, _ := typeOfTarget.FieldByName("Name")
+		countField, _ := typeOfTarget.FieldByName("Count")
+		scoreField, _ := typeOfTarget.FieldByName("Score")
+
+		bindings := []StructFieldBinding{
+			{Field: nameField, Name: "name"},
+			{Field: countField, Name: "count"},
+			{Field: scoreField, Name: "score"},
+		}
+
+		err := ApplyBindings(reflect.ValueOf(target), bindings, map[string]interface{}{
+			"name":  "widget",
+			"score": 99.5,
+		})
+		if err != nil {
+			t.Fatalf("ApplyBindings() error: %v", err)
+		}
+
+		if target.Name != "widget" {
+			t.Fatalf("ApplyBindings() name = %q, want %q", target.Name, "widget")
+		}
+		if target.Count != 0 {
+			t.Fatalf("ApplyBindings() count = %d, want unchanged zero", target.Count)
+		}
+		if target.Score != 99.5 {
+			t.Fatalf("ApplyBindings() score = %v, want 99.5", target.Score)
+		}
+	})
+
+	t.Run("assignment error wraps parameter name", func(t *testing.T) {
+		target := &assignTarget{}
+		countField, _ := reflect.TypeOf(*target).FieldByName("Count")
+
+		err := ApplyBindings(reflect.ValueOf(target), []StructFieldBinding{{Field: countField, Name: "count"}}, map[string]interface{}{
+			"count": "not-an-int",
+		})
+		if err == nil {
+			t.Fatal("ApplyBindings() expected assignment error, got nil")
+		}
+		if !strings.Contains(err.Error(), "failed to bind parameter 'count'") {
+			t.Fatalf("ApplyBindings() error = %q, want wrapped parameter name", err)
+		}
+	})
+}
+
 type assignTarget struct {
 	Name  string
 	Count int
