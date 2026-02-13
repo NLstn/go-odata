@@ -121,13 +121,6 @@ func TestRegisterEnumMembersErrors(t *testing.T) {
 				return RegisterEnumMembers(baseType, []EnumMember{{Name: "A", Value: 1}, {Name: "A", Value: 2}})
 			},
 		},
-		{
-			name: "duplicate values",
-			err:  "duplicate member value",
-			fn: func() error {
-				return RegisterEnumMembers(baseType, []EnumMember{{Name: "A", Value: 1}, {Name: "B", Value: 1}})
-			},
-		},
 	}
 
 	for _, tt := range tests {
@@ -140,6 +133,40 @@ func TestRegisterEnumMembersErrors(t *testing.T) {
 				t.Fatalf("expected error to contain %q, got %q", tt.err, err.Error())
 			}
 		})
+	}
+}
+
+func TestRegisterEnumMembersAllowsDuplicateValuesAndSortsByValueThenName(t *testing.T) {
+	restore := withCleanEnumRegistry(t)
+	defer restore()
+
+	baseType := reflect.TypeOf(enumRegistered(0))
+	err := RegisterEnumMembers(baseType, []EnumMember{
+		{Name: "Beta", Value: 1},
+		{Name: "Alpha", Value: 1},
+		{Name: "Gamma", Value: 2},
+	})
+	if err != nil {
+		t.Fatalf("RegisterEnumMembers() error = %v", err)
+	}
+
+	resolved, _, err := ResolveEnumMembers(baseType)
+	if err != nil {
+		t.Fatalf("ResolveEnumMembers() error = %v", err)
+	}
+
+	if len(resolved) != 3 {
+		t.Fatalf("expected 3 enum members, got %d", len(resolved))
+	}
+
+	if resolved[0].Name != "Alpha" || resolved[0].Value != 1 {
+		t.Fatalf("unexpected first member: %+v", resolved[0])
+	}
+	if resolved[1].Name != "Beta" || resolved[1].Value != 1 {
+		t.Fatalf("unexpected second member: %+v", resolved[1])
+	}
+	if resolved[2].Name != "Gamma" || resolved[2].Value != 2 {
+		t.Fatalf("unexpected third member: %+v", resolved[2])
 	}
 }
 
