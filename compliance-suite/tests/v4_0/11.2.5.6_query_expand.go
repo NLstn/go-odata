@@ -189,5 +189,56 @@ func QueryExpand() *framework.TestSuite {
 		},
 	)
 
+	// Test 4: $expand with parent $select should still include single-valued navigation entity
+	suite.AddTest(
+		"test_expand_with_parent_select_belongs_to",
+		"$expand single-valued navigation works when parent $select omits foreign key",
+		func(ctx *framework.TestContext) error {
+			filter := url.QueryEscape("CategoryID ne null")
+			expand := url.QueryEscape("Category($select=Name)")
+			resp, err := ctx.GET("/Products?$filter=" + filter + "&$top=1&$select=Name&$expand=" + expand)
+			if err != nil {
+				return err
+			}
+			if resp.StatusCode != 200 {
+				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+			}
+
+			var result map[string]interface{}
+			if err := json.Unmarshal(resp.Body, &result); err != nil {
+				return fmt.Errorf("failed to parse JSON: %w", err)
+			}
+
+			value, ok := result["value"].([]interface{})
+			if !ok || len(value) == 0 {
+				return fmt.Errorf("response missing 'value' array or contains no items")
+			}
+
+			item, ok := value[0].(map[string]interface{})
+			if !ok {
+				return fmt.Errorf("first item is not an object")
+			}
+
+			categoryValue, exists := item["Category"]
+			if !exists {
+				return fmt.Errorf("Category field missing from expanded response")
+			}
+			if categoryValue == nil {
+				return fmt.Errorf("Category field is null; expected expanded entity")
+			}
+
+			category, ok := categoryValue.(map[string]interface{})
+			if !ok {
+				return fmt.Errorf("Category field is not an object")
+			}
+
+			if _, ok := category["Name"]; !ok {
+				return fmt.Errorf("expanded Category missing selected Name property")
+			}
+
+			return nil
+		},
+	)
+
 	return suite
 }
