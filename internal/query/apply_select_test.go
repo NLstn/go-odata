@@ -294,14 +294,14 @@ func TestApplySelectDatabaseLevel(t *testing.T) {
 	db := getSelectTestDB(t)
 
 	t.Run("Empty select returns db unchanged", func(t *testing.T) {
-		result := applySelect(db, []string{}, meta)
+		result := applySelect(db, []string{}, nil, meta)
 		if result == nil {
 			t.Fatal("expected non-nil result")
 		}
 	})
 
 	t.Run("Select specific properties modifies db", func(t *testing.T) {
-		result := applySelect(db, []string{"name", "price"}, meta)
+		result := applySelect(db, []string{"name", "price"}, nil, meta)
 		if result == nil {
 			t.Fatal("expected non-nil result")
 		}
@@ -309,10 +309,34 @@ func TestApplySelectDatabaseLevel(t *testing.T) {
 	})
 
 	t.Run("Select properties always includes key properties", func(t *testing.T) {
-		result := applySelect(db, []string{"name"}, meta)
+		result := applySelect(db, []string{"name"}, nil, meta)
 		if result == nil {
 			t.Fatal("expected non-nil result")
 		}
 		// Key properties should be automatically included
+	})
+
+	t.Run("Expand on belongs-to includes foreign key column", func(t *testing.T) {
+		result := applySelect(db, []string{"name"}, []ExpandOption{{NavigationProperty: "category"}}, meta)
+		if result == nil {
+			t.Fatal("expected non-nil result")
+		}
+
+		selects := result.Statement.Selects
+		if len(selects) == 0 {
+			t.Fatal("expected select clause to include columns")
+		}
+
+		foundFK := false
+		for _, selectExpr := range selects {
+			if selectExpr == "`select_test_products`.`category_id`" || selectExpr == "\"select_test_products\".\"category_id\"" {
+				foundFK = true
+				break
+			}
+		}
+
+		if !foundFK {
+			t.Fatalf("expected select clause to include category_id foreign key, got: %v", selects)
+		}
 	})
 }

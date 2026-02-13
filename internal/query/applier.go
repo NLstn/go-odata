@@ -91,7 +91,7 @@ func ApplyQueryOptionsWithFTS(db *gorm.DB, options *QueryOptions, entityMetadata
 	// Apply select at database level to fetch only needed columns
 	// Skip this if compute is present, as compute handles the select clause
 	if len(options.Select) > 0 && options.Compute == nil {
-		db = applySelect(db, options.Select, entityMetadata)
+		db = applySelect(db, options.Select, options.Expand, entityMetadata)
 	}
 
 	// Apply filter

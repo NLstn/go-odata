@@ -9,15 +9,28 @@ import (
 )
 
 // applySelect applies select clause to fetch only specified columns at database level
-func applySelect(db *gorm.DB, selectedProperties []string, entityMetadata *metadata.EntityMetadata) *gorm.DB {
+func applySelect(db *gorm.DB, selectedProperties []string, expandOptions []ExpandOption, entityMetadata *metadata.EntityMetadata) *gorm.DB {
 	if len(selectedProperties) == 0 {
 		return db
 	}
 
 	columns := make([]string, 0, len(selectedProperties))
+	columnSet := make(map[string]bool)
 	selectedPropMap := make(map[string]bool)
 	tableName := entityMetadata.TableName
 	dialect := getDatabaseDialect(db)
+
+	addColumn := func(columnName string) {
+		if columnName == "" {
+			return
+		}
+		qualifiedColumn := quoteTableName(dialect, tableName) + "." + quoteIdent(dialect, columnName)
+		if columnSet[qualifiedColumn] {
+			return
+		}
+		columnSet[qualifiedColumn] = true
+		columns = append(columns, qualifiedColumn)
+	}
 
 	for _, propName := range selectedProperties {
 		propName = strings.TrimSpace(propName)
@@ -25,11 +38,7 @@ func applySelect(db *gorm.DB, selectedProperties []string, entityMetadata *metad
 			if (prop.JsonName == propName || prop.Name == propName) && !prop.IsNavigationProp && !prop.IsComplexType && !prop.IsStream {
 				// Use GetColumnName for proper column name resolution (handles GORM tags and metadata)
 				columnName := GetColumnName(prop.Name, entityMetadata)
-				// Qualify with quoted table and column names to avoid ambiguous column references when JOINs are present
-				// This is necessary for PostgreSQL and also helps with SQLite when multiple tables have the same column names
-				// quoteTableName handles schema-qualified tables, quoteIdent quotes column names
-				qualifiedColumn := quoteTableName(dialect, tableName) + "." + quoteIdent(dialect, columnName)
-				columns = append(columns, qualifiedColumn)
+				addColumn(columnName)
 				selectedPropMap[prop.Name] = true
 				break
 			}
@@ -40,9 +49,28 @@ func applySelect(db *gorm.DB, selectedProperties []string, entityMetadata *metad
 		if !selectedPropMap[keyProp.Name] {
 			// Use GetColumnName for proper column name resolution (handles GORM tags and metadata)
 			columnName := GetColumnName(keyProp.Name, entityMetadata)
-			// Qualify with quoted table and column names to avoid ambiguous column references when JOINs are present
-			qualifiedColumn := quoteTableName(dialect, tableName) + "." + quoteIdent(dialect, columnName)
-			columns = append(columns, qualifiedColumn)
+			addColumn(columnName)
+		}
+	}
+
+	for _, expandOpt := range expandOptions {
+		navPropName := strings.TrimSpace(expandOpt.NavigationProperty)
+		if navPropName == "" {
+			continue
+		}
+
+		for _, prop := range entityMetadata.Properties {
+			if !prop.IsNavigationProp || prop.NavigationIsArray {
+				continue
+			}
+			if prop.Name != navPropName && prop.JsonName != navPropName {
+				continue
+			}
+
+			for _, fkColumn := range strings.Split(prop.ForeignKeyColumnName, ",") {
+				addColumn(strings.TrimSpace(fkColumn))
+			}
+			break
 		}
 	}
 
