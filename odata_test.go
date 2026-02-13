@@ -2,6 +2,7 @@ package odata
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
@@ -319,21 +320,102 @@ func TestServiceRegisterMultipleEntities(t *testing.T) {
 }
 
 func TestRegisterEnumType(t *testing.T) {
-	db := setupTestDB(t)
-	service, err := NewService(db)
-	if err != nil {
-		t.Fatalf("NewService() error: %v", err)
+	type testRegisterEnumTypeEnum int
+	type testRegisterEnumTypeEntity struct {
+		ID    int                      `json:"id" odata:"key"`
+		Value testRegisterEnumTypeEnum `json:"value" odata:"enum=testRegisterEnumTypeEnum"`
 	}
 
-	if err := RegisterEnumType(RegisteredEnum(0), map[string]int64{
-		"Foo": int64(RegisteredEnumFoo),
-		"Bar": int64(RegisteredEnumBar),
-	}); err != nil {
-		t.Fatalf("RegisterEnumType failed: %v", err)
+	tests := []struct {
+		name            string
+		enumValue       interface{}
+		members         map[string]int64
+		wantErrContains string
+		wantMemberOrder []string
+	}{
+		{
+			name:            "nil enumValue returns error",
+			enumValue:       nil,
+			members:         map[string]int64{"A": 1},
+			wantErrContains: "enumValue cannot be nil",
+		},
+		{
+			name:            "empty members returns error",
+			enumValue:       testRegisterEnumTypeEnum(0),
+			members:         map[string]int64{},
+			wantErrContains: "enum members cannot be empty",
+		},
+		{
+			name:      "pointer enum input succeeds",
+			enumValue: new(testRegisterEnumTypeEnum),
+			members: map[string]int64{
+				"PointerMember": 7,
+			},
+		},
+		{
+			name:      "duplicate numeric values are accepted and sorted by value then name",
+			enumValue: testRegisterEnumTypeEnum(0),
+			members: map[string]int64{
+				"Beta":  1,
+				"Alpha": 1,
+				"Gamma": 2,
+			},
+			wantMemberOrder: []string{
+				`<Member Name="Alpha" Value="1" />`,
+				`<Member Name="Beta" Value="1" />`,
+				`<Member Name="Gamma" Value="2" />`,
+			},
+		},
 	}
 
-	if err := service.RegisterEntity(&RegisteredEnumEntity{}); err != nil {
-		t.Fatalf("RegisterEntity with registered enum failed: %v", err)
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			db := setupTestDB(t)
+			service, err := NewService(db)
+			if err != nil {
+				t.Fatalf("NewService() error: %v", err)
+			}
+
+			err = RegisterEnumType(tc.enumValue, tc.members)
+			if tc.wantErrContains != "" {
+				if err == nil {
+					t.Fatalf("expected error containing %q, got nil", tc.wantErrContains)
+				}
+				if !strings.Contains(err.Error(), tc.wantErrContains) {
+					t.Fatalf("expected error containing %q, got %q", tc.wantErrContains, err.Error())
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("RegisterEnumType() error = %v", err)
+			}
+
+			if err := service.RegisterEntity(&testRegisterEnumTypeEntity{}); err != nil {
+				t.Fatalf("RegisterEntity with registered enum failed: %v", err)
+			}
+
+			request := httptest.NewRequest(http.MethodGet, "/$metadata", nil)
+			recorder := httptest.NewRecorder()
+			service.metadataHandler.HandleMetadata(recorder, request)
+
+			if recorder.Code != http.StatusOK {
+				t.Fatalf("HandleMetadata status = %d, want %d", recorder.Code, http.StatusOK)
+			}
+
+			body := recorder.Body.String()
+			for i := 1; i < len(tc.wantMemberOrder); i++ {
+				prev := strings.Index(body, tc.wantMemberOrder[i-1])
+				curr := strings.Index(body, tc.wantMemberOrder[i])
+				if prev == -1 || curr == -1 {
+					t.Fatalf("metadata is missing expected enum members, body: %s", body)
+				}
+				if prev > curr {
+					t.Fatalf("expected %q to appear before %q in metadata", tc.wantMemberOrder[i-1], tc.wantMemberOrder[i])
+				}
+			}
+		})
 	}
 }
 

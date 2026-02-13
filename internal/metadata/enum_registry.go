@@ -40,7 +40,6 @@ func RegisterEnumMembers(enumType reflect.Type, members []EnumMember) error {
 
 	// Validate members: ensure unique names and deterministic ordering.
 	seenNames := make(map[string]struct{})
-	seenValues := make(map[int64]struct{})
 	normalized := make([]EnumMember, len(members))
 	for i, member := range members {
 		if member.Name == "" {
@@ -50,11 +49,6 @@ func RegisterEnumMembers(enumType reflect.Type, members []EnumMember) error {
 			return fmt.Errorf("enum type %s has duplicate member name %s", baseType.Name(), member.Name)
 		}
 		seenNames[member.Name] = struct{}{}
-
-		if _, exists := seenValues[member.Value]; exists {
-			return fmt.Errorf("enum type %s has duplicate member value %d", baseType.Name(), member.Value)
-		}
-		seenValues[member.Value] = struct{}{}
 
 		normalized[i] = member
 	}
