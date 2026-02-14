@@ -313,8 +313,25 @@ func (h *BatchHandler) parseHTTPRequest(r io.Reader) (*batchRequest, error) {
 		return nil, fmt.Errorf("empty request")
 	}
 
-	parts := strings.Fields(requestLine)
-	if len(parts) < 2 {
+	// Parse HTTP request line: METHOD SP Request-URI [SP HTTP-Version]
+	// Cannot use strings.Fields because OData URLs may contain spaces in query parameters
+	// (e.g., $filter=Name eq 'John'), which would be incorrectly split.
+	firstSpace := strings.IndexByte(requestLine, ' ')
+	if firstSpace == -1 {
+		return nil, fmt.Errorf("invalid request line: %s", requestLine)
+	}
+	method := requestLine[:firstSpace]
+	rest := requestLine[firstSpace+1:]
+
+	// Strip optional HTTP version suffix (e.g., " HTTP/1.1")
+	reqURL := rest
+	if lastSpace := strings.LastIndexByte(rest, ' '); lastSpace != -1 {
+		if strings.HasPrefix(rest[lastSpace+1:], "HTTP/") {
+			reqURL = rest[:lastSpace]
+		}
+	}
+
+	if reqURL == "" {
 		return nil, fmt.Errorf("invalid request line: %s", requestLine)
 	}
 
@@ -337,8 +354,8 @@ func (h *BatchHandler) parseHTTPRequest(r io.Reader) (*batchRequest, error) {
 	}
 
 	return &batchRequest{
-		Method:  parts[0],
-		URL:     parts[1],
+		Method:  method,
+		URL:     reqURL,
 		Headers: headers,
 		Body:    bytes.TrimSpace(body),
 	}, nil
