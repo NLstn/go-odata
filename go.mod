@@ -4,6 +4,7 @@ module github.com/nlstn/go-odata
 go 1.24.0
 
 require (
+	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/google/uuid v1.6.0
 	github.com/mitchellh/go-server-timing v1.0.1
 	github.com/shopspring/decimal v1.4.0
@@ -16,7 +17,6 @@ require (
 )
 
 require (
-	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/felixge/httpsnoop v1.0.0 // indirect
 	github.com/golang/gddo v0.0.0-20180823221919-9d8ff1c67be5 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
