@@ -574,6 +574,28 @@ Accept: application/json
 			url:         "BatchTestProducts(1)",
 		},
 		{
+			name: "GET request with filter containing spaces",
+			input: `GET /BatchTestProducts?$filter=Name eq 'Widget' HTTP/1.1
+Host: localhost
+Accept: application/json
+
+`,
+			expectError: false,
+			method:      "GET",
+			url:         "/BatchTestProducts?$filter=Name eq 'Widget'",
+		},
+		{
+			name: "GET request with filter and expand containing spaces",
+			input: `GET /BatchTestProducts?$expand=Category&$filter=Price gt 100 HTTP/1.1
+Host: localhost
+Accept: application/json
+
+`,
+			expectError: false,
+			method:      "GET",
+			url:         "/BatchTestProducts?$expand=Category&$filter=Price gt 100",
+		},
+		{
 			name:        "Empty request",
 			input:       "",
 			expectError: true,
