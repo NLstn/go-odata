@@ -1352,3 +1352,47 @@ Content-Type: application/json
 		t.Errorf("Expected 0 products in database due to batch size limit, got %d", count)
 	}
 }
+
+func TestBatchHandler_FilterQueryWithSpaces(t *testing.T) {
+	handler, db, _ := setupBatchTestHandler(t)
+
+	// Insert test data
+	products := []BatchTestProduct{
+		{ID: 1, Name: "Widget", Price: 10.00, Category: "Electronics"},
+		{ID: 2, Name: "Gadget", Price: 20.00, Category: "Electronics"},
+	}
+	for _, p := range products {
+		db.Create(&p)
+	}
+
+	// Create batch request with $filter containing spaces (e.g., eq 'Widget')
+	// This previously caused a panic in httptest.NewRequest
+	boundary := "batch_boundary"
+	body := fmt.Sprintf(`--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+GET /BatchTestProducts?$filter=Name eq 'Widget' HTTP/1.1
+Host: localhost
+Accept: application/json
+
+
+--%s--
+`, boundary, boundary)
+
+	req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+	req.Header.Set("Content-Type", fmt.Sprintf("multipart/mixed; boundary=%s", boundary))
+	w := httptest.NewRecorder()
+
+	// This should not panic
+	handler.HandleBatch(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	responseBody := w.Body.String()
+	if !strings.Contains(responseBody, "Widget") {
+		t.Errorf("Response should contain 'Widget'. Body: %s", responseBody)
+	}
+}

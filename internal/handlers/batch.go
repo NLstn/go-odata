@@ -372,6 +372,13 @@ func (h *BatchHandler) executeRequest(req *batchRequest, parentReq *http.Request
 		url = "/" + url
 	}
 
+	// Encode spaces in query parameters to prevent httptest.NewRequest panic.
+	// OData filter expressions contain spaces (e.g., "$filter=Name eq 'John'")
+	// which cause httptest.NewRequest to misparse the URL as an HTTP request line.
+	if idx := strings.IndexByte(url, '?'); idx != -1 {
+		url = url[:idx] + "?" + strings.ReplaceAll(url[idx+1:], " ", "%20")
+	}
+
 	// Create an HTTP request
 	httpReq := httptest.NewRequest(req.Method, url, bytes.NewReader(req.Body))
 	for key, values := range req.Headers {
