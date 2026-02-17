@@ -17,8 +17,33 @@ func ApplyExpandOptionToValue(value interface{}, expandOpt *query.ExpandOption, 
 	updatedValue := value
 
 	// Apply nested $select first if specified
+	// NOTE: Only apply if Select has values - this is for nested $select in expand syntax like $expand=Products($select=ID)
+	// Top-level select with navigation paths (like $select=Product/Name) is handled differently
 	if len(expandOpt.Select) > 0 && targetMetadata != nil {
-		updatedValue = applySelectToExpandedValueWithMetadata(updatedValue, expandOpt.Select, targetMetadata)
+		// Key properties should always be included in filtered results (per OData spec)
+		selectSet := make(map[string]bool)
+		for _, s := range expandOpt.Select {
+			selectSet[s] = true
+		}
+
+		// Always include key properties
+		if len(targetMetadata.KeyProperties) > 0 {
+			for _, keyProp := range targetMetadata.KeyProperties {
+				selectSet[keyProp.Name] = true
+				selectSet[keyProp.JsonName] = true
+			}
+		} else if targetMetadata.KeyProperty != nil {
+			selectSet[targetMetadata.KeyProperty.Name] = true
+			selectSet[targetMetadata.KeyProperty.JsonName] = true
+		}
+
+		// Convert back to slice
+		deduped := make([]string, 0, len(selectSet))
+		for s := range selectSet {
+			deduped = append(deduped, s)
+		}
+
+		updatedValue = applySelectToExpandedValueWithMetadata(updatedValue, deduped, targetMetadata)
 	}
 
 	// Apply nested $expand
@@ -262,8 +287,9 @@ func filterEntityFieldsWithMetadata(entityVal reflect.Value, selectedPropMap map
 			}
 
 			// Check if selected
+			// Note: Key properties (ID fields) and OData annotations are always included
 			if !selectedPropMap[field.Name] && !selectedPropMap[jsonName] {
-				// Skip non-selected properties, but include OData annotations
+				// Skip non-selected properties, but include OData annotations and potential key fields
 				if !strings.HasPrefix(jsonName, "@") {
 					continue
 				}
