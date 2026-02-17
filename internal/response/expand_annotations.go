@@ -2,6 +2,7 @@ package response
 
 import (
 	"reflect"
+	"strings"
 
 	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/query"
@@ -13,7 +14,17 @@ func ApplyExpandOptionToValue(value interface{}, expandOpt *query.ExpandOption, 
 		return value, nil
 	}
 
-	updatedValue := applyNestedExpandAnnotations(value, expandOpt.Expand, targetMetadata)
+	updatedValue := value
+
+	// Apply nested $select first if specified
+	if len(expandOpt.Select) > 0 && targetMetadata != nil {
+		updatedValue = applySelectToExpandedValueWithMetadata(updatedValue, expandOpt.Select, targetMetadata)
+	}
+
+	// Apply nested $expand
+	updatedValue = applyNestedExpandAnnotations(updatedValue, expandOpt.Expand, targetMetadata)
+
+	// Handle $count on the expanded collection
 	if !expandOpt.Count {
 		return updatedValue, nil
 	}
@@ -183,4 +194,97 @@ func expandedCollectionCount(value interface{}) *int {
 	default:
 		return nil
 	}
+}
+
+// applySelectToExpandedValueWithMetadata applies $select to the expanded value using metadata
+func applySelectToExpandedValueWithMetadata(value interface{}, selectedProperties []string, entityMetadata *metadata.EntityMetadata) interface{} {
+	if value == nil || len(selectedProperties) == 0 || entityMetadata == nil {
+		return value
+	}
+
+	// Build selected properties map
+	selectedPropMap := make(map[string]bool)
+	for _, propName := range selectedProperties {
+		selectedPropMap[propName] = true
+	}
+
+	val := reflect.ValueOf(value)
+
+	if val.Kind() == reflect.Ptr {
+		if val.IsNil() {
+			return value
+		}
+		val = val.Elem()
+	}
+
+	// Handle collections
+	if val.Kind() == reflect.Slice || val.Kind() == reflect.Array {
+		resultSlice := make([]map[string]interface{}, val.Len())
+		for i := 0; i < val.Len(); i++ {
+			itemVal := val.Index(i)
+			resultSlice[i] = filterEntityFieldsWithMetadata(itemVal, selectedPropMap)
+		}
+		return resultSlice
+	}
+
+	// Handle single entity
+	return filterEntityFieldsWithMetadata(val, selectedPropMap)
+}
+
+// filterEntityFieldsWithMetadata creates a filtered map of entity fields based on selected properties
+func filterEntityFieldsWithMetadata(entityVal reflect.Value, selectedPropMap map[string]bool) map[string]interface{} {
+	if entityVal.Kind() == reflect.Ptr {
+		if entityVal.IsNil() {
+			return nil
+		}
+		entityVal = entityVal.Elem()
+	}
+
+	filteredEntity := make(map[string]interface{})
+
+	// Add OData metadata annotations (always included)
+	selectedPropMap["@odata.id"] = true
+	selectedPropMap["@odata.type"] = true
+	selectedPropMap["@odata.etag"] = true
+
+	if entityVal.Kind() == reflect.Struct {
+		for j := 0; j < entityVal.NumField(); j++ {
+			field := entityVal.Type().Field(j)
+
+			// Get the JsonName or use the field name
+			jsonName := field.Name
+			if jsonTag := field.Tag.Get("json"); jsonTag != "" {
+				// Extract the field name from json tag (format: "fieldname,options...")
+				parts := strings.Split(jsonTag, ",")
+				if parts[0] != "" {
+					jsonName = parts[0]
+				}
+			}
+
+			// Check if selected
+			if !selectedPropMap[field.Name] && !selectedPropMap[jsonName] {
+				// Skip non-selected properties, but include OData annotations
+				if !strings.HasPrefix(jsonName, "@") {
+					continue
+				}
+			}
+
+			fieldValue := entityVal.Field(j)
+			if fieldValue.IsValid() && fieldValue.CanInterface() {
+				filteredEntity[jsonName] = fieldValue.Interface()
+			}
+		}
+	} else if entityVal.Kind() == reflect.Map {
+		// If the value is already a map, just copy selected properties
+		entityMapVal := entityVal.Interface()
+		if entityMap, ok := entityMapVal.(map[string]interface{}); ok {
+			for key, val := range entityMap {
+				if selectedPropMap[key] || strings.HasPrefix(key, "@") {
+					filteredEntity[key] = val
+				}
+			}
+		}
+	}
+
+	return filteredEntity
 }
