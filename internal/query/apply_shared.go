@@ -9,7 +9,7 @@ import (
 
 // applySelectToExpandedEntity applies select to an expanded navigation property (single entity or collection)
 // This is a simplified version that doesn't require full metadata - it works with reflection
-func applySelectToExpandedEntity(expandedValue interface{}, selectedProps []string) interface{} {
+func applySelectToExpandedEntity(expandedValue interface{}, selectedProps []string, expandOptions []ExpandOption) interface{} {
 	if len(selectedProps) == 0 || expandedValue == nil {
 		return expandedValue
 	}
@@ -32,24 +32,30 @@ func applySelectToExpandedEntity(expandedValue interface{}, selectedProps []stri
 		resultSlice := make([]map[string]interface{}, val.Len())
 		for i := 0; i < val.Len(); i++ {
 			itemVal := val.Index(i)
-			resultSlice[i] = filterEntityFields(itemVal, selectedPropMap)
+			resultSlice[i] = filterEntityFields(itemVal, selectedPropMap, expandOptions)
 		}
 		return resultSlice
 	}
 
 	if val.Kind() == reflect.Struct {
-		return filterEntityFields(val, selectedPropMap)
+		return filterEntityFields(val, selectedPropMap, expandOptions)
 	}
 
 	return expandedValue
 }
 
 // filterEntityFields filters struct fields based on selected properties map
-func filterEntityFields(entityVal reflect.Value, selectedPropMap map[string]bool) map[string]interface{} {
+func filterEntityFields(entityVal reflect.Value, selectedPropMap map[string]bool, expandOptions []ExpandOption) map[string]interface{} {
 	filtered := make(map[string]interface{})
 	entityType := entityVal.Type()
 
 	idFields := []string{"ID", "Id", "id"}
+
+	// Build map of expanded navigation properties by name
+	expandedNavMap := make(map[string]*ExpandOption)
+	for i := range expandOptions {
+		expandedNavMap[expandOptions[i].NavigationProperty] = &expandOptions[i]
+	}
 
 	for i := 0; i < entityVal.NumField(); i++ {
 		field := entityType.Field(i)
@@ -82,8 +88,23 @@ func filterEntityFields(entityVal reflect.Value, selectedPropMap map[string]bool
 			}
 		}
 
+		// Check if this field is a navigation property that should be expanded
+		var matchedExpandOpt *ExpandOption
+		if opt, ok := expandedNavMap[field.Name]; ok {
+			matchedExpandOpt = opt
+		} else if opt, ok := expandedNavMap[jsonName]; ok {
+			matchedExpandOpt = opt
+		}
+
 		if isSelected || isKeyField {
 			filtered[jsonName] = fieldVal.Interface()
+		} else if matchedExpandOpt != nil {
+			// Include expanded navigation properties and recursively apply their select/expand
+			val := fieldVal.Interface()
+			if matchedExpandOpt.Select != nil && len(matchedExpandOpt.Select) > 0 && val != nil {
+				val = applySelectToExpandedEntity(val, matchedExpandOpt.Select, matchedExpandOpt.Expand)
+			}
+			filtered[jsonName] = val
 		}
 	}
 

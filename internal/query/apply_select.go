@@ -157,7 +157,11 @@ func ApplySelect(results interface{}, selectedProperties []string, entityMetadat
 						}
 
 						if len(nestedSelect) > 0 && fieldVal != nil {
-							fieldVal = applySelectToExpandedEntity(fieldVal, nestedSelect)
+							var nestedExpand []ExpandOption
+							if expandOpt != nil {
+								nestedExpand = expandOpt.Expand
+							}
+							fieldVal = applySelectToExpandedEntity(fieldVal, nestedSelect, nestedExpand)
 						}
 					}
 
@@ -243,7 +247,11 @@ func ApplySelectToEntity(entity interface{}, selectedProperties []string, entity
 					}
 
 					if len(nestedSelect) > 0 && fieldVal != nil {
-						fieldVal = applySelectToExpandedEntity(fieldVal, nestedSelect)
+						var nestedExpand []ExpandOption
+						if expandOpt != nil {
+							nestedExpand = expandOpt.Expand
+						}
+						fieldVal = applySelectToExpandedEntity(fieldVal, nestedSelect, nestedExpand)
 					}
 				}
 

@@ -19,7 +19,7 @@ type sharedTestCategory struct {
 
 func TestApplySelectToExpandedEntity(t *testing.T) {
 	t.Run("nil value returns nil", func(t *testing.T) {
-		result := applySelectToExpandedEntity(nil, []string{"name"})
+		result := applySelectToExpandedEntity(nil, []string{"name"}, nil)
 		if result != nil {
 			t.Error("expected nil result")
 		}
@@ -27,7 +27,7 @@ func TestApplySelectToExpandedEntity(t *testing.T) {
 
 	t.Run("empty select returns unchanged", func(t *testing.T) {
 		entity := sharedTestProduct{ID: 1, Name: "Test"}
-		result := applySelectToExpandedEntity(&entity, []string{})
+		result := applySelectToExpandedEntity(&entity, []string{}, nil)
 		if result == nil {
 			t.Error("expected non-nil result")
 		}
@@ -35,7 +35,7 @@ func TestApplySelectToExpandedEntity(t *testing.T) {
 
 	t.Run("single entity with select", func(t *testing.T) {
 		entity := sharedTestProduct{ID: 1, Name: "Product1", Price: 10.5}
-		result := applySelectToExpandedEntity(&entity, []string{"name"})
+		result := applySelectToExpandedEntity(&entity, []string{"name"}, nil)
 
 		resultMap, ok := result.(map[string]interface{})
 		if !ok {
@@ -58,7 +58,7 @@ func TestApplySelectToExpandedEntity(t *testing.T) {
 			{ID: 1, Name: "Product1", Price: 10.5},
 			{ID: 2, Name: "Product2", Price: 20.0},
 		}
-		result := applySelectToExpandedEntity(entities, []string{"name"})
+		result := applySelectToExpandedEntity(entities, []string{"name"}, nil)
 
 		resultSlice, ok := result.([]map[string]interface{})
 		if !ok {
@@ -80,7 +80,7 @@ func TestApplySelectToExpandedEntity(t *testing.T) {
 
 	t.Run("pointer to nil returns unchanged", func(t *testing.T) {
 		var entity *sharedTestProduct
-		result := applySelectToExpandedEntity(entity, []string{"name"})
+		result := applySelectToExpandedEntity(entity, []string{"name"}, nil)
 		if result != entity {
 			t.Error("expected result to be unchanged")
 		}
@@ -95,7 +95,7 @@ func TestFilterEntityFields(t *testing.T) {
 		selectedMap := map[string]bool{
 			"name": true,
 		}
-		result := filterEntityFields(productVal, selectedMap)
+		result := filterEntityFields(productVal, selectedMap, nil)
 
 		if _, ok := result["name"]; !ok {
 			t.Error("expected 'name' to be in result")
@@ -112,7 +112,7 @@ func TestFilterEntityFields(t *testing.T) {
 		selectedMap := map[string]bool{
 			"name": true,
 		}
-		result := filterEntityFields(productVal, selectedMap)
+		result := filterEntityFields(productVal, selectedMap, nil)
 
 		if _, ok := result["ID"]; !ok {
 			t.Error("expected 'ID' (key) to be included automatically")
