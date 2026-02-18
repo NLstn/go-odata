@@ -355,4 +355,125 @@ func TestNestedExpandMultipleLevels(t *testing.T) {
 			t.Errorf("Expected Club Name 'Chess Club', got %v", clubMap["Name"])
 		}
 	})
+
+	t.Run("Parent $select with nested $expand containing $select and $expand", func(t *testing.T) {
+		// This is the scenario from the bug report:
+		// /Books?$select=title&$expand=author($select=name;$expand=publisher)
+		// Adapted to our test entities:
+		// /NestedExpandUsers?$select=Name&$expand=Members($select=Role;$expand=Club)
+		req := httptest.NewRequest("GET", "/NestedExpandUsers?$select=Name&$expand=Members($select=Role;$expand=Club)", nil)
+		w := httptest.NewRecorder()
+
+		service.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("Expected status 200, got %d: %s", w.Code, w.Body.String())
+		}
+
+		var response map[string]interface{}
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+			t.Fatalf("Failed to parse response: %v", err)
+		}
+
+		value, ok := response["value"].([]interface{})
+		if !ok {
+			t.Fatal("Response should have value array")
+		}
+
+		if len(value) == 0 {
+			t.Fatal("Expected at least one user")
+		}
+
+		user := value[0].(map[string]interface{})
+
+		// Verify Name is selected
+		if _, hasName := user["Name"]; !hasName {
+			t.Error("User should have Name field (from $select)")
+		}
+
+		// Verify Members are expanded
+		members, ok := user["Members"].([]interface{})
+		if !ok {
+			t.Fatal("Members should be expanded")
+		}
+
+		if len(members) == 0 {
+			t.Fatal("Expected at least one member")
+		}
+
+		member := members[0].(map[string]interface{})
+
+		// Verify Role is selected in member
+		if _, hasRole := member["Role"]; !hasRole {
+			t.Error("Member should have Role field (from nested $select)")
+		}
+
+		// Verify Club IS expanded (this was the bug - Club was being dropped)
+		club, hasClub := member["Club"]
+		if !hasClub {
+			t.Fatal("Club should be expanded with nested $expand inside $expand with $select")
+		}
+
+		clubMap, ok := club.(map[string]interface{})
+		if !ok {
+			t.Fatal("Club should be an object")
+		}
+
+		// Club should have its full properties since no $select was applied to it
+		if _, hasName := clubMap["Name"]; !hasName {
+			t.Error("Club should have Name field")
+		}
+		if _, hasID := clubMap["ID"]; !hasID {
+			t.Error("Club should have ID field")
+		}
+	})
+
+	t.Run("Single entity with $select and nested $expand", func(t *testing.T) {
+		// Similar bug but for single entity endpoint
+		req := httptest.NewRequest("GET", "/NestedExpandUsers(user-123)?$select=Name&$expand=Members($select=Role;$expand=Club)", nil)
+		w := httptest.NewRecorder()
+
+		service.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("Expected status 200, got %d: %s", w.Code, w.Body.String())
+		}
+
+		var response map[string]interface{}
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+			t.Fatalf("Failed to parse response: %v", err)
+		}
+
+		// Verify Name is selected
+		if _, hasName := response["Name"]; !hasName {
+			t.Error("User should have Name field (from $select)")
+		}
+
+		// Verify Members are expanded
+		members, ok := response["Members"].([]interface{})
+		if !ok {
+			t.Fatal("Members should be expanded")
+		}
+
+		if len(members) == 0 {
+			t.Fatal("Expected at least one member")
+		}
+
+		member := members[0].(map[string]interface{})
+
+		// Verify Club IS expanded
+		club, hasClub := member["Club"]
+		if !hasClub {
+			t.Fatal("Club should be expanded with nested $expand inside $expand with $select")
+		}
+
+		clubMap, ok := club.(map[string]interface{})
+		if !ok {
+			t.Fatal("Club should be an object")
+		}
+
+		if _, hasName := clubMap["Name"]; !hasName {
+			t.Error("Club should have Name field")
+		}
+	})
 }

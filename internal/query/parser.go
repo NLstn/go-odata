@@ -231,6 +231,32 @@ func ParseQueryOptions(queryParams url.Values, entityMetadata *metadata.EntityMe
 	return ParseQueryOptionsWithConfig(queryParams, entityMetadata, nil)
 }
 
+// ParseRawQuery parses a raw query string into url.Values, splitting only on '&'.
+// Unlike url.ParseQuery, this preserves semicolons within parameter values, which is
+// required for OData nested query options like $expand=Nav($select=A;$expand=B).
+func ParseRawQuery(rawQuery string) url.Values {
+	values := make(url.Values)
+	if rawQuery == "" {
+		return values
+	}
+	for _, part := range strings.Split(rawQuery, "&") {
+		if part == "" {
+			continue
+		}
+		key, value, _ := strings.Cut(part, "=")
+		decodedKey, err := url.QueryUnescape(key)
+		if err != nil {
+			decodedKey = key
+		}
+		decodedValue, err := url.QueryUnescape(value)
+		if err != nil {
+			decodedValue = value
+		}
+		values.Add(decodedKey, decodedValue)
+	}
+	return values
+}
+
 // ParseQueryOptionsWithConfig parses OData query options from the URL with additional configuration
 func ParseQueryOptionsWithConfig(queryParams url.Values, entityMetadata *metadata.EntityMetadata, config *ParserConfig) (*QueryOptions, error) {
 	options := &QueryOptions{}

@@ -37,6 +37,12 @@ func ApplyExpandOptionToValue(value interface{}, expandOpt *query.ExpandOption, 
 			selectSet[targetMetadata.KeyProperty.JsonName] = true
 		}
 
+		// Include navigation properties from nested $expand so they are not stripped
+		// by the select filter before applyNestedExpandAnnotations can process them
+		for _, nestedExpand := range expandOpt.Expand {
+			selectSet[nestedExpand.NavigationProperty] = true
+		}
+
 		// Convert back to slice
 		deduped := make([]string, 0, len(selectSet))
 		for s := range selectSet {
