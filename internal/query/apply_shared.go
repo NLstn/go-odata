@@ -101,7 +101,7 @@ func filterEntityFields(entityVal reflect.Value, selectedPropMap map[string]bool
 		} else if matchedExpandOpt != nil {
 			// Include expanded navigation properties and recursively apply their select/expand
 			val := fieldVal.Interface()
-			if matchedExpandOpt.Select != nil && len(matchedExpandOpt.Select) > 0 && val != nil {
+			if len(matchedExpandOpt.Select) > 0 && val != nil {
 				val = applySelectToExpandedEntity(val, matchedExpandOpt.Select, matchedExpandOpt.Expand)
 			}
 			filtered[jsonName] = val
