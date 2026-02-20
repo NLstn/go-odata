@@ -690,36 +690,36 @@ func autoDetectPropertyAnnotations(property *PropertyMetadata) {
 
 	// Database-generated keys are computed (auto-increment)
 	if property.IsKey && property.DatabaseGenerated {
-		ensurePropertyAnnotation(property, CoreComputed, true)
+		ensureCoreComputedAnnotation(property)
 	}
 
 	// Auto properties are computed server-side
 	if property.IsAuto {
-		ensurePropertyAnnotation(property, CoreComputed, true)
+		ensureCoreComputedAnnotation(property)
 	}
 
 	// Computed properties are server-side computed values
 	if property.IsComputed {
-		ensurePropertyAnnotation(property, CoreComputed, true)
+		ensureCoreComputedAnnotation(property)
 	}
 
 	// ETag properties use optimistic concurrency (we add a marker annotation)
 	// Note: The actual OptimisticConcurrency annotation is typically on the EntityType
 	if property.IsETag {
-		ensurePropertyAnnotation(property, CoreComputed, true)
+		ensureCoreComputedAnnotation(property)
 	}
 }
 
-// ensurePropertyAnnotation adds an annotation to a property if it doesn't already exist
-func ensurePropertyAnnotation(property *PropertyMetadata, term string, value interface{}) {
+// ensureCoreComputedAnnotation adds the Core.Computed annotation to a property if it doesn't already exist
+func ensureCoreComputedAnnotation(property *PropertyMetadata) {
 	if property == nil {
 		return
 	}
 	if property.Annotations == nil {
 		property.Annotations = NewAnnotationCollection()
 	}
-	if !property.Annotations.Has(term) {
-		property.Annotations.AddTerm(term, value)
+	if !property.Annotations.Has(CoreComputed) {
+		property.Annotations.AddTerm(CoreComputed, true)
 	}
 }
 
