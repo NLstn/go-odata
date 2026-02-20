@@ -106,6 +106,8 @@ type PropertyMetadata struct {
 	StreamContentField     string // Name of the field containing the binary content for this stream
 	// Auto properties
 	IsAuto bool // True if this property is automatically set server-side (clients cannot provide/modify it)
+	// Computed properties
+	IsComputed bool // True if this property is computed server-side and has no database column
 	// Annotations
 	Annotations *AnnotationCollection // OData vocabulary annotations for this property
 }
@@ -131,6 +133,11 @@ func AnalyzeEntity(entity interface{}) (*EntityMetadata, error) {
 
 		// Skip unexported fields
 		if !field.IsExported() {
+			continue
+		}
+
+		// Skip fields explicitly excluded from OData
+		if field.Tag.Get("odata") == "-" {
 			continue
 		}
 
@@ -202,6 +209,11 @@ func AnalyzeSingleton(entity interface{}, singletonName string) (*EntityMetadata
 			continue
 		}
 
+		// Skip fields explicitly excluded from OData
+		if field.Tag.Get("odata") == "-" {
+			continue
+		}
+
 		property, err := analyzeField(field, metadata)
 		if err != nil {
 			return nil, fmt.Errorf("error analyzing field %s: %w", field.Name, err)
@@ -256,6 +268,11 @@ func AnalyzeVirtualEntity(entity interface{}) (*EntityMetadata, error) {
 
 		// Skip unexported fields
 		if !field.IsExported() {
+			continue
+		}
+
+		// Skip fields explicitly excluded from OData
+		if field.Tag.Get("odata") == "-" {
 			continue
 		}
 
@@ -645,6 +662,8 @@ func processODataTagPart(property *PropertyMetadata, part string, metadata *Enti
 		property.KeyGenerator = strings.TrimSpace(strings.TrimPrefix(part, "generate="))
 	case part == "auto":
 		property.IsAuto = true
+	case part == "computed":
+		property.IsComputed = true
 	case strings.HasPrefix(part, "annotation:"):
 		// Handle annotation tags: annotation:Core.Computed or annotation:Org.OData.Core.V1.Description=Some description
 		annotationValue := strings.TrimPrefix(part, "annotation:")
@@ -676,6 +695,11 @@ func autoDetectPropertyAnnotations(property *PropertyMetadata) {
 
 	// Auto properties are computed server-side
 	if property.IsAuto {
+		ensurePropertyAnnotation(property, CoreComputed, true)
+	}
+
+	// Computed properties are server-side computed values
+	if property.IsComputed {
 		ensurePropertyAnnotation(property, CoreComputed, true)
 	}
 

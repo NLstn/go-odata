@@ -248,7 +248,7 @@ func (h *EntityHandler) validateRequiredProperties(requestData map[string]interf
 	var missingFields []string
 	for _, prop := range h.metadata.Properties {
 		// Skip keys and auto fields (server-side fields)
-		if !prop.IsRequired || prop.IsKey || prop.IsAuto {
+		if !prop.IsRequired || prop.IsKey || prop.IsAuto || prop.IsComputed {
 			continue
 		}
 

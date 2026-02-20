@@ -814,6 +814,8 @@ func TestNavigationPropertyPathSingle(t *testing.T) {
 		t.Fatalf("Failed to parse response: %v", err)
 	}
 
+	t.Logf("Response: %+v", response)
+
 	name, ok := response["Name"].(string)
 	if !ok || name != "J.K. Rowling" {
 		t.Errorf("Expected author name 'J.K. Rowling', got %v", name)

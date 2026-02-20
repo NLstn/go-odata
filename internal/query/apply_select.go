@@ -35,7 +35,7 @@ func applySelect(db *gorm.DB, selectedProperties []string, expandOptions []Expan
 	for _, propName := range selectedProperties {
 		propName = strings.TrimSpace(propName)
 		for _, prop := range entityMetadata.Properties {
-			if (prop.JsonName == propName || prop.Name == propName) && !prop.IsNavigationProp && !prop.IsComplexType && !prop.IsStream {
+			if (prop.JsonName == propName || prop.Name == propName) && !prop.IsNavigationProp && !prop.IsComplexType && !prop.IsStream && !prop.IsComputed {
 				// Use GetColumnName for proper column name resolution (handles GORM tags and metadata)
 				columnName := GetColumnName(prop.Name, entityMetadata)
 				addColumn(columnName)

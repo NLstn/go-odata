@@ -149,7 +149,7 @@ func propertyExistsWithNavCache(propertyName string, entityMetadata *metadata.En
 		targetMeta, _, remainingPath, err := cache.resolveSingleEntityNavPathWithCache(propertyName, entityMetadata)
 		if err == nil && targetMeta != nil && remainingPath != "" {
 			prop, _, err := targetMeta.ResolvePropertyPath(remainingPath)
-			if err == nil && prop != nil && !prop.IsNavigationProp {
+			if err == nil && prop != nil && !prop.IsNavigationProp && !prop.IsComputed {
 				return true
 			}
 		}
@@ -157,8 +157,8 @@ func propertyExistsWithNavCache(propertyName string, entityMetadata *metadata.En
 		return true
 	}
 
-	_, _, err := entityMetadata.ResolvePropertyPath(propertyName)
-	return err == nil
+	prop, _, err := entityMetadata.ResolvePropertyPath(propertyName)
+	return err == nil && prop != nil && !prop.IsComputed
 }
 
 // parseSelect parses the $select query option
@@ -186,8 +186,8 @@ func propertyExists(propertyName string, entityMetadata *metadata.EntityMetadata
 		return true
 	}
 
-	_, _, err := entityMetadata.ResolvePropertyPath(propertyName)
-	return err == nil
+	prop, _, err := entityMetadata.ResolvePropertyPath(propertyName)
+	return err == nil && prop != nil && !prop.IsComputed
 }
 
 func resolveNavigationPropertyPath(propertyName string, entityMetadata *metadata.EntityMetadata) (*metadata.EntityMetadata, []string, *metadata.PropertyMetadata, string, error) {
