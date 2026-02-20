@@ -20,12 +20,12 @@ func (p *authContextCapturePolicy) Authorize(ctx auth.AuthContext, _ auth.Resour
 
 func TestBuildAuthContext_ExtractsFromRequestContext(t *testing.T) {
 	tests := []struct {
-		name            string
-		setupContext    func(*http.Request) *http.Request
+		name              string
+		setupContext      func(*http.Request) *http.Request
 		expectedPrincipal interface{}
-		expectedRoles   []string
-		expectedClaims  map[string]interface{}
-		expectedScopes  []string
+		expectedRoles     []string
+		expectedClaims    map[string]interface{}
+		expectedScopes    []string
 	}{
 		{
 			name: "All auth data present",

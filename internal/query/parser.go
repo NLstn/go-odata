@@ -426,7 +426,11 @@ func parseSelectOption(queryParams url.Values, entityMetadata *metadata.EntityMe
 			} else {
 				// Regular property validation (also check computed aliases)
 				if !propertyExists(propName, entityMetadata) && !computedAliases[propName] {
-					return fmt.Errorf("property '%s' does not exist in entity type", propName)
+					// Allow computed properties (IsComputed=true) - they can be selected but not filtered/ordered
+					prop := entityMetadata.FindProperty(propName)
+					if prop == nil || !prop.IsComputed {
+						return fmt.Errorf("property '%s' does not exist in entity type", propName)
+					}
 				}
 			}
 		}

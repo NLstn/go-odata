@@ -926,3 +926,95 @@ type TestNewsEntity struct {
 func (TestNewsEntity) EntitySetName() string {
 	return "News"
 }
+
+// Test entities for odata:"-" and odata:"computed" tags
+type TestEntityWithExcludedField struct {
+	ID              int    `json:"id" odata:"key"`
+	Name            string `json:"name"`
+	InternalSecret  string `json:"-" odata:"-"`               // Completely excluded from OData
+	AnotherExcluded int    `json:"anotherExcluded" odata:"-"` // Excluded with both json and odata tags
+}
+
+type TestEntityWithComputedField struct {
+	ID              int    `json:"id" odata:"key"`
+	Name            string `json:"name"`
+	FullName        string `json:"fullName" odata:"computed"`        // Server-side computed
+	CalculatedValue int    `json:"calculatedValue" odata:"computed"` // Server-side computed
+}
+
+func TestAnalyzeEntity_ExcludedField(t *testing.T) {
+	metadata, err := AnalyzeEntity(TestEntityWithExcludedField{})
+	if err != nil {
+		t.Fatalf("AnalyzeEntity() error = %v", err)
+	}
+
+	// Check that excluded fields are not in Properties
+	for _, prop := range metadata.Properties {
+		if prop.Name == "InternalSecret" || prop.JsonName == "InternalSecret" {
+			t.Errorf("InternalSecret should be excluded from Properties but was found")
+		}
+		if prop.Name == "AnotherExcluded" || prop.JsonName == "anotherExcluded" {
+			t.Errorf("AnotherExcluded should be excluded from Properties but was found")
+		}
+	}
+
+	// Verify that we have exactly 2 properties (ID and Name)
+	if len(metadata.Properties) != 2 {
+		t.Errorf("Expected 2 properties (ID, Name), got %d", len(metadata.Properties))
+	}
+}
+
+func TestAnalyzeEntity_ComputedField(t *testing.T) {
+	metadata, err := AnalyzeEntity(TestEntityWithComputedField{})
+	if err != nil {
+		t.Fatalf("AnalyzeEntity() error = %v", err)
+	}
+
+	// Check that computed fields are in Properties and have IsComputed=true
+	var fullNameProp *PropertyMetadata
+	var calculatedValueProp *PropertyMetadata
+	for i := range metadata.Properties {
+		prop := &metadata.Properties[i]
+		if prop.JsonName == "fullName" {
+			fullNameProp = prop
+		}
+		if prop.JsonName == "calculatedValue" {
+			calculatedValueProp = prop
+		}
+	}
+
+	if fullNameProp == nil {
+		t.Fatalf("FullName property not found in metadata")
+	}
+	if !fullNameProp.IsComputed {
+		t.Errorf("FullName.IsComputed = false, want true")
+	}
+
+	if calculatedValueProp == nil {
+		t.Fatalf("CalculatedValue property not found in metadata")
+	}
+	if !calculatedValueProp.IsComputed {
+		t.Errorf("CalculatedValue.IsComputed = false, want true")
+	}
+
+	// Verify that computed properties have CoreComputed annotation
+	if fullNameProp.Annotations == nil {
+		t.Fatalf("FullName.Annotations is nil")
+	}
+	coreComputedAnnotations := fullNameProp.Annotations.GetByTerm(CoreComputed)
+	if len(coreComputedAnnotations) == 0 {
+		t.Errorf("FullName should have CoreComputed annotation")
+	} else if computedValue, ok := coreComputedAnnotations[0].Value.(bool); !ok || !computedValue {
+		t.Errorf("FullName CoreComputed annotation should be true")
+	}
+
+	if calculatedValueProp.Annotations == nil {
+		t.Fatalf("CalculatedValue.Annotations is nil")
+	}
+	coreComputedAnnotations = calculatedValueProp.Annotations.GetByTerm(CoreComputed)
+	if len(coreComputedAnnotations) == 0 {
+		t.Errorf("CalculatedValue should have CoreComputed annotation")
+	} else if computedValue, ok := coreComputedAnnotations[0].Value.(bool); !ok || !computedValue {
+		t.Errorf("CalculatedValue CoreComputed annotation should be true")
+	}
+}

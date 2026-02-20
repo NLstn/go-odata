@@ -328,10 +328,16 @@ func (h *EntityHandler) buildEntityResponseWithMetadata(navValue reflect.Value, 
 	for i := 0; i < navValue.NumField(); i++ {
 		field := navType.Field(i)
 		if field.IsExported() {
-			fieldValue := navValue.Field(i)
 			// Use cached metadata instead of reflection for performance
+			propMeta := h.findPropertyMetadata(field.Name)
+			// Skip fields not in OData metadata only if we're building a response for our own entity type
+			// For navigation properties (different entity types), include all exported fields
+			if propMeta == nil && navType == h.metadata.EntityType {
+				continue
+			}
+			fieldValue := navValue.Field(i)
 			jsonName := field.Name // Default to field name
-			if propMeta := h.findPropertyMetadata(field.Name); propMeta != nil {
+			if propMeta != nil {
 				jsonName = propMeta.JsonName
 			}
 			odataResponse.Set(jsonName, fieldValue.Interface())
@@ -505,7 +511,11 @@ func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{
 
 		// Check if this field is a navigation property and get cached JsonName
 		propMeta := h.findPropertyMetadata(field.Name)
-		// Use cached metadata instead of reflection for performance
+		// Skip fields not in OData metadata only if we're building a response for our own entity type
+		// For navigation properties (different entity types), include all exported fields
+		if propMeta == nil && entityType == h.metadata.EntityType {
+			continue
+		}
 		jsonName := field.Name // Default to field name
 		if propMeta != nil {
 			jsonName = propMeta.JsonName

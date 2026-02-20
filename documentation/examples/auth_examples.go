@@ -577,7 +577,7 @@ func setupPerEntityAuthorization() {
 		// For example: claims := validateJWT(token)
 
 		// Simulate extracting user info from token
-		userID := "user-123" // Extract from JWT claims
+		userID := "user-123"            // Extract from JWT claims
 		globalRoles := []string{"user"} // Extract from JWT claims
 
 		// Store auth data in context using the standard keys
@@ -635,4 +635,3 @@ func setupPerEntityAuthorization() {
 //    - Update: Require elevated role (admin, owner)
 //    - Delete: Require highest role (owner)
 //    - Actions/Functions: Check operation name and apply custom logic
-

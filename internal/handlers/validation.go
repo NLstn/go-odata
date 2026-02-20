@@ -201,7 +201,7 @@ func (h *EntityHandler) validatePropertiesExist(data map[string]interface{}, w h
 		validProperties[prop.Name] = true
 
 		// Track auto properties to reject client updates if needed
-		if checkAutoProperties && prop.IsAuto {
+		if checkAutoProperties && (prop.IsAuto || prop.IsComputed) {
 			autoProperties[prop.JsonName] = true
 			autoProperties[prop.Name] = true
 		}
