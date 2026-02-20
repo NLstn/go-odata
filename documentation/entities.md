@@ -12,6 +12,7 @@ This guide covers how to define entities in go-odata using Go structs with appro
 - [Server-generated Keys](#server-generated-keys)
 - [Working with UUID/GUID Keys](#working-with-uuidguid-keys)
 - [Supported Tags](#supported-tags)
+- [Computed and Excluded Fields](#computed-and-excluded-fields)
 - [Read Hooks and Query Options](#read-hooks-and-query-options)
 
 ## Basic Entity
@@ -324,10 +325,13 @@ This distinction follows the OData v4 URL conventions where path segments contai
 
 | Tag | Description | Example |
 |-----|-------------|---------|
+| `-` | Excludes the field from OData entirely — not in metadata, not queryable, not in responses | `odata:"-"` |
 | `key` | Marks the field as the entity key (required) | `odata:"key"` |
 | `generate=NAME` | Uses a registered server-side key generator for the property | `odata:"key,generate=uuid"` |
 | `etag` | Marks the field to be used for ETag generation | `odata:"etag"` |
 | `required` | Marks the field as required | `odata:"required"` |
+| `auto` | Marks the field as server-side automatic — clients cannot provide or modify it; adds `Core.Computed` annotation | `odata:"auto"` |
+| `computed` | Marks the field as server-side computed with no database column — selectable via `$select` but not filterable, orderable, or writable by clients | `odata:"computed"` |
 | `maxlength=N` | Sets the maximum length for string properties | `odata:"maxlength=100"` |
 | `precision=N` | Sets the precision for numeric properties | `odata:"precision=10"` |
 | `scale=N` | Sets the scale for decimal properties | `odata:"scale=2"` |
@@ -337,6 +341,11 @@ This distinction follows the OData v4 URL conventions where path segments contai
 | `searchable` | Marks field as searchable for `$search` queries | `odata:"searchable"` |
 | `fuzziness=N` | Sets fuzzy matching tolerance for search (1=exact, 2+=fuzzy) | `odata:"searchable,fuzziness=2"` |
 | `similarity=X` | Sets similarity score threshold for search (0.0-1.0, where 0.95=95% similar) | `odata:"searchable,similarity=0.8"` |
+| `enum=NAME` | Marks the field as an enum type and associates it with the named enum type | `odata:"enum=ProductStatus"` |
+| `flags` | Marks the enum property as a flags enum (supports bitwise combinations) | `odata:"enum=Permissions,flags"` |
+| `contenttype=TYPE` | Sets the MIME content type for binary (`[]byte`) properties | `odata:"contenttype=image/png"` |
+| `stream` | Marks the field as an OData named stream property (`Edm.Stream`) | `odata:"stream"` |
+| `annotation:TERM` | Adds an OData vocabulary annotation to the property | `odata:"annotation:Core.Immutable"` |
 
 ### JSON Tags
 
@@ -392,6 +401,83 @@ Go types are automatically mapped to EDM types in the OData metadata:
 | `bool` | `Edm.Boolean` |
 | `time.Time` | `Edm.DateTimeOffset` |
 | `[]byte` | `Edm.Binary` |
+
+## Computed and Excluded Fields
+
+Use special `odata` tags to handle struct fields that have no corresponding database column, or that you want to hide from the OData API entirely.
+
+### `odata:"-"` — Exclude a field from OData
+
+A field tagged `odata:"-"` is stripped from `metadata.Properties` at registration time. It will **not**:
+- Appear in the `$metadata` document
+- Be serialised in JSON responses
+- Be accepted in `$select`, `$filter`, or `$orderby`
+
+This is useful for private/internal fields that should never be exposed via the API.
+
+```go
+type Employee struct {
+    ID             int    `json:"id"              gorm:"primaryKey"      odata:"key"`
+    Name           string `json:"name"            odata:"required"`
+    InternalSecret string `json:"-" gorm:"-"      odata:"-"` // hidden entirely
+}
+```
+
+> **Note:** You usually also want `gorm:"-"` (so GORM ignores it) and `json:"-"` (so the standard JSON encoder ignores it). The `odata:"-"` tag is what prevents the field from appearing in OData query processing and `$metadata`.
+
+### `odata:"computed"` — Server-side computed field
+
+A field tagged `odata:"computed"` has no backing database column. It stays in `metadata.Properties` (with the `Core.Computed` annotation) and is included in JSON responses, but:
+
+| Operation | Behaviour |
+|-----------|-----------|
+| `$select=field` | ✅ Allowed — but the field is **not** added to the SQL `SELECT`, preventing database errors |
+| `$filter=field eq ...` | ❌ Returns `400 Bad Request` |
+| `$orderby=field` | ❌ Returns `400 Bad Request` |
+| POST / PATCH with field | ❌ Returns `400 Bad Request` |
+
+Populate computed fields in `ODataAfterReadEntity` or `ODataAfterReadCollection` hooks:
+
+```go
+type Employee struct {
+    ID          int    `json:"id"          gorm:"primaryKey"  odata:"key"`
+    FirstName   string `json:"firstName"   odata:"required"`
+    LastName    string `json:"lastName"    odata:"required"`
+    DisplayName string `json:"displayName" gorm:"-"           odata:"computed"` // no DB column
+}
+
+// ODataAfterReadCollection populates DisplayName for each employee.
+func (Employee) ODataAfterReadCollection(ctx context.Context, r *http.Request, opts *odata.QueryOptions, results interface{}) (interface{}, error) {
+    if employees, ok := results.(*[]Employee); ok {
+        for i := range *employees {
+            e := &(*employees)[i]
+            e.DisplayName = e.FirstName + " " + e.LastName
+        }
+    }
+    return nil, nil
+}
+
+// ODataAfterReadEntity populates DisplayName for a single employee.
+func (Employee) ODataAfterReadEntity(ctx context.Context, r *http.Request, opts *odata.QueryOptions, entity interface{}) (interface{}, error) {
+    if e, ok := entity.(*Employee); ok {
+        e.DisplayName = e.FirstName + " " + e.LastName
+    }
+    return nil, nil
+}
+```
+
+### Difference between `auto` and `computed`
+
+| | `odata:"auto"` | `odata:"computed"` |
+|-|---------------|-------------------|
+| Has database column | Yes | No |
+| Added to SQL `SELECT` | Yes | No |
+| Filterable / orderable | Yes | No |
+| Client can provide on POST/PATCH | No | No |
+| `Core.Computed` annotation | Yes | Yes |
+
+Use `auto` for server-managed columns that exist in the database (e.g., `created_at`, `updated_at`).
+Use `computed` for fields populated entirely in application code after the database query.
 
 ## Read Hooks and Query Options
 
