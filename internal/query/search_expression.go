@@ -132,12 +132,10 @@ func (p *searchParser) peek() searchTok {
 	return p.tokens[p.pos]
 }
 
-func (p *searchParser) consume() searchTok {
-	tok := p.peek()
-	if tok.typ != sTokEOF {
+func (p *searchParser) consume() {
+	if p.pos < len(p.tokens) && p.tokens[p.pos].typ != sTokEOF {
 		p.pos++
 	}
-	return tok
 }
 
 // parseOr handles:  andExpr ("OR" andExpr)*
