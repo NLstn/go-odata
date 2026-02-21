@@ -137,8 +137,11 @@ func parseSingleExpandCoreWithConfig(expandStr string, entityMetadata *metadata.
 
 // parseNestedExpandOptionsCoreWithConfig parses nested query options with depth tracking
 func parseNestedExpandOptionsCoreWithConfig(expand *ExpandOption, optionsStr string, targetMetadata *metadata.EntityMetadata, validateMetadata bool, config *ParserConfig, currentDepth int) error {
-	// Split by semicolon for different query options
-	parts := strings.Split(optionsStr, ";")
+	// Split by semicolon for different query options at top level only.
+	parts, err := splitExpandOptionsParts(optionsStr)
+	if err != nil {
+		return err
+	}
 	var computedAliases map[string]bool
 	var computeValue string
 
@@ -311,6 +314,75 @@ func parseNestedExpandOptionsCoreWithConfig(expand *ExpandOption, optionsStr str
 	}
 
 	return nil
+}
+
+// splitExpandOptionsParts splits nested expand options by top-level semicolons,
+// handling nested parentheses and quoted string literals.
+func splitExpandOptionsParts(optionsStr string) ([]string, error) {
+	result := make([]string, 0)
+	var current strings.Builder
+	depth := 0
+	inString := false
+
+	for i := 0; i < len(optionsStr); i++ {
+		ch := optionsStr[i]
+
+		if ch == '\'' {
+			if inString {
+				if i+1 < len(optionsStr) && optionsStr[i+1] == '\'' {
+					current.WriteByte(ch)
+					current.WriteByte(ch)
+					i++
+					continue
+				}
+				inString = false
+			} else {
+				inString = true
+			}
+
+			current.WriteByte(ch)
+			continue
+		}
+
+		if !inString && ch == '(' {
+			depth++
+			current.WriteByte(ch)
+			continue
+		}
+
+		if !inString && ch == ')' {
+			if depth == 0 {
+				return nil, errInvalidExpandSyntaxUnexpectedParen
+			}
+			depth--
+			current.WriteByte(ch)
+			continue
+		}
+
+		if !inString && ch == ';' && depth == 0 {
+			if current.Len() != 0 {
+				result = append(result, current.String())
+			}
+			current.Reset()
+			continue
+		}
+
+		current.WriteByte(ch)
+	}
+
+	if inString {
+		return nil, errInvalidExpandSyntaxMissingQuote
+	}
+
+	if depth != 0 {
+		return nil, errInvalidExpandSyntaxMissingParen
+	}
+
+	if current.Len() != 0 {
+		result = append(result, current.String())
+	}
+
+	return result, nil
 }
 
 func validateExpandSelect(selectedProps []string, entityMetadata *metadata.EntityMetadata, computedAliases map[string]bool) error {

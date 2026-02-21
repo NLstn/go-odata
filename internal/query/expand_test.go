@@ -692,6 +692,168 @@ func TestParseNestedExpandWithFilterContainingComma(t *testing.T) {
 	}
 }
 
+func TestParseNestedExpandWithInnerSemicolonOptions(t *testing.T) {
+	authorMeta, _ := buildAuthorBookMetadata(t)
+
+	params := url.Values{}
+	params.Set("$expand", "Books($expand=Author($select=Name;$filter=contains(Name,'A;B'));$top=2)")
+
+	options, err := ParseQueryOptions(params, authorMeta)
+	if err != nil {
+		t.Fatalf("Failed to parse query options: %v", err)
+	}
+
+	if len(options.Expand) != 1 {
+		t.Fatalf("Expected 1 expand option, got %d", len(options.Expand))
+	}
+
+	booksExpand := options.Expand[0]
+	if booksExpand.Top == nil || *booksExpand.Top != 2 {
+		t.Fatalf("Expected outer $top=2")
+	}
+
+	if len(booksExpand.Expand) != 1 {
+		t.Fatalf("Expected 1 nested expand option, got %d", len(booksExpand.Expand))
+	}
+
+	authorExpand := booksExpand.Expand[0]
+	if len(authorExpand.Select) != 1 || authorExpand.Select[0] != "Name" {
+		t.Fatalf("Expected nested $select=Name")
+	}
+
+	if authorExpand.Filter == nil {
+		t.Fatalf("Expected nested $filter to be parsed")
+	}
+
+	if authorExpand.Filter.Value != "A;B" {
+		t.Fatalf("Expected nested filter value A;B, got %v", authorExpand.Filter.Value)
+	}
+}
+
+func TestParseExpandWithSemicolonInQuotedLiteral(t *testing.T) {
+	authorMeta, _ := buildAuthorBookMetadata(t)
+
+	params := url.Values{}
+	params.Set("$expand", "Books($filter=contains(Title,'A;B');$select=Title)")
+
+	options, err := ParseQueryOptions(params, authorMeta)
+	if err != nil {
+		t.Fatalf("Failed to parse query options: %v", err)
+	}
+
+	if len(options.Expand) != 1 {
+		t.Fatalf("Expected 1 expand option, got %d", len(options.Expand))
+	}
+
+	expand := options.Expand[0]
+	if expand.Filter == nil {
+		t.Fatalf("Expected filter to be parsed")
+	}
+
+	if expand.Filter.Value != "A;B" {
+		t.Fatalf("Expected filter value A;B, got %v", expand.Filter.Value)
+	}
+
+	if len(expand.Select) != 1 || expand.Select[0] != "Title" {
+		t.Fatalf("Expected $select=Title")
+	}
+}
+
+func TestParseExpandWithMixedNestedOptionsAndInnerExpand(t *testing.T) {
+	authorMeta, _ := buildAuthorBookMetadata(t)
+
+	params := url.Values{}
+	params.Set("$expand", "Books($select=Title;$filter=contains(Title,'A;B');$orderby=Title desc;$expand=Author($select=Name;$filter=contains(Name,'X;Y')))")
+
+	options, err := ParseQueryOptions(params, authorMeta)
+	if err != nil {
+		t.Fatalf("Failed to parse query options: %v", err)
+	}
+
+	if len(options.Expand) != 1 {
+		t.Fatalf("Expected 1 expand option, got %d", len(options.Expand))
+	}
+
+	booksExpand := options.Expand[0]
+	if len(booksExpand.Select) != 1 || booksExpand.Select[0] != "Title" {
+		t.Fatalf("Expected books $select=Title")
+	}
+
+	if booksExpand.Filter == nil || booksExpand.Filter.Value != "A;B" {
+		t.Fatalf("Expected books filter with value A;B")
+	}
+
+	if len(booksExpand.OrderBy) != 1 || booksExpand.OrderBy[0].Property != "Title" || !booksExpand.OrderBy[0].Descending {
+		t.Fatalf("Expected books $orderby=Title desc")
+	}
+
+	if len(booksExpand.Expand) != 1 {
+		t.Fatalf("Expected 1 nested author expand, got %d", len(booksExpand.Expand))
+	}
+
+	authorExpand := booksExpand.Expand[0]
+	if len(authorExpand.Select) != 1 || authorExpand.Select[0] != "Name" {
+		t.Fatalf("Expected author $select=Name")
+	}
+
+	if authorExpand.Filter == nil || authorExpand.Filter.Value != "X;Y" {
+		t.Fatalf("Expected author filter with value X;Y")
+	}
+}
+
+func TestSplitExpandOptionsParts(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     string
+		expected  []string
+		expectErr bool
+	}{
+		{
+			name:     "simple",
+			input:    "$select=Title;$top=1",
+			expected: []string{"$select=Title", "$top=1"},
+		},
+		{
+			name:     "nested expand with inner semicolons",
+			input:    "$select=Title;$expand=Author($select=Name;$filter=contains(Name,'A;B'));$top=1",
+			expected: []string{"$select=Title", "$expand=Author($select=Name;$filter=contains(Name,'A;B'))", "$top=1"},
+		},
+		{
+			name:     "quoted semicolon and escaped quote",
+			input:    "$filter=contains(Title,'O''Reilly; Inc.');$orderby=Title",
+			expected: []string{"$filter=contains(Title,'O''Reilly; Inc.')", "$orderby=Title"},
+		},
+		{
+			name:      "unclosed quote",
+			input:     "$filter=contains(Title,'bad;$select=Title",
+			expectErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parts, err := splitExpandOptionsParts(tt.input)
+			if (err != nil) != tt.expectErr {
+				t.Fatalf("Expected error=%v, got err=%v", tt.expectErr, err)
+			}
+
+			if tt.expectErr {
+				return
+			}
+
+			if len(parts) != len(tt.expected) {
+				t.Fatalf("Expected %d parts, got %d", len(tt.expected), len(parts))
+			}
+
+			for i := range tt.expected {
+				if parts[i] != tt.expected[i] {
+					t.Fatalf("Part %d expected %q, got %q", i, tt.expected[i], parts[i])
+				}
+			}
+		})
+	}
+}
+
 // TestParseExpandWithComplexFilter tests parsing $expand with complex nested filters
 func TestParseExpandWithComplexFilter(t *testing.T) {
 	authorMeta, _ := buildAuthorBookMetadata(t)
