@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/nlstn/go-odata/internal/metadata"
+	"github.com/nlstn/go-odata/internal/preference"
 	"github.com/nlstn/go-odata/internal/query"
 	"github.com/nlstn/go-odata/internal/response"
 	"gorm.io/gorm"
@@ -26,13 +27,27 @@ func (e *collectionRequestError) Error() string {
 	return e.Message
 }
 
-// collectionExecutionContext provides the hooks required to execute a collection
-// query pipeline. Implementations can customize individual phases such as parsing
-// query options, running hooks, fetching data, computing next links, and writing
-// the final response while sharing the common orchestration logic.
+// collectionExecutionContext provides the data and optional override hooks required to
+// execute a collection query pipeline.
+//
+// For the standard entity collection path, set W, R, and Pref; the executor will call
+// EntityHandler methods directly, avoiding closure allocations on every request.
+//
+// For specialised paths (e.g. navigation properties, tests), set the individual function
+// fields as overrides. When a function field is non-nil it takes precedence over the
+// data-field fallback.
 type collectionExecutionContext struct {
 	Metadata *metadata.EntityMetadata
 
+	// Data fields used by the standard entity-collection path.
+	// When W and R are set, any nil function field falls back to the corresponding
+	// EntityHandler method, eliminating per-request closure allocations.
+	W    http.ResponseWriter
+	R    *http.Request
+	Pref *preference.Preference
+
+	// Optional function overrides. Non-nil values take precedence over the data-field
+	// fallback. Used by navigation properties, tests, and other specialised callers.
 	ParseQueryOptions func() (*query.QueryOptions, error)
 	BeforeRead        func(*query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error)
 	CountFunc         func(*query.QueryOptions, []func(*gorm.DB) *gorm.DB) (*int64, error)
@@ -43,7 +58,18 @@ type collectionExecutionContext struct {
 }
 
 func (h *EntityHandler) executeCollectionQuery(w http.ResponseWriter, r *http.Request, ctx *collectionExecutionContext) {
-	if ctx == nil || ctx.ParseQueryOptions == nil || ctx.FetchFunc == nil || ctx.WriteResponse == nil {
+	if ctx == nil {
+		h.logger.Error("executeCollectionQuery: nil context - this is a programming error")
+		if err := response.WriteError(w, r, http.StatusInternalServerError, "Internal error", "executeCollectionQuery context is nil"); err != nil {
+			h.logger.Error("Error writing error response", "error", err)
+		}
+		return
+	}
+
+	// Require either function overrides for the three required steps, or data fields (W+R)
+	// that let the executor fall back to EntityHandler methods without closures.
+	hasDataFields := ctx.W != nil && ctx.R != nil
+	if (ctx.ParseQueryOptions == nil || ctx.FetchFunc == nil || ctx.WriteResponse == nil) && !hasDataFields {
 		h.logger.Error("executeCollectionQuery: missing required callbacks - this is a programming error")
 		if err := response.WriteError(w, r, http.StatusInternalServerError, "Internal error", "executeCollectionQuery requires ParseQueryOptions, FetchFunc, and WriteResponse callbacks"); err != nil {
 			h.logger.Error("Error writing error response", "error", err)
@@ -51,7 +77,13 @@ func (h *EntityHandler) executeCollectionQuery(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	queryOptions, err := ctx.ParseQueryOptions()
+	var queryOptions *query.QueryOptions
+	var err error
+	if ctx.ParseQueryOptions != nil {
+		queryOptions, err = ctx.ParseQueryOptions()
+	} else {
+		queryOptions, err = h.parseCollectionQueryOptionsImpl(ctx.W, ctx.R, ctx.Pref)
+	}
 	if !h.handleCollectionError(w, r, err, http.StatusBadRequest, ErrMsgInvalidQueryOptions) {
 		return
 	}
@@ -59,6 +91,11 @@ func (h *EntityHandler) executeCollectionQuery(w http.ResponseWriter, r *http.Re
 	var scopes []func(*gorm.DB) *gorm.DB
 	if ctx.BeforeRead != nil {
 		scopes, err = ctx.BeforeRead(queryOptions)
+		if !h.handleCollectionError(w, r, err, http.StatusForbidden, "Authorization failed") {
+			return
+		}
+	} else if hasDataFields {
+		scopes, err = h.beforeReadCollectionImpl(ctx.R, queryOptions)
 		if !h.handleCollectionError(w, r, err, http.StatusForbidden, "Authorization failed") {
 			return
 		}
@@ -70,9 +107,19 @@ func (h *EntityHandler) executeCollectionQuery(w http.ResponseWriter, r *http.Re
 		if !h.handleCollectionError(w, r, err, http.StatusInternalServerError, ErrMsgDatabaseError) {
 			return
 		}
+	} else if hasDataFields {
+		totalCount, err = h.collectionCountFuncImpl(ctx.R.Context(), queryOptions, scopes)
+		if !h.handleCollectionError(w, r, err, http.StatusInternalServerError, ErrMsgDatabaseError) {
+			return
+		}
 	}
 
-	results, err := ctx.FetchFunc(queryOptions, scopes)
+	var results interface{}
+	if ctx.FetchFunc != nil {
+		results, err = ctx.FetchFunc(queryOptions, scopes)
+	} else {
+		results, err = h.fetchResultsWithTypeCastImpl(ctx.R, queryOptions, scopes)
+	}
 	if !h.handleCollectionError(w, r, err, http.StatusInternalServerError, ErrMsgDatabaseError) {
 		return
 	}
@@ -83,6 +130,8 @@ func (h *EntityHandler) executeCollectionQuery(w http.ResponseWriter, r *http.Re
 		if !h.handleCollectionError(w, r, err, http.StatusInternalServerError, ErrMsgInternalError) {
 			return
 		}
+	} else if hasDataFields {
+		nextLink, results = h.collectionNextLinkFuncImpl(ctx.R, queryOptions, results)
 	}
 
 	if ctx.AfterRead != nil {
@@ -91,9 +140,19 @@ func (h *EntityHandler) executeCollectionQuery(w http.ResponseWriter, r *http.Re
 		} else if hasOverride {
 			results = override
 		}
+	} else if hasDataFields {
+		if override, hasOverride, hookErr := h.afterReadCollectionImpl(ctx.R, queryOptions, results); !h.handleCollectionError(w, r, hookErr, http.StatusForbidden, "Authorization failed") {
+			return
+		} else if hasOverride {
+			results = override
+		}
 	}
 
-	h.handleCollectionError(w, r, ctx.WriteResponse(queryOptions, results, totalCount, nextLink), http.StatusInternalServerError, ErrMsgInternalError)
+	if ctx.WriteResponse != nil {
+		h.handleCollectionError(w, r, ctx.WriteResponse(queryOptions, results, totalCount, nextLink), http.StatusInternalServerError, ErrMsgInternalError)
+	} else {
+		h.handleCollectionError(w, r, h.collectionResponseWriterImpl(ctx.W, ctx.R, ctx.Pref, queryOptions, results, totalCount, nextLink), http.StatusInternalServerError, ErrMsgInternalError)
+	}
 }
 
 func (h *EntityHandler) handleCollectionError(w http.ResponseWriter, r *http.Request, err error, defaultStatus int, defaultCode string) bool {

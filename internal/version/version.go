@@ -19,9 +19,25 @@ type Version struct {
 	Minor int
 }
 
+// Pre-computed string representations for the two standard OData versions.
+// These avoid fmt.Sprintf allocations on every response header write.
+const (
+	v400String = "4.0"
+	v401String = "4.01"
+)
+
 // String returns the version as a string in "Major.Minor" format
 // For minor version 1, returns "4.01" to match OData convention
 func (v Version) String() string {
+	// Fast path for the two common OData versions
+	if v.Major == 4 {
+		if v.Minor == 0 {
+			return v400String
+		}
+		if v.Minor == 1 {
+			return v401String
+		}
+	}
 	if v.Minor == 0 {
 		return fmt.Sprintf("%d.0", v.Major)
 	}

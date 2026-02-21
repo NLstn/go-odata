@@ -24,7 +24,10 @@ func (s *Service) serveHTTP(w http.ResponseWriter, r *http.Request, allowAsync b
 	basePath := s.basePath
 	s.basePathMu.RUnlock()
 
-	// Inject base path into request context for response generation
+	// Inject base path into request context for response generation.
+	// This is the only WithContext call in the entry layer; the runtime will
+	// batch the version negotiation and query-string caching into its own single
+	// WithContext call, keeping the total count to a minimum.
 	if basePath != "" {
 		ctx := context.WithValue(r.Context(), response.BasePathContextKey, basePath)
 		r = r.WithContext(ctx)

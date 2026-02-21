@@ -204,7 +204,7 @@ func (h *EntityHandler) HandleEntityRef(w http.ResponseWriter, r *http.Request, 
 
 	// Validate that $expand and $select are not used with $ref
 	// According to OData v4 spec, $ref does not support $expand or $select
-	queryParams := query.ParseRawQuery(r.URL.RawQuery)
+	queryParams := query.GetOrParseParsedQuery(r.Context(), r.URL.RawQuery)
 	if queryParams.Get("$expand") != "" {
 		if writeErr := response.WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidQueryOptions,
 			"$expand is not supported with $ref"); writeErr != nil {
@@ -284,7 +284,7 @@ func (h *EntityHandler) HandleCollectionRef(w http.ResponseWriter, r *http.Reque
 
 	// Validate that $expand and $select are not used with $ref
 	// According to OData v4 spec, $ref only supports $filter, $top, $skip, $orderby, and $count
-	queryParams := query.ParseRawQuery(r.URL.RawQuery)
+	queryParams := query.GetOrParseParsedQuery(r.Context(), r.URL.RawQuery)
 	if queryParams.Get("$expand") != "" {
 		if writeErr := response.WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidQueryOptions,
 			"$expand is not supported with $ref"); writeErr != nil {
@@ -301,7 +301,7 @@ func (h *EntityHandler) HandleCollectionRef(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Parse query options (support filtering, ordering, pagination for references)
-	queryOptions, err := query.ParseQueryOptions(query.ParseRawQuery(r.URL.RawQuery), h.metadata)
+	queryOptions, err := query.ParseQueryOptions(query.GetOrParseParsedQuery(r.Context(), r.URL.RawQuery), h.metadata)
 	if err != nil {
 		if writeErr := response.WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidQueryOptions, err.Error()); writeErr != nil {
 			h.logger.Error("Error writing error response", "error", writeErr)

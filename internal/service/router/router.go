@@ -119,16 +119,10 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	// Negotiate OData version based on client's OData-MaxVersion header
-	negotiatedVersion := version.NegotiateVersion(clientMaxVersion)
-
-	// Store the negotiated version in the request context
-	ctx := version.WithVersion(req.Context(), negotiatedVersion)
-	req = req.WithContext(ctx)
-
-	// Set the OData-Version header based on the negotiated version
-	// Use direct assignment to preserve exact casing per OData spec
-	w.Header()[response.HeaderODataVersion] = []string{negotiatedVersion.String()}
+	// Set the OData-Version response header. The version was already negotiated in
+	// the runtime layer and stored in the request context, so we just read it here.
+	// Use direct assignment to preserve exact casing per OData spec.
+	w.Header()[response.HeaderODataVersion] = []string{version.GetVersion(req.Context()).String()}
 
 	if r.tryServeAsyncMonitor(w, req) {
 		return

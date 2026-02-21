@@ -10,6 +10,7 @@ import (
 	"github.com/nlstn/go-odata/internal/auth"
 	"github.com/nlstn/go-odata/internal/handlers"
 	"github.com/nlstn/go-odata/internal/metadata"
+	"github.com/nlstn/go-odata/internal/query"
 	"github.com/nlstn/go-odata/internal/response"
 )
 
@@ -209,7 +210,7 @@ func (h *Handler) buildAuthContext(r *http.Request) auth.AuthContext {
 			Method:     r.Method,
 			Path:       r.URL.Path,
 			Headers:    r.Header.Clone(),
-			Query:      r.URL.Query(),
+			Query:      query.GetOrParseParsedQuery(r.Context(), r.URL.RawQuery),
 			RemoteAddr: r.RemoteAddr,
 		},
 	}

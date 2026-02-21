@@ -171,6 +171,26 @@ func (om *OrderedMap) MarshalJSON() ([]byte, error) {
 	estimatedSize := len(om.keys) * 100
 	buf.Grow(estimatedSize)
 
+	if err := om.writeJSONTo(buf); err != nil {
+		return nil, err
+	}
+
+	// Create a copy of the buffer contents since we're reusing the buffer
+	result := make([]byte, buf.Len())
+	copy(result, buf.Bytes())
+	return result, nil
+}
+
+// writeJSONTo writes the JSON representation of this OrderedMap directly into buf.
+// Unlike MarshalJSON it does NOT allocate a new []byte — the caller owns buf.
+// This is the hot path used by the streaming collection response writer, which
+// writes all entities into a single pooled buffer to avoid per-entity copies.
+func (om *OrderedMap) writeJSONTo(buf *bytes.Buffer) error {
+	if len(om.keys) == 0 {
+		buf.WriteString("{}")
+		return nil
+	}
+
 	// Create a streaming encoder - this avoids intermediate allocations
 	enc := json.NewEncoder(buf)
 	// Disable HTML escaping for better performance (not needed for OData responses)
@@ -189,7 +209,7 @@ func (om *OrderedMap) MarshalJSON() ([]byte, error) {
 			// Use json.Marshal for keys that need escaping
 			keyBytes, err := json.Marshal(key)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			buf.Write(keyBytes)
 		} else {
@@ -209,7 +229,7 @@ func (om *OrderedMap) MarshalJSON() ([]byte, error) {
 		case string:
 			if needsEscaping(v) {
 				if err := enc.Encode(v); err != nil {
-					return nil, err
+					return err
 				}
 				// Remove trailing newline added by Encode
 				buf.Truncate(buf.Len() - 1)
@@ -245,7 +265,7 @@ func (om *OrderedMap) MarshalJSON() ([]byte, error) {
 		default:
 			// Fall back to streaming encoder for complex types
 			if err := enc.Encode(value); err != nil {
-				return nil, err
+				return err
 			}
 			// Remove trailing newline added by Encode
 			buf.Truncate(buf.Len() - 1)
@@ -253,11 +273,7 @@ func (om *OrderedMap) MarshalJSON() ([]byte, error) {
 	}
 
 	buf.WriteByte('}')
-
-	// Create a copy of the buffer contents since we're reusing the buffer
-	result := make([]byte, buf.Len())
-	copy(result, buf.Bytes())
-	return result, nil
+	return nil
 }
 
 // writeInt writes an int64 to the buffer without allocation

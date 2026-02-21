@@ -21,7 +21,7 @@ func buildAuthContext(r *http.Request) auth.AuthContext {
 			Method:     r.Method,
 			Path:       r.URL.Path,
 			Headers:    r.Header.Clone(),
-			Query:      r.URL.Query(),
+			Query:      query.GetOrParseParsedQuery(r.Context(), r.URL.RawQuery),
 			RemoteAddr: r.RemoteAddr,
 		},
 	}

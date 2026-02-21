@@ -46,14 +46,10 @@ func (h *EntityHandler) handleGetCollection(w http.ResponseWriter, r *http.Reque
 	pref := preference.ParsePrefer(r)
 
 	h.executeCollectionQuery(w, r, &collectionExecutionContext{
-		Metadata:          h.metadata,
-		ParseQueryOptions: h.parseCollectionQueryOptions(w, r, pref),
-		BeforeRead:        h.beforeReadCollection(r),
-		CountFunc:         h.collectionCountFunc(ctx),
-		FetchFunc:         h.fetchResultsWithTypeCast(r),
-		NextLinkFunc:      h.collectionNextLinkFunc(r),
-		AfterRead:         h.afterReadCollection(r),
-		WriteResponse:     h.collectionResponseWriter(w, r, pref),
+		Metadata: h.metadata,
+		W:        w,
+		R:        r,
+		Pref:     pref,
 	})
 }
 
@@ -62,7 +58,7 @@ func (h *EntityHandler) handleGetCollectionOverwrite(w http.ResponseWriter, r *h
 	pref := preference.ParsePrefer(r)
 
 	// Parse and validate query options
-	queryOptions, err := query.ParseQueryOptionsWithConfig(query.ParseRawQuery(r.URL.RawQuery), h.metadata, h.getParserConfig())
+	queryOptions, err := query.ParseQueryOptionsWithConfig(query.GetOrParseParsedQuery(r.Context(), r.URL.RawQuery), h.metadata, h.getParserConfig())
 	if err != nil {
 		h.writeInvalidQueryError(w, r, err)
 		return
@@ -120,118 +116,108 @@ func (h *EntityHandler) handleGetCollectionOverwrite(w http.ResponseWriter, r *h
 	}
 
 	// Build the response
-	if err := h.collectionResponseWriter(w, r, pref)(queryOptions, result.Items, result.Count, nil); err != nil {
+	if err := h.collectionResponseWriterImpl(w, r, pref, queryOptions, result.Items, result.Count, nil); err != nil {
 		h.logger.Error("Error writing collection response", "error", err)
 	}
 }
 
-func (h *EntityHandler) parseCollectionQueryOptions(w http.ResponseWriter, r *http.Request, pref *preference.Preference) func() (*query.QueryOptions, error) {
-	return func() (*query.QueryOptions, error) {
-		queryOptions, err := query.ParseQueryOptionsWithConfig(query.ParseRawQuery(r.URL.RawQuery), h.metadata, h.getParserConfig())
-		if err != nil {
-			return nil, err
-		}
-
-		// Check if geospatial operations are used but not enabled
-		if queryOptions.Filter != nil && query.ContainsGeospatialOperations(queryOptions.Filter) {
-			if !h.IsGeospatialEnabled() {
-				return nil, &GeospatialNotEnabledError{}
-			}
-		}
-
-		if queryOptions.DeltaToken != nil {
-			h.handleDeltaCollection(w, r, *queryOptions.DeltaToken)
-			return nil, errRequestHandled
-		}
-
-		if err := h.validateSkipToken(queryOptions); err != nil {
-			return nil, &collectionRequestError{
-				StatusCode: http.StatusBadRequest,
-				ErrorCode:  "Invalid $skiptoken",
-				Message:    err.Error(),
-			}
-		}
-
-		if err := h.validateComplexTypeUsage(queryOptions); err != nil {
-			return nil, &collectionRequestError{
-				StatusCode: http.StatusBadRequest,
-				ErrorCode:  "Unsupported query option",
-				Message:    err.Error(),
-			}
-		}
-
-		if pref.MaxPageSize != nil {
-			queryOptions = h.applyMaxPageSize(queryOptions, *pref.MaxPageSize)
-		}
-
-		// Apply default max top if no explicit $top is set
-		queryOptions = h.applyDefaultMaxTop(queryOptions)
-
-		if err := applyPolicyFilter(r, h.policy, buildEntityResourceDescriptor(h.metadata, "", nil), queryOptions); err != nil {
-			return nil, &collectionRequestError{
-				StatusCode: http.StatusForbidden,
-				ErrorCode:  "Authorization failed",
-				Message:    err.Error(),
-			}
-		}
-		if err := applyPolicyFiltersToExpand(r, h.policy, h.metadata, queryOptions.Expand); err != nil {
-			return nil, &collectionRequestError{
-				StatusCode: http.StatusForbidden,
-				ErrorCode:  "Authorization failed",
-				Message:    err.Error(),
-			}
-		}
-
-		return queryOptions, nil
+func (h *EntityHandler) parseCollectionQueryOptionsImpl(w http.ResponseWriter, r *http.Request, pref *preference.Preference) (*query.QueryOptions, error) {
+	queryOptions, err := query.ParseQueryOptionsWithConfig(query.GetOrParseParsedQuery(r.Context(), r.URL.RawQuery), h.metadata, h.getParserConfig())
+	if err != nil {
+		return nil, err
 	}
+
+	// Check if geospatial operations are used but not enabled
+	if queryOptions.Filter != nil && query.ContainsGeospatialOperations(queryOptions.Filter) {
+		if !h.IsGeospatialEnabled() {
+			return nil, &GeospatialNotEnabledError{}
+		}
+	}
+
+	if queryOptions.DeltaToken != nil {
+		h.handleDeltaCollection(w, r, *queryOptions.DeltaToken)
+		return nil, errRequestHandled
+	}
+
+	if err := h.validateSkipToken(queryOptions); err != nil {
+		return nil, &collectionRequestError{
+			StatusCode: http.StatusBadRequest,
+			ErrorCode:  "Invalid $skiptoken",
+			Message:    err.Error(),
+		}
+	}
+
+	if err := h.validateComplexTypeUsage(queryOptions); err != nil {
+		return nil, &collectionRequestError{
+			StatusCode: http.StatusBadRequest,
+			ErrorCode:  "Unsupported query option",
+			Message:    err.Error(),
+		}
+	}
+
+	if pref != nil && pref.MaxPageSize != nil {
+		queryOptions = h.applyMaxPageSize(queryOptions, *pref.MaxPageSize)
+	}
+
+	// Apply default max top if no explicit $top is set
+	queryOptions = h.applyDefaultMaxTop(queryOptions)
+
+	if err := applyPolicyFilter(r, h.policy, buildEntityResourceDescriptor(h.metadata, "", nil), queryOptions); err != nil {
+		return nil, &collectionRequestError{
+			StatusCode: http.StatusForbidden,
+			ErrorCode:  "Authorization failed",
+			Message:    err.Error(),
+		}
+	}
+	if err := applyPolicyFiltersToExpand(r, h.policy, h.metadata, queryOptions.Expand); err != nil {
+		return nil, &collectionRequestError{
+			StatusCode: http.StatusForbidden,
+			ErrorCode:  "Authorization failed",
+			Message:    err.Error(),
+		}
+	}
+
+	return queryOptions, nil
 }
 
-func (h *EntityHandler) beforeReadCollection(r *http.Request) func(*query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
-	return func(queryOptions *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
-		scopes, err := callBeforeReadCollection(h.metadata, r, queryOptions)
-		if err != nil {
-			return nil, err
-		}
-
-		if typeCast := GetTypeCast(r.Context()); typeCast != "" {
-			if scope := h.buildTypeCastScope(typeCast); scope != nil {
-				scopes = append(scopes, scope)
-			}
-		}
-
-		return scopes, nil
+func (h *EntityHandler) beforeReadCollectionImpl(r *http.Request, queryOptions *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
+	scopes, err := callBeforeReadCollection(h.metadata, r, queryOptions)
+	if err != nil {
+		return nil, err
 	}
+
+	if typeCast := GetTypeCast(r.Context()); typeCast != "" {
+		if scope := h.buildTypeCastScope(typeCast); scope != nil {
+			scopes = append(scopes, scope)
+		}
+	}
+
+	return scopes, nil
 }
 
-func (h *EntityHandler) collectionCountFunc(ctx context.Context) func(*query.QueryOptions, []func(*gorm.DB) *gorm.DB) (*int64, error) {
-	return func(queryOptions *query.QueryOptions, scopes []func(*gorm.DB) *gorm.DB) (*int64, error) {
-		if !queryOptions.Count {
-			return nil, nil
-		}
-
-		count, err := h.countEntities(ctx, queryOptions, scopes)
-		if err != nil {
-			return nil, err
-		}
-
-		return &count, nil
+func (h *EntityHandler) collectionCountFuncImpl(ctx context.Context, queryOptions *query.QueryOptions, scopes []func(*gorm.DB) *gorm.DB) (*int64, error) {
+	if !queryOptions.Count {
+		return nil, nil
 	}
+
+	count, err := h.countEntities(ctx, queryOptions, scopes)
+	if err != nil {
+		return nil, err
+	}
+
+	return &count, nil
 }
 
-func (h *EntityHandler) collectionNextLinkFunc(r *http.Request) func(*query.QueryOptions, interface{}) (*string, interface{}, error) {
-	return func(queryOptions *query.QueryOptions, results interface{}) (*string, interface{}, error) {
-		nextLink, needsTrim := h.calculateNextLink(queryOptions, results, r)
-		if needsTrim && queryOptions.Top != nil {
-			results = h.trimResults(results, *queryOptions.Top)
-		}
-		return nextLink, results, nil
+func (h *EntityHandler) collectionNextLinkFuncImpl(r *http.Request, queryOptions *query.QueryOptions, results interface{}) (*string, interface{}) {
+	nextLink, needsTrim := h.calculateNextLink(queryOptions, results, r)
+	if needsTrim && queryOptions.Top != nil {
+		results = h.trimResults(results, *queryOptions.Top)
 	}
+	return nextLink, results
 }
 
-func (h *EntityHandler) afterReadCollection(r *http.Request) func(*query.QueryOptions, interface{}) (interface{}, bool, error) {
-	return func(queryOptions *query.QueryOptions, results interface{}) (interface{}, bool, error) {
-		return callAfterReadCollection(h.metadata, r, queryOptions, results)
-	}
+func (h *EntityHandler) afterReadCollectionImpl(r *http.Request, queryOptions *query.QueryOptions, results interface{}) (interface{}, bool, error) {
+	return callAfterReadCollection(h.metadata, r, queryOptions, results)
 }
 
 func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.QueryOptions, scopes []func(*gorm.DB) *gorm.DB) (interface{}, error) {
@@ -282,7 +268,13 @@ func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.Qu
 	}
 
 	sliceType := reflect.SliceOf(h.metadata.EntityType)
-	results := reflect.New(sliceType).Interface()
+	slicePtr := reflect.New(sliceType)
+	// Pre-allocate the slice with the expected capacity so GORM does not need to
+	// grow it incrementally. modifiedOptions.Top is Top+1 (to detect next-link).
+	if modifiedOptions.Top != nil && *modifiedOptions.Top > 0 {
+		slicePtr.Elem().Set(reflect.MakeSlice(sliceType, 0, *modifiedOptions.Top))
+	}
+	results := slicePtr.Interface()
 
 	if err := db.Find(results).Error; err != nil {
 		return nil, err
@@ -358,20 +350,18 @@ func (h *EntityHandler) trimResults(sliceValue interface{}, maxLen int) interfac
 	return v.Slice(0, maxLen).Interface()
 }
 
-func (h *EntityHandler) fetchResultsWithTypeCast(r *http.Request) func(*query.QueryOptions, []func(*gorm.DB) *gorm.DB) (interface{}, error) {
+func (h *EntityHandler) fetchResultsWithTypeCastImpl(r *http.Request, queryOptions *query.QueryOptions, scopes []func(*gorm.DB) *gorm.DB) (interface{}, error) {
 	ctx := r.Context()
-	return func(queryOptions *query.QueryOptions, scopes []func(*gorm.DB) *gorm.DB) (interface{}, error) {
-		results, err := h.fetchResults(ctx, queryOptions, scopes)
-		if err != nil {
-			return nil, err
-		}
-
-		if typeCast := GetTypeCast(ctx); typeCast != "" {
-			results = h.filterCollectionByType(results, typeCast)
-		}
-
-		return results, nil
+	results, err := h.fetchResults(ctx, queryOptions, scopes)
+	if err != nil {
+		return nil, err
 	}
+
+	if typeCast := GetTypeCast(ctx); typeCast != "" {
+		results = h.filterCollectionByType(results, typeCast)
+	}
+
+	return results, nil
 }
 
 func (h *EntityHandler) filterCollectionByType(results interface{}, typeCast string) interface{} {

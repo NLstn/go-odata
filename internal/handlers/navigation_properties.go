@@ -250,7 +250,7 @@ func (h *EntityHandler) buildNavigationRelatedQuery(parent interface{}, targetMe
 // createNavParseQueryOptions creates the ParseQueryOptions callback for navigation collections
 func (h *EntityHandler) createNavParseQueryOptions(r *http.Request, targetMetadata *metadata.EntityMetadata) func() (*query.QueryOptions, error) {
 	return func() (*query.QueryOptions, error) {
-		queryOptions, err := query.ParseQueryOptions(query.ParseRawQuery(r.URL.RawQuery), targetMetadata)
+		queryOptions, err := query.ParseQueryOptions(query.GetOrParseParsedQuery(r.Context(), r.URL.RawQuery), targetMetadata)
 		if err != nil {
 			return nil, err
 		}
@@ -809,7 +809,7 @@ func (h *EntityHandler) getTargetMetadata(targetName string) (*metadata.EntityMe
 
 // hasQueryOptions checks if the request has any OData query options
 func hasQueryOptions(r *http.Request) bool {
-	q := query.ParseRawQuery(r.URL.RawQuery)
+	q := query.GetOrParseParsedQuery(r.Context(), r.URL.RawQuery)
 	odataOptions := []string{"$filter", "$select", "$orderby", "$top", "$skip", "$count", "$expand", "$search", "$skiptoken"}
 	for _, option := range odataOptions {
 		if q.Has(option) {

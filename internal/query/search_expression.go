@@ -195,7 +195,7 @@ func (p *searchParser) parseAnd() *SearchExprNode {
 // parseNot handles:  "NOT" notExpr | primary
 func (p *searchParser) parseNot() *SearchExprNode {
 	if p.peek().typ == sTokNOT {
-		p.consume() // eat NOT
+		p.consume()             // eat NOT
 		operand := p.parseNot() // right-associative
 		if operand == nil {
 			// NOT with no operand — treat NOT as a term

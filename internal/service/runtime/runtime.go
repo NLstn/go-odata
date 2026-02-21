@@ -14,7 +14,9 @@ import (
 	"github.com/nlstn/go-odata/internal/async"
 	"github.com/nlstn/go-odata/internal/observability"
 	"github.com/nlstn/go-odata/internal/preference"
+	"github.com/nlstn/go-odata/internal/query"
 	servrouter "github.com/nlstn/go-odata/internal/service/router"
+	"github.com/nlstn/go-odata/internal/version"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -105,10 +107,28 @@ func (rt *Runtime) serveHTTPWithServerTiming(w http.ResponseWriter, r *http.Requ
 	servertiming.Middleware(handler, nil).ServeHTTP(w, r)
 }
 
+// headerODataMaxVersion is the HTTP header used to negotiate the OData protocol version.
+const headerODataMaxVersion = "OData-MaxVersion"
+
 // serveHTTPInternal contains the core request handling logic.
 func (rt *Runtime) serveHTTPInternal(w http.ResponseWriter, r *http.Request, allowAsync bool) {
 	ctx := r.Context()
 	start := time.Now()
+
+	// Negotiate OData version and add to context. This is done here so it can be
+	// batched with the query-string cache and any observability context additions
+	// into a single r.WithContext call, avoiding redundant http.Request allocations.
+	negotiatedVersion := version.NegotiateVersion(r.Header.Get(headerODataMaxVersion))
+	ctx = version.WithVersion(ctx, negotiatedVersion)
+
+	// Parse the query string once and store in context alongside the version. This
+	// is the single point of query parsing for the entire request: all downstream
+	// handlers and response writers call query.GetOrParseParsedQuery which returns
+	// the cached url.Values from context without re-parsing or allocating a new map.
+	// CachedParseRawQuery consults a process-level bounded cache so repeated
+	// identical query strings (common in load tests and real API traffic) skip
+	// url.ParseQuery entirely.
+	ctx = query.WithParsedQuery(ctx, query.CachedParseRawQuery(r.URL.RawQuery))
 
 	// Start tracing span if observability is configured
 	var tracer *observability.Tracer
@@ -130,7 +150,8 @@ func (rt *Runtime) serveHTTPInternal(w http.ResponseWriter, r *http.Request, all
 		ctx = observability.WithDBTimeAccumulator(ctx)
 	}
 
-	// Update request with context
+	// Single r.WithContext call — batches version negotiation and all observability
+	// context values to avoid multiple http.Request allocations per request.
 	r = r.WithContext(ctx)
 
 	// Record server timing for the total request duration and database time
@@ -155,23 +176,27 @@ func (rt *Runtime) serveHTTPInternal(w http.ResponseWriter, r *http.Request, all
 		return
 	}
 
-	// Wrap response writer to capture status code for metrics
+	// Only wrap the response writer to capture the status code when observability is
+	// enabled. The wrapper adds a Write/WriteHeader overhead on every request, so we
+	// skip it entirely when nothing will consume the recorded code.
+	if rt.observability == nil {
+		rt.router.ServeHTTP(w, r)
+		return
+	}
+
 	wrapped := &statusRecorder{ResponseWriter: w, statusCode: http.StatusOK}
 	rt.router.ServeHTTP(wrapped, r)
 
-	// Record metrics if observability is configured
-	if rt.observability != nil {
-		duration := time.Since(start)
-		entitySet := extractEntitySetFromPath(r.URL.Path)
-		operation := extractOperationType(r)
-		metrics.RecordRequestEnd(ctx, duration, wrapped.statusCode)
-		if wrapped.statusCode >= 400 {
-			metrics.RecordError(ctx, entitySet, operation, http.StatusText(wrapped.statusCode))
-		}
-		tracer.SetHTTPStatus(ctx, wrapped.statusCode)
-		if entitySet != "" && operation != "" {
-			metrics.RecordRequestDuration(ctx, duration, entitySet, operation, wrapped.statusCode)
-		}
+	duration := time.Since(start)
+	entitySet := extractEntitySetFromPath(r.URL.Path)
+	operation := extractOperationType(r)
+	metrics.RecordRequestEnd(ctx, duration, wrapped.statusCode)
+	if wrapped.statusCode >= 400 {
+		metrics.RecordError(ctx, entitySet, operation, http.StatusText(wrapped.statusCode))
+	}
+	tracer.SetHTTPStatus(ctx, wrapped.statusCode)
+	if entitySet != "" && operation != "" {
+		metrics.RecordRequestDuration(ctx, duration, entitySet, operation, wrapped.statusCode)
 	}
 }
 

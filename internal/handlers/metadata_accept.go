@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+
+	"github.com/nlstn/go-odata/internal/query"
 )
 
 // shouldReturnJSON determines if JSON format should be returned based on request
 func shouldReturnJSON(r *http.Request) bool {
-	format := r.URL.Query().Get("$format")
+	format := query.GetOrParseParsedQuery(r.Context(), r.URL.RawQuery).Get("$format")
 	if format == "json" || format == "application/json" {
 		return true
 	}

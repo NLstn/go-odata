@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/nlstn/go-odata/internal/metadata"
+	"github.com/nlstn/go-odata/internal/query"
 )
 
 // Valid OData metadata levels per OData v4 specification
@@ -88,7 +89,7 @@ func validateMetadataValue(value string) error {
 // Returns an error if an invalid metadata value is specified.
 // Valid values are: "minimal", "full", "none"
 func ValidateODataMetadata(r *http.Request) error {
-	format := getFormatParameter(r.URL.RawQuery)
+	format := query.GetOrParseParsedQuery(r.Context(), r.URL.RawQuery).Get("$format")
 	if format != "" {
 		if err := validateMetadataInFormat(format); err != nil {
 			return err
@@ -108,7 +109,7 @@ func ValidateODataMetadata(r *http.Request) error {
 // GetODataMetadataLevel extracts the odata.metadata parameter value from the request
 // Returns "minimal" (default), "full", or "none" based on Accept header or $format parameter
 func GetODataMetadataLevel(r *http.Request) string {
-	format := getFormatParameter(r.URL.RawQuery)
+	format := query.GetOrParseParsedQuery(r.Context(), r.URL.RawQuery).Get("$format")
 	if format != "" {
 		return extractMetadataFromFormat(format)
 	}
@@ -227,7 +228,7 @@ func extractMetadataFromAccept(accept string) string {
 // IsAcceptableFormat checks if the requested format via Accept header or $format is supported
 // Returns true if the format is acceptable (JSON or wildcard), false otherwise (e.g., XML)
 func IsAcceptableFormat(r *http.Request) bool {
-	format := r.URL.Query().Get("$format")
+	format := query.GetOrParseParsedQuery(r.Context(), r.URL.RawQuery).Get("$format")
 	if format != "" {
 		parts := strings.Split(format, ";")
 		baseFormat := strings.TrimSpace(parts[0])
