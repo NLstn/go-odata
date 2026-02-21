@@ -339,7 +339,7 @@ This distinction follows the OData v4 URL conventions where path segments contai
 | `nullable` | Explicitly marks the field as nullable | `odata:"nullable"` |
 | `nullable=false` | Explicitly marks the field as non-nullable | `odata:"nullable=false"` |
 | `searchable` | Marks field as searchable for `$search` queries | `odata:"searchable"` |
-| `fuzziness=N` | Sets fuzzy matching tolerance for search (1=exact, 2+=fuzzy) | `odata:"searchable,fuzziness=2"` |
+| `fuzziness=N` | Sets fuzzy matching tolerance for search. `fuzziness=1` (default) means exact substring match; `fuzziness=2` allows 1 character difference; `fuzziness=N` allows N-1 differences. Higher values are more permissive. | `odata:"searchable,fuzziness=2"` |
 | `similarity=X` | Sets similarity score threshold for search (0.0-1.0, where 0.95=95% similar) | `odata:"searchable,similarity=0.8"` |
 | `enum=NAME` | Marks the field as an enum type and associates it with the named enum type | `odata:"enum=ProductStatus"` |
 | `flags` | Marks the enum property as a flags enum (supports bitwise combinations) | `odata:"enum=Permissions,flags"` |
@@ -510,17 +510,39 @@ Because the hook returns a scope, the filtered tenant query feeds directly into 
 
 ## Configuring Search
 
-By default, all string properties are searchable when using `$search`. You can control this:
+By default, when `$search` is used, all string properties on an entity are searched.  You can limit
+search to specific fields (including non-string fields) by tagging them `searchable`:
 
 ```go
 type Product struct {
-    ID          int    `json:"ID" odata:"key"`
-    Name        string `json:"Name" odata:"searchable"`           // Searchable
-    Description string `json:"Description" odata:"searchable"`    // Searchable
-    SKU         string `json:"SKU"`                               // Not searchable
-    Category    string `json:"Category"`                          // Not searchable
+    ID          int     `json:"ID" odata:"key"`
+    Name        string  `json:"Name" odata:"searchable"`           // Searchable
+    Description string  `json:"Description" odata:"searchable"`    // Searchable
+    Price       float64 `json:"Price" odata:"searchable"`          // Non-string — also searchable
+    SKU         string  `json:"SKU"`                               // Not searchable
+    Category    string  `json:"Category"`                          // Not searchable
 }
 ```
+
+Non-string fields tagged `searchable` are converted to their default string representation
+(e.g. `42`, `3.14`, `true`) and searched as text.
+
+### Boolean Operators
+
+`$search` supports the OData boolean search grammar (§11.2.5.6):
+
+| Syntax | Meaning |
+|--------|---------|
+| `$search=laptop` | Single term |
+| `$search=laptop wireless` | Implicit AND — both terms must match |
+| `$search=laptop AND wireless` | Explicit AND |
+| `$search=laptop OR phone` | OR — either term must match |
+| `$search=NOT phone` | NOT — term must not match |
+| `$search="high performance"` | Phrase — exact consecutive substring |
+| `$search=(laptop OR phone) AND wireless` | Grouped boolean expression |
+
+Boolean operators (`AND`, `OR`, `NOT`) must be written in **uppercase** to be treated as operators;
+lowercase `and`, `or`, `not` are treated as regular search terms.
 
 ### Fuzzy Matching
 
@@ -528,16 +550,22 @@ Configure fuzzy matching tolerance using the `fuzziness` parameter:
 
 ```go
 type Product struct {
-    Name  string `odata:"searchable,fuzziness=1"`  // Exact match only
-    Email string `odata:"searchable,fuzziness=2"`  // 1 char difference allowed
-    Tags  string `odata:"searchable,fuzziness=3"`  // 2 char differences allowed
+    Name  string `odata:"searchable"`             // fuzziness=1 by default — exact substring match
+    Email string `odata:"searchable,fuzziness=2"` // 1 character difference allowed
+    Tags  string `odata:"searchable,fuzziness=3"` // 2 character differences allowed
 }
 ```
 
-The fuzziness value determines how many character differences are allowed when matching:
-- `fuzziness=1`: Exact substring match (default)
-- `fuzziness=2`: Allows 1 character difference
-- `fuzziness=3`: Allows 2 character differences
+The fuzziness value determines how strict the in-memory match is:
+
+| Value | Meaning |
+|-------|---------|
+| `fuzziness=1` | **Exact substring match** (default). The search term must appear verbatim inside the field. |
+| `fuzziness=2` | Allows **1 character difference** (insertion, deletion, or substitution). |
+| `fuzziness=N` | Allows **N-1 character differences**. Higher is more permissive. |
+
+> **Note**: `fuzziness=1` is the strictest setting (exact match), not the loosest.
+> Higher numbers make the match more tolerant of typos.
 
 ### Similarity-Based Matching
 
@@ -571,4 +599,18 @@ type Product struct {
     Email string `odata:"searchable,similarity=0.9"`  // OK
 }
 ```
+
+### Configuring the PostgreSQL FTS Language
+
+When using PostgreSQL, the library builds `tsvector` indexes and runs `websearch_to_tsquery`
+with a text-search configuration that controls stemming and stop-words.  The default is `"english"`.
+To use a different language, pass `FTSLanguage` in `ServiceConfig`:
+
+```go
+svc, err := odata.NewServiceWithConfig(db, odata.ServiceConfig{
+    FTSLanguage: "french",  // or "german", "simple", etc.
+})
+```
+
+Use `"simple"` to disable stemming and stop-word removal entirely (treats every word as a literal lexeme).  This is useful when indexing data in multiple languages or when precision matters more than recall.
 

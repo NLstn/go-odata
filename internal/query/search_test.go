@@ -282,7 +282,7 @@ func TestApplySearch_MultipleWords(t *testing.T) {
 		{ID: 2, Name: "Budget Laptop", Description: "Affordable laptop for students", Category: "Electronics", Price: 500},
 	}
 
-	// Search for phrase "High Performance"
+	// "High Performance" is parsed as implicit AND(High, Performance) — both terms must match
 	result := ApplySearch(entities, "High Performance", meta)
 	resultSlice, ok := result.([]SearchTestEntity)
 	if !ok {
@@ -539,10 +539,10 @@ func TestApplySearch_WithSimilarity(t *testing.T) {
 		},
 		{
 			name:          "High similarity match",
-			searchQuery:   "John Dae",
+			searchQuery:   `"John Dae"`, // quoted phrase — compared as a whole to the field value
 			expectedCount: 1,
-			expectedIDs:   []int{1}, // John Doe is similar enough (1 char difference in 8 chars = 0.875 similarity)
-			description:   "Should match with high similarity (0.8)",
+			expectedIDs:   []int{1}, // "John Doe" vs "John Dae" = 1 char diff in 8 chars → 0.875 similarity ≥ 0.8
+			description:   "Should match with high similarity (0.8) using phrase search",
 		},
 		{
 			name:          "Email exact match",

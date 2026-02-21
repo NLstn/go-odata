@@ -10,6 +10,14 @@ import (
 	"gorm.io/gorm"
 )
 
+// FTSOptions controls optional FTS behaviour.
+type FTSOptions struct {
+	// Language sets the PostgreSQL text-search configuration used for to_tsvector /
+	// websearch_to_tsquery calls.  Defaults to "english" when empty.
+	// Common values: "english", "french", "german", "simple" (no stemming).
+	Language string
+}
+
 // FTSManager manages Full-Text Search functionality for SQLite and PostgreSQL
 type FTSManager struct {
 	db           *gorm.DB
@@ -18,13 +26,25 @@ type FTSManager struct {
 	dbDialect    string // "sqlite", "postgres", or other
 	ftsTables    map[string]bool
 	ftsTablesMu  sync.RWMutex // protects ftsTables map - RLock for reads, Lock for writes
+	language     string       // PostgreSQL text-search language (default: "english")
 }
 
-// NewFTSManager creates a new FTS manager and detects FTS availability
+// NewFTSManager creates a new FTS manager with default options and detects FTS availability.
 func NewFTSManager(db *gorm.DB) *FTSManager {
+	return NewFTSManagerWithOptions(db, FTSOptions{})
+}
+
+// NewFTSManagerWithOptions creates an FTS manager with explicit options and detects FTS availability.
+// Use this when you need to configure the PostgreSQL text-search language (see FTSOptions.Language).
+func NewFTSManagerWithOptions(db *gorm.DB, opts FTSOptions) *FTSManager {
+	language := opts.Language
+	if language == "" {
+		language = "english"
+	}
 	manager := &FTSManager{
 		db:        db,
 		ftsTables: make(map[string]bool),
+		language:  language,
 	}
 	manager.detectFTS()
 	return manager
@@ -103,11 +123,11 @@ func (m *FTSManager) isFTSVersionAvailable(version string) bool {
 
 // isPostgresFTSAvailable checks if PostgreSQL full-text search is available
 func (m *FTSManager) isPostgresFTSAvailable() bool {
-	// Test if we can use to_tsvector and to_tsquery functions
-	// These are built-in to PostgreSQL and should always be available
-	// Use a subquery to make the test more robust
+	// Test if we can use to_tsvector and websearch_to_tsquery functions.
+	// websearch_to_tsquery is available since PostgreSQL 11 and correctly handles
+	// boolean operators (AND, OR, -term for NOT).
 	var result int
-	err := m.db.Raw("SELECT 1 FROM (SELECT to_tsvector('english', 'test') @@ to_tsquery('english', 'test') AS matched) AS test WHERE matched").Scan(&result).Error
+	err := m.db.Raw("SELECT 1 FROM (SELECT to_tsvector(?, 'test') @@ websearch_to_tsquery(?, 'test') AS matched) AS test WHERE matched", m.language, m.language).Scan(&result).Error
 	// If query executes without error (even if no rows), FTS is available
 	if err != nil && err != gorm.ErrRecordNotFound {
 		return false
@@ -465,7 +485,8 @@ func (m *FTSManager) createPostgresFTSTriggers(tableName, ftsTableName string, s
 	return nil
 }
 
-// buildPostgresTSVectorExpr builds a PostgreSQL tsvector expression from column names
+// buildPostgresTSVectorExpr builds a PostgreSQL tsvector expression from column names.
+// The language is taken from m.language (configurable, default "english").
 func (m *FTSManager) buildPostgresTSVectorExpr(cols []string) string {
 	// Validate identifiers for defense in depth
 	for _, col := range cols {
@@ -477,8 +498,8 @@ func (m *FTSManager) buildPostgresTSVectorExpr(cols []string) string {
 
 	parts := make([]string, 0, len(cols))
 	for _, col := range cols {
-		// Use coalesce to handle NULL values
-		parts = append(parts, fmt.Sprintf("to_tsvector('english', coalesce(NEW.%s, ''))", col))
+		// Use coalesce to handle NULL values; language is a validated config value
+		parts = append(parts, fmt.Sprintf("to_tsvector('%s', coalesce(NEW.%s, ''))", m.language, col))
 	}
 	// PostgreSQL's || operator for tsvectors correctly merges them without needing a space literal
 	return strings.Join(parts, " || ")
@@ -496,10 +517,10 @@ func (m *FTSManager) populatePostgresFTSTable(tableName, ftsTableName string, se
 		}
 	}
 
-	// Build tsvector expression for existing data
+	// Build tsvector expression for existing data; language is a validated config value
 	tsvectorParts := make([]string, 0, len(searchableCols))
 	for _, col := range searchableCols {
-		tsvectorParts = append(tsvectorParts, fmt.Sprintf("to_tsvector('english', coalesce(%s, ''))", col))
+		tsvectorParts = append(tsvectorParts, fmt.Sprintf("to_tsvector('%s', coalesce(%s, ''))", m.language, col))
 	}
 	// PostgreSQL's || operator for tsvectors correctly merges them without needing a space literal
 	tsvectorExpr := strings.Join(tsvectorParts, " || ")
@@ -563,20 +584,36 @@ func (m *FTSManager) ApplyFTSSearch(db *gorm.DB, tableName string, searchQuery s
 		ftsTableName, tableName, keyCol, ftsTableName, keyCol,
 	))
 
-	// Apply search condition based on database type
-	// Search query is passed as a parameterized value, not interpolated
+	// Parse the search query into a boolean expression tree so that AND/OR/NOT
+	// operators are correctly translated into each backend's native query syntax.
+	expr := ParseSearchExpression(searchQuery)
+
+	// Apply search condition based on database type.
+	// The expression-derived query string is passed as a parameterized value, not interpolated.
 	switch m.ftsVersion {
 	case "POSTGRES":
-		// PostgreSQL uses @@ operator with plainto_tsquery for simple text search
-		// plainto_tsquery handles normalization and removes special characters
-		// No manual escaping needed - parameterized query handles it safely
-		db = db.Where(fmt.Sprintf("%s.search_vector @@ plainto_tsquery('english', ?)", ftsTableName), searchQuery)
+		// websearch_to_tsquery (available since PostgreSQL 11) correctly handles:
+		//   AND  → adjacent terms
+		//   OR   → "or" keyword
+		//   NOT  → "-" prefix
+		//   phrase → "double-quoted"
+		// This replaces the previous plainto_tsquery which treated OR/NOT as plain text.
+		wsQuery := expr.toWebsearchQuery()
+		db = db.Where(fmt.Sprintf("%s.search_vector @@ websearch_to_tsquery('%s', ?)", ftsTableName, m.language), wsQuery)
 	case "FTS5":
-		// For FTS5, use the MATCH operator
-		db = db.Where(fmt.Sprintf("%s MATCH ?", ftsTableName), searchQuery)
+		// FTS5 MATCH natively supports AND, OR, NOT, and phrase search
+		ftsQuery := expr.toFTS5Query()
+		db = db.Where(fmt.Sprintf("%s MATCH ?", ftsTableName), ftsQuery)
 	default:
-		// For FTS4/FTS3, also use MATCH
-		db = db.Where(fmt.Sprintf("%s MATCH ?", ftsTableName), searchQuery)
+		// FTS3/FTS4: supports AND (implicit), OR, and phrase; NOT is not supported
+		// and is silently dropped from the query (positive terms still match)
+		ftsQuery := expr.toFTS34Query()
+		if ftsQuery == "" {
+			// toFTS34Query can return "" if the entire expression is negated;
+			// fall back to the raw query to avoid an empty MATCH clause
+			ftsQuery = searchQuery
+		}
+		db = db.Where(fmt.Sprintf("%s MATCH ?", ftsTableName), ftsQuery)
 	}
 
 	return db, nil
