@@ -40,16 +40,20 @@ func parseExpandWithConfig(expandStr string, entityMetadata *metadata.EntityMeta
 
 // splitExpandParts splits expand string by comma, handling nested parentheses
 func splitExpandParts(expandStr string) ([]string, error) {
+	return splitWithDelimiter(expandStr, ',')
+}
+
+func splitWithDelimiter(input string, delimiter byte) ([]string, error) {
 	result := make([]string, 0)
 	var current strings.Builder
 	depth := 0
 	inString := false
 
-	for i := 0; i < len(expandStr); i++ {
-		ch := expandStr[i]
+	for i := 0; i < len(input); i++ {
+		ch := input[i]
 		if ch == '\'' {
 			if inString {
-				if i+1 < len(expandStr) && expandStr[i+1] == '\'' {
+				if i+1 < len(input) && input[i+1] == '\'' {
 					current.WriteByte(ch)
 					current.WriteByte(ch)
 					i++
@@ -72,7 +76,7 @@ func splitExpandParts(expandStr string) ([]string, error) {
 			}
 			depth--
 			current.WriteByte(ch)
-		} else if !inString && ch == ',' && depth == 0 {
+		} else if !inString && ch == delimiter && depth == 0 {
 			if current.Len() != 0 {
 				result = append(result, current.String())
 			}
