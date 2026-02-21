@@ -318,6 +318,12 @@ type ServiceConfig struct {
 	// MaxBatchSize limits the maximum number of sub-requests in a batch request to prevent DoS attacks.
 	// Default: 100. If set to 0 or left unset, DefaultMaxBatchSize is used. This limit is always enforced.
 	MaxBatchSize int
+
+	// FTSLanguage sets the PostgreSQL text-search configuration used when building tsvector indexes
+	// and when querying with websearch_to_tsquery.  Defaults to "english" when empty.
+	// Common values: "english", "french", "german", "simple" (disables stemming and stop-words).
+	// This setting has no effect for SQLite, which uses its own built-in tokenizer.
+	FTSLanguage string
 }
 
 // DefaultNamespace is used when no explicit namespace is configured for the service.
@@ -440,8 +446,8 @@ func NewServiceWithConfig(db *gorm.DB, cfg ServiceConfig) (*Service, error) {
 		}
 	}
 
-	// Initialize FTS manager for SQLite full-text search
-	ftsManager := query.NewFTSManager(db)
+	// Initialize FTS manager for full-text search (SQLite and PostgreSQL)
+	ftsManager := query.NewFTSManagerWithOptions(db, query.FTSOptions{Language: cfg.FTSLanguage})
 
 	// Set defaults for security limits if not specified or negative
 	maxInClauseSize := cfg.MaxInClauseSize
