@@ -461,9 +461,31 @@ func buildComputeExpressionSQL(dialect string, expr *FilterExpression, entityMet
 	return ""
 }
 
+// hasNavigationJoins returns true if there are any navigation JOINs in the query
+// (either added by $filter or present in the $orderby list).
+func hasNavigationJoins(db *gorm.DB, orderBy []OrderByItem, entityMetadata *metadata.EntityMetadata) bool {
+	if entityMetadata == nil {
+		return false
+	}
+	// Check if $filter already added navigation joins
+	if val, ok := db.Get("_joined_nav_props"); ok {
+		if m, ok := val.(map[string]bool); ok && len(m) > 0 {
+			return true
+		}
+	}
+	// Check if any $orderby clause uses a navigation path
+	for _, item := range orderBy {
+		if entityMetadata.IsSingleEntityNavigationPath(item.Property) {
+			return true
+		}
+	}
+	return false
+}
+
 // applyOrderBy applies order by clauses to the GORM query
 func applyOrderBy(db *gorm.DB, orderBy []OrderByItem, entityMetadata *metadata.EntityMetadata) *gorm.DB {
 	dialect := getDatabaseDialect(db)
+	doQualifyColumns := hasNavigationJoins(db, orderBy, entityMetadata)
 	db = addOrderByNavigationJoins(db, orderBy, entityMetadata)
 
 	// For PostgreSQL, we need to build all ORDER BY expressions in a single Clauses() call
@@ -477,7 +499,12 @@ func applyOrderBy(db *gorm.DB, orderBy []OrderByItem, entityMetadata *metadata.E
 					columnName = getQuotedColumnName(dialect, item.Property, entityMetadata)
 				} else {
 					col := GetColumnName(item.Property, entityMetadata)
-					columnName = quoteIdent(dialect, col)
+					if doQualifyColumns && entityMetadata != nil {
+						// Qualify with main table to avoid ambiguity when navigation JOINs are present
+						columnName = quoteIdent(dialect, entityMetadata.TableName) + "." + quoteIdent(dialect, col)
+					} else {
+						columnName = quoteIdent(dialect, col)
+					}
 				}
 			} else {
 				sanitizedAlias := sanitizeIdentifier(item.Property)
@@ -511,7 +538,14 @@ func applyOrderBy(db *gorm.DB, orderBy []OrderByItem, entityMetadata *metadata.E
 					columnName = getQuotedColumnName(dialect, item.Property, entityMetadata)
 					rawColumn = true
 				} else {
-					columnName = GetColumnName(item.Property, entityMetadata)
+					col := GetColumnName(item.Property, entityMetadata)
+					if doQualifyColumns && entityMetadata != nil {
+						// Qualify with main table to avoid ambiguity when navigation JOINs are present
+						columnName = quoteIdent(dialect, entityMetadata.TableName) + "." + quoteIdent(dialect, col)
+						rawColumn = true
+					} else {
+						columnName = col
+					}
 				}
 			} else {
 				sanitizedAlias := sanitizeIdentifier(item.Property)
@@ -536,7 +570,18 @@ func addOrderByNavigationJoins(db *gorm.DB, orderBy []OrderByItem, entityMetadat
 		return db
 	}
 
-	joinedNavProps := make(map[string]bool)
+	// Reuse the joinedNavProps map from $filter (if present) to avoid duplicate JOINs
+	// when both $filter and $orderby reference the same navigation property path.
+	var joinedNavProps map[string]bool
+	if val, ok := db.Get("_joined_nav_props"); ok {
+		if m, ok := val.(map[string]bool); ok {
+			joinedNavProps = m
+		}
+	}
+	if joinedNavProps == nil {
+		joinedNavProps = make(map[string]bool)
+	}
+
 	for _, item := range orderBy {
 		db = addNavigationJoinsForProperty(db, item.Property, entityMetadata, joinedNavProps)
 	}

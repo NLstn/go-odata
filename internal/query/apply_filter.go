@@ -166,6 +166,9 @@ func addNavigationJoins(db *gorm.DB, filter *FilterExpression, entityMetadata *m
 
 	applyJoins(filter)
 
+	// Store the map in the GORM context so $orderby can re-use it and avoid duplicate JOINs
+	db = db.Set("_joined_nav_props", joinedNavProps)
+
 	return db
 }
 
