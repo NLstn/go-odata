@@ -139,7 +139,7 @@ Use the included load testing script to run comprehensive performance tests:
 
 The script automatically:
 - Builds and starts the perfserver
-- Runs 14 different test scenarios
+- Runs 38 different test scenarios (read + write)
 - Saves detailed results to `./load-test-results/`
 - Stops the server when complete
 
@@ -148,6 +148,59 @@ The script automatically:
 sudo apt-get install wrk  # Debian/Ubuntu
 brew install wrk          # macOS
 ```
+
+### Test Coverage
+
+#### Read Tests (1–30) — URL-based, no Lua script required
+
+| # | Scenario | OData Feature |
+|---|----------|---------------|
+| 1 | Service document | Service document |
+| 2 | Metadata document (XML) | Metadata |
+| 3 | Simple collection | Entity set |
+| 4 | Products `$top=100` | Pagination |
+| 5 | Products `$top=500` | Pagination |
+| 6 | `$filter=Price gt 500` | Basic filter |
+| 7 | `$orderby=Price desc` | Ordering |
+| 8 | `$top=100&$skip=1000` | Skip pagination |
+| 9 | `$select=ID,Name,Price` | Field projection |
+| 10 | `$expand=Category` | Navigation expand |
+| 11 | Filter + OrderBy + Expand | Complex query |
+| 12 | `/$count?$filter=…` | Count with filter |
+| 13 | Single entity by key | Key lookup |
+| 14 | Singleton access | Singleton |
+| 15 | `$apply` groupby + aggregate | Aggregation |
+| 16 | `$search=Widget` | Full-text search |
+| 17 | `$metadata?$format=json` | JSON metadata |
+| 18 | `contains(Name,'Premium')` | String functions |
+| 19 | `CreatedAt gt 2024-01-01` | Date comparison |
+| 20 | Multi-condition filter (and/or) | Complex filter |
+| 21 | `$orderby=Price desc,Name asc` | Multi-field ordering |
+| 22 | `$expand=Category,Descriptions($top=2)` | Multi-level expand |
+| 23 | `$expand=Category($select=ID,Name)` | Nested expand + select |
+| 24 | `$apply=filter(…)/groupby(…)` | Apply filter pipeline |
+| 25 | `GetTopProducts(count=10)` | Unbound function |
+| 26 | `GetProductStats()` | Unbound function |
+| 27 | `/Products(1)/Name/$value` | Property value path |
+| 28 | `ProductDescriptions?$filter=LanguageKey eq 'EN'` | Related entity filter |
+| 29 | `Categories?$expand=Products($top=3)` | Reverse expand |
+| 30 | `/Products/$count` (full collection) | Collection count |
+
+#### Write & Mutation Tests (31–38) — wrk Lua scripts in `wrk-scripts/`
+
+| # | Scenario | OData Feature | Lua Script |
+|---|----------|---------------|------------|
+| 31 | `POST /Products` | Entity creation | `post_product.lua` |
+| 32 | `PATCH /Products(id)` | Partial update | `patch_product.lua` |
+| 33 | `POST /Products(id)/ApplyDiscount` | Bound action | `apply_discount.lua` |
+| 34 | `GET /Products(id)` with `If-None-Match` | ETag — cache miss | `etag_conditional_get.lua` |
+| 35 | `PATCH /Products(id)` with `If-Match: *` | Conditional update | `conditional_patch.lua` |
+| 36 | `POST /$batch` (5 GETs per body) | JSON batch | `batch_get.lua` |
+| 37 | `DELETE /Products(id)` (IDs 5001–10000) | Entity deletion | `delete_product.lua` |
+| 38 | `GET /Products` with `Prefer: odata.track-changes` | Change tracking | `prefer_track_changes.lua` |
+
+> **Note:** Write tests modify database state. After running, you can restore the
+> dataset with `curl -X POST http://localhost:9091/Reseed`.
 
 ### Manual Query Performance Tests
 Test various OData query patterns:

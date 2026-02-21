@@ -25,6 +25,7 @@ DB_DSN=""                  # Optional; for postgres defaults if empty
 EXTERNAL_SERVER=0          # Don't start/stop server automatically
 ENABLE_CPU_PROFILE=0       # Enable CPU profiling
 ENABLE_SQL_TRACE=0         # Enable SQL query tracing
+WRK_SCRIPTS="${WRK_SCRIPTS:-${SCRIPT_DIR}/wrk-scripts}"  # Directory containing Lua scripts for write/custom tests
 
 # Connection pooling settings
 MAX_OPEN_CONNS=25          # Maximum number of open database connections
@@ -148,6 +149,42 @@ run_test() {
     if command -v wrk &> /dev/null; then
         wrk -t"$WRK_THREADS" -c"$WRK_CONNECTIONS" -d"$WRK_DURATION" --latency "$url" > "$output_file" 2>&1
         
+        # Display results
+        echo -e "${GREEN}Results:${NC}"
+        cat "$output_file"
+        echo ""
+    else
+        echo -e "${RED}wrk not found. Please install wrk to run load tests.${NC}\n"
+        exit 1
+    fi
+}
+
+# Function to run wrk test with a Lua script
+# Used for write operations, custom headers, and complex request patterns.
+# The Lua script controls the HTTP method, path, headers and body; the URL
+# provides only the host:port for connection establishment.
+run_test_script() {
+    local name="$1"
+    local url="$2"     # base URL – host + port only
+    local script="$3" # path to Lua script relative to WRK_SCRIPTS dir
+    local output_file="$OUTPUT_DIR/wrk_${name}.txt"
+    local full_script="${WRK_SCRIPTS}/${script}"
+
+    echo -e "${YELLOW}Testing: ${name}${NC}"
+    echo -e "Base URL: ${url}"
+    echo -e "Script: ${full_script}"
+    echo -e "Duration: ${WRK_DURATION}, Threads: ${WRK_THREADS}, Connections: ${WRK_CONNECTIONS}\n"
+
+    if [ ! -f "$full_script" ]; then
+        echo -e "${RED}Lua script not found: ${full_script}${NC}\n"
+        echo "SKIPPED: script not found" > "$output_file"
+        return
+    fi
+
+    if command -v wrk &> /dev/null; then
+        wrk -t"$WRK_THREADS" -c"$WRK_CONNECTIONS" -d"$WRK_DURATION" --latency \
+            -s "$full_script" "$url" > "$output_file" 2>&1
+
         # Display results
         echo -e "${GREEN}Results:${NC}"
         cat "$output_file"
@@ -374,7 +411,109 @@ main() {
     # Test 15: Apply/Aggregation
     print_header "Test 15: Apply with GroupBy and Aggregate"
     run_test "apply" "${SERVER_URL}/Products?\$apply=groupby((CategoryID),aggregate(Price%20with%20average%20as%20AvgPrice))"
-    
+
+    # ──────────────────────────────────────────────────────────────────────
+    # READ TESTS: additional OData query features (Tests 16–30)
+    # ──────────────────────────────────────────────────────────────────────
+
+    # Test 16: Full-Text Search
+    print_header "Test 16: Full-Text Search (\$search)"
+    run_test "search" "${SERVER_URL}/Products?\$search=Widget&\$top=50"
+
+    # Test 17: Metadata Document – JSON format
+    print_header "Test 17: Metadata Document (JSON format)"
+    run_test "metadata_json" "${SERVER_URL}/\$metadata?\$format=json"
+
+    # Test 18: String Function Filter – contains()
+    print_header "Test 18: Filter with String Function (contains)"
+    run_test "filter_contains" "${SERVER_URL}/Products?\$filter=contains(Name,'Premium')&\$top=100"
+
+    # Test 19: Date Comparison Filter
+    print_header "Test 19: Filter with Date Comparison"
+    run_test "filter_date" "${SERVER_URL}/Products?\$filter=CreatedAt%20gt%202024-01-01T00:00:00Z&\$top=100"
+
+    # Test 20: Complex Multi-Condition Filter (and / or)
+    print_header "Test 20: Complex Filter (and/or + multiple predicates)"
+    run_test "filter_complex" "${SERVER_URL}/Products?\$filter=Price%20gt%20100%20and%20Price%20lt%20500%20and%20CategoryID%20ne%20null&\$top=100"
+
+    # Test 21: Multi-Field OrderBy
+    print_header "Test 21: Multi-Field OrderBy"
+    run_test "orderby_multi" "${SERVER_URL}/Products?\$orderby=Price%20desc,Name%20asc&\$top=100"
+
+    # Test 22: Multi-Level Expand with Nested Options
+    print_header "Test 22: Multi-Level Expand (Category + Descriptions with \$top)"
+    run_test "expand_multilevel" "${SERVER_URL}/Products?\$expand=Category,Descriptions(\$top=2)&\$top=50"
+
+    # Test 23: Nested Expand with \$select inside \$expand
+    print_header "Test 23: Expand with Nested \$select"
+    run_test "expand_nested_select" "${SERVER_URL}/Products?\$expand=Category(\$select=ID,Name)&\$top=100"
+
+    # Test 24: \$apply with Filter Pipeline
+    print_header "Test 24: Apply – Filter Pipeline then GroupBy+Aggregate"
+    run_test "apply_filter_pipeline" "${SERVER_URL}/Products?\$apply=filter(Price%20gt%20200)/groupby((Status),aggregate(Price%20with%20average%20as%20AvgPrice))"
+
+    # Test 25: Unbound Function – GetTopProducts
+    print_header "Test 25: Unbound Function: GetTopProducts(count=10)"
+    run_test "function_top_products" "${SERVER_URL}/GetTopProducts(count=10)"
+
+    # Test 26: Unbound Function – GetProductStats
+    print_header "Test 26: Unbound Function: GetProductStats()"
+    run_test "function_product_stats" "${SERVER_URL}/GetProductStats()"
+
+    # Test 27: Property Value Path – /Products(id)/Name/\$value
+    print_header "Test 27: Property Value Path (\$value)"
+    run_test "property_value" "${SERVER_URL}/Products(1)/Name/\$value"
+
+    # Test 28: Related Entity Collection with Filter
+    print_header "Test 28: ProductDescriptions Filtered by LanguageKey"
+    run_test "product_descriptions_filter" "${SERVER_URL}/ProductDescriptions?\$filter=LanguageKey%20eq%20'EN'&\$top=100"
+
+    # Test 29: Reverse Navigation Expand (Categories → Products)
+    print_header "Test 29: Categories Expanded with nested Products"
+    run_test "categories_expand" "${SERVER_URL}/Categories?\$expand=Products(\$top=3)&\$top=20"
+
+    # Test 30: Count Entire Collection (no filter)
+    print_header "Test 30: \$count on Products (full collection)"
+    run_test "count_total" "${SERVER_URL}/Products/\$count"
+
+    # ──────────────────────────────────────────────────────────────────────
+    # WRITE & MUTATION TESTS using wrk Lua scripts (Tests 31–38)
+    # Note: these tests modify database state. Run POST /Reseed afterwards
+    # if you need to restore the dataset to its original size.
+    # ──────────────────────────────────────────────────────────────────────
+
+    # Test 31: POST – Create Products
+    print_header "Test 31: POST /Products (entity creation throughput)"
+    run_test_script "post_product" "${SERVER_URL}" "post_product.lua"
+
+    # Test 32: PATCH – Update Product Price
+    print_header "Test 32: PATCH /Products(id) (partial update throughput)"
+    run_test_script "patch_product" "${SERVER_URL}" "patch_product.lua"
+
+    # Test 33: Bound Action – ApplyDiscount
+    print_header "Test 33: POST /Products(id)/ApplyDiscount (bound action throughput)"
+    run_test_script "action_apply_discount" "${SERVER_URL}" "apply_discount.lua"
+
+    # Test 34: Conditional GET – ETag / If-None-Match (cache miss path)
+    print_header "Test 34: GET with If-None-Match (ETag miss → 200 full response)"
+    run_test_script "etag_conditional_get" "${SERVER_URL}" "etag_conditional_get.lua"
+
+    # Test 35: Conditional PATCH – If-Match: * (optimistic concurrency)
+    print_header "Test 35: PATCH with If-Match: * (conditional update throughput)"
+    run_test_script "conditional_patch" "${SERVER_URL}" "conditional_patch.lua"
+
+    # Test 36: Batch GET – 5 entities per batch request
+    print_header "Test 36: POST /\$batch (5 GET requests per batch body)"
+    run_test_script "batch_get" "${SERVER_URL}" "batch_get.lua"
+
+    # Test 37: DELETE Products (cycles IDs 5001–10000)
+    print_header "Test 37: DELETE /Products(id) (delete throughput, mix 204+404)"
+    run_test_script "delete_product" "${SERVER_URL}" "delete_product.lua"
+
+    # Test 38: Prefer: odata.track-changes Collection Response
+    print_header "Test 38: GET /Products with Prefer: odata.track-changes"
+    run_test_script "prefer_track_changes" "${SERVER_URL}" "prefer_track_changes.lua"
+
     # End timestamp
     END_TIME=$(date +%s)
     DURATION=$((END_TIME - START_TIME))
