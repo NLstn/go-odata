@@ -117,6 +117,20 @@ func TestSelectWithNavigationPropertyAndExpand(t *testing.T) {
 	}
 }
 
+func TestExpandWithInvalidNestedOptionReturnsBadRequest(t *testing.T) {
+	db := setupTestDBForSelectNav(t)
+	service := setupServiceWithRelations(db, t)
+	createProductsWithDescriptions(db, t)
+
+	req := httptest.NewRequest(http.MethodGet, "/TestProductWithDescs?$expand=Descriptions($oderby=Name)", nil)
+	w := httptest.NewRecorder()
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status 400 for invalid nested $expand option, got %d. Body: %s", w.Code, w.Body.String())
+	}
+}
+
 // TestComplexTypeDirectAccess tests that direct access to complex types returns the serialized complex object
 func TestComplexTypeDirectAccess(t *testing.T) {
 	db := setupTestDBForSelectNav(t)

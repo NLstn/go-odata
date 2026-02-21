@@ -41,6 +41,36 @@ type TestBookWithPublisher struct {
 	Author   *TestAuthorWithPublisher `json:"Author,omitempty" gorm:"foreignKey:AuthorID"`
 }
 
+type TestProductForExpandOptions struct {
+	ID           uint                              `json:"ID" gorm:"primaryKey" odata:"key"`
+	Name         string                            `json:"Name"`
+	Descriptions []TestDescriptionForExpandOptions `json:"Descriptions" gorm:"foreignKey:ProductID"`
+}
+
+type TestDescriptionForExpandOptions struct {
+	ID        uint                         `json:"ID" gorm:"primaryKey" odata:"key"`
+	ProductID uint                         `json:"ProductID"`
+	Name      string                       `json:"Name"`
+	Product   *TestProductForExpandOptions `json:"Product,omitempty" gorm:"foreignKey:ProductID"`
+}
+
+func buildProductDescriptionMetadata(t *testing.T) (*metadata.EntityMetadata, *metadata.EntityMetadata) {
+	t.Helper()
+
+	productMeta, err := metadata.AnalyzeEntity(&TestProductForExpandOptions{})
+	if err != nil {
+		t.Fatalf("Failed to analyze product entity: %v", err)
+	}
+
+	descriptionMeta, err := metadata.AnalyzeEntity(&TestDescriptionForExpandOptions{})
+	if err != nil {
+		t.Fatalf("Failed to analyze description entity: %v", err)
+	}
+
+	setEntitiesRegistry(productMeta, descriptionMeta)
+
+	return productMeta, descriptionMeta
+}
 func buildAuthorBookMetadata(t *testing.T) (*metadata.EntityMetadata, *metadata.EntityMetadata) {
 	t.Helper()
 
@@ -544,6 +574,76 @@ func TestParseExpandWithInvalidNestedOptions(t *testing.T) {
 			_, err := ParseQueryOptions(params, authorMeta)
 			if err == nil {
 				t.Fatalf("Expected error for %s", tt.expandQuery)
+			}
+		})
+	}
+}
+
+func TestParseExpandWithUnknownNestedOptionKeys(t *testing.T) {
+	productMeta, _ := buildProductDescriptionMetadata(t)
+
+	tests := []struct {
+		name        string
+		expandQuery string
+		expectErr   string
+	}{
+		{
+			name:        "Typo in nested orderby key",
+			expandQuery: "Descriptions($oderby=Name)",
+			expectErr:   "unsupported nested $expand option: $oderby",
+		},
+		{
+			name:        "Unknown nested key",
+			expandQuery: "Descriptions($foo=bar)",
+			expectErr:   "unsupported nested $expand option: $foo",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			params := url.Values{}
+			params.Set("$expand", tt.expandQuery)
+
+			_, err := ParseQueryOptions(params, productMeta)
+			if err == nil {
+				t.Fatalf("Expected error for %s", tt.expandQuery)
+			}
+			if err.Error() != "invalid $expand: "+tt.expectErr {
+				t.Fatalf("Expected error %q, got %q", "invalid $expand: "+tt.expectErr, err.Error())
+			}
+		})
+	}
+}
+
+func TestParseExpandWithAllSupportedNestedOptionKeys(t *testing.T) {
+	productMeta, _ := buildProductDescriptionMetadata(t)
+
+	tests := []struct {
+		name        string
+		expandQuery string
+	}{
+		{name: "$select", expandQuery: "Descriptions($select=Name)"},
+		{name: "$filter", expandQuery: "Descriptions($filter=Name eq 'A')"},
+		{name: "$orderby", expandQuery: "Descriptions($orderby=Name)"},
+		{name: "$top", expandQuery: "Descriptions($top=5)"},
+		{name: "$skip", expandQuery: "Descriptions($skip=1)"},
+		{name: "$count", expandQuery: "Descriptions($count=true)"},
+		{name: "$levels", expandQuery: "Descriptions($levels=max)"},
+		{name: "$expand", expandQuery: "Descriptions($expand=Product)"},
+		{name: "$compute", expandQuery: "Descriptions($compute=length(Name) as NameLen)"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			params := url.Values{}
+			params.Set("$expand", tt.expandQuery)
+
+			options, err := ParseQueryOptions(params, productMeta)
+			if err != nil {
+				t.Fatalf("Expected valid nested option key for %s, got error: %v", tt.name, err)
+			}
+			if len(options.Expand) != 1 {
+				t.Fatalf("Expected 1 expand option, got %d", len(options.Expand))
 			}
 		})
 	}

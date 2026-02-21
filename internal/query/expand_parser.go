@@ -310,6 +310,8 @@ func parseNestedExpandOptionsCoreWithConfig(expand *ExpandOption, optionsStr str
 				}
 				expand.Levels = &levels
 			}
+		default:
+			return fmt.Errorf("unsupported nested $expand option: %s", key)
 		}
 	}
 
