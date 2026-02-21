@@ -587,6 +587,13 @@ func (h *EntityHandler) validateComplexTypeUsage(queryOptions *query.QueryOption
 			continue
 		}
 
+		// Allow single-entity navigation property paths (e.g., "Category/Name")
+		// per OData v4 spec section 5.1.1.15 - properties of entities related with
+		// cardinality 0..1 or 1 can be used as path expressions in $orderby
+		if h.metadata.IsSingleEntityNavigationPath(orderBy.Property) {
+			continue
+		}
+
 		prop, _, err := h.metadata.ResolvePropertyPath(orderBy.Property)
 		if err != nil {
 			return fmt.Errorf("property path '%s' is not supported", orderBy.Property)

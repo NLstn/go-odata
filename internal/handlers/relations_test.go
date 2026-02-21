@@ -1419,3 +1419,205 @@ func TestInvalidODataIDReturns400(t *testing.T) {
 		t.Errorf("Expected status 400, got %d: %s", w.Code, w.Body.String())
 	}
 }
+
+// newBookHandlerWithNavRegistry creates a Books handler with the full entity registry set up.
+func newBookHandlerWithNavRegistry(t *testing.T, db *gorm.DB) *EntityHandler {
+	t.Helper()
+	bookMeta, _ := metadata.AnalyzeEntity(&Book{})
+	authorMeta, _ := metadata.AnalyzeEntity(&Author{})
+	handler := NewEntityHandler(db, bookMeta, nil)
+	handler.SetEntitiesMetadata(map[string]*metadata.EntityMetadata{
+		authorMeta.EntitySetName: authorMeta,
+		bookMeta.EntitySetName:   bookMeta,
+	})
+	return handler
+}
+
+// TestOrderByNavigationPropertyPathAsc tests $orderby on a single-entity navigation property path
+// in ascending order, per OData v4.01 spec section 5.1.1.15.
+func TestOrderByNavigationPropertyPathAsc(t *testing.T) {
+	db := setupRelationTestDB(t)
+	handler := newBookHandlerWithNavRegistry(t, db)
+
+	req := httptest.NewRequest(http.MethodGet, "/Books?$orderby=Author%2FName%20asc", nil)
+	w := httptest.NewRecorder()
+	handler.HandleCollection(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+
+	values, ok := response["value"].([]interface{})
+	if !ok {
+		t.Fatal("Expected value array in response")
+	}
+	if len(values) == 0 {
+		t.Fatal("Expected at least one book in response")
+	}
+
+	// Extract author IDs from results - books by George R.R. Martin (ID=2) come
+	// first alphabetically, then J.K. Rowling (ID=1), then J.R.R. Tolkien (ID=3).
+	firstBook := values[0].(map[string]interface{})
+	authorID, ok := firstBook["AuthorID"].(float64)
+	if !ok {
+		t.Fatalf("Expected numeric AuthorID, got %T", firstBook["AuthorID"])
+	}
+	if int(authorID) != 2 {
+		t.Errorf("Expected first book to belong to author 2 (George R.R. Martin), got author %d", int(authorID))
+	}
+}
+
+// TestOrderByNavigationPropertyPathDesc tests $orderby on a single-entity navigation property path
+// in descending order.
+func TestOrderByNavigationPropertyPathDesc(t *testing.T) {
+	db := setupRelationTestDB(t)
+	handler := newBookHandlerWithNavRegistry(t, db)
+
+	req := httptest.NewRequest(http.MethodGet, "/Books?$orderby=Author%2FName%20desc", nil)
+	w := httptest.NewRecorder()
+	handler.HandleCollection(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+
+	values, ok := response["value"].([]interface{})
+	if !ok {
+		t.Fatal("Expected value array in response")
+	}
+	if len(values) == 0 {
+		t.Fatal("Expected at least one book in response")
+	}
+
+	// Descending: J.R.R. Tolkien (ID=3) first.
+	firstBook := values[0].(map[string]interface{})
+	authorID, ok := firstBook["AuthorID"].(float64)
+	if !ok {
+		t.Fatalf("Expected numeric AuthorID, got %T", firstBook["AuthorID"])
+	}
+	if int(authorID) != 3 {
+		t.Errorf("Expected first book to belong to author 3 (J.R.R. Tolkien), got author %d", int(authorID))
+	}
+}
+
+// TestOrderByNavigationPropertyPathWithExpand tests that $orderby=Nav/Prop works together
+// with $expand on the same navigation property.
+func TestOrderByNavigationPropertyPathWithExpand(t *testing.T) {
+	db := setupRelationTestDB(t)
+	handler := newBookHandlerWithNavRegistry(t, db)
+
+	req := httptest.NewRequest(http.MethodGet, "/Books?$expand=Author&$orderby=Author%2FName", nil)
+	w := httptest.NewRecorder()
+	handler.HandleCollection(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+
+	values, ok := response["value"].([]interface{})
+	if !ok {
+		t.Fatal("Expected value array in response")
+	}
+	if len(values) == 0 {
+		t.Fatal("Expected at least one book in response")
+	}
+
+	// Verify the Author is expanded and results are sorted asc by Author/Name.
+	var prevName string
+	for i, raw := range values {
+		book := raw.(map[string]interface{})
+		author, ok := book["Author"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("Book %d: expected expanded Author, got %T", i, book["Author"])
+		}
+		name, _ := author["Name"].(string)
+		if i > 0 && name < prevName {
+			t.Errorf("Books not sorted by Author/Name asc: '%s' after '%s'", name, prevName)
+		}
+		prevName = name
+	}
+}
+
+// TestOrderByNavigationPropertyPathNoDirection tests $orderby=Nav/Prop with no explicit direction
+// (defaults to ascending).
+func TestOrderByNavigationPropertyPathNoDirection(t *testing.T) {
+	db := setupRelationTestDB(t)
+	handler := newBookHandlerWithNavRegistry(t, db)
+
+	req := httptest.NewRequest(http.MethodGet, "/Books?$orderby=Author%2FName", nil)
+	w := httptest.NewRecorder()
+	handler.HandleCollection(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+
+	values, ok := response["value"].([]interface{})
+	if !ok || len(values) == 0 {
+		t.Fatal("Expected non-empty value array")
+	}
+
+	firstBook := values[0].(map[string]interface{})
+	authorID, ok := firstBook["AuthorID"].(float64)
+	if !ok {
+		t.Fatalf("Expected numeric AuthorID, got %T", firstBook["AuthorID"])
+	}
+	// Ascending (default): George R.R. Martin (ID=2) first.
+	if int(authorID) != 2 {
+		t.Errorf("Expected first book to belong to author 2 (George R.R. Martin), got author %d", int(authorID))
+	}
+}
+
+// TestOrderByNavigationPropertyMultipleClauses tests combining a navigation property path
+// orderby with a regular property orderby.
+func TestOrderByNavigationPropertyMultipleClauses(t *testing.T) {
+	db := setupRelationTestDB(t)
+	handler := newBookHandlerWithNavRegistry(t, db)
+
+	req := httptest.NewRequest(http.MethodGet, "/Books?$orderby=Author%2FName%20asc,Title%20asc", nil)
+	w := httptest.NewRecorder()
+	handler.HandleCollection(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+
+	values, ok := response["value"].([]interface{})
+	if !ok || len(values) == 0 {
+		t.Fatal("Expected non-empty value array")
+	}
+
+	// All George R.R. Martin books (ID=2) should come first, sorted by title.
+	for i := 0; i < 2; i++ {
+		book := values[i].(map[string]interface{})
+		authorID, _ := book["AuthorID"].(float64)
+		if int(authorID) != 2 {
+			t.Errorf("Expected first 2 books to belong to author 2 (George R.R. Martin), book %d has author %d", i, int(authorID))
+		}
+	}
+}

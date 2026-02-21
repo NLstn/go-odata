@@ -538,6 +538,11 @@ func main() {
 			Suite:   v4_0.FilterOnSingleEntityNavigationProperties,
 		})
 		testSuites = append(testSuites, TestSuiteInfo{
+			Name:    "11.3.11_orderby_navigation_property",
+			Version: "4.0",
+			Suite:   v4_0.OrderByNavigationProperty,
+		})
+		testSuites = append(testSuites, TestSuiteInfo{
 			Name:    "11.4.1_requesting_entities",
 			Version: "4.0",
 			Suite:   v4_0.RequestingEntities,
