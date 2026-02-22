@@ -129,6 +129,7 @@ func writeODataCollectionWithNavigationResponse(w http.ResponseWriter, r *http.R
 		w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
 		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(jsonBytes)))
 		w.WriteHeader(http.StatusOK)
+		releaseOrderedMaps(transformedData)
 		return nil
 	}
 
@@ -136,7 +137,12 @@ func writeODataCollectionWithNavigationResponse(w http.ResponseWriter, r *http.R
 	w.WriteHeader(http.StatusOK)
 	encoder := json.NewEncoder(w)
 	encoder.SetEscapeHTML(false)
-	return encoder.Encode(response)
+	err := encoder.Encode(response)
+	// Always release the OrderedMap objects regardless of encoding outcome.
+	// MarshalJSON is called during Encode and produces its own copy of the bytes, so the
+	// maps are safe to return to the pool even when a subsequent write-to-network error occurs.
+	releaseOrderedMaps(transformedData)
+	return err
 }
 
 // WriteODataDeltaResponse writes an OData delta response containing change tracking entries.
@@ -197,4 +203,14 @@ func addIndexAnnotations(data []interface{}) []interface{} {
 		}
 	}
 	return data
+}
+
+// releaseOrderedMaps returns any *OrderedMap elements in data back to the pool.
+// This must only be called after the data has been fully serialized to JSON.
+func releaseOrderedMaps(data []interface{}) {
+	for _, item := range data {
+		if om, ok := item.(*OrderedMap); ok {
+			om.Release()
+		}
+	}
 }

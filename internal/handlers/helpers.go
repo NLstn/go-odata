@@ -654,6 +654,7 @@ type metadataAdapter struct {
 	metadata *metadata.EntityMetadata
 	// Cached converted properties to avoid repeated allocations
 	cachedProperties    []response.PropertyMetadata
+	cachedPropertyMap   map[string]*response.PropertyMetadata
 	cachedKeyProperty   *response.PropertyMetadata
 	cachedKeyProperties []response.PropertyMetadata
 	cachedETagProperty  *response.PropertyMetadata
@@ -713,12 +714,27 @@ func newMetadataAdapter(metadata *metadata.EntityMetadata, namespace string) *me
 		}
 	}
 
+	// Pre-compute property map for O(1) lookup by field name.
+	// This avoids adding per-request entries to the globalPropMetaCache (sync.Map),
+	// which would otherwise grow unboundedly since each request creates a new adapter instance.
+	adapter.cachedPropertyMap = make(map[string]*response.PropertyMetadata, len(adapter.cachedProperties))
+	for i := range adapter.cachedProperties {
+		// &adapter.cachedProperties[i] takes the address of the actual slice element (stable),
+		// not of a loop variable, so every pointer is distinct and points to the correct entry.
+		adapter.cachedPropertyMap[adapter.cachedProperties[i].Name] = &adapter.cachedProperties[i]
+	}
+
 	return adapter
 }
 
 func (a *metadataAdapter) GetProperties() []response.PropertyMetadata {
 	// Return cached properties - no allocation needed
 	return a.cachedProperties
+}
+
+func (a *metadataAdapter) GetPropertyMap() map[string]*response.PropertyMetadata {
+	// Return pre-computed property map for O(1) lookup by field name
+	return a.cachedPropertyMap
 }
 
 func (a *metadataAdapter) GetKeyProperty() *response.PropertyMetadata {
