@@ -70,9 +70,24 @@ func extractJsonFieldName(field reflect.StructField) string {
 // Keys are EntityMetadataProvider, values are map[string]*PropertyMetadata
 var globalPropMetaCache sync.Map
 
+// propertyMapProvider is an optional interface that EntityMetadataProvider implementations
+// can satisfy to provide a pre-computed property map, bypassing globalPropMetaCache entirely.
+// This avoids the unbounded memory growth that occurs when the provider is a per-request
+// object (different pointer each time = distinct cache key that is never evicted).
+type propertyMapProvider interface {
+	GetPropertyMap() map[string]*PropertyMetadata
+}
+
 // getCachedPropertyMetadataMap returns the entire property metadata map for a metadata provider
 // Uses sync.Map for lock-free reads, eliminating RWMutex contention
 func getCachedPropertyMetadataMap(metadata EntityMetadataProvider) map[string]*PropertyMetadata {
+	// If the provider carries a pre-built map (e.g. metadataAdapter), use it directly.
+	// This avoids adding per-request keys to globalPropMetaCache, which would grow
+	// unboundedly because each request creates a new provider instance (new pointer = new key).
+	if pm, ok := metadata.(propertyMapProvider); ok {
+		return pm.GetPropertyMap()
+	}
+
 	// Fast path: lock-free read from sync.Map
 	if cached, ok := globalPropMetaCache.Load(metadata); ok {
 		return cached.(map[string]*PropertyMetadata) //nolint:errcheck // type is guaranteed by our Store calls
