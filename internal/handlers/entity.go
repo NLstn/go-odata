@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"reflect"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"github.com/nlstn/go-odata/internal/auth"
@@ -31,6 +32,10 @@ type EntityHandler struct {
 	defaultMaxTop        *int
 	// propertyMap provides O(1) property lookup by field name instead of O(n) iteration
 	propertyMap map[string]*metadata.PropertyMetadata
+	// cachedAdapter is created once (after all setup calls) and reused on every request
+	// to avoid reallocating property slices and maps per response.
+	cachedAdapterOnce sync.Once
+	cachedAdapter     *metadataAdapter
 	// observability holds the OpenTelemetry configuration for tracing and metrics
 	observability *observability.Config
 	// geospatialEnabled indicates if geospatial features are enabled.
@@ -118,6 +123,16 @@ func (h *EntityHandler) SetNamespace(namespace string) {
 		trimmed = defaultNamespace
 	}
 	h.namespace = trimmed
+}
+
+// getMetadataAdapter returns a cached metadataAdapter for this handler.
+// The adapter is created once on first call (after all setup is complete) and
+// reused on every subsequent request, avoiding per-request property slice/map allocations.
+func (h *EntityHandler) getMetadataAdapter() *metadataAdapter {
+	h.cachedAdapterOnce.Do(func() {
+		h.cachedAdapter = newMetadataAdapter(h.metadata, h.namespace)
+	})
+	return h.cachedAdapter
 }
 
 func (h *EntityHandler) namespaceOrDefault() string {

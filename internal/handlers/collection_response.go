@@ -56,7 +56,7 @@ func (h *EntityHandler) collectionResponseWriter(w http.ResponseWriter, r *http.
 
 		selectedNavProps := selectedNavigationProps(queryOptions.Select, h.metadata)
 
-		metadataProvider := newMetadataAdapter(h.metadata, h.namespace)
+		metadataProvider := h.getMetadataAdapter()
 		if err := response.WriteODataCollectionWithNavigationAndDelta(w, r, h.metadata.EntitySetName, results, totalCount, nextLink, deltaLink, metadataProvider, queryOptions.Expand, selectedNavProps, h.metadata); err != nil {
 			h.logger.Error("Error writing OData response", "error", err)
 		}
