@@ -6,10 +6,21 @@
 - [x] Handler read/write flow refactored to use storage abstraction
 - [x] Service wiring injects storage implementation with backward-compatible defaults
 - [x] Phase 1 verification gates run (`gofmt`, `golangci-lint`, `go test`, `go build`)
+- [x] Phase 2 local in-memory cache backend introduced (`LocalCacheStorage` over `DBStorage`)
+- [x] Entity and collection cache-key strategies implemented (canonical entity tuple + normalized query options)
+- [x] Lazy cache population on miss implemented for entity/collection/count reads
+- [x] Startup warm hook added for configured entity sets (`ServiceConfig.Cache.WarmEntitySets`)
+- [x] Post-commit cache convergence hook implemented (coarse collection invalidation + entity upsert/delete)
+- [x] Phase 2 verification gates run (`gofmt`, `golangci-lint`, `go test`, `go build`)
 
 ### Progress Notes
 - 2026-03-06: Started Phase 1 implementation with storage abstraction as first code change.
 - 2026-03-06: Added `handlers.Storage` + `DBStorage`, routed entity/collection reads and CRUD primitives through storage seam, and validated with lint/test/build.
+- 2026-03-06: Added `handlers.LocalCacheStorage` with entity/collection/count caching, canonical keying, cache metadata (`version marker`, `updated-at`, `dirty`, `pending op ID`), lazy fill, and optional warm-up.
+- 2026-03-06: Reused change-event finalization (`recordChange`) as post-commit cache notification point to avoid cache mutation inside transactions.
+- 2026-03-06: Added `ServiceConfig.Cache` and service wiring to enable local cache storage with backward-compatible defaults (disabled unless enabled).
+- 2026-03-06: Added unit tests for cache reads, collection invalidation/entity upsert behavior, and warm-up path in `internal/handlers/local_cache_storage_test.go`.
+- 2026-03-06: Ran quality gates successfully for Phase 2 foundation (`gofmt`, `golangci-lint`, `go test ./...`, `go build ./...`).
 
 Introduce a storage abstraction in front of existing GORM access, then add a local-memory cache backend with async write-behind to DB and DB-backed cross-instance invalidation/event consumption. Phase 1 will include entity GET and collection GET cache reads, local-first writes with durable retry queue, startup warming for selected entity sets, and eventual consistency across instances using DB as source of truth.
 

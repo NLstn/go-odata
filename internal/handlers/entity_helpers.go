@@ -210,21 +210,21 @@ func (h *EntityHandler) writeDatabaseError(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *EntityHandler) createEntity(tx *gorm.DB, entity interface{}) error {
-	return h.storage.Create(tx, entity)
+	return h.storage.Create(tx, h, entity)
 }
 
 func (h *EntityHandler) updateEntityPartial(tx *gorm.DB, entity interface{}, updateData map[string]interface{}) error {
-	return h.storage.UpdatePartial(tx, entity, updateData)
+	return h.storage.UpdatePartial(tx, h, entity, updateData)
 }
 
 func (h *EntityHandler) updateEntityFull(tx *gorm.DB, entity interface{}, replacement interface{}) error {
-	return h.storage.UpdateFull(tx, entity, replacement)
+	return h.storage.UpdateFull(tx, h, entity, replacement)
 }
 
 func (h *EntityHandler) deleteEntity(tx *gorm.DB, entity interface{}) error {
-	return h.storage.Delete(tx, entity)
+	return h.storage.Delete(tx, h, entity)
 }
 
 func (h *EntityHandler) refreshEntity(tx *gorm.DB, entity interface{}) error {
-	return h.storage.Refresh(tx, entity)
+	return h.storage.Refresh(tx, h, entity)
 }

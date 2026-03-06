@@ -76,6 +76,11 @@ func (h *EntityHandler) SetStorage(storage Storage) {
 	h.storage = storage
 }
 
+// Metadata returns the handler's entity metadata.
+func (h *EntityHandler) Metadata() *metadata.EntityMetadata {
+	return h.metadata
+}
+
 // initPropertyMap initializes the property lookup map for O(1) property lookups
 func (h *EntityHandler) initPropertyMap() {
 	if h.metadata == nil || len(h.metadata.Properties) == 0 {

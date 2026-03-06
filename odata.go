@@ -324,6 +324,25 @@ type ServiceConfig struct {
 	// Common values: "english", "french", "german", "simple" (disables stemming and stop-words).
 	// This setting has no effect for SQLite, which uses its own built-in tokenizer.
 	FTSLanguage string
+
+	// Cache configures the optional local in-memory storage cache.
+	// The cache is disabled by default and must be explicitly enabled.
+	Cache CacheConfig
+}
+
+// CacheConfig controls local in-memory cache behavior.
+type CacheConfig struct {
+	// Enabled turns on LocalCacheStorage. Disabled by default.
+	Enabled bool
+
+	// TTL controls cache entry expiration. Non-positive values disable expiration.
+	TTL time.Duration
+
+	// WarmEntitySets lists entity sets to warm at registration/startup.
+	WarmEntitySets []string
+
+	// WarmTop limits warm-up collection size per warmed entity set.
+	WarmTop int
 }
 
 // DefaultNamespace is used when no explicit namespace is configured for the service.
@@ -484,6 +503,13 @@ func NewServiceWithConfig(db *gorm.DB, cfg ServiceConfig) (*Service, error) {
 		maxInClauseSize:            maxInClauseSize,
 		maxExpandDepth:             maxExpandDepth,
 		maxBatchSize:               maxBatchSize,
+	}
+	if cfg.Cache.Enabled {
+		s.storage = handlers.NewLocalCacheStorage(s.storage, handlers.LocalCacheStorageOptions{
+			TTL:            cfg.Cache.TTL,
+			WarmEntitySets: cfg.Cache.WarmEntitySets,
+			WarmTop:        cfg.Cache.WarmTop,
+		})
 	}
 	s.metadataHandler.SetNamespace(DefaultNamespace)
 	s.metadataHandler.SetPolicy(s.policy)
@@ -994,6 +1020,7 @@ func (s *Service) RegisterEntity(entity interface{}) error {
 	handler.SetMaxInClauseSize(s.maxInClauseSize)
 	handler.SetMaxExpandDepth(s.maxExpandDepth)
 	s.handlers[entityMetadata.EntitySetName] = handler
+	s.warmHandlerStorageIfConfigured(handler)
 
 	s.logger.Debug("Registered entity",
 		"entity", entityMetadata.EntityName,
@@ -1076,6 +1103,7 @@ func (s *Service) RegisterSingleton(entity interface{}, singletonName string) er
 	handler.SetMaxInClauseSize(s.maxInClauseSize)
 	handler.SetMaxExpandDepth(s.maxExpandDepth)
 	s.handlers[singletonName] = handler
+	s.warmHandlerStorageIfConfigured(handler)
 
 	s.logger.Debug("Registered singleton",
 		"entity", singletonMetadata.EntityName,
@@ -1164,11 +1192,27 @@ func (s *Service) RegisterVirtualEntity(entity interface{}) error {
 	handler.SetMaxInClauseSize(s.maxInClauseSize)
 	handler.SetMaxExpandDepth(s.maxExpandDepth)
 	s.handlers[entityMetadata.EntitySetName] = handler
+	s.warmHandlerStorageIfConfigured(handler)
 
 	s.logger.Debug("Registered virtual entity",
 		"entity", entityMetadata.EntityName,
 		"entitySet", entityMetadata.EntitySetName)
 	return nil
+}
+
+func (s *Service) warmHandlerStorageIfConfigured(handler *handlers.EntityHandler) {
+	if handler == nil {
+		return
+	}
+	warmer, ok := s.storage.(handlers.StorageWarmer)
+	if !ok {
+		return
+	}
+	if err := warmer.WarmEntitySet(context.Background(), handler); err != nil {
+		s.logger.Warn("storage warm-up failed",
+			"entitySet", handler.Metadata().EntitySetName,
+			"error", err)
+	}
 }
 
 // Types for registering custom OData actions and functions.

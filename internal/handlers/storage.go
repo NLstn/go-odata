@@ -5,6 +5,7 @@ import (
 	"reflect"
 
 	"github.com/nlstn/go-odata/internal/query"
+	"github.com/nlstn/go-odata/internal/trackchanges"
 	"gorm.io/gorm"
 )
 
@@ -16,11 +17,23 @@ type Storage interface {
 	FetchEntityByKey(ctx context.Context, h *EntityHandler, entityKey string, queryOptions *query.QueryOptions, scopes []func(*gorm.DB) *gorm.DB) (interface{}, error)
 	FetchCollection(ctx context.Context, h *EntityHandler, queryOptions *query.QueryOptions, scopes []func(*gorm.DB) *gorm.DB) (interface{}, error)
 	CountEntities(ctx context.Context, h *EntityHandler, queryOptions *query.QueryOptions, scopes []func(*gorm.DB) *gorm.DB) (int64, error)
-	Create(tx *gorm.DB, entity interface{}) error
-	UpdatePartial(tx *gorm.DB, entity interface{}, updateData map[string]interface{}) error
-	UpdateFull(tx *gorm.DB, entity interface{}, replacement interface{}) error
-	Delete(tx *gorm.DB, entity interface{}) error
-	Refresh(tx *gorm.DB, entity interface{}) error
+	Create(tx *gorm.DB, h *EntityHandler, entity interface{}) error
+	UpdatePartial(tx *gorm.DB, h *EntityHandler, entity interface{}, updateData map[string]interface{}) error
+	UpdateFull(tx *gorm.DB, h *EntityHandler, entity interface{}, replacement interface{}) error
+	Delete(tx *gorm.DB, h *EntityHandler, entity interface{}) error
+	Refresh(tx *gorm.DB, h *EntityHandler, entity interface{}) error
+}
+
+// StorageChangeNotifier is implemented by storage backends that need post-commit
+// entity change notifications to keep local caches in sync.
+type StorageChangeNotifier interface {
+	OnEntityChanged(h *EntityHandler, entity interface{}, changeType trackchanges.ChangeType)
+}
+
+// StorageWarmer is implemented by storage backends that can pre-populate
+// per-entity-set cache entries at startup/registration time.
+type StorageWarmer interface {
+	WarmEntitySet(ctx context.Context, h *EntityHandler) error
 }
 
 // DBStorage is the default Storage implementation backed by GORM only.
@@ -198,22 +211,22 @@ func (s *DBStorage) CountEntities(ctx context.Context, h *EntityHandler, queryOp
 	return count, nil
 }
 
-func (s *DBStorage) Create(tx *gorm.DB, entity interface{}) error {
+func (s *DBStorage) Create(tx *gorm.DB, _ *EntityHandler, entity interface{}) error {
 	return tx.Create(entity).Error
 }
 
-func (s *DBStorage) UpdatePartial(tx *gorm.DB, entity interface{}, updateData map[string]interface{}) error {
+func (s *DBStorage) UpdatePartial(tx *gorm.DB, _ *EntityHandler, entity interface{}, updateData map[string]interface{}) error {
 	return tx.Model(entity).Updates(updateData).Error
 }
 
-func (s *DBStorage) UpdateFull(tx *gorm.DB, entity interface{}, replacement interface{}) error {
+func (s *DBStorage) UpdateFull(tx *gorm.DB, _ *EntityHandler, entity interface{}, replacement interface{}) error {
 	return tx.Model(entity).Select("*").Updates(replacement).Error
 }
 
-func (s *DBStorage) Delete(tx *gorm.DB, entity interface{}) error {
+func (s *DBStorage) Delete(tx *gorm.DB, _ *EntityHandler, entity interface{}) error {
 	return tx.Delete(entity).Error
 }
 
-func (s *DBStorage) Refresh(tx *gorm.DB, entity interface{}) error {
+func (s *DBStorage) Refresh(tx *gorm.DB, _ *EntityHandler, entity interface{}) error {
 	return tx.First(entity).Error
 }

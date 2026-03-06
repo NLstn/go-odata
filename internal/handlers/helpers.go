@@ -239,6 +239,10 @@ func (h *EntityHandler) supportsTrackChanges() bool {
 }
 
 func (h *EntityHandler) recordChange(entity interface{}, changeType trackchanges.ChangeType) {
+	if notifier, ok := h.storage.(StorageChangeNotifier); ok {
+		notifier.OnEntityChanged(h, entity, changeType)
+	}
+
 	if !h.supportsTrackChanges() {
 		return
 	}
