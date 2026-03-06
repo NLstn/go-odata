@@ -354,6 +354,8 @@ type Service struct {
 	entityContainerAnnotations *metadata.AnnotationCollection
 	// handlers holds entity handlers keyed by entity set name
 	handlers map[string]*handlers.EntityHandler
+	// storage is the shared handler storage implementation injected into all handlers
+	storage handlers.Storage
 	// metadataHandler handles metadata document requests
 	metadataHandler *handlers.MetadataHandler
 	// serviceDocumentHandler handles service document requests
@@ -468,6 +470,7 @@ func NewServiceWithConfig(db *gorm.DB, cfg ServiceConfig) (*Service, error) {
 		entities:                   entities,
 		entityContainerAnnotations: metadata.NewAnnotationCollection(),
 		handlers:                   handlersMap,
+		storage:                    handlers.NewDBStorage(),
 		metadataHandler:            handlers.NewMetadataHandler(entities),
 		serviceDocumentHandler:     handlers.NewServiceDocumentHandler(entities, logger),
 		actions:                    make(map[string][]*actions.ActionDefinition),
@@ -964,6 +967,7 @@ func (s *Service) RegisterEntity(entity interface{}) error {
 
 	// Create and store the handler
 	handler := handlers.NewEntityHandler(s.db, entityMetadata, s.logger)
+	handler.SetStorage(s.storage)
 	handler.SetNamespace(s.namespace)
 	handler.SetEntitiesMetadata(s.entities)
 	handler.SetDeltaTracker(s.deltaTracker)
@@ -1046,6 +1050,7 @@ func (s *Service) RegisterSingleton(entity interface{}, singletonName string) er
 
 	// Create and store the handler (same handler type works for both entities and singletons)
 	handler := handlers.NewEntityHandler(s.db, singletonMetadata, s.logger)
+	handler.SetStorage(s.storage)
 	handler.SetNamespace(s.namespace)
 	handler.SetEntitiesMetadata(s.entities)
 	handler.SetFTSManager(s.ftsManager)
@@ -1133,6 +1138,7 @@ func (s *Service) RegisterVirtualEntity(entity interface{}) error {
 
 	// Create and store the handler (no database operations will be performed)
 	handler := handlers.NewEntityHandler(s.db, entityMetadata, s.logger)
+	handler.SetStorage(s.storage)
 	handler.SetNamespace(s.namespace)
 	handler.SetEntitiesMetadata(s.entities)
 	handler.SetFTSManager(s.ftsManager)

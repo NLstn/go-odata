@@ -119,36 +119,7 @@ func (h *EntityHandler) parseSingleEntityQueryOptions(r *http.Request) (*query.Q
 
 // fetchEntityByKey fetches an entity by its key with optional expand
 func (h *EntityHandler) fetchEntityByKey(ctx context.Context, entityKey string, queryOptions *query.QueryOptions, scopes []func(*gorm.DB) *gorm.DB) (interface{}, error) {
-	result := reflect.New(h.metadata.EntityType).Interface()
-
-	db := h.db.WithContext(ctx)
-
-	if len(scopes) > 0 {
-		db = db.Scopes(scopes...)
-	}
-	baseDB := db
-
-	db, err := h.buildKeyQuery(db, entityKey)
-	if err != nil {
-		return nil, err
-	}
-
-	// Apply expand (preload navigation properties) if specified
-	if len(queryOptions.Expand) > 0 {
-		db = query.ApplyExpandOnly(db, queryOptions.Expand, h.metadata, h.logger)
-	}
-
-	if err := db.First(result).Error; err != nil {
-		return nil, err
-	}
-
-	if len(queryOptions.Expand) > 0 {
-		if err := query.ApplyPerParentExpand(baseDB, result, queryOptions.Expand, h.metadata); err != nil {
-			return nil, err
-		}
-	}
-
-	return result, nil
+	return h.storage.FetchEntityByKey(ctx, h, entityKey, queryOptions, scopes)
 }
 
 // writeEntityResponseWithETag writes an entity response with an optional pre-computed ETag
@@ -236,4 +207,24 @@ func (h *EntityHandler) writeDatabaseError(w http.ResponseWriter, r *http.Reques
 	if writeErr := response.WriteError(w, r, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error()); writeErr != nil {
 		h.logger.Error("Error writing error response", "error", writeErr)
 	}
+}
+
+func (h *EntityHandler) createEntity(tx *gorm.DB, entity interface{}) error {
+	return h.storage.Create(tx, entity)
+}
+
+func (h *EntityHandler) updateEntityPartial(tx *gorm.DB, entity interface{}, updateData map[string]interface{}) error {
+	return h.storage.UpdatePartial(tx, entity, updateData)
+}
+
+func (h *EntityHandler) updateEntityFull(tx *gorm.DB, entity interface{}, replacement interface{}) error {
+	return h.storage.UpdateFull(tx, entity, replacement)
+}
+
+func (h *EntityHandler) deleteEntity(tx *gorm.DB, entity interface{}) error {
+	return h.storage.Delete(tx, entity)
+}
+
+func (h *EntityHandler) refreshEntity(tx *gorm.DB, entity interface{}) error {
+	return h.storage.Refresh(tx, entity)
 }

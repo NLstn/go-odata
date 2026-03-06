@@ -88,7 +88,7 @@ func (h *EntityHandler) handleDeleteEntity(w http.ResponseWriter, r *http.Reques
 			return newTransactionHandledError(err)
 		}
 
-		if err := tx.Delete(entity).Error; err != nil {
+		if err := h.deleteEntity(tx, entity); err != nil {
 			h.writeDatabaseError(w, r, err)
 			return newTransactionHandledError(err)
 		}
@@ -244,7 +244,7 @@ func (h *EntityHandler) handlePatchEntity(w http.ResponseWriter, r *http.Request
 			}
 		}
 
-		if err := tx.Model(entity).Updates(updateData).Error; err != nil {
+		if err := h.updateEntityPartial(tx, entity, updateData); err != nil {
 			h.writeDatabaseError(w, r, err)
 			return newTransactionHandledError(err)
 		}
@@ -260,7 +260,7 @@ func (h *EntityHandler) handlePatchEntity(w http.ResponseWriter, r *http.Request
 			h.logger.Error("AfterUpdate hook failed", "error", err)
 		}
 
-		if err := tx.First(entity).Error; err != nil {
+		if err := h.refreshEntity(tx, entity); err != nil {
 			h.logger.Error("Error refreshing entity for change tracking", "error", err)
 		} else {
 			changeEvents = append(changeEvents, changeEvent{entity: entity, changeType: trackchanges.ChangeTypeUpdated})
@@ -421,7 +421,7 @@ func (h *EntityHandler) handlePutEntity(w http.ResponseWriter, r *http.Request, 
 			h.copyETagProperty(entity, replacementEntity)
 		}
 
-		if err := tx.Model(entity).Select("*").Updates(replacementEntity).Error; err != nil {
+		if err := h.updateEntityFull(tx, entity, replacementEntity); err != nil {
 			h.writeDatabaseError(w, r, err)
 			return newTransactionHandledError(err)
 		}
@@ -430,7 +430,7 @@ func (h *EntityHandler) handlePutEntity(w http.ResponseWriter, r *http.Request, 
 			h.logger.Error("AfterUpdate hook failed", "error", err)
 		}
 
-		if err := tx.First(entity).Error; err != nil {
+		if err := h.refreshEntity(tx, entity); err != nil {
 			h.logger.Error("Error refreshing entity for change tracking", "error", err)
 		} else {
 			changeEvents = append(changeEvents, changeEvent{entity: entity, changeType: trackchanges.ChangeTypeUpdated})

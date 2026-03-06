@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"reflect"
 	"sort"
 
 	"github.com/nlstn/go-odata/internal/metadata"
@@ -12,67 +11,7 @@ import (
 
 // countEntities applies query scopes and filters to return the total number of matching entities.
 func (h *EntityHandler) countEntities(ctx context.Context, queryOptions *query.QueryOptions, scopes []func(*gorm.DB) *gorm.DB) (int64, error) {
-	baseDB := h.db.WithContext(ctx).Model(reflect.New(h.metadata.EntityType).Interface())
-	if len(scopes) > 0 {
-		baseDB = baseDB.Scopes(scopes...)
-	}
-
-	if queryOptions == nil {
-		var count int64
-		if err := baseDB.Count(&count).Error; err != nil {
-			return 0, err
-		}
-
-		return count, nil
-	}
-
-	filter := queryOptions.Filter
-	search := queryOptions.Search
-
-	if search != "" && h.ftsManager != nil {
-		countOptions := &query.QueryOptions{Filter: filter, Search: search}
-		countDB := query.ApplyQueryOptionsWithFTS(baseDB, countOptions, h.metadata, h.ftsManager, h.metadata.TableName, h.logger)
-		if searchAppliedAtDB(countDB) {
-			var count int64
-			if err := countDB.Count(&count).Error; err != nil {
-				return 0, err
-			}
-
-			return count, nil
-		}
-	}
-
-	countDB := baseDB
-	if filter != nil {
-		countDB = query.ApplyFilterOnly(countDB, filter, h.metadata, h.logger)
-	}
-
-	if search == "" {
-		var count int64
-		if err := countDB.Count(&count).Error; err != nil {
-			return 0, err
-		}
-
-		return count, nil
-	}
-
-	selectColumns := searchableCountColumns(h.metadata)
-	if len(selectColumns) > 0 {
-		countDB = countDB.Select(selectColumns)
-	}
-
-	sliceType := reflect.SliceOf(h.metadata.EntityType)
-	results := reflect.New(sliceType).Interface()
-
-	if err := countDB.Find(results).Error; err != nil {
-		return 0, err
-	}
-
-	sliceValue := reflect.ValueOf(results).Elem().Interface()
-	filtered := query.ApplySearch(sliceValue, search, h.metadata)
-	count := int64(reflect.ValueOf(filtered).Len())
-
-	return count, nil
+	return h.storage.CountEntities(ctx, h, queryOptions, scopes)
 }
 
 func searchAppliedAtDB(db *gorm.DB) bool {

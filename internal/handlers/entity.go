@@ -20,6 +20,7 @@ import (
 // EntityHandler handles HTTP requests for entity collections
 type EntityHandler struct {
 	db                   *gorm.DB
+	storage              Storage
 	metadata             *metadata.EntityMetadata
 	entitiesMetadata     map[string]*metadata.EntityMetadata
 	namespace            string
@@ -55,6 +56,7 @@ func NewEntityHandler(db *gorm.DB, entityMetadata *metadata.EntityMetadata, logg
 	}
 	h := &EntityHandler{
 		db:        db,
+		storage:   NewDBStorage(),
 		metadata:  entityMetadata,
 		namespace: defaultNamespace,
 		logger:    logger,
@@ -62,6 +64,16 @@ func NewEntityHandler(db *gorm.DB, entityMetadata *metadata.EntityMetadata, logg
 	// Initialize property map for O(1) lookups
 	h.initPropertyMap()
 	return h
+}
+
+// SetStorage sets the storage backend for the handler.
+// Passing nil resets the storage backend to the default DB storage.
+func (h *EntityHandler) SetStorage(storage Storage) {
+	if storage == nil {
+		h.storage = NewDBStorage()
+		return
+	}
+	h.storage = storage
 }
 
 // initPropertyMap initializes the property lookup map for O(1) property lookups
