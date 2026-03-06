@@ -131,6 +131,68 @@ func TestLocalCacheStorageWarmEntitySet(t *testing.T) {
 	require.Equal(t, 1, base.fetchCollectionCount)
 }
 
+func TestLocalCacheStorageReconcileEntitySetRefreshesCache(t *testing.T) {
+	meta := mustAnalyzeCacheTestEntity(t)
+	h := NewEntityHandler(nil, meta, nil)
+
+	base := &cacheTestStorage{
+		collectionResult: []cacheTestProduct{{ID: 1, Name: "initial"}},
+	}
+	cache := NewLocalCacheStorage(base, LocalCacheStorageOptions{}).(*LocalCacheStorage)
+
+	_, err := cache.FetchCollection(context.Background(), h, &query.QueryOptions{}, nil)
+	require.NoError(t, err)
+	require.Equal(t, 1, base.fetchCollectionCount)
+
+	base.collectionResult = []cacheTestProduct{{ID: 1, Name: "reconciled"}}
+	err = cache.ReconcileEntitySet(context.Background(), h)
+	require.NoError(t, err)
+	require.Equal(t, 2, base.fetchCollectionCount)
+
+	entity, err := cache.FetchEntityByKey(context.Background(), h, namedEntityKey(meta, 1), &query.QueryOptions{}, nil)
+	require.NoError(t, err)
+	require.Equal(t, "reconciled", entityName(entity))
+	require.Equal(t, 0, base.fetchEntityCount)
+}
+
+func TestLocalCacheStorageRespectsEntryLimits(t *testing.T) {
+	meta := mustAnalyzeCacheTestEntity(t)
+	cache := NewLocalCacheStorage(&cacheTestStorage{}, LocalCacheStorageOptions{
+		MaxEntityEntries:     1,
+		MaxCollectionEntries: 1,
+		MaxCountEntries:      1,
+	}).(*LocalCacheStorage)
+
+	entityKeyOne := cache.buildEntityCacheKey(meta.EntitySetName, canonicalEntityKeyFromRaw(namedEntityKey(meta, 1), meta.KeyProperties))
+	entityKeyTwo := cache.buildEntityCacheKey(meta.EntitySetName, canonicalEntityKeyFromRaw(namedEntityKey(meta, 2), meta.KeyProperties))
+
+	cache.setEntity(meta.EntitySetName, entityKeyOne, &cacheTestProduct{ID: 1, Name: "one"})
+	cache.setEntity(meta.EntitySetName, entityKeyTwo, &cacheTestProduct{ID: 2, Name: "two"})
+	require.Len(t, cache.entityByKey, 1)
+	_, stillHasFirst := cache.entityByKey[entityKeyOne]
+	require.False(t, stillHasFirst)
+
+	collectionKeyOne := cache.buildCollectionCacheKey(meta.EntitySetName, &query.QueryOptions{Top: ptrInt(1)})
+	collectionKeyTwo := cache.buildCollectionCacheKey(meta.EntitySetName, &query.QueryOptions{Top: ptrInt(2)})
+	cache.setCollection(meta.EntitySetName, collectionKeyOne, []cacheTestProduct{{ID: 1}})
+	cache.setCollection(meta.EntitySetName, collectionKeyTwo, []cacheTestProduct{{ID: 2}})
+	require.Len(t, cache.collectionByKey, 1)
+	_, stillHasCollectionOne := cache.collectionByKey[collectionKeyOne]
+	require.False(t, stillHasCollectionOne)
+
+	countKeyOne := cache.buildCountCacheKey(meta.EntitySetName, &query.QueryOptions{Top: ptrInt(1)})
+	countKeyTwo := cache.buildCountCacheKey(meta.EntitySetName, &query.QueryOptions{Top: ptrInt(2)})
+	cache.setCount(meta.EntitySetName, countKeyOne, 1)
+	cache.setCount(meta.EntitySetName, countKeyTwo, 2)
+	require.Len(t, cache.countByKey, 1)
+	_, stillHasCountOne := cache.countByKey[countKeyOne]
+	require.False(t, stillHasCountOne)
+}
+
+func ptrInt(v int) *int {
+	return &v
+}
+
 func mustAnalyzeCacheTestEntity(t *testing.T) *metadata.EntityMetadata {
 	t.Helper()
 	meta, err := metadata.AnalyzeEntity(&cacheTestProduct{})

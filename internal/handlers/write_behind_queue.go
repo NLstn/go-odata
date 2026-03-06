@@ -52,8 +52,15 @@ type WriteBehindQueue interface {
 // WriteBehindApplyFunc applies a queued write-behind request to the system of record.
 type WriteBehindApplyFunc func(ctx context.Context, req WriteBehindRequest) error
 
+// WriteBehindApplyOptions configures optional side effects for successful apply operations.
+type WriteBehindApplyOptions struct {
+	InvalidationAppender CacheInvalidationAppender
+	SourceInstanceID     string
+}
+
 // WriteBehindQueueOptions configures queue worker behavior and retry semantics.
 type WriteBehindQueueOptions struct {
+	MaxQueueSize         int
 	PollInterval         time.Duration
 	WorkerCount          int
 	MaxRetries           int
@@ -153,6 +160,22 @@ func (q *DurableWriteBehindQueue) Enqueue(_ context.Context, req WriteBehindRequ
 	}
 
 	return q.db.Transaction(func(tx *gorm.DB) error {
+		if q.opts.MaxQueueSize > 0 {
+			var queued int64
+			if err := tx.Model(&writeBehindJob{}).
+				Where("(status = ?) OR (status = ?) OR (status = ? AND retry_at IS NOT NULL)",
+					writeBehindStatusPending,
+					writeBehindStatusInProgress,
+					writeBehindStatusFailed,
+				).
+				Count(&queued).Error; err != nil {
+				return err
+			}
+			if queued >= int64(q.opts.MaxQueueSize) {
+				return fmt.Errorf("write-behind queue is full")
+			}
+		}
+
 		var existing int64
 		if err := tx.Model(&writeBehindJob{}).
 			Where("idempotency_key = ? AND (status = ? OR status = ? OR (status = ? AND retry_at IS NOT NULL))",
@@ -449,6 +472,11 @@ func buildIdempotencyKey(req WriteBehindRequest) string {
 // NewEntityWriteBehindApplier creates an applier that persists queued entity changes
 // using handler metadata and GORM operations.
 func NewEntityWriteBehindApplier(db *gorm.DB, resolver func(entitySet string) (*EntityHandler, bool)) WriteBehindApplyFunc {
+	return NewEntityWriteBehindApplierWithOptions(db, resolver, WriteBehindApplyOptions{})
+}
+
+// NewEntityWriteBehindApplierWithOptions creates an applier with optional post-apply hooks.
+func NewEntityWriteBehindApplierWithOptions(db *gorm.DB, resolver func(entitySet string) (*EntityHandler, bool), opts WriteBehindApplyOptions) WriteBehindApplyFunc {
 	return func(ctx context.Context, req WriteBehindRequest) error {
 		if db == nil {
 			return fmt.Errorf("write-behind apply requires db")
@@ -461,14 +489,33 @@ func NewEntityWriteBehindApplier(db *gorm.DB, resolver func(entitySet string) (*
 			return fmt.Errorf("unknown entity set '%s'", req.EntitySet)
 		}
 
+		var applyErr error
 		switch req.ChangeType {
 		case trackchanges.ChangeTypeDeleted:
-			return applyDeleteByKeys(db.WithContext(ctx), h, req.KeyValues)
+			applyErr = applyDeleteByKeys(db.WithContext(ctx), h, req.KeyValues)
 		case trackchanges.ChangeTypeAdded, trackchanges.ChangeTypeUpdated:
-			return applyUpsertByData(db.WithContext(ctx), h, req.Data)
+			applyErr = applyUpsertByData(db.WithContext(ctx), h, req.Data)
 		default:
 			return fmt.Errorf("unsupported change type '%s'", req.ChangeType)
 		}
+		if applyErr != nil {
+			return applyErr
+		}
+
+		if opts.InvalidationAppender != nil {
+			if err := opts.InvalidationAppender.Append(ctx, CacheInvalidationEvent{
+				EntitySet:      req.EntitySet,
+				ChangeType:     req.ChangeType,
+				KeyValues:      req.KeyValues,
+				Data:           req.Data,
+				CorrelationID:  req.CorrelationID,
+				SourceInstance: opts.SourceInstanceID,
+			}); err != nil {
+				return fmt.Errorf("append cache invalidation event: %w", err)
+			}
+		}
+
+		return nil
 	}
 }
 

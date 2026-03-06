@@ -22,6 +22,8 @@ type EntityHandler struct {
 	db                   *gorm.DB
 	storage              Storage
 	writeBehindQueue     WriteBehindQueue
+	invalidationAppender CacheInvalidationAppender
+	instanceID           string
 	metadata             *metadata.EntityMetadata
 	entitiesMetadata     map[string]*metadata.EntityMetadata
 	namespace            string
@@ -80,6 +82,12 @@ func (h *EntityHandler) SetStorage(storage Storage) {
 // SetWriteBehindQueue configures optional asynchronous write-behind persistence.
 func (h *EntityHandler) SetWriteBehindQueue(queue WriteBehindQueue) {
 	h.writeBehindQueue = queue
+}
+
+// SetCacheInvalidationAppender configures optional DB-backed invalidation append behavior.
+func (h *EntityHandler) SetCacheInvalidationAppender(appender CacheInvalidationAppender, instanceID string) {
+	h.invalidationAppender = appender
+	h.instanceID = instanceID
 }
 
 // Metadata returns the handler's entity metadata.

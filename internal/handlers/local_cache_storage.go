@@ -21,6 +21,12 @@ import (
 type LocalCacheStorageOptions struct {
 	// TTL controls cache entry expiration. A non-positive value disables expiry.
 	TTL time.Duration
+	// MaxEntityEntries limits cached entity-by-key entries. Non-positive is unbounded.
+	MaxEntityEntries int
+	// MaxCollectionEntries limits cached collection query entries. Non-positive is unbounded.
+	MaxCollectionEntries int
+	// MaxCountEntries limits cached count query entries. Non-positive is unbounded.
+	MaxCountEntries int
 	// WarmEntitySets selects entity sets warmed at registration/startup.
 	WarmEntitySets []string
 	// WarmTop limits warm-up collection size to avoid large startup reads.
@@ -34,6 +40,10 @@ type LocalCacheStorageOptions struct {
 type LocalCacheStorage struct {
 	base Storage
 	ttl  time.Duration
+
+	maxEntityEntries     int
+	maxCollectionEntries int
+	maxCountEntries      int
 
 	warmEntitySets map[string]struct{}
 	warmTop        int
@@ -84,16 +94,19 @@ func NewLocalCacheStorage(base Storage, opts LocalCacheStorageOptions) Storage {
 	}
 
 	return &LocalCacheStorage{
-		base:                base,
-		ttl:                 opts.TTL,
-		warmEntitySets:      warmSets,
-		warmTop:             opts.WarmTop,
-		entityByKey:         make(map[string]cacheEntry),
-		collectionByKey:     make(map[string]cacheEntry),
-		countByKey:          make(map[string]countCacheEntry),
-		entityKeysBySet:     make(map[string]map[string]struct{}),
-		collectionKeysBySet: make(map[string]map[string]struct{}),
-		countKeysBySet:      make(map[string]map[string]struct{}),
+		base:                 base,
+		ttl:                  opts.TTL,
+		maxEntityEntries:     opts.MaxEntityEntries,
+		maxCollectionEntries: opts.MaxCollectionEntries,
+		maxCountEntries:      opts.MaxCountEntries,
+		warmEntitySets:       warmSets,
+		warmTop:              opts.WarmTop,
+		entityByKey:          make(map[string]cacheEntry),
+		collectionByKey:      make(map[string]cacheEntry),
+		countByKey:           make(map[string]countCacheEntry),
+		entityKeysBySet:      make(map[string]map[string]struct{}),
+		collectionKeysBySet:  make(map[string]map[string]struct{}),
+		countKeysBySet:       make(map[string]map[string]struct{}),
 	}
 }
 
@@ -112,7 +125,7 @@ func (s *LocalCacheStorage) FetchEntityByKey(ctx context.Context, h *EntityHandl
 		return nil, err
 	}
 
-	s.setEntity(h.metadata.EntitySetName, cacheKey, result, false, "")
+	s.setEntity(h.metadata.EntitySetName, cacheKey, result)
 	return cloneValue(result), nil
 }
 
@@ -131,7 +144,7 @@ func (s *LocalCacheStorage) FetchCollection(ctx context.Context, h *EntityHandle
 		return nil, err
 	}
 
-	s.setCollection(h.metadata.EntitySetName, cacheKey, result, false, "")
+	s.setCollection(h.metadata.EntitySetName, cacheKey, result)
 	s.populateEntityCacheFromCollection(h.metadata, result)
 	return cloneValue(result), nil
 }
@@ -151,7 +164,7 @@ func (s *LocalCacheStorage) CountEntities(ctx context.Context, h *EntityHandler,
 		return 0, err
 	}
 
-	s.setCount(h.metadata.EntitySetName, cacheKey, count, false, "")
+	s.setCount(h.metadata.EntitySetName, cacheKey, count)
 	return count, nil
 }
 
@@ -182,6 +195,7 @@ func (s *LocalCacheStorage) OnEntityChanged(h *EntityHandler, entity interface{}
 
 	setName := h.metadata.EntitySetName
 	s.invalidateCollectionSet(setName)
+	s.invalidateEntitySet(setName)
 
 	entityKey := canonicalEntityKeyFromEntity(entity, h.metadata)
 	if entityKey == "" {
@@ -193,8 +207,38 @@ func (s *LocalCacheStorage) OnEntityChanged(h *EntityHandler, entity interface{}
 	case trackchanges.ChangeTypeDeleted:
 		s.deleteEntity(setName, cacheKey)
 	default:
-		s.setEntity(setName, cacheKey, entity, false, "")
+		s.setEntity(setName, cacheKey, entity)
 	}
+}
+
+// ReplayEntityChange applies an externally observed committed change to local cache state.
+func (s *LocalCacheStorage) ReplayEntityChange(h *EntityHandler, keyValues map[string]interface{}, data map[string]interface{}, changeType trackchanges.ChangeType) {
+	if h == nil || h.metadata == nil {
+		return
+	}
+
+	setName := h.metadata.EntitySetName
+	s.invalidateCollectionSet(setName)
+
+	entityKey := canonicalEntityKeyFromMap(keyValues, h.metadata.KeyProperties)
+	if entityKey == "" {
+		return
+	}
+
+	cacheKey := s.buildEntityCacheKey(setName, entityKey)
+	if changeType == trackchanges.ChangeTypeDeleted {
+		s.deleteEntity(setName, cacheKey)
+		return
+	}
+
+	entity, err := materializeEntityFromData(h.metadata.EntityType, data)
+	if err != nil {
+		// If payload materialization fails, fail-safe by dropping stale entity cache.
+		s.deleteEntity(setName, cacheKey)
+		return
+	}
+
+	s.setEntity(setName, cacheKey, entity)
 }
 
 func (s *LocalCacheStorage) WarmEntitySet(ctx context.Context, h *EntityHandler) error {
@@ -208,10 +252,23 @@ func (s *LocalCacheStorage) WarmEntitySet(ctx context.Context, h *EntityHandler)
 		return nil
 	}
 
+	return s.reconcileEntitySet(ctx, h, s.warmTop)
+}
+
+// ReconcileEntitySet force-refreshes cached collection/entity snapshots for an entity set.
+func (s *LocalCacheStorage) ReconcileEntitySet(ctx context.Context, h *EntityHandler) error {
+	return s.reconcileEntitySet(ctx, h, 0)
+}
+
+func (s *LocalCacheStorage) reconcileEntitySet(ctx context.Context, h *EntityHandler, top int) error {
+	if h == nil || h.metadata == nil {
+		return nil
+	}
+
 	queryOptions := &query.QueryOptions{}
-	if s.warmTop > 0 {
-		top := s.warmTop
-		queryOptions.Top = &top
+	if top > 0 {
+		warmTop := top
+		queryOptions.Top = &warmTop
 	}
 
 	results, err := s.base.FetchCollection(ctx, h, queryOptions, nil)
@@ -219,8 +276,12 @@ func (s *LocalCacheStorage) WarmEntitySet(ctx context.Context, h *EntityHandler)
 		return err
 	}
 
-	collectionKey := s.buildCollectionCacheKey(h.metadata.EntitySetName, queryOptions)
-	s.setCollection(h.metadata.EntitySetName, collectionKey, results, false, "")
+	setName := h.metadata.EntitySetName
+	s.invalidateCollectionSet(setName)
+	s.invalidateEntitySet(setName)
+
+	collectionKey := s.buildCollectionCacheKey(setName, queryOptions)
+	s.setCollection(setName, collectionKey, results)
 	s.populateEntityCacheFromCollection(h.metadata, results)
 	return nil
 }
@@ -237,16 +298,17 @@ func (s *LocalCacheStorage) buildCountCacheKey(entitySet string, queryOptions *q
 	return fmt.Sprintf("count|%s|%s", entitySet, normalizeQueryOptions(queryOptions))
 }
 
-func (s *LocalCacheStorage) setEntity(entitySet, key string, value interface{}, dirty bool, pendingOpID string) {
-	entry := cacheEntry{value: cloneValue(value), meta: s.newMetadata(dirty, pendingOpID)}
+func (s *LocalCacheStorage) setEntity(entitySet, key string, value interface{}) {
+	entry := cacheEntry{value: cloneValue(value), meta: s.newMetadata()}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.entityByKey[key] = entry
 	indexKeyBySet(s.entityKeysBySet, entitySet, key)
+	s.enforceEntityCapacityLocked()
 }
 
-func (s *LocalCacheStorage) setEntityIfAbsent(entitySet, key string, value interface{}, dirty bool, pendingOpID string) {
-	entry := cacheEntry{value: cloneValue(value), meta: s.newMetadata(dirty, pendingOpID)}
+func (s *LocalCacheStorage) setEntityIfAbsent(entitySet, key string, value interface{}) {
+	entry := cacheEntry{value: cloneValue(value), meta: s.newMetadata()}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, exists := s.entityByKey[key]; exists {
@@ -254,6 +316,7 @@ func (s *LocalCacheStorage) setEntityIfAbsent(entitySet, key string, value inter
 	}
 	s.entityByKey[key] = entry
 	indexKeyBySet(s.entityKeysBySet, entitySet, key)
+	s.enforceEntityCapacityLocked()
 }
 
 func (s *LocalCacheStorage) getEntity(key string) (interface{}, bool) {
@@ -266,6 +329,7 @@ func (s *LocalCacheStorage) getEntity(key string) (interface{}, bool) {
 	if s.isExpired(entry.meta.ExpiresAt) {
 		s.mu.Lock()
 		delete(s.entityByKey, key)
+		removeIndexedKeyFromAllSets(s.entityKeysBySet, key)
 		s.mu.Unlock()
 		return nil, false
 	}
@@ -279,12 +343,13 @@ func (s *LocalCacheStorage) deleteEntity(entitySet, key string) {
 	deleteIndexedKey(s.entityKeysBySet, entitySet, key)
 }
 
-func (s *LocalCacheStorage) setCollection(entitySet, key string, value interface{}, dirty bool, pendingOpID string) {
-	entry := cacheEntry{value: cloneValue(value), meta: s.newMetadata(dirty, pendingOpID)}
+func (s *LocalCacheStorage) setCollection(entitySet, key string, value interface{}) {
+	entry := cacheEntry{value: cloneValue(value), meta: s.newMetadata()}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.collectionByKey[key] = entry
 	indexKeyBySet(s.collectionKeysBySet, entitySet, key)
+	s.enforceCollectionCapacityLocked()
 }
 
 func (s *LocalCacheStorage) getCollection(key string) (interface{}, bool) {
@@ -297,18 +362,20 @@ func (s *LocalCacheStorage) getCollection(key string) (interface{}, bool) {
 	if s.isExpired(entry.meta.ExpiresAt) {
 		s.mu.Lock()
 		delete(s.collectionByKey, key)
+		removeIndexedKeyFromAllSets(s.collectionKeysBySet, key)
 		s.mu.Unlock()
 		return nil, false
 	}
 	return cloneValue(entry.value), true
 }
 
-func (s *LocalCacheStorage) setCount(entitySet, key string, value int64, dirty bool, pendingOpID string) {
-	entry := countCacheEntry{count: value, meta: s.newMetadata(dirty, pendingOpID)}
+func (s *LocalCacheStorage) setCount(entitySet, key string, value int64) {
+	entry := countCacheEntry{count: value, meta: s.newMetadata()}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.countByKey[key] = entry
 	indexKeyBySet(s.countKeysBySet, entitySet, key)
+	s.enforceCountCapacityLocked()
 }
 
 func (s *LocalCacheStorage) getCount(key string) (int64, bool) {
@@ -321,6 +388,7 @@ func (s *LocalCacheStorage) getCount(key string) (int64, bool) {
 	if s.isExpired(entry.meta.ExpiresAt) {
 		s.mu.Lock()
 		delete(s.countByKey, key)
+		removeIndexedKeyFromAllSets(s.countKeysBySet, key)
 		s.mu.Unlock()
 		return 0, false
 	}
@@ -341,6 +409,15 @@ func (s *LocalCacheStorage) invalidateCollectionSet(entitySet string) {
 	delete(s.countKeysBySet, entitySet)
 }
 
+func (s *LocalCacheStorage) invalidateEntitySet(entitySet string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for key := range s.entityKeysBySet[entitySet] {
+		delete(s.entityByKey, key)
+	}
+	delete(s.entityKeysBySet, entitySet)
+}
+
 func (s *LocalCacheStorage) populateEntityCacheFromCollection(meta *metadata.EntityMetadata, collection interface{}) {
 	if meta == nil {
 		return
@@ -356,16 +433,16 @@ func (s *LocalCacheStorage) populateEntityCacheFromCollection(meta *metadata.Ent
 		if entityKey == "" {
 			continue
 		}
-		s.setEntityIfAbsent(meta.EntitySetName, s.buildEntityCacheKey(meta.EntitySetName, entityKey), item, false, "")
+		s.setEntityIfAbsent(meta.EntitySetName, s.buildEntityCacheKey(meta.EntitySetName, entityKey), item)
 	}
 }
 
-func (s *LocalCacheStorage) newMetadata(dirty bool, pendingOpID string) cacheMetadata {
+func (s *LocalCacheStorage) newMetadata() cacheMetadata {
 	meta := cacheMetadata{
 		VersionMarker: atomic.AddUint64(&s.globalVersion, 1),
 		UpdatedAt:     time.Now().UTC(),
-		Dirty:         dirty,
-		PendingOpID:   pendingOpID,
+		Dirty:         false,
+		PendingOpID:   "",
 	}
 	if s.ttl > 0 {
 		meta.ExpiresAt = meta.UpdatedAt.Add(s.ttl)
@@ -378,6 +455,76 @@ func (s *LocalCacheStorage) isExpired(expiresAt time.Time) bool {
 		return false
 	}
 	return time.Now().UTC().After(expiresAt)
+}
+
+func (s *LocalCacheStorage) enforceEntityCapacityLocked() {
+	if s.maxEntityEntries <= 0 {
+		return
+	}
+	for len(s.entityByKey) > s.maxEntityEntries {
+		oldestKey := oldestCacheEntryKey(s.entityByKey)
+		if oldestKey == "" {
+			return
+		}
+		delete(s.entityByKey, oldestKey)
+		removeIndexedKeyFromAllSets(s.entityKeysBySet, oldestKey)
+	}
+}
+
+func (s *LocalCacheStorage) enforceCollectionCapacityLocked() {
+	if s.maxCollectionEntries <= 0 {
+		return
+	}
+	for len(s.collectionByKey) > s.maxCollectionEntries {
+		oldestKey := oldestCacheEntryKey(s.collectionByKey)
+		if oldestKey == "" {
+			return
+		}
+		delete(s.collectionByKey, oldestKey)
+		removeIndexedKeyFromAllSets(s.collectionKeysBySet, oldestKey)
+	}
+}
+
+func (s *LocalCacheStorage) enforceCountCapacityLocked() {
+	if s.maxCountEntries <= 0 {
+		return
+	}
+	for len(s.countByKey) > s.maxCountEntries {
+		oldestKey := oldestCountCacheEntryKey(s.countByKey)
+		if oldestKey == "" {
+			return
+		}
+		delete(s.countByKey, oldestKey)
+		removeIndexedKeyFromAllSets(s.countKeysBySet, oldestKey)
+	}
+}
+
+func oldestCacheEntryKey(entries map[string]cacheEntry) string {
+	var (
+		oldestKey string
+		oldestAt  time.Time
+	)
+	for key, entry := range entries {
+		if oldestKey == "" || entry.meta.UpdatedAt.Before(oldestAt) {
+			oldestKey = key
+			oldestAt = entry.meta.UpdatedAt
+		}
+	}
+	return oldestKey
+}
+
+func oldestCountCacheEntryKey(entries map[string]countCacheEntry) string {
+	var (
+		oldestKey string
+		oldestAt  time.Time
+	)
+	for key, entry := range entries {
+		if oldestKey == "" || entry.meta.UpdatedAt.Before(oldestAt) {
+			oldestKey = key
+			oldestAt = entry.meta.UpdatedAt
+		}
+	}
+	return oldestKey
 }
 
 func normalizeQueryOptions(queryOptions *query.QueryOptions) string {
@@ -524,5 +671,17 @@ func deleteIndexedKey(index map[string]map[string]struct{}, setName, key string)
 	delete(set, key)
 	if len(set) == 0 {
 		delete(index, setName)
+	}
+}
+
+func removeIndexedKeyFromAllSets(index map[string]map[string]struct{}, key string) {
+	for setName, set := range index {
+		if _, ok := set[key]; !ok {
+			continue
+		}
+		delete(set, key)
+		if len(set) == 0 {
+			delete(index, setName)
+		}
 	}
 }

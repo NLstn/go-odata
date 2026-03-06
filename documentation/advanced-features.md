@@ -13,6 +13,7 @@ This guide covers advanced features of go-odata including singletons, ETags, lif
   - [Tenant Filtering Example](#tenant-filtering-example)
   - [Redacting Sensitive Data](#redacting-sensitive-data)
 - [Change Tracking and Delta Tokens](#change-tracking-and-delta-tokens)
+- [Local Cache and Write-Behind Configuration](#local-cache-and-write-behind-configuration)
 - [Asynchronous Processing](#asynchronous-processing)
 - [Full-Text Search with Database FTS](#full-text-search-with-database-fts)
 
@@ -845,6 +846,55 @@ type APIKey struct {
 Metadata analysis validates that `generate=uuid` (or any other name you choose) has a registered generator. During POST requests the handler zeroes auto-increment numeric keys and calls the requested generator for every key property that declares one. That behaviour holds for single entities, collections, and composite keys.
 
 The development and performance sample servers ship with an `APIKeys` entity that uses `generate=uuid`. Run `go run ./cmd/devserver` and POST to `/APIKeys` without supplying a `KeyID` to see the feature in action.
+
+## Local Cache and Write-Behind Configuration
+
+`go-odata` can be configured to serve hot reads from a local in-memory cache while persisting writes asynchronously through a durable DB-backed queue.
+
+```go
+service, err := odata.NewServiceWithConfig(db, odata.ServiceConfig{
+    Cache: odata.CacheConfig{
+        Enabled:              true,
+        TTL:                  15 * time.Second,
+        MaxEntityEntries:     5000,
+        MaxCollectionEntries: 500,
+        MaxCountEntries:      500,
+        WarmEntitySets:       []string{"Products", "Categories"},
+        WarmTop:              200,
+        WriteBehind: odata.WriteBehindConfig{
+            Enabled:      true,
+            MaxQueueSize: 10000,
+            WorkerCount:  4,
+        },
+        Consistency: odata.ConsistencyConfig{
+            Enabled:           true,
+            PollInterval:      500 * time.Millisecond,
+            BatchSize:         200,
+            SkipOwnEvents:     true,
+            ReconcileInterval: 2 * time.Minute,
+        },
+    },
+})
+if err != nil {
+    log.Fatal(err)
+}
+defer service.Close()
+```
+
+Key configuration notes:
+
+- `Cache.Enabled` defaults to `false` for backward compatibility.
+- `TTL <= 0` disables entry expiration.
+- `MaxEntityEntries`, `MaxCollectionEntries`, and `MaxCountEntries` are per-instance bounds. `<= 0` means unbounded.
+- `WriteBehind.MaxQueueSize <= 0` means unbounded queue depth.
+- `WriteBehind.Enabled` and `Consistency.Enabled` require `Cache.Enabled=true`; invalid combinations fail at service construction.
+- `WarmEntitySets` and `WarmTop` control startup warm behavior.
+
+Reserved internal tables used by this feature set:
+
+- `_odata_write_behind_queue`
+- `_odata_cache_invalidation_events`
+- `_odata_cache_invalidation_checkpoints`
 
 ## Asynchronous Processing
 

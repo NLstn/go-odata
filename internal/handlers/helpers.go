@@ -243,13 +243,30 @@ func (h *EntityHandler) recordChange(ctx context.Context, entity interface{}, ch
 		notifier.OnEntityChanged(h, entity, changeType)
 	}
 
+	keyValues := h.extractKeyValues(entity)
+	var data map[string]interface{}
+	if changeType != trackchanges.ChangeTypeDeleted {
+		data = h.entityToMap(entity)
+	}
+
+	if h.invalidationAppender != nil && h.writeBehindQueue == nil && len(keyValues) > 0 {
+		if err := h.invalidationAppender.Append(ctx, CacheInvalidationEvent{
+			EntitySet:      h.metadata.EntitySetName,
+			ChangeType:     changeType,
+			KeyValues:      keyValues,
+			Data:           data,
+			SourceInstance: h.instanceID,
+		}); err != nil && h.logger != nil {
+			h.logger.Error("failed to append cache invalidation event",
+				"entitySet", h.metadata.EntitySetName,
+				"changeType", changeType,
+				"err", err,
+			)
+		}
+	}
+
 	if h.writeBehindQueue != nil {
-		keyValues := h.extractKeyValues(entity)
 		if len(keyValues) > 0 {
-			var data map[string]interface{}
-			if changeType != trackchanges.ChangeTypeDeleted {
-				data = h.entityToMap(entity)
-			}
 			if err := h.writeBehindQueue.Enqueue(ctx, WriteBehindRequest{
 				EntitySet:  h.metadata.EntitySetName,
 				ChangeType: changeType,
@@ -269,11 +286,6 @@ func (h *EntityHandler) recordChange(ctx context.Context, entity interface{}, ch
 		return
 	}
 
-	keyValues := h.extractKeyValues(entity)
-	var data map[string]interface{}
-	if changeType != trackchanges.ChangeTypeDeleted {
-		data = h.entityToMap(entity)
-	}
 	if _, err := h.tracker.RecordChange(h.metadata.EntitySetName, keyValues, data, changeType); err != nil {
 		if h.logger != nil {
 			h.logger.Error("failed to record change event", "entitySet", h.metadata.EntitySetName, "err", err)

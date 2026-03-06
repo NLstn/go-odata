@@ -153,10 +153,76 @@ func TestDurableWriteBehindQueueRetriesToPoisonState(t *testing.T) {
 	}, 3*time.Second, 20*time.Millisecond)
 }
 
+func TestEntityWriteBehindApplierAppendsCacheInvalidationEvent(t *testing.T) {
+	h, db := newWriteBehindTestHandler(t)
+
+	logStore, err := NewDBCacheInvalidationLog(db, slog.Default())
+	require.NoError(t, err)
+
+	applier := NewEntityWriteBehindApplierWithOptions(
+		db,
+		func(entitySet string) (*EntityHandler, bool) {
+			if entitySet == h.metadata.EntitySetName {
+				return h, true
+			}
+			return nil, false
+		},
+		WriteBehindApplyOptions{
+			InvalidationAppender: logStore,
+			SourceInstanceID:     "instance-a",
+		},
+	)
+
+	err = applier(context.Background(), WriteBehindRequest{
+		EntitySet:  h.metadata.EntitySetName,
+		ChangeType: trackchanges.ChangeTypeAdded,
+		KeyValues:  map[string]interface{}{"id": 42},
+		Data:       map[string]interface{}{"id": 42, "name": "added"},
+	})
+	require.NoError(t, err)
+
+	var count int64
+	err = db.Model(&cacheInvalidationEvent{}).Count(&count).Error
+	require.NoError(t, err)
+	require.Equal(t, int64(1), count)
+}
+
+func TestDurableWriteBehindQueueHonorsMaxQueueSize(t *testing.T) {
+	h, db := newWriteBehindTestHandler(t)
+
+	queue, err := NewDurableWriteBehindQueue(
+		db,
+		func(context.Context, WriteBehindRequest) error { return nil },
+		slog.Default(),
+		WriteBehindQueueOptions{MaxQueueSize: 1},
+	)
+	require.NoError(t, err)
+
+	err = queue.Enqueue(context.Background(), WriteBehindRequest{
+		EntitySet:  h.metadata.EntitySetName,
+		ChangeType: trackchanges.ChangeTypeAdded,
+		KeyValues:  map[string]interface{}{"id": 100},
+		Data:       map[string]interface{}{"id": 100, "name": "first"},
+	})
+	require.NoError(t, err)
+
+	err = queue.Enqueue(context.Background(), WriteBehindRequest{
+		EntitySet:  h.metadata.EntitySetName,
+		ChangeType: trackchanges.ChangeTypeAdded,
+		KeyValues:  map[string]interface{}{"id": 101},
+		Data:       map[string]interface{}{"id": 101, "name": "second"},
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "queue is full")
+}
+
 func newWriteBehindTestHandler(t *testing.T) (*EntityHandler, *gorm.DB) {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	sqlDB.SetMaxOpenConns(1)
 	require.NoError(t, db.AutoMigrate(&writeBehindTestEntity{}))
 
 	meta, err := metadata.AnalyzeEntity(&writeBehindTestEntity{})

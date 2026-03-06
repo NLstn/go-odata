@@ -15,6 +15,15 @@
 - [x] Phase 3 durable write-behind queue added (DB-backed state + retry/backoff worker + poison handling)
 - [x] Post-commit enqueue integration added via `recordChange` with resilient failure semantics (logs on enqueue/apply errors)
 - [x] Phase 3 verification gates run (`gofmt`, `golangci-lint`, `go test ./...`, `go build ./...`)
+- [x] Phase 4 DB-backed invalidation/change-log table added (`_odata_cache_invalidation_events`) with checkpoint table (`_odata_cache_invalidation_checkpoints`)
+- [x] Phase 4 per-instance poller added with offset checkpointing and idempotent local cache replay hooks
+- [x] Phase 4 reconciliation refresh mode added for healing missed events
+- [x] Phase 4 verification gates run (`gofmt`, `golangci-lint`, `go test ./...`, `go build ./...`)
+- [x] Phase 5 config surface extended with cache memory limits (`MaxEntityEntries`, `MaxCollectionEntries`, `MaxCountEntries`)
+- [x] Phase 5 write-behind queue limit added (`WriteBehind.MaxQueueSize`) and enforced at enqueue time
+- [x] Phase 5 configuration validation added for invalid negative limits while preserving disabled-by-default behavior
+- [x] Phase 5 docs updated (`documentation/advanced-features.md`, `documentation/testing.md`)
+- [x] Phase 5 verification gates run (`gofmt`, `golangci-lint`, `go test ./...`, `go build ./...`)
 
 ### Progress Notes
 - 2026-03-06: Started Phase 1 implementation with storage abstraction as first code change.
@@ -28,6 +37,18 @@
 - 2026-03-06: Wired queue lifecycle/config through `ServiceConfig.Cache.WriteBehind` and `Service.Close`, with compatibility validation that write-behind requires cache enablement.
 - 2026-03-06: Integrated post-commit enqueue at `EntityHandler.recordChange(ctx, ...)` and added tests for enqueue integration, worker apply path, and retry-to-poison behavior.
 - 2026-03-06: Ran quality gates successfully for Phase 3 foundation (`gofmt`, `golangci-lint`, `go test ./...`, `go build ./...`).
+- 2026-03-06: Added DB-backed cache invalidation log/poller foundation in `internal/handlers/cache_invalidation.go`, including event append, per-instance checkpointing, and startup/shutdown lifecycle.
+- 2026-03-06: Added `StorageChangeReplayer` with `LocalCacheStorage.ReplayEntityChange(...)` and wired poller-driven replay for cross-instance cache convergence.
+- 2026-03-06: Wired service config `Cache.Consistency` and handler/apply integration so direct write-through and write-behind DB apply both append invalidation events.
+- 2026-03-06: Added tests for poller replay/skip-own-event behavior and write-behind invalidation append path (`internal/handlers/cache_invalidation_test.go`, `internal/handlers/write_behind_queue_test.go`).
+- 2026-03-06: Ran quality gates successfully for Phase 4 foundation (`gofmt`, `golangci-lint`, `go test ./...`, `go build ./...`).
+- 2026-03-06: Added periodic reconciliation worker wired via `Cache.Consistency.ReconcileInterval` with optional `ReconcileEntitySets` targeting and graceful shutdown in `Service.Close`.
+- 2026-03-06: Added `handlers.StorageReconciler` and `LocalCacheStorage.ReconcileEntitySet(...)` for forced refresh independent of startup warm-set filtering.
+- 2026-03-06: Extended `ServiceConfig.Cache` with bounded local cache options and added enqueue-cap limit via `ServiceConfig.Cache.WriteBehind.MaxQueueSize`.
+- 2026-03-06: Implemented local cache capacity enforcement/eviction for entity, collection, and count caches in `internal/handlers/local_cache_storage.go`.
+- 2026-03-06: Added tests for cache limit eviction, queue size enforcement, and config validation in `internal/handlers/local_cache_storage_test.go`, `internal/handlers/write_behind_queue_test.go`, and `service_config_test.go`.
+- 2026-03-06: Documented cache/write-behind/consistency configuration and related testing guidance in `documentation/advanced-features.md` and `documentation/testing.md`.
+- 2026-03-06: Ran quality gates successfully for Phase 5 foundation (`gofmt`, `golangci-lint`, `go test ./...`, `go build ./...`).
 
 Introduce a storage abstraction in front of existing GORM access, then add a local-memory cache backend with async write-behind to DB and DB-backed cross-instance invalidation/event consumption. Phase 1 will include entity GET and collection GET cache reads, local-first writes with durable retry queue, startup warming for selected entity sets, and eventual consistency across instances using DB as source of truth.
 

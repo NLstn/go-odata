@@ -410,9 +410,20 @@ func (h *BatchHandler) executeRequestInTransaction(req *batchRequest, tx *gorm.D
 	txHandlers := make(map[string]*EntityHandler)
 	for name, handler := range h.handlers {
 		txHandler := NewEntityHandler(tx, handler.metadata, handler.logger)
+		txHandler.SetStorage(handler.storage)
+		txHandler.SetWriteBehindQueue(handler.writeBehindQueue)
+		txHandler.SetCacheInvalidationAppender(handler.invalidationAppender, handler.instanceID)
 		txHandler.SetNamespace(handler.namespace)
 		txHandler.SetDeltaTracker(handler.tracker)
 		txHandler.SetPolicy(handler.policy)
+		txHandler.SetFTSManager(handler.ftsManager)
+		txHandler.SetDefaultMaxTop(handler.defaultMaxTop)
+		txHandler.SetObservability(handler.observability)
+		txHandler.SetGeospatialEnabled(handler.IsGeospatialEnabled())
+		txHandler.SetMaxInClauseSize(handler.maxInClauseSize)
+		txHandler.SetMaxExpandDepth(handler.maxExpandDepth)
+		txHandler.SetKeyGeneratorResolver(handler.keyGeneratorResolver)
+		txHandler.overwrite = handler.overwrite
 		if handler.entitiesMetadata != nil {
 			txHandler.SetEntitiesMetadata(handler.entitiesMetadata)
 		}

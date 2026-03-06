@@ -194,6 +194,52 @@ func TestNewServiceWithConfig_WriteBehindRequiresCache(t *testing.T) {
 	}
 }
 
+func TestNewServiceWithConfig_CacheConsistencyRequiresCache(t *testing.T) {
+	db := setupTestDB(t)
+
+	_, err := NewServiceWithConfig(db, ServiceConfig{
+		Cache: CacheConfig{
+			Enabled: false,
+			Consistency: ConsistencyConfig{
+				Enabled: true,
+			},
+		},
+	})
+	if err == nil {
+		t.Fatal("expected cache consistency config validation error")
+	}
+}
+
+func TestNewServiceWithConfig_InvalidCacheLimitsRejected(t *testing.T) {
+	db := setupTestDB(t)
+
+	_, err := NewServiceWithConfig(db, ServiceConfig{
+		Cache: CacheConfig{
+			Enabled:          true,
+			MaxEntityEntries: -1,
+		},
+	})
+	if err == nil {
+		t.Fatal("expected cache max entity entries validation error")
+	}
+}
+
+func TestNewServiceWithConfig_InvalidWriteBehindQueueLimitRejected(t *testing.T) {
+	db := setupTestDB(t)
+
+	_, err := NewServiceWithConfig(db, ServiceConfig{
+		Cache: CacheConfig{
+			Enabled: true,
+			WriteBehind: WriteBehindConfig{
+				MaxQueueSize: -1,
+			},
+		},
+	})
+	if err == nil {
+		t.Fatal("expected write-behind max queue size validation error")
+	}
+}
+
 // TestSetPreRequestHook verifies pre-request hook configuration
 func TestSetPreRequestHook(t *testing.T) {
 	db := setupTestDB(t)

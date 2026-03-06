@@ -36,6 +36,12 @@ type StorageWarmer interface {
 	WarmEntitySet(ctx context.Context, h *EntityHandler) error
 }
 
+// StorageReconciler is implemented by storage backends that can periodically
+// refresh local cache state from the system of record.
+type StorageReconciler interface {
+	ReconcileEntitySet(ctx context.Context, h *EntityHandler) error
+}
+
 // DBStorage is the default Storage implementation backed by GORM only.
 type DBStorage struct{}
 

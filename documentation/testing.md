@@ -6,6 +6,7 @@ This guide covers testing strategies for go-odata applications, including unit t
 
 - [Unit Tests](#unit-tests)
 - [Integration Tests](#integration-tests)
+- [Cache and Write-Behind Tests](#cache-and-write-behind-tests)
 - [Compliance Tests](#compliance-tests)
 
 ## Unit Tests
@@ -63,6 +64,22 @@ func TestMyFeature(t *testing.T) {
 ## Integration Tests
 
 Integration tests verify end-to-end functionality using GORM with SQLite in-memory database:
+
+## Cache and Write-Behind Tests
+
+When cache features are enabled, include focused tests for configuration and eventual consistency behavior:
+
+- Constructor validation for incompatible/invalid configs (`WriteBehind.Enabled` without cache, negative limits).
+- Cache bounds (`MaxEntityEntries`, `MaxCollectionEntries`, `MaxCountEntries`) and eviction behavior.
+- Queue capacity handling (`WriteBehind.MaxQueueSize`) and retry/poison semantics.
+- Cross-instance convergence (`ConsistencyConfig`) with DB-backed invalidation polling.
+
+Recommended commands while iterating:
+
+```bash
+go test ./internal/handlers -run 'LocalCacheStorage|WriteBehind|CacheInvalidation'
+go test ./... -run 'ServiceConfig|Cache'
+```
 
 ```go
 func TestEntityRetrieval(t *testing.T) {

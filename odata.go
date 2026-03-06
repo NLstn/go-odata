@@ -338,6 +338,18 @@ type CacheConfig struct {
 	// TTL controls cache entry expiration. Non-positive values disable expiration.
 	TTL time.Duration
 
+	// MaxEntityEntries limits cached single-entity entries.
+	// Non-positive values keep the entity cache unbounded.
+	MaxEntityEntries int
+
+	// MaxCollectionEntries limits cached collection-query entries.
+	// Non-positive values keep the collection cache unbounded.
+	MaxCollectionEntries int
+
+	// MaxCountEntries limits cached count-query entries.
+	// Non-positive values keep the count cache unbounded.
+	MaxCountEntries int
+
 	// WarmEntitySets lists entity sets to warm at registration/startup.
 	WarmEntitySets []string
 
@@ -346,12 +358,19 @@ type CacheConfig struct {
 
 	// WriteBehind configures optional durable asynchronous persistence.
 	WriteBehind WriteBehindConfig
+
+	// Consistency configures optional cross-instance cache convergence.
+	Consistency ConsistencyConfig
 }
 
 // WriteBehindConfig controls durable write-behind queue behavior.
 type WriteBehindConfig struct {
 	// Enabled turns on asynchronous write-behind queue processing.
 	Enabled bool
+
+	// MaxQueueSize limits active queued jobs (pending/in-progress/retryable failed).
+	// Non-positive values keep queue capacity unbounded.
+	MaxQueueSize int
 
 	// PollInterval controls how often workers scan for due jobs.
 	PollInterval time.Duration
@@ -373,6 +392,32 @@ type WriteBehindConfig struct {
 
 	// ShutdownDrainTimeout controls how long Close waits for worker drain.
 	ShutdownDrainTimeout time.Duration
+}
+
+// ConsistencyConfig controls DB-driven cross-instance cache convergence behavior.
+type ConsistencyConfig struct {
+	// Enabled turns on DB-backed invalidation log append/polling.
+	Enabled bool
+
+	// PollInterval controls how often the poller checks for unseen events.
+	PollInterval time.Duration
+
+	// BatchSize controls max events processed per poll cycle.
+	BatchSize int
+
+	// InstanceID identifies this service instance for checkpoint tracking.
+	// When empty, a generated value is used.
+	InstanceID string
+
+	// SkipOwnEvents skips re-applying events emitted by this same instance.
+	SkipOwnEvents bool
+
+	// ReconcileInterval enables periodic cache refresh when positive.
+	ReconcileInterval time.Duration
+
+	// ReconcileEntitySets limits reconciliation to named entity sets.
+	// Empty means reconcile all registered entity sets.
+	ReconcileEntitySets []string
 }
 
 // DefaultNamespace is used when no explicit namespace is configured for the service.
@@ -407,6 +452,16 @@ type Service struct {
 	storage handlers.Storage
 	// writeBehindQueue persists post-commit change events for async DB convergence
 	writeBehindQueue *handlers.DurableWriteBehindQueue
+	// cacheInvalidationLog appends committed changes for cross-instance cache convergence.
+	cacheInvalidationLog *handlers.DBCacheInvalidationLog
+	// cacheInvalidationPoller consumes invalidation log entries and applies local cache updates.
+	cacheInvalidationPoller *handlers.CacheInvalidationPoller
+	// cacheInstanceID identifies this running service instance in invalidation checkpoints.
+	cacheInstanceID string
+	// cacheReconcileStopCh signals reconciliation worker shutdown.
+	cacheReconcileStopCh chan struct{}
+	// cacheReconcileWG waits for reconciliation worker shutdown.
+	cacheReconcileWG sync.WaitGroup
 	// metadataHandler handles metadata document requests
 	metadataHandler *handlers.MetadataHandler
 	// serviceDocumentHandler handles service document requests
@@ -478,8 +533,23 @@ func NewServiceWithConfig(db *gorm.DB, cfg ServiceConfig) (*Service, error) {
 	if db == nil {
 		return nil, fmt.Errorf("odata: database handle is required")
 	}
+	if cfg.Cache.MaxEntityEntries < 0 {
+		return nil, fmt.Errorf("odata: cache max entity entries must be >= 0")
+	}
+	if cfg.Cache.MaxCollectionEntries < 0 {
+		return nil, fmt.Errorf("odata: cache max collection entries must be >= 0")
+	}
+	if cfg.Cache.MaxCountEntries < 0 {
+		return nil, fmt.Errorf("odata: cache max count entries must be >= 0")
+	}
+	if cfg.Cache.WriteBehind.MaxQueueSize < 0 {
+		return nil, fmt.Errorf("odata: write-behind max queue size must be >= 0")
+	}
 	if cfg.Cache.WriteBehind.Enabled && !cfg.Cache.Enabled {
 		return nil, fmt.Errorf("odata: cache write-behind requires cache to be enabled")
+	}
+	if cfg.Cache.Consistency.Enabled && !cfg.Cache.Enabled {
+		return nil, fmt.Errorf("odata: cache consistency requires cache to be enabled")
 	}
 
 	entities := make(map[string]*metadata.EntityMetadata)
@@ -541,20 +611,62 @@ func NewServiceWithConfig(db *gorm.DB, cfg ServiceConfig) (*Service, error) {
 	}
 	if cfg.Cache.Enabled {
 		s.storage = handlers.NewLocalCacheStorage(s.storage, handlers.LocalCacheStorageOptions{
-			TTL:            cfg.Cache.TTL,
-			WarmEntitySets: cfg.Cache.WarmEntitySets,
-			WarmTop:        cfg.Cache.WarmTop,
+			TTL:                  cfg.Cache.TTL,
+			MaxEntityEntries:     cfg.Cache.MaxEntityEntries,
+			MaxCollectionEntries: cfg.Cache.MaxCollectionEntries,
+			MaxCountEntries:      cfg.Cache.MaxCountEntries,
+			WarmEntitySets:       cfg.Cache.WarmEntitySets,
+			WarmTop:              cfg.Cache.WarmTop,
 		})
+	}
+	if cfg.Cache.Consistency.Enabled {
+		logStore, err := handlers.NewDBCacheInvalidationLog(s.db, s.logger)
+		if err != nil {
+			return nil, err
+		}
+		s.cacheInvalidationLog = logStore
+		s.cacheInstanceID = cfg.Cache.Consistency.InstanceID
+		if s.cacheInstanceID == "" {
+			s.cacheInstanceID = generatedCacheInstanceID()
+		}
+
+		poller, err := handlers.NewCacheInvalidationPoller(
+			s.db,
+			s.logger,
+			func(entitySet string) (*handlers.EntityHandler, bool) {
+				h, ok := s.handlers[entitySet]
+				return h, ok
+			},
+			handlers.CacheInvalidationPollerOptions{
+				InstanceID:   s.cacheInstanceID,
+				PollInterval: cfg.Cache.Consistency.PollInterval,
+				BatchSize:    cfg.Cache.Consistency.BatchSize,
+				SkipOwnEvent: cfg.Cache.Consistency.SkipOwnEvents,
+			},
+		)
+		if err != nil {
+			return nil, err
+		}
+		poller.Start()
+		s.cacheInvalidationPoller = poller
+
+		if cfg.Cache.Consistency.ReconcileInterval > 0 {
+			s.startCacheReconciler(cfg.Cache.Consistency.ReconcileInterval, cfg.Cache.Consistency.ReconcileEntitySets)
+		}
 	}
 	if cfg.Cache.WriteBehind.Enabled {
 		queue, err := handlers.NewDurableWriteBehindQueue(
 			s.db,
-			handlers.NewEntityWriteBehindApplier(s.db, func(entitySet string) (*handlers.EntityHandler, bool) {
+			handlers.NewEntityWriteBehindApplierWithOptions(s.db, func(entitySet string) (*handlers.EntityHandler, bool) {
 				h, ok := s.handlers[entitySet]
 				return h, ok
+			}, handlers.WriteBehindApplyOptions{
+				InvalidationAppender: s.cacheInvalidationLog,
+				SourceInstanceID:     s.cacheInstanceID,
 			}),
 			s.logger,
 			handlers.WriteBehindQueueOptions{
+				MaxQueueSize:         cfg.Cache.WriteBehind.MaxQueueSize,
 				PollInterval:         cfg.Cache.WriteBehind.PollInterval,
 				WorkerCount:          cfg.Cache.WriteBehind.WorkerCount,
 				MaxRetries:           cfg.Cache.WriteBehind.MaxRetries,
@@ -621,6 +733,14 @@ func generateUUIDBytes() ([16]byte, error) {
 	b[8] = (b[8] & 0x3f) | 0x80
 
 	return b, nil
+}
+
+func generatedCacheInstanceID() string {
+	b, err := generateUUIDBytes()
+	if err != nil {
+		return fmt.Sprintf("instance-%d", time.Now().UnixNano())
+	}
+	return fmt.Sprintf("instance-%x", b)
 }
 
 // SetLogger sets a custom logger for the service.
@@ -986,6 +1106,15 @@ func (s *Service) Close() error {
 		s.writeBehindQueue.Close()
 	}
 
+	if s.cacheInvalidationPoller != nil {
+		s.cacheInvalidationPoller.Close()
+	}
+
+	if s.cacheReconcileStopCh != nil {
+		close(s.cacheReconcileStopCh)
+		s.cacheReconcileWG.Wait()
+	}
+
 	if s.router != nil {
 		s.router.SetAsyncMonitor("", nil)
 	}
@@ -995,6 +1124,10 @@ func (s *Service) Close() error {
 	s.asyncQueue = nil
 	s.asyncMonitorPrefix = ""
 	s.writeBehindQueue = nil
+	s.cacheInvalidationPoller = nil
+	s.cacheInvalidationLog = nil
+	s.cacheInstanceID = ""
+	s.cacheReconcileStopCh = nil
 
 	return nil
 }
@@ -1059,6 +1192,7 @@ func (s *Service) RegisterEntity(entity interface{}) error {
 	handler := handlers.NewEntityHandler(s.db, entityMetadata, s.logger)
 	handler.SetStorage(s.storage)
 	handler.SetWriteBehindQueue(s.writeBehindQueue)
+	handler.SetCacheInvalidationAppender(s.cacheInvalidationLog, s.cacheInstanceID)
 	handler.SetNamespace(s.namespace)
 	handler.SetEntitiesMetadata(s.entities)
 	handler.SetDeltaTracker(s.deltaTracker)
@@ -1144,6 +1278,7 @@ func (s *Service) RegisterSingleton(entity interface{}, singletonName string) er
 	handler := handlers.NewEntityHandler(s.db, singletonMetadata, s.logger)
 	handler.SetStorage(s.storage)
 	handler.SetWriteBehindQueue(s.writeBehindQueue)
+	handler.SetCacheInvalidationAppender(s.cacheInvalidationLog, s.cacheInstanceID)
 	handler.SetNamespace(s.namespace)
 	handler.SetEntitiesMetadata(s.entities)
 	handler.SetFTSManager(s.ftsManager)
@@ -1234,6 +1369,7 @@ func (s *Service) RegisterVirtualEntity(entity interface{}) error {
 	handler := handlers.NewEntityHandler(s.db, entityMetadata, s.logger)
 	handler.SetStorage(s.storage)
 	handler.SetWriteBehindQueue(s.writeBehindQueue)
+	handler.SetCacheInvalidationAppender(s.cacheInvalidationLog, s.cacheInstanceID)
 	handler.SetNamespace(s.namespace)
 	handler.SetEntitiesMetadata(s.entities)
 	handler.SetFTSManager(s.ftsManager)
@@ -1280,6 +1416,62 @@ func (s *Service) warmHandlerStorageIfConfigured(handler *handlers.EntityHandler
 			"entitySet", handler.Metadata().EntitySetName,
 			"error", err)
 	}
+}
+
+func (s *Service) startCacheReconciler(interval time.Duration, entitySets []string) {
+	if interval <= 0 {
+		return
+	}
+	if s.cacheReconcileStopCh != nil {
+		return
+	}
+
+	reconciler, ok := s.storage.(handlers.StorageReconciler)
+	if !ok {
+		return
+	}
+
+	setFilter := make(map[string]struct{}, len(entitySets))
+	for _, setName := range entitySets {
+		trimmed := strings.TrimSpace(setName)
+		if trimmed == "" {
+			continue
+		}
+		setFilter[trimmed] = struct{}{}
+	}
+
+	s.cacheReconcileStopCh = make(chan struct{})
+	s.cacheReconcileWG.Add(1)
+	go func() {
+		defer s.cacheReconcileWG.Done()
+
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-s.cacheReconcileStopCh:
+				return
+			case <-ticker.C:
+				for _, h := range s.handlers {
+					if h == nil || h.Metadata() == nil {
+						continue
+					}
+					if len(setFilter) > 0 {
+						if _, ok := setFilter[h.Metadata().EntitySetName]; !ok {
+							continue
+						}
+					}
+					if err := reconciler.ReconcileEntitySet(context.Background(), h); err != nil {
+						s.logger.Warn("cache reconciliation failed",
+							"entitySet", h.Metadata().EntitySetName,
+							"error", err,
+						)
+					}
+				}
+			}
+		}
+	}()
 }
 
 // Types for registering custom OData actions and functions.
