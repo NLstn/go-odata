@@ -21,6 +21,7 @@ import (
 type EntityHandler struct {
 	db                   *gorm.DB
 	storage              Storage
+	writeBehindQueue     WriteBehindQueue
 	metadata             *metadata.EntityMetadata
 	entitiesMetadata     map[string]*metadata.EntityMetadata
 	namespace            string
@@ -74,6 +75,11 @@ func (h *EntityHandler) SetStorage(storage Storage) {
 		return
 	}
 	h.storage = storage
+}
+
+// SetWriteBehindQueue configures optional asynchronous write-behind persistence.
+func (h *EntityHandler) SetWriteBehindQueue(queue WriteBehindQueue) {
+	h.writeBehindQueue = queue
 }
 
 // Metadata returns the handler's entity metadata.

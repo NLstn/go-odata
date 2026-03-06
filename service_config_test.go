@@ -178,6 +178,22 @@ func TestEnableAsyncProcessing(t *testing.T) {
 	}
 }
 
+func TestNewServiceWithConfig_WriteBehindRequiresCache(t *testing.T) {
+	db := setupTestDB(t)
+
+	_, err := NewServiceWithConfig(db, ServiceConfig{
+		Cache: CacheConfig{
+			Enabled: false,
+			WriteBehind: WriteBehindConfig{
+				Enabled: true,
+			},
+		},
+	})
+	if err == nil {
+		t.Fatal("expected write-behind config validation error")
+	}
+}
+
 // TestSetPreRequestHook verifies pre-request hook configuration
 func TestSetPreRequestHook(t *testing.T) {
 	db := setupTestDB(t)

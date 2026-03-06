@@ -60,11 +60,11 @@ func (h *EntityHandler) runInTransaction(ctx context.Context, r *http.Request, f
 	})
 }
 
-func flushPendingChangeEvents(events []pendingChangeEvent) {
+func flushPendingChangeEventsWithContext(ctx context.Context, events []pendingChangeEvent) {
 	for _, evt := range events {
 		if evt.handler == nil {
 			continue
 		}
-		evt.handler.recordChange(evt.event.entity, evt.event.changeType)
+		evt.handler.recordChange(ctx, evt.event.entity, evt.event.changeType)
 	}
 }

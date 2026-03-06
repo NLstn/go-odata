@@ -343,6 +343,36 @@ type CacheConfig struct {
 
 	// WarmTop limits warm-up collection size per warmed entity set.
 	WarmTop int
+
+	// WriteBehind configures optional durable asynchronous persistence.
+	WriteBehind WriteBehindConfig
+}
+
+// WriteBehindConfig controls durable write-behind queue behavior.
+type WriteBehindConfig struct {
+	// Enabled turns on asynchronous write-behind queue processing.
+	Enabled bool
+
+	// PollInterval controls how often workers scan for due jobs.
+	PollInterval time.Duration
+
+	// WorkerCount controls the number of concurrent queue workers.
+	WorkerCount int
+
+	// MaxRetries controls how many attempts are made before a job is treated as poison.
+	MaxRetries int
+
+	// BaseBackoff is the initial retry backoff duration.
+	BaseBackoff time.Duration
+
+	// MaxBackoff caps exponential retry backoff.
+	MaxBackoff time.Duration
+
+	// InProgressTimeout determines when an in-progress job lease is considered stale.
+	InProgressTimeout time.Duration
+
+	// ShutdownDrainTimeout controls how long Close waits for worker drain.
+	ShutdownDrainTimeout time.Duration
 }
 
 // DefaultNamespace is used when no explicit namespace is configured for the service.
@@ -375,6 +405,8 @@ type Service struct {
 	handlers map[string]*handlers.EntityHandler
 	// storage is the shared handler storage implementation injected into all handlers
 	storage handlers.Storage
+	// writeBehindQueue persists post-commit change events for async DB convergence
+	writeBehindQueue *handlers.DurableWriteBehindQueue
 	// metadataHandler handles metadata document requests
 	metadataHandler *handlers.MetadataHandler
 	// serviceDocumentHandler handles service document requests
@@ -446,6 +478,9 @@ func NewServiceWithConfig(db *gorm.DB, cfg ServiceConfig) (*Service, error) {
 	if db == nil {
 		return nil, fmt.Errorf("odata: database handle is required")
 	}
+	if cfg.Cache.WriteBehind.Enabled && !cfg.Cache.Enabled {
+		return nil, fmt.Errorf("odata: cache write-behind requires cache to be enabled")
+	}
 
 	entities := make(map[string]*metadata.EntityMetadata)
 	handlersMap := make(map[string]*handlers.EntityHandler)
@@ -510,6 +545,30 @@ func NewServiceWithConfig(db *gorm.DB, cfg ServiceConfig) (*Service, error) {
 			WarmEntitySets: cfg.Cache.WarmEntitySets,
 			WarmTop:        cfg.Cache.WarmTop,
 		})
+	}
+	if cfg.Cache.WriteBehind.Enabled {
+		queue, err := handlers.NewDurableWriteBehindQueue(
+			s.db,
+			handlers.NewEntityWriteBehindApplier(s.db, func(entitySet string) (*handlers.EntityHandler, bool) {
+				h, ok := s.handlers[entitySet]
+				return h, ok
+			}),
+			s.logger,
+			handlers.WriteBehindQueueOptions{
+				PollInterval:         cfg.Cache.WriteBehind.PollInterval,
+				WorkerCount:          cfg.Cache.WriteBehind.WorkerCount,
+				MaxRetries:           cfg.Cache.WriteBehind.MaxRetries,
+				BaseBackoff:          cfg.Cache.WriteBehind.BaseBackoff,
+				MaxBackoff:           cfg.Cache.WriteBehind.MaxBackoff,
+				InProgressTimeout:    cfg.Cache.WriteBehind.InProgressTimeout,
+				ShutdownDrainTimeout: cfg.Cache.WriteBehind.ShutdownDrainTimeout,
+			},
+		)
+		if err != nil {
+			return nil, err
+		}
+		queue.Start()
+		s.writeBehindQueue = queue
 	}
 	s.metadataHandler.SetNamespace(DefaultNamespace)
 	s.metadataHandler.SetPolicy(s.policy)
@@ -923,6 +982,10 @@ func (s *Service) Close() error {
 		s.asyncManager.Close()
 	}
 
+	if s.writeBehindQueue != nil {
+		s.writeBehindQueue.Close()
+	}
+
 	if s.router != nil {
 		s.router.SetAsyncMonitor("", nil)
 	}
@@ -931,6 +994,7 @@ func (s *Service) Close() error {
 	s.asyncConfig = nil
 	s.asyncQueue = nil
 	s.asyncMonitorPrefix = ""
+	s.writeBehindQueue = nil
 
 	return nil
 }
@@ -994,6 +1058,7 @@ func (s *Service) RegisterEntity(entity interface{}) error {
 	// Create and store the handler
 	handler := handlers.NewEntityHandler(s.db, entityMetadata, s.logger)
 	handler.SetStorage(s.storage)
+	handler.SetWriteBehindQueue(s.writeBehindQueue)
 	handler.SetNamespace(s.namespace)
 	handler.SetEntitiesMetadata(s.entities)
 	handler.SetDeltaTracker(s.deltaTracker)
@@ -1078,6 +1143,7 @@ func (s *Service) RegisterSingleton(entity interface{}, singletonName string) er
 	// Create and store the handler (same handler type works for both entities and singletons)
 	handler := handlers.NewEntityHandler(s.db, singletonMetadata, s.logger)
 	handler.SetStorage(s.storage)
+	handler.SetWriteBehindQueue(s.writeBehindQueue)
 	handler.SetNamespace(s.namespace)
 	handler.SetEntitiesMetadata(s.entities)
 	handler.SetFTSManager(s.ftsManager)
@@ -1167,6 +1233,7 @@ func (s *Service) RegisterVirtualEntity(entity interface{}) error {
 	// Create and store the handler (no database operations will be performed)
 	handler := handlers.NewEntityHandler(s.db, entityMetadata, s.logger)
 	handler.SetStorage(s.storage)
+	handler.SetWriteBehindQueue(s.writeBehindQueue)
 	handler.SetNamespace(s.namespace)
 	handler.SetEntitiesMetadata(s.entities)
 	handler.SetFTSManager(s.ftsManager)

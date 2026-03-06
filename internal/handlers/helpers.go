@@ -238,9 +238,31 @@ func (h *EntityHandler) supportsTrackChanges() bool {
 	return h.tracker != nil && h.metadata.ChangeTrackingEnabled && !h.metadata.IsSingleton
 }
 
-func (h *EntityHandler) recordChange(entity interface{}, changeType trackchanges.ChangeType) {
+func (h *EntityHandler) recordChange(ctx context.Context, entity interface{}, changeType trackchanges.ChangeType) {
 	if notifier, ok := h.storage.(StorageChangeNotifier); ok {
 		notifier.OnEntityChanged(h, entity, changeType)
+	}
+
+	if h.writeBehindQueue != nil {
+		keyValues := h.extractKeyValues(entity)
+		if len(keyValues) > 0 {
+			var data map[string]interface{}
+			if changeType != trackchanges.ChangeTypeDeleted {
+				data = h.entityToMap(entity)
+			}
+			if err := h.writeBehindQueue.Enqueue(ctx, WriteBehindRequest{
+				EntitySet:  h.metadata.EntitySetName,
+				ChangeType: changeType,
+				KeyValues:  keyValues,
+				Data:       data,
+			}); err != nil && h.logger != nil {
+				h.logger.Error("failed to enqueue write-behind change",
+					"entitySet", h.metadata.EntitySetName,
+					"changeType", changeType,
+					"err", err,
+				)
+			}
+		}
 	}
 
 	if !h.supportsTrackChanges() {
@@ -268,7 +290,7 @@ func (h *EntityHandler) finalizeChangeEvents(ctx context.Context, events []chang
 		return
 	}
 	for _, event := range events {
-		h.recordChange(event.entity, event.changeType)
+		h.recordChange(ctx, event.entity, event.changeType)
 	}
 }
 

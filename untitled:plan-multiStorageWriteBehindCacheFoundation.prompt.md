@@ -12,6 +12,9 @@
 - [x] Startup warm hook added for configured entity sets (`ServiceConfig.Cache.WarmEntitySets`)
 - [x] Post-commit cache convergence hook implemented (coarse collection invalidation + entity upsert/delete)
 - [x] Phase 2 verification gates run (`gofmt`, `golangci-lint`, `go test`, `go build`)
+- [x] Phase 3 durable write-behind queue added (DB-backed state + retry/backoff worker + poison handling)
+- [x] Post-commit enqueue integration added via `recordChange` with resilient failure semantics (logs on enqueue/apply errors)
+- [x] Phase 3 verification gates run (`gofmt`, `golangci-lint`, `go test ./...`, `go build ./...`)
 
 ### Progress Notes
 - 2026-03-06: Started Phase 1 implementation with storage abstraction as first code change.
@@ -21,6 +24,10 @@
 - 2026-03-06: Added `ServiceConfig.Cache` and service wiring to enable local cache storage with backward-compatible defaults (disabled unless enabled).
 - 2026-03-06: Added unit tests for cache reads, collection invalidation/entity upsert behavior, and warm-up path in `internal/handlers/local_cache_storage_test.go`.
 - 2026-03-06: Ran quality gates successfully for Phase 2 foundation (`gofmt`, `golangci-lint`, `go test ./...`, `go build ./...`).
+- 2026-03-06: Added durable write-behind queue model/worker in `internal/handlers/write_behind_queue.go` with DB persistence table (`_odata_write_behind_queue`), job leasing, exponential backoff retries, idempotency dedupe keying, and poison-item behavior after max retries.
+- 2026-03-06: Wired queue lifecycle/config through `ServiceConfig.Cache.WriteBehind` and `Service.Close`, with compatibility validation that write-behind requires cache enablement.
+- 2026-03-06: Integrated post-commit enqueue at `EntityHandler.recordChange(ctx, ...)` and added tests for enqueue integration, worker apply path, and retry-to-poison behavior.
+- 2026-03-06: Ran quality gates successfully for Phase 3 foundation (`gofmt`, `golangci-lint`, `go test ./...`, `go build ./...`).
 
 Introduce a storage abstraction in front of existing GORM access, then add a local-memory cache backend with async write-behind to DB and DB-backed cross-instance invalidation/event consumption. Phase 1 will include entity GET and collection GET cache reads, local-first writes with durable retry queue, startup warming for selected entity sets, and eventual consistency across instances using DB as source of truth.
 

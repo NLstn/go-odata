@@ -294,7 +294,7 @@ func (h *BatchHandler) processChangeset(r io.Reader, boundary string, remainingC
 			tx.Rollback()
 			return []batchResponse{h.createErrorResponse(http.StatusInternalServerError, "Failed to commit transaction")}, false
 		}
-		flushPendingChangeEvents(pendingEvents)
+		flushPendingChangeEventsWithContext(parentReq.Context(), pendingEvents)
 	}
 
 	return responses, sizeExceeded
