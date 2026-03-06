@@ -24,6 +24,10 @@
 - [x] Phase 5 configuration validation added for invalid negative limits while preserving disabled-by-default behavior
 - [x] Phase 5 docs updated (`documentation/advanced-features.md`, `documentation/testing.md`)
 - [x] Phase 5 verification gates run (`gofmt`, `golangci-lint`, `go test ./...`, `go build ./...`)
+- [x] Phase 6 integration tests added for queue visibility, multi-instance convergence, and concurrent read/write shutdown behavior (`test/cache_write_behind_integration_test.go`)
+- [x] Phase 6 observability/health visibility checks added for queue backlog/completion and invalidation event presence via DB-backed state tables
+- [x] Phase 6 verification gates run (`gofmt -w $(git ls-files '*.go')`, `golangci-lint run ./...`, `go test ./...`, `go build ./...`)
+- [x] Phase 6 targeted compliance smoke run (`cd compliance-suite && go run . -version 4.0 -pattern content_type`)
 
 ### Progress Notes
 - 2026-03-06: Started Phase 1 implementation with storage abstraction as first code change.
@@ -49,6 +53,10 @@
 - 2026-03-06: Added tests for cache limit eviction, queue size enforcement, and config validation in `internal/handlers/local_cache_storage_test.go`, `internal/handlers/write_behind_queue_test.go`, and `service_config_test.go`.
 - 2026-03-06: Documented cache/write-behind/consistency configuration and related testing guidance in `documentation/advanced-features.md` and `documentation/testing.md`.
 - 2026-03-06: Ran quality gates successfully for Phase 5 foundation (`gofmt`, `golangci-lint`, `go test ./...`, `go build ./...`).
+- 2026-03-06: Added Phase 6 integration tests in `test/cache_write_behind_integration_test.go` covering write-behind queue progress visibility, cross-instance cache convergence, and concurrent read/write with shutdown drain.
+- 2026-03-06: Validated queue/invalidation operational visibility by asserting DB-backed queue state transitions (`_odata_write_behind_queue`) and invalidation event append behavior (`_odata_cache_invalidation_events`).
+- 2026-03-06: Ran Phase 6 verification gates successfully (`gofmt -w $(git ls-files '*.go')`, `golangci-lint run ./...`, `go test ./...`, `go build ./...`).
+- 2026-03-06: Ran targeted OData compliance-suite smoke successfully (`go run . -version 4.0 -pattern content_type`, 5/5 tests passing).
 
 Introduce a storage abstraction in front of existing GORM access, then add a local-memory cache backend with async write-behind to DB and DB-backed cross-instance invalidation/event consumption. Phase 1 will include entity GET and collection GET cache reads, local-first writes with durable retry queue, startup warming for selected entity sets, and eventual consistency across instances using DB as source of truth.
 
