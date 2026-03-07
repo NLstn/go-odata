@@ -9,9 +9,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nlstn/go-odata/internal/handlers"
+	"github.com/nlstn/go-odata/internal/metadata"
 	"go.opentelemetry.io/otel/metric/noop"
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
 )
+
+type storageConfigTestCategory struct {
+	ID   int    `json:"id" odata:"key"`
+	Name string `json:"name"`
+}
 
 // TestSetLogger verifies custom logger configuration
 func TestSetLogger(t *testing.T) {
@@ -237,6 +244,71 @@ func TestNewServiceWithConfig_InvalidWriteBehindQueueLimitRejected(t *testing.T)
 	})
 	if err == nil {
 		t.Fatal("expected write-behind max queue size validation error")
+	}
+}
+
+func TestNewServiceWithConfig_DefaultStorageBackendIsGORM(t *testing.T) {
+	db := setupTestDB(t)
+
+	service, err := NewServiceWithConfig(db, ServiceConfig{})
+	if err != nil {
+		t.Fatalf("failed to create service: %v", err)
+	}
+
+	if err := service.RegisterEntity(&Product{}); err != nil {
+		t.Fatalf("failed to register product: %v", err)
+	}
+
+	h := service.handlers["Products"]
+	if h == nil {
+		t.Fatal("expected Products handler to be registered")
+	}
+	if _, ok := h.Storage().(*handlers.DBStorage); !ok {
+		t.Fatalf("expected DBStorage, got %T", h.Storage())
+	}
+}
+
+func TestNewServiceWithConfig_PerEntityStorageBackendOverride(t *testing.T) {
+	db := setupTestDB(t)
+
+	service, err := NewServiceWithConfig(db, ServiceConfig{
+		Storage: StorageConfig{
+			DefaultBackend: StorageBackendGORM,
+			EntitySetBackends: map[string]StorageBackend{
+				"Products": StorageBackendLocalCache,
+			},
+		},
+		Cache: CacheConfig{TTL: time.Minute},
+	})
+	if err != nil {
+		t.Fatalf("failed to create service: %v", err)
+	}
+
+	if err := service.RegisterEntity(&Product{}); err != nil {
+		t.Fatalf("failed to register product: %v", err)
+	}
+	if err := service.RegisterEntity(&storageConfigTestCategory{}); err != nil {
+		t.Fatalf("failed to register category: %v", err)
+	}
+	meta, err := metadata.AnalyzeEntity(&storageConfigTestCategory{})
+	if err != nil {
+		t.Fatalf("failed to analyze category metadata: %v", err)
+	}
+
+	productHandler := service.handlers["Products"]
+	if productHandler == nil {
+		t.Fatal("expected Products handler to be registered")
+	}
+	if _, ok := productHandler.Storage().(*handlers.LocalCacheStorage); !ok {
+		t.Fatalf("expected LocalCacheStorage for Products, got %T", productHandler.Storage())
+	}
+
+	categoryHandler := service.handlers[meta.EntitySetName]
+	if categoryHandler == nil {
+		t.Fatalf("expected %s handler to be registered", meta.EntitySetName)
+	}
+	if _, ok := categoryHandler.Storage().(*handlers.DBStorage); !ok {
+		t.Fatalf("expected DBStorage for %s, got %T", meta.EntitySetName, categoryHandler.Storage())
 	}
 }
 

@@ -189,6 +189,26 @@ func TestLocalCacheStorageRespectsEntryLimits(t *testing.T) {
 	require.False(t, stillHasCountOne)
 }
 
+func TestLocalCacheStorageEnabledEntitySetsScope(t *testing.T) {
+	meta := mustAnalyzeCacheTestEntity(t)
+	h := NewEntityHandler(nil, meta, nil)
+
+	base := &cacheTestStorage{
+		entityResult: &cacheTestProduct{ID: 1, Name: "from-db"},
+	}
+	cache := NewLocalCacheStorage(base, LocalCacheStorageOptions{
+		EnabledEntitySets: []string{"AnotherSet"},
+	}).(*LocalCacheStorage)
+
+	entityKey := namedEntityKey(meta, 1)
+	_, err := cache.FetchEntityByKey(context.Background(), h, entityKey, &query.QueryOptions{}, nil)
+	require.NoError(t, err)
+	_, err = cache.FetchEntityByKey(context.Background(), h, entityKey, &query.QueryOptions{}, nil)
+	require.NoError(t, err)
+
+	require.Equal(t, 2, base.fetchEntityCount)
+}
+
 func ptrInt(v int) *int {
 	return &v
 }

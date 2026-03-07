@@ -328,11 +328,36 @@ type ServiceConfig struct {
 	// Cache configures the optional local in-memory storage cache.
 	// The cache is disabled by default and must be explicitly enabled.
 	Cache CacheConfig
+
+	// Storage configures default and per-entity-set storage backend selection.
+	Storage StorageConfig
+}
+
+// StorageBackend identifies built-in service storage backends.
+type StorageBackend string
+
+const (
+	// StorageBackendGORM uses direct database access as the handler storage backend.
+	StorageBackendGORM StorageBackend = "gorm"
+	// StorageBackendLocalCache uses local in-memory cache over DB storage.
+	StorageBackendLocalCache StorageBackend = "local-cache"
+)
+
+// StorageConfig controls storage backend selection.
+type StorageConfig struct {
+	// DefaultBackend is the fallback backend for entity sets without overrides.
+	// Empty defaults to "gorm" unless Cache.Enabled is true for backward compatibility.
+	DefaultBackend StorageBackend
+
+	// EntitySetBackends overrides backend selection per entity set name.
+	// Keys are matched case-insensitively.
+	EntitySetBackends map[string]StorageBackend
 }
 
 // CacheConfig controls local in-memory cache behavior.
 type CacheConfig struct {
-	// Enabled turns on LocalCacheStorage. Disabled by default.
+	// Enabled is retained for backward compatibility and maps to default local-cache backend
+	// when Storage.DefaultBackend is unset.
 	Enabled bool
 
 	// TTL controls cache entry expiration. Non-positive values disable expiration.
@@ -448,8 +473,14 @@ type Service struct {
 	entityContainerAnnotations *metadata.AnnotationCollection
 	// handlers holds entity handlers keyed by entity set name
 	handlers map[string]*handlers.EntityHandler
-	// storage is the shared handler storage implementation injected into all handlers
-	storage handlers.Storage
+	// defaultStorageBackend is the fallback storage backend for all entity sets.
+	defaultStorageBackend StorageBackend
+	// entityStorageBackends stores per-entity-set storage backend overrides.
+	entityStorageBackends map[string]StorageBackend
+	// dbStorage is the shared direct DB storage implementation.
+	dbStorage handlers.Storage
+	// cacheStorage is the shared local-cache storage implementation when enabled.
+	cacheStorage handlers.Storage
 	// writeBehindQueue persists post-commit change events for async DB convergence
 	writeBehindQueue *handlers.DurableWriteBehindQueue
 	// cacheInvalidationLog appends committed changes for cross-instance cache convergence.
@@ -528,11 +559,87 @@ func NewService(db *gorm.DB) (*Service, error) {
 	return NewServiceWithConfig(db, ServiceConfig{})
 }
 
+func isSupportedStorageBackend(backend StorageBackend) bool {
+	switch backend {
+	case StorageBackendGORM, StorageBackendLocalCache:
+		return true
+	default:
+		return false
+	}
+}
+
+func normalizeEntitySetName(name string) string {
+	return strings.ToLower(strings.TrimSpace(name))
+}
+
+func resolveDefaultStorageBackend(cfg ServiceConfig) StorageBackend {
+	if cfg.Storage.DefaultBackend != "" {
+		return cfg.Storage.DefaultBackend
+	}
+	if cfg.Cache.Enabled {
+		// Backward compatibility: Cache.Enabled historically meant cache for all handlers.
+		return StorageBackendLocalCache
+	}
+	return StorageBackendGORM
+}
+
+func buildEntityStorageBackends(overrides map[string]StorageBackend) map[string]StorageBackend {
+	if len(overrides) == 0 {
+		return map[string]StorageBackend{}
+	}
+	resolved := make(map[string]StorageBackend, len(overrides))
+	for setName, backend := range overrides {
+		normalized := normalizeEntitySetName(setName)
+		if normalized == "" {
+			continue
+		}
+		resolved[normalized] = backend
+	}
+	return resolved
+}
+
+func hasLocalCacheBackend(defaultBackend StorageBackend, overrides map[string]StorageBackend) bool {
+	if defaultBackend == StorageBackendLocalCache {
+		return true
+	}
+	for _, backend := range overrides {
+		if backend == StorageBackendLocalCache {
+			return true
+		}
+	}
+	return false
+}
+
+func localCacheEntitySets(defaultBackend StorageBackend, overrides map[string]StorageBackend) []string {
+	if defaultBackend != StorageBackendGORM {
+		return nil
+	}
+	sets := make([]string, 0)
+	for setName, backend := range overrides {
+		if backend == StorageBackendLocalCache {
+			sets = append(sets, setName)
+		}
+	}
+	return sets
+}
+
 // NewServiceWithConfig creates a new OData service instance with additional configuration.
 func NewServiceWithConfig(db *gorm.DB, cfg ServiceConfig) (*Service, error) {
 	if db == nil {
 		return nil, fmt.Errorf("odata: database handle is required")
 	}
+	defaultBackend := resolveDefaultStorageBackend(cfg)
+	if !isSupportedStorageBackend(defaultBackend) {
+		return nil, fmt.Errorf("odata: unsupported default storage backend %q", defaultBackend)
+	}
+	entityBackends := buildEntityStorageBackends(cfg.Storage.EntitySetBackends)
+	for setName, backend := range entityBackends {
+		if !isSupportedStorageBackend(backend) {
+			return nil, fmt.Errorf("odata: unsupported storage backend %q for entity set %q", backend, setName)
+		}
+	}
+	hasCacheBackend := hasLocalCacheBackend(defaultBackend, entityBackends)
+
 	if cfg.Cache.MaxEntityEntries < 0 {
 		return nil, fmt.Errorf("odata: cache max entity entries must be >= 0")
 	}
@@ -545,11 +652,11 @@ func NewServiceWithConfig(db *gorm.DB, cfg ServiceConfig) (*Service, error) {
 	if cfg.Cache.WriteBehind.MaxQueueSize < 0 {
 		return nil, fmt.Errorf("odata: write-behind max queue size must be >= 0")
 	}
-	if cfg.Cache.WriteBehind.Enabled && !cfg.Cache.Enabled {
-		return nil, fmt.Errorf("odata: cache write-behind requires cache to be enabled")
+	if cfg.Cache.WriteBehind.Enabled && !hasCacheBackend {
+		return nil, fmt.Errorf("odata: cache write-behind requires local-cache storage backend")
 	}
-	if cfg.Cache.Consistency.Enabled && !cfg.Cache.Enabled {
-		return nil, fmt.Errorf("odata: cache consistency requires cache to be enabled")
+	if cfg.Cache.Consistency.Enabled && !hasCacheBackend {
+		return nil, fmt.Errorf("odata: cache consistency requires local-cache storage backend")
 	}
 
 	entities := make(map[string]*metadata.EntityMetadata)
@@ -589,12 +696,16 @@ func NewServiceWithConfig(db *gorm.DB, cfg ServiceConfig) (*Service, error) {
 		maxBatchSize = DefaultMaxBatchSize
 	}
 
+	dbStorage := handlers.NewDBStorage()
+
 	s := &Service{
 		db:                         db,
 		entities:                   entities,
 		entityContainerAnnotations: metadata.NewAnnotationCollection(),
 		handlers:                   handlersMap,
-		storage:                    handlers.NewDBStorage(),
+		defaultStorageBackend:      defaultBackend,
+		entityStorageBackends:      entityBackends,
+		dbStorage:                  dbStorage,
 		metadataHandler:            handlers.NewMetadataHandler(entities),
 		serviceDocumentHandler:     handlers.NewServiceDocumentHandler(entities, logger),
 		actions:                    make(map[string][]*actions.ActionDefinition),
@@ -609,13 +720,14 @@ func NewServiceWithConfig(db *gorm.DB, cfg ServiceConfig) (*Service, error) {
 		maxExpandDepth:             maxExpandDepth,
 		maxBatchSize:               maxBatchSize,
 	}
-	if cfg.Cache.Enabled {
-		s.storage = handlers.NewLocalCacheStorage(s.storage, handlers.LocalCacheStorageOptions{
+	if hasCacheBackend {
+		s.cacheStorage = handlers.NewLocalCacheStorage(s.dbStorage, handlers.LocalCacheStorageOptions{
 			TTL:                  cfg.Cache.TTL,
 			MaxEntityEntries:     cfg.Cache.MaxEntityEntries,
 			MaxCollectionEntries: cfg.Cache.MaxCollectionEntries,
 			MaxCountEntries:      cfg.Cache.MaxCountEntries,
 			WarmEntitySets:       cfg.Cache.WarmEntitySets,
+			EnabledEntitySets:    localCacheEntitySets(defaultBackend, entityBackends),
 			WarmTop:              cfg.Cache.WarmTop,
 		})
 	}
@@ -1190,7 +1302,7 @@ func (s *Service) RegisterEntity(entity interface{}) error {
 
 	// Create and store the handler
 	handler := handlers.NewEntityHandler(s.db, entityMetadata, s.logger)
-	handler.SetStorage(s.storage)
+	handler.SetStorage(s.storageForEntitySet(entityMetadata.EntitySetName))
 	handler.SetWriteBehindQueue(s.writeBehindQueue)
 	handler.SetCacheInvalidationAppender(s.cacheInvalidationLog, s.cacheInstanceID)
 	handler.SetNamespace(s.namespace)
@@ -1276,7 +1388,7 @@ func (s *Service) RegisterSingleton(entity interface{}, singletonName string) er
 
 	// Create and store the handler (same handler type works for both entities and singletons)
 	handler := handlers.NewEntityHandler(s.db, singletonMetadata, s.logger)
-	handler.SetStorage(s.storage)
+	handler.SetStorage(s.storageForEntitySet(singletonMetadata.EntitySetName))
 	handler.SetWriteBehindQueue(s.writeBehindQueue)
 	handler.SetCacheInvalidationAppender(s.cacheInvalidationLog, s.cacheInstanceID)
 	handler.SetNamespace(s.namespace)
@@ -1367,7 +1479,7 @@ func (s *Service) RegisterVirtualEntity(entity interface{}) error {
 
 	// Create and store the handler (no database operations will be performed)
 	handler := handlers.NewEntityHandler(s.db, entityMetadata, s.logger)
-	handler.SetStorage(s.storage)
+	handler.SetStorage(s.storageForEntitySet(entityMetadata.EntitySetName))
 	handler.SetWriteBehindQueue(s.writeBehindQueue)
 	handler.SetCacheInvalidationAppender(s.cacheInvalidationLog, s.cacheInstanceID)
 	handler.SetNamespace(s.namespace)
@@ -1407,7 +1519,7 @@ func (s *Service) warmHandlerStorageIfConfigured(handler *handlers.EntityHandler
 	if handler == nil {
 		return
 	}
-	warmer, ok := s.storage.(handlers.StorageWarmer)
+	warmer, ok := handler.Storage().(handlers.StorageWarmer)
 	if !ok {
 		return
 	}
@@ -1423,11 +1535,6 @@ func (s *Service) startCacheReconciler(interval time.Duration, entitySets []stri
 		return
 	}
 	if s.cacheReconcileStopCh != nil {
-		return
-	}
-
-	reconciler, ok := s.storage.(handlers.StorageReconciler)
-	if !ok {
 		return
 	}
 
@@ -1462,6 +1569,10 @@ func (s *Service) startCacheReconciler(interval time.Duration, entitySets []stri
 							continue
 						}
 					}
+					reconciler, ok := h.Storage().(handlers.StorageReconciler)
+					if !ok {
+						continue
+					}
 					if err := reconciler.ReconcileEntitySet(context.Background(), h); err != nil {
 						s.logger.Warn("cache reconciliation failed",
 							"entitySet", h.Metadata().EntitySetName,
@@ -1472,6 +1583,77 @@ func (s *Service) startCacheReconciler(interval time.Duration, entitySets []stri
 			}
 		}
 	}()
+}
+
+func (s *Service) storageBackendForEntitySet(entitySetName string) StorageBackend {
+	normalized := normalizeEntitySetName(entitySetName)
+	if backend, ok := s.entityStorageBackends[normalized]; ok {
+		return backend
+	}
+	return s.defaultStorageBackend
+}
+
+func (s *Service) storageForEntitySet(entitySetName string) handlers.Storage {
+	switch s.storageBackendForEntitySet(entitySetName) {
+	case StorageBackendLocalCache:
+		if s.cacheStorage != nil {
+			return s.cacheStorage
+		}
+		return s.dbStorage
+	default:
+		return s.dbStorage
+	}
+}
+
+// SetDefaultStorageBackend configures the default storage backend for this service.
+// Existing handlers without explicit entity overrides are updated in place.
+func (s *Service) SetDefaultStorageBackend(backend StorageBackend) error {
+	if !isSupportedStorageBackend(backend) {
+		return fmt.Errorf("unsupported storage backend %q", backend)
+	}
+	if backend == StorageBackendLocalCache && s.cacheStorage == nil {
+		return fmt.Errorf("local-cache backend is not configured for this service")
+	}
+
+	s.defaultStorageBackend = backend
+	for entitySetName, handler := range s.handlers {
+		if handler == nil {
+			continue
+		}
+		if _, hasOverride := s.entityStorageBackends[normalizeEntitySetName(entitySetName)]; hasOverride {
+			continue
+		}
+		handler.SetStorage(s.storageForEntitySet(entitySetName))
+		s.warmHandlerStorageIfConfigured(handler)
+	}
+	return nil
+}
+
+// SetEntityStorageBackend overrides storage backend for a specific entity set.
+// If the entity set is already registered, the handler is updated immediately.
+func (s *Service) SetEntityStorageBackend(entitySetName string, backend StorageBackend) error {
+	if !isSupportedStorageBackend(backend) {
+		return fmt.Errorf("unsupported storage backend %q", backend)
+	}
+	if backend == StorageBackendLocalCache && s.cacheStorage == nil {
+		return fmt.Errorf("local-cache backend is not configured for this service")
+	}
+
+	normalized := normalizeEntitySetName(entitySetName)
+	if normalized == "" {
+		return fmt.Errorf("entity set name is required")
+	}
+
+	s.entityStorageBackends[normalized] = backend
+	for registeredSetName, handler := range s.handlers {
+		if normalizeEntitySetName(registeredSetName) != normalized || handler == nil {
+			continue
+		}
+		handler.SetStorage(s.storageForEntitySet(registeredSetName))
+		s.warmHandlerStorageIfConfigured(handler)
+		break
+	}
+	return nil
 }
 
 // Types for registering custom OData actions and functions.

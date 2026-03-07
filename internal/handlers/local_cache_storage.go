@@ -29,6 +29,9 @@ type LocalCacheStorageOptions struct {
 	MaxCountEntries int
 	// WarmEntitySets selects entity sets warmed at registration/startup.
 	WarmEntitySets []string
+	// EnabledEntitySets limits caching to listed entity sets.
+	// Empty means all entity sets are eligible for caching.
+	EnabledEntitySets []string
 	// WarmTop limits warm-up collection size to avoid large startup reads.
 	WarmTop int
 }
@@ -45,8 +48,9 @@ type LocalCacheStorage struct {
 	maxCollectionEntries int
 	maxCountEntries      int
 
-	warmEntitySets map[string]struct{}
-	warmTop        int
+	warmEntitySets    map[string]struct{}
+	enabledEntitySets map[string]struct{}
+	warmTop           int
 
 	mu sync.RWMutex
 
@@ -93,6 +97,15 @@ func NewLocalCacheStorage(base Storage, opts LocalCacheStorageOptions) Storage {
 		warmSets[strings.ToLower(trimmed)] = struct{}{}
 	}
 
+	enabledSets := make(map[string]struct{}, len(opts.EnabledEntitySets))
+	for _, setName := range opts.EnabledEntitySets {
+		trimmed := strings.TrimSpace(setName)
+		if trimmed == "" {
+			continue
+		}
+		enabledSets[strings.ToLower(trimmed)] = struct{}{}
+	}
+
 	return &LocalCacheStorage{
 		base:                 base,
 		ttl:                  opts.TTL,
@@ -100,6 +113,7 @@ func NewLocalCacheStorage(base Storage, opts LocalCacheStorageOptions) Storage {
 		maxCollectionEntries: opts.MaxCollectionEntries,
 		maxCountEntries:      opts.MaxCountEntries,
 		warmEntitySets:       warmSets,
+		enabledEntitySets:    enabledSets,
 		warmTop:              opts.WarmTop,
 		entityByKey:          make(map[string]cacheEntry),
 		collectionByKey:      make(map[string]cacheEntry),
@@ -111,7 +125,7 @@ func NewLocalCacheStorage(base Storage, opts LocalCacheStorageOptions) Storage {
 }
 
 func (s *LocalCacheStorage) FetchEntityByKey(ctx context.Context, h *EntityHandler, entityKey string, queryOptions *query.QueryOptions, scopes []func(*gorm.DB) *gorm.DB) (interface{}, error) {
-	if h == nil || h.metadata == nil || len(scopes) > 0 {
+	if h == nil || h.metadata == nil || len(scopes) > 0 || !s.shouldCacheEntitySet(h.metadata.EntitySetName) {
 		return s.base.FetchEntityByKey(ctx, h, entityKey, queryOptions, scopes)
 	}
 
@@ -130,7 +144,7 @@ func (s *LocalCacheStorage) FetchEntityByKey(ctx context.Context, h *EntityHandl
 }
 
 func (s *LocalCacheStorage) FetchCollection(ctx context.Context, h *EntityHandler, queryOptions *query.QueryOptions, scopes []func(*gorm.DB) *gorm.DB) (interface{}, error) {
-	if h == nil || h.metadata == nil || len(scopes) > 0 {
+	if h == nil || h.metadata == nil || len(scopes) > 0 || !s.shouldCacheEntitySet(h.metadata.EntitySetName) {
 		return s.base.FetchCollection(ctx, h, queryOptions, scopes)
 	}
 
@@ -150,7 +164,7 @@ func (s *LocalCacheStorage) FetchCollection(ctx context.Context, h *EntityHandle
 }
 
 func (s *LocalCacheStorage) CountEntities(ctx context.Context, h *EntityHandler, queryOptions *query.QueryOptions, scopes []func(*gorm.DB) *gorm.DB) (int64, error) {
-	if h == nil || h.metadata == nil || len(scopes) > 0 {
+	if h == nil || h.metadata == nil || len(scopes) > 0 || !s.shouldCacheEntitySet(h.metadata.EntitySetName) {
 		return s.base.CountEntities(ctx, h, queryOptions, scopes)
 	}
 
@@ -192,6 +206,9 @@ func (s *LocalCacheStorage) OnEntityChanged(h *EntityHandler, entity interface{}
 	if h == nil || h.metadata == nil {
 		return
 	}
+	if !s.shouldCacheEntitySet(h.metadata.EntitySetName) {
+		return
+	}
 
 	setName := h.metadata.EntitySetName
 	s.invalidateCollectionSet(setName)
@@ -214,6 +231,9 @@ func (s *LocalCacheStorage) OnEntityChanged(h *EntityHandler, entity interface{}
 // ReplayEntityChange applies an externally observed committed change to local cache state.
 func (s *LocalCacheStorage) ReplayEntityChange(h *EntityHandler, keyValues map[string]interface{}, data map[string]interface{}, changeType trackchanges.ChangeType) {
 	if h == nil || h.metadata == nil {
+		return
+	}
+	if !s.shouldCacheEntitySet(h.metadata.EntitySetName) {
 		return
 	}
 
@@ -245,6 +265,9 @@ func (s *LocalCacheStorage) WarmEntitySet(ctx context.Context, h *EntityHandler)
 	if h == nil || h.metadata == nil {
 		return nil
 	}
+	if !s.shouldCacheEntitySet(h.metadata.EntitySetName) {
+		return nil
+	}
 	if len(s.warmEntitySets) == 0 {
 		return nil
 	}
@@ -257,6 +280,12 @@ func (s *LocalCacheStorage) WarmEntitySet(ctx context.Context, h *EntityHandler)
 
 // ReconcileEntitySet force-refreshes cached collection/entity snapshots for an entity set.
 func (s *LocalCacheStorage) ReconcileEntitySet(ctx context.Context, h *EntityHandler) error {
+	if h == nil || h.metadata == nil {
+		return nil
+	}
+	if !s.shouldCacheEntitySet(h.metadata.EntitySetName) {
+		return nil
+	}
 	return s.reconcileEntitySet(ctx, h, 0)
 }
 
@@ -284,6 +313,14 @@ func (s *LocalCacheStorage) reconcileEntitySet(ctx context.Context, h *EntityHan
 	s.setCollection(setName, collectionKey, results)
 	s.populateEntityCacheFromCollection(h.metadata, results)
 	return nil
+}
+
+func (s *LocalCacheStorage) shouldCacheEntitySet(entitySet string) bool {
+	if len(s.enabledEntitySets) == 0 {
+		return true
+	}
+	_, ok := s.enabledEntitySets[strings.ToLower(strings.TrimSpace(entitySet))]
+	return ok
 }
 
 func (s *LocalCacheStorage) buildEntityCacheKey(entitySet, canonicalKey string) string {

@@ -79,6 +79,14 @@ func (h *EntityHandler) SetStorage(storage Storage) {
 	h.storage = storage
 }
 
+// Storage returns the currently configured storage backend for the handler.
+func (h *EntityHandler) Storage() Storage {
+	if h.storage == nil {
+		return NewDBStorage()
+	}
+	return h.storage
+}
+
 // SetWriteBehindQueue configures optional asynchronous write-behind persistence.
 func (h *EntityHandler) SetWriteBehindQueue(queue WriteBehindQueue) {
 	h.writeBehindQueue = queue
