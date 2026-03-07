@@ -47,7 +47,7 @@ type EntityHandler struct {
 	maxInClauseSize int
 	// maxExpandDepth limits the depth of nested $expand operations
 	maxExpandDepth int
-	// entityCache is the optional in-memory cache for the full entity dataset.
+	// entityCache is the optional local SQLite cache for the full entity dataset.
 	// When non-nil and valid, collection reads are served from the cache instead
 	// of querying the primary database.
 	entityCache *cache.EntityCache
@@ -185,7 +185,7 @@ func (h *EntityHandler) SetMaxExpandDepth(depth int) {
 	h.maxExpandDepth = depth
 }
 
-// SetEntityCache attaches an in-memory cache to this handler.
+// SetEntityCache attaches a local SQLite cache to this handler.
 // When the cache is warm, collection reads are served from it instead of the
 // primary database. Pass nil to disable caching.
 func (h *EntityHandler) SetEntityCache(c *cache.EntityCache) {
@@ -194,30 +194,33 @@ func (h *EntityHandler) SetEntityCache(c *cache.EntityCache) {
 
 // readDB returns the database connection to use for a read operation.
 // When the entity has a full cache configured, it ensures the cache is warm
-// and returns the in-memory SQLite database. If the cache refresh fails, it
+// and returns the cache database. If the cache refresh fails, it
 // logs a warning and falls back to the primary database transparently.
 // When no cache is configured, it simply returns the primary database.
-func (h *EntityHandler) readDB(ctx context.Context) *gorm.DB {
+// The returned release function must be called when done.
+func (h *EntityHandler) readDB(ctx context.Context) (*gorm.DB, bool, func()) {
+	noopRelease := func() {}
+	primaryDB := h.db.WithContext(ctx)
+
 	if h.entityCache == nil {
-		return h.db.WithContext(ctx)
+		return primaryDB, false, noopRelease
 	}
 
 	if !h.entityCache.IsValid() {
-		if err := h.entityCache.Refresh(h.db); err != nil {
+		if err := h.entityCache.Refresh(primaryDB); err != nil {
 			h.logger.Warn("Failed to refresh entity cache, falling back to primary database",
 				"entitySet", h.metadata.EntitySetName,
 				"error", err)
-			return h.db.WithContext(ctx)
+			return primaryDB, false, noopRelease
 		}
 	}
 
-	return h.entityCache.DB().WithContext(ctx)
-}
+	cacheDB, release, ok := h.entityCache.AcquireDB()
+	if !ok {
+		return primaryDB, false, noopRelease
+	}
 
-// isUsingCache reports whether the handler is currently configured to serve reads
-// from the in-memory cache rather than the primary database.
-func (h *EntityHandler) isUsingCache() bool {
-	return h.entityCache != nil
+	return cacheDB.WithContext(ctx), true, release
 }
 
 // invalidateCache marks the entity cache as stale so that the next read

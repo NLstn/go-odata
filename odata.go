@@ -311,8 +311,8 @@ const (
 	// primary database. This is the default.
 	CacheLevelNone CacheLevel = iota
 
-	// CacheLevelFull caches the entire dataset for the entity in memory.
-	// When the cache is warm, all collection reads are served from the in-memory
+	// CacheLevelFull caches the entire dataset for the entity in a local SQLite file.
+	// When the cache is warm, all collection reads are served from the local cache
 	// store instead of the primary database. The cache is invalidated automatically
 	// after the configured TTL and immediately after any write operation (POST,
 	// PATCH, PUT, DELETE) so that reads always reflect current data.
@@ -1065,6 +1065,10 @@ func (s *Service) EnableChangeTracking(entitySetName string) error {
 }
 
 func (s *Service) configureEntityCache(entityMeta *metadata.EntityMetadata, handler *handlers.EntityHandler, cfg EntityCacheConfig) error {
+	if entityMeta == nil {
+		return fmt.Errorf("entity metadata is nil")
+	}
+
 	switch cfg.Level {
 	case CacheLevelNone:
 		return nil
