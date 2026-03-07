@@ -74,7 +74,7 @@ Leverage powerful OData v4 features:
 - **ETags**: Optimistic concurrency control for safe updates
 - **Lifecycle & Read Hooks**: Execute custom logic at specific points in entity lifecycle, add tenant filters, or redact responses before returning data
 - **Full-Text Search**: Database-native FTS for SQLite/PostgreSQL with automatic in-memory fallback on other backends
-- **Caching**: In-memory full-dataset caching with configurable TTL to reduce database load for small, read-heavy lookup tables
+- **Caching**: Per-replica local SQLite full-dataset caching with configurable TTL to reduce database load for small, read-heavy lookup tables
 - **Geospatial Functions**: Query geographic data using geo.distance, geo.length, and geo.intersects
 
 ### Testing

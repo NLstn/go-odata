@@ -1,6 +1,6 @@
 # Entity Caching
 
-go-odata supports optional in-memory caching of entity data to reduce round-trips to the
+go-odata supports optional per-replica caching of entity data to reduce round-trips to the
 primary database for frequently-read, slowly-changing datasets.
 
 ## Cache Levels
@@ -8,7 +8,7 @@ primary database for frequently-read, slowly-changing datasets.
 | Level               | Behaviour                                                           |
 |---------------------|---------------------------------------------------------------------|
 | `CacheLevelNone`    | No caching (default). Every read queries the primary database.       |
-| `CacheLevelFull`    | The entire entity dataset is loaded into an in-memory SQLite store. Reads are served from that store until the TTL expires or a write operation invalidates the cache. |
+| `CacheLevelFull`    | The entire entity dataset is loaded into a local file-based SQLite store (per service instance/replica). Reads are served from that store until the TTL expires or a write operation invalidates the cache. |
 
 ## When to Use Full Caching
 
@@ -57,7 +57,7 @@ This makes it straightforward to toggle caching via configuration without branch
 
 ```go
 service.RegisterEntity(&Category{}, odata.EntityCacheConfig{
-    Level: cachingEnabled ? odata.CacheLevelFull : odata.CacheLevelNone,
+    Level: odata.CacheLevelNone,
     TTL:   5 * time.Minute,
 })
 ```
@@ -79,25 +79,23 @@ and repopulates the cache.
 
 ## OData Query Options and the Cache
 
-When `CacheLevelFull` is active, **all standard OData query options continue to work** —
-filtering, ordering, pagination, `$count`, `$select`, `$expand`, and `$search` are all
-applied against the in-memory SQLite store in exactly the same way as they would be applied
-against the primary database.
+When `CacheLevelFull` is active, standard OData query options continue to work:
+`$filter`, `$orderby`, `$top`, `$skip`, `$count`, `$select`, and `$search`.
 
-The only difference is that the data source is the in-memory cache rather than the primary
-database. The query processing pipeline is identical.
+`$expand` remains available, but expansion queries run against the primary database so
+navigation targets that are not present in the cache still resolve correctly.
 
 ## How It Works
 
 1. On the first collection read after caching is enabled (or after invalidation / TTL
    expiry), go-odata loads all rows for the entity from the primary database and stores
-   them in a private in-memory SQLite database.
-2. Subsequent reads are routed to this in-memory store until the TTL expires or a write
+    them in a private file-based SQLite cache local to that replica.
+2. Subsequent reads are routed to this local cache until the TTL expires or a write
    invalidates the cache.
 3. The cache is scoped to a single entity set — enabling caching for one entity has no
    effect on others.
 4. The cache is held per-service instance. Horizontal scaling (multiple instances)
-   means each instance maintains its own in-memory copy. If you need distributed
+    means each instance maintains its own local copy. If you need distributed
    invalidation, refresh the TTL accordingly or handle invalidation in your deployment
    layer.
 

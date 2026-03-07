@@ -241,12 +241,19 @@ func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.Qu
 		modifiedOptions.Top = &topPlusOne
 	}
 
-	// Use the in-memory cache database when available, otherwise the primary database.
-	db := h.readDB(ctx)
+	// Use the cache database when available, otherwise the primary database.
+	db, usingCache, release := h.readDB(ctx)
+	defer release()
+
 	if len(scopes) > 0 {
 		db = db.Scopes(scopes...)
 	}
-	baseDB := db
+	// Expand queries may require related tables that are not present in the cache DB.
+	// Run per-parent expand lookups against the primary database.
+	baseDB := h.db.WithContext(ctx)
+	if len(scopes) > 0 {
+		baseDB = baseDB.Scopes(scopes...)
+	}
 
 	if queryOptions.SkipToken != nil {
 		db = h.applySkipTokenFilter(db, queryOptions)
@@ -255,11 +262,11 @@ func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.Qu
 	// Get the table name for FTS from metadata (respects custom TableName() methods)
 	tableName := h.metadata.TableName
 
-	// When serving from cache (in-memory SQLite), the primary DB's FTS manager is not
+	// When serving from the cache DB, the primary DB's FTS manager is not
 	// applicable. Pass nil so that the query falls back to the built-in SQLite FTS or
 	// the in-memory search implementation that is applied further below.
 	fts := h.ftsManager
-	if h.isUsingCache() {
+	if usingCache {
 		fts = nil
 	}
 

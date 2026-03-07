@@ -53,6 +53,26 @@ func setupCacheTestService(t *testing.T, cacheConfigs ...odata.EntityCacheConfig
 	return db, service
 }
 
+func newCacheTestService(t *testing.T) (*gorm.DB, *odata.Service) {
+	t.Helper()
+
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("failed to connect database: %v", err)
+	}
+
+	if err := db.AutoMigrate(&CachedCategory{}); err != nil {
+		t.Fatalf("failed to migrate database: %v", err)
+	}
+
+	service, err := odata.NewService(db)
+	if err != nil {
+		t.Fatalf("failed to create service: %v", err)
+	}
+
+	return db, service
+}
+
 // TestEntityCaching_RegisterWithCacheLevelNone verifies that CacheLevelNone is a no-op.
 func TestEntityCaching_RegisterWithCacheLevelNone(t *testing.T) {
 	_, service := setupCacheTestService(t, odata.EntityCacheConfig{
@@ -71,7 +91,7 @@ func TestEntityCaching_RegisterWithCacheLevelNone(t *testing.T) {
 // TestEntityCaching_RegisterWithMultipleConfigs verifies that only one cache config
 // can be provided during entity registration.
 func TestEntityCaching_RegisterWithMultipleConfigs(t *testing.T) {
-	_, service := setupCacheTestService(t)
+	_, service := newCacheTestService(t)
 
 	err := service.RegisterEntity(&CachedCategory{},
 		odata.EntityCacheConfig{Level: odata.CacheLevelNone},
@@ -79,6 +99,10 @@ func TestEntityCaching_RegisterWithMultipleConfigs(t *testing.T) {
 	)
 	if err == nil {
 		t.Fatal("expected error when registering entity with multiple cache configs, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "expected at most one cache configuration") {
+		t.Fatalf("expected multiple-config error, got: %v", err)
 	}
 }
 
@@ -312,19 +336,71 @@ func TestEntityCaching_TTLExpiry(t *testing.T) {
 		t.Fatalf("direct DB insert failed: %v", err)
 	}
 
-	// Sleep until the cache expires with some margin.
-	time.Sleep(200 * time.Millisecond)
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for cache TTL expiry and refresh")
+		}
 
-	// Second read — cache should be stale and refreshed from the primary DB.
-	req2 := httptest.NewRequest(http.MethodGet, "/CachedCategories", nil)
-	w2 := httptest.NewRecorder()
-	service.ServeHTTP(w2, req2)
-	if w2.Code != http.StatusOK {
-		t.Fatalf("second GET failed: %d", w2.Code)
+		req2 := httptest.NewRequest(http.MethodGet, "/CachedCategories", nil)
+		w2 := httptest.NewRecorder()
+		service.ServeHTTP(w2, req2)
+		if w2.Code != http.StatusOK {
+			t.Fatalf("second GET failed: %d", w2.Code)
+		}
+
+		var resp map[string]interface{}
+		if err := json.Unmarshal(w2.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("failed to parse response: %v", err)
+		}
+
+		values, ok := resp["value"].([]interface{})
+		if !ok {
+			t.Fatalf("expected 'value' array in response")
+		}
+
+		if len(values) == 4 {
+			break
+		}
+
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// TestEntityCaching_InvalidatedAfterPut verifies that replacing an entity
+// invalidates the cache so that subsequent reads reflect the replacement.
+func TestEntityCaching_InvalidatedAfterPut(t *testing.T) {
+	_, service := setupCacheTestService(t, odata.EntityCacheConfig{
+		Level: odata.CacheLevelFull,
+		TTL:   time.Hour,
+	})
+
+	// Warm the cache.
+	warmReq := httptest.NewRequest(http.MethodGet, "/CachedCategories", nil)
+	warmW := httptest.NewRecorder()
+	service.ServeHTTP(warmW, warmReq)
+	if warmW.Code != http.StatusOK {
+		t.Fatalf("initial GET failed: %d", warmW.Code)
+	}
+
+	body := `{"ID":1,"Name":"Replaced Electronics"}`
+	putReq := httptest.NewRequest(http.MethodPut, "/CachedCategories(1)", strings.NewReader(body))
+	putReq.Header.Set("Content-Type", "application/json")
+	putW := httptest.NewRecorder()
+	service.ServeHTTP(putW, putReq)
+	if putW.Code != http.StatusNoContent && putW.Code != http.StatusOK {
+		t.Fatalf("PUT failed: %d %s", putW.Code, putW.Body.String())
+	}
+
+	getReq := httptest.NewRequest(http.MethodGet, "/CachedCategories?$filter=Name%20eq%20'Replaced%20Electronics'", nil)
+	getW := httptest.NewRecorder()
+	service.ServeHTTP(getW, getReq)
+	if getW.Code != http.StatusOK {
+		t.Fatalf("GET after PUT failed: %d", getW.Code)
 	}
 
 	var resp map[string]interface{}
-	if err := json.Unmarshal(w2.Body.Bytes(), &resp); err != nil {
+	if err := json.Unmarshal(getW.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("failed to parse response: %v", err)
 	}
 
@@ -333,8 +409,8 @@ func TestEntityCaching_TTLExpiry(t *testing.T) {
 		t.Fatalf("expected 'value' array in response")
 	}
 
-	if len(values) != 4 {
-		t.Errorf("expected 4 entities after TTL expiry, got %d", len(values))
+	if len(values) != 1 {
+		t.Errorf("expected 1 entity with replaced name, got %d", len(values))
 	}
 }
 
