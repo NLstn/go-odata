@@ -185,35 +185,41 @@ func TestEnableAsyncProcessing(t *testing.T) {
 	}
 }
 
-func TestNewServiceWithConfig_WriteBehindRequiresCache(t *testing.T) {
+func TestNewServiceWithConfig_WriteBehindCanBeEnabledBeforeEntityCacheSelection(t *testing.T) {
 	db := setupTestDB(t)
 
-	_, err := NewServiceWithConfig(db, ServiceConfig{
+	service, err := NewServiceWithConfig(db, ServiceConfig{
 		Cache: CacheConfig{
-			Enabled: false,
 			WriteBehind: WriteBehindConfig{
 				Enabled: true,
 			},
 		},
 	})
-	if err == nil {
-		t.Fatal("expected write-behind config validation error")
+	if err != nil {
+		t.Fatalf("expected service creation to succeed, got %v", err)
+	}
+
+	if err := service.RegisterEntity(&Product{}, WithFullCache()); err != nil {
+		t.Fatalf("failed to register cached entity: %v", err)
 	}
 }
 
-func TestNewServiceWithConfig_CacheConsistencyRequiresCache(t *testing.T) {
+func TestNewServiceWithConfig_CacheConsistencyCanBeEnabledBeforeEntityCacheSelection(t *testing.T) {
 	db := setupTestDB(t)
 
-	_, err := NewServiceWithConfig(db, ServiceConfig{
+	service, err := NewServiceWithConfig(db, ServiceConfig{
 		Cache: CacheConfig{
-			Enabled: false,
 			Consistency: ConsistencyConfig{
 				Enabled: true,
 			},
 		},
 	})
-	if err == nil {
-		t.Fatal("expected cache consistency config validation error")
+	if err != nil {
+		t.Fatalf("expected service creation to succeed, got %v", err)
+	}
+
+	if err := service.RegisterEntity(&Product{}, WithFullCache()); err != nil {
+		t.Fatalf("failed to register cached entity: %v", err)
 	}
 }
 
@@ -303,6 +309,42 @@ func TestNewServiceWithConfig_PerEntityStorageBackendOverride(t *testing.T) {
 		t.Fatalf("expected LocalCacheStorage for Products, got %T", productHandler.Storage())
 	}
 
+	categoryHandler := service.handlers[meta.EntitySetName]
+	if categoryHandler == nil {
+		t.Fatalf("expected %s handler to be registered", meta.EntitySetName)
+	}
+	if _, ok := categoryHandler.Storage().(*handlers.DBStorage); !ok {
+		t.Fatalf("expected DBStorage for %s, got %T", meta.EntitySetName, categoryHandler.Storage())
+	}
+}
+
+func TestRegisterEntityWithFullCacheOption(t *testing.T) {
+	db := setupTestDB(t)
+
+	service, err := NewServiceWithConfig(db, ServiceConfig{})
+	if err != nil {
+		t.Fatalf("failed to create service: %v", err)
+	}
+
+	if err := service.RegisterEntity(&Product{}, WithFullCache()); err != nil {
+		t.Fatalf("failed to register product: %v", err)
+	}
+	if err := service.RegisterEntity(&storageConfigTestCategory{}); err != nil {
+		t.Fatalf("failed to register category: %v", err)
+	}
+
+	productHandler := service.handlers["Products"]
+	if productHandler == nil {
+		t.Fatal("expected Products handler to be registered")
+	}
+	if _, ok := productHandler.Storage().(*handlers.LocalCacheStorage); !ok {
+		t.Fatalf("expected LocalCacheStorage for Products, got %T", productHandler.Storage())
+	}
+
+	meta, err := metadata.AnalyzeEntity(&storageConfigTestCategory{})
+	if err != nil {
+		t.Fatalf("failed to analyze category metadata: %v", err)
+	}
 	categoryHandler := service.handlers[meta.EntitySetName]
 	if categoryHandler == nil {
 		t.Fatalf("expected %s handler to be registered", meta.EntitySetName)
