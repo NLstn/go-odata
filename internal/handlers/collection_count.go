@@ -12,7 +12,8 @@ import (
 
 // countEntities applies query scopes and filters to return the total number of matching entities.
 func (h *EntityHandler) countEntities(ctx context.Context, queryOptions *query.QueryOptions, scopes []func(*gorm.DB) *gorm.DB) (int64, error) {
-	baseDB := h.db.WithContext(ctx).Model(reflect.New(h.metadata.EntityType).Interface())
+	// Use the in-memory cache database when available, otherwise the primary database.
+	baseDB := h.readDB(ctx).Model(reflect.New(h.metadata.EntityType).Interface())
 	if len(scopes) > 0 {
 		baseDB = baseDB.Scopes(scopes...)
 	}
@@ -29,7 +30,9 @@ func (h *EntityHandler) countEntities(ctx context.Context, queryOptions *query.Q
 	filter := queryOptions.Filter
 	search := queryOptions.Search
 
-	if search != "" && h.ftsManager != nil {
+	// When serving from the in-memory cache the primary FTS manager is not
+	// applicable; use the in-memory search path instead.
+	if search != "" && h.ftsManager != nil && !h.isUsingCache() {
 		countOptions := &query.QueryOptions{Filter: filter, Search: search}
 		countDB := query.ApplyQueryOptionsWithFTS(baseDB, countOptions, h.metadata, h.ftsManager, h.metadata.TableName, h.logger)
 		if searchAppliedAtDB(countDB) {

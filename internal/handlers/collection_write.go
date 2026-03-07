@@ -146,6 +146,9 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 
 	h.finalizeChangeEvents(ctx, changeEvents)
 
+	// Invalidate the entity cache so that subsequent reads reflect the new entity.
+	h.invalidateCache()
+
 	location := h.buildEntityLocation(r, entity)
 	w.Header().Set("Location", location)
 
@@ -237,6 +240,9 @@ func (h *EntityHandler) handlePostMediaEntity(w http.ResponseWriter, r *http.Req
 	}
 
 	h.finalizeChangeEvents(ctx, changeEvents)
+
+	// Invalidate the entity cache so that subsequent reads reflect the new entity.
+	h.invalidateCache()
 
 	location := h.buildEntityLocation(r, entity)
 	w.Header().Set("Location", location)

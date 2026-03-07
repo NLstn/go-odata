@@ -59,6 +59,7 @@ import (
 	"github.com/nlstn/go-odata/internal/actions"
 	"github.com/nlstn/go-odata/internal/async"
 	"github.com/nlstn/go-odata/internal/auth"
+	"github.com/nlstn/go-odata/internal/cache"
 	"github.com/nlstn/go-odata/internal/handlers"
 	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/observability"
@@ -300,6 +301,37 @@ type ReadHook interface {
 	// It receives the entity after all query processing and can redact or transform it.
 	// Return nil, nil to keep the original response.
 	ODataAfterReadEntity(ctx context.Context, r *http.Request, opts *QueryOptions, entity interface{}) (interface{}, error)
+}
+
+// CacheLevel controls whether and how an entity's data is cached in memory.
+type CacheLevel int
+
+const (
+	// CacheLevelNone disables caching for the entity. All reads go directly to the
+	// primary database. This is the default.
+	CacheLevelNone CacheLevel = iota
+
+	// CacheLevelFull caches the entire dataset for the entity in memory.
+	// When the cache is warm, all collection reads are served from the in-memory
+	// store instead of the primary database. The cache is invalidated automatically
+	// after the configured TTL and immediately after any write operation (POST,
+	// PATCH, PUT, DELETE) so that reads always reflect current data.
+	//
+	// This level is well-suited for small, slowly-changing lookup tables (for
+	// example: categories, statuses, country codes) where database round-trips
+	// are a measurable overhead.
+	CacheLevelFull
+)
+
+// EntityCacheConfig holds the caching configuration for a single entity set.
+type EntityCacheConfig struct {
+	// Level selects the caching strategy. Defaults to CacheLevelNone.
+	Level CacheLevel
+
+	// TTL is the duration after which a full cache entry is considered stale and
+	// must be refreshed from the primary database. A value of 0 defaults to
+	// 5 minutes. Only used when Level is CacheLevelFull.
+	TTL time.Duration
 }
 
 // ServiceConfig controls optional service behaviours.
@@ -1013,6 +1045,60 @@ func (s *Service) EnableChangeTracking(entitySetName string) error {
 		return err
 	}
 
+	return nil
+}
+
+// EnableEntityCaching configures in-memory caching for the named entity set.
+//
+// Call this after RegisterEntity. Passing CacheLevelNone (the default) is a no-op;
+// use CacheLevelFull to enable full-dataset caching with a configurable TTL.
+//
+// When CacheLevelFull is active the service maintains an in-memory SQLite copy of
+// all rows for the entity. Collection reads are served from this copy, avoiding
+// round-trips to the primary database until the TTL expires. Any write operation
+// (POST, PATCH, PUT, DELETE) against the entity set immediately invalidates the
+// cache so that subsequent reads reflect the latest state.
+//
+// A zero TTL defaults to 5 minutes.
+//
+// Example:
+//
+//	if err := service.EnableEntityCaching("Products", odata.EntityCacheConfig{
+//	    Level: odata.CacheLevelFull,
+//	    TTL:   10 * time.Minute,
+//	}); err != nil {
+//	    log.Fatal(err)
+//	}
+func (s *Service) EnableEntityCaching(entitySetName string, cfg EntityCacheConfig) error {
+	if cfg.Level == CacheLevelNone {
+		return nil
+	}
+
+	entityMeta, exists := s.entities[entitySetName]
+	if !exists {
+		return fmt.Errorf("entity set '%s' is not registered", entitySetName)
+	}
+
+	handler, exists := s.handlers[entitySetName]
+	if !exists || handler == nil {
+		return fmt.Errorf("entity handler for '%s' is not initialized", entitySetName)
+	}
+
+	ttl := cfg.TTL
+	if ttl <= 0 {
+		ttl = 5 * time.Minute
+	}
+
+	entityCache, err := cache.New(entityMeta.EntityType, ttl)
+	if err != nil {
+		return fmt.Errorf("failed to create entity cache for '%s': %w", entitySetName, err)
+	}
+
+	handler.SetEntityCache(entityCache)
+	s.logger.Debug("Enabled entity caching",
+		"entitySet", entitySetName,
+		"level", "full",
+		"ttl", ttl)
 	return nil
 }
 
