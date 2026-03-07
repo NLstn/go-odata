@@ -461,3 +461,130 @@ func TestEntityCaching_DefaultTTLUsedWhenZero(t *testing.T) {
 		t.Fatalf("GET failed after zero TTL setup: %d %s", w.Code, w.Body.String())
 	}
 }
+
+// TestEntityCaching_KeyReadUsesCache verifies that key-based entity reads are served
+// from the cache once it is warm.
+func TestEntityCaching_KeyReadUsesCache(t *testing.T) {
+	db, service := setupCacheTestService(t, odata.EntityCacheConfig{
+		Level: odata.CacheLevelFull,
+		TTL:   time.Hour,
+	})
+
+	// Warm the cache through a key read.
+	keyReq := httptest.NewRequest(http.MethodGet, "/CachedCategories(1)", nil)
+	keyW := httptest.NewRecorder()
+	service.ServeHTTP(keyW, keyReq)
+	if keyW.Code != http.StatusOK {
+		t.Fatalf("initial key GET failed: %d %s", keyW.Code, keyW.Body.String())
+	}
+
+	// Mutate the primary DB directly so cache is not invalidated.
+	if err := db.Model(&CachedCategory{}).Where("id = ?", 1).Update("name", "Changed In DB").Error; err != nil {
+		t.Fatalf("direct DB update failed: %v", err)
+	}
+
+	// A second key read should still return cached data.
+	keyReq2 := httptest.NewRequest(http.MethodGet, "/CachedCategories(1)", nil)
+	keyW2 := httptest.NewRecorder()
+	service.ServeHTTP(keyW2, keyReq2)
+	if keyW2.Code != http.StatusOK {
+		t.Fatalf("second key GET failed: %d %s", keyW2.Code, keyW2.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(keyW2.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse key response: %v", err)
+	}
+
+	if got, ok := resp["Name"].(string); !ok || got != "Electronics" {
+		t.Fatalf("expected cached Name='Electronics', got %v", resp["Name"])
+	}
+}
+
+// TestEntityCaching_KeyReadInvalidatedAfterPatch verifies that key-based reads
+// observe updates after write-triggered cache invalidation.
+func TestEntityCaching_KeyReadInvalidatedAfterPatch(t *testing.T) {
+	_, service := setupCacheTestService(t, odata.EntityCacheConfig{
+		Level: odata.CacheLevelFull,
+		TTL:   time.Hour,
+	})
+
+	// Warm cache through key read.
+	warmReq := httptest.NewRequest(http.MethodGet, "/CachedCategories(1)", nil)
+	warmW := httptest.NewRecorder()
+	service.ServeHTTP(warmW, warmReq)
+	if warmW.Code != http.StatusOK {
+		t.Fatalf("initial key GET failed: %d %s", warmW.Code, warmW.Body.String())
+	}
+
+	patchReq := httptest.NewRequest(http.MethodPatch, "/CachedCategories(1)", strings.NewReader(`{"Name":"Patched Name"}`))
+	patchReq.Header.Set("Content-Type", "application/json")
+	patchW := httptest.NewRecorder()
+	service.ServeHTTP(patchW, patchReq)
+	if patchW.Code != http.StatusNoContent && patchW.Code != http.StatusOK {
+		t.Fatalf("PATCH failed: %d %s", patchW.Code, patchW.Body.String())
+	}
+
+	getReq := httptest.NewRequest(http.MethodGet, "/CachedCategories(1)", nil)
+	getW := httptest.NewRecorder()
+	service.ServeHTTP(getW, getReq)
+	if getW.Code != http.StatusOK {
+		t.Fatalf("GET after PATCH failed: %d %s", getW.Code, getW.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(getW.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse key response: %v", err)
+	}
+
+	if got, ok := resp["Name"].(string); !ok || got != "Patched Name" {
+		t.Fatalf("expected Name='Patched Name', got %v", resp["Name"])
+	}
+}
+
+// TestEntityCaching_KeyReadTTLExpiry verifies that key-based reads refresh from
+// primary DB when cache TTL expires.
+func TestEntityCaching_KeyReadTTLExpiry(t *testing.T) {
+	db, service := setupCacheTestService(t, odata.EntityCacheConfig{
+		Level: odata.CacheLevelFull,
+		TTL:   100 * time.Millisecond,
+	})
+
+	// Warm cache through key read.
+	warmReq := httptest.NewRequest(http.MethodGet, "/CachedCategories(1)", nil)
+	warmW := httptest.NewRecorder()
+	service.ServeHTTP(warmW, warmReq)
+	if warmW.Code != http.StatusOK {
+		t.Fatalf("initial key GET failed: %d %s", warmW.Code, warmW.Body.String())
+	}
+
+	// Mutate primary DB directly to avoid explicit cache invalidation.
+	if err := db.Model(&CachedCategory{}).Where("id = ?", 1).Update("name", "TTL Refreshed Name").Error; err != nil {
+		t.Fatalf("direct DB update failed: %v", err)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for key read cache TTL refresh")
+		}
+
+		getReq := httptest.NewRequest(http.MethodGet, "/CachedCategories(1)", nil)
+		getW := httptest.NewRecorder()
+		service.ServeHTTP(getW, getReq)
+		if getW.Code != http.StatusOK {
+			t.Fatalf("key GET failed during TTL wait: %d %s", getW.Code, getW.Body.String())
+		}
+
+		var resp map[string]interface{}
+		if err := json.Unmarshal(getW.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("failed to parse key response: %v", err)
+		}
+
+		if got, ok := resp["Name"].(string); ok && got == "TTL Refreshed Name" {
+			break
+		}
+
+		time.Sleep(50 * time.Millisecond)
+	}
+}
