@@ -19,7 +19,7 @@ type CachedCategory struct {
 	Name string `json:"Name"`
 }
 
-func setupCacheTestService(t *testing.T) (*gorm.DB, *odata.Service) {
+func setupCacheTestService(t *testing.T, cacheConfigs ...odata.EntityCacheConfig) (*gorm.DB, *odata.Service) {
 	t.Helper()
 
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
@@ -46,50 +46,49 @@ func setupCacheTestService(t *testing.T) (*gorm.DB, *odata.Service) {
 		t.Fatalf("failed to create service: %v", err)
 	}
 
-	if err := service.RegisterEntity(&CachedCategory{}); err != nil {
+	if err := service.RegisterEntity(&CachedCategory{}, cacheConfigs...); err != nil {
 		t.Fatalf("failed to register entity: %v", err)
 	}
 
 	return db, service
 }
 
-// TestEntityCaching_EnableWithCacheLevelNone verifies that CacheLevelNone is a no-op.
-func TestEntityCaching_EnableWithCacheLevelNone(t *testing.T) {
-	_, service := setupCacheTestService(t)
-
-	err := service.EnableEntityCaching("CachedCategories", odata.EntityCacheConfig{
+// TestEntityCaching_RegisterWithCacheLevelNone verifies that CacheLevelNone is a no-op.
+func TestEntityCaching_RegisterWithCacheLevelNone(t *testing.T) {
+	_, service := setupCacheTestService(t, odata.EntityCacheConfig{
 		Level: odata.CacheLevelNone,
 	})
-	if err != nil {
-		t.Fatalf("EnableEntityCaching with CacheLevelNone returned error: %v", err)
+
+	req := httptest.NewRequest(http.MethodGet, "/CachedCategories", nil)
+	w := httptest.NewRecorder()
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET failed with CacheLevelNone: %d %s", w.Code, w.Body.String())
 	}
 }
 
-// TestEntityCaching_EnableUnregisteredEntity verifies that an error is returned when
-// attempting to enable caching for an entity set that was never registered.
-func TestEntityCaching_EnableUnregisteredEntity(t *testing.T) {
+// TestEntityCaching_RegisterWithMultipleConfigs verifies that only one cache config
+// can be provided during entity registration.
+func TestEntityCaching_RegisterWithMultipleConfigs(t *testing.T) {
 	_, service := setupCacheTestService(t)
 
-	err := service.EnableEntityCaching("NonExistent", odata.EntityCacheConfig{
-		Level: odata.CacheLevelFull,
-		TTL:   time.Minute,
-	})
+	err := service.RegisterEntity(&CachedCategory{},
+		odata.EntityCacheConfig{Level: odata.CacheLevelNone},
+		odata.EntityCacheConfig{Level: odata.CacheLevelFull},
+	)
 	if err == nil {
-		t.Fatal("expected error for unregistered entity set, got nil")
+		t.Fatal("expected error when registering entity with multiple cache configs, got nil")
 	}
 }
 
 // TestEntityCaching_FullCacheReturnsAllEntities verifies that a cached entity set
 // returns all entities correctly.
 func TestEntityCaching_FullCacheReturnsAllEntities(t *testing.T) {
-	_, service := setupCacheTestService(t)
-
-	if err := service.EnableEntityCaching("CachedCategories", odata.EntityCacheConfig{
+	_, service := setupCacheTestService(t, odata.EntityCacheConfig{
 		Level: odata.CacheLevelFull,
 		TTL:   time.Minute,
-	}); err != nil {
-		t.Fatalf("EnableEntityCaching: %v", err)
-	}
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "/CachedCategories", nil)
 	w := httptest.NewRecorder()
@@ -117,14 +116,10 @@ func TestEntityCaching_FullCacheReturnsAllEntities(t *testing.T) {
 // TestEntityCaching_FullCacheWithFilter verifies that OData $filter works correctly
 // when data is served from the in-memory cache.
 func TestEntityCaching_FullCacheWithFilter(t *testing.T) {
-	_, service := setupCacheTestService(t)
-
-	if err := service.EnableEntityCaching("CachedCategories", odata.EntityCacheConfig{
+	_, service := setupCacheTestService(t, odata.EntityCacheConfig{
 		Level: odata.CacheLevelFull,
 		TTL:   time.Minute,
-	}); err != nil {
-		t.Fatalf("EnableEntityCaching: %v", err)
-	}
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "/CachedCategories?$filter=Name%20eq%20'Electronics'", nil)
 	w := httptest.NewRecorder()
@@ -152,14 +147,10 @@ func TestEntityCaching_FullCacheWithFilter(t *testing.T) {
 // TestEntityCaching_InvalidatedAfterCreate verifies that creating a new entity
 // invalidates the cache so that subsequent reads include the new entity.
 func TestEntityCaching_InvalidatedAfterCreate(t *testing.T) {
-	_, service := setupCacheTestService(t)
-
-	if err := service.EnableEntityCaching("CachedCategories", odata.EntityCacheConfig{
+	_, service := setupCacheTestService(t, odata.EntityCacheConfig{
 		Level: odata.CacheLevelFull,
 		TTL:   time.Hour, // long TTL so it doesn't expire between requests
-	}); err != nil {
-		t.Fatalf("EnableEntityCaching: %v", err)
-	}
+	})
 
 	// Warm the cache with an initial read.
 	warmReq := httptest.NewRequest(http.MethodGet, "/CachedCategories", nil)
@@ -205,14 +196,10 @@ func TestEntityCaching_InvalidatedAfterCreate(t *testing.T) {
 // TestEntityCaching_InvalidatedAfterDelete verifies that deleting an entity
 // invalidates the cache so that subsequent reads exclude the deleted entity.
 func TestEntityCaching_InvalidatedAfterDelete(t *testing.T) {
-	_, service := setupCacheTestService(t)
-
-	if err := service.EnableEntityCaching("CachedCategories", odata.EntityCacheConfig{
+	_, service := setupCacheTestService(t, odata.EntityCacheConfig{
 		Level: odata.CacheLevelFull,
 		TTL:   time.Hour,
-	}); err != nil {
-		t.Fatalf("EnableEntityCaching: %v", err)
-	}
+	})
 
 	// Warm the cache.
 	warmReq := httptest.NewRequest(http.MethodGet, "/CachedCategories", nil)
@@ -256,14 +243,10 @@ func TestEntityCaching_InvalidatedAfterDelete(t *testing.T) {
 // TestEntityCaching_InvalidatedAfterPatch verifies that patching an entity
 // invalidates the cache so that subsequent reads reflect the update.
 func TestEntityCaching_InvalidatedAfterPatch(t *testing.T) {
-	_, service := setupCacheTestService(t)
-
-	if err := service.EnableEntityCaching("CachedCategories", odata.EntityCacheConfig{
+	_, service := setupCacheTestService(t, odata.EntityCacheConfig{
 		Level: odata.CacheLevelFull,
 		TTL:   time.Hour,
-	}); err != nil {
-		t.Fatalf("EnableEntityCaching: %v", err)
-	}
+	})
 
 	// Warm the cache.
 	warmReq := httptest.NewRequest(http.MethodGet, "/CachedCategories", nil)
@@ -309,15 +292,11 @@ func TestEntityCaching_InvalidatedAfterPatch(t *testing.T) {
 // TestEntityCaching_TTLExpiry verifies that an expired cache is refreshed automatically
 // on the next read.
 func TestEntityCaching_TTLExpiry(t *testing.T) {
-	db, service := setupCacheTestService(t)
-
 	// Short TTL to make the cache expire quickly in the test.
-	if err := service.EnableEntityCaching("CachedCategories", odata.EntityCacheConfig{
+	db, service := setupCacheTestService(t, odata.EntityCacheConfig{
 		Level: odata.CacheLevelFull,
 		TTL:   100 * time.Millisecond,
-	}); err != nil {
-		t.Fatalf("EnableEntityCaching: %v", err)
-	}
+	})
 
 	// First read — warms the cache.
 	req1 := httptest.NewRequest(http.MethodGet, "/CachedCategories", nil)
@@ -362,14 +341,10 @@ func TestEntityCaching_TTLExpiry(t *testing.T) {
 // TestEntityCaching_TopAndSkip verifies that $top and $skip work correctly
 // when data is served from the cache.
 func TestEntityCaching_TopAndSkip(t *testing.T) {
-	_, service := setupCacheTestService(t)
-
-	if err := service.EnableEntityCaching("CachedCategories", odata.EntityCacheConfig{
+	_, service := setupCacheTestService(t, odata.EntityCacheConfig{
 		Level: odata.CacheLevelFull,
 		TTL:   time.Minute,
-	}); err != nil {
-		t.Fatalf("EnableEntityCaching: %v", err)
-	}
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "/CachedCategories?$top=2&$skip=1", nil)
 	w := httptest.NewRecorder()
@@ -397,15 +372,10 @@ func TestEntityCaching_TopAndSkip(t *testing.T) {
 // TestEntityCaching_DefaultTTLUsedWhenZero verifies that a zero TTL defaults to
 // 5 minutes without returning an error.
 func TestEntityCaching_DefaultTTLUsedWhenZero(t *testing.T) {
-	_, service := setupCacheTestService(t)
-
-	err := service.EnableEntityCaching("CachedCategories", odata.EntityCacheConfig{
+	_, service := setupCacheTestService(t, odata.EntityCacheConfig{
 		Level: odata.CacheLevelFull,
 		TTL:   0, // should default to 5 minutes
 	})
-	if err != nil {
-		t.Fatalf("EnableEntityCaching with zero TTL should not return error: %v", err)
-	}
 
 	req := httptest.NewRequest(http.MethodGet, "/CachedCategories", nil)
 	w := httptest.NewRecorder()

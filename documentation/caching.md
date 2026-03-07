@@ -24,8 +24,7 @@ may consume significant memory. In those cases, leave caching disabled (the defa
 
 ## Enabling Caching
 
-Call `EnableEntityCaching` **after** `RegisterEntity`. The entity set name must match
-the name used during registration (typically the pluralised struct name).
+Configure caching directly in `RegisterEntity` by passing `EntityCacheConfig`.
 
 ```go
 service, err := odata.NewService(db)
@@ -33,12 +32,8 @@ if err != nil {
     log.Fatal(err)
 }
 
-if err := service.RegisterEntity(&Category{}); err != nil {
-    log.Fatal(err)
-}
-
-// Enable full-dataset caching with a 10-minute TTL.
-if err := service.EnableEntityCaching("Categories", odata.EntityCacheConfig{
+// Enable full-dataset caching with a 10-minute TTL at registration time.
+if err := service.RegisterEntity(&Category{}, odata.EntityCacheConfig{
     Level: odata.CacheLevelFull,
     TTL:   10 * time.Minute,
 }); err != nil {
@@ -57,11 +52,11 @@ read automatically refreshes the cache from the primary database.
 
 ### Passing `CacheLevelNone`
 
-Calling `EnableEntityCaching` with `CacheLevelNone` is explicitly allowed and is a no-op.
+Passing `CacheLevelNone` to `RegisterEntity` is explicitly allowed and is a no-op.
 This makes it straightforward to toggle caching via configuration without branching:
 
 ```go
-service.EnableEntityCaching("Categories", odata.EntityCacheConfig{
+service.RegisterEntity(&Category{}, odata.EntityCacheConfig{
     Level: cachingEnabled ? odata.CacheLevelFull : odata.CacheLevelNone,
     TTL:   5 * time.Minute,
 })
@@ -117,9 +112,7 @@ type Category struct {
 db.AutoMigrate(&Category{})
 
 service, _ := odata.NewService(db)
-service.RegisterEntity(&Category{})
-
-service.EnableEntityCaching("Categories", odata.EntityCacheConfig{
+service.RegisterEntity(&Category{}, odata.EntityCacheConfig{
     Level: odata.CacheLevelFull,
     TTL:   15 * time.Minute,
 })

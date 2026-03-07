@@ -969,7 +969,19 @@ func (s *Service) resolveKeyGenerator(name string) (KeyGenerator, bool) {
 }
 
 // RegisterEntity registers an entity type with the OData service.
-func (s *Service) RegisterEntity(entity interface{}) error {
+//
+// Optionally pass an EntityCacheConfig to enable per-entity caching at
+// registration time. When omitted, caching defaults to CacheLevelNone.
+func (s *Service) RegisterEntity(entity interface{}, cacheConfigs ...EntityCacheConfig) error {
+	if len(cacheConfigs) > 1 {
+		return fmt.Errorf("expected at most one cache configuration, got %d", len(cacheConfigs))
+	}
+
+	cacheCfg := EntityCacheConfig{Level: CacheLevelNone}
+	if len(cacheConfigs) == 1 {
+		cacheCfg = cacheConfigs[0]
+	}
+
 	// Analyze the entity structure
 	entityMetadata, err := metadata.AnalyzeEntity(entity)
 	if err != nil {
@@ -1023,6 +1035,10 @@ func (s *Service) RegisterEntity(entity interface{}) error {
 	handler.SetMaxExpandDepth(s.maxExpandDepth)
 	s.handlers[entityMetadata.EntitySetName] = handler
 
+	if err := s.configureEntityCache(entityMetadata, handler, cacheCfg); err != nil {
+		return err
+	}
+
 	s.logger.Debug("Registered entity",
 		"entity", entityMetadata.EntityName,
 		"entitySet", entityMetadata.EntitySetName)
@@ -1048,40 +1064,18 @@ func (s *Service) EnableChangeTracking(entitySetName string) error {
 	return nil
 }
 
-// EnableEntityCaching configures in-memory caching for the named entity set.
-//
-// Call this after RegisterEntity. Passing CacheLevelNone (the default) is a no-op;
-// use CacheLevelFull to enable full-dataset caching with a configurable TTL.
-//
-// When CacheLevelFull is active the service maintains an in-memory SQLite copy of
-// all rows for the entity. Collection reads are served from this copy, avoiding
-// round-trips to the primary database until the TTL expires. Any write operation
-// (POST, PATCH, PUT, DELETE) against the entity set immediately invalidates the
-// cache so that subsequent reads reflect the latest state.
-//
-// A zero TTL defaults to 5 minutes.
-//
-// Example:
-//
-//	if err := service.EnableEntityCaching("Products", odata.EntityCacheConfig{
-//	    Level: odata.CacheLevelFull,
-//	    TTL:   10 * time.Minute,
-//	}); err != nil {
-//	    log.Fatal(err)
-//	}
-func (s *Service) EnableEntityCaching(entitySetName string, cfg EntityCacheConfig) error {
-	if cfg.Level == CacheLevelNone {
+func (s *Service) configureEntityCache(entityMeta *metadata.EntityMetadata, handler *handlers.EntityHandler, cfg EntityCacheConfig) error {
+	switch cfg.Level {
+	case CacheLevelNone:
 		return nil
+	case CacheLevelFull:
+		// continue below
+	default:
+		return fmt.Errorf("unsupported cache level %d", cfg.Level)
 	}
 
-	entityMeta, exists := s.entities[entitySetName]
-	if !exists {
-		return fmt.Errorf("entity set '%s' is not registered", entitySetName)
-	}
-
-	handler, exists := s.handlers[entitySetName]
-	if !exists || handler == nil {
-		return fmt.Errorf("entity handler for '%s' is not initialized", entitySetName)
+	if handler == nil {
+		return fmt.Errorf("entity handler for '%s' is not initialized", entityMeta.EntitySetName)
 	}
 
 	ttl := cfg.TTL
@@ -1091,12 +1085,12 @@ func (s *Service) EnableEntityCaching(entitySetName string, cfg EntityCacheConfi
 
 	entityCache, err := cache.New(entityMeta.EntityType, ttl)
 	if err != nil {
-		return fmt.Errorf("failed to create entity cache for '%s': %w", entitySetName, err)
+		return fmt.Errorf("failed to create entity cache for '%s': %w", entityMeta.EntitySetName, err)
 	}
 
 	handler.SetEntityCache(entityCache)
 	s.logger.Debug("Enabled entity caching",
-		"entitySet", entitySetName,
+		"entitySet", entityMeta.EntitySetName,
 		"level", "full",
 		"ttl", ttl)
 	return nil
