@@ -121,12 +121,22 @@ func (h *EntityHandler) parseSingleEntityQueryOptions(r *http.Request) (*query.Q
 func (h *EntityHandler) fetchEntityByKey(ctx context.Context, entityKey string, queryOptions *query.QueryOptions, scopes []func(*gorm.DB) *gorm.DB) (interface{}, error) {
 	result := reflect.New(h.metadata.EntityType).Interface()
 
-	db := h.db.WithContext(ctx)
+	// Use the cache database when available, otherwise the primary database.
+	db, usingCache, release := h.readDB(ctx)
+	defer release()
 
 	if len(scopes) > 0 {
 		db = db.Scopes(scopes...)
 	}
 	baseDB := db
+	if usingCache {
+		// Expand queries may require related tables that are not present in the cache DB.
+		// Run per-parent expand lookups against the primary database.
+		baseDB = h.db.WithContext(ctx)
+		if len(scopes) > 0 {
+			baseDB = baseDB.Scopes(scopes...)
+		}
+	}
 
 	db, err := h.buildKeyQuery(db, entityKey)
 	if err != nil {
@@ -134,7 +144,7 @@ func (h *EntityHandler) fetchEntityByKey(ctx context.Context, entityKey string, 
 	}
 
 	// Apply expand (preload navigation properties) if specified
-	if len(queryOptions.Expand) > 0 {
+	if len(queryOptions.Expand) > 0 && !usingCache {
 		db = query.ApplyExpandOnly(db, queryOptions.Expand, h.metadata, h.logger)
 	}
 

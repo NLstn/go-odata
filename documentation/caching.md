@@ -66,13 +66,13 @@ service.RegisterEntity(&Category{}, odata.EntityCacheConfig{
 
 The cache is invalidated automatically whenever a write operation succeeds:
 
-| HTTP method | Operation        | Cache invalidated? |
-|-------------|------------------|--------------------|
-| `POST`      | Create entity    | ✓                  |
-| `PATCH`     | Update entity    | ✓                  |
-| `PUT`       | Replace entity   | ✓                  |
-| `DELETE`    | Delete entity    | ✓                  |
-| `GET`       | Read collection  | ✗ (read-only)      |
+| HTTP method | Operation           | Cache invalidated? |
+|-------------|---------------------|--------------------|
+| `POST`      | Create entity       | ✓                  |
+| `PATCH`     | Update entity       | ✓                  |
+| `PUT`       | Replace entity      | ✓                  |
+| `DELETE`    | Delete entity       | ✓                  |
+| `GET`       | Read (collection/key) | ✗ (read-only)    |
 
 After invalidation the very next read re-fetches the full dataset from the primary database
 and repopulates the cache.
@@ -118,6 +118,7 @@ service.RegisterEntity(&Category{}, odata.EntityCacheConfig{
 http.ListenAndServe(":8080", service)
 ```
 
-All GET requests to `/Categories` (including `$filter`, `$orderby`, `$top`, `$skip`) will
-be served from memory. POST, PATCH, PUT, and DELETE requests still reach the primary
-database and automatically refresh the cache on success.
+All GET requests to `/Categories` and `/Categories(<key>)` (including collection query
+options like `$filter`, `$orderby`, `$top`, `$skip`) are served from the local cache when
+it is warm. POST, PATCH, PUT, and DELETE requests still reach the primary database and
+invalidate the cache on success.
