@@ -15,6 +15,7 @@ Welcome to the go-odata documentation! This library implements the OData v4.01 s
 - **[Authorization](authorization.md)** - Implement role-based access control, row-level security, and per-entity authorization
 - **[Actions and Functions](actions-and-functions.md)** - Implement custom OData operations beyond standard CRUD
 - **[Advanced Features](advanced-features.md)** - Use singletons, ETags for concurrency control, lifecycle hooks, and read hooks for authorization/redaction
+- **[Caching](caching.md)** - Cache entire entity datasets in memory to reduce database round-trips for small, slowly-changing lookup tables
 - **[Geospatial Functions](geospatial.md)** - Query geographic data with geo.distance, geo.length, and geo.intersects
 
 ### Testing & Development
@@ -73,6 +74,7 @@ Leverage powerful OData v4 features:
 - **ETags**: Optimistic concurrency control for safe updates
 - **Lifecycle & Read Hooks**: Execute custom logic at specific points in entity lifecycle, add tenant filters, or redact responses before returning data
 - **Full-Text Search**: Database-native FTS for SQLite/PostgreSQL with automatic in-memory fallback on other backends
+- **Caching**: In-memory full-dataset caching with configurable TTL to reduce database load for small, read-heavy lookup tables
 - **Geospatial Functions**: Query geographic data using geo.distance, geo.length, and geo.intersects
 
 ### Testing

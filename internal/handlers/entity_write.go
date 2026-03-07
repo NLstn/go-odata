@@ -109,6 +109,9 @@ func (h *EntityHandler) handleDeleteEntity(w http.ResponseWriter, r *http.Reques
 
 	h.finalizeChangeEvents(ctx, changeEvents)
 
+	// Invalidate the entity cache so that subsequent reads reflect the deletion.
+	h.invalidateCache()
+
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -276,6 +279,9 @@ func (h *EntityHandler) handlePatchEntity(w http.ResponseWriter, r *http.Request
 	}
 
 	h.finalizeChangeEvents(ctx, changeEvents)
+
+	// Invalidate the entity cache so that subsequent reads reflect the update.
+	h.invalidateCache()
 
 	db, err := h.buildKeyQuery(h.db.WithContext(ctx), entityKey)
 	if err != nil {
@@ -446,6 +452,9 @@ func (h *EntityHandler) handlePutEntity(w http.ResponseWriter, r *http.Request, 
 	}
 
 	h.finalizeChangeEvents(ctx, changeEvents)
+
+	// Invalidate the entity cache so that subsequent reads reflect the update.
+	h.invalidateCache()
 
 	db, err := h.buildKeyQuery(h.db.WithContext(ctx), entityKey)
 	if err != nil {

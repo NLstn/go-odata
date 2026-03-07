@@ -241,7 +241,8 @@ func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.Qu
 		modifiedOptions.Top = &topPlusOne
 	}
 
-	db := h.db.WithContext(ctx)
+	// Use the in-memory cache database when available, otherwise the primary database.
+	db := h.readDB(ctx)
 	if len(scopes) > 0 {
 		db = db.Scopes(scopes...)
 	}
@@ -254,8 +255,16 @@ func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.Qu
 	// Get the table name for FTS from metadata (respects custom TableName() methods)
 	tableName := h.metadata.TableName
 
+	// When serving from cache (in-memory SQLite), the primary DB's FTS manager is not
+	// applicable. Pass nil so that the query falls back to the built-in SQLite FTS or
+	// the in-memory search implementation that is applied further below.
+	fts := h.ftsManager
+	if h.isUsingCache() {
+		fts = nil
+	}
+
 	// Apply query options with FTS support
-	db = query.ApplyQueryOptionsWithFTS(db, &modifiedOptions, h.metadata, h.ftsManager, tableName, h.logger)
+	db = query.ApplyQueryOptionsWithFTS(db, &modifiedOptions, h.metadata, fts, tableName, h.logger)
 
 	// Check if search was applied at database level
 	searchAppliedAtDB := false
