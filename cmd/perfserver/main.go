@@ -153,7 +153,7 @@ func main() {
 		*maxOpenConns, *maxIdleConns, *connMaxLifetime, *connMaxIdleTime)
 
 	// Auto-migrate the Product, ProductDescription, Category, and CompanyInfo models
-	if err := Db.AutoMigrate(&entities.Category{}, &entities.Product{}, &entities.ProductDescription{}, &entities.CompanyInfo{}, &entities.APIKey{}); err != nil {
+	if err := Db.AutoMigrate(&entities.Category{}, &entities.Product{}, &entities.ProductDescription{}, &entities.CompanyInfo{}, &entities.APIKey{}, &entities.CachedFeatureFlag{}, &entities.UncachedFeatureFlag{}); err != nil {
 		log.Fatal("Failed to migrate database:", err)
 	}
 
@@ -189,6 +189,15 @@ func main() {
 	if err := service.RegisterEntity(&entities.APIKey{}); err != nil {
 		log.Fatal("Failed to register APIKey entity:", err)
 	}
+	if err := service.RegisterEntity(&entities.CachedFeatureFlag{}, odata.EntityCacheConfig{
+		Level: odata.CacheLevelFull,
+		TTL:   10 * time.Minute,
+	}); err != nil {
+		log.Fatal("Failed to register CachedFeatureFlag entity:", err)
+	}
+	if err := service.RegisterEntity(&entities.UncachedFeatureFlag{}); err != nil {
+		log.Fatal("Failed to register UncachedFeatureFlag entity:", err)
+	}
 
 	if err := service.EnableChangeTracking("Products"); err != nil {
 		log.Fatal("Failed to enable change tracking for Products:", err)
@@ -223,6 +232,8 @@ func main() {
 	fmt.Printf("  ProductDescriptions:  http://localhost:%s/ProductDescriptions\n", *port)
 	fmt.Printf("  Company (Singleton):  http://localhost:%s/Company\n", *port)
 	fmt.Printf("  API Keys:             http://localhost:%s/APIKeys\n", *port)
+	fmt.Printf("  Cached Flags:         http://localhost:%s/CachedFeatureFlags\n", *port)
+	fmt.Printf("  Uncached Flags:       http://localhost:%s/UncachedFeatureFlags\n", *port)
 	fmt.Println()
 	fmt.Println("Performance Testing:")
 	fmt.Printf("  POST http://localhost:%s/Reseed  (Resets database to performance testing state)\n", *port)

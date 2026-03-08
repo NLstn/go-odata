@@ -47,7 +47,7 @@ type EntityHandler struct {
 	maxInClauseSize int
 	// maxExpandDepth limits the depth of nested $expand operations
 	maxExpandDepth int
-	// entityCache is the optional local SQLite cache for the full entity dataset.
+	// entityCache is the optional local in-memory SQLite cache for the full entity dataset.
 	// When non-nil and valid, collection reads are served from the cache instead
 	// of querying the primary database.
 	entityCache *cache.EntityCache
@@ -185,7 +185,7 @@ func (h *EntityHandler) SetMaxExpandDepth(depth int) {
 	h.maxExpandDepth = depth
 }
 
-// SetEntityCache attaches a local SQLite cache to this handler.
+// SetEntityCache attaches a local in-memory SQLite cache to this handler.
 // When the cache is warm, collection reads are served from it instead of the
 // primary database. Pass nil to disable caching.
 func (h *EntityHandler) SetEntityCache(c *cache.EntityCache) {

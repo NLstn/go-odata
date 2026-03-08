@@ -8,7 +8,7 @@ primary database for frequently-read, slowly-changing datasets.
 | Level               | Behaviour                                                           |
 |---------------------|---------------------------------------------------------------------|
 | `CacheLevelNone`    | No caching (default). Every read queries the primary database.       |
-| `CacheLevelFull`    | The entire entity dataset is loaded into a local file-based SQLite store (per service instance/replica). Reads are served from that store until the TTL expires or a write operation invalidates the cache. |
+| `CacheLevelFull`    | The entire entity dataset is loaded into a local in-memory SQLite store (per service instance/replica). Reads are served from that store until the TTL expires or a write operation invalidates the cache. |
 
 ## When to Use Full Caching
 
@@ -88,8 +88,8 @@ navigation targets that are not present in the cache still resolve correctly.
 ## How It Works
 
 1. On the first collection read after caching is enabled (or after invalidation / TTL
-   expiry), go-odata loads all rows for the entity from the primary database and stores
-    them in a private file-based SQLite cache local to that replica.
+    expiry), go-odata loads all rows for the entity from the primary database and stores
+    them in a private in-memory SQLite cache local to that replica.
 2. Subsequent reads are routed to this local cache until the TTL expires or a write
    invalidates the cache.
 3. The cache is scoped to a single entity set — enabling caching for one entity has no
