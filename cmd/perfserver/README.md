@@ -90,6 +90,8 @@ The API key dataset is deliberately write-heavy to highlight server-managed key 
 - `GET /ProductDescriptions` - Product description list
 - `GET /Company` - Company info singleton
 - `GET /APIKeys` - API key list with server-generated identifiers
+- `GET /CachedFeatureFlags` - Feature flags with full-dataset entity caching enabled
+- `GET /UncachedFeatureFlags` - Feature flags without entity caching (primary DB reads)
 
 ### Performance Testing
 - `POST /Reseed` - Reset database to extensive performance testing state
@@ -132,6 +134,9 @@ Use the included load testing script to run comprehensive performance tests:
 
 # With SQL tracing
 ./run_load_tests.sh --sql-trace
+
+# Validate cached vs uncached feature flag speedup (default threshold: 1.50x)
+./run_load_tests.sh --feature-flag-threshold 1.50
 
 # Use external/already running server
 ./run_load_tests.sh --external-server

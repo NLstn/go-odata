@@ -25,6 +25,7 @@ DB_DSN=""                  # Optional; for postgres defaults if empty
 EXTERNAL_SERVER=0          # Don't start/stop server automatically
 ENABLE_CPU_PROFILE=0       # Enable CPU profiling
 ENABLE_SQL_TRACE=0         # Enable SQL query tracing
+FEATURE_FLAG_SPEEDUP_THRESHOLD="1.50"  # Cached must be at least this many times faster
 
 # Connection pooling settings
 MAX_OPEN_CONNS=25          # Maximum number of open database connections
@@ -156,6 +157,62 @@ run_test() {
         echo -e "${RED}wrk not found. Please install wrk to run load tests.${NC}\n"
         exit 1
     fi
+}
+
+warm_cached_feature_flags() {
+    local warmup_url="${SERVER_URL}/CachedFeatureFlags?\$filter=Environment%20eq%20'prod'%20and%20Enabled%20eq%20true&\$orderby=RolloutPercentage%20desc&\$top=200"
+    echo -e "${YELLOW}Warming cache for CachedFeatureFlags...${NC}"
+    if ! curl -s -f "$warmup_url" > /dev/null; then
+        echo -e "${RED}✗ Failed to warm cache for CachedFeatureFlags${NC}"
+        return 1
+    fi
+    echo -e "${GREEN}✓ Cache warmed${NC}"
+    return 0
+}
+
+extract_requests_per_sec() {
+    local wrk_file="$1"
+    awk '/Requests\/sec:/ {print $2}' "$wrk_file" | tail -n 1
+}
+
+compare_feature_flag_results() {
+    local cached_file="$OUTPUT_DIR/wrk_feature_flags_cached.txt"
+    local uncached_file="$OUTPUT_DIR/wrk_feature_flags_uncached.txt"
+
+    if [ ! -f "$cached_file" ] || [ ! -f "$uncached_file" ]; then
+        echo -e "${YELLOW}⚠ Feature flag benchmark files missing, skipping comparison${NC}"
+        return 0
+    fi
+
+    local cached_rps
+    local uncached_rps
+    cached_rps=$(extract_requests_per_sec "$cached_file")
+    uncached_rps=$(extract_requests_per_sec "$uncached_file")
+
+    if [ -z "$cached_rps" ] || [ -z "$uncached_rps" ]; then
+        echo -e "${YELLOW}⚠ Could not parse Requests/sec from wrk outputs${NC}"
+        return 0
+    fi
+
+    local speedup
+    speedup=$(awk -v c="$cached_rps" -v u="$uncached_rps" 'BEGIN { if (u <= 0) { print 0 } else { printf "%.2f", c/u } }')
+
+    {
+        echo ""
+        echo "Feature Flag Benchmark Comparison"
+        echo "  CachedFeatureFlags RPS:   $cached_rps"
+        echo "  UncachedFeatureFlags RPS: $uncached_rps"
+        echo "  Speedup (cached/uncached): ${speedup}x"
+        echo "  Required speedup: ${FEATURE_FLAG_SPEEDUP_THRESHOLD}x"
+    } | tee -a "$OUTPUT_DIR/summary.txt"
+
+    if awk -v s="$speedup" -v t="$FEATURE_FLAG_SPEEDUP_THRESHOLD" 'BEGIN { exit !(s >= t) }'; then
+        echo -e "${GREEN}✓ Validation passed: cached feature flags are much faster (${speedup}x >= ${FEATURE_FLAG_SPEEDUP_THRESHOLD}x)${NC}"
+        return 0
+    fi
+
+    echo -e "${RED}✗ Validation failed: cached feature flags are not much faster (${speedup}x < ${FEATURE_FLAG_SPEEDUP_THRESHOLD}x)${NC}"
+    return 1
 }
 
 # Function to check if server is running
@@ -326,6 +383,15 @@ main() {
     # Test 3: Simple Entity Collection
     print_header "Test 3: Categories (Simple Collection)"
     run_test "categories" "${SERVER_URL}/Categories"
+
+    # Test 3b: Cached feature flags benchmark
+    print_header "Test 3b: Cached Feature Flags"
+    warm_cached_feature_flags
+    run_test "feature_flags_cached" "${SERVER_URL}/CachedFeatureFlags?\$filter=Environment%20eq%20'prod'%20and%20Enabled%20eq%20true&\$orderby=RolloutPercentage%20desc&\$top=200"
+
+    # Test 3c: Uncached feature flags benchmark
+    print_header "Test 3c: Uncached Feature Flags"
+    run_test "feature_flags_uncached" "${SERVER_URL}/UncachedFeatureFlags?\$filter=Environment%20eq%20'prod'%20and%20Enabled%20eq%20true&\$orderby=RolloutPercentage%20desc&\$top=200"
     
     # Test 4: Products with Pagination (Realistic Query)
     print_header "Test 4: Products with Top 100 (Realistic Page Size)"
@@ -381,6 +447,8 @@ main() {
     
     echo "Test completed at: $(date)" >> "$OUTPUT_DIR/summary.txt"
     echo "Total duration: ${DURATION} seconds" >> "$OUTPUT_DIR/summary.txt"
+
+    compare_feature_flag_results
     
     display_summary
     
@@ -406,6 +474,8 @@ OPTIONS:
     --external-server      Use an external server (don't start/stop the perfserver)
     --cpu-profile          Enable CPU profiling (saves to OUTPUT_DIR/cpu.prof)
     --sql-trace            Enable SQL query tracing (saves to OUTPUT_DIR/sql-trace.txt)
+    --feature-flag-threshold NUM
+                           Minimum cached/uncached speedup ratio for validation (default: 1.50)
 
     Connection Pooling:
     --max-open-conns NUM    Maximum open database connections (default: 25)
@@ -490,6 +560,10 @@ while [[ $# -gt 0 ]]; do
         --sql-trace)
             ENABLE_SQL_TRACE=1
             shift
+            ;;
+        --feature-flag-threshold)
+            FEATURE_FLAG_SPEEDUP_THRESHOLD="$2"
+            shift 2
             ;;
         --max-open-conns)
             MAX_OPEN_CONNS="$2"

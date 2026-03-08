@@ -19,7 +19,7 @@ func seedDatabase(db *gorm.DB, extensive bool) error {
 	dialectName := db.Name()
 
 	// Drop all tables (GORM handles the correct order based on foreign keys)
-	if err := db.Migrator().DropTable(&entities.ProductDescription{}, &entities.Product{}, &entities.Category{}, &entities.CompanyInfo{}, &entities.APIKey{}); err != nil {
+	if err := db.Migrator().DropTable(&entities.ProductDescription{}, &entities.Product{}, &entities.Category{}, &entities.CompanyInfo{}, &entities.APIKey{}, &entities.CachedFeatureFlag{}, &entities.UncachedFeatureFlag{}); err != nil {
 		return fmt.Errorf("failed to drop tables: %w", err)
 	}
 
@@ -29,7 +29,7 @@ func seedDatabase(db *gorm.DB, extensive bool) error {
 	if dialectName == "postgres" {
 		// List of table names that need sequence resets (tables with auto-increment primary keys)
 		// Excludes tables with composite keys (product_descriptions) or UUID keys (api_keys)
-		tables := []string{"categories", "products", "company_infos"}
+		tables := []string{"categories", "products", "company_infos", "cached_feature_flags", "uncached_feature_flags"}
 		for _, table := range tables {
 			// PostgreSQL convention: sequence name is table_column_seq
 			// GORM uses lowercase table names and "id" for primary key columns by default
@@ -42,7 +42,7 @@ func seedDatabase(db *gorm.DB, extensive bool) error {
 	}
 
 	// Recreate tables with fresh schema (auto-increment counters are automatically reset)
-	if err := db.AutoMigrate(&entities.Category{}, &entities.Product{}, &entities.ProductDescription{}, &entities.CompanyInfo{}, &entities.APIKey{}); err != nil {
+	if err := db.AutoMigrate(&entities.Category{}, &entities.Product{}, &entities.ProductDescription{}, &entities.CompanyInfo{}, &entities.APIKey{}, &entities.CachedFeatureFlag{}, &entities.UncachedFeatureFlag{}); err != nil {
 		return fmt.Errorf("failed to migrate database: %w", err)
 	}
 
@@ -114,6 +114,35 @@ func seedDatabase(db *gorm.DB, extensive bool) error {
 		return fmt.Errorf("failed to seed API keys: %w", err)
 	}
 
+	featureFlagCount := 100
+	if extensive {
+		featureFlagCount = 50000
+	}
+
+	cachedFeatureFlags := entities.GenerateCachedFeatureFlags(featureFlagCount)
+	for i := 0; i < len(cachedFeatureFlags); i += batchSize {
+		end := i + batchSize
+		if end > len(cachedFeatureFlags) {
+			end = len(cachedFeatureFlags)
+		}
+		batch := cachedFeatureFlags[i:end]
+		if err := db.Create(&batch).Error; err != nil {
+			return fmt.Errorf("failed to seed cached feature flags batch %d-%d: %w", i, end, err)
+		}
+	}
+
+	uncachedFeatureFlags := entities.GenerateUncachedFeatureFlags(featureFlagCount)
+	for i := 0; i < len(uncachedFeatureFlags); i += batchSize {
+		end := i + batchSize
+		if end > len(uncachedFeatureFlags) {
+			end = len(uncachedFeatureFlags)
+		}
+		batch := uncachedFeatureFlags[i:end]
+		if err := db.Create(&batch).Error; err != nil {
+			return fmt.Errorf("failed to seed uncached feature flags batch %d-%d: %w", i, end, err)
+		}
+	}
+
 	// For PostgreSQL, reset sequence values to match the max ID in each table
 	// This ensures that the next auto-generated ID doesn't conflict with existing IDs
 	// Only reset sequences for tables that have auto-increment integer primary keys
@@ -124,9 +153,11 @@ func seedDatabase(db *gorm.DB, extensive bool) error {
 			sequence string
 			column   string
 		}{
-			"categories":    {sequence: "categories_id_seq", column: "id"},
-			"products":      {sequence: "products_id_seq", column: "id"},
-			"company_infos": {sequence: "company_infos_id_seq", column: "id"},
+			"categories":             {sequence: "categories_id_seq", column: "id"},
+			"products":               {sequence: "products_id_seq", column: "id"},
+			"company_infos":          {sequence: "company_infos_id_seq", column: "id"},
+			"cached_feature_flags":   {sequence: "cached_feature_flags_id_seq", column: "id"},
+			"uncached_feature_flags": {sequence: "uncached_feature_flags_id_seq", column: "id"},
 		}
 
 		for table, info := range sequenceResets {
@@ -142,8 +173,8 @@ func seedDatabase(db *gorm.DB, extensive bool) error {
 		}
 	}
 
-	fmt.Printf("Database seeded with %d categories, %d products, %d descriptions, %d API keys, and company info\n",
-		len(sampleCategories), len(sampleProducts), len(sampleDescriptions), len(apiKeys))
+	fmt.Printf("Database seeded with %d categories, %d products, %d descriptions, %d API keys, %d cached flags, %d uncached flags, and company info\n",
+		len(sampleCategories), len(sampleProducts), len(sampleDescriptions), len(apiKeys), len(cachedFeatureFlags), len(uncachedFeatureFlags))
 	return nil
 }
 
