@@ -1,16 +1,16 @@
 // Module github.com/nlstn/go-odata implements the OData v4.01 specification.
 module github.com/nlstn/go-odata
 
-go 1.24.0
+go 1.25.0
 
 require (
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/google/uuid v1.6.0
 	github.com/mitchellh/go-server-timing v1.0.1
 	github.com/shopspring/decimal v1.4.0
-	go.opentelemetry.io/otel v1.41.0
-	go.opentelemetry.io/otel/metric v1.41.0
-	go.opentelemetry.io/otel/trace v1.41.0
+	go.opentelemetry.io/otel v1.42.0
+	go.opentelemetry.io/otel/metric v1.42.0
+	go.opentelemetry.io/otel/trace v1.42.0
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/driver/sqlite v1.6.0
 	gorm.io/gorm v1.31.1
