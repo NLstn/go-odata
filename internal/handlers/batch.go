@@ -436,6 +436,9 @@ func (h *BatchHandler) executeRequestInTransaction(req *batchRequest, tx *gorm.D
 		if handler.entitiesMetadata != nil {
 			txHandler.SetEntitiesMetadata(handler.entitiesMetadata)
 		}
+		if handler.keyGeneratorResolver != nil {
+			txHandler.SetKeyGeneratorResolver(handler.keyGeneratorResolver)
+		}
 		txHandlers[name] = txHandler
 	}
 
