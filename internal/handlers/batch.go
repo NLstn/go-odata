@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/textproto"
+	"net/url"
 	"strings"
 	"time"
 
@@ -240,6 +241,12 @@ func (h *BatchHandler) processChangeset(r io.Reader, boundary string, remainingC
 
 	pendingEvents := make([]pendingChangeEvent, 0)
 
+	// contentIDLocations maps a Content-ID value to the URL path of the entity created by
+	// that request. This enables $<contentID> URL referencing per OData v4 spec §11.4.9.3:
+	// subsequent requests in the same changeset may use "$<contentID>" as a URL prefix to
+	// refer to the entity created by the request bearing that Content-ID.
+	contentIDLocations := make(map[string]string)
+
 	var hasError bool
 	var sizeExceeded bool
 	for {
@@ -274,10 +281,23 @@ func (h *BatchHandler) processChangeset(r io.Reader, boundary string, remainingC
 
 		req.ContentID = contentID
 
+		// Resolve any $<contentID> URL reference before dispatching the request.
+		// Per OData v4 spec §11.4.9.3, a request may use "$<contentID>" as a prefix in
+		// its URL to refer to the entity created by the earlier request with that Content-ID.
+		req.URL = resolveContentIDReference(req.URL, contentIDLocations)
+
 		// Execute request within transaction
 		resp := h.executeRequestInTransaction(req, tx, &pendingEvents, parentReq)
 		resp.ContentID = req.ContentID // Echo Content-ID in response
 		responses = append(responses, resp)
+
+		// If the request succeeded and carried a Content-ID, record the Location of the
+		// newly created entity so subsequent requests can reference it via $<contentID>.
+		if contentID != "" && resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			if location := resp.Headers.Get("Location"); location != "" {
+				contentIDLocations[contentID] = extractLocationPath(location)
+			}
+		}
 
 		// If any request fails, mark as error
 		if resp.StatusCode >= 400 {
@@ -761,6 +781,45 @@ func (h *BatchHandler) writeBatchResponse(w http.ResponseWriter, responses []bat
 	if _, err := fmt.Fprintf(w, "--%s--\r\n", boundary); err != nil {
 		h.logger.Error("Error writing final boundary", "error", err)
 	}
+}
+
+// resolveContentIDReference replaces a leading $<contentID> token in rawURL with the
+// corresponding entity path recorded in contentIDLocations.
+//
+// Per OData v4 spec §11.4.9.3, within a changeset a request may use "$<contentID>" as a
+// URL prefix to refer to the resource created by the earlier request that bore that
+// Content-ID header. Examples:
+//
+//	"$1"               →  "/Products(9)"
+//	"/$1"              →  "/Products(9)"
+//	"$1/Descriptions"  →  "/Products(9)/Descriptions"
+//	"/$1/Descriptions" →  "/Products(9)/Descriptions"
+func resolveContentIDReference(rawURL string, contentIDLocations map[string]string) string {
+	// Strip an optional leading slash so we always work with "$<id>…" form.
+	stripped := strings.TrimPrefix(rawURL, "/")
+	if !strings.HasPrefix(stripped, "$") {
+		return rawURL
+	}
+
+	for id, locPath := range contentIDLocations {
+		prefix := "$" + id
+		// Match exactly "$<id>" or "$<id>/" to avoid "$10" matching "$1".
+		if stripped == prefix || strings.HasPrefix(stripped, prefix+"/") {
+			suffix := stripped[len(prefix):]
+			return locPath + suffix
+		}
+	}
+
+	return rawURL
+}
+
+// extractLocationPath returns the path component of an absolute or relative URL.
+// If the input cannot be parsed as a URL, it is returned unchanged.
+func extractLocationPath(rawURL string) string {
+	if parsed, err := url.Parse(rawURL); err == nil && parsed.Path != "" {
+		return parsed.Path
+	}
+	return rawURL
 }
 
 // generateBoundary generates a random boundary string

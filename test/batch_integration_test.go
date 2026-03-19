@@ -1691,3 +1691,281 @@ Accept: application/json
 		t.Errorf("Expected 2 successful HTTP responses, got %d. Body: %s", successCount, responseBody)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Content-ID URL referencing integration tests (OData v4 spec §11.4.9.3)
+// ---------------------------------------------------------------------------
+
+func setupBatchContentIDIntegrationTest(t *testing.T) (*odata.Service, *gorm.DB) {
+	t.Helper()
+
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("Failed to connect to database: %v", err)
+	}
+
+	if err := db.AutoMigrate(&BatchIntegrationCustomer{}, &BatchIntegrationOrder{}); err != nil {
+		t.Fatalf("Failed to migrate database: %v", err)
+	}
+
+	service, err := odata.NewService(db)
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
+	if err := service.RegisterEntity(&BatchIntegrationCustomer{}); err != nil {
+		t.Fatalf("Failed to register customer entity: %v", err)
+	}
+	if err := service.RegisterEntity(&BatchIntegrationOrder{}); err != nil {
+		t.Fatalf("Failed to register order entity: %v", err)
+	}
+
+	return service, db
+}
+
+// TestBatchIntegration_ContentIDURLReference_CreateThenUpdate verifies that within a
+// changeset a newly created entity can be updated in the same batch using the
+// "$<contentID>" URL reference (OData v4 spec §11.4.9.3).
+func TestBatchIntegration_ContentIDURLReference_CreateThenUpdate(t *testing.T) {
+	service, db := setupBatchContentIDIntegrationTest(t)
+
+	batchBoundary := "batch_cid_int"
+	changesetBoundary := "changeset_cid_int"
+	body := fmt.Sprintf(`--%s
+Content-Type: multipart/mixed; boundary=%s
+
+--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+Content-ID: 1
+
+POST /BatchIntegrationCustomers HTTP/1.1
+Content-Type: application/json
+
+{"Name":"Contoso"}
+
+--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+Content-ID: 2
+
+PATCH /$1 HTTP/1.1
+Content-Type: application/json
+
+{"Name":"Contoso Updated"}
+
+--%s--
+
+--%s--
+`, batchBoundary, changesetBoundary,
+		changesetBoundary, changesetBoundary, changesetBoundary,
+		batchBoundary)
+
+	req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+	req.Header.Set("Content-Type", fmt.Sprintf("multipart/mixed; boundary=%s", batchBoundary))
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Status = %v, want 200. Body: %s", w.Code, w.Body.String())
+	}
+
+	respBody := w.Body.String()
+	if !strings.Contains(respBody, "HTTP/1.1 201") {
+		t.Errorf("expected 201 Created for POST; body:\n%s", respBody)
+	}
+	if !strings.Contains(respBody, "HTTP/1.1 200") && !strings.Contains(respBody, "HTTP/1.1 204") {
+		t.Errorf("expected 200/204 for PATCH via $1; body:\n%s", respBody)
+	}
+
+	var customers []BatchIntegrationCustomer
+	db.Find(&customers)
+	if len(customers) != 1 {
+		t.Fatalf("expected 1 customer, got %d", len(customers))
+	}
+	if customers[0].Name != "Contoso Updated" {
+		t.Errorf("customer Name = %q, want %q", customers[0].Name, "Contoso Updated")
+	}
+}
+
+// TestBatchIntegration_ContentIDURLReference_CreateCustomerAndLinkExistingOrder verifies
+// the canonical use-case: create a customer in a changeset (Content-ID: 1), then link a
+// pre-existing order to that new customer using "POST /$1/Orders/$ref".
+// This demonstrates $<contentID> URL-path resolution; the @odata.id in the body uses the
+// known URL of the pre-existing order.
+func TestBatchIntegration_ContentIDURLReference_CreateCustomerAndLinkExistingOrder(t *testing.T) {
+	service, db := setupBatchContentIDIntegrationTest(t)
+
+	// Pre-create an order with a known ID so we can reference it by URL in the $ref body.
+	existingOrder := BatchIntegrationOrder{ID: 42, Amount: 99.0}
+	if err := db.Create(&existingOrder).Error; err != nil {
+		t.Fatalf("failed to create pre-existing order: %v", err)
+	}
+
+	batchBoundary := "batch_ref_int"
+	changesetBoundary := "changeset_ref_int"
+	body := fmt.Sprintf(`--%s
+Content-Type: multipart/mixed; boundary=%s
+
+--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+Content-ID: 1
+
+POST /BatchIntegrationCustomers HTTP/1.1
+Content-Type: application/json
+
+{"Name":"ACME Corp"}
+
+--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+Content-ID: 2
+
+POST /$1/Orders/$ref HTTP/1.1
+Content-Type: application/json
+
+{"@odata.id":"/BatchIntegrationOrders(42)"}
+
+--%s--
+
+--%s--
+`, batchBoundary, changesetBoundary,
+		changesetBoundary, changesetBoundary, changesetBoundary,
+		batchBoundary)
+
+	req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+	req.Header.Set("Content-Type", fmt.Sprintf("multipart/mixed; boundary=%s", batchBoundary))
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Status = %v, want 200. Body: %s", w.Code, w.Body.String())
+	}
+
+	respBody := w.Body.String()
+
+	if !strings.Contains(respBody, "HTTP/1.1 201") {
+		t.Errorf("expected 201 Created for customer; body:\n%s", respBody)
+	}
+	if !strings.Contains(respBody, "HTTP/1.1 204") {
+		t.Errorf("expected 204 No Content for $ref link via $1; body:\n%s", respBody)
+	}
+
+	// Verify the order is now linked to the newly-created customer.
+	var customers []BatchIntegrationCustomer
+	db.Preload("Orders").Find(&customers)
+	if len(customers) != 1 {
+		t.Fatalf("expected 1 customer, got %d", len(customers))
+	}
+	if len(customers[0].Orders) != 1 {
+		t.Errorf("expected 1 order linked to customer, got %d", len(customers[0].Orders))
+	}
+	if customers[0].Orders[0].ID != 42 {
+		t.Errorf("linked order ID = %d, want 42", customers[0].Orders[0].ID)
+	}
+}
+
+// TestBatchIntegration_ContentIDURLReference_ReadBackCreatedEntity verifies that a GET
+// using "$<contentID>" returns the entity created in the same changeset.
+func TestBatchIntegration_ContentIDURLReference_ReadBackCreatedEntity(t *testing.T) {
+	service, _ := setupBatchContentIDIntegrationTest(t)
+
+	batchBoundary := "batch_read_int"
+	changesetBoundary := "changeset_read_int"
+	body := fmt.Sprintf(`--%s
+Content-Type: multipart/mixed; boundary=%s
+
+--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+Content-ID: 1
+
+POST /BatchIntegrationCustomers HTTP/1.1
+Content-Type: application/json
+
+{"Name":"ReadBack Corp"}
+
+--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+Content-ID: 2
+
+GET /$1 HTTP/1.1
+
+
+--%s--
+
+--%s--
+`, batchBoundary, changesetBoundary,
+		changesetBoundary, changesetBoundary, changesetBoundary,
+		batchBoundary)
+
+	req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+	req.Header.Set("Content-Type", fmt.Sprintf("multipart/mixed; boundary=%s", batchBoundary))
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Status = %v, want 200. Body: %s", w.Code, w.Body.String())
+	}
+
+	if !strings.Contains(w.Body.String(), "ReadBack Corp") {
+		t.Errorf("GET via $1 did not return the created entity; body:\n%s", w.Body.String())
+	}
+}
+
+// TestBatchIntegration_ContentIDURLReference_RollbackOnError verifies that when a
+// $<contentID>-referencing request fails the entire changeset is rolled back.
+func TestBatchIntegration_ContentIDURLReference_RollbackOnError(t *testing.T) {
+	service, db := setupBatchContentIDIntegrationTest(t)
+
+	batchBoundary := "batch_rb_int"
+	changesetBoundary := "changeset_rb_int"
+	body := fmt.Sprintf(`--%s
+Content-Type: multipart/mixed; boundary=%s
+
+--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+Content-ID: 1
+
+POST /BatchIntegrationCustomers HTTP/1.1
+Content-Type: application/json
+
+{"Name":"RollbackCustomer"}
+
+--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+Content-ID: 2
+
+DELETE /$99 HTTP/1.1
+
+
+--%s--
+
+--%s--
+`, batchBoundary, changesetBoundary,
+		changesetBoundary, changesetBoundary, changesetBoundary,
+		batchBoundary)
+
+	req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+	req.Header.Set("Content-Type", fmt.Sprintf("multipart/mixed; boundary=%s", batchBoundary))
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Status = %v, want 200. Body: %s", w.Code, w.Body.String())
+	}
+
+	// $99 is unknown → the changeset must be rolled back, no customer in the DB.
+	var count int64
+	db.Model(&BatchIntegrationCustomer{}).Count(&count)
+	if count != 0 {
+		t.Errorf("expected changeset rollback (0 customers), got %d", count)
+	}
+}

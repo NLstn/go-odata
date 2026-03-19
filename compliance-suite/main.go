@@ -608,6 +608,11 @@ func main() {
 			Suite:   v4_0.BatchErrorHandling,
 		})
 		testSuites = append(testSuites, TestSuiteInfo{
+			Name:    "11.4.9.3_batch_content_id_referencing",
+			Version: "4.0",
+			Suite:   v4_0.BatchContentIDReferencing,
+		})
+		testSuites = append(testSuites, TestSuiteInfo{
 			Name:    "11.4.10_asynchronous_requests",
 			Version: "4.0",
 			Suite:   v4_0.AsynchronousRequests,
