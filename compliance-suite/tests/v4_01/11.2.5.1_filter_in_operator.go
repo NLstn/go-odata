@@ -18,9 +18,9 @@ func InOperator() *framework.TestSuite {
 
 	suite.AddTest(
 		"test_filter_in_string_membership",
-		"String membership: Name in ('Laptop','Chair') returns only matching entities",
+		"String membership: Name in ('Laptop','Wireless Mouse') returns only matching entities",
 		func(ctx *framework.TestContext) error {
-			resp, err := ctx.GET("/Products?$filter=Name in ('Laptop','Chair')")
+			resp, err := ctx.GET("/Products?$filter=Name in ('Laptop','Wireless Mouse')")
 			if err != nil {
 				return err
 			}
@@ -34,7 +34,7 @@ func InOperator() *framework.TestSuite {
 				return err
 			}
 
-			allowed := map[string]struct{}{"Laptop": {}, "Chair": {}}
+			allowed := map[string]struct{}{"Laptop": {}, "Wireless Mouse": {}}
 			for i, entity := range entities {
 				name, ok := entity["Name"].(string)
 				if !ok {
@@ -51,9 +51,9 @@ func InOperator() *framework.TestSuite {
 
 	suite.AddTest(
 		"test_filter_in_numeric_membership",
-		"Numeric membership: ID in (1,2,3) returns only matching entities",
+		"Numeric membership: Price in (29.99, 15.50) returns only matching entities",
 		func(ctx *framework.TestContext) error {
-			resp, err := ctx.GET("/Products?$filter=ID in (1,2,3)")
+			resp, err := ctx.GET("/Products?$filter=Price in (29.99,15.50)")
 			if err != nil {
 				return err
 			}
@@ -67,14 +67,14 @@ func InOperator() *framework.TestSuite {
 				return err
 			}
 
-			allowed := map[int]struct{}{1: {}, 2: {}, 3: {}}
+			allowedPrices := map[float64]struct{}{29.99: {}, 15.50: {}}
 			for i, entity := range entities {
-				id, err := intField(entity, "ID")
+				price, err := floatField(entity, "Price")
 				if err != nil {
 					return framework.NewError(fmt.Sprintf("entity %d: %v", i, err))
 				}
-				if _, exists := allowed[id]; !exists {
-					return framework.NewError(fmt.Sprintf("entity %d has ID=%d not in expected set", i, id))
+				if _, exists := allowedPrices[price]; !exists {
+					return framework.NewError(fmt.Sprintf("entity %d has Price=%f not in expected set", i, price))
 				}
 			}
 
@@ -84,9 +84,9 @@ func InOperator() *framework.TestSuite {
 
 	suite.AddTest(
 		"test_filter_in_with_combined_expression",
-		"Combined expression: Price gt 10 and ID in (...) enforces both predicates",
+		"Combined expression: Name in ('Laptop','Wireless Mouse') and Price gt 20 enforces both predicates",
 		func(ctx *framework.TestContext) error {
-			resp, err := ctx.GET("/Products?$filter=Price gt 10 and ID in (1,2,3,4,5)")
+			resp, err := ctx.GET("/Products?$filter=Name in ('Laptop','Wireless Mouse') and Price gt 20")
 			if err != nil {
 				return err
 			}
@@ -100,22 +100,22 @@ func InOperator() *framework.TestSuite {
 				return err
 			}
 
-			allowedIDs := map[int]struct{}{1: {}, 2: {}, 3: {}, 4: {}, 5: {}}
+			allowedNames := map[string]struct{}{"Laptop": {}, "Wireless Mouse": {}}
 			for i, entity := range entities {
-				id, err := intField(entity, "ID")
-				if err != nil {
-					return framework.NewError(fmt.Sprintf("entity %d: %v", i, err))
+				name, ok := entity["Name"].(string)
+				if !ok {
+					return framework.NewError(fmt.Sprintf("entity %d missing string Name field", i))
 				}
-				if _, exists := allowedIDs[id]; !exists {
-					return framework.NewError(fmt.Sprintf("entity %d has ID=%d not in expected set", i, id))
+				if _, exists := allowedNames[name]; !exists {
+					return framework.NewError(fmt.Sprintf("entity %d has Name=%q not in expected set", i, name))
 				}
 
 				price, err := floatField(entity, "Price")
 				if err != nil {
 					return framework.NewError(fmt.Sprintf("entity %d: %v", i, err))
 				}
-				if price <= 10 {
-					return framework.NewError(fmt.Sprintf("entity %d has Price=%v, expected > 10", i, price))
+				if price <= 20 {
+					return framework.NewError(fmt.Sprintf("entity %d has Price=%v, expected > 20", i, price))
 				}
 			}
 
@@ -140,7 +140,7 @@ func InOperator() *framework.TestSuite {
 		"test_filter_in_type_mismatch_numeric_in_string",
 		"Type mismatch: numeric property compared to string list returns 400",
 		func(ctx *framework.TestContext) error {
-			resp, err := ctx.GET("/Products?$filter=ID in ('1','2')")
+			resp, err := ctx.GET("/Products?$filter=Price in ('expensive','cheap')")
 			if err != nil {
 				return err
 			}
@@ -153,7 +153,7 @@ func InOperator() *framework.TestSuite {
 		"test_filter_in_malformed_missing_parentheses",
 		"Malformed list syntax (missing parentheses) returns 400",
 		func(ctx *framework.TestContext) error {
-			resp, err := ctx.GET("/Products?$filter=ID in 1,2,3")
+			resp, err := ctx.GET("/Products?$filter=Name in 'Laptop','Wireless Mouse'")
 			if err != nil {
 				return err
 			}
@@ -166,7 +166,7 @@ func InOperator() *framework.TestSuite {
 		"test_filter_in_malformed_missing_comma",
 		"Malformed list syntax (missing comma) returns 400",
 		func(ctx *framework.TestContext) error {
-			resp, err := ctx.GET("/Products?$filter=ID in (1 2,3)")
+			resp, err := ctx.GET("/Products?$filter=Name in ('Laptop' 'Wireless Mouse')")
 			if err != nil {
 				return err
 			}
