@@ -556,3 +556,111 @@ func ContainsAny(s string, substrs ...string) bool {
 	}
 	return false
 }
+
+// ParseEntityCollection parses a JSON response and returns the top-level OData "value" collection.
+func (c *TestContext) ParseEntityCollection(resp *HTTPResponse) ([]map[string]interface{}, error) {
+	var payload map[string]interface{}
+	if err := json.Unmarshal(resp.Body, &payload); err != nil {
+		return nil, fmt.Errorf("failed to parse JSON response: %w", err)
+	}
+
+	rawValue, ok := payload["value"]
+	if !ok {
+		return nil, fmt.Errorf("response missing 'value' collection")
+	}
+
+	rawItems, ok := rawValue.([]interface{})
+	if !ok {
+		return nil, fmt.Errorf("response 'value' is not an array")
+	}
+
+	items := make([]map[string]interface{}, 0, len(rawItems))
+	for i, raw := range rawItems {
+		entity, ok := raw.(map[string]interface{})
+		if !ok {
+			return nil, fmt.Errorf("response item %d is not an object", i)
+		}
+		items = append(items, entity)
+	}
+
+	return items, nil
+}
+
+// AssertMinCollectionSize ensures a collection has at least min items.
+func (c *TestContext) AssertMinCollectionSize(items []map[string]interface{}, min int) error {
+	if len(items) < min {
+		return fmt.Errorf("expected at least %d item(s), got %d", min, len(items))
+	}
+	return nil
+}
+
+// AssertEntityHasFields ensures all required fields are present on an entity.
+func (c *TestContext) AssertEntityHasFields(entity map[string]interface{}, requiredFields ...string) error {
+	for _, field := range requiredFields {
+		if _, ok := entity[field]; !ok {
+			return fmt.Errorf("required field %q is missing", field)
+		}
+	}
+	return nil
+}
+
+// AssertEntityOnlyAllowedFields ensures entity fields are in the provided allow-list.
+func (c *TestContext) AssertEntityOnlyAllowedFields(entity map[string]interface{}, allowedFields ...string) error {
+	allowed := make(map[string]struct{}, len(allowedFields))
+	for _, field := range allowedFields {
+		allowed[field] = struct{}{}
+	}
+
+	for key := range entity {
+		if _, ok := allowed[key]; !ok {
+			return fmt.Errorf("field %q is not allowed in this response", key)
+		}
+	}
+
+	return nil
+}
+
+// AssertAllEntitiesSatisfy checks a predicate against every entity in a collection.
+func (c *TestContext) AssertAllEntitiesSatisfy(
+	items []map[string]interface{},
+	description string,
+	predicate func(entity map[string]interface{}) (bool, string),
+) error {
+	for i, entity := range items {
+		ok, reason := predicate(entity)
+		if !ok {
+			if reason == "" {
+				reason = "predicate returned false"
+			}
+			return fmt.Errorf("entity at index %d does not satisfy %s: %s", i, description, reason)
+		}
+	}
+	return nil
+}
+
+// AssertEntitiesSortedByFloat checks ascending/descending ordering by a float field.
+func (c *TestContext) AssertEntitiesSortedByFloat(items []map[string]interface{}, field string, ascending bool) error {
+	if len(items) < 2 {
+		return nil
+	}
+
+	for i := 1; i < len(items); i++ {
+		prev, ok := items[i-1][field].(float64)
+		if !ok {
+			return fmt.Errorf("item %d field %q is missing or not numeric", i-1, field)
+		}
+		curr, ok := items[i][field].(float64)
+		if !ok {
+			return fmt.Errorf("item %d field %q is missing or not numeric", i, field)
+		}
+
+		if ascending && curr < prev {
+			return fmt.Errorf("items not sorted ascending by %q at index %d: %.6f < %.6f", field, i, curr, prev)
+		}
+		if !ascending && curr > prev {
+			return fmt.Errorf("items not sorted descending by %q at index %d: %.6f > %.6f", field, i, curr, prev)
+		}
+	}
+
+	return nil
+}

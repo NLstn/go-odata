@@ -1,7 +1,6 @@
 package v4_0
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/url"
 
@@ -18,26 +17,7 @@ func fetchLogicalOperatorItems(ctx *framework.TestContext, filterExpr string) ([
 		return nil, err
 	}
 
-	var result map[string]interface{}
-	if err := json.Unmarshal(resp.Body, &result); err != nil {
-		return nil, fmt.Errorf("failed to parse JSON: %w", err)
-	}
-
-	value, ok := result["value"].([]interface{})
-	if !ok {
-		return nil, fmt.Errorf("missing 'value' field in response")
-	}
-
-	items := make([]map[string]interface{}, 0, len(value))
-	for i, raw := range value {
-		item, ok := raw.(map[string]interface{})
-		if !ok {
-			return nil, fmt.Errorf("item %d is not an object", i)
-		}
-		items = append(items, item)
-	}
-
-	return items, nil
+	return ctx.ParseEntityCollection(resp)
 }
 
 func numericField(item map[string]interface{}, key string) (float64, error) {
@@ -65,21 +45,19 @@ func FilterLogicalOperators() *framework.TestSuite {
 			if err != nil {
 				return err
 			}
-
-			if len(items) == 0 {
-				return fmt.Errorf("AND filter returned no items")
+			if err := ctx.AssertMinCollectionSize(items, 1); err != nil {
+				return fmt.Errorf("AND filter returned no items: %w", err)
 			}
-			for i, item := range items {
+			return ctx.AssertAllEntitiesSatisfy(items, "Price gt 10 and Price lt 100", func(item map[string]interface{}) (bool, string) {
 				price, err := numericField(item, "Price")
 				if err != nil {
-					return fmt.Errorf("item %d: %w", i, err)
+					return false, err.Error()
 				}
 				if !(price > 10 && price < 100) {
-					return fmt.Errorf("item %d has Price=%.2f which does not satisfy Price gt 10 and Price lt 100", i, price)
+					return false, fmt.Sprintf("Price=%.2f does not satisfy Price gt 10 and Price lt 100", price)
 				}
-			}
-
-			return nil
+				return true, ""
+			})
 		},
 	)
 
@@ -92,21 +70,19 @@ func FilterLogicalOperators() *framework.TestSuite {
 			if err != nil {
 				return err
 			}
-
-			if len(items) == 0 {
-				return fmt.Errorf("OR filter returned no items")
+			if err := ctx.AssertMinCollectionSize(items, 1); err != nil {
+				return fmt.Errorf("OR filter returned no items: %w", err)
 			}
-			for i, item := range items {
+			return ctx.AssertAllEntitiesSatisfy(items, "Price lt 10 or Price gt 100", func(item map[string]interface{}) (bool, string) {
 				price, err := numericField(item, "Price")
 				if err != nil {
-					return fmt.Errorf("item %d: %w", i, err)
+					return false, err.Error()
 				}
 				if !(price < 10 || price > 100) {
-					return fmt.Errorf("item %d has Price=%.2f which does not satisfy Price lt 10 or Price gt 100", i, price)
+					return false, fmt.Sprintf("Price=%.2f does not satisfy Price lt 10 or Price gt 100", price)
 				}
-			}
-
-			return nil
+				return true, ""
+			})
 		},
 	)
 
@@ -119,21 +95,19 @@ func FilterLogicalOperators() *framework.TestSuite {
 			if err != nil {
 				return err
 			}
-
-			if len(items) == 0 {
-				return fmt.Errorf("NOT filter returned no items")
+			if err := ctx.AssertMinCollectionSize(items, 1); err != nil {
+				return fmt.Errorf("NOT filter returned no items: %w", err)
 			}
-			for i, item := range items {
+			return ctx.AssertAllEntitiesSatisfy(items, "not (Price gt 50)", func(item map[string]interface{}) (bool, string) {
 				price, err := numericField(item, "Price")
 				if err != nil {
-					return fmt.Errorf("item %d: %w", i, err)
+					return false, err.Error()
 				}
 				if price > 50 {
-					return fmt.Errorf("item %d has Price=%.2f which violates not (Price gt 50)", i, price)
+					return false, fmt.Sprintf("Price=%.2f violates not (Price gt 50)", price)
 				}
-			}
-
-			return nil
+				return true, ""
+			})
 		},
 	)
 
@@ -146,24 +120,23 @@ func FilterLogicalOperators() *framework.TestSuite {
 			if err != nil {
 				return err
 			}
-
-			if len(items) == 0 {
-				return fmt.Errorf("complex AND/OR filter returned no items")
+			if err := ctx.AssertMinCollectionSize(items, 1); err != nil {
+				return fmt.Errorf("complex AND/OR filter returned no items: %w", err)
 			}
-			for i, item := range items {
+			return ctx.AssertAllEntitiesSatisfy(items, "(Price lt 10 or Price gt 100) and Status eq 9", func(item map[string]interface{}) (bool, string) {
 				price, err := numericField(item, "Price")
 				if err != nil {
-					return fmt.Errorf("item %d: %w", i, err)
+					return false, err.Error()
 				}
 				status, err := numericField(item, "Status")
 				if err != nil {
-					return fmt.Errorf("item %d: %w", i, err)
+					return false, err.Error()
 				}
 				if !((price < 10 || price > 100) && status == 9) {
-					return fmt.Errorf("item %d has Price=%.2f Status=%.0f which does not satisfy (Price lt 10 or Price gt 100) and Status eq 9", i, price, status)
+					return false, fmt.Sprintf("Price=%.2f Status=%.0f does not satisfy expression", price, status)
 				}
-			}
-			return nil
+				return true, ""
+			})
 		},
 	)
 
@@ -176,24 +149,23 @@ func FilterLogicalOperators() *framework.TestSuite {
 			if err != nil {
 				return err
 			}
-
-			if len(items) == 0 {
-				return fmt.Errorf("multiple AND filter returned no items")
+			if err := ctx.AssertMinCollectionSize(items, 1); err != nil {
+				return fmt.Errorf("multiple AND filter returned no items: %w", err)
 			}
-			for i, item := range items {
+			return ctx.AssertAllEntitiesSatisfy(items, "Price gt 10 and Price lt 100 and Status eq 1", func(item map[string]interface{}) (bool, string) {
 				price, err := numericField(item, "Price")
 				if err != nil {
-					return fmt.Errorf("item %d: %w", i, err)
+					return false, err.Error()
 				}
 				status, err := numericField(item, "Status")
 				if err != nil {
-					return fmt.Errorf("item %d: %w", i, err)
+					return false, err.Error()
 				}
 				if !(price > 10 && price < 100 && status == 1) {
-					return fmt.Errorf("item %d has Price=%.2f Status=%.0f which does not satisfy Price gt 10 and Price lt 100 and Status eq 1", i, price, status)
+					return false, fmt.Sprintf("Price=%.2f Status=%.0f does not satisfy expression", price, status)
 				}
-			}
-			return nil
+				return true, ""
+			})
 		},
 	)
 
@@ -206,20 +178,19 @@ func FilterLogicalOperators() *framework.TestSuite {
 			if err != nil {
 				return err
 			}
-
-			if len(items) == 0 {
-				return fmt.Errorf("multiple OR filter returned no items")
+			if err := ctx.AssertMinCollectionSize(items, 1); err != nil {
+				return fmt.Errorf("multiple OR filter returned no items: %w", err)
 			}
-			for i, item := range items {
+			return ctx.AssertAllEntitiesSatisfy(items, "Status eq 1 or Status eq 2 or Status eq 3", func(item map[string]interface{}) (bool, string) {
 				status, err := numericField(item, "Status")
 				if err != nil {
-					return fmt.Errorf("item %d: %w", i, err)
+					return false, err.Error()
 				}
 				if !(status == 1 || status == 2 || status == 3) {
-					return fmt.Errorf("item %d has Status=%.0f which does not satisfy Status eq 1 or Status eq 2 or Status eq 3", i, status)
+					return false, fmt.Sprintf("Status=%.0f does not satisfy expression", status)
 				}
-			}
-			return nil
+				return true, ""
+			})
 		},
 	)
 
@@ -232,24 +203,23 @@ func FilterLogicalOperators() *framework.TestSuite {
 			if err != nil {
 				return err
 			}
-
-			if len(items) == 0 {
-				return fmt.Errorf("NOT with AND filter returned no items")
+			if err := ctx.AssertMinCollectionSize(items, 1); err != nil {
+				return fmt.Errorf("NOT with AND filter returned no items: %w", err)
 			}
-			for i, item := range items {
+			return ctx.AssertAllEntitiesSatisfy(items, "not (Price gt 50 and Status eq 1)", func(item map[string]interface{}) (bool, string) {
 				price, err := numericField(item, "Price")
 				if err != nil {
-					return fmt.Errorf("item %d: %w", i, err)
+					return false, err.Error()
 				}
 				status, err := numericField(item, "Status")
 				if err != nil {
-					return fmt.Errorf("item %d: %w", i, err)
+					return false, err.Error()
 				}
 				if price > 50 && status == 1 {
-					return fmt.Errorf("item %d has Price=%.2f Status=%.0f which violates not (Price gt 50 and Status eq 1)", i, price, status)
+					return false, fmt.Sprintf("Price=%.2f Status=%.0f violates expression", price, status)
 				}
-			}
-			return nil
+				return true, ""
+			})
 		},
 	)
 
@@ -262,24 +232,23 @@ func FilterLogicalOperators() *framework.TestSuite {
 			if err != nil {
 				return err
 			}
-
-			if len(items) == 0 {
-				return fmt.Errorf("parentheses precedence filter returned no items")
+			if err := ctx.AssertMinCollectionSize(items, 1); err != nil {
+				return fmt.Errorf("parentheses precedence filter returned no items: %w", err)
 			}
-			for i, item := range items {
+			return ctx.AssertAllEntitiesSatisfy(items, "Price gt 10 and (Status eq 1 or Status eq 2)", func(item map[string]interface{}) (bool, string) {
 				price, err := numericField(item, "Price")
 				if err != nil {
-					return fmt.Errorf("item %d: %w", i, err)
+					return false, err.Error()
 				}
 				status, err := numericField(item, "Status")
 				if err != nil {
-					return fmt.Errorf("item %d: %w", i, err)
+					return false, err.Error()
 				}
 				if !(price > 10 && (status == 1 || status == 2)) {
-					return fmt.Errorf("item %d has Price=%.2f Status=%.0f which does not satisfy Price gt 10 and (Status eq 1 or Status eq 2)", i, price, status)
+					return false, fmt.Sprintf("Price=%.2f Status=%.0f does not satisfy expression", price, status)
 				}
-			}
-			return nil
+				return true, ""
+			})
 		},
 	)
 
@@ -292,20 +261,19 @@ func FilterLogicalOperators() *framework.TestSuite {
 			if err != nil {
 				return err
 			}
-
-			if len(items) == 0 {
-				return fmt.Errorf("NOT with OR filter returned no items")
+			if err := ctx.AssertMinCollectionSize(items, 1); err != nil {
+				return fmt.Errorf("NOT with OR filter returned no items: %w", err)
 			}
-			for i, item := range items {
+			return ctx.AssertAllEntitiesSatisfy(items, "not (Price lt 10 or Price gt 100)", func(item map[string]interface{}) (bool, string) {
 				price, err := numericField(item, "Price")
 				if err != nil {
-					return fmt.Errorf("item %d: %w", i, err)
+					return false, err.Error()
 				}
 				if price < 10 || price > 100 {
-					return fmt.Errorf("item %d has Price=%.2f which violates not (Price lt 10 or Price gt 100)", i, price)
+					return false, fmt.Sprintf("Price=%.2f violates expression", price)
 				}
-			}
-			return nil
+				return true, ""
+			})
 		},
 	)
 

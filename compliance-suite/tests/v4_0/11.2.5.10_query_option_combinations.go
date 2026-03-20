@@ -9,24 +9,15 @@ import (
 	"github.com/nlstn/go-odata/compliance-suite/framework"
 )
 
-func parseCollectionResponse(resp *framework.HTTPResponse) (map[string]interface{}, []map[string]interface{}, error) {
+func parseCollectionResponse(ctx *framework.TestContext, resp *framework.HTTPResponse) (map[string]interface{}, []map[string]interface{}, error) {
 	var result map[string]interface{}
 	if err := json.Unmarshal(resp.Body, &result); err != nil {
 		return nil, nil, fmt.Errorf("failed to parse JSON: %w", err)
 	}
 
-	rawValue, ok := result["value"].([]interface{})
-	if !ok {
-		return nil, nil, fmt.Errorf("response missing 'value' array")
-	}
-
-	items := make([]map[string]interface{}, 0, len(rawValue))
-	for i, raw := range rawValue {
-		item, ok := raw.(map[string]interface{})
-		if !ok {
-			return nil, nil, fmt.Errorf("item %d is not an object", i)
-		}
-		items = append(items, item)
+	items, err := ctx.ParseEntityCollection(resp)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	return result, items, nil
@@ -48,25 +39,14 @@ func itemString(item map[string]interface{}, key string) (string, error) {
 	return v, nil
 }
 
-func assertSelectedFieldsOnly(items []map[string]interface{}, selected ...string) error {
-	allowed := map[string]bool{
-		"@odata.context": true,
-		"@odata.etag":    true,
-		"@odata.id":      true,
-		"ID":             true,
-	}
-	for _, field := range selected {
-		allowed[field] = true
-	}
-
+func assertSelectedFieldsOnly(ctx *framework.TestContext, items []map[string]interface{}, selected ...string) error {
+	allowed := []string{"@odata.context", "@odata.etag", "@odata.id", "ID"}
+	allowed = append(allowed, selected...)
 	for i, item := range items {
-		for key := range item {
-			if !allowed[key] {
-				return fmt.Errorf("item %d contains non-selected field %q", i, key)
-			}
+		if err := ctx.AssertEntityOnlyAllowedFields(item, allowed...); err != nil {
+			return fmt.Errorf("item %d: %w", i, err)
 		}
 	}
-
 	return nil
 }
 
@@ -83,21 +63,8 @@ func assertPricesMatch(items []map[string]interface{}, pred func(float64) bool, 
 	return nil
 }
 
-func assertSortedByPriceDesc(items []map[string]interface{}) error {
-	for i := 1; i < len(items); i++ {
-		prev, err := itemFloat(items[i-1], "Price")
-		if err != nil {
-			return fmt.Errorf("item %d: %w", i-1, err)
-		}
-		curr, err := itemFloat(items[i], "Price")
-		if err != nil {
-			return fmt.Errorf("item %d: %w", i, err)
-		}
-		if curr > prev {
-			return fmt.Errorf("results not ordered by Price desc: %.2f before %.2f", prev, curr)
-		}
-	}
-	return nil
+func assertSortedByPriceDesc(ctx *framework.TestContext, items []map[string]interface{}) error {
+	return ctx.AssertEntitiesSortedByFloat(items, "Price", false)
 }
 
 // QueryOptionCombinations creates the 11.2.5.10 Query Option Combinations test suite
@@ -118,11 +85,11 @@ func QueryOptionCombinations() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode != 200 {
-				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+			if err := ctx.AssertStatusCode(resp, 200); err != nil {
+				return err
 			}
 
-			_, items, err := parseCollectionResponse(resp)
+			_, items, err := parseCollectionResponse(ctx, resp)
 			if err != nil {
 				return err
 			}
@@ -132,7 +99,7 @@ func QueryOptionCombinations() *framework.TestSuite {
 			if err := assertPricesMatch(items, func(p float64) bool { return p > 100 }, "Price gt 100"); err != nil {
 				return err
 			}
-			if err := assertSelectedFieldsOnly(items, "Name", "Price"); err != nil {
+			if err := assertSelectedFieldsOnly(ctx, items, "Name", "Price"); err != nil {
 				return err
 			}
 
@@ -150,11 +117,11 @@ func QueryOptionCombinations() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode != 200 {
-				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+			if err := ctx.AssertStatusCode(resp, 200); err != nil {
+				return err
 			}
 
-			_, items, err := parseCollectionResponse(resp)
+			_, items, err := parseCollectionResponse(ctx, resp)
 			if err != nil {
 				return err
 			}
@@ -164,7 +131,7 @@ func QueryOptionCombinations() *framework.TestSuite {
 			if err := assertPricesMatch(items, func(p float64) bool { return p > 100 }, "Price gt 100"); err != nil {
 				return err
 			}
-			if err := assertSortedByPriceDesc(items); err != nil {
+			if err := assertSortedByPriceDesc(ctx, items); err != nil {
 				return err
 			}
 
@@ -182,11 +149,11 @@ func QueryOptionCombinations() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode != 200 {
-				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+			if err := ctx.AssertStatusCode(resp, 200); err != nil {
+				return err
 			}
 
-			_, items, err := parseCollectionResponse(resp)
+			_, items, err := parseCollectionResponse(ctx, resp)
 			if err != nil {
 				return err
 			}
@@ -211,11 +178,11 @@ func QueryOptionCombinations() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode != 200 {
-				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+			if err := ctx.AssertStatusCode(resp, 200); err != nil {
+				return err
 			}
 
-			result, items, err := parseCollectionResponse(resp)
+			result, items, err := parseCollectionResponse(ctx, resp)
 			if err != nil {
 				return err
 			}
@@ -244,21 +211,21 @@ func QueryOptionCombinations() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode != 200 {
-				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+			if err := ctx.AssertStatusCode(resp, 200); err != nil {
+				return err
 			}
 
-			_, items, err := parseCollectionResponse(resp)
+			_, items, err := parseCollectionResponse(ctx, resp)
 			if err != nil {
 				return err
 			}
 			if len(items) < 2 {
 				return fmt.Errorf("select+orderby requires at least 2 items to verify order")
 			}
-			if err := assertSortedByPriceDesc(items); err != nil {
+			if err := assertSortedByPriceDesc(ctx, items); err != nil {
 				return err
 			}
-			if err := assertSelectedFieldsOnly(items, "Name", "Price"); err != nil {
+			if err := assertSelectedFieldsOnly(ctx, items, "Name", "Price"); err != nil {
 				return err
 			}
 
@@ -276,11 +243,11 @@ func QueryOptionCombinations() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode != 200 {
-				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+			if err := ctx.AssertStatusCode(resp, 200); err != nil {
+				return err
 			}
 
-			_, items, err := parseCollectionResponse(resp)
+			_, items, err := parseCollectionResponse(ctx, resp)
 			if err != nil {
 				return err
 			}
@@ -307,11 +274,11 @@ func QueryOptionCombinations() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode != 200 {
-				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+			if err := ctx.AssertStatusCode(resp, 200); err != nil {
+				return err
 			}
 
-			result, items, err := parseCollectionResponse(resp)
+			result, items, err := parseCollectionResponse(ctx, resp)
 			if err != nil {
 				return err
 			}
@@ -321,10 +288,10 @@ func QueryOptionCombinations() *framework.TestSuite {
 			if err := assertPricesMatch(items, func(p float64) bool { return p > 50 }, "Price gt 50"); err != nil {
 				return err
 			}
-			if err := assertSortedByPriceDesc(items); err != nil {
+			if err := assertSortedByPriceDesc(ctx, items); err != nil {
 				return err
 			}
-			if err := assertSelectedFieldsOnly(items, "Name", "Price"); err != nil {
+			if err := assertSelectedFieldsOnly(ctx, items, "Name", "Price"); err != nil {
 				return err
 			}
 			count, ok := result["@odata.count"].(float64)
@@ -349,11 +316,11 @@ func QueryOptionCombinations() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode != 200 {
-				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+			if err := ctx.AssertStatusCode(resp, 200); err != nil {
+				return err
 			}
 
-			result, items, err := parseCollectionResponse(resp)
+			result, items, err := parseCollectionResponse(ctx, resp)
 			if err != nil {
 				return err
 			}
@@ -382,11 +349,11 @@ func QueryOptionCombinations() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode != 200 {
-				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+			if err := ctx.AssertStatusCode(resp, 200); err != nil {
+				return err
 			}
 
-			_, items, err := parseCollectionResponse(resp)
+			_, items, err := parseCollectionResponse(ctx, resp)
 			if err != nil {
 				return err
 			}
@@ -411,11 +378,11 @@ func QueryOptionCombinations() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode != 200 {
-				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+			if err := ctx.AssertStatusCode(resp, 200); err != nil {
+				return err
 			}
 
-			result, items, err := parseCollectionResponse(resp)
+			result, items, err := parseCollectionResponse(ctx, resp)
 			if err != nil {
 				return err
 			}
