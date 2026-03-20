@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"regexp"
-	"strings"
 
 	"github.com/nlstn/go-odata/compliance-suite/framework"
 )
@@ -78,6 +76,38 @@ func QueryIndex() *framework.TestSuite {
 		return categoryID, nil
 	}
 
+	parseIndexedEntities := func(ctx *framework.TestContext, resp *framework.HTTPResponse) ([]map[string]interface{}, error) {
+		items, err := ctx.ParseEntityCollection(resp)
+		if err != nil {
+			return nil, err
+		}
+		if err := ctx.AssertMinCollectionSize(items, 1); err != nil {
+			return nil, err
+		}
+		return items, nil
+	}
+
+	assertSequentialIndexes := func(items []map[string]interface{}, start int) error {
+		for i, item := range items {
+			rawIndex, ok := item["@odata.index"]
+			if !ok {
+				return fmt.Errorf("item %d is missing @odata.index", i)
+			}
+
+			indexValue, ok := rawIndex.(float64)
+			if !ok {
+				return fmt.Errorf("item %d has non-numeric @odata.index value %T", i, rawIndex)
+			}
+
+			expected := float64(start + i)
+			if indexValue != expected {
+				return fmt.Errorf("item %d has @odata.index %.0f, expected %.0f", i, indexValue, expected)
+			}
+		}
+
+		return nil
+	}
+
 	// Test 1: $index without other query options
 	suite.AddTest(
 		"test_index_basic",
@@ -92,9 +122,13 @@ func QueryIndex() *framework.TestSuite {
 				return framework.NewError(fmt.Sprintf("Missing $index support is a compliance defect: %v", err))
 			}
 
-			body := string(resp.Body)
-			if !strings.Contains(body, `"@odata.index"`) {
-				ctx.Log("Response missing @odata.index annotations (optional check)")
+			items, err := parseIndexedEntities(ctx, resp)
+			if err != nil {
+				return err
+			}
+
+			if err := assertSequentialIndexes(items, 0); err != nil {
+				return framework.NewError(fmt.Sprintf("$index response must include sequential @odata.index annotations: %v", err))
 			}
 
 			return nil
@@ -187,9 +221,15 @@ func QueryIndex() *framework.TestSuite {
 				return err
 			}
 
-			body := string(resp.Body)
-			if !strings.Contains(body, `"value"`) {
-				return framework.NewError("Response missing value array")
+			items, err := parseIndexedEntities(ctx, resp)
+			if err != nil {
+				return framework.NewError(fmt.Sprintf("$index response must include a non-empty value collection: %v", err))
+			}
+			if len(items) != 3 {
+				return framework.NewError(fmt.Sprintf("expected 3 items from $top=3 query, got %d", len(items)))
+			}
+			if err := assertSequentialIndexes(items, 0); err != nil {
+				return framework.NewError(fmt.Sprintf("$index response format must include sequential annotations: %v", err))
 			}
 
 			return nil
@@ -228,12 +268,19 @@ func QueryIndex() *framework.TestSuite {
 				return err
 			}
 
-			// $index should not work on single entities
-			if err := ctx.AssertStatusCode(resp, 200); err != nil {
-				return nil // Good, it was rejected
+			if err := ctx.AssertStatusCode(resp, http.StatusBadRequest); err != nil {
+				return framework.NewError(fmt.Sprintf("expected HTTP 400 when $index is used on a single entity: %v", err))
 			}
 
-			return framework.NewError("$index should be rejected on single entity")
+			if !ctx.IsValidJSON(resp) {
+				return framework.NewError("single-entity $index rejection must return a valid JSON error payload")
+			}
+
+			if err := ctx.AssertBodyContains(resp, "$index query option is not applicable to individual entities"); err != nil {
+				return framework.NewError(fmt.Sprintf("single-entity $index rejection should explain why the request is invalid: %v", err))
+			}
+
+			return nil
 		},
 	)
 
@@ -280,7 +327,7 @@ func QueryIndex() *framework.TestSuite {
 	// Test 11: Check if @odata.index annotation is included
 	suite.AddTest(
 		"test_index_annotation_presence",
-		"@odata.index annotation presence (optional)",
+		"@odata.index annotation presence is required",
 		func(ctx *framework.TestContext) error {
 			resp, err := ctx.GET("/Products?$index&$top=2")
 			if err != nil {
@@ -291,9 +338,15 @@ func QueryIndex() *framework.TestSuite {
 				return err
 			}
 
-			body := string(resp.Body)
-			if !strings.Contains(body, `"@odata.index"`) {
-				ctx.Log("Response missing @odata.index annotations (optional check)")
+			items, err := parseIndexedEntities(ctx, resp)
+			if err != nil {
+				return err
+			}
+			if len(items) != 2 {
+				return framework.NewError(fmt.Sprintf("expected 2 items from $top=2 query, got %d", len(items)))
+			}
+			if err := assertSequentialIndexes(items, 0); err != nil {
+				return framework.NewError(fmt.Sprintf("@odata.index annotations must be present and sequential: %v", err))
 			}
 
 			return nil
@@ -303,7 +356,7 @@ func QueryIndex() *framework.TestSuite {
 	// Test 12: $index value starts at 0
 	suite.AddTest(
 		"test_index_starts_at_zero",
-		"$index starts at zero (optional verification)",
+		"$index starts at zero",
 		func(ctx *framework.TestContext) error {
 			resp, err := ctx.GET("/Products?$index&$top=1")
 			if err != nil {
@@ -314,16 +367,17 @@ func QueryIndex() *framework.TestSuite {
 				return err
 			}
 
-			body := string(resp.Body)
-			matched, matchErr := regexp.MatchString(`"@odata\.index"\s*:\s*0`, body)
-			if matchErr != nil {
-				return framework.NewError(fmt.Sprintf("failed to evaluate @odata.index pattern: %v", matchErr))
+			items, err := parseIndexedEntities(ctx, resp)
+			if err != nil {
+				return err
 			}
-			if matched {
-				return nil
+			if len(items) != 1 {
+				return framework.NewError(fmt.Sprintf("expected 1 item from $top=1 query, got %d", len(items)))
+			}
+			if err := assertSequentialIndexes(items, 0); err != nil {
+				return framework.NewError(fmt.Sprintf("first $index value must be zero: %v", err))
 			}
 
-			ctx.Log("Unable to verify that @odata.index starts at 0 (optional check)")
 			return nil
 		},
 	)

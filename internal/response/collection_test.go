@@ -7,6 +7,57 @@ import (
 	"testing"
 )
 
+func TestAddIndexAnnotationsAddsIndexesToMaps(t *testing.T) {
+	data := []interface{}{
+		map[string]interface{}{"ID": 1},
+		map[string]interface{}{"ID": 2},
+	}
+
+	annotated := addIndexAnnotations(data)
+
+	for i, item := range annotated {
+		itemMap, ok := item.(map[string]interface{})
+		if !ok {
+			t.Fatalf("item %d is %T, want map[string]interface{}", i, item)
+		}
+
+		index, ok := itemMap["@odata.index"].(int)
+		if !ok {
+			t.Fatalf("item %d missing integer @odata.index, got %T", i, itemMap["@odata.index"])
+		}
+		if index != i {
+			t.Fatalf("item %d index = %d, want %d", i, index, i)
+		}
+	}
+}
+
+func TestAddIndexAnnotationsAddsIndexesToOrderedMaps(t *testing.T) {
+	first := NewOrderedMap()
+	first.Set("ID", 1)
+	second := NewOrderedMap()
+	second.Set("ID", 2)
+
+	annotated := addIndexAnnotations([]interface{}{first, second})
+
+	for i, item := range annotated {
+		ordered, ok := item.(*OrderedMap)
+		if !ok {
+			t.Fatalf("item %d is %T, want *OrderedMap", i, item)
+		}
+
+		index, ok := ordered.values["@odata.index"].(int)
+		if !ok {
+			t.Fatalf("item %d missing integer @odata.index, got %T", i, ordered.values["@odata.index"])
+		}
+		if index != i {
+			t.Fatalf("item %d index = %d, want %d", i, index, i)
+		}
+	}
+
+	first.Release()
+	second.Release()
+}
+
 func TestWriteODataCollectionWithNilData(t *testing.T) {
 	req := httptest.NewRequest("GET", "http://example.com/Products", nil)
 	w := httptest.NewRecorder()
