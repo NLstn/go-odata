@@ -399,7 +399,7 @@ func resolveColumnName(db *gorm.DB, dialect string, propertyName string, entityM
 }
 
 func buildCollectionCountExpression(dialect string, propertyName string, entityMetadata *metadata.EntityMetadata) (string, bool) {
-	ownerMetadata, navProp, _, err := resolveCollectionCountPath(propertyName, entityMetadata)
+	ownerMetadata, navProp, err := resolveCollectionCountPath(propertyName, entityMetadata)
 	if err != nil || ownerMetadata == nil || navProp == nil {
 		return "", false
 	}

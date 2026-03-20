@@ -40,6 +40,23 @@ go run . -db postgres -dsn "postgresql://user:pass@localhost/dbname"
 - Company (Singleton): `http://localhost:9090/Company`
 - Reseed Database: `POST http://localhost:9090/Reseed`
 
+## Example Primitive Queries
+
+The compliance sample model includes primitive-focused fields on `Products` to exercise literal parsing and filtering:
+
+- Byte/SByte/Int16/Single:
+  - `GET /Products?$filter=Rating gt 100`
+  - `GET /Products?$filter=Temperature lt 0`
+  - `GET /Products?$filter=Quantity le 32767`
+  - `GET /Products?$filter=Weight eq 3.14f`
+- Binary literal:
+  - `GET /Products?$filter=Data eq binary'dGVzdA=='`
+- Date and Time-of-day shaped values:
+  - `GET /Products?$filter=ReleaseDate eq 2024-01-15`
+  - `GET /Products?$filter=OpenTime eq 09:30:00`
+- Duration literal:
+  - `GET /Products?$filter=ShippingTime eq duration'P1D'`
+
 ## Testing
 
 The compliance server is used by the Go-based compliance test suite in `compliance-suite/`.

@@ -206,6 +206,7 @@ func TestASTParser_LiteralTyping(t *testing.T) {
 		filter       string
 		expectErr    bool
 		expectedType string
+		skipConvert  bool
 	}{
 		{
 			name:         "String literal",
@@ -224,6 +225,26 @@ func TestASTParser_LiteralTyping(t *testing.T) {
 			filter:       "Price eq 99.99",
 			expectErr:    false,
 			expectedType: "number",
+		},
+		{
+			name:         "Single literal with f suffix",
+			filter:       "Price eq 3.14f",
+			expectErr:    false,
+			expectedType: "number",
+		},
+		{
+			name:         "Duration prefixed literal",
+			filter:       "Price eq duration'P1D'",
+			expectErr:    false,
+			expectedType: "duration",
+			skipConvert:  true,
+		},
+		{
+			name:         "Binary prefixed literal",
+			filter:       "Price eq binary'dGVzdA=='",
+			expectErr:    false,
+			expectedType: "binary",
+			skipConvert:  true,
 		},
 		{
 			name:         "Boolean literal true",
@@ -280,9 +301,11 @@ func TestASTParser_LiteralTyping(t *testing.T) {
 				}
 
 				// Also convert to FilterExpression to ensure it works
-				_, err := ASTToFilterExpression(ast, meta)
-				if err != nil {
-					t.Errorf("Failed to convert AST to FilterExpression: %v", err)
+				if !tt.skipConvert {
+					_, err = ASTToFilterExpression(ast, meta)
+					if err != nil {
+						t.Errorf("Failed to convert AST to FilterExpression: %v", err)
+					}
 				}
 			}
 		})
