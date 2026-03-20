@@ -130,6 +130,42 @@ func TestApplyExpandOptionToValueNestedExpand(t *testing.T) {
 	assertExpandedChildren(t, updatedMap)
 }
 
+func TestApplyExpandOptionToValueNestedSelectExcludesUnselectedFields(t *testing.T) {
+	childMeta := mustAnalyzeEntity(t, expandChild{})
+
+	expandOpt := &query.ExpandOption{
+		Select: []string{"Toys"},
+	}
+
+	child := expandChild{
+		ID:       10,
+		ParentID: 1,
+		Toys: []expandToy{
+			{ID: 100, ChildID: 10, Name: "Rocket"},
+		},
+	}
+
+	updated, count := ApplyExpandOptionToValue(child, expandOpt, childMeta)
+	if count != nil {
+		t.Fatalf("expected nil count, got %v", *count)
+	}
+
+	updatedMap, ok := updated.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected map result, got %T", updated)
+	}
+
+	if _, ok := updatedMap["toys"]; !ok {
+		t.Fatal("expected selected navigation property toys to be present")
+	}
+	if _, ok := updatedMap["id"]; ok {
+		t.Fatal("expected unselected key field id to be excluded")
+	}
+	if _, ok := updatedMap["parentId"]; ok {
+		t.Fatal("expected unselected property parentId to be excluded")
+	}
+}
+
 func mustAnalyzeEntity(t *testing.T, entity interface{}) *metadata.EntityMetadata {
 	t.Helper()
 

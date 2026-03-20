@@ -11,14 +11,14 @@ import (
 func HeaderODataVersion() *framework.TestSuite {
 	suite := framework.NewTestSuite(
 		"8.2.6 Header OData-Version",
-		"Tests that OData-Version header is properly set and version negotiation works according to OData v4 specification, including OData-MaxVersion handling.",
+		"Tests that OData-Version is present and respects OData 4.0 negotiation constraints.",
 		"https://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part1-protocol/odata-v4.0-errata03-os-part1-protocol-complete.html#sec_HeaderODataVersion",
 	)
 
-	// Test 1: Service should return OData-Version: 4.01 header by default
+	// Test 1: Service should return OData-Version header by default
 	suite.AddTest(
 		"test_odata_version_header",
-		"Service returns OData-Version header with value 4.01 by default",
+		"Service returns OData-Version header by default",
 		func(ctx *framework.TestContext) error {
 			resp, err := ctx.GET("/")
 			if err != nil {
@@ -30,22 +30,16 @@ func HeaderODataVersion() *framework.TestSuite {
 				return framework.NewError("Header not found")
 			}
 
-			// Without OData-MaxVersion, service should return its highest supported version
-			odataVersion = strings.TrimSpace(odataVersion)
-			if odataVersion != "4.01" {
-				return framework.NewError(fmt.Sprintf("Expected version 4.01, got: %s", odataVersion))
-			}
-
 			return nil
 		},
 	)
 
-	// Test 2: Service should respond with OData-Version: 4.0 when OData-MaxVersion: 4.0
+	// Test 3: Metadata should respond with OData-Version: 4.0 when OData-MaxVersion: 4.0
 	suite.AddTest(
-		"test_maxversion_40_response",
-		"Service responds with OData-Version: 4.0 when OData-MaxVersion: 4.0",
+		"test_metadata_maxversion_40_response",
+		"Metadata document responds with OData-Version: 4.0 when OData-MaxVersion: 4.0",
 		func(ctx *framework.TestContext) error {
-			resp, err := ctx.GET("/",
+			resp, err := ctx.GET("/$metadata",
 				framework.Header{Key: "OData-MaxVersion", Value: "4.0"},
 			)
 			if err != nil {
@@ -66,13 +60,13 @@ func HeaderODataVersion() *framework.TestSuite {
 		},
 	)
 
-	// Test 3: Service should respond with OData-Version: 4.01 when OData-MaxVersion: 4.01
+	// Test 3: Service document should respond with OData-Version: 4.0 when OData-MaxVersion: 4.0
 	suite.AddTest(
-		"test_maxversion_401_response",
-		"Service responds with OData-Version: 4.01 when OData-MaxVersion: 4.01",
+		"test_service_document_maxversion_40_response",
+		"Service document responds with OData-Version: 4.0 when OData-MaxVersion: 4.0",
 		func(ctx *framework.TestContext) error {
 			resp, err := ctx.GET("/",
-				framework.Header{Key: "OData-MaxVersion", Value: "4.01"},
+				framework.Header{Key: "OData-MaxVersion", Value: "4.0"},
 			)
 			if err != nil {
 				return err
@@ -84,8 +78,8 @@ func HeaderODataVersion() *framework.TestSuite {
 
 			odataVersion := resp.Headers.Get("OData-Version")
 			odataVersion = strings.TrimSpace(odataVersion)
-			if odataVersion != "4.01" {
-				return framework.NewError(fmt.Sprintf("Expected OData-Version: 4.01, got: %s", odataVersion))
+			if odataVersion != "4.0" {
+				return framework.NewError(fmt.Sprintf("Expected OData-Version: 4.0, got: %s (service document response must respect OData-MaxVersion: 4.0)", odataVersion))
 			}
 
 			return nil

@@ -186,14 +186,11 @@ func QueryCompute() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode == 400 {
-				return nil
-			}
 			if resp.StatusCode == 200 {
 				return framework.NewError("Invalid syntax accepted")
 			}
 
-			return framework.NewError(fmt.Sprintf("Expected 400 but got %d", resp.StatusCode))
+			return ctx.AssertODataError(resp, http.StatusBadRequest, "invalid compute expression format")
 		},
 	)
 
@@ -281,6 +278,9 @@ func QueryCompute() *framework.TestSuite {
 			}
 			if err := ctx.AssertStatusCode(v40Resp, http.StatusBadRequest); err != nil {
 				return framework.NewError(fmt.Sprintf("4.0 negotiated request must reject 4.01 $compute feature: %v", err))
+			}
+			if err := ctx.AssertODataError(v40Resp, http.StatusBadRequest, "$compute is not supported in OData 4.0"); err != nil {
+				return framework.NewError(fmt.Sprintf("4.0 negotiated $compute rejection must include strict OData error payload: %v", err))
 			}
 
 			return nil

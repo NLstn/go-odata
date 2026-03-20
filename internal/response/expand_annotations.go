@@ -20,21 +20,9 @@ func ApplyExpandOptionToValue(value interface{}, expandOpt *query.ExpandOption, 
 	// NOTE: Only apply if Select has values - this is for nested $select in expand syntax like $expand=Products($select=ID)
 	// Top-level select with navigation paths (like $select=Product/Name) is handled differently
 	if len(expandOpt.Select) > 0 && targetMetadata != nil {
-		// Key properties should always be included in filtered results (per OData spec)
 		selectSet := make(map[string]bool)
 		for _, s := range expandOpt.Select {
 			selectSet[s] = true
-		}
-
-		// Always include key properties
-		if len(targetMetadata.KeyProperties) > 0 {
-			for _, keyProp := range targetMetadata.KeyProperties {
-				selectSet[keyProp.Name] = true
-				selectSet[keyProp.JsonName] = true
-			}
-		} else if targetMetadata.KeyProperty != nil {
-			selectSet[targetMetadata.KeyProperty.Name] = true
-			selectSet[targetMetadata.KeyProperty.JsonName] = true
 		}
 
 		// Include navigation properties from nested $expand so they are not stripped

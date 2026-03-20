@@ -1,9 +1,7 @@
 package v4_0
 
 import (
-	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/nlstn/go-odata/compliance-suite/framework"
 )
@@ -29,18 +27,45 @@ func ComplexFilter() *framework.TestSuite {
 				return err
 			}
 
-			var result map[string]interface{}
-			if err := json.Unmarshal(resp.Body, &result); err != nil {
+			items, err := ctx.ParseEntityCollection(resp)
+			if err != nil {
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
-
-			// Check response has results with Seattle
-			body := string(resp.Body)
-			if !strings.Contains(body, `"City":"Seattle"`) {
-				return framework.NewError("Filtered response missing expected City value")
+			if err := ctx.AssertMinCollectionSize(items, 1); err != nil {
+				return err
 			}
 
-			return nil
+			return ctx.AssertAllEntitiesSatisfy(items, "ShippingAddress/City eq 'Seattle'", func(entity map[string]interface{}) (bool, string) {
+				addressRaw, ok := entity["ShippingAddress"]
+				if !ok || addressRaw == nil {
+					return false, "ShippingAddress is missing or null"
+				}
+				address, ok := addressRaw.(map[string]interface{})
+				if !ok {
+					return false, fmt.Sprintf("ShippingAddress has unexpected type %T", addressRaw)
+				}
+				city, ok := address["City"].(string)
+				if !ok {
+					return false, fmt.Sprintf("City has unexpected type %T", address["City"])
+				}
+				if city != "Seattle" {
+					return false, fmt.Sprintf("City=%q", city)
+				}
+				return true, ""
+			})
+		},
+	)
+
+	suite.AddTest(
+		"test_filter_invalid_nested_complex_property",
+		"Invalid nested complex property paths return 400 with an OData error payload",
+		func(ctx *framework.TestContext) error {
+			resp, err := ctx.GET("/Products?$filter=ShippingAddress/Unknown eq 'Seattle'")
+			if err != nil {
+				return err
+			}
+
+			return ctx.AssertODataError(resp, 400, "ShippingAddress/Unknown")
 		},
 	)
 

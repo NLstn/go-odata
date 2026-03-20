@@ -2,6 +2,7 @@ package v4_0
 
 import (
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/nlstn/go-odata/compliance-suite/framework"
@@ -81,7 +82,7 @@ func registerHeaderAcceptTests(suite *framework.TestSuite) {
 
 	suite.AddTest(
 		"Unsupported Accept returns 406",
-		"Unsupported media type should return 406 or support XML",
+		"Unsupported entity media type returns 406 with an OData error payload",
 		func(ctx *framework.TestContext) error {
 			productPath, err := firstEntityPath(ctx, "Products")
 			if err != nil {
@@ -95,19 +96,7 @@ func registerHeaderAcceptTests(suite *framework.TestSuite) {
 				return err
 			}
 
-			switch resp.StatusCode {
-			case 406:
-				return nil
-			case 200:
-				// Server might support XML
-				contentType := resp.Headers.Get("Content-Type")
-				if strings.Contains(strings.ToLower(contentType), "application/xml") {
-					return nil
-				}
-				return fmt.Errorf("expected 406 or XML response, got JSON with HTTP 200")
-			default:
-				return fmt.Errorf("expected HTTP 406, got %d", resp.StatusCode)
-			}
+			return ctx.AssertODataError(resp, http.StatusNotAcceptable, "requested format")
 		},
 	)
 
