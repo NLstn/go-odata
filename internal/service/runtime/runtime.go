@@ -238,7 +238,7 @@ func (rt *Runtime) tryHandleAsync(w http.ResponseWriter, r *http.Request) bool {
 		jobOpts = append(jobOpts, async.WithRetryAfter(rt.defaultRetryInterval))
 	}
 
-	job, err := rt.asyncManager.StartJob(r.Context(), handler, jobOpts...)
+	job, err := rt.asyncManager.StartJob(context.WithoutCancel(r.Context()), handler, jobOpts...)
 	if err != nil {
 		restoreRequestBody(r, body)
 		queueToken.release()
