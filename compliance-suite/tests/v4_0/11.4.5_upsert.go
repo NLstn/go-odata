@@ -55,8 +55,33 @@ func Upsert() *framework.TestSuite {
 				return err
 			}
 
-			if putResp.StatusCode != 200 && putResp.StatusCode != 204 {
-				return fmt.Errorf("expected status 200 or 204, got %d", putResp.StatusCode)
+			if putResp.StatusCode != 204 {
+				return fmt.Errorf("expected status 204, got %d", putResp.StatusCode)
+			}
+			if len(putResp.Body) != 0 {
+				return fmt.Errorf("expected empty body for 204 PUT response, got %q", string(putResp.Body))
+			}
+
+			getResp, err := ctx.GET(fmt.Sprintf("/Products(%s)", id))
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(getResp, 200); err != nil {
+				return err
+			}
+
+			var updated map[string]interface{}
+			if err := json.Unmarshal(getResp.Body, &updated); err != nil {
+				return fmt.Errorf("failed to parse updated entity: %w", err)
+			}
+			if updated["Name"] != "Updated Product" {
+				return fmt.Errorf("expected updated Name, got %v", updated["Name"])
+			}
+			if updated["Price"] != 199.99 {
+				return fmt.Errorf("expected updated Price 199.99, got %v", updated["Price"])
+			}
+			if updated["Description"] != "Updated via PUT" {
+				return fmt.Errorf("expected updated Description, got %v", updated["Description"])
 			}
 
 			return nil
@@ -79,9 +104,8 @@ func Upsert() *framework.TestSuite {
 				return err
 			}
 
-			// Should return 201 (created) or 404 (not supported)
-			if resp.StatusCode != 201 && resp.StatusCode != 404 {
-				return fmt.Errorf("expected status 201 or 404, got %d", resp.StatusCode)
+			if err := ctx.AssertODataError(resp, 404, "does not exist"); err != nil {
+				return fmt.Errorf("expected PUT to non-existent entity to be rejected with strict 404 payload: %w", err)
 			}
 
 			return nil
@@ -125,9 +149,33 @@ func Upsert() *framework.TestSuite {
 				return err
 			}
 
-			// Should return 400 or accept it (200/204) if server fills in defaults
-			if putResp.StatusCode != 400 && putResp.StatusCode != 200 && putResp.StatusCode != 204 {
-				return fmt.Errorf("expected status 400, 200, or 204, got %d", putResp.StatusCode)
+			if putResp.StatusCode != 204 {
+				return fmt.Errorf("expected status 204, got %d", putResp.StatusCode)
+			}
+			if len(putResp.Body) != 0 {
+				return fmt.Errorf("expected empty body for 204 PUT response, got %q", string(putResp.Body))
+			}
+
+			getResp, err := ctx.GET(fmt.Sprintf("/Products(%s)", id))
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(getResp, 200); err != nil {
+				return err
+			}
+
+			var updated map[string]interface{}
+			if err := json.Unmarshal(getResp.Body, &updated); err != nil {
+				return fmt.Errorf("failed to parse replaced entity: %w", err)
+			}
+			if updated["Name"] != "Incomplete" {
+				return fmt.Errorf("expected replacement Name to be Incomplete, got %v", updated["Name"])
+			}
+			if updated["Price"] != 0.0 {
+				return fmt.Errorf("expected omitted Price to be reset to 0, got %v", updated["Price"])
+			}
+			if updated["CategoryID"] != nil {
+				return fmt.Errorf("expected omitted CategoryID to be reset to null, got %v", updated["CategoryID"])
 			}
 
 			return nil
@@ -174,8 +222,11 @@ func Upsert() *framework.TestSuite {
 				return err
 			}
 
-			if putResp.StatusCode != 200 && putResp.StatusCode != 204 {
-				return fmt.Errorf("expected status 200 or 204, got %d", putResp.StatusCode)
+			if putResp.StatusCode != 204 {
+				return fmt.Errorf("expected status 204, got %d", putResp.StatusCode)
+			}
+			if len(putResp.Body) != 0 {
+				return fmt.Errorf("expected empty body for 204 PUT response, got %q", string(putResp.Body))
 			}
 
 			// Check for OData-Version header

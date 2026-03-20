@@ -492,6 +492,103 @@ func (c *TestContext) AssertStatusCode(resp *HTTPResponse, expected int) error {
 	return nil
 }
 
+// AssertODataError validates an OData JSON error payload for a specific HTTP status.
+func (c *TestContext) AssertODataError(resp *HTTPResponse, expectedStatus int, messageFragment string) error {
+	if err := c.AssertStatusCode(resp, expectedStatus); err != nil {
+		return err
+	}
+
+	var payload map[string]interface{}
+	if err := json.Unmarshal(resp.Body, &payload); err != nil {
+		return fmt.Errorf("expected JSON error response, got parse error: %w", err)
+	}
+
+	errObjRaw, ok := payload["error"]
+	if !ok {
+		return fmt.Errorf("missing error object in response")
+	}
+
+	errObj, ok := errObjRaw.(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("error object has unexpected type %T", errObjRaw)
+	}
+
+	code, ok := errObj["code"].(string)
+	if !ok || strings.TrimSpace(code) == "" {
+		return fmt.Errorf("error object must include a non-empty code")
+	}
+	if code != fmt.Sprintf("%d", expectedStatus) {
+		return fmt.Errorf("error code mismatch: got %q, expected %d", code, expectedStatus)
+	}
+
+	messages, err := collectODataErrorMessages(errObj)
+	if err != nil {
+		return err
+	}
+
+	if messageFragment == "" {
+		return nil
+	}
+
+	needle := strings.ToLower(strings.TrimSpace(messageFragment))
+	for _, message := range messages {
+		if strings.Contains(strings.ToLower(message), needle) {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("error payload does not contain expected message fragment %q; messages=%v", messageFragment, messages)
+}
+
+func collectODataErrorMessages(errObj map[string]interface{}) ([]string, error) {
+	messages := []string{}
+
+	topLevelMessage, err := extractODataMessage(errObj["message"])
+	if err != nil {
+		return nil, err
+	}
+	messages = append(messages, topLevelMessage)
+
+	if detailsRaw, ok := errObj["details"]; ok {
+		details, ok := detailsRaw.([]interface{})
+		if !ok {
+			return nil, fmt.Errorf("error details has unexpected type %T", detailsRaw)
+		}
+		for i, detailRaw := range details {
+			detail, ok := detailRaw.(map[string]interface{})
+			if !ok {
+				return nil, fmt.Errorf("error detail %d has unexpected type %T", i, detailRaw)
+			}
+			detailMessage, err := extractODataMessage(detail["message"])
+			if err != nil {
+				return nil, fmt.Errorf("invalid error detail %d message: %w", i, err)
+			}
+			messages = append(messages, detailMessage)
+		}
+	}
+
+	return messages, nil
+}
+
+func extractODataMessage(value interface{}) (string, error) {
+	switch message := value.(type) {
+	case string:
+		message = strings.TrimSpace(message)
+		if message == "" {
+			return "", fmt.Errorf("error message is empty")
+		}
+		return message, nil
+	case map[string]interface{}:
+		text, ok := message["value"].(string)
+		if !ok || strings.TrimSpace(text) == "" {
+			return "", fmt.Errorf("error message object must contain non-empty value")
+		}
+		return strings.TrimSpace(text), nil
+	default:
+		return "", fmt.Errorf("error message has unexpected type %T", value)
+	}
+}
+
 // AssertHeader checks if the response has the expected header value
 func (c *TestContext) AssertHeader(resp *HTTPResponse, key, expected string) error {
 	actual := resp.Headers.Get(key)

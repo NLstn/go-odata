@@ -61,7 +61,8 @@ func QueryExpand() *framework.TestSuite {
 		"$expand with nested $select",
 		func(ctx *framework.TestContext) error {
 			expand := url.QueryEscape("Descriptions($select=Description)")
-			resp, err := ctx.GET("/Products?$expand=" + expand + "&$top=1")
+			filter := url.QueryEscape("Name eq 'Laptop'")
+			resp, err := ctx.GET("/Products?$filter=" + filter + "&$expand=" + expand + "&$top=1")
 			if err != nil {
 				return err
 			}
@@ -91,15 +92,22 @@ func QueryExpand() *framework.TestSuite {
 				return fmt.Errorf("descriptions field is not an array")
 			}
 
-			// If there are descriptions, verify they contain Description field
-			if len(descArray) > 0 {
-				desc, ok := descArray[0].(map[string]interface{})
-				if !ok {
-					return fmt.Errorf("first description is not an object")
-				}
-				if _, ok := desc["Description"]; !ok {
-					return fmt.Errorf("expanded Descriptions missing Description field")
-				}
+			if len(descArray) == 0 {
+				return fmt.Errorf("expected at least one expanded description for Laptop fixture")
+			}
+
+			desc, ok := descArray[0].(map[string]interface{})
+			if !ok {
+				return fmt.Errorf("first description is not an object")
+			}
+			if _, ok := desc["Description"]; !ok {
+				return fmt.Errorf("expanded Descriptions missing Description field")
+			}
+			if _, ok := desc["LanguageKey"]; ok {
+				return fmt.Errorf("expanded Descriptions unexpectedly included non-selected field LanguageKey")
+			}
+			if _, ok := desc["ProductID"]; ok {
+				return fmt.Errorf("expanded Descriptions unexpectedly included non-selected field ProductID")
 			}
 
 			return nil

@@ -167,7 +167,7 @@ func CaseInsensitiveSystemQueryOptions() *framework.TestSuite {
 				return err
 			}
 
-			return ctx.AssertStatusCode(resp, http.StatusBadRequest)
+			return ctx.AssertODataError(resp, http.StatusBadRequest, "must not appear more than once")
 		},
 	)
 
@@ -180,8 +180,8 @@ func CaseInsensitiveSystemQueryOptions() *framework.TestSuite {
 				return err
 			}
 
-			if err := ctx.AssertStatusCode(resp, http.StatusBadRequest); err != nil {
-				return framework.NewError(fmt.Sprintf("expected unknown option to be rejected with 400: %v", err))
+			if err := ctx.AssertODataError(resp, http.StatusBadRequest, "unknown query option"); err != nil {
+				return framework.NewError(fmt.Sprintf("expected unknown option to be rejected with strict 400 payload: %v", err))
 			}
 
 			return nil
@@ -223,8 +223,8 @@ func CaseInsensitiveSystemQueryOptions() *framework.TestSuite {
 			if err != nil {
 				return err
 			}
-			if err := ctx.AssertStatusCode(mixedCaseOptionResp, http.StatusBadRequest); err != nil {
-				return framework.NewError(fmt.Sprintf("4.0 should reject mixed-case system option names: %v", err))
+			if err := ctx.AssertODataError(mixedCaseOptionResp, http.StatusBadRequest, "unknown query option"); err != nil {
+				return framework.NewError(fmt.Sprintf("4.0 should reject mixed-case system option names with strict error payload: %v", err))
 			}
 
 			noDollarOptionResp, err := ctx.GET("/Products?filter=Price%20gt%2010&$top=1", headers...)
@@ -239,16 +239,16 @@ func CaseInsensitiveSystemQueryOptions() *framework.TestSuite {
 			if err != nil {
 				return err
 			}
-			if err := ctx.AssertStatusCode(upperCaseOperatorResp, http.StatusBadRequest); err != nil {
-				return framework.NewError(fmt.Sprintf("4.0 should reject upper-case logical/comparison operators: %v", err))
+			if err := ctx.AssertODataError(upperCaseOperatorResp, http.StatusBadRequest, "unexpected token"); err != nil {
+				return framework.NewError(fmt.Sprintf("4.0 should reject upper-case logical/comparison operators with strict error payload: %v", err))
 			}
 
 			upperCaseFunctionResp, err := ctx.GET("/Products?$filter=CONTAINS(Name,'Laptop')&$top=1", headers...)
 			if err != nil {
 				return err
 			}
-			if err := ctx.AssertStatusCode(upperCaseFunctionResp, http.StatusBadRequest); err != nil {
-				return framework.NewError(fmt.Sprintf("4.0 should reject upper-case canonical function names: %v", err))
+			if err := ctx.AssertODataError(upperCaseFunctionResp, http.StatusBadRequest, "unsupported function"); err != nil {
+				return framework.NewError(fmt.Sprintf("4.0 should reject upper-case canonical function names with strict error payload: %v", err))
 			}
 
 			return nil

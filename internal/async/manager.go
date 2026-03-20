@@ -525,13 +525,22 @@ func writeStoredResponse(w http.ResponseWriter, resp *StoredResponse, includeBod
 	if status == 0 {
 		status = http.StatusOK
 	}
-	if w.Header().Get("AsyncResult") == "" {
+	if shouldIncludeAsyncResult(w.Header()) && w.Header().Get("AsyncResult") == "" {
 		w.Header().Set("AsyncResult", strconv.Itoa(status))
 	}
 	w.WriteHeader(status)
 	if includeBody && len(resp.Body) > 0 {
 		writeBytes(w, resp.Body)
 	}
+}
+
+func shouldIncludeAsyncResult(headers http.Header) bool {
+	version := strings.TrimSpace(headers.Get("OData-Version"))
+	if version == "" {
+		return true
+	}
+
+	return !strings.EqualFold(version, "4.0")
 }
 
 func copyHeader(dst, src http.Header) {
