@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"net/http"
 	"sort"
 	"strings"
 
@@ -495,6 +496,41 @@ func FunctionActionOverloading() *framework.TestSuite {
 				return err
 			}
 			return assertClientError(invalidResp, "CalculatePrice invalid bound signature")
+		},
+	)
+
+	suite.AddTest(
+		"test_function_call_syntax_version_negotiation_4_01_vs_4_0",
+		"parameterless function call without parentheses is accepted with OData-MaxVersion 4.01 and rejected when negotiated to 4.0",
+		func(ctx *framework.TestContext) error {
+			doc, err := getMetadata(ctx)
+			if err != nil {
+				return err
+			}
+			_, err = requireDeclaredSignatures(ctx, doc, "GetTopProducts", false, "Function", [][]string{{}})
+			if err != nil {
+				return err
+			}
+
+			v401Headers := []framework.Header{{Key: "OData-MaxVersion", Value: "4.01"}}
+			v401Resp, err := ctx.GET("/GetTopProducts", v401Headers...)
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(v401Resp, http.StatusOK); err != nil {
+				return framework.NewError(fmt.Sprintf("4.01 negotiated parameterless function call without parentheses should succeed: %v", err))
+			}
+
+			v40Headers := []framework.Header{{Key: "OData-MaxVersion", Value: "4.0"}}
+			v40Resp, err := ctx.GET("/GetTopProducts", v40Headers...)
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(v40Resp, http.StatusBadRequest); err != nil {
+				return framework.NewError(fmt.Sprintf("4.0 negotiated request must reject 4.01 parameterless function shorthand: %v", err))
+			}
+
+			return nil
 		},
 	)
 

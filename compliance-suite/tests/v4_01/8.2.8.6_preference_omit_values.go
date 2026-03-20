@@ -84,5 +84,42 @@ func PreferenceOmitValues() *framework.TestSuite {
 		},
 	)
 
+	suite.AddTest(
+		"test_omit_values_version_negotiation_4_01_vs_4_0",
+		"unprefixed omit-values preference applies in 4.01 negotiation and is not reported as applied in 4.0 negotiation",
+		func(ctx *framework.TestContext) error {
+			v401Headers := []framework.Header{
+				{Key: "OData-MaxVersion", Value: "4.01"},
+				{Key: "Prefer", Value: "omit-values=nulls"},
+			}
+			v401Resp, err := ctx.GET("/Products?$top=3", v401Headers...)
+			if err != nil {
+				return err
+			}
+			if v401Resp.StatusCode < http.StatusOK || v401Resp.StatusCode >= 300 {
+				return framework.NewError(fmt.Sprintf("expected 2xx for 4.01 negotiated omit-values request, got %d", v401Resp.StatusCode))
+			}
+
+			v40Headers := []framework.Header{
+				{Key: "OData-MaxVersion", Value: "4.0"},
+				{Key: "Prefer", Value: "omit-values=nulls"},
+			}
+			v40Resp, err := ctx.GET("/Products?$top=3", v40Headers...)
+			if err != nil {
+				return err
+			}
+			if v40Resp.StatusCode < http.StatusOK || v40Resp.StatusCode >= 300 {
+				return framework.NewError(fmt.Sprintf("expected 2xx for 4.0 negotiated request with unknown preference token, got %d", v40Resp.StatusCode))
+			}
+
+			applied := v40Resp.Headers.Get("Preference-Applied")
+			if strings.Contains(applied, "omit-values=nulls") {
+				return framework.NewError(fmt.Sprintf("4.0 negotiated response must not report unprefixed omit-values as applied, got %q", applied))
+			}
+
+			return nil
+		},
+	)
+
 	return suite
 }

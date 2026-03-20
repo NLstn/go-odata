@@ -347,7 +347,7 @@ func ParseQueryOptionsWithConfigAndCaseSensitivity(queryParams url.Values, entit
 		return nil, err
 	}
 
-	if err := parseExpandOption(queryParams, entityMetadata, options, config); err != nil {
+	if err := parseExpandOption(queryParams, entityMetadata, options, config, caseInsensitive); err != nil {
 		return nil, err
 	}
 
@@ -671,9 +671,9 @@ func extractAliasesFromAggregate(applyStr string, aliases map[string]bool) {
 }
 
 // parseExpandOption parses the $expand query parameter
-func parseExpandOption(queryParams url.Values, entityMetadata *metadata.EntityMetadata, options *QueryOptions, config *ParserConfig) error {
+func parseExpandOption(queryParams url.Values, entityMetadata *metadata.EntityMetadata, options *QueryOptions, config *ParserConfig, caseInsensitive bool) error {
 	if expandStr := queryParams.Get("$expand"); expandStr != "" {
-		expand, err := parseExpandWithConfig(expandStr, entityMetadata, config, 0)
+		expand, err := parseExpandWithConfig(expandStr, entityMetadata, config, 0, caseInsensitive)
 		if err != nil {
 			return fmt.Errorf("invalid $expand: %w", err)
 		}
