@@ -673,6 +673,18 @@ func (h *EntityHandler) validateFilterForComplexTypes(filter *query.FilterExpres
 			goto validateChildren
 		}
 
+		// Allow collection navigation path counts, e.g. "Descriptions/$count".
+		// These are validated by the query parser and translated to correlated COUNT subqueries.
+		if strings.HasSuffix(filter.Property, "/$count") {
+			segments := strings.Split(filter.Property, "/")
+			if len(segments) == 2 {
+				navProp := h.metadata.FindNavigationProperty(strings.TrimSpace(segments[0]))
+				if navProp != nil && navProp.NavigationIsArray {
+					goto validateChildren
+				}
+			}
+		}
+
 		// Check if this looks like a navigation property path but wasn't validated above
 		// This provides better error messages for invalid navigation paths
 		if strings.Contains(filter.Property, "/") {

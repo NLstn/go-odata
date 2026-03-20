@@ -47,16 +47,11 @@ func CollectionProperties() *framework.TestSuite {
 				return err
 			}
 
-			// Lambda operators are advanced feature
-			if resp.StatusCode == 200 {
-				return nil
-			}
-			// Accept 400, 500, or 501 as indication feature is not implemented
-			if resp.StatusCode == 400 || resp.StatusCode == 500 || resp.StatusCode == 501 {
-				return framework.NewError("Lambda operators (any/all) not implemented")
+			if err := ctx.AssertStatusCode(resp, 200); err != nil {
+				return err
 			}
 
-			return fmt.Errorf("unexpected status: %d", resp.StatusCode)
+			return nil
 		},
 	)
 
@@ -69,16 +64,11 @@ func CollectionProperties() *framework.TestSuite {
 				return err
 			}
 
-			// Lambda operators are advanced feature
-			if resp.StatusCode == 200 {
-				return nil
-			}
-			// Accept 400, 500, or 501 as indication feature is not implemented
-			if resp.StatusCode == 400 || resp.StatusCode == 500 || resp.StatusCode == 501 {
-				return framework.NewError("Lambda operators (any/all) not implemented")
+			if err := ctx.AssertStatusCode(resp, 200); err != nil {
+				return err
 			}
 
-			return fmt.Errorf("unexpected status: %d", resp.StatusCode)
+			return nil
 		},
 	)
 
@@ -113,12 +103,11 @@ func CollectionProperties() *framework.TestSuite {
 				return err
 			}
 
-			// Advanced feature, may not be supported
-			if resp.StatusCode == 200 || resp.StatusCode == 400 || resp.StatusCode == 501 {
-				return nil
+			if err := ctx.AssertStatusCode(resp, 200); err != nil {
+				return err
 			}
 
-			return fmt.Errorf("unexpected status: %d", resp.StatusCode)
+			return nil
 		},
 	)
 
@@ -131,12 +120,11 @@ func CollectionProperties() *framework.TestSuite {
 				return err
 			}
 
-			// Optional feature
-			if resp.StatusCode == 200 || resp.StatusCode == 400 {
-				return nil
+			if err := ctx.AssertStatusCode(resp, 200); err != nil {
+				return err
 			}
 
-			return fmt.Errorf("unexpected status: %d", resp.StatusCode)
+			return nil
 		},
 	)
 
@@ -149,12 +137,11 @@ func CollectionProperties() *framework.TestSuite {
 				return err
 			}
 
-			// Optional feature
-			if resp.StatusCode == 200 || resp.StatusCode == 400 || resp.StatusCode == 501 {
-				return nil
+			if err := ctx.AssertStatusCode(resp, 200); err != nil {
+				return err
 			}
 
-			return fmt.Errorf("unexpected status: %d", resp.StatusCode)
+			return nil
 		},
 	)
 

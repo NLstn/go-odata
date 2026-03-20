@@ -117,6 +117,18 @@ func astToFilterExpressionWithContext(node ASTNode, ctx *conversionContext) (*Fi
 	return nil, errUnsupportedASTNodeType
 }
 
+func propertyAllowedInFilter(ctx *conversionContext, property string) bool {
+	if ctx == nil {
+		return true
+	}
+
+	if ctx.propertyExists(property) {
+		return true
+	}
+
+	return isCollectionCountPath(property, ctx.entityMetadata)
+}
+
 // convertBinaryExprWithContext converts a binary expression to a filter expression
 func convertBinaryExprWithContext(n *BinaryExpr, ctx *conversionContext) (*FilterExpression, error) {
 	left, err := astToFilterExpressionWithContext(n.Left, ctx)
@@ -394,7 +406,7 @@ func extractPropertyFromComparisonWithContext(node ASTNode, ctx *conversionConte
 		property := ident.Name
 		// Validate property exists (either in entity metadata or as a computed alias)
 		hasComputedAlias := ctx != nil && ctx.hasComputedAlias(property)
-		if ctx != nil && !ctx.propertyExists(property) && !hasComputedAlias {
+		if ctx != nil && !propertyAllowedInFilter(ctx, property) && !hasComputedAlias {
 			return "", fmt.Errorf("property '%s' does not exist", property)
 		}
 		return property, nil
@@ -437,7 +449,7 @@ func convertBinaryArithmeticExprWithContext(binExpr *BinaryExpr, ctx *conversion
 		property = leftIdent.Name
 		// Validate property exists (either in entity metadata or as a computed alias)
 		hasComputedAlias := ctx != nil && ctx.hasComputedAlias(property)
-		if ctx != nil && !ctx.propertyExists(property) && !hasComputedAlias {
+		if ctx != nil && !propertyAllowedInFilter(ctx, property) && !hasComputedAlias {
 			return nil, fmt.Errorf("property '%s' does not exist", property)
 		}
 	} else if leftBinExpr, ok := binExpr.Left.(*BinaryExpr); ok {
@@ -487,7 +499,7 @@ func extractPropertyFromArithmeticExprWithContext(binExpr *BinaryExpr, ctx *conv
 		property := leftIdent.Name
 		// Validate property exists (either in entity metadata or as a computed alias)
 		hasComputedAlias := ctx != nil && ctx.hasComputedAlias(property)
-		if ctx != nil && !ctx.propertyExists(property) && !hasComputedAlias {
+		if ctx != nil && !propertyAllowedInFilter(ctx, property) && !hasComputedAlias {
 			return "", fmt.Errorf("property '%s' does not exist", property)
 		}
 		return property, nil
