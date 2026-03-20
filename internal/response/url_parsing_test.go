@@ -422,3 +422,42 @@ func TestParseODataURLComponentsEmptyPathSegments(t *testing.T) {
 		})
 	}
 }
+
+func TestParseODataURLComponentsBoundFunctionWithColonInStringKey(t *testing.T) {
+	path := "Events('69980427-96ba-474b-b1dc-8c94acd900de_2026-03-20T19:30:00Z')/GetRSVPCounts()"
+
+	components, err := ParseODataURLComponents(path)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	if components.EntitySet != "Events" {
+		t.Fatalf("Expected entity set Events, got %s", components.EntitySet)
+	}
+
+	if components.EntityKey != "69980427-96ba-474b-b1dc-8c94acd900de_2026-03-20T19:30:00Z" {
+		t.Fatalf("Expected parsed string key with colon preserved, got %s", components.EntityKey)
+	}
+
+	if components.NavigationProperty != "GetRSVPCounts()" {
+		t.Fatalf("Expected operation segment GetRSVPCounts(), got %s", components.NavigationProperty)
+	}
+}
+
+func TestParseODataURLComponentsMalformedCompositeKeyWithColonReturnsError(t *testing.T) {
+	path := "Events(ID='69980427-96ba-474b-b1dc-8c94acd900de_2026-03-20T19:30:00Z)/GetRSVPCounts()"
+
+	_, err := ParseODataURLComponents(path)
+	if err == nil {
+		t.Fatal("Expected error for malformed composite key with unclosed quote, got nil")
+	}
+}
+
+func TestParseODataURLComponentsColonInKeyStillRejectsEmptyPathSegments(t *testing.T) {
+	path := "Events('69980427-96ba-474b-b1dc-8c94acd900de_2026-03-20T19:30:00Z')//GetRSVPCounts()"
+
+	_, err := ParseODataURLComponents(path)
+	if err == nil {
+		t.Fatal("Expected error for URL with empty path segment, got nil")
+	}
+}

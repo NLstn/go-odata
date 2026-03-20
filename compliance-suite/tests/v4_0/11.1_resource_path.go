@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/nlstn/go-odata/compliance-suite/framework"
 )
@@ -398,6 +399,61 @@ func ResourcePath() *framework.TestSuite {
 			if resp.StatusCode != 404 && resp.StatusCode != 400 && resp.StatusCode != 301 {
 				return fmt.Errorf("empty path segments must return 404, 400, or 301 per OData spec (got %d)", resp.StatusCode)
 			}
+			return nil
+		},
+	)
+
+	// Test 15: Bound function URL with colon inside string key literal
+	suite.AddTest(
+		"test_bound_function_colon_in_string_key",
+		"Bound function path with colon inside quoted key is parsed as a valid OData resource path",
+		func(ctx *framework.TestContext) error {
+			productPath, err := firstEntityPath(ctx, "Products")
+			if err != nil {
+				return err
+			}
+
+			start := strings.Index(productPath, "(")
+			end := strings.LastIndex(productPath, ")")
+			if start == -1 || end == -1 || end <= start+1 {
+				return fmt.Errorf("unexpected product path format: %s", productPath)
+			}
+
+			baseID := productPath[start+1 : end]
+			keyWithColon := fmt.Sprintf("'%s_2026-03-20T19:30:00Z'", baseID)
+			operationPath := "/Products(" + keyWithColon + ")/GetRelatedProducts()"
+
+			resp, err := ctx.GET(operationPath)
+			if err != nil {
+				return err
+			}
+
+			if resp.StatusCode == 400 {
+				return fmt.Errorf("valid URL shape must not be rejected as invalid URL (got 400)")
+			}
+
+			if resp.StatusCode != 404 && resp.StatusCode != 200 {
+				return fmt.Errorf("expected status 404 for non-existent key or 200 if entity exists, got %d", resp.StatusCode)
+			}
+
+			return nil
+		},
+	)
+
+	// Test 16: Malformed key literal must be rejected
+	suite.AddTest(
+		"test_malformed_key_literal_rejected",
+		"Malformed key literal with unclosed quote returns 400",
+		func(ctx *framework.TestContext) error {
+			resp, err := ctx.GET("/Products(ID='69980427-96ba-474b-b1dc-8c94acd900de_2026-03-20T19:30:00Z)/GetRelatedProducts()")
+			if err != nil {
+				return err
+			}
+
+			if resp.StatusCode != 400 {
+				return fmt.Errorf("expected status 400 for malformed key literal, got %d", resp.StatusCode)
+			}
+
 			return nil
 		},
 	)

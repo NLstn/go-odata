@@ -2,6 +2,7 @@ package v4_0
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/nlstn/go-odata/compliance-suite/framework"
 )
@@ -78,6 +79,42 @@ func AddressingOperations() *framework.TestSuite {
 
 			if resp.StatusCode == 404 || resp.StatusCode == 501 {
 				return fmt.Errorf("operation not addressable (status %d). Missing actions/functions are a compliance failure", resp.StatusCode)
+			}
+
+			return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		},
+	)
+
+	// Test 3b: Bound function with colon inside quoted string key literal
+	suite.AddTest(
+		"test_bound_function_colon_in_string_key",
+		"Bound function remains addressable when quoted key literal contains a colon",
+		func(ctx *framework.TestContext) error {
+			productPath, err := firstEntityPath(ctx, "Products")
+			if err != nil {
+				return err
+			}
+
+			start := strings.Index(productPath, "(")
+			end := strings.LastIndex(productPath, ")")
+			if start == -1 || end == -1 || end <= start+1 {
+				return fmt.Errorf("unexpected product path format: %s", productPath)
+			}
+
+			baseID := productPath[start+1 : end]
+			operationPath := fmt.Sprintf("/Products('%s_2026-03-20T19:30:00Z')/GetRelatedProducts()", baseID)
+
+			resp, err := ctx.GET(operationPath)
+			if err != nil {
+				return err
+			}
+
+			if resp.StatusCode == 400 {
+				return fmt.Errorf("valid bound function URL was rejected as invalid URL")
+			}
+
+			if resp.StatusCode == 200 || resp.StatusCode == 404 {
+				return nil
 			}
 
 			return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
