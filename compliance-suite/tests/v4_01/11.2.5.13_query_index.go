@@ -3,6 +3,7 @@ package v4_01
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"regexp"
 	"strings"
 
@@ -314,7 +315,11 @@ func QueryIndex() *framework.TestSuite {
 			}
 
 			body := string(resp.Body)
-			if matched, _ := regexp.MatchString(`"@odata\.index"\s*:\s*0`, body); matched {
+			matched, matchErr := regexp.MatchString(`"@odata\.index"\s*:\s*0`, body)
+			if matchErr != nil {
+				return framework.NewError(fmt.Sprintf("failed to evaluate @odata.index pattern: %v", matchErr))
+			}
+			if matched {
 				return nil
 			}
 
@@ -374,6 +379,34 @@ func QueryIndex() *framework.TestSuite {
 
 			if err := ctx.AssertStatusCode(resp, 400); err != nil {
 				return framework.NewError(fmt.Sprintf("Expected HTTP 400 for duplicate $index parameters but got %d", resp.StatusCode))
+			}
+
+			return nil
+		},
+	)
+
+	suite.AddTest(
+		"test_index_version_negotiation_4_01_vs_4_0",
+		"$index is accepted with OData-MaxVersion 4.01 and rejected when negotiated to 4.0",
+		func(ctx *framework.TestContext) error {
+			query := "/Products?$INDEX&$top=1"
+
+			v401Headers := []framework.Header{{Key: "OData-MaxVersion", Value: "4.01"}}
+			v401Resp, err := ctx.GET(query, v401Headers...)
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(v401Resp, http.StatusOK); err != nil {
+				return framework.NewError(fmt.Sprintf("4.01 negotiated $index request should succeed: %v", err))
+			}
+
+			v40Headers := []framework.Header{{Key: "OData-MaxVersion", Value: "4.0"}}
+			v40Resp, err := ctx.GET(query, v40Headers...)
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(v40Resp, http.StatusBadRequest); err != nil {
+				return framework.NewError(fmt.Sprintf("4.0 negotiated request must reject 4.01 $index behavior: %v", err))
 			}
 
 			return nil

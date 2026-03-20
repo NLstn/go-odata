@@ -2,6 +2,7 @@ package v4_01
 
 import (
 	"fmt"
+	"net/http"
 	"regexp"
 	"strings"
 
@@ -112,6 +113,39 @@ func QuerySchemaVersion() *framework.TestSuite {
 
 			if err := ctx.AssertStatusCode(resp, 404); err != nil {
 				return framework.NewError(fmt.Sprintf("unknown $schemaversion should return 404: %v", err))
+			}
+
+			return nil
+		},
+	)
+
+	suite.AddTest(
+		"test_schemaversion_version_negotiation_4_01_vs_4_0",
+		"$schemaversion is accepted with OData-MaxVersion 4.01 and rejected when negotiated to 4.0",
+		func(ctx *framework.TestContext) error {
+			version, err := getSchemaVersion(ctx)
+			if err != nil {
+				return err
+			}
+
+			query := fmt.Sprintf("/Products?$schemaversion=%s&$top=1", version)
+
+			v401Headers := []framework.Header{{Key: "OData-MaxVersion", Value: "4.01"}}
+			v401Resp, err := ctx.GET(query, v401Headers...)
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(v401Resp, http.StatusOK); err != nil {
+				return framework.NewError(fmt.Sprintf("4.01 negotiated $schemaversion request should succeed: %v", err))
+			}
+
+			v40Headers := []framework.Header{{Key: "OData-MaxVersion", Value: "4.0"}}
+			v40Resp, err := ctx.GET(query, v40Headers...)
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(v40Resp, http.StatusBadRequest); err != nil {
+				return framework.NewError(fmt.Sprintf("4.0 negotiated request must reject 4.01 $schemaversion behavior: %v", err))
 			}
 
 			return nil

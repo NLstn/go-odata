@@ -2,6 +2,7 @@ package v4_01
 
 import (
 	"fmt"
+	"net/http"
 
 	"github.com/nlstn/go-odata/compliance-suite/framework"
 )
@@ -252,6 +253,34 @@ func QueryCompute() *framework.TestSuite {
 				if _, ok := category["DoubleID"]; !ok {
 					return framework.NewError(fmt.Sprintf("entity %d expanded Category missing computed property \"DoubleID\"", i))
 				}
+			}
+
+			return nil
+		},
+	)
+
+	suite.AddTest(
+		"test_compute_version_negotiation_4_01_vs_4_0",
+		"$compute is accepted with OData-MaxVersion 4.01 and rejected when negotiated to 4.0",
+		func(ctx *framework.TestContext) error {
+			query := "/Products?$compute=Price mul 1.1 as PriceWithTax&$select=ID,PriceWithTax&$top=1"
+
+			v401Headers := []framework.Header{{Key: "OData-MaxVersion", Value: "4.01"}}
+			v401Resp, err := ctx.GET(query, v401Headers...)
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(v401Resp, http.StatusOK); err != nil {
+				return framework.NewError(fmt.Sprintf("4.01 negotiated $compute request should succeed: %v", err))
+			}
+
+			v40Headers := []framework.Header{{Key: "OData-MaxVersion", Value: "4.0"}}
+			v40Resp, err := ctx.GET(query, v40Headers...)
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(v40Resp, http.StatusBadRequest); err != nil {
+				return framework.NewError(fmt.Sprintf("4.0 negotiated request must reject 4.01 $compute feature: %v", err))
 			}
 
 			return nil

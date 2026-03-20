@@ -119,14 +119,105 @@ func isCaseInsensitiveSystemQueryParsingEnabled(r *http.Request) bool {
 	return v.Major > 4 || (v.Major == 4 && v.Minor >= 1)
 }
 
+func usesInOperator(filter *query.FilterExpression) bool {
+	if filter == nil {
+		return false
+	}
+	if filter.Operator == query.OpIn {
+		return true
+	}
+	return usesInOperator(filter.Left) || usesInOperator(filter.Right)
+}
+
+func expandHasCompute(expands []query.ExpandOption) bool {
+	for _, expand := range expands {
+		if expand.Compute != nil {
+			return true
+		}
+		if expandHasCompute(expand.Expand) {
+			return true
+		}
+	}
+	return false
+}
+
+func expandHasInOperator(expands []query.ExpandOption) bool {
+	for _, expand := range expands {
+		if usesInOperator(expand.Filter) {
+			return true
+		}
+		if expandHasInOperator(expand.Expand) {
+			return true
+		}
+	}
+	return false
+}
+
+func applyHasCompute(apply []query.ApplyTransformation) bool {
+	for _, transform := range apply {
+		if transform.Compute != nil {
+			return true
+		}
+		if transform.GroupBy != nil && applyHasCompute(transform.GroupBy.Transform) {
+			return true
+		}
+	}
+	return false
+}
+
+func applyHasInOperator(apply []query.ApplyTransformation) bool {
+	for _, transform := range apply {
+		if usesInOperator(transform.Filter) {
+			return true
+		}
+		if transform.GroupBy != nil && applyHasInOperator(transform.GroupBy.Transform) {
+			return true
+		}
+	}
+	return false
+}
+
+func validateQueryOptionsForNegotiatedVersion(queryOptions *query.QueryOptions, negotiated version.Version) error {
+	if negotiated.Supports("in-operator") {
+		return nil
+	}
+
+	if usesInOperator(queryOptions.Filter) || expandHasInOperator(queryOptions.Expand) || applyHasInOperator(queryOptions.Apply) {
+		return fmt.Errorf("invalid $filter: 'in' operator is not supported in OData %s", negotiated.String())
+	}
+
+	if queryOptions.Compute != nil || expandHasCompute(queryOptions.Expand) || applyHasCompute(queryOptions.Apply) {
+		return fmt.Errorf("invalid $compute: $compute is not supported in OData %s", negotiated.String())
+	}
+
+	if queryOptions.Index {
+		return fmt.Errorf("invalid $index: $index is not supported in OData %s", negotiated.String())
+	}
+
+	if queryOptions.SchemaVersion != nil {
+		return fmt.Errorf("invalid $schemaversion: $schemaversion is not supported in OData %s", negotiated.String())
+	}
+
+	return nil
+}
+
 func (h *EntityHandler) parseQueryOptionsByNegotiatedVersion(r *http.Request, entityMetadata *metadata.EntityMetadata, config *query.ParserConfig) (*query.QueryOptions, error) {
 	caseInsensitive := isCaseInsensitiveSystemQueryParsingEnabled(r)
-	return query.ParseQueryOptionsWithConfigAndCaseSensitivity(
+	queryOptions, err := query.ParseQueryOptionsWithConfigAndCaseSensitivity(
 		query.ParseRawQuery(r.URL.RawQuery),
 		entityMetadata,
 		config,
 		caseInsensitive,
 	)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := validateQueryOptionsForNegotiatedVersion(queryOptions, version.GetVersion(r.Context())); err != nil {
+		return nil, err
+	}
+
+	return queryOptions, nil
 }
 
 // buildKeyQuery builds a GORM query with WHERE conditions for the entity key(s)

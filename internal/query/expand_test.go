@@ -649,6 +649,20 @@ func TestParseExpandWithAllSupportedNestedOptionKeys(t *testing.T) {
 	}
 }
 
+func TestParseExpandWithNoDollarNestedOptionsVersionBehavior(t *testing.T) {
+	productMeta, _ := buildProductDescriptionMetadata(t)
+	params := url.Values{}
+	params.Set("$expand", "Descriptions(filter=Name eq 'A';orderby=Name desc;top=1;skip=0;count=true;select=Name)")
+
+	if _, err := ParseQueryOptionsWithConfigAndCaseSensitivity(params, productMeta, nil, true); err != nil {
+		t.Fatalf("expected 4.01-style no-$ nested options to parse, got error: %v", err)
+	}
+
+	if _, err := ParseQueryOptionsWithConfigAndCaseSensitivity(params, productMeta, nil, false); err == nil {
+		t.Fatal("expected 4.0-style parsing to reject no-$ nested options")
+	}
+}
+
 // TestSplitExpandParts tests the expand parts splitting logic
 func TestSplitExpandParts(t *testing.T) {
 	tests := []struct {

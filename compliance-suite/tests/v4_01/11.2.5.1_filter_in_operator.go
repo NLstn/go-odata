@@ -188,6 +188,32 @@ func InOperator() *framework.TestSuite {
 		},
 	)
 
+	suite.AddTest(
+		"test_filter_in_version_negotiation_4_01_vs_4_0",
+		"in-operator is accepted with OData-MaxVersion 4.01 and rejected when negotiated to 4.0",
+		func(ctx *framework.TestContext) error {
+			v401Headers := []framework.Header{{Key: "OData-MaxVersion", Value: "4.01"}}
+			v401Resp, err := ctx.GET("/Products?$filter=Name in ('Laptop','Wireless Mouse')", v401Headers...)
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(v401Resp, http.StatusOK); err != nil {
+				return framework.NewError(fmt.Sprintf("4.01 negotiated in-operator request should succeed: %v", err))
+			}
+
+			v40Headers := []framework.Header{{Key: "OData-MaxVersion", Value: "4.0"}}
+			v40Resp, err := ctx.GET("/Products?$filter=Name in ('Laptop','Wireless Mouse')", v40Headers...)
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(v40Resp, http.StatusBadRequest); err != nil {
+				return framework.NewError(fmt.Sprintf("4.0 negotiated request must reject 4.01 in-operator syntax: %v", err))
+			}
+
+			return nil
+		},
+	)
+
 	return suite
 }
 

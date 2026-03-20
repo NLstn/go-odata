@@ -2,6 +2,7 @@ package v4_01
 
 import (
 	"fmt"
+	"net/http"
 	"net/url"
 	"sort"
 
@@ -282,6 +283,35 @@ func NestedExpandOptions() *framework.TestSuite {
 			}
 
 			return ctx.AssertBodyContains(resp, "Descriptions@odata.count")
+		},
+	)
+
+	suite.AddTest(
+		"test_nested_expand_version_negotiation_4_01_vs_4_0",
+		"nested expand options using no-$ forms are accepted with OData-MaxVersion 4.01 and rejected when negotiated to 4.0",
+		func(ctx *framework.TestContext) error {
+			expand := url.QueryEscape("Descriptions(filter=LanguageKey eq 'EN';top=1;select=LanguageKey)")
+			query := "/Products?$top=1&$expand=" + expand
+
+			v401Headers := []framework.Header{{Key: "OData-MaxVersion", Value: "4.01"}}
+			v401Resp, err := ctx.GET(query, v401Headers...)
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(v401Resp, http.StatusOK); err != nil {
+				return framework.NewError(fmt.Sprintf("4.01 negotiated nested expand request should succeed: %v", err))
+			}
+
+			v40Headers := []framework.Header{{Key: "OData-MaxVersion", Value: "4.0"}}
+			v40Resp, err := ctx.GET(query, v40Headers...)
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(v40Resp, http.StatusBadRequest); err != nil {
+				return framework.NewError(fmt.Sprintf("4.0 negotiated request must reject 4.01 no-$ nested option names: %v", err))
+			}
+
+			return nil
 		},
 	)
 
