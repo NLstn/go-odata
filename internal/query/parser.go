@@ -188,7 +188,7 @@ const (
 	LogicalOr  LogicalOperator = "or"
 )
 
-// validQueryOptions is a set of valid OData v4 system query options
+// validQueryOptions is a set of valid OData v4 system query options (lowercase with $ prefix)
 var validQueryOptions = map[string]bool{
 	"$filter":        true,
 	"$select":        true,
@@ -207,15 +207,61 @@ var validQueryOptions = map[string]bool{
 	"$skiptoken":     true,
 }
 
+// normalizeQueryOptionKey normalizes a query option key to lowercase with $ prefix
+// per OData v4.01 spec: system query option names are case-insensitive and may be provided without the $ prefix
+// Returns the normalized key if it's a valid OData system query option, otherwise returns the original key
+func normalizeQueryOptionKey(key string) string {
+	// Try with $ prefix
+	withDollar := "$" + strings.ToLower(key)
+	if validQueryOptions[withDollar] {
+		return withDollar
+	}
+
+	// Already has $ prefix, just lowercase it
+	if strings.HasPrefix(key, "$") {
+		return strings.ToLower(key)
+	}
+
+	// Check if without modification (lowercase) it's a valid option
+	lowercase := strings.ToLower(key)
+	if validQueryOptions[lowercase] {
+		return lowercase
+	}
+
+	// Not a known OData system query option, return original
+	return key
+}
+
+// normalizeQueryParams normalizes all query parameters to have lowercase $ prefix
+// This allows case-insensitive query options and options without $ prefix
+// Non-OData parameters are left unchanged
+func normalizeQueryParams(queryParams url.Values) url.Values {
+	normalized := make(url.Values)
+
+	for key, values := range queryParams {
+		normalizedKey := normalizeQueryOptionKey(key)
+		// Add with normalized key
+		normalized[normalizedKey] = values
+	}
+
+	return normalized
+}
+
 // validateQueryOptions validates that all query parameters starting with $ are valid OData query options
 // and that no system query option appears more than once
 func validateQueryOptions(queryParams url.Values) error {
+	optionCounts := make(map[string]int)
+
 	for key, values := range queryParams {
 		// Only validate parameters that start with $
 		if strings.HasPrefix(key, "$") {
+			// Check if it's a valid option (key should already be normalized to lowercase)
 			if !validQueryOptions[key] {
 				return fmt.Errorf("unknown query option: '%s'", key)
 			}
+
+			optionCounts[key]++
+
 			// Check for duplicate query parameters
 			// According to OData spec, system query options should not appear more than once
 			if len(values) > 1 {
@@ -223,6 +269,14 @@ func validateQueryOptions(queryParams url.Values) error {
 			}
 		}
 	}
+
+	// Check for duplicate options
+	for option, count := range optionCounts {
+		if count > 1 {
+			return fmt.Errorf("query option '%s' must not appear more than once", option)
+		}
+	}
+
 	return nil
 }
 
@@ -280,6 +334,10 @@ func ParseQueryOptionsWithConfig(queryParams url.Values, entityMetadata *metadat
 
 	// Use resolved parameters for all subsequent parsing
 	queryParams = resolvedParams
+
+	// Normalize query parameter keys to lowercase with $ prefix
+	// per OData v4.01 spec: system query option names are case-insensitive and may be provided without the $ prefix
+	queryParams = normalizeQueryParams(queryParams)
 
 	// Validate that all query parameters starting with $ are valid OData query options
 	if err := validateQueryOptions(queryParams); err != nil {
