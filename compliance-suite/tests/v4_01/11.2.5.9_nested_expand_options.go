@@ -310,6 +310,9 @@ func NestedExpandOptions() *framework.TestSuite {
 			if err := ctx.AssertStatusCode(v40Resp, http.StatusBadRequest); err != nil {
 				return framework.NewError(fmt.Sprintf("4.0 negotiated request must reject 4.01 no-$ nested option names: %v", err))
 			}
+			if err := ctx.AssertODataError(v40Resp, http.StatusBadRequest, "unsupported nested $expand option"); err != nil {
+				return framework.NewError(fmt.Sprintf("4.0 negotiated nested expand rejection must include strict OData error payload: %v", err))
+			}
 
 			return nil
 		},

@@ -103,12 +103,29 @@ func HeaderAsyncResult() *framework.TestSuite {
 }
 
 func startAsyncRequest(ctx *framework.TestContext, maxVersion string) (*framework.HTTPResponse, error) {
-	return ctx.GET(
-		"/Products?$top=1",
-		framework.Header{Key: "Prefer", Value: "respond-async"},
-		framework.Header{Key: "OData-MaxVersion", Value: maxVersion},
-		framework.Header{Key: "Accept", Value: "application/json"},
-	)
+	var lastResp *framework.HTTPResponse
+	for i := 0; i < 5; i++ {
+		resp, err := ctx.GET(
+			"/Products?$top=1",
+			framework.Header{Key: "Prefer", Value: "respond-async"},
+			framework.Header{Key: "OData-MaxVersion", Value: maxVersion},
+			framework.Header{Key: "Accept", Value: "application/json"},
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		lastResp = resp
+		if resp.StatusCode == http.StatusAccepted {
+			return resp, nil
+		}
+	}
+
+	if lastResp == nil {
+		return nil, framework.NewError("failed to obtain response when requesting async processing")
+	}
+
+	return lastResp, nil
 }
 
 func pollAsyncMonitor(ctx *framework.TestContext, location, maxVersion string) (*framework.HTTPResponse, error) {

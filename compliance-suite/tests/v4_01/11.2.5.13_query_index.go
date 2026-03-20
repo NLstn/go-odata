@@ -462,6 +462,9 @@ func QueryIndex() *framework.TestSuite {
 			if err := ctx.AssertStatusCode(v40Resp, http.StatusBadRequest); err != nil {
 				return framework.NewError(fmt.Sprintf("4.0 negotiated request must reject 4.01 $index behavior: %v", err))
 			}
+			if err := ctx.AssertODataError(v40Resp, http.StatusBadRequest, "unknown query option"); err != nil {
+				return framework.NewError(fmt.Sprintf("4.0 negotiated $index rejection must include strict OData error payload: %v", err))
+			}
 
 			return nil
 		},
