@@ -217,9 +217,14 @@ func normalizeQueryOptionKey(key string) string {
 		return withDollar
 	}
 
-	// Already has $ prefix, just lowercase it
+	// Already has $ prefix, lowercase it and check validity
 	if strings.HasPrefix(key, "$") {
-		return strings.ToLower(key)
+		lowercase := strings.ToLower(key)
+		if validQueryOptions[lowercase] {
+			return lowercase
+		}
+		// Unknown $ option - preserve original casing for error messages
+		return key
 	}
 
 	// Check if without modification (lowercase) it's a valid option
