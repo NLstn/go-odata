@@ -214,20 +214,6 @@ func decodeJSON(resp *framework.HTTPResponse, target interface{}) error {
 	return nil
 }
 
-func intField(entity map[string]interface{}, key string) (int, error) {
-	v, ok := entity[key]
-	if !ok {
-		return 0, fmt.Errorf("missing %q field", key)
-	}
-
-	n, ok := v.(float64)
-	if !ok {
-		return 0, fmt.Errorf("field %q is %T, expected number", key, v)
-	}
-
-	return int(n), nil
-}
-
 func floatField(entity map[string]interface{}, key string) (float64, error) {
 	v, ok := entity[key]
 	if !ok {
