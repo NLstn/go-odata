@@ -290,6 +290,11 @@ func (t *Tokenizer) readNumber() string {
 		}
 	}
 
+	// OData Edm.Single literals may have an optional 'f'/'F' suffix.
+	if t.ch == 'f' || t.ch == 'F' {
+		t.advance()
+	}
+
 	// Return a slice of the input string to avoid allocation
 	return t.input[start:t.pos]
 }

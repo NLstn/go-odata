@@ -158,6 +158,21 @@ func main() {
 			Suite:   v4_0.NumericEdgeCases,
 		})
 		testSuites = append(testSuites, TestSuiteInfo{
+			Name:    "5.1.1.2_byte_types",
+			Version: "4.0",
+			Suite:   v4_0.ByteTypes,
+		})
+		testSuites = append(testSuites, TestSuiteInfo{
+			Name:    "5.1.1.3_int16_type",
+			Version: "4.0",
+			Suite:   v4_0.Int16Type,
+		})
+		testSuites = append(testSuites, TestSuiteInfo{
+			Name:    "5.1.1.4_single_type",
+			Version: "4.0",
+			Suite:   v4_0.SingleType,
+		})
+		testSuites = append(testSuites, TestSuiteInfo{
 			Name:    "5.1.1.5_numeric_boundary_tests",
 			Version: "4.0",
 			Suite:   v4_0.NumericBoundaryTests,
@@ -176,6 +191,26 @@ func main() {
 			Name:    "5.1.4_temporal_data_types",
 			Version: "4.0",
 			Suite:   v4_0.TemporalDataTypes,
+		})
+		testSuites = append(testSuites, TestSuiteInfo{
+			Name:    "5.1.5_guid_type",
+			Version: "4.0",
+			Suite:   v4_0.GuidType,
+		})
+		testSuites = append(testSuites, TestSuiteInfo{
+			Name:    "5.1.6_binary_type",
+			Version: "4.0",
+			Suite:   v4_0.BinaryType,
+		})
+		testSuites = append(testSuites, TestSuiteInfo{
+			Name:    "5.1.7_date_timeofday_types",
+			Version: "4.0",
+			Suite:   v4_0.DateTimeOfDayTypes,
+		})
+		testSuites = append(testSuites, TestSuiteInfo{
+			Name:    "5.1.8_duration_type",
+			Version: "4.0",
+			Suite:   v4_0.DurationType,
 		})
 		testSuites = append(testSuites, TestSuiteInfo{
 			Name:    "5.2_complex_types",

@@ -168,6 +168,38 @@ func TestTokenizer(t *testing.T) {
 				TokenEOF,
 			},
 		},
+		{
+			name:  "Single literal with f suffix",
+			input: "Price eq 3.14f",
+			expected: []TokenType{
+				TokenIdentifier,
+				TokenOperator,
+				TokenNumber,
+				TokenEOF,
+			},
+		},
+		{
+			name:  "Binary prefixed literal",
+			input: "Data eq binary'dGVzdA=='",
+			expected: []TokenType{
+				TokenIdentifier,
+				TokenOperator,
+				TokenIdentifier,
+				TokenString,
+				TokenEOF,
+			},
+		},
+		{
+			name:  "Duration prefixed literal",
+			input: "ShippingTime eq duration'P1D'",
+			expected: []TokenType{
+				TokenIdentifier,
+				TokenOperator,
+				TokenIdentifier,
+				TokenString,
+				TokenEOF,
+			},
+		},
 	}
 
 	for _, tt := range tests {

@@ -40,6 +40,16 @@ type Product struct {
 	Name            string        `json:"Name" gorm:"not null" odata:"required,maxlength=100,searchable,annotation:Core.Description=Product display name"`
 	Description     *string       `json:"Description" odata:"nullable,maxlength=500,annotation:Core.Description=Detailed product description"` // Nullable description field
 	Price           float64       `json:"Price" gorm:"not null" odata:"required,precision=10,scale=2"`
+	Rating          uint8         `json:"Rating" odata:""`
+	Temperature     int8          `json:"Temperature" odata:""`
+	Quantity        int16         `json:"Quantity" odata:""`
+	Weight          float32       `json:"Weight" odata:""`
+	Data            []byte        `json:"Data,omitempty" odata:"nullable"`
+	ReleaseDate     string        `json:"ReleaseDate,omitempty" odata:""`
+	OpenTime        string        `json:"OpenTime,omitempty" odata:""`
+	ShippingTime    string        `json:"ShippingTime,omitempty" odata:""`
+	ProcessingTime  string        `json:"ProcessingTime,omitempty" odata:""`
+	Offset          string        `json:"Offset,omitempty" odata:""`
 	CategoryID      *uuid.UUID    `json:"CategoryID" gorm:"type:char(36)" odata:"nullable"` // Foreign key for Category navigation property
 	Status          ProductStatus `json:"Status" gorm:"not null" odata:"enum=ProductStatus,flags"`
 	Version         int           `json:"Version" gorm:"default:1" odata:"etag"` // Version field used for optimistic concurrency control via ETag
@@ -104,6 +114,16 @@ func GetSampleProducts() []Product {
 		{
 			Name:            "Laptop",
 			Price:           999.99,
+			Rating:          200,
+			Temperature:     -10,
+			Quantity:        1200,
+			Weight:          3.14,
+			Data:            []byte("test"),
+			ReleaseDate:     "2024-01-15",
+			OpenTime:        "09:30:00",
+			ShippingTime:    "P1D",
+			ProcessingTime:  "PT45S",
+			Offset:          "P0D",
 			CategoryID:      nil, // Will be set during seeding after categories are created
 			Status:          ProductStatusInStock | ProductStatusFeatured,
 			Version:         1,
@@ -129,13 +149,23 @@ func GetSampleProducts() []Product {
 			Area:     stringPtr("POLYGON((-122.5 47.5, -122.0 47.5, -122.0 47.8, -122.5 47.8, -122.5 47.5))"), // Seattle area
 		},
 		{
-			Name:        "Wireless Mouse",
-			Price:       29.99,
-			CategoryID:  nil,                                        // Will be set during seeding
-			Status:      ProductStatusInStock | ProductStatusOnSale, // In stock and on sale
-			Version:     1,
-			CreatedAt:   time.Date(2024, 3, 20, 14, 45, 0, 0, time.UTC),
-			ProductType: "Product",
+			Name:           "Wireless Mouse",
+			Price:          29.99,
+			Rating:         110,
+			Temperature:    5,
+			Quantity:       300,
+			Weight:         0.09,
+			Data:           []byte{0x01, 0x02, 0x03},
+			ReleaseDate:    "2024-01-20",
+			OpenTime:       "08:15:00",
+			ShippingTime:   "PT2H",
+			ProcessingTime: "PT1.5S",
+			Offset:         "-P1D",
+			CategoryID:     nil,                                        // Will be set during seeding
+			Status:         ProductStatusInStock | ProductStatusOnSale, // In stock and on sale
+			Version:        1,
+			CreatedAt:      time.Date(2024, 3, 20, 14, 45, 0, 0, time.UTC),
+			ProductType:    "Product",
 			ShippingAddress: &Address{
 				Street:     "456 Innovation Blvd",
 				City:       "San Francisco",
@@ -154,13 +184,23 @@ func GetSampleProducts() []Product {
 			Area:     stringPtr("POLYGON((-122.5 37.7, -122.3 37.7, -122.3 37.9, -122.5 37.9, -122.5 37.7))"), // SF Bay area
 		},
 		{
-			Name:        "Coffee Mug",
-			Price:       15.50,
-			CategoryID:  nil,                  // Will be set during seeding
-			Status:      ProductStatusInStock, // Only in stock
-			Version:     1,
-			CreatedAt:   time.Date(2023, 11, 5, 9, 15, 0, 0, time.UTC),
-			ProductType: "Product",
+			Name:           "Coffee Mug",
+			Price:          15.50,
+			Rating:         0,
+			Temperature:    -5,
+			Quantity:       -200,
+			Weight:         0.0,
+			Data:           []byte{},
+			ReleaseDate:    "2024-01-01",
+			OpenTime:       "00:00:00",
+			ShippingTime:   "P2D",
+			ProcessingTime: "PT30M",
+			Offset:         "P0D",
+			CategoryID:     nil,                  // Will be set during seeding
+			Status:         ProductStatusInStock, // Only in stock
+			Version:        1,
+			CreatedAt:      time.Date(2023, 11, 5, 9, 15, 0, 0, time.UTC),
+			ProductType:    "Product",
 			ShippingAddress: &Address{
 				Street:     "789 Home St",
 				City:       "Portland",
@@ -179,13 +219,22 @@ func GetSampleProducts() []Product {
 			Area:     stringPtr("POLYGON((-122.8 45.4, -122.5 45.4, -122.5 45.7, -122.8 45.7, -122.8 45.4))"), // Portland area
 		},
 		{
-			Name:        "Office Chair",
-			Price:       249.99,
-			CategoryID:  nil,                       // Will be set during seeding
-			Status:      ProductStatusDiscontinued, // Discontinued
-			Version:     1,
-			CreatedAt:   time.Date(2023, 8, 12, 16, 20, 0, 0, time.UTC),
-			ProductType: "Product",
+			Name:           "Office Chair",
+			Price:          249.99,
+			Rating:         255,
+			Temperature:    127,
+			Quantity:       32767,
+			Weight:         150.0,
+			ReleaseDate:    "2024-12-31",
+			OpenTime:       "23:59:59",
+			ShippingTime:   "P1DT2H30M",
+			ProcessingTime: "PT45S",
+			Offset:         "P0D",
+			CategoryID:     nil,                       // Will be set during seeding
+			Status:         ProductStatusDiscontinued, // Discontinued
+			Version:        1,
+			CreatedAt:      time.Date(2023, 8, 12, 16, 20, 0, 0, time.UTC),
+			ProductType:    "Product",
 			// No shipping address or dimensions (testing null complex types)
 			ShippingAddress: nil,
 			Dimensions:      nil,

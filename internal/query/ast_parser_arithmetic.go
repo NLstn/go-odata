@@ -1,6 +1,7 @@
 package query
 
 import (
+	"encoding/base64"
 	"fmt"
 	"math"
 	"strconv"
@@ -201,6 +202,11 @@ func (p *ASTParser) parseNumberLiteral(value string) ASTNode {
 		return expr
 	}
 
+	// Edm.Single literals may use an optional f/F suffix (e.g., 3.14f, 1.5e2f).
+	if strings.HasSuffix(value, "f") || strings.HasSuffix(value, "F") {
+		value = value[:len(value)-1]
+	}
+
 	// Try to parse as integer first, then as float
 	if intVal, err := strconv.ParseInt(value, 10, 64); err == nil {
 		expr := AcquireLiteralExpr()
@@ -224,16 +230,36 @@ func (p *ASTParser) parseNumberLiteral(value string) ASTNode {
 func (p *ASTParser) parseIdentifierOrFunctionCall(token *Token) (ASTNode, error) {
 	p.advance()
 
-	// Check for geospatial literals: geography'...' or geometry'...'
+	// Check for prefixed string literals such as geography'...', binary'...', duration'...'
 	lowerIdent := strings.ToLower(token.Value)
-	if (lowerIdent == "geography" || lowerIdent == "geometry") && p.currentToken().Type == TokenString {
-		geoType := lowerIdent
-		geoValue := p.currentToken().Value
+	if (lowerIdent == "geography" || lowerIdent == "geometry" || lowerIdent == "binary" || lowerIdent == "duration") && p.currentToken().Type == TokenString {
+		literalValue := p.currentToken().Value
 		p.advance()
-		expr := AcquireLiteralExpr()
-		expr.Value = geoValue
-		expr.Type = geoType
-		return expr, nil
+
+		switch lowerIdent {
+		case "binary":
+			decoded, err := base64.StdEncoding.DecodeString(literalValue)
+			if err != nil {
+				return nil, fmt.Errorf("invalid binary literal: %w", err)
+			}
+			expr := AcquireLiteralExpr()
+			expr.Value = decoded
+			expr.Type = "binary"
+			return expr, nil
+		case "duration":
+			if !isValidDurationLiteral(literalValue) {
+				return nil, fmt.Errorf("invalid duration literal: %s", literalValue)
+			}
+			expr := AcquireLiteralExpr()
+			expr.Value = literalValue
+			expr.Type = "duration"
+			return expr, nil
+		default:
+			expr := AcquireLiteralExpr()
+			expr.Value = literalValue
+			expr.Type = lowerIdent
+			return expr, nil
+		}
 	}
 
 	// Check for property path with slashes (e.g., Orders/Items or Tags/any)
@@ -254,6 +280,46 @@ func (p *ASTParser) parseIdentifierOrFunctionCall(token *Token) (ASTNode, error)
 	identExpr := AcquireIdentifierExpr()
 	identExpr.Name = token.Value
 	return identExpr, nil
+}
+
+func isValidDurationLiteral(value string) bool {
+	if value == "" {
+		return false
+	}
+
+	value = strings.TrimPrefix(value, "-")
+
+	if !strings.HasPrefix(value, "P") {
+		return false
+	}
+
+	body := value[1:]
+	if body == "" {
+		return false
+	}
+
+	if strings.Contains(body, "T") {
+		parts := strings.SplitN(body, "T", 2)
+		datePart := parts[0]
+		timePart := parts[1]
+		if datePart == "" && timePart == "" {
+			return false
+		}
+		if datePart != "" && !strings.HasSuffix(datePart, "D") {
+			return false
+		}
+		if timePart != "" {
+			if !strings.ContainsAny(timePart, "HMS") {
+				return false
+			}
+			if strings.Contains(timePart, "-") {
+				return false
+			}
+		}
+		return true
+	}
+
+	return strings.HasSuffix(body, "D")
 }
 
 // parsePropertyPath parses a property path with slashes (e.g., Orders/Items/any)
