@@ -15,6 +15,7 @@ type conversionContext struct {
 	entityMetadata  *metadata.EntityMetadata
 	maxInClauseSize int
 	cache           *parserCache // Cache for resolved navigation paths
+	caseInsensitive bool
 }
 
 // hasComputedAlias checks if an alias is registered as a computed property
@@ -43,12 +44,19 @@ func (ctx *conversionContext) propertyExists(propertyName string) bool {
 
 // ASTToFilterExpressionWithComputed converts an AST to a FilterExpression with computed alias support
 func ASTToFilterExpressionWithComputed(node ASTNode, entityMetadata *metadata.EntityMetadata, computedAliases map[string]bool, maxInClauseSize int) (*FilterExpression, error) {
+	return ASTToFilterExpressionWithComputedAndMode(node, entityMetadata, computedAliases, maxInClauseSize, true)
+}
+
+// ASTToFilterExpressionWithComputedAndMode converts an AST to a FilterExpression with
+// computed alias support and explicit expression case-sensitivity mode.
+func ASTToFilterExpressionWithComputedAndMode(node ASTNode, entityMetadata *metadata.EntityMetadata, computedAliases map[string]bool, maxInClauseSize int, caseInsensitive bool) (*FilterExpression, error) {
 	cache := newParserCache()
 	ctx := &conversionContext{
 		computedAliases: computedAliases,
 		entityMetadata:  entityMetadata,
 		maxInClauseSize: maxInClauseSize,
 		cache:           cache,
+		caseInsensitive: caseInsensitive,
 	}
 	result, err := astToFilterExpressionWithContext(node, ctx)
 	releaseParserCache(cache)
@@ -57,9 +65,16 @@ func ASTToFilterExpressionWithComputed(node ASTNode, entityMetadata *metadata.En
 
 // ASTToFilterExpression converts an AST to a FilterExpression
 func ASTToFilterExpression(node ASTNode, entityMetadata *metadata.EntityMetadata) (*FilterExpression, error) {
+	return ASTToFilterExpressionWithMode(node, entityMetadata, true)
+}
+
+// ASTToFilterExpressionWithMode converts an AST to a FilterExpression with explicit
+// expression case-sensitivity mode.
+func ASTToFilterExpressionWithMode(node ASTNode, entityMetadata *metadata.EntityMetadata, caseInsensitive bool) (*FilterExpression, error) {
 	ctx := &conversionContext{
 		computedAliases: nil,
 		entityMetadata:  entityMetadata,
+		caseInsensitive: caseInsensitive,
 	}
 	return astToFilterExpressionWithContext(node, ctx)
 }
@@ -368,7 +383,7 @@ func validateValueAgainstPropertyType(property string, value interface{}, entity
 			return nil
 		}
 	}
-	
+
 	// For bool, filter expressions, and other types, allow comparison
 	return nil
 }

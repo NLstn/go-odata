@@ -2,6 +2,7 @@ package query
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/nlstn/go-odata/internal/metadata"
 )
@@ -42,6 +43,9 @@ func (p *ASTParser) parseFunctionCall(functionName string) (ASTNode, error) {
 // convertFunctionCallExprWithContext converts a function call expression to a filter expression using the provided context
 func convertFunctionCallExprWithContext(n *FunctionCallExpr, entityMetadata *metadata.EntityMetadata, ctx *conversionContext) (*FilterExpression, error) {
 	functionName := n.Function
+	if ctx != nil && ctx.caseInsensitive {
+		functionName = strings.ToLower(functionName)
+	}
 
 	// Handle zero-argument functions (now)
 	if isZeroArgFunction(functionName) {

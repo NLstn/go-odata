@@ -109,6 +109,69 @@ func CaseInsensitiveSystemQueryOptions() *framework.TestSuite {
 	)
 
 	suite.AddTest(
+		"test_search_case_and_dollar_prefix",
+		"$search accepts mixed case and no-$ forms equivalently",
+		func(ctx *framework.TestContext) error {
+			canonical := "/Products?$search=Laptop"
+			return assertEquivalentResponses(ctx, canonical, []string{
+				"/Products?$SEARCH=Laptop",
+				"/Products?$Search=Laptop",
+				"/Products?search=Laptop",
+			})
+		},
+	)
+
+	suite.AddTest(
+		"test_compute_case_and_dollar_prefix",
+		"$compute accepts mixed case and no-$ forms equivalently",
+		func(ctx *framework.TestContext) error {
+			canonical := "/Products?$compute=Price%20mul%202%20as%20DoublePrice&$select=ID,DoublePrice&$top=2"
+			return assertEquivalentResponses(ctx, canonical, []string{
+				"/Products?$COMPUTE=Price%20mul%202%20as%20DoublePrice&$select=ID,DoublePrice&$top=2",
+				"/Products?$Compute=Price%20mul%202%20as%20DoublePrice&$select=ID,DoublePrice&$top=2",
+				"/Products?compute=Price%20mul%202%20as%20DoublePrice&$select=ID,DoublePrice&$top=2",
+			})
+		},
+	)
+
+	suite.AddTest(
+		"test_filter_operator_names_case_insensitive",
+		"4.01 logical/arithmetic operator names are case-insensitive",
+		func(ctx *framework.TestContext) error {
+			canonical := "/Products?$filter=Price%20gt%2010%20and%20Price%20lt%201000"
+			return assertEquivalentResponses(ctx, canonical, []string{
+				"/Products?$filter=Price%20GT%2010%20AnD%20Price%20Lt%201000",
+				"/Products?$filter=Price%20gT%2010%20aNd%20Price%20lT%201000",
+			})
+		},
+	)
+
+	suite.AddTest(
+		"test_filter_function_names_case_insensitive",
+		"4.01 canonical function names are case-insensitive",
+		func(ctx *framework.TestContext) error {
+			canonical := "/Products?$filter=contains(Name,'Laptop')"
+			return assertEquivalentResponses(ctx, canonical, []string{
+				"/Products?$filter=CONTAINS(Name,'Laptop')",
+				"/Products?$filter=ConTaIns(Name,'Laptop')",
+			})
+		},
+	)
+
+	suite.AddTest(
+		"test_duplicate_system_query_option_rejected_across_forms",
+		"same system query option must not appear multiple times across case/$ variants",
+		func(ctx *framework.TestContext) error {
+			resp, err := ctx.GET("/Products?$filter=Price%20gt%2010&FILTER=Price%20gt%2010")
+			if err != nil {
+				return err
+			}
+
+			return ctx.AssertStatusCode(resp, http.StatusBadRequest)
+		},
+	)
+
+	suite.AddTest(
 		"test_unknown_option_rejected_with_dollar",
 		"unknown query options with $ are rejected",
 		func(ctx *framework.TestContext) error {
@@ -139,6 +202,56 @@ func CaseInsensitiveSystemQueryOptions() *framework.TestSuite {
 			}
 
 			return ctx.AssertStatusCode(resp, http.StatusOK)
+		},
+	)
+
+	suite.AddTest(
+		"test_negotiated_4_0_keeps_strict_query_option_and_expression_casing",
+		"when negotiated to 4.0, mixed-case/$-less system options and upper-case expression keywords are not treated as 4.01 features",
+		func(ctx *framework.TestContext) error {
+			headers := []framework.Header{{Key: "OData-MaxVersion", Value: "4.0"}}
+
+			canonicalResp, err := ctx.GET("/Products?$filter=Price%20gt%2010&$top=1", headers...)
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(canonicalResp, http.StatusOK); err != nil {
+				return framework.NewError(fmt.Sprintf("4.0 canonical query should still work: %v", err))
+			}
+
+			mixedCaseOptionResp, err := ctx.GET("/Products?$FILTER=Price%20gt%2010&$top=1", headers...)
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(mixedCaseOptionResp, http.StatusBadRequest); err != nil {
+				return framework.NewError(fmt.Sprintf("4.0 should reject mixed-case system option names: %v", err))
+			}
+
+			noDollarOptionResp, err := ctx.GET("/Products?filter=Price%20gt%2010&$top=1", headers...)
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(noDollarOptionResp, http.StatusOK); err != nil {
+				return framework.NewError(fmt.Sprintf("4.0 should treat non-$ query options as custom options: %v", err))
+			}
+
+			upperCaseOperatorResp, err := ctx.GET("/Products?$filter=Price%20GT%2010&$top=1", headers...)
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(upperCaseOperatorResp, http.StatusBadRequest); err != nil {
+				return framework.NewError(fmt.Sprintf("4.0 should reject upper-case logical/comparison operators: %v", err))
+			}
+
+			upperCaseFunctionResp, err := ctx.GET("/Products?$filter=CONTAINS(Name,'Laptop')&$top=1", headers...)
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(upperCaseFunctionResp, http.StatusBadRequest); err != nil {
+				return framework.NewError(fmt.Sprintf("4.0 should reject upper-case canonical function names: %v", err))
+			}
+
+			return nil
 		},
 	)
 

@@ -193,6 +193,11 @@ func main() {
 			Suite:   v4_0.ComplexOrderBy,
 		})
 		testSuites = append(testSuites, TestSuiteInfo{
+			Name:    "5.2_custom_query_options",
+			Version: "4.0",
+			Suite:   v4_0.CustomQueryOptions,
+		})
+		testSuites = append(testSuites, TestSuiteInfo{
 			Name:    "5.3_enum_types",
 			Version: "4.0",
 			Suite:   v4_0.EnumTypes,

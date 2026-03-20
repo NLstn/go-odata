@@ -65,6 +65,8 @@ The `compliance-suite/` directory contains a Go-based test suite that validates 
    - Tests one specific section of the OData v4 specification
    - Is named according to the spec section (e.g., `query_filter.go`)
    - Is placed in `tests/v4_0/` for OData 4.0 features, or `tests/v4_01/` for 4.01-specific features
+   - For `tests/v4_01/`: MUST only test behavior that is new in 4.01 or explicitly different from 4.0
+   - For `tests/v4_01/`: MUST verify version-gated behavior by asserting the 4.01 behavior works when 4.01 is negotiated and does NOT apply when 4.0 is negotiated
    - Includes spec reference URLs in the TestSuite definition
    - Can run independently or as part of the full suite
    - Returns appropriate exit codes for CI/CD integration
@@ -118,6 +120,9 @@ The `compliance-suite/` directory contains a Go-based test suite that validates 
    - Choose the correct directory:
      - Add to `tests/v4_0/` for OData 4.0 features (applies to both 4.0 and 4.01)
      - Add to `tests/v4_01/` only for features new or different in OData 4.01
+    - For every `tests/v4_01/` suite, include explicit negotiation checks:
+       - A positive assertion with negotiated 4.01 (e.g., request with `OData-MaxVersion: 4.01`)
+       - A negative/strict assertion with negotiated 4.0 (e.g., request with `OData-MaxVersion: 4.0`) proving 4.01-only behavior is not active
    - Create a Go file with a function that returns `*framework.TestSuite`
    - Reference the official OData v4 specification sections
    - Include spec URL in the TestSuite definition

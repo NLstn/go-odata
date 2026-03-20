@@ -45,6 +45,9 @@ type Tokenizer struct {
 	ch          rune
 	tokenBuffer []Token // Pre-allocated buffer for tokens
 	tokenIndex  int     // Current position in token buffer
+	// caseInsensitive controls whether expression keywords/operators are recognized
+	// case-insensitively (OData 4.01) or strictly lowercase (OData 4.0 behavior).
+	caseInsensitive bool
 }
 
 // tokenizerPool is a sync.Pool for reusing Tokenizer instances.
@@ -59,6 +62,12 @@ var tokenizerPool = sync.Pool{
 
 // AcquireTokenizer gets a Tokenizer from the pool and initializes it with the input
 func AcquireTokenizer(input string) *Tokenizer {
+	return AcquireTokenizerWithMode(input, true)
+}
+
+// AcquireTokenizerWithMode gets a Tokenizer from the pool and initializes it with the input
+// and expression case-sensitivity mode.
+func AcquireTokenizerWithMode(input string, caseInsensitive bool) *Tokenizer {
 	var t *Tokenizer
 	if v := tokenizerPool.Get(); v != nil {
 		if tok, ok := v.(*Tokenizer); ok {
@@ -73,6 +82,7 @@ func AcquireTokenizer(input string) *Tokenizer {
 	t.input = input
 	t.pos = 0
 	t.tokenIndex = 0
+	t.caseInsensitive = caseInsensitive
 	// Reset the slice length but keep capacity
 	t.tokenBuffer = t.tokenBuffer[:0]
 
@@ -110,6 +120,11 @@ func ReleaseTokenizer(t *Tokenizer) {
 
 // NewTokenizer creates a new tokenizer
 func NewTokenizer(input string) *Tokenizer {
+	return NewTokenizerWithMode(input, true)
+}
+
+// NewTokenizerWithMode creates a new tokenizer with explicit case-sensitivity mode.
+func NewTokenizerWithMode(input string, caseInsensitive bool) *Tokenizer {
 	// Pre-allocate token buffer based on estimated number of tokens
 	estimatedTokens := len(input)/estimatedAvgTokenLength + 1
 	if estimatedTokens < minTokenSliceCapacity {
@@ -117,10 +132,11 @@ func NewTokenizer(input string) *Tokenizer {
 	}
 
 	t := &Tokenizer{
-		input:       input,
-		pos:         0,
-		tokenBuffer: make([]Token, 0, estimatedTokens),
-		tokenIndex:  0,
+		input:           input,
+		pos:             0,
+		tokenBuffer:     make([]Token, 0, estimatedTokens),
+		tokenIndex:      0,
+		caseInsensitive: caseInsensitive,
 	}
 	if len(input) > 0 {
 		t.ch = rune(input[0])
@@ -662,9 +678,9 @@ func (t *Tokenizer) tokenizeIdentifierOrKeyword(pos int) *Token {
 	// functions (when followed by '(') or infix operators
 	// Use fast ASCII case-insensitive comparison
 	if t.ch == '(' {
-		if equalsFoldASCII(value, "add") || equalsFoldASCII(value, "sub") ||
-			equalsFoldASCII(value, "mul") || equalsFoldASCII(value, "div") ||
-			equalsFoldASCII(value, "mod") || equalsFoldASCII(value, "has") {
+		if t.keywordEquals(value, "add") || t.keywordEquals(value, "sub") ||
+			t.keywordEquals(value, "mul") || t.keywordEquals(value, "div") ||
+			t.keywordEquals(value, "mod") || t.keywordEquals(value, "has") {
 			// Treat as identifier (function name) when followed by '('
 			return t.getToken(TokenIdentifier, value, pos)
 		}
@@ -686,74 +702,81 @@ func (t *Tokenizer) classifyKeywordFast(value string, pos int) *Token {
 	// Use length as first discriminator for efficiency
 	switch len(value) {
 	case 2:
-		if equalsFoldASCII(value, "or") {
+		if t.keywordEquals(value, "or") {
 			return t.getToken(TokenLogical, "or", pos)
 		}
-		if equalsFoldASCII(value, "eq") {
+		if t.keywordEquals(value, "eq") {
 			return t.getToken(TokenOperator, "eq", pos)
 		}
-		if equalsFoldASCII(value, "ne") {
+		if t.keywordEquals(value, "ne") {
 			return t.getToken(TokenOperator, "ne", pos)
 		}
-		if equalsFoldASCII(value, "gt") {
+		if t.keywordEquals(value, "gt") {
 			return t.getToken(TokenOperator, "gt", pos)
 		}
-		if equalsFoldASCII(value, "ge") {
+		if t.keywordEquals(value, "ge") {
 			return t.getToken(TokenOperator, "ge", pos)
 		}
-		if equalsFoldASCII(value, "lt") {
+		if t.keywordEquals(value, "lt") {
 			return t.getToken(TokenOperator, "lt", pos)
 		}
-		if equalsFoldASCII(value, "le") {
+		if t.keywordEquals(value, "le") {
 			return t.getToken(TokenOperator, "le", pos)
 		}
-		if equalsFoldASCII(value, "in") {
+		if t.keywordEquals(value, "in") {
 			return t.getToken(TokenOperator, "in", pos)
 		}
 	case 3:
-		if equalsFoldASCII(value, "and") {
+		if t.keywordEquals(value, "and") {
 			return t.getToken(TokenLogical, "and", pos)
 		}
-		if equalsFoldASCII(value, "not") {
+		if t.keywordEquals(value, "not") {
 			return t.getToken(TokenNot, "not", pos)
 		}
-		if equalsFoldASCII(value, "has") {
+		if t.keywordEquals(value, "has") {
 			return t.getToken(TokenOperator, "has", pos)
 		}
-		if equalsFoldASCII(value, "add") {
+		if t.keywordEquals(value, "add") {
 			return t.getToken(TokenArithmetic, "add", pos)
 		}
-		if equalsFoldASCII(value, "sub") {
+		if t.keywordEquals(value, "sub") {
 			return t.getToken(TokenArithmetic, "sub", pos)
 		}
-		if equalsFoldASCII(value, "mul") {
+		if t.keywordEquals(value, "mul") {
 			return t.getToken(TokenArithmetic, "mul", pos)
 		}
-		if equalsFoldASCII(value, "div") {
+		if t.keywordEquals(value, "div") {
 			return t.getToken(TokenArithmetic, "div", pos)
 		}
-		if equalsFoldASCII(value, "mod") {
+		if t.keywordEquals(value, "mod") {
 			return t.getToken(TokenArithmetic, "mod", pos)
 		}
-		if equalsFoldASCII(value, "inf") {
+		if t.keywordEquals(value, "inf") {
 			return t.getToken(TokenNumber, "inf", pos)
 		}
-		if equalsFoldASCII(value, "nan") {
+		if t.keywordEquals(value, "nan") {
 			return t.getToken(TokenNumber, "nan", pos)
 		}
 	case 4:
-		if equalsFoldASCII(value, "true") {
+		if t.keywordEquals(value, "true") {
 			return t.getToken(TokenBoolean, "true", pos)
 		}
-		if equalsFoldASCII(value, "null") {
+		if t.keywordEquals(value, "null") {
 			return t.getToken(TokenNull, "null", pos)
 		}
 	case 5:
-		if equalsFoldASCII(value, "false") {
+		if t.keywordEquals(value, "false") {
 			return t.getToken(TokenBoolean, "false", pos)
 		}
 	}
 	return nil
+}
+
+func (t *Tokenizer) keywordEquals(value, target string) bool {
+	if t.caseInsensitive {
+		return equalsFoldASCII(value, target)
+	}
+	return value == target
 }
 
 const (

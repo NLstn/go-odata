@@ -66,7 +66,7 @@ func (h *EntityHandler) writeRequestError(w http.ResponseWriter, r *http.Request
 }
 
 func (h *EntityHandler) parseSingleEntityQueryOptions(r *http.Request) (*query.QueryOptions, error) {
-	queryOptions, err := query.ParseQueryOptions(query.ParseRawQuery(r.URL.RawQuery), h.metadata)
+	queryOptions, err := h.parseQueryOptionsByNegotiatedVersion(r, h.metadata, nil)
 	if err != nil {
 		return nil, &requestError{
 			StatusCode: http.StatusBadRequest,
