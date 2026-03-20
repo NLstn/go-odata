@@ -529,6 +529,9 @@ func FunctionActionOverloading() *framework.TestSuite {
 			if err := ctx.AssertStatusCode(v40Resp, http.StatusBadRequest); err != nil {
 				return framework.NewError(fmt.Sprintf("4.0 negotiated request must reject 4.01 parameterless function shorthand: %v", err))
 			}
+			if err := ctx.AssertODataError(v40Resp, http.StatusBadRequest, "parentheses"); err != nil {
+				return framework.NewError(fmt.Sprintf("4.0 negotiated function shorthand rejection must include strict OData error payload: %v", err))
+			}
 
 			return nil
 		},

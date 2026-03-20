@@ -147,6 +147,9 @@ func QuerySchemaVersion() *framework.TestSuite {
 			if err := ctx.AssertStatusCode(v40Resp, http.StatusBadRequest); err != nil {
 				return framework.NewError(fmt.Sprintf("4.0 negotiated request must reject 4.01 $schemaversion behavior: %v", err))
 			}
+			if err := ctx.AssertODataError(v40Resp, http.StatusBadRequest, "not supported in OData 4.0"); err != nil {
+				return framework.NewError(fmt.Sprintf("4.0 negotiated $schemaversion rejection must include strict OData error payload: %v", err))
+			}
 
 			return nil
 		},
