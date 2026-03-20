@@ -197,9 +197,11 @@ func shouldAddIndexAnnotations(r *http.Request) bool {
 // The index represents the zero-based ordinal position of each item in the collection
 func addIndexAnnotations(data []interface{}) []interface{} {
 	for i, item := range data {
-		// Only add index to map items (structs are already converted to maps by this point)
-		if itemMap, ok := item.(map[string]interface{}); ok {
-			itemMap["@odata.index"] = i
+		switch value := item.(type) {
+		case map[string]interface{}:
+			value["@odata.index"] = i
+		case *OrderedMap:
+			value.Set("@odata.index", i)
 		}
 	}
 	return data
