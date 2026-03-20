@@ -26,30 +26,19 @@ func QueryExpand() *framework.TestSuite {
 			if err != nil {
 				return err
 			}
-			if resp.StatusCode != 200 {
-				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+			if err := ctx.AssertStatusCode(resp, 200); err != nil {
+				return err
 			}
 
-			var result map[string]interface{}
-			if err := json.Unmarshal(resp.Body, &result); err != nil {
-				return fmt.Errorf("failed to parse JSON: %w", err)
+			items, err := ctx.ParseEntityCollection(resp)
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertMinCollectionSize(items, 1); err != nil {
+				return fmt.Errorf("response contains no items: %w", err)
 			}
 
-			// Get the value array
-			value, ok := result["value"].([]interface{})
-			if !ok {
-				return fmt.Errorf("response missing 'value' array")
-			}
-
-			if len(value) == 0 {
-				return fmt.Errorf("response contains no items")
-			}
-
-			// Check first item
-			item, ok := value[0].(map[string]interface{})
-			if !ok {
-				return fmt.Errorf("first item is not an object")
-			}
+			item := items[0]
 
 			// Verify Descriptions field is present
 			descriptions, ok := item["Descriptions"]
@@ -76,30 +65,19 @@ func QueryExpand() *framework.TestSuite {
 			if err != nil {
 				return err
 			}
-			if resp.StatusCode != 200 {
-				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+			if err := ctx.AssertStatusCode(resp, 200); err != nil {
+				return err
 			}
 
-			var result map[string]interface{}
-			if err := json.Unmarshal(resp.Body, &result); err != nil {
-				return fmt.Errorf("failed to parse JSON: %w", err)
+			items, err := ctx.ParseEntityCollection(resp)
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertMinCollectionSize(items, 1); err != nil {
+				return fmt.Errorf("response contains no items: %w", err)
 			}
 
-			// Get the value array
-			value, ok := result["value"].([]interface{})
-			if !ok {
-				return fmt.Errorf("response missing 'value' array")
-			}
-
-			if len(value) == 0 {
-				return fmt.Errorf("response contains no items")
-			}
-
-			// Check first item
-			item, ok := value[0].(map[string]interface{})
-			if !ok {
-				return fmt.Errorf("first item is not an object")
-			}
+			item := items[0]
 
 			// Verify Descriptions field is present and expanded
 			descriptions, ok := item["Descriptions"]
@@ -138,24 +116,19 @@ func QueryExpand() *framework.TestSuite {
 			if err != nil {
 				return err
 			}
-			if allResp.StatusCode != 200 {
-				return fmt.Errorf("failed to get products: status %d", allResp.StatusCode)
+			if err := ctx.AssertStatusCode(allResp, 200); err != nil {
+				return fmt.Errorf("failed to get products: %w", err)
 			}
 
-			var allResult map[string]interface{}
-			if err := json.Unmarshal(allResp.Body, &allResult); err != nil {
+			items, err := ctx.ParseEntityCollection(allResp)
+			if err != nil {
 				return fmt.Errorf("failed to parse products JSON: %w", err)
 			}
-
-			value, ok := allResult["value"].([]interface{})
-			if !ok || len(value) == 0 {
+			if err := ctx.AssertMinCollectionSize(items, 1); err != nil {
 				return fmt.Errorf("no products available")
 			}
 
-			firstItem, ok := value[0].(map[string]interface{})
-			if !ok {
-				return fmt.Errorf("first item is not an object")
-			}
+			firstItem := items[0]
 
 			productID := firstItem["ID"]
 
@@ -165,8 +138,8 @@ func QueryExpand() *framework.TestSuite {
 			if err != nil {
 				return err
 			}
-			if resp.StatusCode != 200 {
-				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+			if err := ctx.AssertStatusCode(resp, 200); err != nil {
+				return err
 			}
 
 			var result map[string]interface{}
@@ -200,40 +173,35 @@ func QueryExpand() *framework.TestSuite {
 			if err != nil {
 				return err
 			}
-			if resp.StatusCode != 200 {
-				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+			if err := ctx.AssertStatusCode(resp, 200); err != nil {
+				return err
 			}
 
-			var result map[string]interface{}
-			if err := json.Unmarshal(resp.Body, &result); err != nil {
-				return fmt.Errorf("failed to parse JSON: %w", err)
+			items, err := ctx.ParseEntityCollection(resp)
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertMinCollectionSize(items, 1); err != nil {
+				return fmt.Errorf("response missing 'value' array or contains no items: %w", err)
 			}
 
-			value, ok := result["value"].([]interface{})
-			if !ok || len(value) == 0 {
-				return fmt.Errorf("response missing 'value' array or contains no items")
-			}
-
-			item, ok := value[0].(map[string]interface{})
-			if !ok {
-				return fmt.Errorf("first item is not an object")
-			}
+			item := items[0]
 
 			categoryValue, exists := item["Category"]
 			if !exists {
-				return fmt.Errorf("Category field missing from expanded response")
+				return fmt.Errorf("category field missing from expanded response")
 			}
 			if categoryValue == nil {
-				return fmt.Errorf("Category field is null; expected expanded entity")
+				return fmt.Errorf("category field is null; expected expanded entity")
 			}
 
 			category, ok := categoryValue.(map[string]interface{})
 			if !ok {
-				return fmt.Errorf("Category field is not an object")
+				return fmt.Errorf("category field is not an object")
 			}
 
-			if _, ok := category["Name"]; !ok {
-				return fmt.Errorf("expanded Category missing selected Name property")
+			if err := ctx.AssertEntityHasFields(category, "Name"); err != nil {
+				return fmt.Errorf("expanded category missing selected Name property: %w", err)
 			}
 
 			return nil

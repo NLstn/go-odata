@@ -3,7 +3,6 @@ package v4_0
 import (
 	"fmt"
 	"net/url"
-	"strconv"
 	"strings"
 
 	"github.com/nlstn/go-odata/compliance-suite/framework"
@@ -16,6 +15,17 @@ func QueryFilter() *framework.TestSuite {
 		"Tests $filter query option according to OData v4 specification, including equality, comparison, and logical operators.",
 		"https://docs.oasis-open.org/odata/odata/v4.0/errata03/os/complete/part1-protocol/odata-v4.0-errata03-os-part1-protocol-complete.html#sec_SystemQueryOptionfilter",
 	)
+
+	parsePrice := func(value interface{}) (float64, error) {
+		switch v := value.(type) {
+		case float64:
+			return v, nil
+		case int:
+			return float64(v), nil
+		default:
+			return 0, fmt.Errorf("Price must be numeric, got %T", value)
+		}
+	}
 
 	// Test 1: Basic eq (equals) operator with string
 	suite.AddTest(
@@ -32,44 +42,27 @@ func QueryFilter() *framework.TestSuite {
 				return err
 			}
 
-			var data map[string]interface{}
-			if err := ctx.GetJSON(resp, &data); err != nil {
+			items, err := ctx.ParseEntityCollection(resp)
+			if err != nil {
 				return err
-			}
-
-			// Verify response structure
-			if err := ctx.AssertJSONField(resp, "value"); err != nil {
-				return err
-			}
-
-			value, ok := data["value"].([]interface{})
-			if !ok {
-				return framework.NewError("value must be an array")
 			}
 
 			// Verify the filter actually worked - should return at least 1 entity with Name='Laptop'
-			if len(value) < 1 {
-				return framework.NewError(fmt.Sprintf("Expected at least 1 entity, got %d entities", len(value)))
+			if err := ctx.AssertMinCollectionSize(items, 1); err != nil {
+				return framework.NewError(fmt.Sprintf("Expected at least 1 entity, got %d entities", len(items)))
 			}
 
 			// Verify all returned entities have Name='Laptop'
-			for _, item := range value {
-				entity, ok := item.(map[string]interface{})
-				if !ok {
-					return framework.NewError("Entity must be an object")
-				}
-
+			return ctx.AssertAllEntitiesSatisfy(items, "Name eq 'Laptop'", func(entity map[string]interface{}) (bool, string) {
 				name, ok := entity["Name"].(string)
 				if !ok {
-					return framework.NewError("Entity must have Name field as string")
+					return false, "Name field is missing or not a string"
 				}
-
 				if name != "Laptop" {
-					return framework.NewError(fmt.Sprintf("Expected Name='Laptop', got Name='%s'", name))
+					return false, fmt.Sprintf("Expected Name='Laptop', got Name='%s'", name)
 				}
-			}
-
-			return nil
+				return true, ""
+			})
 		},
 	)
 
@@ -88,57 +81,30 @@ func QueryFilter() *framework.TestSuite {
 				return err
 			}
 
-			var data map[string]interface{}
-			if err := ctx.GetJSON(resp, &data); err != nil {
+			items, err := ctx.ParseEntityCollection(resp)
+			if err != nil {
 				return err
-			}
-
-			// Verify response structure
-			if err := ctx.AssertJSONField(resp, "value"); err != nil {
-				return err
-			}
-
-			value, ok := data["value"].([]interface{})
-			if !ok {
-				return framework.NewError("value must be an array")
 			}
 
 			// Verify all returned entities have Price > 100
-			if len(value) == 0 {
+			if len(items) == 0 {
 				return framework.NewError("No entities returned or no Price field found")
 			}
 
-			for _, item := range value {
-				entity, ok := item.(map[string]interface{})
+			return ctx.AssertAllEntitiesSatisfy(items, "Price gt 100", func(entity map[string]interface{}) (bool, string) {
+				priceRaw, ok := entity["Price"]
 				if !ok {
-					continue
+					return false, "Entity must have Price field"
 				}
-
-				price, ok := entity["Price"]
-				if !ok {
-					return framework.NewError("Entity must have Price field")
+				priceValue, err := parsePrice(priceRaw)
+				if err != nil {
+					return false, err.Error()
 				}
-
-				var priceValue float64
-				switch v := price.(type) {
-				case float64:
-					priceValue = v
-				case int:
-					priceValue = float64(v)
-				case string:
-					var err error
-					priceValue, err = strconv.ParseFloat(v, 64)
-					if err != nil {
-						return framework.NewError(fmt.Sprintf("Failed to parse Price as float: %v", err))
-					}
-				}
-
 				if priceValue <= 100 {
-					return framework.NewError(fmt.Sprintf("Found entity with Price=%v which is not > 100", priceValue))
+					return false, fmt.Sprintf("Found entity with Price=%v which is not > 100", priceValue)
 				}
-			}
-
-			return nil
+				return true, ""
+			})
 		},
 	)
 
@@ -157,48 +123,29 @@ func QueryFilter() *framework.TestSuite {
 				return err
 			}
 
-			var data map[string]interface{}
-			if err := ctx.GetJSON(resp, &data); err != nil {
+			items, err := ctx.ParseEntityCollection(resp)
+			if err != nil {
 				return err
-			}
-
-			// Verify response structure
-			if err := ctx.AssertJSONField(resp, "value"); err != nil {
-				return err
-			}
-
-			value, ok := data["value"].([]interface{})
-			if !ok {
-				return framework.NewError("value must be an array")
 			}
 
 			// Verify all returned entities have "Laptop" in their Name
-			if len(value) == 0 {
+			if len(items) == 0 {
 				return framework.NewError("No entities returned - expected at least one product with 'Laptop' in name")
 			}
 
-			for _, item := range value {
-				entity, ok := item.(map[string]interface{})
-				if !ok {
-					return framework.NewError("Entity must be an object")
-				}
-
+			return ctx.AssertAllEntitiesSatisfy(items, "contains(Name,'Laptop')", func(entity map[string]interface{}) (bool, string) {
 				name, ok := entity["Name"].(string)
 				if !ok {
-					return framework.NewError("Entity must have Name field as string")
+					return false, "Entity must have Name field as string"
 				}
-
 				if len(name) == 0 {
-					return framework.NewError("Name field is empty")
+					return false, "Name field is empty"
 				}
-
-				// Strictly verify that the filter actually worked - all returned names must contain "Laptop"
 				if !strings.Contains(name, "Laptop") {
-					return framework.NewError(fmt.Sprintf("Filter failed: found entity with Name='%s' which does not contain 'Laptop'", name))
+					return false, fmt.Sprintf("Filter failed: found entity with Name='%s' which does not contain 'Laptop'", name)
 				}
-			}
-
-			return nil
+				return true, ""
+			})
 		},
 	)
 
@@ -217,57 +164,30 @@ func QueryFilter() *framework.TestSuite {
 				return err
 			}
 
-			var data map[string]interface{}
-			if err := ctx.GetJSON(resp, &data); err != nil {
+			items, err := ctx.ParseEntityCollection(resp)
+			if err != nil {
 				return err
-			}
-
-			// Verify response structure
-			if err := ctx.AssertJSONField(resp, "value"); err != nil {
-				return err
-			}
-
-			value, ok := data["value"].([]interface{})
-			if !ok {
-				return framework.NewError("value must be an array")
 			}
 
 			// Verify all returned entities have 10 < Price < 1000
-			if len(value) == 0 {
+			if len(items) == 0 {
 				return framework.NewError("No entities returned or no Price field found")
 			}
 
-			for _, item := range value {
-				entity, ok := item.(map[string]interface{})
+			return ctx.AssertAllEntitiesSatisfy(items, "Price gt 10 and Price lt 1000", func(entity map[string]interface{}) (bool, string) {
+				priceRaw, ok := entity["Price"]
 				if !ok {
-					continue
+					return false, "Entity must have Price field"
 				}
-
-				price, ok := entity["Price"]
-				if !ok {
-					return framework.NewError("Entity must have Price field")
+				priceValue, err := parsePrice(priceRaw)
+				if err != nil {
+					return false, err.Error()
 				}
-
-				var priceValue float64
-				switch v := price.(type) {
-				case float64:
-					priceValue = v
-				case int:
-					priceValue = float64(v)
-				case string:
-					var err error
-					priceValue, err = strconv.ParseFloat(v, 64)
-					if err != nil {
-						return framework.NewError(fmt.Sprintf("Failed to parse Price as float: %v", err))
-					}
-				}
-
 				if priceValue <= 10 || priceValue >= 1000 {
-					return framework.NewError(fmt.Sprintf("Found entity with Price=%v which is not in range (10, 1000)", priceValue))
+					return false, fmt.Sprintf("Found entity with Price=%v which is not in range (10, 1000)", priceValue)
 				}
-			}
-
-			return nil
+				return true, ""
+			})
 		},
 	)
 
@@ -286,44 +206,27 @@ func QueryFilter() *framework.TestSuite {
 				return err
 			}
 
-			var data map[string]interface{}
-			if err := ctx.GetJSON(resp, &data); err != nil {
+			items, err := ctx.ParseEntityCollection(resp)
+			if err != nil {
 				return err
-			}
-
-			// Verify response structure
-			if err := ctx.AssertJSONField(resp, "value"); err != nil {
-				return err
-			}
-
-			value, ok := data["value"].([]interface{})
-			if !ok {
-				return framework.NewError("value must be an array")
 			}
 
 			// Verify we got at least 1 entity
-			if len(value) < 1 {
-				return framework.NewError(fmt.Sprintf("Expected at least 1 entity, got %d", len(value)))
+			if len(items) < 1 {
+				return framework.NewError(fmt.Sprintf("Expected at least 1 entity, got %d", len(items)))
 			}
 
 			// Verify all returned entities have Name='Laptop' or Name='Wireless Mouse'
-			for _, item := range value {
-				entity, ok := item.(map[string]interface{})
-				if !ok {
-					continue
-				}
-
+			return ctx.AssertAllEntitiesSatisfy(items, "Name eq 'Laptop' or Name eq 'Wireless Mouse'", func(entity map[string]interface{}) (bool, string) {
 				name, ok := entity["Name"].(string)
 				if !ok {
-					return framework.NewError("Entity must have Name field")
+					return false, "Entity must have Name field"
 				}
-
 				if name != "Laptop" && name != "Wireless Mouse" {
-					return framework.NewError(fmt.Sprintf("Found entity with Name='%s' which is not 'Laptop' or 'Wireless Mouse'", name))
+					return false, fmt.Sprintf("Found entity with Name='%s' which is not 'Laptop' or 'Wireless Mouse'", name)
 				}
-			}
-
-			return nil
+				return true, ""
+			})
 		},
 	)
 
@@ -342,58 +245,31 @@ func QueryFilter() *framework.TestSuite {
 				return err
 			}
 
-			var data map[string]interface{}
-			if err := ctx.GetJSON(resp, &data); err != nil {
+			items, err := ctx.ParseEntityCollection(resp)
+			if err != nil {
 				return err
-			}
-
-			// Verify response structure
-			if err := ctx.AssertJSONField(resp, "value"); err != nil {
-				return err
-			}
-
-			value, ok := data["value"].([]interface{})
-			if !ok {
-				return framework.NewError("value must be an array")
 			}
 
 			// If no results, that's valid (no products match the criteria)
-			if len(value) == 0 {
+			if len(items) == 0 {
 				return nil
 			}
 
 			// Verify all returned entities have 100 < Price < 1000
-			for _, item := range value {
-				entity, ok := item.(map[string]interface{})
+			return ctx.AssertAllEntitiesSatisfy(items, "(Price gt 100) and (Price lt 1000)", func(entity map[string]interface{}) (bool, string) {
+				priceRaw, ok := entity["Price"]
 				if !ok {
-					continue
+					return false, "Entity must have Price field"
 				}
-
-				price, ok := entity["Price"]
-				if !ok {
-					return framework.NewError("Entity must have Price field")
+				priceValue, err := parsePrice(priceRaw)
+				if err != nil {
+					return false, err.Error()
 				}
-
-				var priceValue float64
-				switch v := price.(type) {
-				case float64:
-					priceValue = v
-				case int:
-					priceValue = float64(v)
-				case string:
-					var err error
-					priceValue, err = strconv.ParseFloat(v, 64)
-					if err != nil {
-						return framework.NewError(fmt.Sprintf("Failed to parse Price as float: %v", err))
-					}
-				}
-
 				if priceValue <= 100 || priceValue >= 1000 {
-					return framework.NewError(fmt.Sprintf("Found entity with Price=%v which is not in range (100, 1000)", priceValue))
+					return false, fmt.Sprintf("Found entity with Price=%v which is not in range (100, 1000)", priceValue)
 				}
-			}
-
-			return nil
+				return true, ""
+			})
 		},
 	)
 

@@ -1,10 +1,8 @@
 package v4_0
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/url"
-	"sort"
 
 	"github.com/nlstn/go-odata/compliance-suite/framework"
 )
@@ -27,46 +25,28 @@ func QuerySelectOrderby() *framework.TestSuite {
 			if err != nil {
 				return err
 			}
-			if resp.StatusCode != 200 {
-				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+			if err := ctx.AssertStatusCode(resp, 200); err != nil {
+				return err
 			}
 
-			var result map[string]interface{}
-			if err := json.Unmarshal(resp.Body, &result); err != nil {
-				return fmt.Errorf("failed to parse JSON: %w", err)
+			items, err := ctx.ParseEntityCollection(resp)
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertMinCollectionSize(items, 1); err != nil {
+				return err
 			}
 
-			// Check that value array exists
-			value, ok := result["value"].([]interface{})
-			if !ok {
-				return fmt.Errorf("response missing 'value' array")
-			}
-
-			if len(value) == 0 {
-				return fmt.Errorf("response contains no items")
-			}
-
-			// Check first item
-			item, ok := value[0].(map[string]interface{})
-			if !ok {
-				return fmt.Errorf("first item is not an object")
-			}
+			item := items[0]
 
 			// Verify Name field is present
-			if _, ok := item["Name"]; !ok {
-				return fmt.Errorf("selected field 'Name' is missing")
+			if err := ctx.AssertEntityHasFields(item, "Name"); err != nil {
+				return err
 			}
 
-			// Verify that fields NOT in $select are not present (except metadata fields and ID)
-			for key := range item {
-				// Allow metadata fields and ID (required for identification)
-				if key == "@odata.context" || key == "@odata.etag" || key == "@odata.id" || key == "ID" || key == "Name" {
-					continue
-				}
-				// Any other field should not be present
-				if key == "Description" || key == "Price" || key == "CategoryID" {
-					return fmt.Errorf("response contains field '%s' which was not selected", key)
-				}
+			// Verify that fields NOT in $select are not present.
+			if err := ctx.AssertEntityOnlyAllowedFields(item, "@odata.context", "@odata.etag", "@odata.id", "ID", "Name"); err != nil {
+				return err
 			}
 
 			return nil
@@ -83,49 +63,28 @@ func QuerySelectOrderby() *framework.TestSuite {
 			if err != nil {
 				return err
 			}
-			if resp.StatusCode != 200 {
-				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+			if err := ctx.AssertStatusCode(resp, 200); err != nil {
+				return err
 			}
 
-			var result map[string]interface{}
-			if err := json.Unmarshal(resp.Body, &result); err != nil {
-				return fmt.Errorf("failed to parse JSON: %w", err)
+			items, err := ctx.ParseEntityCollection(resp)
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertMinCollectionSize(items, 1); err != nil {
+				return err
 			}
 
-			// Check that value array exists
-			value, ok := result["value"].([]interface{})
-			if !ok {
-				return fmt.Errorf("response missing 'value' array")
-			}
-
-			if len(value) == 0 {
-				return fmt.Errorf("response contains no items")
-			}
-
-			// Check first item
-			item, ok := value[0].(map[string]interface{})
-			if !ok {
-				return fmt.Errorf("first item is not an object")
-			}
+			item := items[0]
 
 			// Verify both Name and Price are present
-			if _, ok := item["Name"]; !ok {
-				return fmt.Errorf("selected field 'Name' is missing")
-			}
-			if _, ok := item["Price"]; !ok {
-				return fmt.Errorf("selected field 'Price' is missing")
+			if err := ctx.AssertEntityHasFields(item, "Name", "Price"); err != nil {
+				return err
 			}
 
-			// Verify that fields NOT in $select are not present (except metadata fields and ID)
-			for key := range item {
-				// Allow metadata fields, ID, and selected fields
-				if key == "@odata.context" || key == "@odata.etag" || key == "@odata.id" || key == "ID" || key == "Name" || key == "Price" {
-					continue
-				}
-				// Any other field should not be present
-				if key == "Description" || key == "CategoryID" {
-					return fmt.Errorf("response contains field '%s' which was not selected", key)
-				}
+			// Verify that fields NOT in $select are not present.
+			if err := ctx.AssertEntityOnlyAllowedFields(item, "@odata.context", "@odata.etag", "@odata.id", "ID", "Name", "Price"); err != nil {
+				return err
 			}
 
 			return nil
@@ -142,47 +101,19 @@ func QuerySelectOrderby() *framework.TestSuite {
 			if err != nil {
 				return err
 			}
-			if resp.StatusCode != 200 {
-				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+			if err := ctx.AssertStatusCode(resp, 200); err != nil {
+				return err
 			}
 
-			var result map[string]interface{}
-			if err := json.Unmarshal(resp.Body, &result); err != nil {
-				return fmt.Errorf("failed to parse JSON: %w", err)
+			items, err := ctx.ParseEntityCollection(resp)
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertMinCollectionSize(items, 2); err != nil {
+				return err
 			}
 
-			// Check that value array exists
-			value, ok := result["value"].([]interface{})
-			if !ok {
-				return fmt.Errorf("response missing 'value' array")
-			}
-
-			if len(value) < 2 {
-				return fmt.Errorf("need at least 2 items to verify ordering")
-			}
-
-			// Extract prices and verify ascending order
-			var prices []float64
-			for i, v := range value {
-				item, ok := v.(map[string]interface{})
-				if !ok {
-					return fmt.Errorf("item %d is not an object", i)
-				}
-				price, ok := item["Price"].(float64)
-				if !ok {
-					return fmt.Errorf("item %d missing Price field or not a number", i)
-				}
-				prices = append(prices, price)
-			}
-
-			// Verify ascending order
-			for i := 1; i < len(prices); i++ {
-				if prices[i] < prices[i-1] {
-					return fmt.Errorf("results not ordered ascending: found %.2f after %.2f", prices[i], prices[i-1])
-				}
-			}
-
-			return nil
+			return ctx.AssertEntitiesSortedByFloat(items, "Price", true)
 		},
 	)
 
@@ -196,47 +127,19 @@ func QuerySelectOrderby() *framework.TestSuite {
 			if err != nil {
 				return err
 			}
-			if resp.StatusCode != 200 {
-				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+			if err := ctx.AssertStatusCode(resp, 200); err != nil {
+				return err
 			}
 
-			var result map[string]interface{}
-			if err := json.Unmarshal(resp.Body, &result); err != nil {
-				return fmt.Errorf("failed to parse JSON: %w", err)
+			items, err := ctx.ParseEntityCollection(resp)
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertMinCollectionSize(items, 2); err != nil {
+				return err
 			}
 
-			// Check that value array exists
-			value, ok := result["value"].([]interface{})
-			if !ok {
-				return fmt.Errorf("response missing 'value' array")
-			}
-
-			if len(value) < 2 {
-				return fmt.Errorf("need at least 2 items to verify ordering")
-			}
-
-			// Extract prices and verify descending order
-			var prices []float64
-			for i, v := range value {
-				item, ok := v.(map[string]interface{})
-				if !ok {
-					return fmt.Errorf("item %d is not an object", i)
-				}
-				price, ok := item["Price"].(float64)
-				if !ok {
-					return fmt.Errorf("item %d missing Price field or not a number", i)
-				}
-				prices = append(prices, price)
-			}
-
-			// Verify descending order
-			for i := 1; i < len(prices); i++ {
-				if prices[i] > prices[i-1] {
-					return fmt.Errorf("results not ordered descending: found %.2f after %.2f", prices[i], prices[i-1])
-				}
-			}
-
-			return nil
+			return ctx.AssertEntitiesSortedByFloat(items, "Price", false)
 		},
 	)
 
@@ -250,23 +153,16 @@ func QuerySelectOrderby() *framework.TestSuite {
 			if err != nil {
 				return err
 			}
-			if resp.StatusCode != 200 {
-				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+			if err := ctx.AssertStatusCode(resp, 200); err != nil {
+				return err
 			}
 
-			var result map[string]interface{}
-			if err := json.Unmarshal(resp.Body, &result); err != nil {
-				return fmt.Errorf("failed to parse JSON: %w", err)
+			items, err := ctx.ParseEntityCollection(resp)
+			if err != nil {
+				return err
 			}
-
-			// Check that value array exists
-			value, ok := result["value"].([]interface{})
-			if !ok {
-				return fmt.Errorf("response missing 'value' array")
-			}
-
-			if len(value) < 2 {
-				return fmt.Errorf("need at least 2 items to verify ordering")
+			if err := ctx.AssertMinCollectionSize(items, 2); err != nil {
+				return err
 			}
 
 			// Extract items and verify multi-level ordering
@@ -274,12 +170,8 @@ func QuerySelectOrderby() *framework.TestSuite {
 				Name  string
 				Price float64
 			}
-			var items []item
-			for i, v := range value {
-				obj, ok := v.(map[string]interface{})
-				if !ok {
-					return fmt.Errorf("item %d is not an object", i)
-				}
+			var extracted []item
+			for i, obj := range items {
 				name, ok := obj["Name"].(string)
 				if !ok {
 					return fmt.Errorf("item %d missing Name field or not a string", i)
@@ -288,13 +180,13 @@ func QuerySelectOrderby() *framework.TestSuite {
 				if !ok {
 					return fmt.Errorf("item %d missing Price field or not a number", i)
 				}
-				items = append(items, item{Name: name, Price: price})
+				extracted = append(extracted, item{Name: name, Price: price})
 			}
 
 			// Verify ordering: first by Name asc, then by Price desc
-			for i := 1; i < len(items); i++ {
-				prev := items[i-1]
-				curr := items[i]
+			for i := 1; i < len(extracted); i++ {
+				prev := extracted[i-1]
+				curr := extracted[i]
 
 				// Compare Name first
 				if curr.Name < prev.Name {
@@ -322,59 +214,30 @@ func QuerySelectOrderby() *framework.TestSuite {
 			if err != nil {
 				return err
 			}
-			if resp.StatusCode != 200 {
-				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+			if err := ctx.AssertStatusCode(resp, 200); err != nil {
+				return err
 			}
 
-			var result map[string]interface{}
-			if err := json.Unmarshal(resp.Body, &result); err != nil {
-				return fmt.Errorf("failed to parse JSON: %w", err)
+			items, err := ctx.ParseEntityCollection(resp)
+			if err != nil {
+				return err
 			}
-
-			// Check that value array exists
-			value, ok := result["value"].([]interface{})
-			if !ok {
-				return fmt.Errorf("response missing 'value' array")
-			}
-
-			if len(value) < 2 {
-				return fmt.Errorf("need at least 2 items to verify")
+			if err := ctx.AssertMinCollectionSize(items, 2); err != nil {
+				return err
 			}
 
 			// Check first item
-			item, ok := value[0].(map[string]interface{})
-			if !ok {
-				return fmt.Errorf("first item is not an object")
-			}
+			item := items[0]
 
 			// Verify selected fields are present
-			if _, ok := item["Name"]; !ok {
-				return fmt.Errorf("selected field 'Name' is missing")
+			if err := ctx.AssertEntityHasFields(item, "Name", "Price"); err != nil {
+				return err
 			}
-			if _, ok := item["Price"]; !ok {
-				return fmt.Errorf("selected field 'Price' is missing")
-			}
-
-			// Extract prices and verify ascending order (default when direction not specified)
-			var prices []float64
-			for i, v := range value {
-				obj, ok := v.(map[string]interface{})
-				if !ok {
-					return fmt.Errorf("item %d is not an object", i)
-				}
-				price, ok := obj["Price"].(float64)
-				if !ok {
-					return fmt.Errorf("item %d missing Price field or not a number", i)
-				}
-				prices = append(prices, price)
+			if err := ctx.AssertEntityOnlyAllowedFields(item, "@odata.context", "@odata.etag", "@odata.id", "ID", "Name", "Price"); err != nil {
+				return err
 			}
 
-			// Verify ascending order
-			if !sort.Float64sAreSorted(prices) {
-				return fmt.Errorf("results not ordered by Price ascending")
-			}
-
-			return nil
+			return ctx.AssertEntitiesSortedByFloat(items, "Price", true)
 		},
 	)
 

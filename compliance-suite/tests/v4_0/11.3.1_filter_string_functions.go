@@ -1,7 +1,6 @@
 package v4_0
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/url"
 	"strings"
@@ -19,26 +18,7 @@ func fetchStringFilterItems(ctx *framework.TestContext, filterExpr string) ([]ma
 		return nil, err
 	}
 
-	var result map[string]interface{}
-	if err := json.Unmarshal(resp.Body, &result); err != nil {
-		return nil, fmt.Errorf("failed to parse JSON: %w", err)
-	}
-
-	value, ok := result["value"].([]interface{})
-	if !ok {
-		return nil, fmt.Errorf("response missing 'value' array")
-	}
-
-	items := make([]map[string]interface{}, 0, len(value))
-	for i, raw := range value {
-		item, ok := raw.(map[string]interface{})
-		if !ok {
-			return nil, fmt.Errorf("item %d is not an object", i)
-		}
-		items = append(items, item)
-	}
-
-	return items, nil
+	return ctx.ParseEntityCollection(resp)
 }
 
 func productName(item map[string]interface{}) (string, error) {

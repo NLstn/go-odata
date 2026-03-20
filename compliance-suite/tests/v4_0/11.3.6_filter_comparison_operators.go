@@ -1,12 +1,24 @@
 package v4_0
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/url"
 
 	"github.com/nlstn/go-odata/compliance-suite/framework"
 )
+
+func fetchComparisonItems(ctx *framework.TestContext, filterExpr string) ([]map[string]interface{}, error) {
+	filter := url.QueryEscape(filterExpr)
+	resp, err := ctx.GET("/Products?$filter=" + filter)
+	if err != nil {
+		return nil, err
+	}
+	if err := ctx.AssertStatusCode(resp, 200); err != nil {
+		return nil, err
+	}
+
+	return ctx.ParseEntityCollection(resp)
+}
 
 // FilterComparisonOperators creates the 11.3.6 Comparison Operators test suite
 func FilterComparisonOperators() *framework.TestSuite {
@@ -21,25 +33,11 @@ func FilterComparisonOperators() *framework.TestSuite {
 		"test_eq_operator",
 		"eq (equals) operator works",
 		func(ctx *framework.TestContext) error {
-			filter := url.QueryEscape("Status eq 1")
-			resp, err := ctx.GET("/Products?$filter=" + filter)
+			items, err := fetchComparisonItems(ctx, "Status eq 1")
 			if err != nil {
 				return err
 			}
-			if resp.StatusCode != 200 {
-				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
-			}
-
-			var result map[string]interface{}
-			if err := json.Unmarshal(resp.Body, &result); err != nil {
-				return fmt.Errorf("failed to parse JSON: %w", err)
-			}
-
-			if _, ok := result["value"]; !ok {
-				return fmt.Errorf("missing 'value' field in response")
-			}
-
-			return nil
+			return ctx.AssertMinCollectionSize(items, 1)
 		},
 	)
 
@@ -48,45 +46,20 @@ func FilterComparisonOperators() *framework.TestSuite {
 		"test_ne_operator",
 		"ne (not equals) operator works and returns only matching entities",
 		func(ctx *framework.TestContext) error {
-			filter := url.QueryEscape("Status ne 0")
-			resp, err := ctx.GET("/Products?$filter=" + filter)
+			items, err := fetchComparisonItems(ctx, "Status ne 0")
 			if err != nil {
 				return err
 			}
-			if resp.StatusCode != 200 {
-				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
-			}
-
-			var result map[string]interface{}
-			if err := json.Unmarshal(resp.Body, &result); err != nil {
-				return fmt.Errorf("failed to parse JSON: %w", err)
-			}
-
-			value, ok := result["value"].([]interface{})
-			if !ok {
-				return fmt.Errorf("missing 'value' field in response or not an array")
-			}
-
-			// Strictly validate: all returned entities must have Status != 0
-			for _, item := range value {
-				entity, ok := item.(map[string]interface{})
+			return ctx.AssertAllEntitiesSatisfy(items, "Status ne 0", func(entity map[string]interface{}) (bool, string) {
+				statusFloat, ok := entity["Status"].(float64)
 				if !ok {
-					continue
+					return false, "Status field is missing or non-numeric"
 				}
-
-				if status, ok := entity["Status"]; ok {
-					statusFloat, ok := status.(float64)
-					if !ok {
-						return fmt.Errorf("filter validation failed: Status field is not a numeric value")
-					}
-					statusVal := int(statusFloat)
-					if statusVal == 0 {
-						return fmt.Errorf("filter validation failed: found entity with Status=0, but filter was 'Status ne 0'")
-					}
+				if int(statusFloat) == 0 {
+					return false, "found Status=0"
 				}
-			}
-
-			return nil
+				return true, ""
+			})
 		},
 	)
 
@@ -95,44 +68,20 @@ func FilterComparisonOperators() *framework.TestSuite {
 		"test_gt_operator",
 		"gt (greater than) operator works and returns only matching entities",
 		func(ctx *framework.TestContext) error {
-			filter := url.QueryEscape("Price gt 50")
-			resp, err := ctx.GET("/Products?$filter=" + filter)
+			items, err := fetchComparisonItems(ctx, "Price gt 50")
 			if err != nil {
 				return err
 			}
-			if resp.StatusCode != 200 {
-				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
-			}
-
-			var result map[string]interface{}
-			if err := json.Unmarshal(resp.Body, &result); err != nil {
-				return fmt.Errorf("failed to parse JSON: %w", err)
-			}
-
-			value, ok := result["value"].([]interface{})
-			if !ok {
-				return fmt.Errorf("missing 'value' field in response or not an array")
-			}
-
-			// Strictly validate: all returned entities must have Price > 50
-			for _, item := range value {
-				entity, ok := item.(map[string]interface{})
+			return ctx.AssertAllEntitiesSatisfy(items, "Price gt 50", func(entity map[string]interface{}) (bool, string) {
+				price, ok := entity["Price"].(float64)
 				if !ok {
-					continue
+					return false, "Price field is missing or non-numeric"
 				}
-
-				if price, ok := entity["Price"]; ok {
-					priceVal, ok := price.(float64)
-					if !ok {
-						return fmt.Errorf("unexpected type for Price: %T", price)
-					}
-					if priceVal <= 50 {
-						return fmt.Errorf("filter validation failed: found entity with Price=%v, but filter was 'Price gt 50'", priceVal)
-					}
+				if price <= 50 {
+					return false, fmt.Sprintf("found Price=%v", price)
 				}
-			}
-
-			return nil
+				return true, ""
+			})
 		},
 	)
 
@@ -141,44 +90,20 @@ func FilterComparisonOperators() *framework.TestSuite {
 		"test_ge_operator",
 		"ge (greater than or equal) operator works and returns only matching entities",
 		func(ctx *framework.TestContext) error {
-			filter := url.QueryEscape("Price ge 50")
-			resp, err := ctx.GET("/Products?$filter=" + filter)
+			items, err := fetchComparisonItems(ctx, "Price ge 50")
 			if err != nil {
 				return err
 			}
-			if resp.StatusCode != 200 {
-				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
-			}
-
-			var result map[string]interface{}
-			if err := json.Unmarshal(resp.Body, &result); err != nil {
-				return fmt.Errorf("failed to parse JSON: %w", err)
-			}
-
-			value, ok := result["value"].([]interface{})
-			if !ok {
-				return fmt.Errorf("missing 'value' field in response or not an array")
-			}
-
-			// Strictly validate: all returned entities must have Price >= 50
-			for _, item := range value {
-				entity, ok := item.(map[string]interface{})
+			return ctx.AssertAllEntitiesSatisfy(items, "Price ge 50", func(entity map[string]interface{}) (bool, string) {
+				price, ok := entity["Price"].(float64)
 				if !ok {
-					continue
+					return false, "Price field is missing or non-numeric"
 				}
-
-				if price, ok := entity["Price"]; ok {
-					priceVal, ok := price.(float64)
-					if !ok {
-						return fmt.Errorf("filter validation failed: unexpected type for Price field: %T", price)
-					}
-					if priceVal < 50 {
-						return fmt.Errorf("filter validation failed: found entity with Price=%v, but filter was 'Price ge 50'", priceVal)
-					}
+				if price < 50 {
+					return false, fmt.Sprintf("found Price=%v", price)
 				}
-			}
-
-			return nil
+				return true, ""
+			})
 		},
 	)
 
@@ -187,44 +112,20 @@ func FilterComparisonOperators() *framework.TestSuite {
 		"test_lt_operator",
 		"lt (less than) operator works and returns only matching entities",
 		func(ctx *framework.TestContext) error {
-			filter := url.QueryEscape("Price lt 100")
-			resp, err := ctx.GET("/Products?$filter=" + filter)
+			items, err := fetchComparisonItems(ctx, "Price lt 100")
 			if err != nil {
 				return err
 			}
-			if resp.StatusCode != 200 {
-				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
-			}
-
-			var result map[string]interface{}
-			if err := json.Unmarshal(resp.Body, &result); err != nil {
-				return fmt.Errorf("failed to parse JSON: %w", err)
-			}
-
-			value, ok := result["value"].([]interface{})
-			if !ok {
-				return fmt.Errorf("missing 'value' field in response or not an array")
-			}
-
-			// Strictly validate: all returned entities must have Price < 100
-			for _, item := range value {
-				entity, ok := item.(map[string]interface{})
+			return ctx.AssertAllEntitiesSatisfy(items, "Price lt 100", func(entity map[string]interface{}) (bool, string) {
+				price, ok := entity["Price"].(float64)
 				if !ok {
-					continue
+					return false, "Price field is missing or non-numeric"
 				}
-
-				if price, ok := entity["Price"]; ok {
-					priceVal, ok := price.(float64)
-					if !ok {
-						return fmt.Errorf("filter validation failed: unexpected type for Price: %T", price)
-					}
-					if priceVal >= 100 {
-						return fmt.Errorf("filter validation failed: found entity with Price=%v, but filter was 'Price lt 100'", priceVal)
-					}
+				if price >= 100 {
+					return false, fmt.Sprintf("found Price=%v", price)
 				}
-			}
-
-			return nil
+				return true, ""
+			})
 		},
 	)
 
@@ -233,44 +134,20 @@ func FilterComparisonOperators() *framework.TestSuite {
 		"test_le_operator",
 		"le (less than or equal) operator works and returns only matching entities",
 		func(ctx *framework.TestContext) error {
-			filter := url.QueryEscape("Price le 100")
-			resp, err := ctx.GET("/Products?$filter=" + filter)
+			items, err := fetchComparisonItems(ctx, "Price le 100")
 			if err != nil {
 				return err
 			}
-			if resp.StatusCode != 200 {
-				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
-			}
-
-			var result map[string]interface{}
-			if err := json.Unmarshal(resp.Body, &result); err != nil {
-				return fmt.Errorf("failed to parse JSON: %w", err)
-			}
-
-			value, ok := result["value"].([]interface{})
-			if !ok {
-				return fmt.Errorf("missing 'value' field in response or not an array")
-			}
-
-			// Strictly validate: all returned entities must have Price <= 100
-			for _, item := range value {
-				entity, ok := item.(map[string]interface{})
+			return ctx.AssertAllEntitiesSatisfy(items, "Price le 100", func(entity map[string]interface{}) (bool, string) {
+				price, ok := entity["Price"].(float64)
 				if !ok {
-					continue
+					return false, "Price field is missing or non-numeric"
 				}
-
-				if price, ok := entity["Price"]; ok {
-					priceVal, ok := price.(float64)
-					if !ok {
-						return fmt.Errorf("unexpected type for 'Price' field: %T", price)
-					}
-					if priceVal > 100 {
-						return fmt.Errorf("filter validation failed: found entity with Price=%v, but filter was 'Price le 100'", priceVal)
-					}
+				if price > 100 {
+					return false, fmt.Sprintf("found Price=%v", price)
 				}
-			}
-
-			return nil
+				return true, ""
+			})
 		},
 	)
 
@@ -279,25 +156,11 @@ func FilterComparisonOperators() *framework.TestSuite {
 		"test_eq_string",
 		"eq operator works with strings",
 		func(ctx *framework.TestContext) error {
-			filter := url.QueryEscape("Name eq 'Laptop'")
-			resp, err := ctx.GET("/Products?$filter=" + filter)
+			items, err := fetchComparisonItems(ctx, "Name eq 'Laptop'")
 			if err != nil {
 				return err
 			}
-			if resp.StatusCode != 200 {
-				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
-			}
-
-			var result map[string]interface{}
-			if err := json.Unmarshal(resp.Body, &result); err != nil {
-				return fmt.Errorf("failed to parse JSON: %w", err)
-			}
-
-			if _, ok := result["value"]; !ok {
-				return fmt.Errorf("missing 'value' field in response")
-			}
-
-			return nil
+			return ctx.AssertMinCollectionSize(items, 1)
 		},
 	)
 
@@ -306,25 +169,11 @@ func FilterComparisonOperators() *framework.TestSuite {
 		"test_ne_string",
 		"ne operator works with strings",
 		func(ctx *framework.TestContext) error {
-			filter := url.QueryEscape("Name ne 'Laptop'")
-			resp, err := ctx.GET("/Products?$filter=" + filter)
+			items, err := fetchComparisonItems(ctx, "Name ne 'Laptop'")
 			if err != nil {
 				return err
 			}
-			if resp.StatusCode != 200 {
-				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
-			}
-
-			var result map[string]interface{}
-			if err := json.Unmarshal(resp.Body, &result); err != nil {
-				return fmt.Errorf("failed to parse JSON: %w", err)
-			}
-
-			if _, ok := result["value"]; !ok {
-				return fmt.Errorf("missing 'value' field in response")
-			}
-
-			return nil
+			return ctx.AssertMinCollectionSize(items, 1)
 		},
 	)
 
@@ -333,13 +182,9 @@ func FilterComparisonOperators() *framework.TestSuite {
 		"test_decimal_comparison",
 		"Comparison operators work with decimal numbers",
 		func(ctx *framework.TestContext) error {
-			filter := url.QueryEscape("Price eq 99.99")
-			resp, err := ctx.GET("/Products?$filter=" + filter)
+			_, err := fetchComparisonItems(ctx, "Price eq 99.99")
 			if err != nil {
 				return err
-			}
-			if resp.StatusCode != 200 {
-				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
 			}
 			return nil
 		},
@@ -350,13 +195,9 @@ func FilterComparisonOperators() *framework.TestSuite {
 		"test_null_comparison",
 		"Comparison with null value",
 		func(ctx *framework.TestContext) error {
-			filter := url.QueryEscape("CategoryID eq null")
-			resp, err := ctx.GET("/Products?$filter=" + filter)
+			_, err := fetchComparisonItems(ctx, "CategoryID eq null")
 			if err != nil {
 				return err
-			}
-			if resp.StatusCode != 200 {
-				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
 			}
 			return nil
 		},
@@ -367,25 +208,20 @@ func FilterComparisonOperators() *framework.TestSuite {
 		"test_multiple_comparisons",
 		"Multiple comparison operators combined",
 		func(ctx *framework.TestContext) error {
-			filter := url.QueryEscape("Price ge 10 and Price le 100")
-			resp, err := ctx.GET("/Products?$filter=" + filter)
+			items, err := fetchComparisonItems(ctx, "Price ge 10 and Price le 100")
 			if err != nil {
 				return err
 			}
-			if resp.StatusCode != 200 {
-				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
-			}
-
-			var result map[string]interface{}
-			if err := json.Unmarshal(resp.Body, &result); err != nil {
-				return fmt.Errorf("failed to parse JSON: %w", err)
-			}
-
-			if _, ok := result["value"]; !ok {
-				return fmt.Errorf("missing 'value' field in response")
-			}
-
-			return nil
+			return ctx.AssertAllEntitiesSatisfy(items, "Price ge 10 and Price le 100", func(entity map[string]interface{}) (bool, string) {
+				price, ok := entity["Price"].(float64)
+				if !ok {
+					return false, "Price field is missing or non-numeric"
+				}
+				if price < 10 || price > 100 {
+					return false, fmt.Sprintf("found Price=%v", price)
+				}
+				return true, ""
+			})
 		},
 	)
 
