@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/nlstn/go-odata/internal/metadata"
+	oquery "github.com/nlstn/go-odata/internal/query"
 )
 
 // Valid OData metadata levels per OData v4 specification
@@ -339,10 +340,10 @@ func BuildNextLink(r *http.Request, skipValue int) string {
 	baseURL := buildBaseURL(r)
 
 	nextURL := *r.URL
-	query := nextURL.Query()
-	query.Del("$skiptoken")
-	query.Set("$skip", fmt.Sprintf("%d", skipValue))
-	nextURL.RawQuery = query.Encode()
+	q := oquery.NormalizeQueryParams(nextURL.Query())
+	q.Del("$skiptoken")
+	q.Set("$skip", fmt.Sprintf("%d", skipValue))
+	nextURL.RawQuery = q.Encode()
 
 	return baseURL + nextURL.Path + "?" + nextURL.RawQuery
 }
@@ -352,11 +353,11 @@ func BuildNextLinkWithSkipToken(r *http.Request, skipToken string) string {
 	baseURL := buildBaseURL(r)
 
 	nextURL := *r.URL
-	query := nextURL.Query()
-	query.Del("$skip")
-	query.Del("$skiptoken")
-	query.Set("$skiptoken", skipToken)
-	nextURL.RawQuery = query.Encode()
+	q := oquery.NormalizeQueryParams(nextURL.Query())
+	q.Del("$skip")
+	q.Del("$skiptoken")
+	q.Set("$skiptoken", skipToken)
+	nextURL.RawQuery = q.Encode()
 
 	return baseURL + nextURL.Path + "?" + nextURL.RawQuery
 }

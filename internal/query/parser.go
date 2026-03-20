@@ -241,6 +241,13 @@ func normalizeQueryOptionKey(key string) string {
 // This allows case-insensitive query options and options without $ prefix
 // Non-OData parameters are left unchanged
 func normalizeQueryParams(queryParams url.Values) url.Values {
+	return NormalizeQueryParams(queryParams)
+}
+
+// NormalizeQueryParams normalizes all query parameters to have lowercase $ prefix.
+// This allows case-insensitive query options and options without $ prefix per OData 4.01.
+// Non-OData parameters are left unchanged.
+func NormalizeQueryParams(queryParams url.Values) url.Values {
 	normalized := make(url.Values)
 
 	for key, values := range queryParams {

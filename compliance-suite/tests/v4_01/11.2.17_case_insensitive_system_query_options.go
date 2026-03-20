@@ -127,18 +127,18 @@ func CaseInsensitiveSystemQueryOptions() *framework.TestSuite {
 
 	suite.AddTest(
 		"test_unknown_option_rejected_without_dollar",
-		"unknown query options without $ are rejected",
+		"unknown parameters without $ are treated as custom query params and ignored",
 		func(ctx *framework.TestContext) error {
+			// Per OData 4.01 spec: without a $ prefix the server only treats a parameter as a
+			// system query option if its name matches a known system query option name (e.g. "filter",
+			// "top"). Unknown names without $ (e.g. "filtre") are custom query parameters — they must
+			// not start with $ or @@ — and MUST be silently ignored by the service (200 response).
 			resp, err := ctx.GET("/Products?filtre=Price%20gt%2010")
 			if err != nil {
 				return err
 			}
 
-			if err := ctx.AssertStatusCode(resp, http.StatusBadRequest); err != nil {
-				return framework.NewError(fmt.Sprintf("expected unknown option to be rejected with 400: %v", err))
-			}
-
-			return nil
+			return ctx.AssertStatusCode(resp, http.StatusOK)
 		},
 	)
 

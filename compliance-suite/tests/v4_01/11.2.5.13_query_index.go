@@ -341,26 +341,19 @@ func QueryIndex() *framework.TestSuite {
 		},
 	)
 
-	// Test 14: $index case sensitivity
+	// Test 14: $index case insensitivity (OData 4.01)
 	suite.AddTest(
 		"test_index_case_sensitivity",
-		"$index is case-sensitive",
+		"$INDEX is accepted case-insensitively per OData 4.01",
 		func(ctx *framework.TestContext) error {
+			// OData 4.01 makes all system query option names case-insensitive.
+			// $INDEX must be treated as equivalent to $index.
 			resp, err := ctx.GET("/Products?$INDEX")
 			if err != nil {
 				return err
 			}
 
-			// Should reject uppercase $INDEX
-			if resp.StatusCode == 200 {
-				return framework.NewError("Service treated $INDEX as valid; expected rejection")
-			}
-
-			if err := ctx.AssertStatusCode(resp, 400); err != nil {
-				return framework.NewError(fmt.Sprintf("Expected HTTP 400 for uppercase $INDEX but got %d", resp.StatusCode))
-			}
-
-			return nil
+			return ctx.AssertStatusCode(resp, 200)
 		},
 	)
 
