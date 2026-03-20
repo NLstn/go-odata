@@ -250,7 +250,7 @@ func (h *EntityHandler) buildNavigationRelatedQuery(parent interface{}, targetMe
 // createNavParseQueryOptions creates the ParseQueryOptions callback for navigation collections
 func (h *EntityHandler) createNavParseQueryOptions(r *http.Request, targetMetadata *metadata.EntityMetadata) func() (*query.QueryOptions, error) {
 	return func() (*query.QueryOptions, error) {
-		queryOptions, err := query.ParseQueryOptions(query.ParseRawQuery(r.URL.RawQuery), targetMetadata)
+		queryOptions, err := h.parseQueryOptionsByNegotiatedVersion(r, targetMetadata, nil)
 		if err != nil {
 			return nil, err
 		}

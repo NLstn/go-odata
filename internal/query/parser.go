@@ -252,8 +252,9 @@ func NormalizeQueryParams(queryParams url.Values) url.Values {
 
 	for key, values := range queryParams {
 		normalizedKey := normalizeQueryOptionKey(key)
-		// Add with normalized key
-		normalized[normalizedKey] = values
+		// Merge values under the normalized key so duplicates across case/$ forms
+		// remain visible to validation.
+		normalized[normalizedKey] = append(normalized[normalizedKey], values...)
 	}
 
 	return normalized
@@ -297,34 +298,11 @@ func ParseQueryOptions(queryParams url.Values, entityMetadata *metadata.EntityMe
 	return ParseQueryOptionsWithConfig(queryParams, entityMetadata, nil)
 }
 
-// ParseRawQuery parses a raw query string into url.Values, splitting only on '&'.
-// Unlike url.ParseQuery, this preserves semicolons within parameter values, which is
-// required for OData nested query options like $expand=Nav($select=A;$expand=B).
-func ParseRawQuery(rawQuery string) url.Values {
-	values := make(url.Values)
-	if rawQuery == "" {
-		return values
-	}
-	for _, part := range strings.Split(rawQuery, "&") {
-		if part == "" {
-			continue
-		}
-		key, value, _ := strings.Cut(part, "=")
-		decodedKey, err := url.QueryUnescape(key)
-		if err != nil {
-			decodedKey = key
-		}
-		decodedValue, err := url.QueryUnescape(value)
-		if err != nil {
-			decodedValue = value
-		}
-		values.Add(decodedKey, decodedValue)
-	}
-	return values
-}
-
-// ParseQueryOptionsWithConfig parses OData query options from the URL with additional configuration
-func ParseQueryOptionsWithConfig(queryParams url.Values, entityMetadata *metadata.EntityMetadata, config *ParserConfig) (*QueryOptions, error) {
+// ParseQueryOptionsWithConfigAndCaseSensitivity parses OData query options with explicit
+// control over whether 4.01-style case-insensitive system query options are enabled.
+// When caseInsensitive is false (4.0 behavior), system query options must be lowercase and
+// $-prefixed, and expression keyword parsing remains case-sensitive.
+func ParseQueryOptionsWithConfigAndCaseSensitivity(queryParams url.Values, entityMetadata *metadata.EntityMetadata, config *ParserConfig, caseInsensitive bool) (*QueryOptions, error) {
 	options := &QueryOptions{}
 
 	// Use default config if not provided
@@ -347,11 +325,12 @@ func ParseQueryOptionsWithConfig(queryParams url.Values, entityMetadata *metadat
 	// Use resolved parameters for all subsequent parsing
 	queryParams = resolvedParams
 
-	// Normalize query parameter keys to lowercase with $ prefix
-	// per OData v4.01 spec: system query option names are case-insensitive and may be provided without the $ prefix
-	queryParams = normalizeQueryParams(queryParams)
+	if caseInsensitive {
+		// OData v4.01: system query option names are case-insensitive and may omit '$'.
+		queryParams = normalizeQueryParams(queryParams)
+	}
 
-	// Validate that all query parameters starting with $ are valid OData query options
+	// Validate query option names and duplicates according to the selected behavior.
 	if err := validateQueryOptions(queryParams); err != nil {
 		return nil, err
 	}
@@ -360,7 +339,7 @@ func ParseQueryOptionsWithConfig(queryParams url.Values, entityMetadata *metadat
 	computedAliases := extractAllComputedAliases(queryParams)
 
 	// Parse each query option
-	if err := parseFilterOption(queryParams, entityMetadata, options, computedAliases, config); err != nil {
+	if err := parseFilterOption(queryParams, entityMetadata, options, computedAliases, config, caseInsensitive); err != nil {
 		return nil, err
 	}
 
@@ -421,6 +400,39 @@ func ParseQueryOptionsWithConfig(queryParams url.Values, entityMetadata *metadat
 	return options, nil
 }
 
+// ParseRawQuery parses a raw query string into url.Values, splitting only on '&'.
+// Unlike url.ParseQuery, this preserves semicolons within parameter values, which is
+// required for OData nested query options like $expand=Nav($select=A;$expand=B).
+func ParseRawQuery(rawQuery string) url.Values {
+	values := make(url.Values)
+	if rawQuery == "" {
+		return values
+	}
+	for _, part := range strings.Split(rawQuery, "&") {
+		if part == "" {
+			continue
+		}
+		key, value, _ := strings.Cut(part, "=")
+		decodedKey, err := url.QueryUnescape(key)
+		if err != nil {
+			decodedKey = key
+		}
+		decodedValue, err := url.QueryUnescape(value)
+		if err != nil {
+			decodedValue = value
+		}
+		values.Add(decodedKey, decodedValue)
+	}
+	return values
+}
+
+// ParseQueryOptionsWithConfig parses OData query options from the URL with additional configuration
+func ParseQueryOptionsWithConfig(queryParams url.Values, entityMetadata *metadata.EntityMetadata, config *ParserConfig) (*QueryOptions, error) {
+	// Keep existing behavior for callers that don't explicitly negotiate version:
+	// treat parsing as OData 4.01-compatible.
+	return ParseQueryOptionsWithConfigAndCaseSensitivity(queryParams, entityMetadata, config, true)
+}
+
 // setMaxInClauseSizeRecursive sets the maxInClauseSize on a filter expression and all its children
 func setMaxInClauseSizeRecursive(filter *FilterExpression, maxSize int) {
 	if filter == nil {
@@ -432,7 +444,7 @@ func setMaxInClauseSizeRecursive(filter *FilterExpression, maxSize int) {
 }
 
 // parseFilterOption parses the $filter query parameter
-func parseFilterOption(queryParams url.Values, entityMetadata *metadata.EntityMetadata, options *QueryOptions, computedAliases map[string]bool, config *ParserConfig) error {
+func parseFilterOption(queryParams url.Values, entityMetadata *metadata.EntityMetadata, options *QueryOptions, computedAliases map[string]bool, config *ParserConfig, caseInsensitive bool) error {
 	if filterValues, exists := queryParams["$filter"]; exists {
 		filterStr := ""
 		if len(filterValues) > 0 {
@@ -445,7 +457,7 @@ func parseFilterOption(queryParams url.Values, entityMetadata *metadata.EntityMe
 		if config != nil {
 			maxInClauseSize = config.MaxInClauseSize
 		}
-		filter, err := parseFilter(filterStr, entityMetadata, computedAliases, maxInClauseSize)
+		filter, err := parseFilterWithMode(filterStr, entityMetadata, computedAliases, maxInClauseSize, caseInsensitive)
 		if err != nil {
 			return fmt.Errorf("invalid $filter: %w", err)
 		}

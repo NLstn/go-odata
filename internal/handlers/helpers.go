@@ -12,6 +12,7 @@ import (
 	"github.com/nlstn/go-odata/internal/query"
 	"github.com/nlstn/go-odata/internal/response"
 	"github.com/nlstn/go-odata/internal/trackchanges"
+	"github.com/nlstn/go-odata/internal/version"
 	"gorm.io/gorm"
 )
 
@@ -111,6 +112,21 @@ func convertKeyValue(value string, keyName string, keyProperties []metadata.Prop
 func SetODataHeader(w http.ResponseWriter, key, value string) {
 	// Set with exact capitalization for wire format (OData spec compliance)
 	w.Header()[key] = []string{value}
+}
+
+func isCaseInsensitiveSystemQueryParsingEnabled(r *http.Request) bool {
+	v := version.GetVersion(r.Context())
+	return v.Major > 4 || (v.Major == 4 && v.Minor >= 1)
+}
+
+func (h *EntityHandler) parseQueryOptionsByNegotiatedVersion(r *http.Request, entityMetadata *metadata.EntityMetadata, config *query.ParserConfig) (*query.QueryOptions, error) {
+	caseInsensitive := isCaseInsensitiveSystemQueryParsingEnabled(r)
+	return query.ParseQueryOptionsWithConfigAndCaseSensitivity(
+		query.ParseRawQuery(r.URL.RawQuery),
+		entityMetadata,
+		config,
+		caseInsensitive,
+	)
 }
 
 // buildKeyQuery builds a GORM query with WHERE conditions for the entity key(s)
