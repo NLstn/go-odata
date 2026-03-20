@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strings"
 
 	"github.com/nlstn/go-odata/internal/version"
@@ -211,16 +210,11 @@ func ParseODataURLComponents(path string) (*ODataURLComponents, error) {
 		return nil, fmt.Errorf("invalid URL: empty path segments are not allowed per OData specification")
 	}
 
-	u, err := url.Parse(path)
-	if err != nil {
-		return nil, err
-	}
-
 	components := &ODataURLComponents{
 		EntityKeyMap: make(map[string]string),
 	}
 
-	pathParts := strings.Split(u.Path, "/")
+	pathParts := strings.Split(path, "/")
 
 	// Remove leading/trailing empty segments from leading/trailing slashes
 	// We already rejected consecutive slashes above, so any empty segments here
