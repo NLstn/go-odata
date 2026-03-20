@@ -220,6 +220,90 @@ func TestCollectionNavigationPropertyStillRequiresLambda(t *testing.T) {
 	}
 }
 
+// TestCollectionNavigationPropertyCountFilter ensures collection/$count is accepted in filters.
+func TestCollectionNavigationPropertyCountFilter(t *testing.T) {
+	// Setup database
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("Failed to connect to database: %v", err)
+	}
+
+	// Define test entities
+	type ProductDescription struct {
+		ID        uint   `json:"ID" gorm:"primaryKey" odata:"key"`
+		ProductID uint   `json:"ProductID" gorm:"index"`
+		Language  string `json:"Language"`
+	}
+
+	type Product struct {
+		ID           uint                 `json:"ID" gorm:"primaryKey" odata:"key"`
+		Name         string               `json:"Name" gorm:"not null" odata:"required"`
+		Descriptions []ProductDescription `json:"Descriptions" gorm:"foreignKey:ProductID;references:ID"`
+	}
+
+	if err := db.AutoMigrate(&Product{}, &ProductDescription{}); err != nil {
+		t.Fatalf("Failed to migrate: %v", err)
+	}
+
+	// Seed data: product 1 has 2 descriptions, product 2 has 1 description.
+	if err := db.Create(&Product{ID: 1, Name: "Laptop"}).Error; err != nil {
+		t.Fatalf("Failed to create product 1: %v", err)
+	}
+	if err := db.Create(&Product{ID: 2, Name: "Mouse"}).Error; err != nil {
+		t.Fatalf("Failed to create product 2: %v", err)
+	}
+
+	if err := db.Create(&ProductDescription{ID: 1, ProductID: 1, Language: "EN"}).Error; err != nil {
+		t.Fatalf("Failed to create description 1: %v", err)
+	}
+	if err := db.Create(&ProductDescription{ID: 2, ProductID: 1, Language: "DE"}).Error; err != nil {
+		t.Fatalf("Failed to create description 2: %v", err)
+	}
+	if err := db.Create(&ProductDescription{ID: 3, ProductID: 2, Language: "EN"}).Error; err != nil {
+		t.Fatalf("Failed to create description 3: %v", err)
+	}
+
+	service, err := odata.NewService(db)
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
+	service.RegisterEntity(&Product{})
+	service.RegisterEntity(&ProductDescription{})
+
+	testURL := "/Products?$filter=" + url.QueryEscape("Descriptions/$count gt 1")
+	req := httptest.NewRequest(http.MethodGet, testURL, nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected status %d for collection count filter, got %d. Body: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+
+	values, ok := response["value"].([]interface{})
+	if !ok {
+		t.Fatalf("Expected 'value' array in response, got: %T", response["value"])
+	}
+
+	if len(values) != 1 {
+		t.Fatalf("Expected exactly one matching product, got %d", len(values))
+	}
+
+	product, ok := values[0].(map[string]interface{})
+	if !ok {
+		t.Fatalf("Expected object in value array, got %T", values[0])
+	}
+
+	if product["Name"] != "Laptop" {
+		t.Fatalf("Expected Laptop to match count filter, got %v", product["Name"])
+	}
+}
+
 // TestMultiLevelNavigationPathRejection ensures multi-level navigation paths are rejected with clear error
 func TestMultiLevelNavigationPathRejection(t *testing.T) {
 	// Setup database

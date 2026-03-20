@@ -346,6 +346,10 @@ func buildLogicalConditionWithDB(db *gorm.DB, dialect string, filter *FilterExpr
 // resolveColumnName determines the correct column name to use in SQL queries.
 // It handles special cases like $it, $count, aggregate aliases, and regular properties.
 func resolveColumnName(db *gorm.DB, dialect string, propertyName string, entityMetadata *metadata.EntityMetadata) string {
+	if countExpr, ok := buildCollectionCountExpression(dialect, propertyName, entityMetadata); ok {
+		return countExpr
+	}
+
 	// Check if this is a known entity property first
 	if propertyExists(propertyName, entityMetadata) {
 		return getQuotedColumnName(dialect, propertyName, entityMetadata)
@@ -392,6 +396,68 @@ func resolveColumnName(db *gorm.DB, dialect string, propertyName string, entityM
 
 	// Default: quote as identifier
 	return quoteIdent(dialect, rawName)
+}
+
+func buildCollectionCountExpression(dialect string, propertyName string, entityMetadata *metadata.EntityMetadata) (string, bool) {
+	ownerMetadata, navProp, _, err := resolveCollectionCountPath(propertyName, entityMetadata)
+	if err != nil || ownerMetadata == nil || navProp == nil {
+		return "", false
+	}
+
+	relatedTableName := strings.TrimSpace(navProp.NavigationTargetTableName)
+	if relatedTableName == "" {
+		return "", false
+	}
+
+	foreignKeyColumn := strings.TrimSpace(navProp.ForeignKeyColumnName)
+	if foreignKeyColumn == "" {
+		return "", false
+	}
+
+	parentTableName := strings.TrimSpace(ownerMetadata.TableName)
+	if parentTableName == "" {
+		return "", false
+	}
+
+	quotedRelatedTable := quoteIdent(dialect, relatedTableName)
+	quotedParentTable := quoteIdent(dialect, parentTableName)
+	foreignKeyColumns := strings.Split(foreignKeyColumn, ",")
+	joinConditions := make([]string, 0, len(ownerMetadata.KeyProperties))
+
+	if len(ownerMetadata.KeyProperties) == 0 {
+		fkCol := strings.TrimSpace(foreignKeyColumns[0])
+		if fkCol == "" {
+			return "", false
+		}
+		joinConditions = append(joinConditions,
+			fmt.Sprintf("%s.%s = %s.%s",
+				quotedRelatedTable,
+				quoteIdent(dialect, fkCol),
+				quotedParentTable,
+				quoteIdent(dialect, "id")))
+	} else {
+		for i, keyProp := range ownerMetadata.KeyProperties {
+			fkCol := keyProp.ColumnName
+			if i < len(foreignKeyColumns) {
+				if candidate := strings.TrimSpace(foreignKeyColumns[i]); candidate != "" {
+					fkCol = candidate
+				}
+			}
+
+			joinConditions = append(joinConditions,
+				fmt.Sprintf("%s.%s = %s.%s",
+					quotedRelatedTable,
+					quoteIdent(dialect, fkCol),
+					quotedParentTable,
+					quoteIdent(dialect, keyProp.ColumnName)))
+		}
+	}
+
+	if len(joinConditions) == 0 {
+		return "", false
+	}
+
+	return fmt.Sprintf("(SELECT COUNT(*) FROM %s WHERE %s)", quotedRelatedTable, strings.Join(joinConditions, " AND ")), true
 }
 
 // tryBuildRightSideFunctionComparison attempts to build a comparison when the right side is a function call.

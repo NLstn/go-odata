@@ -51,6 +51,25 @@ type lambdaMismatchKid struct {
 	Name             string `json:"Name"`
 }
 
+type countFilterProduct struct {
+	ID           uint                     `json:"ID" gorm:"primaryKey" odata:"key"`
+	Descriptions []countFilterDescription `json:"Descriptions" gorm:"foreignKey:ProductID"`
+}
+
+type countFilterDescription struct {
+	ID        uint   `json:"ID" gorm:"primaryKey" odata:"key"`
+	ProductID uint   `json:"ProductID"`
+	Text      string `json:"Text"`
+}
+
+func (countFilterProduct) TableName() string {
+	return "count_filter_products"
+}
+
+func (countFilterDescription) TableName() string {
+	return "count_filter_descriptions"
+}
+
 func buildNavigationFilterMetadata(t *testing.T) (*metadata.EntityMetadata, *metadata.EntityMetadata, *metadata.EntityMetadata) {
 	t.Helper()
 
@@ -162,5 +181,34 @@ func TestBuildLambdaConditionLogsForeignKeyMismatch(t *testing.T) {
 	stdoutOutput := string(stdoutBytes)
 	if !strings.Contains(stdoutOutput, "Foreign key column count") {
 		t.Fatalf("expected warning about foreign key mismatch in stdout, got %q", stdoutOutput)
+	}
+}
+
+func TestCollectionCountFilterBuildsCorrelatedSubquery(t *testing.T) {
+	productMeta, err := metadata.AnalyzeEntity(&countFilterProduct{})
+	if err != nil {
+		t.Fatalf("Failed to analyze product entity: %v", err)
+	}
+
+	descriptionMeta, err := metadata.AnalyzeEntity(&countFilterDescription{})
+	if err != nil {
+		t.Fatalf("Failed to analyze description entity: %v", err)
+	}
+
+	setEntitiesRegistry(productMeta, descriptionMeta)
+
+	filterExpr, err := parseFilter("Descriptions/$count gt 1", productMeta, nil, 0)
+	if err != nil {
+		t.Fatalf("Failed to parse collection count filter: %v", err)
+	}
+
+	sql, args := buildFilterCondition("postgres", filterExpr, productMeta)
+	expectedSQL := "(SELECT COUNT(*) FROM \"count_filter_descriptions\" WHERE \"count_filter_descriptions\".\"product_id\" = \"count_filter_products\".\"id\") > ?"
+	if sql != expectedSQL {
+		t.Fatalf("expected SQL %q, got %q", expectedSQL, sql)
+	}
+
+	if len(args) != 1 || args[0] != int64(1) {
+		t.Fatalf("expected args [1], got %#v", args)
 	}
 }
