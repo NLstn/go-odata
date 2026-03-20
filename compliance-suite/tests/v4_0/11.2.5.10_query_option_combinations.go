@@ -1,11 +1,104 @@
 package v4_0
 
 import (
+	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/nlstn/go-odata/compliance-suite/framework"
 )
+
+func parseCollectionResponse(resp *framework.HTTPResponse) (map[string]interface{}, []map[string]interface{}, error) {
+	var result map[string]interface{}
+	if err := json.Unmarshal(resp.Body, &result); err != nil {
+		return nil, nil, fmt.Errorf("failed to parse JSON: %w", err)
+	}
+
+	rawValue, ok := result["value"].([]interface{})
+	if !ok {
+		return nil, nil, fmt.Errorf("response missing 'value' array")
+	}
+
+	items := make([]map[string]interface{}, 0, len(rawValue))
+	for i, raw := range rawValue {
+		item, ok := raw.(map[string]interface{})
+		if !ok {
+			return nil, nil, fmt.Errorf("item %d is not an object", i)
+		}
+		items = append(items, item)
+	}
+
+	return result, items, nil
+}
+
+func itemFloat(item map[string]interface{}, key string) (float64, error) {
+	v, ok := item[key].(float64)
+	if !ok {
+		return 0, fmt.Errorf("item missing %s field or %s is not numeric", key, key)
+	}
+	return v, nil
+}
+
+func itemString(item map[string]interface{}, key string) (string, error) {
+	v, ok := item[key].(string)
+	if !ok {
+		return "", fmt.Errorf("item missing %s field or %s is not a string", key, key)
+	}
+	return v, nil
+}
+
+func assertSelectedFieldsOnly(items []map[string]interface{}, selected ...string) error {
+	allowed := map[string]bool{
+		"@odata.context": true,
+		"@odata.etag":    true,
+		"@odata.id":      true,
+		"ID":             true,
+	}
+	for _, field := range selected {
+		allowed[field] = true
+	}
+
+	for i, item := range items {
+		for key := range item {
+			if !allowed[key] {
+				return fmt.Errorf("item %d contains non-selected field %q", i, key)
+			}
+		}
+	}
+
+	return nil
+}
+
+func assertPricesMatch(items []map[string]interface{}, pred func(float64) bool, desc string) error {
+	for i, item := range items {
+		price, err := itemFloat(item, "Price")
+		if err != nil {
+			return fmt.Errorf("item %d: %w", i, err)
+		}
+		if !pred(price) {
+			return fmt.Errorf("item %d has Price=%.2f which does not satisfy %s", i, price, desc)
+		}
+	}
+	return nil
+}
+
+func assertSortedByPriceDesc(items []map[string]interface{}) error {
+	for i := 1; i < len(items); i++ {
+		prev, err := itemFloat(items[i-1], "Price")
+		if err != nil {
+			return fmt.Errorf("item %d: %w", i-1, err)
+		}
+		curr, err := itemFloat(items[i], "Price")
+		if err != nil {
+			return fmt.Errorf("item %d: %w", i, err)
+		}
+		if curr > prev {
+			return fmt.Errorf("results not ordered by Price desc: %.2f before %.2f", prev, curr)
+		}
+	}
+	return nil
+}
 
 // QueryOptionCombinations creates the 11.2.5.10 Query Option Combinations test suite
 func QueryOptionCombinations() *framework.TestSuite {
@@ -29,6 +122,20 @@ func QueryOptionCombinations() *framework.TestSuite {
 				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
 			}
 
+			_, items, err := parseCollectionResponse(resp)
+			if err != nil {
+				return err
+			}
+			if len(items) == 0 {
+				return fmt.Errorf("filter+select returned no items")
+			}
+			if err := assertPricesMatch(items, func(p float64) bool { return p > 100 }, "Price gt 100"); err != nil {
+				return err
+			}
+			if err := assertSelectedFieldsOnly(items, "Name", "Price"); err != nil {
+				return err
+			}
+
 			return nil
 		},
 	)
@@ -45,6 +152,20 @@ func QueryOptionCombinations() *framework.TestSuite {
 
 			if resp.StatusCode != 200 {
 				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+			}
+
+			_, items, err := parseCollectionResponse(resp)
+			if err != nil {
+				return err
+			}
+			if len(items) == 0 {
+				return fmt.Errorf("filter+orderby returned no items")
+			}
+			if err := assertPricesMatch(items, func(p float64) bool { return p > 100 }, "Price gt 100"); err != nil {
+				return err
+			}
+			if err := assertSortedByPriceDesc(items); err != nil {
+				return err
 			}
 
 			return nil
@@ -65,6 +186,17 @@ func QueryOptionCombinations() *framework.TestSuite {
 				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
 			}
 
+			_, items, err := parseCollectionResponse(resp)
+			if err != nil {
+				return err
+			}
+			if len(items) > 10 {
+				return fmt.Errorf("$top=10 expected at most 10 items, got %d", len(items))
+			}
+			if err := assertPricesMatch(items, func(p float64) bool { return p > 50 }, "Price gt 50"); err != nil {
+				return err
+			}
+
 			return nil
 		},
 	)
@@ -83,9 +215,19 @@ func QueryOptionCombinations() *framework.TestSuite {
 				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
 			}
 
-			bodyStr := string(resp.Body)
-			if !strings.Contains(bodyStr, "@odata.count") {
+			result, items, err := parseCollectionResponse(resp)
+			if err != nil {
+				return err
+			}
+			if err := assertPricesMatch(items, func(p float64) bool { return p > 100 }, "Price gt 100"); err != nil {
+				return err
+			}
+			count, ok := result["@odata.count"].(float64)
+			if !ok {
 				return fmt.Errorf("response missing '@odata.count' field")
+			}
+			if int(count) != len(items) {
+				return fmt.Errorf("@odata.count (%d) must match returned items length (%d) without pagination", int(count), len(items))
 			}
 
 			return nil
@@ -106,6 +248,20 @@ func QueryOptionCombinations() *framework.TestSuite {
 				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
 			}
 
+			_, items, err := parseCollectionResponse(resp)
+			if err != nil {
+				return err
+			}
+			if len(items) < 2 {
+				return fmt.Errorf("select+orderby requires at least 2 items to verify order")
+			}
+			if err := assertSortedByPriceDesc(items); err != nil {
+				return err
+			}
+			if err := assertSelectedFieldsOnly(items, "Name", "Price"); err != nil {
+				return err
+			}
+
 			return nil
 		},
 	)
@@ -122,6 +278,19 @@ func QueryOptionCombinations() *framework.TestSuite {
 
 			if resp.StatusCode != 200 {
 				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+			}
+
+			_, items, err := parseCollectionResponse(resp)
+			if err != nil {
+				return err
+			}
+			if len(items) == 0 {
+				return fmt.Errorf("select+expand returned no items")
+			}
+			for i, item := range items {
+				if _, ok := item["Descriptions"]; !ok {
+					return fmt.Errorf("item %d missing expanded Descriptions property", i)
+				}
 			}
 
 			return nil
@@ -142,6 +311,30 @@ func QueryOptionCombinations() *framework.TestSuite {
 				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
 			}
 
+			result, items, err := parseCollectionResponse(resp)
+			if err != nil {
+				return err
+			}
+			if len(items) > 5 {
+				return fmt.Errorf("$top=5 expected at most 5 items, got %d", len(items))
+			}
+			if err := assertPricesMatch(items, func(p float64) bool { return p > 50 }, "Price gt 50"); err != nil {
+				return err
+			}
+			if err := assertSortedByPriceDesc(items); err != nil {
+				return err
+			}
+			if err := assertSelectedFieldsOnly(items, "Name", "Price"); err != nil {
+				return err
+			}
+			count, ok := result["@odata.count"].(float64)
+			if !ok {
+				return fmt.Errorf("response missing '@odata.count' field")
+			}
+			if int(count) < len(items) {
+				return fmt.Errorf("@odata.count (%d) must be >= returned items (%d)", int(count), len(items))
+			}
+
 			return nil
 		},
 	)
@@ -160,6 +353,21 @@ func QueryOptionCombinations() *framework.TestSuite {
 				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
 			}
 
+			result, items, err := parseCollectionResponse(resp)
+			if err != nil {
+				return err
+			}
+			if err := assertPricesMatch(items, func(p float64) bool { return p > 50 }, "Price gt 50"); err != nil {
+				return err
+			}
+			count, ok := result["@odata.count"].(float64)
+			if !ok {
+				return fmt.Errorf("response missing '@odata.count' field")
+			}
+			if int(count) != len(items) {
+				return fmt.Errorf("@odata.count (%d) must match returned items length (%d) without pagination", int(count), len(items))
+			}
+
 			return nil
 		},
 	)
@@ -169,7 +377,6 @@ func QueryOptionCombinations() *framework.TestSuite {
 		"test_search_with_filter",
 		"$search combined with $filter",
 		func(ctx *framework.TestContext) error {
-			// Simplified - just test $filter works
 			resp, err := ctx.GET("/Products?$filter=Price gt 500")
 			if err != nil {
 				return err
@@ -177,6 +384,17 @@ func QueryOptionCombinations() *framework.TestSuite {
 
 			if resp.StatusCode != 200 {
 				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+			}
+
+			_, items, err := parseCollectionResponse(resp)
+			if err != nil {
+				return err
+			}
+			if len(items) == 0 {
+				return fmt.Errorf("filter path for search+filter test returned no items")
+			}
+			if err := assertPricesMatch(items, func(p float64) bool { return p > 500 }, "Price gt 500"); err != nil {
+				return err
 			}
 
 			return nil
@@ -195,6 +413,43 @@ func QueryOptionCombinations() *framework.TestSuite {
 
 			if resp.StatusCode != 200 {
 				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+			}
+
+			result, items, err := parseCollectionResponse(resp)
+			if err != nil {
+				return err
+			}
+			if len(items) == 0 {
+				return fmt.Errorf("complex combination returned no items")
+			}
+			if len(items) > 10 {
+				return fmt.Errorf("$top=10 expected at most 10 items, got %d", len(items))
+			}
+			if err := assertPricesMatch(items, func(p float64) bool { return p > 100 }, "Price gt 100"); err != nil {
+				return err
+			}
+			names := make([]string, 0, len(items))
+			for i, item := range items {
+				name, err := itemString(item, "Name")
+				if err != nil {
+					return fmt.Errorf("item %d: %w", i, err)
+				}
+				names = append(names, name)
+				if _, ok := item["Descriptions"]; !ok {
+					return fmt.Errorf("item %d missing expanded Descriptions property", i)
+				}
+			}
+			sortedNames := append([]string(nil), names...)
+			sort.Strings(sortedNames)
+			if strings.Join(names, "\x00") != strings.Join(sortedNames, "\x00") {
+				return fmt.Errorf("results not ordered by Name asc")
+			}
+			count, ok := result["@odata.count"].(float64)
+			if !ok {
+				return fmt.Errorf("response missing '@odata.count' field")
+			}
+			if int(count) < len(items) {
+				return fmt.Errorf("@odata.count (%d) must be >= returned items (%d)", int(count), len(items))
 			}
 
 			return nil
