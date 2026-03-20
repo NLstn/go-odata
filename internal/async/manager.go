@@ -516,6 +516,7 @@ func (m *Manager) ServeMonitor(w http.ResponseWriter, r *http.Request) {
 
 func writeStoredResponse(w http.ResponseWriter, resp *StoredResponse, includeBody bool) {
 	if resp == nil {
+		w.Header().Set("AsyncResult", strconv.Itoa(http.StatusOK))
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -523,6 +524,9 @@ func writeStoredResponse(w http.ResponseWriter, resp *StoredResponse, includeBod
 	status := resp.StatusCode
 	if status == 0 {
 		status = http.StatusOK
+	}
+	if w.Header().Get("AsyncResult") == "" {
+		w.Header().Set("AsyncResult", strconv.Itoa(status))
 	}
 	w.WriteHeader(status)
 	if includeBody && len(resp.Body) > 0 {

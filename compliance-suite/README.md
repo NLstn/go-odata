@@ -123,10 +123,13 @@ Individual Tests:
 
 Current v4.01 suites include:
 
+- 8.2.8.6 Preference omit-values
+- 8.3.1 Header AsyncResult
 - 11.2.5.8 Query Compute
 - 11.2.5.9 Nested Expand Options ($count and $levels)
 - 11.2.5.11 OrderBy Computed Properties
 - 11.2.5.13 Query Index
+- 11.2.12 Query Schemaversion
 - 12.2 Function and Action Overloading
 
 ## Vocabulary Test Suites

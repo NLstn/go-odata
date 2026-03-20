@@ -714,6 +714,16 @@ func main() {
 			Suite:   v4_01.NestedExpandOptions,
 		})
 		testSuites = append(testSuites, TestSuiteInfo{
+			Name:    "8.2.8.6_preference_omit_values",
+			Version: "4.01",
+			Suite:   v4_01.PreferenceOmitValues,
+		})
+		testSuites = append(testSuites, TestSuiteInfo{
+			Name:    "8.3.1_header_async_result",
+			Version: "4.01",
+			Suite:   v4_01.HeaderAsyncResult,
+		})
+		testSuites = append(testSuites, TestSuiteInfo{
 			Name:    "11.2.5.1_filter_in_operator",
 			Version: "4.01",
 			Suite:   v4_01.InOperator,
@@ -732,6 +742,11 @@ func main() {
 			Name:    "11.2.5.13_query_index",
 			Version: "4.01",
 			Suite:   v4_01.QueryIndex,
+		})
+		testSuites = append(testSuites, TestSuiteInfo{
+			Name:    "11.2.12_query_schemaversion",
+			Version: "4.01",
+			Suite:   v4_01.QuerySchemaVersion,
 		})
 		testSuites = append(testSuites, TestSuiteInfo{
 			Name:    "11.2.17_case_insensitive_system_query_options",
