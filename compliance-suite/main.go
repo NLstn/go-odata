@@ -714,6 +714,11 @@ func main() {
 			Suite:   v4_01.NestedExpandOptions,
 		})
 		testSuites = append(testSuites, TestSuiteInfo{
+			Name:    "11.2.5.1_filter_in_operator",
+			Version: "4.01",
+			Suite:   v4_01.InOperator,
+		})
+		testSuites = append(testSuites, TestSuiteInfo{
 			Name:    "11.2.5.8_query_compute",
 			Version: "4.01",
 			Suite:   v4_01.QueryCompute,
