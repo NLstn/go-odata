@@ -734,6 +734,11 @@ func main() {
 			Suite:   v4_01.QueryIndex,
 		})
 		testSuites = append(testSuites, TestSuiteInfo{
+			Name:    "11.2.17_case_insensitive_system_query_options",
+			Version: "4.01",
+			Suite:   v4_01.CaseInsensitiveSystemQueryOptions,
+		})
+		testSuites = append(testSuites, TestSuiteInfo{
 			Name:    "12.2_function_action_overloading",
 			Version: "4.01",
 			Suite:   v4_01.FunctionActionOverloading,
