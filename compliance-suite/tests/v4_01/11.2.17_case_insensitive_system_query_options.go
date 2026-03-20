@@ -1,0 +1,182 @@
+package v4_01
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"reflect"
+
+	"github.com/nlstn/go-odata/compliance-suite/framework"
+)
+
+// CaseInsensitiveSystemQueryOptions creates the 11.2.17 case-insensitive system query options test suite.
+func CaseInsensitiveSystemQueryOptions() *framework.TestSuite {
+	suite := framework.NewTestSuite(
+		"11.2.17 Case-Insensitive System Query Options",
+		"Validates OData 4.01 requirement that system query option names are case-insensitive and may be specified without the $ prefix.",
+		"https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part2-url-conventions.html#sec_SystemQueryOptions",
+	)
+
+	suite.AddTest(
+		"test_filter_case_and_dollar_prefix",
+		"$filter accepts mixed case and no-$ forms equivalently",
+		func(ctx *framework.TestContext) error {
+			canonical := "/Products?$filter=Price%20gt%2010"
+			return assertEquivalentResponses(ctx, canonical, []string{
+				"/Products?$FILTER=Price%20gt%2010",
+				"/Products?$Filter=Price%20gt%2010",
+				"/Products?filter=Price%20gt%2010",
+			})
+		},
+	)
+
+	suite.AddTest(
+		"test_select_case_and_dollar_prefix",
+		"$select accepts mixed case and no-$ forms equivalently",
+		func(ctx *framework.TestContext) error {
+			canonical := "/Products?$select=ID,Name"
+			return assertEquivalentResponses(ctx, canonical, []string{
+				"/Products?$SELECT=ID,Name",
+				"/Products?$Select=ID,Name",
+				"/Products?select=ID,Name",
+			})
+		},
+	)
+
+	suite.AddTest(
+		"test_orderby_case_and_dollar_prefix",
+		"$orderby accepts mixed case and no-$ forms equivalently",
+		func(ctx *framework.TestContext) error {
+			canonical := "/Products?$orderby=Price%20desc"
+			return assertEquivalentResponses(ctx, canonical, []string{
+				"/Products?$ORDERBY=Price%20desc",
+				"/Products?$OrderBy=Price%20desc",
+				"/Products?orderby=Price%20desc",
+			})
+		},
+	)
+
+	suite.AddTest(
+		"test_top_case_and_dollar_prefix",
+		"$top accepts mixed case and no-$ forms equivalently",
+		func(ctx *framework.TestContext) error {
+			canonical := "/Products?$top=3"
+			return assertEquivalentResponses(ctx, canonical, []string{
+				"/Products?$TOP=3",
+				"/Products?$Top=3",
+				"/Products?top=3",
+			})
+		},
+	)
+
+	suite.AddTest(
+		"test_skip_case_and_dollar_prefix",
+		"$skip accepts mixed case and no-$ forms equivalently",
+		func(ctx *framework.TestContext) error {
+			canonical := "/Products?$skip=1"
+			return assertEquivalentResponses(ctx, canonical, []string{
+				"/Products?$SKIP=1",
+				"/Products?$Skip=1",
+				"/Products?skip=1",
+			})
+		},
+	)
+
+	suite.AddTest(
+		"test_count_case_and_dollar_prefix",
+		"$count accepts mixed case and no-$ forms equivalently",
+		func(ctx *framework.TestContext) error {
+			canonical := "/Products?$count=true&$top=3"
+			return assertEquivalentResponses(ctx, canonical, []string{
+				"/Products?$COUNT=true&$top=3",
+				"/Products?$Count=true&$top=3",
+				"/Products?count=true&$top=3",
+			})
+		},
+	)
+
+	suite.AddTest(
+		"test_expand_case_and_dollar_prefix",
+		"$expand accepts mixed case and no-$ forms equivalently",
+		func(ctx *framework.TestContext) error {
+			canonical := "/Products?$expand=Category&$top=2"
+			return assertEquivalentResponses(ctx, canonical, []string{
+				"/Products?$EXPAND=Category&$top=2",
+				"/Products?$Expand=Category&$top=2",
+				"/Products?expand=Category&$top=2",
+			})
+		},
+	)
+
+	suite.AddTest(
+		"test_unknown_option_rejected_with_dollar",
+		"unknown query options with $ are rejected",
+		func(ctx *framework.TestContext) error {
+			resp, err := ctx.GET("/Products?$filtre=Price%20gt%2010")
+			if err != nil {
+				return err
+			}
+
+			if err := ctx.AssertStatusCode(resp, http.StatusBadRequest); err != nil {
+				return framework.NewError(fmt.Sprintf("expected unknown option to be rejected with 400: %v", err))
+			}
+
+			return nil
+		},
+	)
+
+	suite.AddTest(
+		"test_unknown_option_rejected_without_dollar",
+		"unknown query options without $ are rejected",
+		func(ctx *framework.TestContext) error {
+			resp, err := ctx.GET("/Products?filtre=Price%20gt%2010")
+			if err != nil {
+				return err
+			}
+
+			if err := ctx.AssertStatusCode(resp, http.StatusBadRequest); err != nil {
+				return framework.NewError(fmt.Sprintf("expected unknown option to be rejected with 400: %v", err))
+			}
+
+			return nil
+		},
+	)
+
+	return suite
+}
+
+func assertEquivalentResponses(ctx *framework.TestContext, canonical string, variants []string) error {
+	canonicalResp, err := ctx.GET(canonical)
+	if err != nil {
+		return err
+	}
+	if err := ctx.AssertStatusCode(canonicalResp, http.StatusOK); err != nil {
+		return framework.NewError(fmt.Sprintf("canonical request failed: %v", err))
+	}
+
+	var canonicalPayload interface{}
+	if err := json.Unmarshal(canonicalResp.Body, &canonicalPayload); err != nil {
+		return framework.NewError(fmt.Sprintf("canonical response is not valid JSON: %v", err))
+	}
+
+	for _, variant := range variants {
+		resp, err := ctx.GET(variant)
+		if err != nil {
+			return err
+		}
+		if err := ctx.AssertStatusCode(resp, http.StatusOK); err != nil {
+			return framework.NewError(fmt.Sprintf("variant request failed (%s): %v", variant, err))
+		}
+
+		var payload interface{}
+		if err := json.Unmarshal(resp.Body, &payload); err != nil {
+			return framework.NewError(fmt.Sprintf("variant response is not valid JSON (%s): %v", variant, err))
+		}
+
+		if !reflect.DeepEqual(canonicalPayload, payload) {
+			return framework.NewError(fmt.Sprintf("response for %s differs from canonical request %s", variant, canonical))
+		}
+	}
+
+	return nil
+}
