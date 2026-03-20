@@ -363,7 +363,14 @@ func setMaxInClauseSizeRecursive(filter *FilterExpression, maxSize int) {
 
 // parseFilterOption parses the $filter query parameter
 func parseFilterOption(queryParams url.Values, entityMetadata *metadata.EntityMetadata, options *QueryOptions, computedAliases map[string]bool, config *ParserConfig) error {
-	if filterStr := queryParams.Get("$filter"); filterStr != "" {
+	if filterValues, exists := queryParams["$filter"]; exists {
+		filterStr := ""
+		if len(filterValues) > 0 {
+			filterStr = filterValues[0]
+		}
+		if strings.TrimSpace(filterStr) == "" {
+			return fmt.Errorf("invalid $filter: filter expression cannot be empty")
+		}
 		maxInClauseSize := 0
 		if config != nil {
 			maxInClauseSize = config.MaxInClauseSize
