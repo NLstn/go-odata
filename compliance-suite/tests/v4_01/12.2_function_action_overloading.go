@@ -55,7 +55,7 @@ func FunctionActionOverloading() *framework.TestSuite {
 
 		var doc metadataDocument
 		if err := xml.Unmarshal(resp.Body, &doc); err != nil {
-			return nil, framework.NewError("unable to parse $metadata XML: %v", err)
+			return nil, framework.NewError(fmt.Sprintf("unable to parse $metadata XML: %v", err))
 		}
 
 		cachedMetadata = &doc
@@ -126,7 +126,7 @@ func FunctionActionOverloading() *framework.TestSuite {
 
 	assertSuccessNoErrorPayload := func(resp *framework.HTTPResponse, context string) error {
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			return framework.NewError("%s: expected 2xx success, got %d", context, resp.StatusCode)
+			return framework.NewError(fmt.Sprintf("%s: expected 2xx success, got %d", context, resp.StatusCode))
 		}
 		trimmed := strings.TrimSpace(string(resp.Body))
 		if trimmed == "" {
@@ -135,17 +135,17 @@ func FunctionActionOverloading() *framework.TestSuite {
 
 		var payload map[string]interface{}
 		if err := json.Unmarshal(resp.Body, &payload); err != nil {
-			return framework.NewError("%s: expected JSON payload, got unmarshal error: %v", context, err)
+			return framework.NewError(fmt.Sprintf("%s: expected JSON payload, got unmarshal error: %v", context, err))
 		}
 		if _, hasError := payload["error"]; hasError {
-			return framework.NewError("%s: successful response must not contain an error object", context)
+			return framework.NewError(fmt.Sprintf("%s: successful response must not contain an error object", context))
 		}
 		return nil
 	}
 
 	assertClientError := func(resp *framework.HTTPResponse, context string) error {
 		if resp.StatusCode < 400 || resp.StatusCode >= 500 {
-			return framework.NewError("%s: expected 4xx client error, got %d", context, resp.StatusCode)
+			return framework.NewError(fmt.Sprintf("%s: expected 4xx client error, got %d", context, resp.StatusCode))
 		}
 		return nil
 	}
@@ -391,7 +391,7 @@ func FunctionActionOverloading() *framework.TestSuite {
 					}
 					sig := fmt.Sprintf("Function|%t|%s|%s", fn.IsBound, fn.Name, paramKey(names))
 					if _, exists := seen[sig]; exists {
-						return framework.NewError("$metadata contains duplicate function overload signature for %s", fn.Name)
+						return framework.NewError(fmt.Sprintf("$metadata contains duplicate function overload signature for %s", fn.Name))
 					}
 					seen[sig] = struct{}{}
 				}
@@ -407,7 +407,7 @@ func FunctionActionOverloading() *framework.TestSuite {
 					}
 					sig := fmt.Sprintf("Action|%t|%s|%s", action.IsBound, action.Name, paramKey(names))
 					if _, exists := seen[sig]; exists {
-						return framework.NewError("$metadata contains duplicate action overload signature for %s", action.Name)
+						return framework.NewError(fmt.Sprintf("$metadata contains duplicate action overload signature for %s", action.Name))
 					}
 					seen[sig] = struct{}{}
 				}
