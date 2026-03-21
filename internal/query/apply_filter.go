@@ -1066,8 +1066,8 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 	case OpYear:
 		switch dialect {
 		case "postgres":
-			// Use DATE cast with NULLIF to avoid errors on empty strings.
-			return fmt.Sprintf("(EXTRACT(YEAR FROM CAST(NULLIF(%s, '') AS DATE))::INT)", columnName), nil
+			// Normalize via TEXT first so this works for both temporal columns and string-backed values.
+			return fmt.Sprintf("(EXTRACT(YEAR FROM CAST(NULLIF(CAST(%s AS TEXT), '') AS TIMESTAMP))::INT)", columnName), nil
 		case "mysql", "mariadb":
 			// MySQL/MariaDB can handle YEAR() on string dates
 			return fmt.Sprintf("YEAR(%s)", columnName), nil
@@ -1077,8 +1077,8 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 	case OpMonth:
 		switch dialect {
 		case "postgres":
-			// Use DATE cast with NULLIF to avoid errors on empty strings.
-			return fmt.Sprintf("(EXTRACT(MONTH FROM CAST(NULLIF(%s, '') AS DATE))::INT)", columnName), nil
+			// Normalize via TEXT first so this works for both temporal columns and string-backed values.
+			return fmt.Sprintf("(EXTRACT(MONTH FROM CAST(NULLIF(CAST(%s AS TEXT), '') AS TIMESTAMP))::INT)", columnName), nil
 		case "mysql", "mariadb":
 			// MySQL/MariaDB can handle MONTH() on string dates
 			return fmt.Sprintf("MONTH(%s)", columnName), nil
@@ -1088,8 +1088,8 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 	case OpDay:
 		switch dialect {
 		case "postgres":
-			// Use DATE cast with NULLIF to avoid errors on empty strings.
-			return fmt.Sprintf("(EXTRACT(DAY FROM CAST(NULLIF(%s, '') AS DATE))::INT)", columnName), nil
+			// Normalize via TEXT first so this works for both temporal columns and string-backed values.
+			return fmt.Sprintf("(EXTRACT(DAY FROM CAST(NULLIF(CAST(%s AS TEXT), '') AS TIMESTAMP))::INT)", columnName), nil
 		case "mysql", "mariadb":
 			// MySQL/MariaDB can handle DAY() on string dates
 			return fmt.Sprintf("DAY(%s)", columnName), nil
@@ -1099,8 +1099,8 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 	case OpHour:
 		switch dialect {
 		case "postgres":
-			// Use TIME cast with NULLIF to avoid errors on empty strings.
-			return fmt.Sprintf("(EXTRACT(HOUR FROM CAST(NULLIF(%s, '') AS TIME))::INT)", columnName), nil
+			// Normalize via TEXT first so this works for both temporal columns and string-backed values.
+			return fmt.Sprintf("(EXTRACT(HOUR FROM CAST(NULLIF(CAST(%s AS TEXT), '') AS TIME))::INT)", columnName), nil
 		case "mysql", "mariadb":
 			// MySQL/MariaDB can handle HOUR() on string time columns
 			return fmt.Sprintf("HOUR(%s)", columnName), nil
@@ -1110,8 +1110,8 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 	case OpMinute:
 		switch dialect {
 		case "postgres":
-			// Use TIME cast with NULLIF to avoid errors on empty strings.
-			return fmt.Sprintf("(EXTRACT(MINUTE FROM CAST(NULLIF(%s, '') AS TIME))::INT)", columnName), nil
+			// Normalize via TEXT first so this works for both temporal columns and string-backed values.
+			return fmt.Sprintf("(EXTRACT(MINUTE FROM CAST(NULLIF(CAST(%s AS TEXT), '') AS TIME))::INT)", columnName), nil
 		case "mysql", "mariadb":
 			// MySQL/MariaDB can handle MINUTE() on string time columns
 			return fmt.Sprintf("MINUTE(%s)", columnName), nil
@@ -1121,8 +1121,8 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 	case OpSecond:
 		switch dialect {
 		case "postgres":
-			// Use TIME cast with NULLIF to avoid errors on empty strings.
-			return fmt.Sprintf("(EXTRACT(SECOND FROM CAST(NULLIF(%s, '') AS TIME))::INT)", columnName), nil
+			// Normalize via TEXT first so this works for both temporal columns and string-backed values.
+			return fmt.Sprintf("(EXTRACT(SECOND FROM CAST(NULLIF(CAST(%s AS TEXT), '') AS TIME))::INT)", columnName), nil
 		case "mysql", "mariadb":
 			// MySQL/MariaDB can handle SECOND() on string time columns
 			return fmt.Sprintf("SECOND(%s)", columnName), nil
@@ -1132,8 +1132,8 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 	case OpDate:
 		switch dialect {
 		case "postgres":
-			// Cast to timestamp first for string columns, then extract date
-			return fmt.Sprintf("(CAST(CAST(%s AS TIMESTAMP) AS DATE))", columnName), nil
+			// Normalize via TEXT first so this works for both temporal columns and string-backed values.
+			return fmt.Sprintf("(CAST(NULLIF(CAST(%s AS TEXT), '') AS DATE))", columnName), nil
 		case "mysql", "mariadb":
 			return fmt.Sprintf("DATE(%s)", columnName), nil
 		default: // sqlite
@@ -1142,8 +1142,8 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 	case OpTime:
 		switch dialect {
 		case "postgres":
-			// Cast to timestamp first for string columns, then extract time
-			return fmt.Sprintf("(CAST(CAST(%s AS TIMESTAMP) AS TIME))", columnName), nil
+			// Normalize via TEXT first so this works for both temporal columns and string-backed values.
+			return fmt.Sprintf("(CAST(NULLIF(CAST(%s AS TEXT), '') AS TIME))", columnName), nil
 		case "mysql", "mariadb":
 			return fmt.Sprintf("TIME(%s)", columnName), nil
 		default: // sqlite
