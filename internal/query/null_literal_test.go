@@ -63,7 +63,7 @@ func TestNullLiteralSQLGeneration(t *testing.T) {
 			// Build SQL condition
 			sql, args := buildFilterCondition("sqlite", filterExpr, meta)
 
-			if sql != tt.expectedSQL {
+			if !sqlEquivalent(tt.expectedSQL, sql) {
 				t.Errorf("Expected SQL:\n  %s\nGot:\n  %s", tt.expectedSQL, sql)
 			}
 

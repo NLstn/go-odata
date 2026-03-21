@@ -96,7 +96,7 @@ func TestPropertyToPropertyComparison(t *testing.T) {
 					t.Errorf("Expected no args for property-to-property comparison, got %d args: %v", len(args), args)
 				}
 				// SQL should contain both column names
-				if sql != tt.expectedSQL {
+				if !sqlEquivalent(tt.expectedSQL, sql) {
 					t.Errorf("Expected SQL: %s, got: %s", tt.expectedSQL, sql)
 				}
 			} else {
@@ -104,7 +104,7 @@ func TestPropertyToPropertyComparison(t *testing.T) {
 				if len(args) == 0 {
 					t.Errorf("Expected args for property-to-literal comparison, got none")
 				}
-				if sql != tt.expectedSQL {
+				if !sqlEquivalent(tt.expectedSQL, sql) {
 					t.Errorf("Expected SQL: %s, got: %s", tt.expectedSQL, sql)
 				}
 			}

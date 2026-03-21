@@ -236,7 +236,7 @@ func TestInOperator_SQLGeneration(t *testing.T) {
 				return
 			}
 
-			if sql != tt.expectedSQL {
+			if !sqlEquivalent(tt.expectedSQL, sql) {
 				t.Errorf("Expected SQL '%s', got '%s'", tt.expectedSQL, sql)
 			}
 

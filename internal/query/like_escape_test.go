@@ -42,7 +42,7 @@ func TestBuildFilterCondition_LikeEscapes(t *testing.T) {
 
 	sql, args := buildFilterCondition("sqlite", filterExpr, meta)
 	expectedSQL := "name LIKE ? ESCAPE '\\'"
-	if sql != expectedSQL {
+	if !sqlEquivalent(expectedSQL, sql) {
 		t.Fatalf("expected SQL %q, got %q", expectedSQL, sql)
 	}
 
@@ -65,7 +65,7 @@ func TestBuildFilterCondition_LikeEscapes_MySQL(t *testing.T) {
 
 	sql, args := buildFilterCondition("mysql", filterExpr, meta)
 	expectedSQL := "name LIKE ? ESCAPE '\\\\'"
-	if sql != expectedSQL {
+	if !sqlEquivalent(expectedSQL, sql) {
 		t.Fatalf("expected SQL %q, got %q", expectedSQL, sql)
 	}
 

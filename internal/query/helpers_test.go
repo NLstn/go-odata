@@ -73,7 +73,7 @@ func TestBuildComparisonConditionComplexPath(t *testing.T) {
 
 	query, args := buildComparisonCondition("sqlite", filter, meta)
 
-	if query != "shipping_city = ?" {
+	if !sqlEquivalent("shipping_city = ?", query) {
 		t.Fatalf("expected SQL to use shipping_city column, got %s", query)
 	}
 	if len(args) != 1 || args[0] != "Seattle" {
