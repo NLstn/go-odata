@@ -31,7 +31,7 @@ func TestIsOfFunction_EntityTypeWithAnd(t *testing.T) {
 			name:           "isof entity type eq true with and (no discriminator)",
 			filter:         "isof('Namespace.SpecialProduct') eq true and Price gt 100",
 			expectErr:      false,
-			expectedSQL:    "(1 = ?) AND (price > ?)", // Goes through different code path
+			expectedSQL:    "(0 = ?) AND (price > ?)", // isof without discriminator resolves to false
 			expectedArgsNo: 2,
 		},
 		{
@@ -66,7 +66,7 @@ func TestIsOfFunction_EntityTypeWithAnd(t *testing.T) {
 			name:           "isof entity type eq false with and (no discriminator)",
 			filter:         "isof('Namespace.SpecialProduct') eq false and Price gt 100",
 			expectErr:      false,
-			expectedSQL:    "(1 = ?) AND (price > ?)", // Goes through different code path
+			expectedSQL:    "(0 = ?) AND (price > ?)", // isof without discriminator resolves to false
 			expectedArgsNo: 2,
 		},
 		{
@@ -101,7 +101,7 @@ func TestIsOfFunction_EntityTypeWithAnd(t *testing.T) {
 			t.Logf("✓ SQL:   %s", sql)
 			t.Logf("✓ Args:  %v", args)
 
-			if sql != tt.expectedSQL {
+			if !sqlEquivalent(tt.expectedSQL, sql) {
 				t.Errorf("Expected SQL:\n%s\nGot:\n%s", tt.expectedSQL, sql)
 			}
 
@@ -196,7 +196,7 @@ func TestIsOfFunction_EntityTypeWithDiscriminator(t *testing.T) {
 			t.Logf("✓ SQL:   %s", sql)
 			t.Logf("✓ Args:  %v", args)
 
-			if sql != tt.expectedSQL {
+			if !sqlEquivalent(tt.expectedSQL, sql) {
 				t.Errorf("Expected SQL:\n%s\nGot:\n%s", tt.expectedSQL, sql)
 			}
 

@@ -1066,8 +1066,8 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 	case OpYear:
 		switch dialect {
 		case "postgres":
-			// Cast to timestamp first to handle string date columns
-			return fmt.Sprintf("(EXTRACT(YEAR FROM CAST(%s AS TIMESTAMP))::INT)", columnName), nil
+			// Use DATE cast with NULLIF to avoid errors on empty strings.
+			return fmt.Sprintf("(EXTRACT(YEAR FROM CAST(NULLIF(%s, '') AS DATE))::INT)", columnName), nil
 		case "mysql", "mariadb":
 			// MySQL/MariaDB can handle YEAR() on string dates
 			return fmt.Sprintf("YEAR(%s)", columnName), nil
@@ -1077,8 +1077,8 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 	case OpMonth:
 		switch dialect {
 		case "postgres":
-			// Cast to timestamp first to handle string date columns
-			return fmt.Sprintf("(EXTRACT(MONTH FROM CAST(%s AS TIMESTAMP))::INT)", columnName), nil
+			// Use DATE cast with NULLIF to avoid errors on empty strings.
+			return fmt.Sprintf("(EXTRACT(MONTH FROM CAST(NULLIF(%s, '') AS DATE))::INT)", columnName), nil
 		case "mysql", "mariadb":
 			// MySQL/MariaDB can handle MONTH() on string dates
 			return fmt.Sprintf("MONTH(%s)", columnName), nil
@@ -1088,8 +1088,8 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 	case OpDay:
 		switch dialect {
 		case "postgres":
-			// Cast to timestamp first to handle string date columns
-			return fmt.Sprintf("(EXTRACT(DAY FROM CAST(%s AS TIMESTAMP))::INT)", columnName), nil
+			// Use DATE cast with NULLIF to avoid errors on empty strings.
+			return fmt.Sprintf("(EXTRACT(DAY FROM CAST(NULLIF(%s, '') AS DATE))::INT)", columnName), nil
 		case "mysql", "mariadb":
 			// MySQL/MariaDB can handle DAY() on string dates
 			return fmt.Sprintf("DAY(%s)", columnName), nil
@@ -1099,8 +1099,8 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 	case OpHour:
 		switch dialect {
 		case "postgres":
-			// Cast to timestamp first to handle string time columns
-			return fmt.Sprintf("(EXTRACT(HOUR FROM CAST(%s AS TIMESTAMP))::INT)", columnName), nil
+			// Use TIME cast with NULLIF to avoid errors on empty strings.
+			return fmt.Sprintf("(EXTRACT(HOUR FROM CAST(NULLIF(%s, '') AS TIME))::INT)", columnName), nil
 		case "mysql", "mariadb":
 			// MySQL/MariaDB can handle HOUR() on string time columns
 			return fmt.Sprintf("HOUR(%s)", columnName), nil
@@ -1110,8 +1110,8 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 	case OpMinute:
 		switch dialect {
 		case "postgres":
-			// Cast to timestamp first to handle string time columns
-			return fmt.Sprintf("(EXTRACT(MINUTE FROM CAST(%s AS TIMESTAMP))::INT)", columnName), nil
+			// Use TIME cast with NULLIF to avoid errors on empty strings.
+			return fmt.Sprintf("(EXTRACT(MINUTE FROM CAST(NULLIF(%s, '') AS TIME))::INT)", columnName), nil
 		case "mysql", "mariadb":
 			// MySQL/MariaDB can handle MINUTE() on string time columns
 			return fmt.Sprintf("MINUTE(%s)", columnName), nil
@@ -1121,8 +1121,8 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 	case OpSecond:
 		switch dialect {
 		case "postgres":
-			// Cast to timestamp first to handle string time columns
-			return fmt.Sprintf("(EXTRACT(SECOND FROM CAST(%s AS TIMESTAMP))::INT)", columnName), nil
+			// Use TIME cast with NULLIF to avoid errors on empty strings.
+			return fmt.Sprintf("(EXTRACT(SECOND FROM CAST(NULLIF(%s, '') AS TIME))::INT)", columnName), nil
 		case "mysql", "mariadb":
 			// MySQL/MariaDB can handle SECOND() on string time columns
 			return fmt.Sprintf("SECOND(%s)", columnName), nil

@@ -36,13 +36,13 @@ type Order struct {
 }
 
 type OrderItem struct {
-	ID        int      `json:"id" gorm:"primarykey" odata:"key"`
-	OrderID   int      `json:"orderId" odata:"required"`
-	Order     *Order   `json:"order" gorm:"foreignKey:OrderID;references:ID"`
-	ProductID int             `json:"productId" odata:"required"`
+	ID        int              `json:"id" gorm:"primarykey" odata:"key"`
+	OrderID   int              `json:"orderId" odata:"required"`
+	Order     *Order           `json:"order" gorm:"foreignKey:OrderID;references:ID"`
+	ProductID int              `json:"productId" odata:"required"`
 	Product   *MetaTestProduct `json:"product" gorm:"foreignKey:ProductID;references:ID"`
-	Quantity  int      `json:"quantity" odata:"required"`
-	UnitPrice float64  `json:"unitPrice" odata:"precision=10,scale=2"`
+	Quantity  int              `json:"quantity" odata:"required"`
+	UnitPrice float64          `json:"unitPrice" odata:"precision=10,scale=2"`
 }
 
 type MetaTestProduct struct {
@@ -115,8 +115,8 @@ func TestMetadataIntegrationXML(t *testing.T) {
 	if !strings.Contains(bodyStr, `EntityType Name="Order"`) {
 		t.Error("XML should contain Order entity type")
 	}
-	if !strings.Contains(bodyStr, `EntityType Name="Product"`) {
-		t.Error("XML should contain Product entity type")
+	if !strings.Contains(bodyStr, `EntityType Name="MetaTestProduct"`) {
+		t.Error("XML should contain MetaTestProduct entity type")
 	}
 
 	// Verify facets
@@ -247,9 +247,9 @@ func TestMetadataIntegrationJSON(t *testing.T) {
 	}
 
 	// Verify Product entity with default values
-	product, ok := odataService["Product"].(map[string]interface{})
+	product, ok := odataService["MetaTestProduct"].(map[string]interface{})
 	if !ok {
-		t.Fatal("Product entity type not found")
+		t.Fatal("MetaTestProduct entity type not found")
 	}
 
 	sku, ok := product["sku"].(map[string]interface{})
@@ -288,8 +288,8 @@ func TestMetadataIntegrationJSON(t *testing.T) {
 	if _, ok := container["Orders"]; !ok {
 		t.Error("Orders entity set not found in container")
 	}
-	if _, ok := container["Products"]; !ok {
-		t.Error("Products entity set not found in container")
+	if _, ok := container["MetaTestProducts"]; !ok {
+		t.Error("MetaTestProducts entity set not found in container")
 	}
 }
 
@@ -330,8 +330,8 @@ func TestMetadataWithComplexRelationships(t *testing.T) {
 	if !ok {
 		t.Fatal("product navigation property not found in OrderItem")
 	}
-	if productType, ok := productNav["$Type"].(string); !ok || productType != "ODataService.Product" {
-		t.Errorf("Expected product type=ODataService.Product, got %v", productNav["$Type"])
+	if productType, ok := productNav["$Type"].(string); !ok || productType != "ODataService.MetaTestProduct" {
+		t.Errorf("Expected product type=ODataService.MetaTestProduct, got %v", productNav["$Type"])
 	}
 
 	// Verify collection navigation (one-to-many)
