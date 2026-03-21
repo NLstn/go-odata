@@ -1,4 +1,4 @@
-package odata
+package odata_test
 
 import (
 	"encoding/json"
@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/nlstn/go-odata"
+	odata "github.com/nlstn/go-odata"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )

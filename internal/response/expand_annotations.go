@@ -227,6 +227,14 @@ func applySelectToExpandedValueWithMetadata(value interface{}, selectedPropertie
 		selectedPropMap[propName] = true
 	}
 
+	keyPropMap := make(map[string]bool)
+	for _, keyProp := range entityMetadata.KeyProperties {
+		keyPropMap[keyProp.Name] = true
+		if keyProp.JsonName != "" {
+			keyPropMap[keyProp.JsonName] = true
+		}
+	}
+
 	val := reflect.ValueOf(value)
 
 	if val.Kind() == reflect.Ptr {
@@ -241,17 +249,17 @@ func applySelectToExpandedValueWithMetadata(value interface{}, selectedPropertie
 		resultSlice := make([]map[string]interface{}, val.Len())
 		for i := 0; i < val.Len(); i++ {
 			itemVal := val.Index(i)
-			resultSlice[i] = filterEntityFieldsWithMetadata(itemVal, selectedPropMap)
+			resultSlice[i] = filterEntityFieldsWithMetadata(itemVal, selectedPropMap, keyPropMap)
 		}
 		return resultSlice
 	}
 
 	// Handle single entity
-	return filterEntityFieldsWithMetadata(val, selectedPropMap)
+	return filterEntityFieldsWithMetadata(val, selectedPropMap, keyPropMap)
 }
 
 // filterEntityFieldsWithMetadata creates a filtered map of entity fields based on selected properties
-func filterEntityFieldsWithMetadata(entityVal reflect.Value, selectedPropMap map[string]bool) map[string]interface{} {
+func filterEntityFieldsWithMetadata(entityVal reflect.Value, selectedPropMap map[string]bool, keyPropMap map[string]bool) map[string]interface{} {
 	if entityVal.Kind() == reflect.Ptr {
 		if entityVal.IsNil() {
 			return nil
@@ -280,9 +288,10 @@ func filterEntityFieldsWithMetadata(entityVal reflect.Value, selectedPropMap map
 				}
 			}
 
-			// Check if selected
-			// Note: Key properties (ID fields) and OData annotations are always included
-			if !selectedPropMap[field.Name] && !selectedPropMap[jsonName] {
+			// Key properties and OData annotations are always included.
+			isSelected := selectedPropMap[field.Name] || selectedPropMap[jsonName]
+			isKey := keyPropMap[field.Name] || keyPropMap[jsonName]
+			if !isSelected && !isKey {
 				// Skip non-selected properties, but include OData annotations and potential key fields
 				if !strings.HasPrefix(jsonName, "@") {
 					continue
@@ -299,7 +308,7 @@ func filterEntityFieldsWithMetadata(entityVal reflect.Value, selectedPropMap map
 		entityMapVal := entityVal.Interface()
 		if entityMap, ok := entityMapVal.(map[string]interface{}); ok {
 			for key, val := range entityMap {
-				if selectedPropMap[key] || strings.HasPrefix(key, "@") {
+				if selectedPropMap[key] || keyPropMap[key] || strings.HasPrefix(key, "@") {
 					filteredEntity[key] = val
 				}
 			}

@@ -2,10 +2,11 @@ package odata_test
 
 import (
 	"encoding/json"
-	odata "github.com/nlstn/go-odata"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	odata "github.com/nlstn/go-odata"
 )
 
 // TestExpandSelectComprehensive tests various combinations of expand and select
