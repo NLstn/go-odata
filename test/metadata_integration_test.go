@@ -1,4 +1,4 @@
-package odata
+package odata_test
 
 import (
 	"encoding/json"
@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nlstn/go-odata"
+	odata "github.com/nlstn/go-odata"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -39,13 +39,13 @@ type OrderItem struct {
 	ID        int      `json:"id" gorm:"primarykey" odata:"key"`
 	OrderID   int      `json:"orderId" odata:"required"`
 	Order     *Order   `json:"order" gorm:"foreignKey:OrderID;references:ID"`
-	ProductID int      `json:"productId" odata:"required"`
-	Product   *Product `json:"product" gorm:"foreignKey:ProductID;references:ID"`
+	ProductID int             `json:"productId" odata:"required"`
+	Product   *MetaTestProduct `json:"product" gorm:"foreignKey:ProductID;references:ID"`
 	Quantity  int      `json:"quantity" odata:"required"`
 	UnitPrice float64  `json:"unitPrice" odata:"precision=10,scale=2"`
 }
 
-type Product struct {
+type MetaTestProduct struct {
 	ID          int     `json:"id" gorm:"primarykey" odata:"key"`
 	Name        string  `json:"name" odata:"required,maxlength=100"`
 	Description *string `json:"description" odata:"maxlength=1000,nullable"`
@@ -62,7 +62,7 @@ func setupTestServer(t *testing.T) *httptest.Server {
 	}
 
 	// Auto-migrate all tables
-	if err := db.AutoMigrate(&Customer{}, &Order{}, &OrderItem{}, &Product{}); err != nil {
+	if err := db.AutoMigrate(&Customer{}, &Order{}, &OrderItem{}, &MetaTestProduct{}); err != nil {
 		t.Fatalf("Failed to migrate database: %v", err)
 	}
 
@@ -74,7 +74,7 @@ func setupTestServer(t *testing.T) *httptest.Server {
 	_ = service.RegisterEntity(&Customer{})
 	_ = service.RegisterEntity(&Order{})
 	_ = service.RegisterEntity(&OrderItem{})
-	_ = service.RegisterEntity(&Product{})
+	_ = service.RegisterEntity(&MetaTestProduct{})
 
 	// Create test server
 	server := httptest.NewServer(service)

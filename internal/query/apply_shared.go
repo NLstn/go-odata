@@ -7,6 +7,12 @@ import (
 	"github.com/nlstn/go-odata/internal/metadata"
 )
 
+// isKeyFieldName checks if a field name looks like a key/ID field
+func isKeyFieldName(fieldName string) bool {
+	// Common key field names
+	return fieldName == "ID" || fieldName == "Id" || fieldName == "id"
+}
+
 // applySelectToExpandedEntity applies select to an expanded navigation property (single entity or collection)
 // This is a simplified version that doesn't require full metadata - it works with reflection
 func applySelectToExpandedEntity(expandedValue interface{}, selectedProps []string, expandOptions []ExpandOption) interface{} {
@@ -39,6 +45,19 @@ func applySelectToExpandedEntity(expandedValue interface{}, selectedProps []stri
 
 	if val.Kind() == reflect.Struct {
 		return filterEntityFields(val, selectedPropMap, expandOptions)
+	}
+
+	// Handle maps (from JSON unmarshaling or database results)
+	if val.Kind() == reflect.Map {
+		result := make(map[string]interface{})
+		for _, key := range val.MapKeys() {
+			keyStr := key.String()
+			// Always include ID/key fields
+			if isKeyFieldName(keyStr) || selectedPropMap[keyStr] {
+				result[keyStr] = val.MapIndex(key).Interface()
+			}
+		}
+		return result
 	}
 
 	return expandedValue
