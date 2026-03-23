@@ -1,6 +1,7 @@
 package query
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/nlstn/go-odata/internal/metadata"
@@ -27,6 +28,19 @@ type selectTestTag struct {
 	ID        int    `json:"ID" odata:"key"`
 	Name      string `json:"name"`
 	ProductID int    `json:"productID"`
+}
+
+// has-one test types: MemberID is on the child (selectTestPrivacySettings), not on selectTestMember
+type selectTestPrivacySettings struct {
+	ID       int    `json:"ID" odata:"key"`
+	MemberID int    `json:"memberID"`
+	Setting  string `json:"setting"`
+}
+
+type selectTestMember struct {
+	ID              int                        `json:"ID" odata:"key"`
+	Name            string                     `json:"name"`
+	PrivacySettings *selectTestPrivacySettings `json:"privacySettings,omitempty" gorm:"foreignKey:MemberID"`
 }
 
 func getSelectTestMetadata(t *testing.T) *metadata.EntityMetadata {
@@ -337,6 +351,25 @@ func TestApplySelectDatabaseLevel(t *testing.T) {
 
 		if !foundFK {
 			t.Fatalf("expected select clause to include category_id foreign key, got: %v", selects)
+		}
+	})
+
+	t.Run("Expand on has-one does NOT include child FK column in parent SELECT", func(t *testing.T) {
+		memberMeta, err := metadata.AnalyzeEntity(selectTestMember{})
+		if err != nil {
+			t.Fatalf("AnalyzeEntity returned error: %v", err)
+		}
+
+		result := applySelect(db, []string{"name"}, []ExpandOption{{NavigationProperty: "privacySettings"}}, memberMeta)
+		if result == nil {
+			t.Fatal("expected non-nil result")
+		}
+
+		selects := result.Statement.Selects
+		for _, selectExpr := range selects {
+			if strings.Contains(selectExpr, "member_id") {
+				t.Fatalf("expected child FK column member_id NOT to appear in parent SELECT, got: %v", selects)
+			}
 		}
 	})
 }
