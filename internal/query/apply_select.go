@@ -67,8 +67,14 @@ func applySelect(db *gorm.DB, selectedProperties []string, expandOptions []Expan
 				continue
 			}
 
+			// Only add FK columns that belong to the parent/current entity (belongs-to relationship).
+			// For has-one relationships, the FK is on the child entity and must not be added here,
+			// as it would produce invalid SQL referencing a column that does not exist on the parent table.
 			for _, fkColumn := range strings.Split(prop.ForeignKeyColumnName, ",") {
-				addColumn(strings.TrimSpace(fkColumn))
+				fkColumn = strings.TrimSpace(fkColumn)
+				if fkColumn != "" && isForeignKeyOnEntity(fkColumn, entityMetadata) {
+					addColumn(fkColumn)
+				}
 			}
 			break
 		}
@@ -305,4 +311,20 @@ func ApplySelectToMapResults(results []map[string]interface{}, selectedPropertie
 	}
 
 	return filteredResults
+}
+
+// isForeignKeyOnEntity checks whether fkColumn is a column that belongs to the given entity.
+// This is used to distinguish belongs-to relationships (FK on parent entity) from has-one
+// relationships (FK on child entity). Returns true only when the column is found among the
+// non-navigation, non-complex properties of the entity.
+func isForeignKeyOnEntity(fkColumn string, entityMeta *metadata.EntityMetadata) bool {
+	for _, prop := range entityMeta.Properties {
+		if prop.IsNavigationProp || prop.IsComplexType {
+			continue
+		}
+		if prop.ColumnName == fkColumn {
+			return true
+		}
+	}
+	return false
 }
