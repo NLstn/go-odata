@@ -2,8 +2,9 @@ package odata
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
+
+	"github.com/nlstn/go-odata/internal/odataerrors"
 )
 
 // Sentinel errors for common OData error conditions.
@@ -49,50 +50,63 @@ var (
 // ErrorCode represents standard OData error codes.
 // These codes provide semantic information about the error type
 // and follow the OData specification conventions.
-type ErrorCode string
+type ErrorCode = odataerrors.ErrorCode
 
 // Standard OData error codes as defined in the OData specification.
 const (
 	// ErrorCodeGeneral is a general, unspecified error.
-	ErrorCodeGeneral ErrorCode = "General"
+	ErrorCodeGeneral = odataerrors.ErrorCodeGeneral
 
 	// ErrorCodeNotFound indicates the requested resource was not found.
-	ErrorCodeNotFound ErrorCode = "NotFound"
+	ErrorCodeNotFound = odataerrors.ErrorCodeNotFound
 
 	// ErrorCodeBadRequest indicates malformed or invalid request syntax.
-	ErrorCodeBadRequest ErrorCode = "BadRequest"
+	ErrorCodeBadRequest = odataerrors.ErrorCodeBadRequest
 
 	// ErrorCodeUnauthorized indicates missing or invalid authentication.
-	ErrorCodeUnauthorized ErrorCode = "Unauthorized"
+	ErrorCodeUnauthorized = odataerrors.ErrorCodeUnauthorized
 
 	// ErrorCodeForbidden indicates insufficient permissions.
-	ErrorCodeForbidden ErrorCode = "Forbidden"
+	ErrorCodeForbidden = odataerrors.ErrorCodeForbidden
 
 	// ErrorCodeMethodNotAllowed indicates the HTTP method is not supported.
-	ErrorCodeMethodNotAllowed ErrorCode = "MethodNotAllowed"
+	ErrorCodeMethodNotAllowed = odataerrors.ErrorCodeMethodNotAllowed
 
 	// ErrorCodeConflict indicates a conflict with current resource state.
-	ErrorCodeConflict ErrorCode = "Conflict"
+	ErrorCodeConflict = odataerrors.ErrorCodeConflict
 
 	// ErrorCodePreconditionFailed indicates an ETag precondition failed.
-	ErrorCodePreconditionFailed ErrorCode = "PreconditionFailed"
+	ErrorCodePreconditionFailed = odataerrors.ErrorCodePreconditionFailed
 
 	// ErrorCodeUnsupportedMediaType indicates unsupported Content-Type.
-	ErrorCodeUnsupportedMediaType ErrorCode = "UnsupportedMediaType"
+	ErrorCodeUnsupportedMediaType = odataerrors.ErrorCodeUnsupportedMediaType
 
 	// ErrorCodeInternalServerError indicates an internal server error.
-	ErrorCodeInternalServerError ErrorCode = "InternalServerError"
+	ErrorCodeInternalServerError = odataerrors.ErrorCodeInternalServerError
 
 	// ErrorCodeNotImplemented indicates the operation is not implemented.
-	ErrorCodeNotImplemented ErrorCode = "NotImplemented"
+	ErrorCodeNotImplemented = odataerrors.ErrorCodeNotImplemented
 
 	// ErrorCodeServiceUnavailable indicates the service is temporarily unavailable.
-	ErrorCodeServiceUnavailable ErrorCode = "ServiceUnavailable"
+	ErrorCodeServiceUnavailable = odataerrors.ErrorCodeServiceUnavailable
 )
 
 // ODataError provides a structured error that includes an HTTP status code,
 // OData error code, and descriptive message. This type can be returned from
 // hooks, overwrite handlers, and custom operations to provide precise error responses.
+//
+// Example usage in an action or function handler:
+//
+//	Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) error {
+//	    if !isAuthorized(r) {
+//	        return &odata.ODataError{
+//	            StatusCode: http.StatusForbidden,
+//	            Code:       odata.ErrorCodeForbidden,
+//	            Message:    "You do not have permission to perform this action",
+//	        }
+//	    }
+//	    return nil
+//	}
 //
 // Example usage in an overwrite handler:
 //
@@ -110,52 +124,10 @@ const (
 //	    }
 //	    return product, nil
 //	}
-type ODataError struct {
-	// StatusCode is the HTTP status code to return (e.g., 400, 404, 500).
-	StatusCode int
-
-	// Code is the OData-specific error code.
-	Code ErrorCode
-
-	// Message is a human-readable error description.
-	Message string
-
-	// Target optionally identifies the part of the request that caused the error.
-	// For example, "Products(1)/Name" for a validation error on the Name property.
-	Target string
-
-	// Details provides additional error information for complex validation scenarios.
-	Details []ErrorDetail
-
-	// Err is the underlying error, if any. This allows error wrapping while
-	// maintaining compatibility with errors.Is() and errors.As().
-	Err error
-}
+type ODataError = odataerrors.ODataError
 
 // ErrorDetail represents additional error information in an OData error response.
-type ErrorDetail struct {
-	// Code is a service-defined error code for this detail.
-	Code string
-
-	// Target identifies the specific part of the request causing this error.
-	Target string
-
-	// Message is a human-readable description of this specific error.
-	Message string
-}
-
-// Error implements the error interface.
-func (e *ODataError) Error() string {
-	if e.Err != nil {
-		return fmt.Sprintf("%s: %v", e.Message, e.Err)
-	}
-	return e.Message
-}
-
-// Unwrap implements error unwrapping for errors.Is() and errors.As().
-func (e *ODataError) Unwrap() error {
-	return e.Err
-}
+type ErrorDetail = odataerrors.ErrorDetail
 
 // MapErrorToHTTPStatus returns the appropriate HTTP status code for common errors.
 // This helper can be used in custom handlers to determine status codes.

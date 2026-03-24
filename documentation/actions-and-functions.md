@@ -522,6 +522,64 @@ Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params ma
 }
 ```
 
+#### Typed Errors for Custom Status Codes
+
+Action and function handlers support typed errors that control the HTTP status code and OData error body returned to the client. Using a plain `error` always results in HTTP 500; use the typed error types below to return meaningful status codes.
+
+**`*odata.ODataError`** — full OData-compliant error with status code, error code, message, target, and optional details:
+
+```go
+import "net/http"
+
+Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) error {
+    if !isAuthorized(r) {
+        return &odata.ODataError{
+            StatusCode: http.StatusForbidden,
+            Code:       odata.ErrorCodeForbidden,
+            Message:    "You do not have permission to perform this action",
+        }
+    }
+
+    // Validation with multiple error details
+    if err := validate(params); err != nil {
+        return &odata.ODataError{
+            StatusCode: http.StatusBadRequest,
+            Code:       odata.ErrorCodeBadRequest,
+            Message:    "Validation failed",
+            Details: []odata.ErrorDetail{
+                {Code: "Required", Target: "Name", Message: "Name is required"},
+                {Code: "Range",    Target: "Price", Message: "Price must be positive"},
+            },
+        }
+    }
+
+    return nil
+}
+```
+
+**`*odata.HookError`** — lightweight typed error with status code and message:
+
+```go
+Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) error {
+    if rateLimitExceeded(r) {
+        return odata.NewHookError(http.StatusTooManyRequests, "Rate limit exceeded")
+    }
+    return nil
+}
+```
+
+**Sentinel errors** — use `odata.MapErrorToHTTPStatus` to translate a sentinel error into the appropriate status code, or return one directly and let the framework fall back to HTTP 500 for unknown errors:
+
+| Sentinel error              | HTTP status |
+|-----------------------------|-------------|
+| `odata.ErrEntityNotFound`   | 404         |
+| `odata.ErrValidationError`  | 400         |
+| `odata.ErrUnauthorized`     | 401         |
+| `odata.ErrForbidden`        | 403         |
+| `odata.ErrConflict`         | 409         |
+
+For any unrecognized error, the framework returns HTTP 500 with the error message.
+
 ### Context Access
 
 For bound operations, the context contains the entity instance:

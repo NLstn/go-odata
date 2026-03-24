@@ -2,6 +2,7 @@ package operations
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -9,7 +10,9 @@ import (
 	"github.com/nlstn/go-odata/internal/actions"
 	"github.com/nlstn/go-odata/internal/auth"
 	"github.com/nlstn/go-odata/internal/handlers"
+	"github.com/nlstn/go-odata/internal/hookerrors"
 	"github.com/nlstn/go-odata/internal/metadata"
+	"github.com/nlstn/go-odata/internal/odataerrors"
 	"github.com/nlstn/go-odata/internal/response"
 )
 
@@ -98,9 +101,7 @@ func (h *Handler) HandleActionOrFunction(w http.ResponseWriter, r *http.Request,
 		}
 
 		if err := actionDef.Handler(w, r, ctx, params); err != nil {
-			if writeErr := response.WriteError(w, r, http.StatusInternalServerError, "Action failed", err.Error()); writeErr != nil {
-				h.logError("Error writing error response", writeErr)
-			}
+			h.writeHandlerError(w, r, err, "Action failed")
 			return
 		}
 	case http.MethodGet:
@@ -128,9 +129,7 @@ func (h *Handler) HandleActionOrFunction(w http.ResponseWriter, r *http.Request,
 
 		result, err := functionDef.Handler(w, r, ctx, params)
 		if err != nil {
-			if writeErr := response.WriteError(w, r, http.StatusInternalServerError, "Function failed", err.Error()); writeErr != nil {
-				h.logError("Error writing error response", writeErr)
-			}
+			h.writeHandlerError(w, r, err, "Function failed")
 			return
 		}
 
@@ -188,6 +187,68 @@ func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, invErr *inv
 		return
 	}
 	if writeErr := response.WriteError(w, r, invErr.status, invErr.message, invErr.detail); writeErr != nil {
+		h.logError("Error writing error response", writeErr)
+	}
+}
+
+// writeHandlerError writes an appropriate OData error response for errors returned
+// from action or function handlers. It respects typed errors:
+//   - *odataerrors.ODataError: uses the error's StatusCode, Code, Message (falling back to fallbackMessage if empty), Target, and Details
+//   - *hookerrors.HookError: uses the error's StatusCode and Message (falling back to fallbackMessage if empty)
+//   - all other errors: falls back to HTTP 500 with the provided fallbackMessage
+func (h *Handler) writeHandlerError(w http.ResponseWriter, r *http.Request, err error, fallbackMessage string) {
+	var odataErr *odataerrors.ODataError
+	if errors.As(err, &odataErr) {
+		statusCode := odataErr.StatusCode
+		if statusCode == 0 {
+			statusCode = http.StatusInternalServerError
+		}
+		code := string(odataErr.Code)
+		if code == "" {
+			code = fmt.Sprintf("%d", statusCode)
+		}
+		respErr := &response.ODataError{
+			Code:    code,
+			Message: odataErr.Message,
+			Target:  odataErr.Target,
+		}
+		if respErr.Message == "" {
+			respErr.Message = fallbackMessage
+		}
+		for _, d := range odataErr.Details {
+			respErr.Details = append(respErr.Details, response.ODataErrorDetail{
+				Code:    d.Code,
+				Target:  d.Target,
+				Message: d.Message,
+			})
+		}
+		if writeErr := response.WriteODataError(w, r, statusCode, respErr); writeErr != nil {
+			h.logError("Error writing error response", writeErr)
+		}
+		return
+	}
+
+	var hookErr *hookerrors.HookError
+	if errors.As(err, &hookErr) {
+		statusCode := hookErr.StatusCode
+		if statusCode == 0 {
+			statusCode = http.StatusInternalServerError
+		}
+		message := hookErr.Message
+		if message == "" {
+			message = fallbackMessage
+		}
+		details := ""
+		if hookErr.Err != nil {
+			details = hookErr.Err.Error()
+		}
+		if writeErr := response.WriteError(w, r, statusCode, message, details); writeErr != nil {
+			h.logError("Error writing error response", writeErr)
+		}
+		return
+	}
+
+	if writeErr := response.WriteError(w, r, http.StatusInternalServerError, fallbackMessage, err.Error()); writeErr != nil {
 		h.logError("Error writing error response", writeErr)
 	}
 }
