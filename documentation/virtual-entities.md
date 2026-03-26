@@ -475,20 +475,27 @@ Create: func(ctx *odata.OverwriteContext, entity interface{}) (interface{}, erro
 
 ### Using HookError
 
-Similar to entity hooks, overwrite handlers can return `odata.HookError` for custom status codes:
+Similar to entity hooks, overwrite handlers can return `odata.HookError` for custom status codes and optional machine-readable OData fields (`Code`, `Target`, `Details`):
 
 ```go
 GetEntity: func(ctx *odata.OverwriteContext) (interface{}, error) {
     entity, err := externalAPI.GetEntity(ctx.EntityKey)
     if err != nil {
         if errors.Is(err, externalAPI.ErrNotFound) {
-            return nil, odata.NewHookError(http.StatusNotFound, "Entity not found")
+            return nil, &odata.HookError{
+                StatusCode: http.StatusNotFound,
+                Code:       "EXTERNAL_ENTITY_NOT_FOUND",
+                Message:    "Entity not found",
+                Target:     "entityKey",
+            }
         }
         return nil, odata.NewHookError(http.StatusBadGateway, "External service unavailable")
     }
     return entity, nil
 }
 ```
+
+If `Code` is empty, `error.code` defaults to the HTTP status as a string.
 
 ## Implementing Pagination for Virtual Entities
 

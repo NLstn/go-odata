@@ -29,11 +29,27 @@ func (EmployeeWithCustomHook) TableName() string {
 
 // ODataBeforeReadEntity returns a 401 Unauthorized status code
 func (e *EmployeeWithCustomHook) ODataBeforeReadEntity(ctx context.Context, r *http.Request, opts *odata.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
+	if r.Header.Get("X-Use-ODataError") == "1" {
+		return nil, &odata.ODataError{
+			StatusCode: http.StatusConflict,
+			Code:       "INVITE_ALREADY_MEMBER",
+			Message:    "invite already exists",
+			Target:     "members",
+			Details: []odata.ErrorDetail{{
+				Code:    "Membership",
+				Target:  "members",
+				Message: "user is already a member",
+			}},
+		}
+	}
+
 	// Simulate checking if user is authenticated by checking a header
 	if r.Header.Get("Authorization") == "" {
 		return nil, &odata.HookError{
 			StatusCode: http.StatusUnauthorized,
+			Code:       "AUTH_REQUIRED",
 			Message:    "User is not authenticated",
+			Target:     "Authorization",
 		}
 	}
 	return nil, nil
@@ -93,6 +109,12 @@ func TestHookError_CustomStatusCodes(t *testing.T) {
 		}
 
 		errorObj := errorResp["error"].(map[string]interface{})
+		if errorObj["code"] != "AUTH_REQUIRED" {
+			t.Errorf("Expected code 'AUTH_REQUIRED', got %v", errorObj["code"])
+		}
+		if errorObj["target"] != "Authorization" {
+			t.Errorf("Expected target 'Authorization', got %v", errorObj["target"])
+		}
 		if errorObj["message"] != "User is not authenticated" {
 			t.Errorf("Expected message 'User is not authenticated', got %s", errorObj["message"])
 		}
@@ -107,6 +129,48 @@ func TestHookError_CustomStatusCodes(t *testing.T) {
 
 		if w.Code != http.StatusOK {
 			t.Errorf("Expected status %d, got %d", http.StatusOK, w.Code)
+		}
+	})
+
+	t.Run("BeforeReadEntity propagates ODataError code and details", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/EmployeeWithCustomHooks(1)", nil)
+		req.Header.Set("X-Use-ODataError", "1")
+		w := httptest.NewRecorder()
+
+		service.ServeHTTP(w, req)
+
+		if w.Code != http.StatusConflict {
+			t.Errorf("Expected status %d, got %d", http.StatusConflict, w.Code)
+		}
+
+		body, _ := io.ReadAll(w.Body)
+		var errorResp map[string]interface{}
+		if err := json.Unmarshal(body, &errorResp); err != nil {
+			t.Fatalf("Failed to parse error response: %v", err)
+		}
+
+		errorObj := errorResp["error"].(map[string]interface{})
+		if errorObj["code"] != "INVITE_ALREADY_MEMBER" {
+			t.Errorf("Expected code 'INVITE_ALREADY_MEMBER', got %v", errorObj["code"])
+		}
+		if errorObj["message"] != "invite already exists" {
+			t.Errorf("Expected message 'invite already exists', got %v", errorObj["message"])
+		}
+		if errorObj["target"] != "members" {
+			t.Errorf("Expected target 'members', got %v", errorObj["target"])
+		}
+
+		details, ok := errorObj["details"].([]interface{})
+		if !ok || len(details) != 1 {
+			t.Fatalf("Expected one detail entry, got %#v", errorObj["details"])
+		}
+
+		detail := details[0].(map[string]interface{})
+		if detail["code"] != "Membership" {
+			t.Errorf("Expected detail code 'Membership', got %v", detail["code"])
+		}
+		if detail["target"] != "members" {
+			t.Errorf("Expected detail target 'members', got %v", detail["target"])
 		}
 	})
 

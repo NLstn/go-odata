@@ -44,9 +44,9 @@ func (h *EntityHandler) writeHookError(w http.ResponseWriter, r *http.Request, e
 		return
 	}
 
-	_, status, message, details := extractHookErrorDetails(err, defaultStatus, defaultCode)
+	status, odataErr := response.BuildODataErrorResponse(err, defaultStatus, defaultCode)
 
-	if writeErr := response.WriteError(w, r, status, message, details); writeErr != nil {
+	if writeErr := response.WriteODataError(w, r, status, odataErr); writeErr != nil {
 		h.logger.Error("Error writing error response", "error", writeErr)
 	}
 }
