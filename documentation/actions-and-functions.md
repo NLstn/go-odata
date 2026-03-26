@@ -557,16 +557,26 @@ Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params ma
 }
 ```
 
-**`*odata.HookError`** — lightweight typed error with status code and message:
+**`*odata.HookError`** — lightweight typed error with status code and optional OData payload fields (`Code`, `Target`, `Details`):
 
 ```go
 Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) error {
     if rateLimitExceeded(r) {
-        return odata.NewHookError(http.StatusTooManyRequests, "Rate limit exceeded")
+        return &odata.HookError{
+            StatusCode: http.StatusTooManyRequests,
+            Code:       "RATE_LIMIT_EXCEEDED",
+            Message:    "Rate limit exceeded",
+            Target:     "requests",
+            Details: []odata.HookErrorDetail{
+                {Code: "Quota", Target: "requests", Message: "Too many requests for current plan"},
+            },
+        }
     }
     return nil
 }
 ```
+
+If `Code` is omitted, the response falls back to the HTTP status as a string (for example `"429"`).
 
 **Sentinel errors** — use `odata.MapErrorToHTTPStatus` to translate a sentinel error into the appropriate status code, or return one directly and let the framework fall back to HTTP 500 for unknown errors:
 

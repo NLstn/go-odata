@@ -711,6 +711,42 @@ Client receives:
 }
 ```
 
+For machine-readable client handling, hooks can return typed errors:
+
+- `odata.HookError` for lightweight control
+- `odata.ODataError` for full OData payload control
+
+`odata.HookError` supports:
+
+- `StatusCode` for HTTP status
+- `Code` for custom `error.code` (for example `INVITE_ALREADY_PENDING`)
+- `Message` for `error.message`
+- `Target` for `error.target`
+- `Details` for additional structured error details
+
+When `Code` is empty, the service uses a backward-compatible numeric fallback (`"400"`, `"403"`, and so on).
+
+```go
+func (p *Product) ODataBeforeCreate(_ context.Context, _ *http.Request) error {
+    if productAlreadyInvited(p) {
+        return &odata.HookError{
+            StatusCode: http.StatusConflict,
+            Code:       "INVITE_ALREADY_PENDING",
+            Message:    "invite already pending",
+            Target:     "invite",
+            Details: []odata.HookErrorDetail{
+                {
+                    Code:    "Membership",
+                    Target:  "invite",
+                    Message: "an invite already exists for this user",
+                },
+            },
+        }
+    }
+    return nil
+}
+```
+
 ### Read Hooks
 
 Read hooks let you shape read behavior without forking handlers:

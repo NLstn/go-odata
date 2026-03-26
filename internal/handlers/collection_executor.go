@@ -113,14 +113,6 @@ func (h *EntityHandler) handleCollectionError(w http.ResponseWriter, r *http.Req
 		return false
 	}
 
-	// Check for HookError first (public API error type)
-	if isHookErr, status, message, details := extractHookErrorDetails(err, defaultStatus, defaultCode); isHookErr {
-		if writeErr := response.WriteError(w, r, status, message, details); writeErr != nil {
-			h.logger.Error("Error writing error response", "error", writeErr)
-		}
-		return false
-	}
-
 	var reqErr *collectionRequestError
 	if errors.As(err, &reqErr) {
 		status := reqErr.StatusCode
@@ -139,7 +131,8 @@ func (h *EntityHandler) handleCollectionError(w http.ResponseWriter, r *http.Req
 		return false
 	}
 
-	if writeErr := response.WriteError(w, r, defaultStatus, defaultCode, err.Error()); writeErr != nil {
+	status, odataErr := response.BuildODataErrorResponse(err, defaultStatus, defaultCode)
+	if writeErr := response.WriteODataError(w, r, status, odataErr); writeErr != nil {
 		h.logger.Error("Error writing error response", "error", writeErr)
 	}
 	return false

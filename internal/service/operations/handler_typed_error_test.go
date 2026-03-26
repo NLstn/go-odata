@@ -115,6 +115,7 @@ func TestHandleActionOrFunction_ActionHookError(t *testing.T) {
 		name           string
 		returnErr      error
 		expectedStatus int
+		expectedCode   string
 		expectedMsg    string
 	}{
 		{
@@ -124,6 +125,7 @@ func TestHandleActionOrFunction_ActionHookError(t *testing.T) {
 				Message:    "bad input from hook",
 			},
 			expectedStatus: http.StatusBadRequest,
+			expectedCode:   "400",
 			expectedMsg:    "bad input from hook",
 		},
 		{
@@ -133,7 +135,19 @@ func TestHandleActionOrFunction_ActionHookError(t *testing.T) {
 				Message:    "rate limit exceeded",
 			},
 			expectedStatus: http.StatusTooManyRequests,
+			expectedCode:   "429",
 			expectedMsg:    "rate limit exceeded",
+		},
+		{
+			name: "HookError with custom code",
+			returnErr: &hookerrors.HookError{
+				StatusCode: http.StatusConflict,
+				Code:       "INVITE_ALREADY_PENDING",
+				Message:    "invite already pending",
+			},
+			expectedStatus: http.StatusConflict,
+			expectedCode:   "INVITE_ALREADY_PENDING",
+			expectedMsg:    "invite already pending",
 		},
 		{
 			name: "HookError with zero StatusCode defaults to 500",
@@ -141,6 +155,7 @@ func TestHandleActionOrFunction_ActionHookError(t *testing.T) {
 				Message: "hook error no status",
 			},
 			expectedStatus: http.StatusInternalServerError,
+			expectedCode:   "500",
 			expectedMsg:    "hook error no status",
 		},
 	}
@@ -175,6 +190,9 @@ func TestHandleActionOrFunction_ActionHookError(t *testing.T) {
 			}
 
 			resp := decodeODataError(t, rec.Body.Bytes())
+			if resp.Error.Code != tt.expectedCode {
+				t.Errorf("code = %q, want %q", resp.Error.Code, tt.expectedCode)
+			}
 			if resp.Error.Message != tt.expectedMsg {
 				t.Errorf("message = %q, want %q", resp.Error.Message, tt.expectedMsg)
 			}
@@ -259,6 +277,7 @@ func TestHandleActionOrFunction_FunctionHookError(t *testing.T) {
 		name           string
 		returnErr      error
 		expectedStatus int
+		expectedCode   string
 		expectedMsg    string
 	}{
 		{
@@ -268,6 +287,7 @@ func TestHandleActionOrFunction_FunctionHookError(t *testing.T) {
 				Message:    "not allowed",
 			},
 			expectedStatus: http.StatusForbidden,
+			expectedCode:   "403",
 			expectedMsg:    "not allowed",
 		},
 		{
@@ -277,7 +297,19 @@ func TestHandleActionOrFunction_FunctionHookError(t *testing.T) {
 				Message:    "service unavailable",
 			},
 			expectedStatus: http.StatusServiceUnavailable,
+			expectedCode:   "503",
 			expectedMsg:    "service unavailable",
+		},
+		{
+			name: "HookError function custom code",
+			returnErr: &hookerrors.HookError{
+				StatusCode: http.StatusBadRequest,
+				Code:       "INVALID_FILTER_DOMAIN",
+				Message:    "invalid filter domain",
+			},
+			expectedStatus: http.StatusBadRequest,
+			expectedCode:   "INVALID_FILTER_DOMAIN",
+			expectedMsg:    "invalid filter domain",
 		},
 	}
 
@@ -311,6 +343,9 @@ func TestHandleActionOrFunction_FunctionHookError(t *testing.T) {
 			}
 
 			resp := decodeODataError(t, rec.Body.Bytes())
+			if resp.Error.Code != tt.expectedCode {
+				t.Errorf("code = %q, want %q", resp.Error.Code, tt.expectedCode)
+			}
 			if resp.Error.Message != tt.expectedMsg {
 				t.Errorf("message = %q, want %q", resp.Error.Message, tt.expectedMsg)
 			}

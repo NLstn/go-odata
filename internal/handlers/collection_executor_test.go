@@ -107,6 +107,7 @@ func TestExecuteCollectionQueryErrors(t *testing.T) {
 			ParseQueryOptions: func() (*query.QueryOptions, error) {
 				return nil, &hookerrors.HookError{
 					StatusCode: http.StatusConflict,
+					Code:       "COLLECTION_CONFLICT",
 					Message:    "Hook failed",
 					Err:        errors.New("hook detail"),
 				}
@@ -126,8 +127,8 @@ func TestExecuteCollectionQueryErrors(t *testing.T) {
 		}
 
 		resp := decodeODataError(t, recorder)
-		if resp.Error.Code != "409" {
-			t.Fatalf("expected code 409, got %q", resp.Error.Code)
+		if resp.Error.Code != "COLLECTION_CONFLICT" {
+			t.Fatalf("expected code COLLECTION_CONFLICT, got %q", resp.Error.Code)
 		}
 		if resp.Error.Message != "Hook failed" {
 			t.Fatalf("expected message %q, got %q", "Hook failed", resp.Error.Message)
