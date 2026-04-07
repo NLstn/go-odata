@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	servertiming "github.com/mitchellh/go-server-timing"
 	"github.com/nlstn/go-odata/internal/async"
 	"github.com/nlstn/go-odata/internal/observability"
 	"github.com/nlstn/go-odata/internal/preference"
@@ -95,14 +94,22 @@ func (rt *Runtime) ServeHTTP(w http.ResponseWriter, r *http.Request, allowAsync 
 	rt.serveHTTPInternal(w, r, allowAsync)
 }
 
-// serveHTTPWithServerTiming wraps the request handling with the go-server-timing middleware.
+// serveHTTPWithServerTiming wraps the request handling with server-timing support.
+// It uses a non-buffering ResponseWriter wrapper that injects the Server-Timing header
+// just before the status line is written, preserving streaming / chunked-transfer behaviour.
 func (rt *Runtime) serveHTTPWithServerTiming(w http.ResponseWriter, r *http.Request, allowAsync bool) {
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		rt.serveHTTPInternal(w, r, allowAsync)
-	})
+	// Build a context that carries both the server-timing and DB-time accumulators so
+	// the streaming writer can snapshot them at WriteHeader time.
+	ctx := observability.WithServerTimingAccumulator(r.Context())
+	ctx = observability.WithDBTimeAccumulator(ctx)
+	reqWithAcc := r.WithContext(ctx)
 
-	// Wrap with server-timing middleware
-	servertiming.Middleware(handler, nil).ServeHTTP(w, r)
+	stw := &serverTimingResponseWriter{
+		ResponseWriter: w,
+		ctx:            ctx,
+		start:          time.Now(),
+	}
+	rt.serveHTTPInternal(stw, reqWithAcc, allowAsync)
 }
 
 // serveHTTPInternal contains the core request handling logic.
@@ -125,31 +132,8 @@ func (rt *Runtime) serveHTTPInternal(w http.ResponseWriter, r *http.Request, all
 		metrics.RecordRequestStart(ctx)
 	}
 
-	// Add database time accumulator to context for server timing
-	if rt.observability != nil && rt.observability.ServerTimingEnabled() {
-		ctx = observability.WithDBTimeAccumulator(ctx)
-	}
-
 	// Update request with context
 	r = r.WithContext(ctx)
-
-	// Record server timing for the total request duration and database time
-	if rt.observability != nil && rt.observability.ServerTimingEnabled() {
-		timing := servertiming.FromContext(r.Context())
-		if timing != nil {
-			// Total request duration metric
-			totalMetric := timing.NewMetric("total").WithDesc("Total request duration").Start()
-			defer totalMetric.Stop()
-
-			// Database time metric - we'll set the duration in a defer after all DB operations
-			dbMetric := timing.NewMetric("db").WithDesc("Database queries")
-			defer func() {
-				if acc := observability.DBTimeAccumulatorFromContext(r.Context()); acc != nil {
-					dbMetric.Duration = acc.Duration()
-				}
-			}()
-		}
-	}
 
 	if allowAsync && rt.tryHandleAsync(w, r) {
 		return
@@ -348,6 +332,59 @@ func (r *statusRecorder) Write(b []byte) (int, error) {
 		r.written = true
 	}
 	return r.ResponseWriter.Write(b)
+}
+
+// serverTimingResponseWriter is a non-buffering ResponseWriter wrapper that injects the
+// Server-Timing header just before the status line is committed to the client.
+// Writes are passed straight through, preserving streaming and chunked-transfer behaviour.
+type serverTimingResponseWriter struct {
+	http.ResponseWriter
+	ctx           context.Context
+	start         time.Time
+	headerWritten bool
+}
+
+// Unwrap returns the underlying ResponseWriter, enabling interface delegation
+// (e.g. http.Flusher, http.Hijacker) by callers that use http.ResponseController.
+func (w *serverTimingResponseWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
+}
+
+// WriteHeader snapshots all accumulated timing metrics, injects the Server-Timing header
+// into the outgoing response, and then delegates to the real WriteHeader.
+func (w *serverTimingResponseWriter) WriteHeader(statusCode int) {
+	if !w.headerWritten {
+		w.headerWritten = true
+		// Snapshot timing at the moment headers are committed.
+		observability.SetServerTimingMetricDuration(w.ctx, "total", time.Since(w.start), "Total request duration")
+		if acc := observability.DBTimeAccumulatorFromContext(w.ctx); acc != nil {
+			observability.SetServerTimingMetricDuration(w.ctx, "db", acc.Duration(), "Database queries")
+		}
+		if header := observability.ServerTimingHeader(w.ctx); header != "" {
+			w.ResponseWriter.Header().Add("Server-Timing", header)
+		}
+	}
+	w.ResponseWriter.WriteHeader(statusCode)
+}
+
+// Write triggers an implicit WriteHeader(200) on the first call (mirroring net/http semantics)
+// and then passes the bytes directly to the underlying writer — no buffering.
+func (w *serverTimingResponseWriter) Write(b []byte) (int, error) {
+	if !w.headerWritten {
+		w.WriteHeader(http.StatusOK)
+	}
+	return w.ResponseWriter.Write(b)
+}
+
+// Flush implements http.Flusher by injecting the Server-Timing header first (if not yet
+// written) and then forwarding to the underlying writer's Flush if available.
+func (w *serverTimingResponseWriter) Flush() {
+	if !w.headerWritten {
+		w.WriteHeader(http.StatusOK)
+	}
+	if f, ok := w.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
 }
 
 // extractEntitySetFromPath extracts the entity set name from a URL path.

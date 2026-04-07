@@ -623,7 +623,6 @@ type ObservabilityConfig struct {
 
 	// EnableServerTiming enables the Server-Timing HTTP response header.
 	// When enabled, timing metrics are added to responses for debugging in browser dev tools.
-	// This uses the mitchellh/go-server-timing library to add timing information to HTTP responses.
 	EnableServerTiming bool
 }
 
