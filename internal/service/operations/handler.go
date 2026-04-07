@@ -83,7 +83,7 @@ func (h *Handler) HandleActionOrFunction(w http.ResponseWriter, r *http.Request,
 	// not be confused with the $count system query option).
 	// ParseRawQuery is used instead of r.URL.Query() to preserve semicolons
 	// inside nested query options such as $expand=Nav($select=A;$filter=B gt 1).
-	systemQueryParams := odataSystemQueryParams(query.ParseRawQuery(r.URL.RawQuery))
+	systemQueryParams := extractSystemQueryParams(query.ParseRawQuery(r.URL.RawQuery))
 	queryOpts, parseErr := query.ParseQueryOptions(systemQueryParams, nil)
 	if parseErr != nil {
 		h.writeError(w, r, &invocationError{
@@ -372,12 +372,12 @@ func containsAny(s string, substrings ...string) bool {
 	return false
 }
 
-// odataSystemQueryParams returns a new url.Values containing only the OData
+// extractSystemQueryParams returns a new url.Values containing only the OData
 // system query options (those whose key starts with '$') from src. Non-system
 // parameters – such as function call parameters – are excluded to prevent them
 // from being misinterpreted as system query options (e.g. a function parameter
 // named "count" must not be confused with $count).
-func odataSystemQueryParams(src map[string][]string) map[string][]string {
+func extractSystemQueryParams(src map[string][]string) map[string][]string {
 	out := make(map[string][]string, len(src))
 	for k, v := range src {
 		if strings.HasPrefix(k, "$") {
