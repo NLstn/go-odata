@@ -40,9 +40,11 @@ func parseOrderBy(orderByStr string, entityMetadata *metadata.EntityMetadata, co
 			}
 		}
 
-		// Validate property exists (either in entity metadata or as a computed alias)
-		if !computedAliases[item.Property] {
-			if entityMetadata != nil && entityMetadata.IsSingleEntityNavigationPath(item.Property) {
+		// Validate property exists (either in entity metadata or as a computed alias).
+		// When entityMetadata is nil property validation is skipped – the caller has
+		// no schema to validate against.
+		if !computedAliases[item.Property] && entityMetadata != nil {
+			if entityMetadata.IsSingleEntityNavigationPath(item.Property) {
 				_, _, _, _, err := resolveNavigationPropertyPath(item.Property, entityMetadata)
 				if err != nil {
 					return nil, fmt.Errorf("property '%s' does not exist", item.Property)
