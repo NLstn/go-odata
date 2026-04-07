@@ -499,7 +499,7 @@ func parseSelectOption(queryParams url.Values, entityMetadata *metadata.EntityMe
 		// Skip validation when entityMetadata is nil – the caller has no schema to validate against.
 		for _, propName := range selectedProps {
 			if entityMetadata == nil {
-				break
+				continue
 			}
 			// Handle navigation property paths (e.g., "Product/Name")
 			if strings.Contains(propName, "/") {
