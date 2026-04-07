@@ -10,6 +10,7 @@ import (
 	"github.com/nlstn/go-odata/internal/auth"
 	"github.com/nlstn/go-odata/internal/handlers"
 	"github.com/nlstn/go-odata/internal/metadata"
+	"github.com/nlstn/go-odata/internal/query"
 	"github.com/nlstn/go-odata/internal/response"
 )
 
@@ -73,6 +74,27 @@ type overloadResolver[T any] func(*http.Request, []T, bool, string) (T, map[stri
 
 // HandleActionOrFunction executes the requested action or function.
 func (h *Handler) HandleActionOrFunction(w http.ResponseWriter, r *http.Request, name, key string, isBound bool, entitySet string) {
+	// Parse OData query options from the URL and inject them into the request
+	// context so that action and function handlers can access them via
+	// actions.QueryOptionsFromRequest (exported as odata.GetQueryOptionsFromRequest).
+	//
+	// Only $-prefixed system query options are extracted to avoid conflicts with
+	// function parameters (e.g. a function with a parameter named "count" must
+	// not be confused with the $count system query option).
+	// ParseRawQuery is used instead of r.URL.Query() to preserve semicolons
+	// inside nested query options such as $expand=Nav($select=A;$filter=B gt 1).
+	systemQueryParams := odataSystemQueryParams(query.ParseRawQuery(r.URL.RawQuery))
+	queryOpts, parseErr := query.ParseQueryOptions(systemQueryParams, nil)
+	if parseErr != nil {
+		h.writeError(w, r, &invocationError{
+			status:  http.StatusBadRequest,
+			message: "Invalid query options",
+			detail:  parseErr.Error(),
+		})
+		return
+	}
+	r = actions.WithQueryOptions(r, queryOpts)
+
 	switch r.Method {
 	case http.MethodPost:
 		actionDef, params, invErr := resolveInvocation(r, name, "Action", h.actions, actions.ResolveActionOverload, isBound, entitySet)
@@ -348,4 +370,19 @@ func containsAny(s string, substrings ...string) bool {
 		}
 	}
 	return false
+}
+
+// odataSystemQueryParams returns a new url.Values containing only the OData
+// system query options (those whose key starts with '$') from src. Non-system
+// parameters – such as function call parameters – are excluded to prevent them
+// from being misinterpreted as system query options (e.g. a function parameter
+// named "count" must not be confused with $count).
+func odataSystemQueryParams(src map[string][]string) map[string][]string {
+	out := make(map[string][]string, len(src))
+	for k, v := range src {
+		if strings.HasPrefix(k, "$") {
+			out[k] = v
+		}
+	}
+	return out
 }

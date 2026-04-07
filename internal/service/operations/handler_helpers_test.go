@@ -82,3 +82,130 @@ func TestHandler_HandleActionOrFunction_MethodNotAllowed(t *testing.T) {
 		})
 	}
 }
+
+// TestHandler_QueryOptionsInjectedIntoFunctionHandler verifies that parsed OData
+// query options are available inside a function handler via
+// actions.QueryOptionsFromRequest.
+func TestHandler_QueryOptionsInjectedIntoFunctionHandler(t *testing.T) {
+	var capturedTop *int
+
+	handler := operations.NewHandler(
+		make(map[string][]*actions.ActionDefinition),
+		map[string][]*actions.FunctionDefinition{
+			"ListItems": {
+				{
+					Name: "ListItems",
+					Handler: func(_ http.ResponseWriter, r *http.Request, _ interface{}, _ map[string]interface{}) (interface{}, error) {
+						opts := actions.QueryOptionsFromRequest(r)
+						if opts != nil {
+							capturedTop = opts.Top
+						}
+						return []string{"a", "b", "c"}, nil
+					},
+				},
+			},
+		},
+		make(map[string]*handlers.EntityHandler),
+		make(map[string]*metadata.EntityMetadata),
+		"",
+		noopLogger{},
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/ListItems?$top=2", nil)
+	rec := httptest.NewRecorder()
+
+	handler.HandleActionOrFunction(rec, req, "ListItems", "", false, "")
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	if capturedTop == nil {
+		t.Fatal("expected Top query option to be captured, got nil")
+	}
+	if *capturedTop != 2 {
+		t.Errorf("Top = %d, want 2", *capturedTop)
+	}
+}
+
+// TestHandler_QueryOptionsInjectedIntoActionHandler verifies that parsed OData
+// query options are available inside an action handler via
+// actions.QueryOptionsFromRequest.
+func TestHandler_QueryOptionsInjectedIntoActionHandler(t *testing.T) {
+	var capturedOrderBy string
+
+	handler := operations.NewHandler(
+		map[string][]*actions.ActionDefinition{
+			"DoSomething": {
+				{
+					Name: "DoSomething",
+					Handler: func(w http.ResponseWriter, r *http.Request, _ interface{}, _ map[string]interface{}) error {
+						opts := actions.QueryOptionsFromRequest(r)
+						if opts != nil && len(opts.OrderBy) > 0 {
+							capturedOrderBy = opts.OrderBy[0].Property
+						}
+						w.WriteHeader(http.StatusNoContent)
+						return nil
+					},
+				},
+			},
+		},
+		make(map[string][]*actions.FunctionDefinition),
+		make(map[string]*handlers.EntityHandler),
+		make(map[string]*metadata.EntityMetadata),
+		"",
+		noopLogger{},
+	)
+
+	req := httptest.NewRequest(http.MethodPost, "/DoSomething?$orderby=Name", nil)
+	rec := httptest.NewRecorder()
+
+	handler.HandleActionOrFunction(rec, req, "DoSomething", "", false, "")
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusNoContent)
+	}
+
+	if capturedOrderBy != "Name" {
+		t.Errorf("OrderBy property = %q, want %q", capturedOrderBy, "Name")
+	}
+}
+
+// TestHandler_InvalidQueryOptionsReturn400 verifies that malformed OData system
+// query options (e.g. $top=abc) cause the framework to return 400 Bad Request
+// before the action or function handler is called.
+func TestHandler_InvalidQueryOptionsReturn400(t *testing.T) {
+	called := false
+
+	handler := operations.NewHandler(
+		make(map[string][]*actions.ActionDefinition),
+		map[string][]*actions.FunctionDefinition{
+			"ListItems": {
+				{
+					Name: "ListItems",
+					Handler: func(_ http.ResponseWriter, _ *http.Request, _ interface{}, _ map[string]interface{}) (interface{}, error) {
+						called = true
+						return nil, nil
+					},
+				},
+			},
+		},
+		make(map[string]*handlers.EntityHandler),
+		make(map[string]*metadata.EntityMetadata),
+		"",
+		noopLogger{},
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/ListItems?$top=notanumber", nil)
+	rec := httptest.NewRecorder()
+
+	handler.HandleActionOrFunction(rec, req, "ListItems", "", false, "")
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+
+	if called {
+		t.Error("expected function handler NOT to be called when query options are invalid")
+	}
+}

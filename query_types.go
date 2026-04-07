@@ -1,6 +1,11 @@
 package odata
 
-import "github.com/nlstn/go-odata/internal/query"
+import (
+	"net/http"
+
+	"github.com/nlstn/go-odata/internal/actions"
+	"github.com/nlstn/go-odata/internal/query"
+)
 
 // QueryOptions represents parsed OData query options from an HTTP request.
 //
@@ -186,4 +191,33 @@ const (
 //	}
 func ParseFilter(filterStr string) (*FilterExpression, error) {
 	return query.ParseFilterWithoutMetadata(filterStr)
+}
+
+// GetQueryOptionsFromRequest retrieves the parsed OData query options from the
+// HTTP request context. Call this inside an ActionHandler or FunctionHandler to
+// access system query options such as $filter, $orderby, $top, and $skip that
+// were included in the request URL.
+//
+// The framework automatically parses the query options before invoking the
+// handler and stores them in the request context. Invalid OData system query
+// options (e.g. malformed $top) cause the framework to return 400 Bad Request
+// before the handler is called, so when this function is called from within a
+// handler the result is always a valid, non-nil *QueryOptions.
+//
+// Returns nil only if called outside of a framework-managed handler invocation
+// (e.g. in tests that construct a bare *http.Request without going through the
+// operations handler).
+//
+// Example:
+//
+//	func myFunctionHandler(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) (interface{}, error) {
+//	    opts := odata.GetQueryOptionsFromRequest(r)
+//	    results, err := fetchResults()
+//	    if err != nil {
+//	        return nil, err
+//	    }
+//	    return odata.ApplyQueryOptionsToSlice(results, opts, nil)
+//	}
+func GetQueryOptionsFromRequest(r *http.Request) *QueryOptions {
+	return actions.QueryOptionsFromRequest(r)
 }

@@ -10,6 +10,7 @@ This guide covers how to register and implement custom OData actions and functio
   - [FunctionDefinition](#functiondefinition)
   - [ParameterDefinition](#parameterdefinition)
   - [Handler Signatures](#handler-signatures)
+- [Accessing OData Query Options](#accessing-odata-query-options)
 - [Functions](#functions)
 - [Actions](#actions)
 - [Parameter Types](#parameter-types)
@@ -178,6 +179,66 @@ type FunctionHandler func(
 - Automatically serializes return value to JSON
 - Sets appropriate HTTP status code (200 OK)
 - Adds OData context annotations
+
+## Accessing OData Query Options
+
+Action and function handlers receive a fully parsed [`*odata.QueryOptions`](../query_types.go) value
+via the HTTP request context. This lets handlers apply standard OData query options
+(`$filter`, `$orderby`, `$top`, `$skip`, etc.) to their own result sets without
+duplicating internal parsing logic.
+
+### Retrieving query options
+
+Call `odata.GetQueryOptionsFromRequest(r)` inside any action or function handler:
+
+```go
+import odata "github.com/nlstn/go-odata"
+
+service.RegisterFunction(odata.FunctionDefinition{
+    Name:       "ExpandEventsInWindow",
+    IsBound:    true,
+    EntitySet:  "Clubs",
+    Parameters: []odata.ParameterDefinition{
+        {Name: "From", Type: reflect.TypeOf(""), Required: true},
+        {Name: "To",   Type: reflect.TypeOf(""), Required: true},
+    },
+    ReturnType: reflect.TypeOf([]Event{}),
+    Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) (interface{}, error) {
+        club := ctx.(*Club)
+        from := params["From"].(string)
+        to   := params["To"].(string)
+
+        // Fetch raw results from your own source
+        events, err := fetchEventsInWindow(club.ID, from, to)
+        if err != nil {
+            return nil, err
+        }
+
+        // Apply $filter / $orderby / $top / $skip consistently with the rest of
+        // the service – no manual parsing required.
+        opts := odata.GetQueryOptionsFromRequest(r)
+        return odata.ApplyQueryOptionsToSlice(events, opts, nil)
+    },
+})
+```
+
+**Invoke:**
+```bash
+GET /Clubs('ACME')/ExpandEventsInWindow(From='2024-01-01',To='2024-12-31')?$orderby=StartTime asc&$top=10
+```
+
+### Notes
+
+- `GetQueryOptionsFromRequest` always returns a non-nil `*QueryOptions` when called
+  from a framework-managed handler – the framework parses and injects the options
+  before your handler is called.
+- Only `$`-prefixed OData system query options are parsed. Non-`$` URL parameters
+  (such as function parameters) are never interpreted as system query options to
+  avoid ambiguity.
+- An invalid system query option (e.g. `$top=notanumber`) causes the framework to
+  return `400 Bad Request` before your handler is called.
+- `ApplyQueryOptionsToSlice` can apply the retrieved options directly to an
+  in-memory slice – see its documentation for filtering, sorting, and paging support.
 
 ## Functions
 
