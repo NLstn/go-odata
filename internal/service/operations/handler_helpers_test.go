@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 
 	"github.com/nlstn/go-odata/internal/actions"
@@ -207,5 +208,65 @@ func TestHandler_InvalidQueryOptionsReturn400(t *testing.T) {
 
 	if called {
 		t.Error("expected function handler NOT to be called when query options are invalid")
+	}
+}
+
+// TestHandler_NonSystemParametersAreExcludedFromQueryParsing verifies that
+// non-$ query parameters are not interpreted as OData system query options.
+func TestHandler_NonSystemParametersAreExcludedFromQueryParsing(t *testing.T) {
+	var (
+		capturedParamCount string
+		capturedCount      bool
+		hasOpts            bool
+	)
+
+	handler := operations.NewHandler(
+		make(map[string][]*actions.ActionDefinition),
+		map[string][]*actions.FunctionDefinition{
+			"ListItems": {
+				{
+					Name: "ListItems",
+					Parameters: []actions.ParameterDefinition{
+						{Name: "count", Type: reflect.TypeOf(""), Required: true},
+					},
+					Handler: func(_ http.ResponseWriter, r *http.Request, _ interface{}, params map[string]interface{}) (interface{}, error) {
+						capturedParamCount = params["count"].(string)
+
+						opts := actions.QueryOptionsFromRequest(r)
+						if opts != nil {
+							hasOpts = true
+							capturedCount = opts.Count
+						}
+
+						return []string{"ok"}, nil
+					},
+				},
+			},
+		},
+		make(map[string]*handlers.EntityHandler),
+		make(map[string]*metadata.EntityMetadata),
+		"",
+		noopLogger{},
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/ListItems(count='paramValue')?$count=true", nil)
+	rec := httptest.NewRecorder()
+
+	handler.HandleActionOrFunction(rec, req, "ListItems", "", false, "")
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	if capturedParamCount != "paramValue" {
+		t.Fatalf("function parameter count = %q, want %q", capturedParamCount, "paramValue")
+	}
+
+	if !hasOpts {
+		t.Fatal("expected query options to be injected")
+	}
+
+	if !capturedCount {
+		t.Fatalf("query option $count = %v, want true", capturedCount)
 	}
 }

@@ -495,12 +495,13 @@ func parseSelectOption(queryParams url.Values, entityMetadata *metadata.EntityMe
 			}
 		}
 
+		if entityMetadata == nil {
+			options.Select = selectedProps
+			return nil
+		}
+
 		// Validate that all selected properties exist (either as entity properties or computed properties).
-		// Skip validation when entityMetadata is nil – the caller has no schema to validate against.
 		for _, propName := range selectedProps {
-			if entityMetadata == nil {
-				continue
-			}
 			// Handle navigation property paths (e.g., "Product/Name")
 			if strings.Contains(propName, "/") {
 				parts := strings.SplitN(propName, "/", 2)
