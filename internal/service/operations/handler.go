@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/nlstn/go-odata/internal/actions"
@@ -377,8 +378,8 @@ func containsAny(s string, substrings ...string) bool {
 // parameters – such as function call parameters – are excluded to prevent them
 // from being misinterpreted as system query options (e.g. a function parameter
 // named "count" must not be confused with $count).
-func extractSystemQueryParams(src map[string][]string) map[string][]string {
-	out := make(map[string][]string, len(src))
+func extractSystemQueryParams(src url.Values) url.Values {
+	out := make(url.Values, len(src))
 	for k, v := range src {
 		if strings.HasPrefix(k, "$") {
 			out[k] = v
