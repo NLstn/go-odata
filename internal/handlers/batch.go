@@ -1196,7 +1196,8 @@ func (h *BatchHandler) writeJSONBatchResponse(w http.ResponseWriter, responses [
 
 // jsonRawError returns a json.RawMessage containing an OData-format error object.
 func jsonRawError(code int, message string) json.RawMessage {
-	// This Marshal call uses only string/int values and cannot fail.
+	// Defensive: marshal can theoretically fail with exotic string values, so
+	// handle the error path even though in practice it will not occur.
 	b, err := json.Marshal(map[string]interface{}{
 		"error": map[string]interface{}{
 			"code":    fmt.Sprintf("%d", code),
