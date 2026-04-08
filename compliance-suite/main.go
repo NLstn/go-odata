@@ -808,6 +808,11 @@ func main() {
 			Version: "4.01",
 			Suite:   v4_01.FunctionActionOverloading,
 		})
+		testSuites = append(testSuites, TestSuiteInfo{
+			Name:    "19_json_batch",
+			Version: "4.01",
+			Suite:   v4_01.JSONBatch,
+		})
 	}
 
 	if len(testSuites) == 0 {

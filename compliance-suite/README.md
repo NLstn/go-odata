@@ -131,6 +131,7 @@ Current v4.01 suites include:
 - 11.2.5.13 Query Index
 - 11.2.12 Query Schemaversion
 - 12.2 Function and Action Overloading
+- 19 JSON Batch Requests (OData JSON Format v4.01 §19)
 
 ## Vocabulary Test Suites
 

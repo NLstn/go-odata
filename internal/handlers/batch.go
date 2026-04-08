@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -20,6 +21,7 @@ import (
 
 	"github.com/nlstn/go-odata/internal/observability"
 	"github.com/nlstn/go-odata/internal/response"
+	"github.com/nlstn/go-odata/internal/version"
 	"go.opentelemetry.io/otel/trace"
 	"gorm.io/gorm"
 )
@@ -84,6 +86,50 @@ type batchResponse struct {
 	ContentID  string // Content-ID to include in the response MIME part envelope
 }
 
+// jsonBatchRequestItem represents a single request object in a JSON batch envelope.
+// Defined in OData JSON Format v4.01 §19.2.
+type jsonBatchRequestItem struct {
+	ID             string            `json:"id"`
+	Method         string            `json:"method"`
+	URL            string            `json:"url"`
+	Headers        map[string]string `json:"headers,omitempty"`
+	Body           json.RawMessage   `json:"body,omitempty"`
+	AtomicityGroup string            `json:"atomicityGroup,omitempty"`
+	DependsOn      []string          `json:"dependsOn,omitempty"`
+}
+
+// jsonBatchEnvelope is the top-level structure of a JSON batch request body.
+type jsonBatchEnvelope struct {
+	Requests []jsonBatchRequestItem `json:"requests"`
+}
+
+// jsonBatchResponseItem represents a single response object in a JSON batch response.
+// Defined in OData JSON Format v4.01 §19.5.
+type jsonBatchResponseItem struct {
+	ID      string            `json:"id"`
+	Status  int               `json:"status"`
+	Headers map[string]string `json:"headers,omitempty"`
+	Body    json.RawMessage   `json:"body,omitempty"`
+}
+
+// jsonBatchResponseEnvelope is the top-level structure of a JSON batch response body.
+type jsonBatchResponseEnvelope struct {
+	Responses []jsonBatchResponseItem `json:"responses"`
+}
+
+// jsonGroupState holds the transaction state for a single atomicity group.
+type jsonGroupState struct {
+	tx                 *gorm.DB
+	pendingEvents      []pendingChangeEvent
+	contentIDLocations map[string]string
+	failed             bool
+	committed          bool
+	// responseIndices tracks the indices of already-appended response items
+	// in the outer responses slice, so they can be retroactively updated to
+	// 424 Failed Dependency if the group transaction is rolled back.
+	responseIndices []int
+}
+
 // HandleBatch handles the $batch endpoint
 func (h *BatchHandler) HandleBatch(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -116,9 +162,15 @@ func (h *BatchHandler) HandleBatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Route to JSON batch handler for application/json Content-Type (OData 4.01).
+	if mediaType == "application/json" {
+		h.handleJSONBatch(w, r)
+		return
+	}
+
 	if !strings.HasPrefix(mediaType, "multipart/") {
 		if err := response.WriteError(w, r, http.StatusBadRequest, "Invalid Content-Type",
-			"$batch requests must use multipart/mixed Content-Type"); err != nil {
+			"$batch requests must use multipart/mixed or application/json Content-Type"); err != nil {
 			h.logger.Error("Error writing error response", "error", err)
 		}
 		return
@@ -784,6 +836,378 @@ func (h *BatchHandler) writeBatchResponse(w http.ResponseWriter, responses []bat
 	if _, err := fmt.Fprintf(w, "--%s--\r\n", boundary); err != nil {
 		h.logger.Error("Error writing final boundary", "error", err)
 	}
+}
+
+// handleJSONBatch processes a JSON-encoded batch request per OData JSON Format v4.01 §19.
+//
+// The request body must contain a top-level "requests" array; the response is a top-level
+// "responses" array.  Key semantics implemented:
+//   - dependsOn  – if any listed dependency has failed the request is skipped with 424.
+//   - atomicityGroup – all requests sharing a group name run in a single database
+//     transaction; if any individual request fails the transaction is rolled back and all
+//     responses for that group (including ones already written) are changed to 424.
+//   - Prefer: continue-on-error – when absent the handler stops at the first failure of a
+//     standalone (non-group) request; when present it continues processing.
+func (h *BatchHandler) handleJSONBatch(w http.ResponseWriter, r *http.Request) {
+	// JSON batch is an OData 4.01-only feature.  Reject requests when the
+	// negotiated version is 4.0 (i.e. the client sent OData-MaxVersion: 4.0).
+	negotiated := version.GetVersion(r.Context())
+	if negotiated.Major == 4 && negotiated.Minor == 0 {
+		if writeErr := response.WriteError(w, r, http.StatusBadRequest, "Not supported",
+			"JSON batch ($batch with Content-Type: application/json) requires OData 4.01. "+
+				"Use multipart/mixed for OData 4.0 batch requests."); writeErr != nil {
+			h.logger.Error("Error writing error response", "error", writeErr)
+		}
+		return
+	}
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		if writeErr := response.WriteError(w, r, http.StatusBadRequest, "Invalid batch request",
+			fmt.Sprintf("Failed to read request body: %v", err)); writeErr != nil {
+			h.logger.Error("Error writing error response", "error", writeErr)
+		}
+		return
+	}
+
+	var envelope jsonBatchEnvelope
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		if writeErr := response.WriteError(w, r, http.StatusBadRequest, "Invalid JSON batch request",
+			fmt.Sprintf("Failed to parse JSON batch envelope: %v", err)); writeErr != nil {
+			h.logger.Error("Error writing error response", "error", writeErr)
+		}
+		return
+	}
+
+	// Validate: check for duplicate IDs
+	allIDs := make(map[string]bool, len(envelope.Requests))
+	for _, item := range envelope.Requests {
+		if item.ID == "" {
+			if writeErr := response.WriteError(w, r, http.StatusBadRequest, "Invalid batch request",
+				"Each request in a JSON batch must have a non-empty 'id' field"); writeErr != nil {
+				h.logger.Error("Error writing error response", "error", writeErr)
+			}
+			return
+		}
+		if allIDs[item.ID] {
+			if writeErr := response.WriteError(w, r, http.StatusBadRequest, "Invalid batch request",
+				fmt.Sprintf("Duplicate request id: %q", item.ID)); writeErr != nil {
+				h.logger.Error("Error writing error response", "error", writeErr)
+			}
+			return
+		}
+		allIDs[item.ID] = true
+	}
+
+	// Enforce batch size limit
+	if len(envelope.Requests) > h.maxBatchSize {
+		if writeErr := response.WriteError(w, r, http.StatusRequestEntityTooLarge, "Batch size limit exceeded",
+			fmt.Sprintf("Batch request contains too many sub-requests. Maximum allowed: %d", h.maxBatchSize)); writeErr != nil {
+			h.logger.Error("Error writing error response", "error", writeErr)
+		}
+		return
+	}
+
+	// Check Prefer: continue-on-error
+	prefer := r.Header.Get("Prefer")
+	continueOnError := strings.Contains(prefer, "continue-on-error")
+
+	// Pre-scan: record the last array index for each atomicityGroup so we know
+	// when to commit the group transaction.
+	groupLastIdx := make(map[string]int)
+	for i, item := range envelope.Requests {
+		if item.AtomicityGroup != "" {
+			groupLastIdx[item.AtomicityGroup] = i
+		}
+	}
+
+	// Processing state
+	failedIDs := make(map[string]bool)
+	groups := make(map[string]*jsonGroupState)
+	responses := make([]jsonBatchResponseItem, 0, len(envelope.Requests))
+
+	for i, item := range envelope.Requests {
+		// --- Check dependsOn ---
+		depFailed := false
+		for _, dep := range item.DependsOn {
+			if failedIDs[dep] {
+				depFailed = true
+				break
+			}
+		}
+
+		gs := groups[item.AtomicityGroup]
+		groupAlreadyFailed := item.AtomicityGroup != "" && gs != nil && gs.failed
+
+		if depFailed || groupAlreadyFailed {
+			failedIDs[item.ID] = true
+			resp := h.makeJSONFailedDependencyResponse(item.ID)
+			if item.AtomicityGroup != "" {
+				if gs == nil {
+					gs = &jsonGroupState{contentIDLocations: map[string]string{}}
+					groups[item.AtomicityGroup] = gs
+				}
+				gs.responseIndices = append(gs.responseIndices, len(responses))
+			}
+			responses = append(responses, resp)
+			continue
+		}
+
+		// --- Build the internal batchRequest from the JSON item ---
+		req, buildErr := h.jsonItemToBatchRequest(item)
+		if buildErr != nil {
+			failedIDs[item.ID] = true
+			errResp := jsonBatchResponseItem{
+				ID:     item.ID,
+				Status: http.StatusBadRequest,
+				Body:   jsonRawError(http.StatusBadRequest, buildErr.Error()),
+			}
+			if item.AtomicityGroup != "" {
+				gs = h.getOrCreateJSONGroupState(groups, item.AtomicityGroup)
+				if gs.tx != nil {
+					gs.tx.Rollback()
+				}
+				gs.failed = true
+				for _, idx := range gs.responseIndices {
+					id := responses[idx].ID
+					responses[idx] = h.makeJSONFailedDependencyResponse(id)
+				}
+				gs.responseIndices = append(gs.responseIndices, len(responses))
+			}
+			responses = append(responses, errResp)
+			if !continueOnError {
+				break
+			}
+			continue
+		}
+
+		// --- Execute the request ---
+		var resp batchResponse
+
+		if item.AtomicityGroup != "" {
+			gs = h.getOrCreateJSONGroupState(groups, item.AtomicityGroup)
+
+			// Start a transaction for the group if this is the first request.
+			if gs.tx == nil {
+				tx := h.db.Begin()
+				if tx.Error != nil {
+					gs.failed = true
+					failedIDs[item.ID] = true
+					errResp := jsonBatchResponseItem{
+						ID:     item.ID,
+						Status: http.StatusInternalServerError,
+						Body:   jsonRawError(http.StatusInternalServerError, "Failed to start transaction"),
+					}
+					gs.responseIndices = append(gs.responseIndices, len(responses))
+					responses = append(responses, errResp)
+					if !continueOnError {
+						break
+					}
+					continue
+				}
+				gs.tx = tx
+			}
+
+			// Resolve $<id> content-ID URL references within the group.
+			req.URL = resolveContentIDReference(req.URL, gs.contentIDLocations)
+
+			resp = h.executeRequestInTransaction(req, gs.tx, &gs.pendingEvents, r)
+
+			if resp.StatusCode >= 400 {
+				// Failure → rollback entire group.
+				gs.tx.Rollback()
+				gs.failed = true
+				failedIDs[item.ID] = true
+
+				// Retroactively mark all earlier group responses as 424.
+				for _, idx := range gs.responseIndices {
+					id := responses[idx].ID
+					responses[idx] = h.makeJSONFailedDependencyResponse(id)
+				}
+				gs.responseIndices = append(gs.responseIndices, len(responses))
+				responses = append(responses, h.batchResponseToJSONItem(item.ID, resp))
+			} else {
+				// Record content-ID location for later $<id> URL references.
+				if item.ID != "" {
+					if loc := resp.Headers.Get("Location"); loc != "" {
+						gs.contentIDLocations[item.ID] = extractLocationPath(loc)
+					}
+				}
+
+				gs.responseIndices = append(gs.responseIndices, len(responses))
+				responses = append(responses, h.batchResponseToJSONItem(item.ID, resp))
+
+				// Commit when we reach the last request in the group.
+				if i == groupLastIdx[item.AtomicityGroup] {
+					if commitErr := gs.tx.Commit().Error; commitErr != nil {
+						gs.tx.Rollback()
+						gs.failed = true
+						failedIDs[item.ID] = true
+						// Retroactively mark all group responses as 424.
+						for _, idx := range gs.responseIndices {
+							id := responses[idx].ID
+							responses[idx] = h.makeJSONFailedDependencyResponse(id)
+						}
+					} else {
+						gs.committed = true
+						flushPendingChangeEvents(gs.pendingEvents)
+					}
+				}
+			}
+		} else {
+			// Standalone (non-group) request.
+			resp = h.executeRequest(req, r)
+			responses = append(responses, h.batchResponseToJSONItem(item.ID, resp))
+
+			if resp.StatusCode >= 400 {
+				failedIDs[item.ID] = true
+				if !continueOnError {
+					// Fatal error: per OData JSON Format v4.01 §19.5, the service MUST
+					// return a response for every request.  Fill remaining unprocessed
+					// requests with 424 Failed Dependency and stop.
+					for j := i + 1; j < len(envelope.Requests); j++ {
+						rem := envelope.Requests[j]
+						failedIDs[rem.ID] = true
+						if rem.AtomicityGroup != "" {
+							remGS := h.getOrCreateJSONGroupState(groups, rem.AtomicityGroup)
+							remGS.responseIndices = append(remGS.responseIndices, len(responses))
+						}
+						responses = append(responses, h.makeJSONFailedDependencyResponse(rem.ID))
+					}
+					break
+				}
+			}
+		}
+	}
+
+	// Roll back any group transaction that was never committed (early exit).
+	for _, gs := range groups {
+		if !gs.committed && !gs.failed && gs.tx != nil {
+			gs.tx.Rollback()
+		}
+	}
+
+	h.writeJSONBatchResponse(w, responses)
+
+	// Update batch span and metrics (reuse observability infrastructure).
+	if h.observability != nil {
+		h.observability.Metrics().RecordBatchSize(r.Context(), len(responses))
+	}
+}
+
+// getOrCreateJSONGroupState returns the existing group state or creates a new one.
+func (h *BatchHandler) getOrCreateJSONGroupState(groups map[string]*jsonGroupState, name string) *jsonGroupState {
+	if gs, ok := groups[name]; ok {
+		return gs
+	}
+	gs := &jsonGroupState{
+		contentIDLocations: make(map[string]string),
+	}
+	groups[name] = gs
+	return gs
+}
+
+// jsonItemToBatchRequest converts a jsonBatchRequestItem into the internal batchRequest type.
+func (h *BatchHandler) jsonItemToBatchRequest(item jsonBatchRequestItem) (*batchRequest, error) {
+	if item.Method == "" {
+		return nil, fmt.Errorf("request %q is missing required field 'method'", item.ID)
+	}
+	if item.URL == "" {
+		return nil, fmt.Errorf("request %q is missing required field 'url'", item.ID)
+	}
+
+	// Strip an absolute base URL prefix, keeping only the path (and query string).
+	reqURL := item.URL
+	if u, parseErr := url.Parse(reqURL); parseErr == nil && u.IsAbs() {
+		reqURL = u.RequestURI() // path + query + fragment
+	}
+
+	headers := make(http.Header, len(item.Headers))
+	for k, v := range item.Headers {
+		headers.Set(k, v)
+	}
+
+	// Marshal the body back to JSON bytes (it was parsed as json.RawMessage).
+	var bodyBytes []byte
+	if len(item.Body) > 0 && string(item.Body) != "null" {
+		bodyBytes = item.Body
+	}
+
+	return &batchRequest{
+		Method:    item.Method,
+		URL:       reqURL,
+		Headers:   headers,
+		Body:      bodyBytes,
+		ContentID: item.ID,
+	}, nil
+}
+
+// batchResponseToJSONItem converts an internal batchResponse into a jsonBatchResponseItem.
+func (h *BatchHandler) batchResponseToJSONItem(id string, resp batchResponse) jsonBatchResponseItem {
+	headers := make(map[string]string, len(resp.Headers))
+	for k, vals := range resp.Headers {
+		if len(vals) > 0 {
+			headers[k] = vals[0]
+		}
+	}
+	if len(headers) == 0 {
+		headers = nil
+	}
+
+	var bodyMsg json.RawMessage
+	trimmed := bytes.TrimSpace(resp.Body)
+	if len(trimmed) > 0 && json.Valid(trimmed) {
+		bodyMsg = json.RawMessage(trimmed)
+	}
+
+	return jsonBatchResponseItem{
+		ID:      id,
+		Status:  resp.StatusCode,
+		Headers: headers,
+		Body:    bodyMsg,
+	}
+}
+
+// makeJSONFailedDependencyResponse returns a 424 Failed Dependency response item.
+func (h *BatchHandler) makeJSONFailedDependencyResponse(id string) jsonBatchResponseItem {
+	return jsonBatchResponseItem{
+		ID:     id,
+		Status: http.StatusFailedDependency,
+		Body:   jsonRawError(http.StatusFailedDependency, "Failed Dependency"),
+	}
+}
+
+// writeJSONBatchResponse serialises the responses slice as a JSON batch response envelope.
+func (h *BatchHandler) writeJSONBatchResponse(w http.ResponseWriter, responses []jsonBatchResponseItem) {
+	envelope := jsonBatchResponseEnvelope{Responses: responses}
+	out, err := json.Marshal(envelope)
+	if err != nil {
+		h.logger.Error("Error marshalling JSON batch response", "error", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if _, err := w.Write(out); err != nil {
+		h.logger.Error("Error writing JSON batch response", "error", err)
+	}
+}
+
+// jsonRawError returns a json.RawMessage containing an OData-format error object.
+func jsonRawError(code int, message string) json.RawMessage {
+	// This Marshal call uses only string/int values and cannot fail.
+	b, err := json.Marshal(map[string]interface{}{
+		"error": map[string]interface{}{
+			"code":    fmt.Sprintf("%d", code),
+			"message": message,
+		},
+	})
+	if err != nil {
+		// Fallback: return a safe static error payload.
+		return json.RawMessage(`{"error":{"code":"500","message":"internal error"}}`)
+	}
+	return json.RawMessage(b)
 }
 
 // resolveContentIDReference replaces a leading $<contentID> token in rawURL with the
