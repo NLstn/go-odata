@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -1394,5 +1395,512 @@ Accept: application/json
 	responseBody := w.Body.String()
 	if !strings.Contains(responseBody, "Widget") {
 		t.Errorf("Response should contain 'Widget'. Body: %s", responseBody)
+	}
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// JSON batch tests (OData JSON Format v4.01 §19)
+// ─────────────────────────────────────────────────────────────────────────────
+
+func TestJSONBatch_InvalidJSON(t *testing.T) {
+	handler, _, _ := setupBatchTestHandler(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader("not-json"))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.HandleBatch(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+}
+
+func TestJSONBatch_MissingID(t *testing.T) {
+	handler, _, _ := setupBatchTestHandler(t)
+
+	body := `{"requests":[{"method":"GET","url":"BatchTestProducts"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.HandleBatch(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+}
+
+func TestJSONBatch_DuplicateID(t *testing.T) {
+	handler, _, _ := setupBatchTestHandler(t)
+
+	body := `{"requests":[
+{"id":"r1","method":"GET","url":"BatchTestProducts"},
+{"id":"r1","method":"GET","url":"BatchTestProducts"}
+]}`
+	req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.HandleBatch(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+}
+
+func TestJSONBatch_EmptyRequests(t *testing.T) {
+	handler, _, _ := setupBatchTestHandler(t)
+
+	body := `{"requests":[]}`
+	req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.HandleBatch(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("Failed to decode JSON response: %v", err)
+	}
+	responses, ok := result["responses"].([]interface{})
+	if !ok {
+		t.Fatalf("Expected 'responses' array in response body, got: %v", result)
+	}
+	if len(responses) != 0 {
+		t.Errorf("Expected 0 responses, got %d", len(responses))
+	}
+}
+
+func TestJSONBatch_SingleGET(t *testing.T) {
+	handler, db, _ := setupBatchTestHandler(t)
+
+	db.Create(&BatchTestProduct{ID: 1, Name: "JSON Product", Price: 9.99})
+
+	body := `{"requests":[
+{"id":"r1","method":"GET","url":"/BatchTestProducts(1)"}
+]}`
+	req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.HandleBatch(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("Failed to decode JSON response: %v", err)
+	}
+
+	responses, ok := result["responses"].([]interface{})
+	if !ok || len(responses) != 1 {
+		t.Fatalf("Expected 1 response, got: %v", result)
+	}
+
+	r0 := responses[0].(map[string]interface{})
+	if r0["id"] != "r1" {
+		t.Errorf("Expected id=r1, got %v", r0["id"])
+	}
+	if r0["status"] != float64(200) {
+		t.Errorf("Expected status 200, got %v", r0["status"])
+	}
+
+	// Body should include the product
+	bodyMap, ok := r0["body"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("Expected body map, got %T: %v", r0["body"], r0["body"])
+	}
+	if bodyMap["Name"] != "JSON Product" {
+		t.Errorf("Expected Name=JSON Product, got %v", bodyMap["Name"])
+	}
+}
+
+func TestJSONBatch_MultipleGETs(t *testing.T) {
+	handler, db, _ := setupBatchTestHandler(t)
+
+	db.Create(&BatchTestProduct{ID: 10, Name: "Alpha", Price: 1.0})
+	db.Create(&BatchTestProduct{ID: 11, Name: "Beta", Price: 2.0})
+
+	body := `{"requests":[
+{"id":"r1","method":"GET","url":"/BatchTestProducts(10)"},
+{"id":"r2","method":"GET","url":"/BatchTestProducts(11)"}
+]}`
+	req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.HandleBatch(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("Failed to decode JSON response: %v", err)
+	}
+
+	responses := result["responses"].([]interface{})
+	if len(responses) != 2 {
+		t.Fatalf("Expected 2 responses, got %d", len(responses))
+	}
+}
+
+func TestJSONBatch_ResponseContentType(t *testing.T) {
+	handler, _, _ := setupBatchTestHandler(t)
+
+	body := `{"requests":[]}`
+	req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.HandleBatch(w, req)
+
+	ct := w.Header().Get("Content-Type")
+	if !strings.Contains(ct, "application/json") {
+		t.Errorf("Expected application/json Content-Type, got %q", ct)
+	}
+}
+
+func TestJSONBatch_POST(t *testing.T) {
+	handler, _, _ := setupBatchTestHandler(t)
+
+	body := `{"requests":[
+{"id":"create1","method":"POST","url":"/BatchTestProducts",
+ "headers":{"Content-Type":"application/json"},
+ "body":{"Name":"Created via JSON batch","Price":42.0}}
+]}`
+	req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.HandleBatch(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("Failed to decode JSON response: %v", err)
+	}
+
+	responses := result["responses"].([]interface{})
+	if len(responses) != 1 {
+		t.Fatalf("Expected 1 response, got %d", len(responses))
+	}
+
+	r0 := responses[0].(map[string]interface{})
+	if r0["status"] != float64(201) {
+		t.Errorf("Expected status 201, got %v", r0["status"])
+	}
+}
+
+func TestJSONBatch_DependsOn_SuccessChain(t *testing.T) {
+	handler, db, _ := setupBatchTestHandler(t)
+
+	db.Create(&BatchTestProduct{ID: 20, Name: "DepProduct", Price: 5.0})
+
+	// r2 depends on r1; both should succeed.
+	body := `{"requests":[
+{"id":"r1","method":"GET","url":"/BatchTestProducts(20)"},
+{"id":"r2","method":"GET","url":"/BatchTestProducts(20)","dependsOn":["r1"]}
+]}`
+	req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.HandleBatch(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("Failed to decode: %v", err)
+	}
+
+	responses := result["responses"].([]interface{})
+	if len(responses) != 2 {
+		t.Fatalf("Expected 2 responses, got %d", len(responses))
+	}
+
+	for _, resp := range responses {
+		r := resp.(map[string]interface{})
+		if r["status"] != float64(200) {
+			t.Errorf("Expected status 200, got %v for id=%v", r["status"], r["id"])
+		}
+	}
+}
+
+func TestJSONBatch_DependsOn_FailurePropagation(t *testing.T) {
+	handler, _, _ := setupBatchTestHandler(t)
+
+	// r1 will fail (entity 99999 does not exist); r2 depends on r1 and must get 424.
+	body := `{"requests":[
+{"id":"r1","method":"GET","url":"/BatchTestProducts(99999)"},
+{"id":"r2","method":"GET","url":"/BatchTestProducts(1)","dependsOn":["r1"]}
+]}`
+	req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.HandleBatch(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("Failed to decode: %v", err)
+	}
+
+	responses := result["responses"].([]interface{})
+	if len(responses) != 2 {
+		t.Fatalf("Expected 2 responses, got %d", len(responses))
+	}
+
+	r1 := responses[0].(map[string]interface{})
+	r2 := responses[1].(map[string]interface{})
+
+	if r1["status"] == float64(200) {
+		t.Errorf("r1 should have failed (entity not found)")
+	}
+	if r2["id"] != "r2" {
+		t.Errorf("Expected r2 id, got %v", r2["id"])
+	}
+	if r2["status"] != float64(424) {
+		t.Errorf("Expected r2 status 424 Failed Dependency, got %v", r2["status"])
+	}
+}
+
+func TestJSONBatch_ContinueOnError(t *testing.T) {
+	handler, db, _ := setupBatchTestHandler(t)
+
+	db.Create(&BatchTestProduct{ID: 30, Name: "ContinueProduct", Price: 1.0})
+
+	// r1 fails; r2 has no dependency on r1, so it should run (continue-on-error).
+	body := `{"requests":[
+{"id":"r1","method":"GET","url":"/BatchTestProducts(99999)"},
+{"id":"r2","method":"GET","url":"/BatchTestProducts(30)"}
+]}`
+	req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Prefer", "continue-on-error")
+	w := httptest.NewRecorder()
+
+	handler.HandleBatch(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("Failed to decode: %v", err)
+	}
+
+	responses := result["responses"].([]interface{})
+	if len(responses) != 2 {
+		t.Fatalf("Expected 2 responses with continue-on-error, got %d", len(responses))
+	}
+
+	r2 := responses[1].(map[string]interface{})
+	if r2["status"] != float64(200) {
+		t.Errorf("Expected r2 status 200 after continue-on-error, got %v", r2["status"])
+	}
+}
+
+func TestJSONBatch_StopOnError_Default(t *testing.T) {
+	handler, db, _ := setupBatchTestHandler(t)
+
+	db.Create(&BatchTestProduct{ID: 40, Name: "StopProduct", Price: 1.0})
+
+	// r1 fails; r2 has no dependsOn, so without continue-on-error processing stops.
+	body := `{"requests":[
+{"id":"r1","method":"GET","url":"/BatchTestProducts(99999)"},
+{"id":"r2","method":"GET","url":"/BatchTestProducts(40)"}
+]}`
+	req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.HandleBatch(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("Failed to decode: %v", err)
+	}
+
+	responses := result["responses"].([]interface{})
+	// Per OData JSON Format v4.01 §19.5, the service MUST return a response for every
+	// request. Without continue-on-error, r2 is not executed but still gets 424.
+	if len(responses) != 2 {
+		t.Fatalf("Expected 2 responses (r1 failed, r2 gets 424), got %d: %v", len(responses), result)
+	}
+
+	r2 := responses[1].(map[string]interface{})
+	if r2["status"] != float64(424) {
+		t.Errorf("Expected r2 status 424 (not executed due to fatal error), got %v", r2["status"])
+	}
+}
+
+func TestJSONBatch_AtomicityGroup_AllSucceed(t *testing.T) {
+	handler, _, _ := setupBatchTestHandler(t)
+
+	body := `{"requests":[
+{"id":"r1","method":"POST","url":"/BatchTestProducts",
+ "headers":{"Content-Type":"application/json"},
+ "body":{"Name":"Atomic1","Price":1.0},
+ "atomicityGroup":"g1"},
+{"id":"r2","method":"POST","url":"/BatchTestProducts",
+ "headers":{"Content-Type":"application/json"},
+ "body":{"Name":"Atomic2","Price":2.0},
+ "atomicityGroup":"g1"}
+]}`
+	req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.HandleBatch(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("Failed to decode: %v", err)
+	}
+
+	responses := result["responses"].([]interface{})
+	if len(responses) != 2 {
+		t.Fatalf("Expected 2 responses, got %d", len(responses))
+	}
+
+	for _, resp := range responses {
+		r := resp.(map[string]interface{})
+		if r["status"] != float64(201) {
+			t.Errorf("Expected status 201, got %v for id=%v", r["status"], r["id"])
+		}
+	}
+}
+
+func TestJSONBatch_AtomicityGroup_RollbackOnFailure(t *testing.T) {
+	handler, db, _ := setupBatchTestHandler(t)
+
+	// Start with one product.
+	db.Create(&BatchTestProduct{ID: 50, Name: "Existing", Price: 1.0})
+
+	// r1 succeeds; r2 tries to delete a non-existing entity and fails.
+	// Both are in the same atomicityGroup, so both should end up as 4xx.
+	body := `{"requests":[
+{"id":"r1","method":"POST","url":"/BatchTestProducts",
+ "headers":{"Content-Type":"application/json"},
+ "body":{"Name":"ShouldRollback","Price":99.0},
+ "atomicityGroup":"g1"},
+{"id":"r2","method":"DELETE","url":"/BatchTestProducts(99999)",
+ "atomicityGroup":"g1"}
+]}`
+	req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.HandleBatch(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("Failed to decode: %v", err)
+	}
+
+	responses := result["responses"].([]interface{})
+	if len(responses) != 2 {
+		t.Fatalf("Expected 2 responses, got %d", len(responses))
+	}
+
+	// r1 was retroactively failed; r2 was the direct failure.
+	r1 := responses[0].(map[string]interface{})
+	r2 := responses[1].(map[string]interface{})
+
+	if r1["status"] != float64(424) {
+		t.Errorf("Expected r1 status 424 (rolled back), got %v", r1["status"])
+	}
+	if r2["status"] == float64(200) || r2["status"] == float64(201) {
+		t.Errorf("Expected r2 to fail, got status %v", r2["status"])
+	}
+
+	// Verify the product was NOT persisted (transaction rolled back).
+	var count int64
+	db.Model(&BatchTestProduct{}).Where("name = ?", "ShouldRollback").Count(&count)
+	if count != 0 {
+		t.Errorf("Expected ShouldRollback product to be rolled back, but it exists in the database")
+	}
+}
+
+func TestJSONBatch_MaxBatchSize(t *testing.T) {
+	handler, _, _ := setupBatchTestHandler(t)
+	// The max batch size for the test handler is 100.
+	// Build a request with 101 items.
+	reqs := make([]string, 101)
+	for i := range reqs {
+		reqs[i] = fmt.Sprintf(`{"id":"r%d","method":"GET","url":"/BatchTestProducts"}`, i)
+	}
+	body := `{"requests":[` + strings.Join(reqs, ",") + `]}`
+
+	req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.HandleBatch(w, req)
+
+	if w.Code != http.StatusRequestEntityTooLarge {
+		t.Errorf("Expected 413, got %d. Body: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestJSONBatch_IDEchoedInResponse(t *testing.T) {
+	handler, db, _ := setupBatchTestHandler(t)
+
+	db.Create(&BatchTestProduct{ID: 60, Name: "IDEcho", Price: 1.0})
+
+	body := `{"requests":[
+{"id":"uniqueID-123","method":"GET","url":"/BatchTestProducts(60)"}
+]}`
+	req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.HandleBatch(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("Failed to decode: %v", err)
+	}
+
+	responses := result["responses"].([]interface{})
+	r0 := responses[0].(map[string]interface{})
+	if r0["id"] != "uniqueID-123" {
+		t.Errorf("Expected echoed id=uniqueID-123, got %v", r0["id"])
 	}
 }
