@@ -336,28 +336,45 @@ func JSONBatch() *framework.TestSuite {
 	)
 
 	// ── Version gating: JSON batch MUST NOT apply under OData-MaxVersion: 4.0 ─
+	// Per the custom-agent guidelines for v4_01/ tests, this test MUST include:
+	//   1. A negative assertion (4.0 client is rejected).
+	//   2. A positive assertion (4.01 client is accepted).
 
 	suite.AddTest(
 		"test_json_batch_rejected_for_odata_40",
-		"JSON batch is rejected when client negotiates OData-MaxVersion: 4.0",
+		"JSON batch is rejected when client negotiates OData-MaxVersion: 4.0 but accepted for 4.01",
 		func(ctx *framework.TestContext) error {
-			body, _ := json.Marshal(makeRequests(map[string]interface{}{
+			batchBody, _ := json.Marshal(makeRequests(map[string]interface{}{
 				"id":     "r1",
 				"method": "GET",
 				"url":    "Products",
 			}))
 
-			resp, err := ctx.POSTRaw("/$batch", body, "application/json",
+			// Negative assertion: JSON batch with OData-MaxVersion: 4.0 must be rejected.
+			resp40, err := ctx.POSTRaw("/$batch", batchBody, "application/json",
 				framework.Header{Key: "OData-MaxVersion", Value: "4.0"},
 			)
 			if err != nil {
 				return err
 			}
-			// JSON batch is a 4.01-only feature; a 4.0 client should get 4xx.
-			if resp.StatusCode < 400 {
+			if resp40.StatusCode < 400 {
 				return framework.NewError(fmt.Sprintf(
 					"expected a 4xx error when using JSON batch with OData-MaxVersion: 4.0, got %d",
-					resp.StatusCode,
+					resp40.StatusCode,
+				))
+			}
+
+			// Positive assertion: JSON batch with OData-MaxVersion: 4.01 must be accepted.
+			resp401, err := ctx.POSTRaw("/$batch", batchBody, "application/json",
+				framework.Header{Key: "OData-MaxVersion", Value: "4.01"},
+			)
+			if err != nil {
+				return err
+			}
+			if resp401.StatusCode != 200 {
+				return framework.NewError(fmt.Sprintf(
+					"expected 200 when using JSON batch with OData-MaxVersion: 4.01, got %d",
+					resp401.StatusCode,
 				))
 			}
 			return nil
