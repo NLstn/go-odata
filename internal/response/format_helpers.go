@@ -378,11 +378,6 @@ func BuildDeltaLink(r *http.Request, deltaToken string) string {
 	return baseURL + deltaURL.Path
 }
 
-func buildContextURL(r *http.Request, entitySetName string) string {
-	baseURL := buildBaseURL(r)
-	return baseURL + "/$metadata#" + entitySetName
-}
-
 // buildContextURLWithSelect builds an OData context URL with optional select properties.
 // When selectedProps is non-empty, the context URL includes the property list in parentheses:
 //
