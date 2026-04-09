@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/nlstn/go-odata/internal/actions"
@@ -88,6 +89,53 @@ func TestHandleActionOrFunction_FunctionMetadataNone(t *testing.T) {
 	}
 	if payload["value"] != "ok" {
 		t.Fatalf("value = %v, want %q", payload["value"], "ok")
+	}
+}
+
+func TestHandleActionOrFunction_HeadFunction_ReturnsStatusAndHeadersNoBody(t *testing.T) {
+	handler := operations.NewHandler(
+		nil,
+		map[string][]*actions.FunctionDefinition{
+			"GetStatus": {
+				{
+					Name: "GetStatus",
+					Handler: func(http.ResponseWriter, *http.Request, interface{}, map[string]interface{}) (interface{}, error) {
+						return "ok", nil
+					},
+				},
+			},
+		},
+		nil,
+		map[string]*metadata.EntityMetadata{},
+		"",
+		noopLogger{},
+	)
+
+	req := httptest.NewRequest(http.MethodHead, "/GetStatus()", nil)
+	rec := httptest.NewRecorder()
+
+	handler.HandleActionOrFunction(rec, req, "GetStatus", "", false, "")
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if got := rec.Header().Get("Content-Type"); !strings.Contains(got, "application/json") {
+		t.Fatalf("Content-Type = %q, want application/json prefix", got)
+	}
+	if rec.Body.Len() != 0 {
+		t.Fatalf("expected empty body for HEAD request, got %d bytes: %s", rec.Body.Len(), rec.Body.String())
+	}
+}
+
+func TestHandleActionOrFunction_HeadFunction_FunctionNotFound(t *testing.T) {
+	handler := newBaseHandler()
+	req := httptest.NewRequest(http.MethodHead, "/UnknownFunction()", nil)
+	rec := httptest.NewRecorder()
+
+	handler.HandleActionOrFunction(rec, req, "UnknownFunction", "", false, "")
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusNotFound)
 	}
 }
 

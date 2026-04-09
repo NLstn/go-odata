@@ -113,6 +113,30 @@ func TestIsValidAsyncJobID(t *testing.T) {
 	}
 }
 
+func TestRouter_HeadUnboundFunction_InvokesActionInvoker(t *testing.T) {
+	invoked := false
+	var invokedMethod string
+	invoker := func(w http.ResponseWriter, req *http.Request, name, key string, isBound bool, entitySet string) {
+		invoked = true
+		invokedMethod = req.Method
+	}
+
+	r := newTestRouter(nil, nil, map[string][]*actions.FunctionDefinition{
+		"TopProducts": nil,
+	}, invoker)
+
+	req := httptest.NewRequest(http.MethodHead, "/TopProducts()", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if !invoked {
+		t.Fatal("expected action invoker to be called for HEAD request on unbound function")
+	}
+	if invokedMethod != http.MethodHead {
+		t.Fatalf("expected method HEAD forwarded to invoker, got %q", invokedMethod)
+	}
+}
+
 func TestRouter_StreamPropertyRefRejected(t *testing.T) {
 	handler := newStubEntityHandler()
 	handler.streamProps["Photo"] = true

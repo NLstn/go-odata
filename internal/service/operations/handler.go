@@ -124,7 +124,7 @@ func (h *Handler) HandleActionOrFunction(w http.ResponseWriter, r *http.Request,
 			h.writeHandlerError(w, r, err, "Action failed")
 			return
 		}
-	case http.MethodGet:
+	case http.MethodGet, http.MethodHead:
 		functionDef, params, invErr := resolveInvocation(r, name, "Function", h.functions, actions.ResolveFunctionOverload, isBound, entitySet)
 		if invErr != nil {
 			h.writeError(w, r, invErr)
