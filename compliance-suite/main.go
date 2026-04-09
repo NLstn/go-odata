@@ -759,6 +759,11 @@ func main() {
 			Suite:   v4_01.HeaderMaxVersion,
 		})
 		testSuites = append(testSuites, TestSuiteInfo{
+			Name:    "11.2.1_key_as_segments",
+			Version: "4.01",
+			Suite:   v4_01.KeyAsSegments,
+		})
+		testSuites = append(testSuites, TestSuiteInfo{
 			Name:    "11.2.5.9_nested_expand_options",
 			Version: "4.01",
 			Suite:   v4_01.NestedExpandOptions,

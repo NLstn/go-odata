@@ -49,6 +49,9 @@ func (v Version) Supports(feature string) bool {
 	case "case-insensitive-functions":
 		// Case-insensitive string functions added in 4.01
 		return v.Major > 4 || (v.Major == 4 && v.Minor >= 1)
+	case "key-as-segments":
+		// Key-as-segments URL convention added in OData 4.01
+		return v.Major > 4 || (v.Major == 4 && v.Minor >= 1)
 	default:
 		return false
 	}
