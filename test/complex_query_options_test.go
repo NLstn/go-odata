@@ -147,3 +147,112 @@ func TestOrderByComplexNestedProperty(t *testing.T) {
 		t.Fatalf("expected first result to have ID 1, got %d", int(firstID))
 	}
 }
+
+// TestFilterByComplexTypeEqNull tests that filtering by a complex type property eq null returns HTTP 200
+// and only matches products where the complex property is null.
+func TestFilterByComplexTypeEqNull(t *testing.T) {
+	service, db := setupComplexQueryService(t)
+	products := []ComplexQueryProduct{
+		{
+			ID:   10,
+			Name: "WithAddress",
+			ShippingAddress: &ComplexQueryAddress{
+				Street: "1 Main St",
+				City:   "Seattle",
+			},
+		},
+		{
+			ID:              11,
+			Name:            "NoAddress",
+			ShippingAddress: nil,
+		},
+	}
+	if err := db.Create(&products).Error; err != nil {
+		t.Fatalf("failed to seed products: %v", err)
+	}
+
+	filter := url.QueryEscape("ShippingAddress eq null")
+	req := httptest.NewRequest(http.MethodGet, "/ComplexQueryProducts?%24filter="+filter, nil)
+	w := httptest.NewRecorder()
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var body struct {
+		Value []map[string]interface{} `json:"value"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+
+	if len(body.Value) != 1 {
+		t.Fatalf("expected 1 result (NoAddress product), got %d", len(body.Value))
+	}
+	if name, ok := body.Value[0]["Name"].(string); !ok || name != "NoAddress" {
+		t.Fatalf("expected Name='NoAddress', got %v", body.Value[0]["Name"])
+	}
+}
+
+// TestFilterByComplexTypeNeNull tests that filtering by a complex type property ne null returns HTTP 200
+// and only matches products where the complex property is non-null.
+func TestFilterByComplexTypeNeNull(t *testing.T) {
+	service, db := setupComplexQueryService(t)
+	products := []ComplexQueryProduct{
+		{
+			ID:   20,
+			Name: "WithAddress",
+			ShippingAddress: &ComplexQueryAddress{
+				Street: "1 Main St",
+				City:   "Seattle",
+			},
+		},
+		{
+			ID:              21,
+			Name:            "NoAddress",
+			ShippingAddress: nil,
+		},
+	}
+	if err := db.Create(&products).Error; err != nil {
+		t.Fatalf("failed to seed products: %v", err)
+	}
+
+	filter := url.QueryEscape("ShippingAddress ne null")
+	req := httptest.NewRequest(http.MethodGet, "/ComplexQueryProducts?%24filter="+filter, nil)
+	w := httptest.NewRecorder()
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var body struct {
+		Value []map[string]interface{} `json:"value"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+
+	if len(body.Value) != 1 {
+		t.Fatalf("expected 1 result (WithAddress product), got %d", len(body.Value))
+	}
+	if name, ok := body.Value[0]["Name"].(string); !ok || name != "WithAddress" {
+		t.Fatalf("expected Name='WithAddress', got %v", body.Value[0]["Name"])
+	}
+}
+
+// TestFilterByComplexTypeGtReturns400 tests that gt/lt operators on complex type properties return 400.
+func TestFilterByComplexTypeGtReturns400(t *testing.T) {
+	service, db := setupComplexQueryService(t)
+	seedComplexQueryProducts(t, db)
+
+	filter := url.QueryEscape("ShippingAddress gt null")
+	req := httptest.NewRequest(http.MethodGet, "/ComplexQueryProducts?%24filter="+filter, nil)
+	w := httptest.NewRecorder()
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400 for complex type gt operator, got %d: %s", w.Code, w.Body.String())
+	}
+}

@@ -718,7 +718,16 @@ func (h *EntityHandler) validateFilterForComplexTypes(filter *query.FilterExpres
 			return fmt.Errorf("filtering by navigation property '%s' requires a property path (e.g., '%s/PropertyName')", filter.Property, filter.Property)
 		}
 		if prop.IsComplexType {
-			return fmt.Errorf("filtering by complex type property '%s' is not supported", filter.Property)
+			// Per OData v4.01 spec, eq and ne may be used with complex-typed operands.
+			// Only null semantics are supported: eq null checks all embedded fields are null,
+			// ne null checks at least one embedded field is non-null.
+			if filter.Operator != query.OpEqual && filter.Operator != query.OpNotEqual {
+				return fmt.Errorf("complex type property '%s' can only be used with eq or ne operators in $filter", filter.Property)
+			}
+			if filter.Value != nil {
+				return fmt.Errorf("complex type property '%s' can only be compared to null using eq or ne", filter.Property)
+			}
+			// Allow null comparison - SQL generation expands to per-field null checks
 		}
 	}
 
