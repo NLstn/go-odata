@@ -530,10 +530,18 @@ func TestRouter_FunctionCompositionAfterNavigation(t *testing.T) {
 		handleBatch:           func(http.ResponseWriter, *http.Request) {},
 		actions:               make(map[string][]*actions.ActionDefinition),
 		functions:             map[string][]*actions.FunctionDefinition{"GetAveragePrice": nil},
-		actionInvoker: func(_ http.ResponseWriter, _ *http.Request, name, key string, isBound bool, entitySet string) {
+		actionInvoker: func(_ http.ResponseWriter, req *http.Request, name, key string, isBound bool, entitySet string) {
 			invoked = true
 			if name != "GetAveragePrice" || key != "" || !isBound || entitySet != "Products" {
 				t.Fatalf("unexpected invocation parameters: name=%s key=%s bound=%v set=%s", name, key, isBound, entitySet)
+			}
+			navCtx := actions.NavigationBindingContextFromRequest(req)
+			if navCtx == nil {
+				t.Fatalf("expected navigation binding context to be set")
+			}
+			if navCtx.ParentEntitySet != "Categories" || navCtx.ParentKey != "1" || navCtx.NavigationProperty != "Products" {
+				t.Fatalf("unexpected navigation context: parentSet=%s parentKey=%s nav=%s",
+					navCtx.ParentEntitySet, navCtx.ParentKey, navCtx.NavigationProperty)
 			}
 		},
 	}
@@ -571,10 +579,18 @@ func TestRouter_FunctionCompositionWithRenamedNavigation(t *testing.T) {
 		handleBatch:           func(http.ResponseWriter, *http.Request) {},
 		actions:               make(map[string][]*actions.ActionDefinition),
 		functions:             map[string][]*actions.FunctionDefinition{"GetAveragePrice": nil},
-		actionInvoker: func(_ http.ResponseWriter, _ *http.Request, name, key string, isBound bool, entitySet string) {
+		actionInvoker: func(_ http.ResponseWriter, req *http.Request, name, key string, isBound bool, entitySet string) {
 			invoked = true
 			if name != "GetAveragePrice" || key != "" || !isBound || entitySet != "Products" {
 				t.Fatalf("unexpected invocation parameters: name=%s key=%s bound=%v set=%s", name, key, isBound, entitySet)
+			}
+			navCtx := actions.NavigationBindingContextFromRequest(req)
+			if navCtx == nil {
+				t.Fatalf("expected navigation binding context to be set")
+			}
+			if navCtx.ParentEntitySet != "Categories" || navCtx.ParentKey != "1" || navCtx.NavigationProperty != "FeaturedProducts" {
+				t.Fatalf("unexpected navigation context: parentSet=%s parentKey=%s nav=%s",
+					navCtx.ParentEntitySet, navCtx.ParentKey, navCtx.NavigationProperty)
 			}
 		},
 	}
