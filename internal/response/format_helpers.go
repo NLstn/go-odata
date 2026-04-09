@@ -383,6 +383,38 @@ func buildContextURL(r *http.Request, entitySetName string) string {
 	return baseURL + "/$metadata#" + entitySetName
 }
 
+// buildContextURLWithSelect builds an OData context URL with optional select properties.
+// When selectedProps is non-empty, the context URL includes the property list in parentheses:
+//
+//	#EntitySet(prop1,prop2)
+//
+// When empty, returns the plain collection context URL:
+//
+//	#EntitySet
+func buildContextURLWithSelect(r *http.Request, entitySetName string, selectedProps []string) string {
+	baseURL := buildBaseURL(r)
+	if len(selectedProps) == 0 {
+		return baseURL + "/$metadata#" + entitySetName
+	}
+	return baseURL + "/$metadata#" + entitySetName + "(" + strings.Join(selectedProps, ",") + ")"
+}
+
+// BuildEntityContextURL builds an OData context URL for a single entity with optional select properties.
+// When selectedProps is non-empty, the context URL includes the property list:
+//
+//	#EntitySet(prop1,prop2)/$entity
+//
+// When empty, returns the plain entity context URL:
+//
+//	#EntitySet/$entity
+func BuildEntityContextURL(r *http.Request, entitySetName string, selectedProps []string) string {
+	baseURL := buildBaseURL(r)
+	if len(selectedProps) == 0 {
+		return baseURL + "/$metadata#" + entitySetName + "/$entity"
+	}
+	return baseURL + "/$metadata#" + entitySetName + "(" + strings.Join(selectedProps, ",") + ")/$entity"
+}
+
 func buildDeltaContextURL(r *http.Request, entitySetName string) string {
 	baseURL := buildBaseURL(r)
 	return baseURL + "/$metadata#" + entitySetName + "/$delta"

@@ -56,8 +56,17 @@ func (h *EntityHandler) collectionResponseWriter(w http.ResponseWriter, r *http.
 
 		selectedNavProps := selectedNavigationProps(queryOptions.Select, h.metadata)
 
+		// Compute the context URL properties for the response.
+		// $apply transformations produce a new output shape (e.g. grouped/aggregated properties).
+		// $select narrows the shape of the base entity set.
+		// Both cases require the context URL to list the output properties in parentheses.
+		contextProps := query.ContextPropertiesFromApply(queryOptions.Apply)
+		if len(contextProps) == 0 {
+			contextProps = queryOptions.Select
+		}
+
 		metadataProvider := h.getMetadataAdapter()
-		if err := response.WriteODataCollectionWithNavigationAndDelta(w, r, h.metadata.EntitySetName, results, totalCount, nextLink, deltaLink, metadataProvider, queryOptions.Expand, selectedNavProps, h.metadata); err != nil {
+		if err := response.WriteODataCollectionWithNavigationAndSelect(w, r, h.metadata.EntitySetName, results, totalCount, nextLink, deltaLink, metadataProvider, queryOptions.Expand, selectedNavProps, h.metadata, contextProps); err != nil {
 			h.logger.Error("Error writing OData response", "error", err)
 		}
 

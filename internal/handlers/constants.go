@@ -48,7 +48,6 @@ const (
 
 // OData format constants
 const (
-	ODataContextFormat   = "%s/$metadata#%s/$entity"
 	ODataEntityKeyFormat = "%s(%s)"
 	ODataContextProperty = "@odata.context"
 	EntityKeyNotExistFmt = "The entity with key '%s' does not exist"
