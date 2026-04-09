@@ -167,20 +167,36 @@ func TestComplexTypeDirectAccess(t *testing.T) {
 	}
 }
 
-// TestComplexTypeInFilter tests that filtering by complex types returns 400
+// TestComplexTypeInFilter tests that filtering by complex types with eq null is allowed
 func TestComplexTypeInFilter(t *testing.T) {
 	db := setupTestDBForSelectNav(t)
 	service := setupServiceWithComplexTypes(db, t)
 
 	createProductWithComplexType(db, t)
 
-	// Test: Filtering by complex type should return 400
+	// Test: Filtering by complex type with eq null should return 200
 	req := httptest.NewRequest(http.MethodGet, "/TestProductWithComplexes?$filter=Address%20eq%20null", nil)
 	w := httptest.NewRecorder()
 	service.ServeHTTP(w, req)
 
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("Expected status 400 for complex type filter, got %d. Body: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200 for complex type null filter, got %d. Body: %s", w.Code, w.Body.String())
+		return
+	}
+
+	// The seeded product has a non-null Address, so result should be an empty collection
+	var response map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Errorf("Response is not valid JSON: %v", err)
+		return
+	}
+	values, ok := response["value"].([]interface{})
+	if !ok {
+		t.Error("Response missing 'value' array")
+		return
+	}
+	if len(values) != 0 {
+		t.Errorf("Expected 0 results (product has non-null Address), got %d", len(values))
 	}
 }
 

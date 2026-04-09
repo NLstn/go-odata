@@ -2,6 +2,7 @@ package query
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/nlstn/go-odata/internal/metadata"
@@ -627,6 +628,53 @@ func buildComparisonCondition(dialect string, filter *FilterExpression, entityMe
 	return buildComparisonConditionWithDB(nil, dialect, filter, entityMetadata)
 }
 
+// buildComplexTypeNullComparison builds SQL for a complex type eq null or ne null comparison.
+// Per OData v4.01 spec, eq null is true when all embedded scalar columns are null,
+// and ne null is true when at least one embedded scalar column is non-null.
+// Conditions are sorted deterministically by column name.
+func buildComplexTypeNullComparison(dialect string, op FilterOperator, complexProp *metadata.PropertyMetadata) (string, []interface{}) {
+	if len(complexProp.ComplexTypeFields) == 0 {
+		return "", nil
+	}
+
+	prefix := complexProp.EmbeddedPrefix
+	seen := make(map[string]bool)
+	colNames := make([]string, 0, len(complexProp.ComplexTypeFields))
+
+	for _, field := range complexProp.ComplexTypeFields {
+		if field.IsNavigationProp || field.IsComplexType {
+			continue
+		}
+		colName := prefix + field.ColumnName
+		if seen[colName] {
+			continue
+		}
+		seen[colName] = true
+		colNames = append(colNames, colName)
+	}
+
+	if len(colNames) == 0 {
+		return "", nil
+	}
+
+	sort.Strings(colNames)
+
+	conditions := make([]string, len(colNames))
+	for i, colName := range colNames {
+		quotedCol := quoteIdent(dialect, colName)
+		if op == OpEqual {
+			conditions[i] = fmt.Sprintf("%s IS NULL", quotedCol)
+		} else {
+			conditions[i] = fmt.Sprintf("%s IS NOT NULL", quotedCol)
+		}
+	}
+
+	if op == OpEqual {
+		return fmt.Sprintf("(%s)", strings.Join(conditions, " AND ")), []interface{}{}
+	}
+	return fmt.Sprintf("(%s)", strings.Join(conditions, " OR ")), []interface{}{}
+}
+
 func buildComparisonConditionWithDB(db *gorm.DB, dialect string, filter *FilterExpression, entityMetadata *metadata.EntityMetadata) (string, []interface{}) {
 	// Handle lambda operators (any, all)
 	if filter.Operator == OpAny || filter.Operator == OpAll {
@@ -636,6 +684,14 @@ func buildComparisonConditionWithDB(db *gorm.DB, dialect string, filter *FilterE
 	// Handle function comparisons (e.g., tolower(Name) eq 'john')
 	if filter.Left != nil && filter.Left.Operator != "" {
 		return buildFunctionComparison(dialect, filter, entityMetadata)
+	}
+
+	// Handle complex type eq null / ne null comparisons
+	if filter.Property != "" && entityMetadata != nil && filter.Value == nil &&
+		(filter.Operator == OpEqual || filter.Operator == OpNotEqual) {
+		if complexProp := entityMetadata.FindComplexTypeProperty(filter.Property); complexProp != nil {
+			return buildComplexTypeNullComparison(dialect, filter.Operator, complexProp)
+		}
 	}
 
 	// Resolve the column name for the left side of the comparison

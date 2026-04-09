@@ -69,5 +69,74 @@ func ComplexFilter() *framework.TestSuite {
 		},
 	)
 
+	suite.AddTest(
+		"test_filter_complex_type_eq_null",
+		"Filter by complex type eq null returns 200 and only null-addressed products",
+		func(ctx *framework.TestContext) error {
+			resp, err := ctx.GET("/Products?$filter=ShippingAddress eq null")
+			if err != nil {
+				return err
+			}
+
+			if err := ctx.AssertStatusCode(resp, 200); err != nil {
+				return err
+			}
+
+			items, err := ctx.ParseEntityCollection(resp)
+			if err != nil {
+				return fmt.Errorf("failed to parse response: %w", err)
+			}
+
+			return ctx.AssertAllEntitiesSatisfy(items, "ShippingAddress eq null", func(entity map[string]interface{}) (bool, string) {
+				addressRaw, ok := entity["ShippingAddress"]
+				if !ok || addressRaw == nil {
+					return true, ""
+				}
+				return false, fmt.Sprintf("expected ShippingAddress to be null, got %v", addressRaw)
+			})
+		},
+	)
+
+	suite.AddTest(
+		"test_filter_complex_type_ne_null",
+		"Filter by complex type ne null returns 200 and only non-null-addressed products",
+		func(ctx *framework.TestContext) error {
+			resp, err := ctx.GET("/Products?$filter=ShippingAddress ne null")
+			if err != nil {
+				return err
+			}
+
+			if err := ctx.AssertStatusCode(resp, 200); err != nil {
+				return err
+			}
+
+			items, err := ctx.ParseEntityCollection(resp)
+			if err != nil {
+				return fmt.Errorf("failed to parse response: %w", err)
+			}
+
+			return ctx.AssertAllEntitiesSatisfy(items, "ShippingAddress ne null", func(entity map[string]interface{}) (bool, string) {
+				addressRaw, ok := entity["ShippingAddress"]
+				if !ok || addressRaw == nil {
+					return false, "expected ShippingAddress to be non-null"
+				}
+				return true, ""
+			})
+		},
+	)
+
+	suite.AddTest(
+		"test_filter_complex_type_gt_returns_400",
+		"Filtering by complex type with gt operator returns 400",
+		func(ctx *framework.TestContext) error {
+			resp, err := ctx.GET("/Products?$filter=ShippingAddress gt null")
+			if err != nil {
+				return err
+			}
+
+			return ctx.AssertStatusCode(resp, 400)
+		},
+	)
+
 	return suite
 }
