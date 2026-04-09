@@ -152,7 +152,7 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	switch req.Method {
-	case http.MethodGet:
+	case http.MethodGet, http.MethodHead:
 		if strings.Contains(path, "(") && strings.Contains(path, ")") {
 			pathWithoutParams := path
 			if idx := strings.Index(path, "("); idx != -1 {
