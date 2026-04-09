@@ -303,6 +303,23 @@ func (r *Router) routeRequest(w http.ResponseWriter, req *http.Request, handler 
 	hasKey := components.EntityKey != "" || len(components.EntityKeyMap) > 0
 	isSingleton := handler.IsSingleton()
 
+	// OData 4.01 key-as-segments convention: if no parenthetical key was parsed
+	// but there is a segment after the entity set that is not a known property,
+	// treat it as the entity key (e.g., /Products/1 → key "1").
+	if !hasKey && !isSingleton && components.NavigationProperty != "" {
+		ver := version.GetVersion(req.Context())
+		if ver.Supports("key-as-segments") {
+			potentialKey := components.NavigationProperty
+			if !handler.IsNavigationProperty(potentialKey) &&
+				!handler.IsStructuralProperty(potentialKey) &&
+				!handler.IsStreamProperty(potentialKey) &&
+				!handler.IsComplexTypeProperty(potentialKey) {
+				components = resolveKeyAsSegment(components)
+				hasKey = true
+			}
+		}
+	}
+
 	if components.IsCount {
 		if hasKey && components.NavigationProperty != "" {
 			keyString := r.getKeyString(components)
@@ -534,4 +551,27 @@ func (r *Router) getNavigationTargetEntitySet(handler EntityHandler, navigationP
 	}
 
 	return ""
+}
+
+// resolveKeyAsSegment reinterprets the first property segment as an entity key,
+// implementing the OData 4.01 key-as-segments URL convention.
+// For example, /Products/1 → EntitySet="Products", EntityKey="1".
+// If additional property segments remain after the key, they are preserved.
+func resolveKeyAsSegment(components *response.ODataURLComponents) *response.ODataURLComponents {
+	newComponents := *components
+	newComponents.EntityKey = components.NavigationProperty
+	newComponents.EntityKeyMap = make(map[string]string)
+
+	if len(components.PropertySegments) > 1 {
+		remainingSegments := components.PropertySegments[1:]
+		newComponents.NavigationProperty = remainingSegments[0]
+		newComponents.PropertySegments = remainingSegments
+		newComponents.PropertyPath = strings.Join(remainingSegments, "/")
+	} else {
+		newComponents.NavigationProperty = ""
+		newComponents.PropertySegments = nil
+		newComponents.PropertyPath = ""
+	}
+
+	return &newComponents
 }
