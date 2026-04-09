@@ -233,6 +233,60 @@ func TestRouter_KeyAsSegments_NotActive40(t *testing.T) {
 	}
 }
 
+// TestRouter_KeyAsSegments_CollectionFunctionNotTreatedAsKey verifies that
+// /Products/GetAveragePrice() invokes the collection-bound function in 4.01 mode
+// instead of interpreting "GetAveragePrice()" as a key segment.
+func TestRouter_KeyAsSegments_CollectionFunctionNotTreatedAsKey(t *testing.T) {
+	handler := newStubEntityHandler()
+	invoked := false
+	r := newTestRouter(handler, nil, map[string][]*actions.FunctionDefinition{"GetAveragePrice": nil},
+		func(_ http.ResponseWriter, _ *http.Request, name, key string, isBound bool, entitySet string) {
+			invoked = true
+			if name != "GetAveragePrice" || key != "" || !isBound || entitySet != "Products" {
+				t.Fatalf("unexpected invocation parameters: name=%s key=%s bound=%v set=%s", name, key, isBound, entitySet)
+			}
+		})
+
+	req := httptest.NewRequest(http.MethodGet, "/Products/GetAveragePrice()", nil)
+	req.Header.Set("OData-MaxVersion", "4.01")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if !invoked {
+		t.Fatalf("expected collection-bound function invocation")
+	}
+	if len(handler.calls) != 0 {
+		t.Fatalf("expected no entity handler calls, got %v", handler.calls)
+	}
+}
+
+// TestRouter_KeyAsSegments_CollectionActionNotTreatedAsKey verifies that
+// /Products/MarkAllAsReviewed invokes the collection-bound action in 4.01 mode
+// instead of interpreting "MarkAllAsReviewed" as a key segment.
+func TestRouter_KeyAsSegments_CollectionActionNotTreatedAsKey(t *testing.T) {
+	handler := newStubEntityHandler()
+	invoked := false
+	r := newTestRouter(handler, map[string][]*actions.ActionDefinition{"MarkAllAsReviewed": nil}, nil,
+		func(_ http.ResponseWriter, _ *http.Request, name, key string, isBound bool, entitySet string) {
+			invoked = true
+			if name != "MarkAllAsReviewed" || key != "" || !isBound || entitySet != "Products" {
+				t.Fatalf("unexpected invocation parameters: name=%s key=%s bound=%v set=%s", name, key, isBound, entitySet)
+			}
+		})
+
+	req := httptest.NewRequest(http.MethodPost, "/Products/MarkAllAsReviewed", nil)
+	req.Header.Set("OData-MaxVersion", "4.01")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if !invoked {
+		t.Fatalf("expected collection-bound action invocation")
+	}
+	if len(handler.calls) != 0 {
+		t.Fatalf("expected no entity handler calls, got %v", handler.calls)
+	}
+}
+
 // TestRouter_KeyAsSegments_KnownPropertyNotTreatedAsKey verifies that a segment matching a
 // navigation property name is never treated as a key (even in 4.01 mode).
 func TestRouter_KeyAsSegments_KnownPropertyNotTreatedAsKey(t *testing.T) {

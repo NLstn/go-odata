@@ -310,10 +310,15 @@ func (r *Router) routeRequest(w http.ResponseWriter, req *http.Request, handler 
 		ver := version.GetVersion(req.Context())
 		if ver.Supports("key-as-segments") {
 			potentialKey := components.NavigationProperty
+			operationName := potentialKey
+			if idx := strings.Index(operationName, "("); idx != -1 {
+				operationName = operationName[:idx]
+			}
 			if !handler.IsNavigationProperty(potentialKey) &&
 				!handler.IsStructuralProperty(potentialKey) &&
 				!handler.IsStreamProperty(potentialKey) &&
-				!handler.IsComplexTypeProperty(potentialKey) {
+				!handler.IsComplexTypeProperty(potentialKey) &&
+				!r.isActionOrFunction(operationName) {
 				components = resolveKeyAsSegment(components)
 				hasKey = true
 			}
