@@ -221,3 +221,35 @@ func ParseFilter(filterStr string) (*FilterExpression, error) {
 func GetQueryOptionsFromRequest(r *http.Request) *QueryOptions {
 	return actions.QueryOptionsFromRequest(r)
 }
+
+// NavigationBindingContext contains context about the parent navigation path
+// when a bound action or function is invoked through navigation composition
+// (e.g. /Categories(1)/Products/GetAveragePrice()).
+//
+// Use GetNavigationBindingContextFromRequest inside an ActionHandler or
+// FunctionHandler to access this context.
+type NavigationBindingContext = actions.NavigationBindingContext
+
+// GetNavigationBindingContextFromRequest retrieves the parent navigation
+// context from the HTTP request. Call this inside an ActionHandler or
+// FunctionHandler to determine the parent entity set, parent key, and
+// navigation property when the operation was invoked via navigation
+// composition.
+//
+// Returns nil when the operation was not invoked through navigation
+// composition (e.g. a direct call such as /Products/GetAveragePrice()).
+//
+// Example:
+//
+//	func myFunctionHandler(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) (interface{}, error) {
+//	    navCtx := odata.GetNavigationBindingContextFromRequest(r)
+//	    if navCtx != nil {
+//	        // invoked via navigation: e.g. /Categories(1)/Products/GetAveragePrice()
+//	        log.Printf("parent entity set: %s, key: %s, nav: %s",
+//	            navCtx.ParentEntitySet, navCtx.ParentKey, navCtx.NavigationProperty)
+//	    }
+//	    // ... implement function logic
+//	}
+func GetNavigationBindingContextFromRequest(r *http.Request) *NavigationBindingContext {
+	return actions.NavigationBindingContextFromRequest(r)
+}

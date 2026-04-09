@@ -412,9 +412,15 @@ func (r *Router) handlePropertyRequest(w http.ResponseWriter, req *http.Request,
 				return
 			}
 
-			// Update request URL to point to the navigated collection with the operation
-			// e.g., change Categories(1)/Products/GetAveragePrice() to Products/GetAveragePrice()
-			// but we need to ensure the operation is bound to the navigated collection
+			// Inject parent binding context so that action/function handlers can
+			// access the parent entity set, key, and navigation property that were
+			// used to reach the bound target (e.g. Categories(1)/Products/...).
+			req = actions.WithNavigationBindingContext(req, &actions.NavigationBindingContext{
+				ParentEntitySet:    components.EntitySet,
+				ParentKey:          keyString,
+				NavigationProperty: firstSegment,
+			})
+
 			r.actionInvoker(w, req, lastOperationName, "", true, targetEntitySet)
 			return
 		}
