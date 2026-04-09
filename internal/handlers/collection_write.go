@@ -158,7 +158,7 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 
 	if pref.ShouldReturnContent(true) {
 		SetODataHeader(w, HeaderODataEntityId, location)
-		h.writeEntityResponseWithETag(w, r, entity, "", http.StatusCreated, nil)
+		h.writeEntityResponseWithETag(w, r, entity, "", http.StatusCreated, nil, nil)
 	} else {
 		// Per OData v4.01 spec, POST with return=minimal should return 201 Created with empty body
 		SetODataHeader(w, HeaderODataEntityId, location)
@@ -606,7 +606,7 @@ func (h *EntityHandler) handlePostEntityOverwrite(w http.ResponseWriter, r *http
 
 	if pref.ShouldReturnContent(true) {
 		SetODataHeader(w, HeaderODataEntityId, location)
-		h.writeEntityResponseWithETag(w, r, result, "", http.StatusCreated, nil)
+		h.writeEntityResponseWithETag(w, r, result, "", http.StatusCreated, nil, nil)
 	} else {
 		// Per OData v4.01 spec, POST with return=minimal should return 201 Created with empty body
 		SetODataHeader(w, HeaderODataEntityId, location)

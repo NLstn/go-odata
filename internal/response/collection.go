@@ -11,25 +11,41 @@ import (
 
 // WriteODataCollection writes an OData collection response.
 func WriteODataCollection(w http.ResponseWriter, r *http.Request, entitySetName string, data interface{}, count *int64, nextLink *string) error {
-	return writeODataCollectionResponse(w, r, entitySetName, data, count, nextLink, nil)
+	return writeODataCollectionResponse(w, r, entitySetName, data, count, nextLink, nil, nil)
+}
+
+// WriteODataCollectionWithSelect writes an OData collection response with a pre-computed list of
+// selected/output properties used to build the @odata.context URL.
+// selectedProps should contain the $select properties so that the context URL is shaped as
+// #EntitySet(prop1,prop2) per the OData spec.
+func WriteODataCollectionWithSelect(w http.ResponseWriter, r *http.Request, entitySetName string, data interface{}, count *int64, nextLink *string, selectedProps []string) error {
+	return writeODataCollectionResponse(w, r, entitySetName, data, count, nextLink, nil, selectedProps)
 }
 
 // WriteODataCollectionWithDelta writes an OData collection response that includes a delta link.
 func WriteODataCollectionWithDelta(w http.ResponseWriter, r *http.Request, entitySetName string, data interface{}, count *int64, nextLink, deltaLink *string) error {
-	return writeODataCollectionResponse(w, r, entitySetName, data, count, nextLink, deltaLink)
+	return writeODataCollectionResponse(w, r, entitySetName, data, count, nextLink, deltaLink, nil)
 }
 
 // WriteODataCollectionWithNavigation writes an OData collection response with navigation links.
 func WriteODataCollectionWithNavigation(w http.ResponseWriter, r *http.Request, entitySetName string, data interface{}, count *int64, nextLink *string, metadata EntityMetadataProvider, expandOptions []query.ExpandOption, selectedNavProps []string, fullMetadata *metadata.EntityMetadata) error {
-	return writeODataCollectionWithNavigationResponse(w, r, entitySetName, data, count, nextLink, nil, metadata, expandOptions, selectedNavProps, fullMetadata)
+	return writeODataCollectionWithNavigationResponse(w, r, entitySetName, data, count, nextLink, nil, metadata, expandOptions, selectedNavProps, fullMetadata, nil)
 }
 
 // WriteODataCollectionWithNavigationAndDelta writes an OData collection response with navigation links and a delta link.
 func WriteODataCollectionWithNavigationAndDelta(w http.ResponseWriter, r *http.Request, entitySetName string, data interface{}, count *int64, nextLink, deltaLink *string, metadata EntityMetadataProvider, expandOptions []query.ExpandOption, selectedNavProps []string, fullMetadata *metadata.EntityMetadata) error {
-	return writeODataCollectionWithNavigationResponse(w, r, entitySetName, data, count, nextLink, deltaLink, metadata, expandOptions, selectedNavProps, fullMetadata)
+	return writeODataCollectionWithNavigationResponse(w, r, entitySetName, data, count, nextLink, deltaLink, metadata, expandOptions, selectedNavProps, fullMetadata, nil)
 }
 
-func writeODataCollectionResponse(w http.ResponseWriter, r *http.Request, entitySetName string, data interface{}, count *int64, nextLink, deltaLink *string) error {
+// WriteODataCollectionWithNavigationAndSelect writes an OData collection response with navigation links
+// and a pre-computed list of selected/output properties used to build the @odata.context URL.
+// selectedProps should contain the $select properties (or $apply output properties) so that the
+// context URL is shaped as #EntitySet(prop1,prop2) per the OData spec.
+func WriteODataCollectionWithNavigationAndSelect(w http.ResponseWriter, r *http.Request, entitySetName string, data interface{}, count *int64, nextLink, deltaLink *string, md EntityMetadataProvider, expandOptions []query.ExpandOption, selectedNavProps []string, fullMetadata *metadata.EntityMetadata, selectedProps []string) error {
+	return writeODataCollectionWithNavigationResponse(w, r, entitySetName, data, count, nextLink, deltaLink, md, expandOptions, selectedNavProps, fullMetadata, selectedProps)
+}
+
+func writeODataCollectionResponse(w http.ResponseWriter, r *http.Request, entitySetName string, data interface{}, count *int64, nextLink, deltaLink *string, selectedProps []string) error {
 	if !IsAcceptableFormat(r) {
 		return WriteError(w, r, http.StatusNotAcceptable, "Not Acceptable",
 			"The requested format is not supported. Only application/json is supported for data responses.")
@@ -39,7 +55,7 @@ func writeODataCollectionResponse(w http.ResponseWriter, r *http.Request, entity
 
 	contextURL := ""
 	if metadataLevel != "none" {
-		contextURL = buildContextURL(r, entitySetName)
+		contextURL = buildContextURLWithSelect(r, entitySetName, selectedProps)
 	}
 
 	if data == nil {
@@ -81,7 +97,7 @@ func writeODataCollectionResponse(w http.ResponseWriter, r *http.Request, entity
 	return encoder.Encode(response)
 }
 
-func writeODataCollectionWithNavigationResponse(w http.ResponseWriter, r *http.Request, entitySetName string, data interface{}, count *int64, nextLink, deltaLink *string, metadata EntityMetadataProvider, expandOptions []query.ExpandOption, selectedNavProps []string, fullMetadata *metadata.EntityMetadata) error {
+func writeODataCollectionWithNavigationResponse(w http.ResponseWriter, r *http.Request, entitySetName string, data interface{}, count *int64, nextLink, deltaLink *string, metadata EntityMetadataProvider, expandOptions []query.ExpandOption, selectedNavProps []string, fullMetadata *metadata.EntityMetadata, selectedProps []string) error {
 	if !IsAcceptableFormat(r) {
 		return WriteError(w, r, http.StatusNotAcceptable, "Not Acceptable",
 			"The requested format is not supported. Only application/json is supported for data responses.")
@@ -91,7 +107,7 @@ func writeODataCollectionWithNavigationResponse(w http.ResponseWriter, r *http.R
 
 	contextURL := ""
 	if metadataLevel != "none" {
-		contextURL = buildContextURL(r, entitySetName)
+		contextURL = buildContextURLWithSelect(r, entitySetName, selectedProps)
 	}
 
 	transformedData := addNavigationLinks(data, metadata, expandOptions, selectedNavProps, r, entitySetName, metadataLevel, fullMetadata)

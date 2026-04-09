@@ -424,7 +424,7 @@ func (h *EntityHandler) createNavWriteResponse(w http.ResponseWriter, r *http.Re
 			return nil
 		}
 
-		if err := response.WriteODataCollection(w, r, navigationPath, results, totalCount, nextLink); err != nil {
+		if err := response.WriteODataCollectionWithSelect(w, r, navigationPath, results, totalCount, nextLink, queryOptions.Select); err != nil {
 			h.logger.Error("Error writing navigation property collection", "error", err)
 		}
 
@@ -699,7 +699,7 @@ func (h *EntityHandler) writeSingleNavigationEntity(w http.ResponseWriter, r *ht
 	// Build the OData response with navigation path according to OData V4 spec: EntitySet(key)/NavigationProperty/$entity
 	navigationPath := fmt.Sprintf(ODataEntityKeyFormat, h.metadata.EntitySetName, entityKey)
 	navigationPath = fmt.Sprintf("%s/%s", navigationPath, navProp.JsonName)
-	contextURL := fmt.Sprintf("%s/$metadata#%s/$entity", response.BuildBaseURL(r), navigationPath)
+	contextURL := response.BuildEntityContextURL(r, navigationPath, nil)
 	odataResponse := h.buildEntityResponseWithMetadata(navValue, contextURL, metadataLevel)
 
 	// Set Content-Type with dynamic metadata level

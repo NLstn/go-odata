@@ -145,7 +145,7 @@ func (h *EntityHandler) handleGetEntity(w http.ResponseWriter, r *http.Request, 
 	}
 
 	// Build and write response
-	h.writeEntityResponseWithETag(w, r, result, currentETag, http.StatusOK, queryOptions.Expand)
+	h.writeEntityResponseWithETag(w, r, result, currentETag, http.StatusOK, queryOptions.Expand, queryOptions.Select)
 }
 
 // handleGetEntityOverwrite handles GET entity requests using the overwrite handler
@@ -184,7 +184,7 @@ func (h *EntityHandler) handleGetEntityOverwrite(w http.ResponseWriter, r *http.
 	}
 
 	// Build and write response
-	h.writeEntityResponseWithETag(w, r, result, "", http.StatusOK, queryOptions.Expand)
+	h.writeEntityResponseWithETag(w, r, result, "", http.StatusOK, queryOptions.Expand, queryOptions.Select)
 }
 
 // HandleEntityRef handles GET requests for entity references (e.g., Products(1)/$ref)

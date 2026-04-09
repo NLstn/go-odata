@@ -163,7 +163,7 @@ func (h *EntityHandler) fetchEntityByKey(ctx context.Context, entityKey string, 
 
 // writeEntityResponseWithETag writes an entity response with an optional pre-computed ETag
 // and customizable success status codes while handling common response requirements.
-func (h *EntityHandler) writeEntityResponseWithETag(w http.ResponseWriter, r *http.Request, result interface{}, precomputedETag string, status int, expandOptions []query.ExpandOption) {
+func (h *EntityHandler) writeEntityResponseWithETag(w http.ResponseWriter, r *http.Request, result interface{}, precomputedETag string, status int, expandOptions []query.ExpandOption, selectedProps []string) {
 	// Check if the requested format is supported
 	if !response.IsAcceptableFormat(r) {
 		if err := response.WriteError(w, r, http.StatusNotAcceptable, "Not Acceptable",
@@ -175,7 +175,7 @@ func (h *EntityHandler) writeEntityResponseWithETag(w http.ResponseWriter, r *ht
 
 	// Get metadata level
 	metadataLevel := response.GetODataMetadataLevel(r)
-	contextURL := fmt.Sprintf(ODataContextFormat, response.BuildBaseURL(r), h.metadata.EntitySetName)
+	contextURL := response.BuildEntityContextURL(r, h.metadata.EntitySetName, selectedProps)
 
 	// Use pre-computed ETag if provided, otherwise generate it
 	etagValue := precomputedETag
