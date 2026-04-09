@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -246,44 +247,60 @@ func Parse(etagHeader string) string {
 	return etagHeader
 }
 
-// Match checks if the provided If-Match header value matches the current ETag
-// Returns true if they match or if ifMatch is "*" (match any)
+// splitETags splits a comma-separated ETag list header value into individual ETag tokens.
+// Leading and trailing whitespace is trimmed from each token.
+func splitETags(header string) []string {
+	parts := strings.Split(header, ",")
+	tags := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if t := strings.TrimSpace(p); t != "" {
+			tags = append(tags, t)
+		}
+	}
+	return tags
+}
+
+// Match checks if the provided If-Match header value matches the current ETag.
+// Returns true if ifMatch is empty (no precondition), if ifMatch is "*" and the
+// entity exists, or if any ETag in the comma-separated list matches the current ETag.
 func Match(ifMatch string, currentETag string) bool {
 	if ifMatch == "" {
 		return true // No If-Match header means no precondition
 	}
 
 	// "*" matches any ETag (entity must exist)
-	if ifMatch == "*" {
+	if strings.TrimSpace(ifMatch) == "*" {
 		return currentETag != ""
 	}
 
-	// Parse both ETags and compare
-	parsedIfMatch := Parse(ifMatch)
 	parsedCurrent := Parse(currentETag)
-
-	return parsedIfMatch == parsedCurrent
+	for _, tag := range splitETags(ifMatch) {
+		if Parse(tag) == parsedCurrent {
+			return true
+		}
+	}
+	return false
 }
 
-// NoneMatch checks if the provided If-None-Match header value does NOT match the current ETag
-// Returns true if they don't match or if ifNoneMatch is empty (no condition)
-// Returns false if they match (meaning resource hasn't changed - should return 304)
-// The "*" wildcard means "match if entity exists" for If-None-Match
+// NoneMatch checks if the provided If-None-Match header value does NOT match the current ETag.
+// Returns true if they don't match or if ifNoneMatch is empty (no condition).
+// Returns false if ifNoneMatch is "*" and the entity exists, or if any ETag in the
+// comma-separated list matches the current ETag (meaning resource hasn't changed - 304).
 func NoneMatch(ifNoneMatch string, currentETag string) bool {
 	if ifNoneMatch == "" {
 		return true // No If-None-Match header means no condition, proceed normally
 	}
 
 	// "*" matches any existing entity, so none-match is false if entity exists
-	if ifNoneMatch == "*" {
+	if strings.TrimSpace(ifNoneMatch) == "*" {
 		return currentETag == ""
 	}
 
-	// Parse both ETags and compare
-	parsedIfNoneMatch := Parse(ifNoneMatch)
 	parsedCurrent := Parse(currentETag)
-
-	// Return true if they DON'T match (proceed with normal response)
-	// Return false if they DO match (should return 304)
-	return parsedIfNoneMatch != parsedCurrent
+	for _, tag := range splitETags(ifNoneMatch) {
+		if Parse(tag) == parsedCurrent {
+			return false // A tag matched — resource hasn't changed
+		}
+	}
+	return true
 }

@@ -409,3 +409,141 @@ func TestNoneMatch(t *testing.T) {
 		})
 	}
 }
+
+func TestMatch_List(t *testing.T) {
+	tests := []struct {
+		name        string
+		ifMatch     string
+		currentETag string
+		want        bool
+	}{
+		{
+			name:        "List with one matching tag",
+			ifMatch:     `"tag1", "tag2"`,
+			currentETag: `"tag2"`,
+			want:        true,
+		},
+		{
+			name:        "List with no matching tag",
+			ifMatch:     `"tag1", "tag2"`,
+			currentETag: `"tag3"`,
+			want:        false,
+		},
+		{
+			name:        "List with weak and strong matching",
+			ifMatch:     `W/"abc", "def"`,
+			currentETag: `W/"abc"`,
+			want:        true,
+		},
+		{
+			name:        "List whitespace variations",
+			ifMatch:     `  "tag1"  ,  "tag2"  `,
+			currentETag: `"tag2"`,
+			want:        true,
+		},
+		{
+			name:        "Wildcard trims whitespace",
+			ifMatch:     "  *  ",
+			currentETag: `W/"abc"`,
+			want:        true,
+		},
+		{
+			name:        "Single matching tag behaves as before",
+			ifMatch:     `W/"abc123"`,
+			currentETag: `W/"abc123"`,
+			want:        true,
+		},
+		{
+			name:        "Single non-matching tag behaves as before",
+			ifMatch:     `W/"abc123"`,
+			currentETag: `W/"xyz"`,
+			want:        false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := Match(tt.ifMatch, tt.currentETag)
+			if got != tt.want {
+				t.Errorf("Match(%q, %q) = %v, want %v", tt.ifMatch, tt.currentETag, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNoneMatch_List(t *testing.T) {
+	tests := []struct {
+		name        string
+		ifNoneMatch string
+		currentETag string
+		want        bool
+		description string
+	}{
+		{
+			name:        "List with one matching tag returns false",
+			ifNoneMatch: `"tag1", "tag2"`,
+			currentETag: `"tag2"`,
+			want:        false,
+			description: "One tag in the list matches — should indicate 304",
+		},
+		{
+			name:        "List with no matching tag returns true",
+			ifNoneMatch: `"tag1", "tag2"`,
+			currentETag: `"tag3"`,
+			want:        true,
+			description: "No tag matches — proceed normally",
+		},
+		{
+			name:        "List with weak and strong matching returns false",
+			ifNoneMatch: `W/"abc", "def"`,
+			currentETag: `"def"`,
+			want:        false,
+			description: "Strong tag in list matches",
+		},
+		{
+			name:        "List whitespace variations with match returns false",
+			ifNoneMatch: `  "tag1"  ,  "tag2"  `,
+			currentETag: `"tag1"`,
+			want:        false,
+			description: "Whitespace around tags should be trimmed before comparison",
+		},
+		{
+			name:        "List whitespace variations with no match returns true",
+			ifNoneMatch: `  "tag1"  ,  "tag2"  `,
+			currentETag: `"tag3"`,
+			want:        true,
+			description: "Whitespace around tags — no match",
+		},
+		{
+			name:        "Wildcard trims whitespace — entity exists returns false",
+			ifNoneMatch: "  *  ",
+			currentETag: `W/"abc"`,
+			want:        false,
+			description: "Wildcard with existing entity",
+		},
+		{
+			name:        "Single matching tag behaves as before",
+			ifNoneMatch: `W/"abc123"`,
+			currentETag: `W/"abc123"`,
+			want:        false,
+			description: "Single matching tag",
+		},
+		{
+			name:        "Single non-matching tag behaves as before",
+			ifNoneMatch: `W/"abc123"`,
+			currentETag: `W/"xyz"`,
+			want:        true,
+			description: "Single non-matching tag",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := NoneMatch(tt.ifNoneMatch, tt.currentETag)
+			if got != tt.want {
+				t.Errorf("NoneMatch(%q, %q) = %v, want %v\nDescription: %s",
+					tt.ifNoneMatch, tt.currentETag, got, tt.want, tt.description)
+			}
+		})
+	}
+}
