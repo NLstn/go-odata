@@ -2,7 +2,6 @@ package odata_test
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -381,7 +380,7 @@ func TestContextURL_ExactFormat(t *testing.T) {
 	}
 
 	ctx := getContextURL(t, w.Body.Bytes())
-	want := fmt.Sprintf("http://example.com/$metadata#ContextTestProducts(Name,Price)")
+	want := "http://example.com/$metadata#ContextTestProducts(Name,Price)"
 	if ctx != want {
 		t.Errorf("@odata.context = %q, want %q", ctx, want)
 	}
