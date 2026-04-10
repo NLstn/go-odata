@@ -2,6 +2,7 @@ package query
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/nlstn/go-odata/internal/metadata"
@@ -106,14 +107,13 @@ func splitApplyTransformations(applyStr string) []string {
 	return result
 }
 
-// parseApplyTransformation parses a single transformation
-func parseApplyTransformation(transStr string, entityMetadata *metadata.EntityMetadata) (*ApplyTransformation, error) {
-	return parseApplyTransformationWithAliases(transStr, entityMetadata, nil, 0)
-}
-
 // parseApplyTransformationWithAliases parses a single transformation with computed aliases support
 func parseApplyTransformationWithAliases(transStr string, entityMetadata *metadata.EntityMetadata, computedAliases map[string]bool, maxInClauseSize int) (*ApplyTransformation, error) {
 	transStr = strings.TrimSpace(transStr)
+
+	if transStr == "identity" {
+		return &ApplyTransformation{Type: ApplyTypeIdentity}, nil
+	}
 
 	// Determine transformation type
 	if strings.HasPrefix(transStr, "groupby(") {
@@ -124,6 +124,28 @@ func parseApplyTransformationWithAliases(transStr string, entityMetadata *metada
 		return parseFilterTransformation(transStr, entityMetadata, computedAliases, maxInClauseSize)
 	} else if strings.HasPrefix(transStr, "compute(") {
 		return parseCompute(transStr, entityMetadata, maxInClauseSize)
+	} else if strings.HasPrefix(transStr, "orderby(") {
+		return parseOrderByTransformation(transStr, entityMetadata, computedAliases)
+	} else if strings.HasPrefix(transStr, "top(") {
+		return parseTopTransformation(transStr)
+	} else if strings.HasPrefix(transStr, "skip(") {
+		return parseSkipTransformation(transStr)
+	} else if strings.HasPrefix(transStr, "search(") {
+		return parseSearchTransformation(transStr)
+	} else if strings.HasPrefix(transStr, "concat(") {
+		return parseConcatTransformation(transStr, entityMetadata, maxInClauseSize)
+	} else if strings.HasPrefix(transStr, "topcount(") {
+		return parseSetTransformation(transStr, entityMetadata, ApplyTypeTopCount)
+	} else if strings.HasPrefix(transStr, "bottomcount(") {
+		return parseSetTransformation(transStr, entityMetadata, ApplyTypeBottomCount)
+	} else if strings.HasPrefix(transStr, "toppercent(") {
+		return parseSetTransformation(transStr, entityMetadata, ApplyTypeTopPercent)
+	} else if strings.HasPrefix(transStr, "bottompercent(") {
+		return parseSetTransformation(transStr, entityMetadata, ApplyTypeBottomPercent)
+	} else if strings.HasPrefix(transStr, "topsum(") {
+		return parseSetTransformation(transStr, entityMetadata, ApplyTypeTopSum)
+	} else if strings.HasPrefix(transStr, "bottomsum(") {
+		return parseSetTransformation(transStr, entityMetadata, ApplyTypeBottomSum)
 	}
 
 	return nil, fmt.Errorf("unknown transformation: %s", transStr)
@@ -220,18 +242,175 @@ func parseGroupBy(transStr string, entityMetadata *metadata.EntityMetadata) (*Ap
 		}
 		remaining = strings.TrimSpace(remaining[1:]) // Skip comma
 
-		// Parse nested transformations
-		nestedTrans, err := parseApplyTransformation(remaining, entityMetadata)
+		// Parse nested transformation sequence.
+		// Example: groupby((Category),aggregate(...)/filter(...)/top(5))
+		nestedTrans, err := parseApply(remaining, entityMetadata, 0)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse nested transformation: %w", err)
+			return nil, fmt.Errorf("failed to parse nested transformation sequence: %w", err)
 		}
-		groupBy.Transform = []ApplyTransformation{*nestedTrans}
+		groupBy.Transform = nestedTrans
 	}
 
 	return &ApplyTransformation{
 		Type:    ApplyTypeGroupBy,
 		GroupBy: groupBy,
 	}, nil
+}
+
+// parseOrderByTransformation parses an orderby transformation.
+// Format: orderby(prop1 desc,prop2 asc)
+func parseOrderByTransformation(transStr string, entityMetadata *metadata.EntityMetadata, computedAliases map[string]bool) (*ApplyTransformation, error) {
+	if !strings.HasPrefix(transStr, "orderby(") {
+		return nil, fmt.Errorf("invalid orderby format")
+	}
+
+	content := transStr[8:] // Skip "orderby("
+	if !strings.HasSuffix(content, ")") {
+		return nil, fmt.Errorf("missing closing parenthesis in orderby")
+	}
+	content = strings.TrimSpace(content[:len(content)-1])
+
+	orderBy, err := parseOrderBy(content, entityMetadata, computedAliases)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ApplyTransformation{
+		Type:    ApplyTypeOrderBy,
+		OrderBy: orderBy,
+	}, nil
+}
+
+// parseTopTransformation parses a top transformation.
+// Format: top(5)
+func parseTopTransformation(transStr string) (*ApplyTransformation, error) {
+	if !strings.HasPrefix(transStr, "top(") {
+		return nil, fmt.Errorf("invalid top format")
+	}
+
+	content := transStr[4:] // Skip "top("
+	if !strings.HasSuffix(content, ")") {
+		return nil, fmt.Errorf("missing closing parenthesis in top")
+	}
+	content = strings.TrimSpace(content[:len(content)-1])
+
+	top, err := parseNonNegativeInt(content, "top")
+	if err != nil {
+		return nil, err
+	}
+
+	return &ApplyTransformation{Type: ApplyTypeTop, Top: &top}, nil
+}
+
+// parseSkipTransformation parses a skip transformation.
+// Format: skip(5)
+func parseSkipTransformation(transStr string) (*ApplyTransformation, error) {
+	if !strings.HasPrefix(transStr, "skip(") {
+		return nil, fmt.Errorf("invalid skip format")
+	}
+
+	content := transStr[5:] // Skip "skip("
+	if !strings.HasSuffix(content, ")") {
+		return nil, fmt.Errorf("missing closing parenthesis in skip")
+	}
+	content = strings.TrimSpace(content[:len(content)-1])
+
+	skip, err := parseNonNegativeInt(content, "skip")
+	if err != nil {
+		return nil, err
+	}
+
+	return &ApplyTransformation{Type: ApplyTypeSkip, Skip: &skip}, nil
+}
+
+// parseSearchTransformation parses a search transformation.
+// Format: search(term-expression)
+func parseSearchTransformation(transStr string) (*ApplyTransformation, error) {
+	content := transStr[len("search("):]
+	if !strings.HasSuffix(content, ")") {
+		return nil, fmt.Errorf("missing closing parenthesis in search")
+	}
+	query := strings.TrimSpace(content[:len(content)-1])
+	if query == "" {
+		return nil, errInvalidSearch
+	}
+	return &ApplyTransformation{Type: ApplyTypeSearch, Search: &query}, nil
+}
+
+// parseConcatTransformation parses concat(seq1,seq2,...).
+func parseConcatTransformation(transStr string, entityMetadata *metadata.EntityMetadata, maxInClauseSize int) (*ApplyTransformation, error) {
+	content := transStr[len("concat("):]
+	if !strings.HasSuffix(content, ")") {
+		return nil, fmt.Errorf("missing closing parenthesis in concat")
+	}
+	content = strings.TrimSpace(content[:len(content)-1])
+	if content == "" {
+		return nil, fmt.Errorf("concat requires at least one transformation sequence")
+	}
+
+	parts := splitAggregateExpressions(content)
+	if len(parts) == 0 {
+		return nil, fmt.Errorf("concat requires at least one transformation sequence")
+	}
+
+	sequences := make([][]ApplyTransformation, 0, len(parts))
+	for _, part := range parts {
+		seq, err := parseApply(strings.TrimSpace(part), entityMetadata, maxInClauseSize)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse concat sequence: %w", err)
+		}
+		sequences = append(sequences, seq)
+	}
+
+	return &ApplyTransformation{
+		Type:   ApplyTypeConcat,
+		Concat: &ConcatTransformation{Sequences: sequences},
+	}, nil
+}
+
+// parseSetTransformation parses topcount/bottomcount/toppercent/bottompercent/topsum/bottomsum.
+func parseSetTransformation(transStr string, entityMetadata *metadata.EntityMetadata, t ApplyTransformationType) (*ApplyTransformation, error) {
+	open := strings.IndexByte(transStr, '(')
+	if open < 0 || !strings.HasSuffix(transStr, ")") {
+		return nil, fmt.Errorf("invalid %s format", t)
+	}
+
+	content := strings.TrimSpace(transStr[open+1 : len(transStr)-1])
+	parts := splitAggregateExpressions(content)
+	if len(parts) != 2 {
+		return nil, fmt.Errorf("invalid %s format, expected '%s(value,measure)'", t, t)
+	}
+
+	valueStr := strings.TrimSpace(parts[0])
+	measure := strings.TrimSpace(parts[1])
+	if !propertyExists(measure, entityMetadata) {
+		return nil, fmt.Errorf("property '%s' does not exist in entity type", measure)
+	}
+
+	set := &SetTransformation{Measure: measure}
+
+	switch t {
+	case ApplyTypeTopCount, ApplyTypeBottomCount:
+		count, err := parseNonNegativeInt(valueStr, string(t))
+		if err != nil {
+			return nil, err
+		}
+		set.Count = &count
+		set.Parameter = float64(count)
+	case ApplyTypeTopPercent, ApplyTypeBottomPercent, ApplyTypeTopSum, ApplyTypeBottomSum:
+		v, err := strconv.ParseFloat(valueStr, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid %s value: %s", t, valueStr)
+		}
+		if (t == ApplyTypeTopPercent || t == ApplyTypeBottomPercent) && (v < 0 || v > 100) {
+			return nil, fmt.Errorf("%s value must be between 0 and 100", t)
+		}
+		set.Parameter = v
+	default:
+		return nil, fmt.Errorf("unsupported set transformation type: %s", t)
+	}
+
+	return &ApplyTransformation{Type: t, Set: set}, nil
 }
 
 // parseGroupByProperties parses a comma-separated list of properties

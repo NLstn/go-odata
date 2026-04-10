@@ -641,3 +641,70 @@ func TestParseAggregationMethod(t *testing.T) {
 		})
 	}
 }
+
+func TestParseApply_NewSetTransformations(t *testing.T) {
+	meta := getApplyTestMetadata(t)
+
+	transformations, err := parseApply("identity/orderby(Price desc)/skip(1)/top(2)", meta, 0)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	if len(transformations) != 4 {
+		t.Fatalf("Expected 4 transformations, got %d", len(transformations))
+	}
+
+	if transformations[0].Type != ApplyTypeIdentity {
+		t.Fatalf("Expected first transformation to be identity, got %v", transformations[0].Type)
+	}
+
+	if transformations[1].Type != ApplyTypeOrderBy {
+		t.Fatalf("Expected second transformation to be orderby, got %v", transformations[1].Type)
+	}
+	if len(transformations[1].OrderBy) != 1 {
+		t.Fatalf("Expected 1 orderby item, got %d", len(transformations[1].OrderBy))
+	}
+	if transformations[1].OrderBy[0].Property != "Price" || !transformations[1].OrderBy[0].Descending {
+		t.Fatalf("Expected orderby Price desc, got %+v", transformations[1].OrderBy[0])
+	}
+
+	if transformations[2].Type != ApplyTypeSkip || transformations[2].Skip == nil || *transformations[2].Skip != 1 {
+		t.Fatalf("Expected third transformation to be skip(1), got %+v", transformations[2])
+	}
+
+	if transformations[3].Type != ApplyTypeTop || transformations[3].Top == nil || *transformations[3].Top != 2 {
+		t.Fatalf("Expected fourth transformation to be top(2), got %+v", transformations[3])
+	}
+}
+
+func TestParseApply_GroupByNestedSequence(t *testing.T) {
+	meta := getApplyTestMetadata(t)
+
+	transformations, err := parseApply("groupby((Category),aggregate(Price with sum as Total)/filter(Total gt 10)/top(5))", meta, 0)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	if len(transformations) != 1 {
+		t.Fatalf("Expected 1 top-level transformation, got %d", len(transformations))
+	}
+
+	if transformations[0].Type != ApplyTypeGroupBy || transformations[0].GroupBy == nil {
+		t.Fatalf("Expected groupby transformation, got %+v", transformations[0])
+	}
+
+	nested := transformations[0].GroupBy.Transform
+	if len(nested) != 3 {
+		t.Fatalf("Expected 3 nested transformations, got %d", len(nested))
+	}
+
+	if nested[0].Type != ApplyTypeAggregate {
+		t.Fatalf("Expected first nested transformation aggregate, got %v", nested[0].Type)
+	}
+	if nested[1].Type != ApplyTypeFilter {
+		t.Fatalf("Expected second nested transformation filter, got %v", nested[1].Type)
+	}
+	if nested[2].Type != ApplyTypeTop || nested[2].Top == nil || *nested[2].Top != 5 {
+		t.Fatalf("Expected third nested transformation top(5), got %+v", nested[2])
+	}
+}

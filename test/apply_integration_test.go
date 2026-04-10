@@ -497,3 +497,85 @@ func TestIntegrationApplyFilter(t *testing.T) {
 		})
 	}
 }
+
+func TestIntegrationApplyConcat_StrictSemantics(t *testing.T) {
+	// Initialize database
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("Failed to open database: %v", err)
+	}
+
+	// Auto-migrate
+	if err := db.AutoMigrate(&ApplyTestProduct{}); err != nil {
+		t.Fatalf("Failed to migrate: %v", err)
+	}
+
+	// Create test data
+	products := []ApplyTestProduct{
+		{ID: 1, Name: "Laptop", Price: 999.99, Category: "Electronics", Quantity: 10},
+		{ID: 2, Name: "Mouse", Price: 29.99, Category: "Electronics", Quantity: 50},
+		{ID: 3, Name: "Keyboard", Price: 149.99, Category: "Electronics", Quantity: 30},
+		{ID: 4, Name: "Chair", Price: 249.99, Category: "Furniture", Quantity: 20},
+	}
+	for _, product := range products {
+		if err := db.Create(&product).Error; err != nil {
+			t.Fatalf("Failed to create product: %v", err)
+		}
+	}
+
+	service, err := odata.NewService(db)
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
+	_ = service.RegisterEntity(&ApplyTestProduct{})
+
+	t.Run("concat preserves duplicates", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/ApplyTestProducts?$apply=concat(filter(Category%20eq%20'Electronics'),filter(Category%20eq%20'Electronics'))", nil)
+		w := httptest.NewRecorder()
+		service.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("Expected status %d, got %d. Body: %s", http.StatusOK, w.Code, w.Body.String())
+		}
+
+		var response map[string]interface{}
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+			t.Fatalf("Failed to parse JSON: %v", err)
+		}
+
+		value, ok := response["value"].([]interface{})
+		if !ok {
+			t.Fatal("value is not an array")
+		}
+
+		// Electronics contains 3 products; concat of the same sequence twice must
+		// preserve duplicates, so expected result size is 6.
+		if len(value) != 6 {
+			t.Fatalf("Expected 6 items, got %d", len(value))
+		}
+	})
+
+	t.Run("global top applies after concat", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/ApplyTestProducts?$apply=concat(identity,identity)&$top=5", nil)
+		w := httptest.NewRecorder()
+		service.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("Expected status %d, got %d. Body: %s", http.StatusOK, w.Code, w.Body.String())
+		}
+
+		var response map[string]interface{}
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+			t.Fatalf("Failed to parse JSON: %v", err)
+		}
+
+		value, ok := response["value"].([]interface{})
+		if !ok {
+			t.Fatal("value is not an array")
+		}
+
+		if len(value) != 5 {
+			t.Fatalf("Expected 5 items after global $top, got %d", len(value))
+		}
+	})
+}
