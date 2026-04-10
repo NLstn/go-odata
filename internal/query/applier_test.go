@@ -9,8 +9,9 @@ import (
 )
 
 type ApplierTestEntity struct {
-	ID   int    `json:"id" gorm:"primarykey" odata:"key"`
-	Name string `json:"name"`
+	ID    int     `json:"id" gorm:"primarykey" odata:"key"`
+	Name  string  `json:"name"`
+	Price float64 `json:"price"`
 }
 
 func setupApplierTestDB(t *testing.T) *gorm.DB {
@@ -330,6 +331,71 @@ func TestApplyQueryOptions_ApplySetTransformations(t *testing.T) {
 	if entities[0].Name != "Bob" {
 		t.Fatalf("Expected entity Name to be Bob, got %s", entities[0].Name)
 	}
+}
+
+func TestApplyQueryOptions_ApplyTopAndBottomSumCutoff(t *testing.T) {
+	db := setupApplierTestDB(t)
+	meta, err := metadata.AnalyzeEntity(ApplierTestEntity{})
+	if err != nil {
+		t.Fatalf("Failed to analyze entity: %v", err)
+	}
+
+	testData := []ApplierTestEntity{
+		{ID: 1, Name: "A", Price: 70},
+		{ID: 2, Name: "B", Price: 40},
+		{ID: 3, Name: "C", Price: 30},
+		{ID: 4, Name: "D", Price: 20},
+		{ID: 5, Name: "E", Price: 10},
+	}
+	for _, entity := range testData {
+		db.Create(&entity)
+	}
+
+	t.Run("topsum applies cumulative cutoff", func(t *testing.T) {
+		opts := &QueryOptions{
+			Apply: []ApplyTransformation{
+				{Type: ApplyTypeTopSum, Set: &SetTransformation{Measure: "Price", Parameter: 100}},
+			},
+		}
+
+		q := ApplyQueryOptions(db.Session(&gorm.Session{}), opts, meta, nil)
+
+		var entities []ApplierTestEntity
+		if err := q.Find(&entities).Error; err != nil {
+			t.Fatalf("Query execution failed: %v", err)
+		}
+
+		if len(entities) != 2 {
+			t.Fatalf("Expected 2 entities for topsum cutoff, got %d", len(entities))
+		}
+
+		if entities[0].Name != "A" || entities[1].Name != "B" {
+			t.Fatalf("Expected [A B], got [%s %s]", entities[0].Name, entities[1].Name)
+		}
+	})
+
+	t.Run("bottomsum applies cumulative cutoff", func(t *testing.T) {
+		opts := &QueryOptions{
+			Apply: []ApplyTransformation{
+				{Type: ApplyTypeBottomSum, Set: &SetTransformation{Measure: "Price", Parameter: 25}},
+			},
+		}
+
+		q := ApplyQueryOptions(db.Session(&gorm.Session{}), opts, meta, nil)
+
+		var entities []ApplierTestEntity
+		if err := q.Find(&entities).Error; err != nil {
+			t.Fatalf("Query execution failed: %v", err)
+		}
+
+		if len(entities) != 2 {
+			t.Fatalf("Expected 2 entities for bottomsum cutoff, got %d", len(entities))
+		}
+
+		if entities[0].Name != "E" || entities[1].Name != "D" {
+			t.Fatalf("Expected [E D], got [%s %s]", entities[0].Name, entities[1].Name)
+		}
+	})
 }
 
 func TestApplyExpandOnly(t *testing.T) {

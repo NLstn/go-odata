@@ -317,6 +317,34 @@ func ApplyTransformationCatalog() *framework.TestSuite {
 	)
 
 	suite.AddTest(
+		"test_apply_topsum_cutoff_semantics",
+		"topsum enforces cumulative-threshold cutoff in descending measure order",
+		func(ctx *framework.TestContext) error {
+			applyExpr := url.QueryEscape("topsum(2500,Price)")
+			resp, err := ctx.GET("/Products?$apply=" + applyExpr)
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(resp, 200); err != nil {
+				return err
+			}
+
+			names, err := applyProductNames(resp.Body)
+			if err != nil {
+				return err
+			}
+			if len(names) != 2 {
+				return fmt.Errorf("expected 2 products for topsum cutoff, got %d", len(names))
+			}
+			if names[0] != "Premium Laptop Pro" || names[1] != "Laptop" {
+				return fmt.Errorf("expected [Premium Laptop Pro Laptop], got %v", names)
+			}
+
+			return nil
+		},
+	)
+
+	suite.AddTest(
 		"test_apply_bottomsum_large_threshold",
 		"bottomsum with very large threshold returns the full set",
 		func(ctx *framework.TestContext) error {
@@ -354,10 +382,38 @@ func ApplyTransformationCatalog() *framework.TestSuite {
 	)
 
 	suite.AddTest(
+		"test_apply_bottomsum_cutoff_semantics",
+		"bottomsum enforces cumulative-threshold cutoff in ascending measure order",
+		func(ctx *framework.TestContext) error {
+			applyExpr := url.QueryEscape("bottomsum(40,Price)")
+			resp, err := ctx.GET("/Products?$apply=" + applyExpr)
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(resp, 200); err != nil {
+				return err
+			}
+
+			names, err := applyProductNames(resp.Body)
+			if err != nil {
+				return err
+			}
+			if len(names) != 2 {
+				return fmt.Errorf("expected 2 products for bottomsum cutoff, got %d", len(names))
+			}
+			if names[0] != "Coffee Mug" || names[1] != "Wireless Mouse" {
+				return fmt.Errorf("expected [Coffee Mug Wireless Mouse], got %v", names)
+			}
+
+			return nil
+		},
+	)
+
+	suite.AddTest(
 		"test_apply_concat",
 		"concat combines the results of multiple transformation sequences",
 		func(ctx *framework.TestContext) error {
-			upperExpr := url.QueryEscape("filter(Price gt 1000)")
+			upperExpr := url.QueryEscape("filter(Price gt 100)")
 			upperResp, err := ctx.GET("/Products?$apply=" + upperExpr)
 			if err != nil {
 				return err
@@ -370,7 +426,7 @@ func ApplyTransformationCatalog() *framework.TestSuite {
 				return err
 			}
 
-			lowerExpr := url.QueryEscape("filter(Price le 1000)")
+			lowerExpr := url.QueryEscape("filter(Price gt 500)")
 			lowerResp, err := ctx.GET("/Products?$apply=" + lowerExpr)
 			if err != nil {
 				return err
@@ -383,7 +439,7 @@ func ApplyTransformationCatalog() *framework.TestSuite {
 				return err
 			}
 
-			concatExpr := url.QueryEscape("concat(filter(Price gt 1000),filter(Price le 1000))")
+			concatExpr := url.QueryEscape("concat(filter(Price gt 100),filter(Price gt 500))")
 			concatResp, err := ctx.GET("/Products?$apply=" + concatExpr)
 			if err != nil {
 				return err
@@ -399,6 +455,12 @@ func ApplyTransformationCatalog() *framework.TestSuite {
 			expected := upperCount + lowerCount
 			if concatCount != expected {
 				return fmt.Errorf("concat count mismatch: expected %d, got %d", expected, concatCount)
+			}
+
+			// These filters overlap, so concat must preserve duplicate rows from the
+			// second sequence (UNION ALL semantics).
+			if concatCount <= upperCount {
+				return fmt.Errorf("expected concat with overlapping sequences to include duplicates: concat=%d upper=%d", concatCount, upperCount)
 			}
 
 			return nil
