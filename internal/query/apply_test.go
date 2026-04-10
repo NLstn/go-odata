@@ -746,3 +746,54 @@ func TestParseQueryOptions_ApplyCaseAndDollarPrefixVersionBehavior(t *testing.T)
 		}
 	})
 }
+
+func TestParseApply_TransformationKeywordCaseVersionBehavior(t *testing.T) {
+	meta := getApplyTestMetadata(t)
+
+	t.Run("4.01 accepts mixed-case transformation keywords", func(t *testing.T) {
+		transformations, err := parseApplyWithCaseSensitivity("FILTER(Price gt 10)/OrDeRbY(Price desc)/Top(1)", meta, 0, true)
+		if err != nil {
+			t.Fatalf("expected mixed-case transformations to parse in 4.01 mode, got error: %v", err)
+		}
+
+		if len(transformations) != 3 {
+			t.Fatalf("expected 3 transformations, got %d", len(transformations))
+		}
+
+		expected := []ApplyTransformationType{ApplyTypeFilter, ApplyTypeOrderBy, ApplyTypeTop}
+		for i, want := range expected {
+			if transformations[i].Type != want {
+				t.Fatalf("expected transformation %d to be %s, got %s", i, want, transformations[i].Type)
+			}
+		}
+	})
+
+	t.Run("4.01 applies case-insensitive parsing to nested groupby sequence", func(t *testing.T) {
+		transformations, err := parseApplyWithCaseSensitivity("groupby((Category),AGGREGATE(Price with sum as Total)/FILTER(Total gt 10)/TOP(1))", meta, 0, true)
+		if err != nil {
+			t.Fatalf("expected nested mixed-case groupby sequence to parse in 4.01 mode, got error: %v", err)
+		}
+
+		if len(transformations) != 1 || transformations[0].GroupBy == nil {
+			t.Fatalf("expected one groupby transformation, got %+v", transformations)
+		}
+
+		nested := transformations[0].GroupBy.Transform
+		if len(nested) != 3 {
+			t.Fatalf("expected 3 nested transformations, got %d", len(nested))
+		}
+
+		expected := []ApplyTransformationType{ApplyTypeAggregate, ApplyTypeFilter, ApplyTypeTop}
+		for i, want := range expected {
+			if nested[i].Type != want {
+				t.Fatalf("expected nested transformation %d to be %s, got %s", i, want, nested[i].Type)
+			}
+		}
+	})
+
+	t.Run("4.0 rejects mixed-case transformation keywords", func(t *testing.T) {
+		if _, err := parseApplyWithCaseSensitivity("FILTER(Price gt 10)", meta, 0, false); err == nil {
+			t.Fatal("expected 4.0 mode to reject mixed-case FILTER transformation")
+		}
+	})
+}

@@ -9,7 +9,7 @@ import (
 )
 
 // parseApplyOption parses the $apply query parameter
-func parseApplyOption(queryParams map[string][]string, entityMetadata *metadata.EntityMetadata, options *QueryOptions, config *ParserConfig) error {
+func parseApplyOption(queryParams map[string][]string, entityMetadata *metadata.EntityMetadata, options *QueryOptions, config *ParserConfig, caseInsensitive bool) error {
 	applyStr := ""
 	if vals, ok := queryParams["$apply"]; ok && len(vals) > 0 {
 		applyStr = vals[0]
@@ -24,7 +24,13 @@ func parseApplyOption(queryParams map[string][]string, entityMetadata *metadata.
 		maxInClauseSize = config.MaxInClauseSize
 	}
 
-	transformations, err := parseApply(applyStr, entityMetadata, maxInClauseSize)
+	var transformations []ApplyTransformation
+	var err error
+	if caseInsensitive {
+		transformations, err = parseApply(applyStr, entityMetadata, maxInClauseSize)
+	} else {
+		transformations, err = parseApplyWithCaseSensitivity(applyStr, entityMetadata, maxInClauseSize, false)
+	}
 	if err != nil {
 		return fmt.Errorf("invalid $apply: %w", err)
 	}
@@ -34,6 +40,13 @@ func parseApplyOption(queryParams map[string][]string, entityMetadata *metadata.
 
 // parseApply parses the $apply query parameter value
 func parseApply(applyStr string, entityMetadata *metadata.EntityMetadata, maxInClauseSize int) ([]ApplyTransformation, error) {
+	return parseApplyWithCaseSensitivity(applyStr, entityMetadata, maxInClauseSize, true)
+}
+
+// parseApplyWithCaseSensitivity parses the $apply query parameter value and controls
+// whether transformation names are parsed case-insensitively (4.01 behavior) or
+// strictly (4.0 behavior).
+func parseApplyWithCaseSensitivity(applyStr string, entityMetadata *metadata.EntityMetadata, maxInClauseSize int, caseInsensitive bool) ([]ApplyTransformation, error) {
 	applyStr = strings.TrimSpace(applyStr)
 	if applyStr == "" {
 		return nil, errEmptyApplyString
@@ -53,7 +66,7 @@ func parseApply(applyStr string, entityMetadata *metadata.EntityMetadata, maxInC
 			continue
 		}
 
-		transformation, err := parseApplyTransformationWithAliases(transStr, entityMetadata, computedAliases, maxInClauseSize)
+		transformation, err := parseApplyTransformationWithAliases(transStr, entityMetadata, computedAliases, maxInClauseSize, caseInsensitive)
 		if err != nil {
 			return nil, err
 		}
@@ -68,6 +81,38 @@ func parseApply(applyStr string, entityMetadata *metadata.EntityMetadata, maxInC
 	}
 
 	return transformations, nil
+}
+
+func canonicalizeApplyTransformationKeyword(transStr string) string {
+	keywords := []string{
+		"groupby(",
+		"aggregate(",
+		"filter(",
+		"compute(",
+		"orderby(",
+		"topcount(",
+		"bottomcount(",
+		"toppercent(",
+		"bottompercent(",
+		"topsum(",
+		"bottomsum(",
+		"search(",
+		"concat(",
+		"top(",
+		"skip(",
+	}
+
+	for _, keyword := range keywords {
+		if len(transStr) >= len(keyword) && strings.EqualFold(transStr[:len(keyword)], keyword) {
+			return keyword + transStr[len(keyword):]
+		}
+	}
+
+	if strings.EqualFold(transStr, "identity") {
+		return "identity"
+	}
+
+	return transStr
 }
 
 // splitApplyTransformations splits the apply string by '/' while respecting parentheses
@@ -108,8 +153,11 @@ func splitApplyTransformations(applyStr string) []string {
 }
 
 // parseApplyTransformationWithAliases parses a single transformation with computed aliases support
-func parseApplyTransformationWithAliases(transStr string, entityMetadata *metadata.EntityMetadata, computedAliases map[string]bool, maxInClauseSize int) (*ApplyTransformation, error) {
+func parseApplyTransformationWithAliases(transStr string, entityMetadata *metadata.EntityMetadata, computedAliases map[string]bool, maxInClauseSize int, caseInsensitive bool) (*ApplyTransformation, error) {
 	transStr = strings.TrimSpace(transStr)
+	if caseInsensitive {
+		transStr = canonicalizeApplyTransformationKeyword(transStr)
+	}
 
 	if transStr == "identity" {
 		return &ApplyTransformation{Type: ApplyTypeIdentity}, nil
@@ -117,7 +165,7 @@ func parseApplyTransformationWithAliases(transStr string, entityMetadata *metada
 
 	// Determine transformation type
 	if strings.HasPrefix(transStr, "groupby(") {
-		return parseGroupBy(transStr, entityMetadata)
+		return parseGroupBy(transStr, entityMetadata, caseInsensitive)
 	} else if strings.HasPrefix(transStr, "aggregate(") {
 		return parseAggregate(transStr, entityMetadata)
 	} else if strings.HasPrefix(transStr, "filter(") {
@@ -133,7 +181,7 @@ func parseApplyTransformationWithAliases(transStr string, entityMetadata *metada
 	} else if strings.HasPrefix(transStr, "search(") {
 		return parseSearchTransformation(transStr)
 	} else if strings.HasPrefix(transStr, "concat(") {
-		return parseConcatTransformation(transStr, entityMetadata, maxInClauseSize)
+		return parseConcatTransformation(transStr, entityMetadata, maxInClauseSize, caseInsensitive)
 	} else if strings.HasPrefix(transStr, "topcount(") {
 		return parseSetTransformation(transStr, entityMetadata, ApplyTypeTopCount)
 	} else if strings.HasPrefix(transStr, "bottomcount(") {
@@ -191,7 +239,7 @@ func extractAliasesFromTransformation(trans *ApplyTransformation, aliases map[st
 // parseGroupBy parses a groupby transformation
 // Format: groupby((prop1,prop2), aggregate(expr))
 // or: groupby((prop1,prop2))
-func parseGroupBy(transStr string, entityMetadata *metadata.EntityMetadata) (*ApplyTransformation, error) {
+func parseGroupBy(transStr string, entityMetadata *metadata.EntityMetadata, caseInsensitive bool) (*ApplyTransformation, error) {
 	if !strings.HasPrefix(transStr, "groupby(") {
 		return nil, errInvalidGroupByFormat
 	}
@@ -244,7 +292,7 @@ func parseGroupBy(transStr string, entityMetadata *metadata.EntityMetadata) (*Ap
 
 		// Parse nested transformation sequence.
 		// Example: groupby((Category),aggregate(...)/filter(...)/top(5))
-		nestedTrans, err := parseApply(remaining, entityMetadata, 0)
+		nestedTrans, err := parseApplyWithCaseSensitivity(remaining, entityMetadata, 0, caseInsensitive)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse nested transformation sequence: %w", err)
 		}
@@ -338,7 +386,7 @@ func parseSearchTransformation(transStr string) (*ApplyTransformation, error) {
 }
 
 // parseConcatTransformation parses concat(seq1,seq2,...).
-func parseConcatTransformation(transStr string, entityMetadata *metadata.EntityMetadata, maxInClauseSize int) (*ApplyTransformation, error) {
+func parseConcatTransformation(transStr string, entityMetadata *metadata.EntityMetadata, maxInClauseSize int, caseInsensitive bool) (*ApplyTransformation, error) {
 	content := transStr[len("concat("):]
 	if !strings.HasSuffix(content, ")") {
 		return nil, fmt.Errorf("missing closing parenthesis in concat")
@@ -355,7 +403,7 @@ func parseConcatTransformation(transStr string, entityMetadata *metadata.EntityM
 
 	sequences := make([][]ApplyTransformation, 0, len(parts))
 	for _, part := range parts {
-		seq, err := parseApply(strings.TrimSpace(part), entityMetadata, maxInClauseSize)
+		seq, err := parseApplyWithCaseSensitivity(strings.TrimSpace(part), entityMetadata, maxInClauseSize, caseInsensitive)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse concat sequence: %w", err)
 		}
