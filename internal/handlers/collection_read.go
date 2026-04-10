@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"sort"
 	"strings"
 
 	"github.com/nlstn/go-odata/internal/preference"
@@ -282,6 +283,14 @@ func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.Qu
 	}
 
 	if query.ShouldUseMapResults(queryOptions) {
+		if len(modifiedOptions.Apply) == 1 && modifiedOptions.Apply[0].Type == query.ApplyTypeConcat && modifiedOptions.Apply[0].Concat != nil {
+			results, err := h.executeTopLevelConcatApply(db, &modifiedOptions, fts, tableName)
+			if err != nil {
+				return nil, err
+			}
+			return results, nil
+		}
+
 		var results []map[string]interface{}
 		if err := db.Find(&results).Error; err != nil {
 			return nil, err
@@ -327,6 +336,168 @@ func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.Qu
 	}
 
 	return sliceValue, nil
+}
+
+func (h *EntityHandler) executeTopLevelConcatApply(db *gorm.DB, options *query.QueryOptions, fts *query.FTSManager, tableName string) ([]map[string]interface{}, error) {
+	if options == nil || len(options.Apply) != 1 || options.Apply[0].Type != query.ApplyTypeConcat || options.Apply[0].Concat == nil {
+		return nil, fmt.Errorf("invalid concat apply options")
+	}
+
+	concat := options.Apply[0].Concat
+	results := make([]map[string]interface{}, 0)
+
+	for _, sequence := range concat.Sequences {
+		seqOptions := *options
+		seqOptions.Apply = sequence
+		// $orderby/$skip/$top query options are applied after the whole $apply pipeline.
+		// For concat, that means after concatenating all sequence results.
+		seqOptions.OrderBy = nil
+		seqOptions.Skip = nil
+		seqOptions.Top = nil
+
+		seqDB := db.Session(&gorm.Session{})
+		seqDB = query.ApplyQueryOptionsWithFTS(seqDB, &seqOptions, h.metadata, fts, tableName, h.logger)
+
+		var part []map[string]interface{}
+		if err := seqDB.Find(&part).Error; err != nil {
+			return nil, err
+		}
+		results = append(results, part...)
+	}
+
+	if len(options.OrderBy) > 0 {
+		applyMapOrderBy(results, options.OrderBy)
+	}
+
+	if options.Skip != nil {
+		skip := *options.Skip
+		if skip >= len(results) {
+			results = []map[string]interface{}{}
+		} else if skip > 0 {
+			results = results[skip:]
+		}
+	}
+
+	if options.Top != nil {
+		top := *options.Top
+		if top <= 0 {
+			results = []map[string]interface{}{}
+		} else if top < len(results) {
+			results = results[:top]
+		}
+	}
+
+	if len(options.Select) > 0 && options.Compute != nil {
+		computedAliases := make(map[string]bool)
+		for _, expr := range options.Compute.Expressions {
+			computedAliases[expr.Alias] = true
+		}
+		results = query.ApplySelectToMapResults(results, options.Select, h.metadata, computedAliases)
+	}
+
+	return results, nil
+}
+
+func applyMapOrderBy(results []map[string]interface{}, orderBy []query.OrderByItem) {
+	sort.SliceStable(results, func(i, j int) bool {
+		left := results[i]
+		right := results[j]
+
+		for _, item := range orderBy {
+			lv, lok := getMapValueCaseInsensitive(left, item.Property)
+			rv, rok := getMapValueCaseInsensitive(right, item.Property)
+
+			cmp := compareMapValues(lv, lok, rv, rok)
+			if cmp == 0 {
+				continue
+			}
+
+			if item.Descending {
+				return cmp > 0
+			}
+			return cmp < 0
+		}
+
+		return false
+	})
+}
+
+func getMapValueCaseInsensitive(m map[string]interface{}, key string) (interface{}, bool) {
+	if v, ok := m[key]; ok {
+		return v, true
+	}
+	for k, v := range m {
+		if strings.EqualFold(k, key) {
+			return v, true
+		}
+	}
+	return nil, false
+}
+
+func compareMapValues(left interface{}, leftOK bool, right interface{}, rightOK bool) int {
+	if !leftOK && !rightOK {
+		return 0
+	}
+	if !leftOK {
+		return -1
+	}
+	if !rightOK {
+		return 1
+	}
+
+	if lf, lok := toFloat64(left); lok {
+		if rf, rok := toFloat64(right); rok {
+			switch {
+			case lf < rf:
+				return -1
+			case lf > rf:
+				return 1
+			default:
+				return 0
+			}
+		}
+	}
+
+	ls := strings.ToLower(fmt.Sprintf("%v", left))
+	rs := strings.ToLower(fmt.Sprintf("%v", right))
+	if ls < rs {
+		return -1
+	}
+	if ls > rs {
+		return 1
+	}
+	return 0
+}
+
+func toFloat64(v interface{}) (float64, bool) {
+	switch x := v.(type) {
+	case float64:
+		return x, true
+	case float32:
+		return float64(x), true
+	case int:
+		return float64(x), true
+	case int8:
+		return float64(x), true
+	case int16:
+		return float64(x), true
+	case int32:
+		return float64(x), true
+	case int64:
+		return float64(x), true
+	case uint:
+		return float64(x), true
+	case uint8:
+		return float64(x), true
+	case uint16:
+		return float64(x), true
+	case uint32:
+		return float64(x), true
+	case uint64:
+		return float64(x), true
+	default:
+		return 0, false
+	}
 }
 
 func (h *EntityHandler) calculateNextLink(queryOptions *query.QueryOptions, sliceValue interface{}, r *http.Request) (*string, bool) {

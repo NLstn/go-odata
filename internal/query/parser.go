@@ -61,17 +61,52 @@ type ApplyTransformation struct {
 	Aggregate *AggregateTransformation
 	Filter    *FilterExpression
 	Compute   *ComputeTransformation
+	OrderBy   []OrderByItem
+	Top       *int
+	Skip      *int
+	Search    *string
+	Concat    *ConcatTransformation
+	Set       *SetTransformation
 }
 
 // ApplyTransformationType represents the type of apply transformation
 type ApplyTransformationType string
 
 const (
-	ApplyTypeGroupBy   ApplyTransformationType = "groupby"
-	ApplyTypeAggregate ApplyTransformationType = "aggregate"
-	ApplyTypeFilter    ApplyTransformationType = "filter"
-	ApplyTypeCompute   ApplyTransformationType = "compute"
+	ApplyTypeIdentity      ApplyTransformationType = "identity"
+	ApplyTypeGroupBy       ApplyTransformationType = "groupby"
+	ApplyTypeAggregate     ApplyTransformationType = "aggregate"
+	ApplyTypeFilter        ApplyTransformationType = "filter"
+	ApplyTypeCompute       ApplyTransformationType = "compute"
+	ApplyTypeOrderBy       ApplyTransformationType = "orderby"
+	ApplyTypeTop           ApplyTransformationType = "top"
+	ApplyTypeSkip          ApplyTransformationType = "skip"
+	ApplyTypeSearch        ApplyTransformationType = "search"
+	ApplyTypeConcat        ApplyTransformationType = "concat"
+	ApplyTypeTopCount      ApplyTransformationType = "topcount"
+	ApplyTypeBottomCount   ApplyTransformationType = "bottomcount"
+	ApplyTypeTopPercent    ApplyTransformationType = "toppercent"
+	ApplyTypeBottomPercent ApplyTransformationType = "bottompercent"
+	ApplyTypeTopSum        ApplyTransformationType = "topsum"
+	ApplyTypeBottomSum     ApplyTransformationType = "bottomsum"
 )
+
+// ConcatTransformation represents concat(seq1,seq2,...) where each argument is
+// an independent transformation sequence.
+type ConcatTransformation struct {
+	Sequences [][]ApplyTransformation
+}
+
+// SetTransformation captures measure-based set transformations.
+// Parameter is interpreted as:
+// - topcount/bottomcount: count (integer)
+// - toppercent/bottompercent: percentage (0..100)
+// - topsum/bottomsum: cumulative threshold of measure
+type SetTransformation struct {
+	Measure   string
+	Parameter float64
+	Count     *int
+}
 
 // GroupByTransformation represents a groupby transformation
 type GroupByTransformation struct {

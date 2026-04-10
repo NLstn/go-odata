@@ -290,6 +290,48 @@ func TestApplyQueryOptionsWithFTS(t *testing.T) {
 	}
 }
 
+func TestApplyQueryOptions_ApplySetTransformations(t *testing.T) {
+	db := setupApplierTestDB(t)
+	meta, err := metadata.AnalyzeEntity(ApplierTestEntity{})
+	if err != nil {
+		t.Fatalf("Failed to analyze entity: %v", err)
+	}
+
+	testData := []ApplierTestEntity{
+		{ID: 1, Name: "Alice"},
+		{ID: 2, Name: "Bob"},
+		{ID: 3, Name: "Charlie"},
+	}
+	for _, entity := range testData {
+		db.Create(&entity)
+	}
+
+	opts := &QueryOptions{
+		Apply: []ApplyTransformation{
+			{Type: ApplyTypeIdentity},
+			{Type: ApplyTypeOrderBy, OrderBy: []OrderByItem{{Property: "Name", Descending: true}}},
+			{Type: ApplyTypeSkip, Skip: func() *int { v := 1; return &v }()},
+			{Type: ApplyTypeTop, Top: func() *int { v := 1; return &v }()},
+		},
+	}
+
+	q := ApplyQueryOptions(db, opts, meta, nil)
+
+	var entities []ApplierTestEntity
+	if err := q.Find(&entities).Error; err != nil {
+		t.Fatalf("Query execution failed: %v", err)
+	}
+
+	if len(entities) != 1 {
+		t.Fatalf("Expected 1 entity, got %d", len(entities))
+	}
+
+	// Desc order by Name is Charlie, Bob, Alice. skip(1)/top(1) returns Bob.
+	if entities[0].Name != "Bob" {
+		t.Fatalf("Expected entity Name to be Bob, got %s", entities[0].Name)
+	}
+}
+
 func TestApplyExpandOnly(t *testing.T) {
 	db := setupApplierTestDB(t)
 	meta, err := metadata.AnalyzeEntity(ApplierTestEntity{})

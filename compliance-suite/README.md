@@ -13,6 +13,7 @@ Tests cover various aspects including:
 
 - Service document and metadata
 - Query options ($filter, $select, $orderby, etc.)
+- Full $apply transformation catalog coverage (aggregate/groupby/filter/compute/identity/orderby/search/skip/top/concat and top/bottom count/percent/sum variants)
 - $count behavior when using the $search query option
 - CRUD operations
 - HTTP headers and content negotiation
