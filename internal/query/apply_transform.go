@@ -136,23 +136,26 @@ func applySetTransformation(db *gorm.DB, transformation ApplyTransformation, ent
 
 	measureCol := GetColumnName(transformation.Set.Measure, entityMetadata)
 	if measureCol == "" {
-		return db
+		// Allow aliases produced by previous transformations (for example,
+		// aggregate aliases inside a groupby pipeline) to be referenced directly.
+		measureCol = transformation.Set.Measure
 	}
 
 	dialect := getDatabaseDialect(db)
-	qualified := quoteTableName(dialect, entityMetadata.TableName) + "." + quoteIdent(dialect, measureCol)
+	qualifiedMeasure := qualifyMeasureForSetTransformation(dialect, entityMetadata, measureCol, transformation.Set.Measure)
+	qualifiedKey := qualifyPrimaryKeyForSetTransformation(dialect, entityMetadata)
 
 	switch transformation.Type {
 	case ApplyTypeTopCount:
 		if transformation.Set.Count == nil {
 			return db
 		}
-		return db.Order(clause.OrderByColumn{Column: clause.Column{Raw: true, Name: qualified}, Desc: true}).Limit(*transformation.Set.Count)
+		return db.Order(clause.OrderByColumn{Column: clause.Column{Raw: true, Name: qualifiedMeasure}, Desc: true}).Limit(*transformation.Set.Count)
 	case ApplyTypeBottomCount:
 		if transformation.Set.Count == nil {
 			return db
 		}
-		return db.Order(clause.OrderByColumn{Column: clause.Column{Raw: true, Name: qualified}, Desc: false}).Limit(*transformation.Set.Count)
+		return db.Order(clause.OrderByColumn{Column: clause.Column{Raw: true, Name: qualifiedMeasure}, Desc: false}).Limit(*transformation.Set.Count)
 	case ApplyTypeTopPercent:
 		if transformation.Set.Parameter <= 0 {
 			return db.Limit(0)
@@ -174,7 +177,7 @@ func applySetTransformation(db *gorm.DB, transformation ApplyTransformation, ent
 		if k < 0 {
 			k = 0
 		}
-		return db.Order(clause.OrderByColumn{Column: clause.Column{Raw: true, Name: qualified}, Desc: true}).Limit(k)
+		return db.Order(clause.OrderByColumn{Column: clause.Column{Raw: true, Name: qualifiedMeasure}, Desc: true}).Limit(k)
 	case ApplyTypeBottomPercent:
 		if transformation.Set.Parameter <= 0 {
 			return db.Limit(0)
@@ -194,22 +197,84 @@ func applySetTransformation(db *gorm.DB, transformation ApplyTransformation, ent
 		if k < 0 {
 			k = 0
 		}
-		return db.Order(clause.OrderByColumn{Column: clause.Column{Raw: true, Name: qualified}, Desc: false}).Limit(k)
+		return db.Order(clause.OrderByColumn{Column: clause.Column{Raw: true, Name: qualifiedMeasure}, Desc: false}).Limit(k)
 	case ApplyTypeTopSum:
-		if transformation.Set.Parameter <= 0 {
-			return db.Limit(0)
-		}
-		// If threshold is very high, full set is returned, matching the spec expectation
-		// covered by current compliance tests.
-		return db.Order(clause.OrderByColumn{Column: clause.Column{Raw: true, Name: qualified}, Desc: true})
+		return applySumThresholdSetTransformation(db, qualifiedKey, qualifiedMeasure, transformation.Set.Parameter, true)
 	case ApplyTypeBottomSum:
-		if transformation.Set.Parameter <= 0 {
-			return db.Limit(0)
-		}
-		return db.Order(clause.OrderByColumn{Column: clause.Column{Raw: true, Name: qualified}, Desc: false})
+		return applySumThresholdSetTransformation(db, qualifiedKey, qualifiedMeasure, transformation.Set.Parameter, false)
 	default:
 		return db
 	}
+}
+
+func qualifyMeasureForSetTransformation(dialect string, entityMetadata *metadata.EntityMetadata, measureCol string, measureName string) string {
+	if propertyExists(measureName, entityMetadata) {
+		return quoteTableName(dialect, entityMetadata.TableName) + "." + quoteIdent(dialect, measureCol)
+	}
+	return quoteIdent(dialect, measureCol)
+}
+
+func qualifyPrimaryKeyForSetTransformation(dialect string, entityMetadata *metadata.EntityMetadata) string {
+	if entityMetadata == nil {
+		return ""
+	}
+
+	if entityMetadata.KeyProperty != nil && entityMetadata.KeyProperty.ColumnName != "" {
+		return quoteTableName(dialect, entityMetadata.TableName) + "." + quoteIdent(dialect, entityMetadata.KeyProperty.ColumnName)
+	}
+
+	if len(entityMetadata.KeyProperties) > 0 {
+		keyCol := entityMetadata.KeyProperties[0].ColumnName
+		if keyCol != "" {
+			return quoteTableName(dialect, entityMetadata.TableName) + "." + quoteIdent(dialect, keyCol)
+		}
+	}
+
+	return ""
+}
+
+func applySumThresholdSetTransformation(db *gorm.DB, qualifiedKey string, qualifiedMeasure string, threshold float64, desc bool) *gorm.DB {
+	if threshold <= 0 {
+		return db.Limit(0)
+	}
+
+	ordered := db.Order(clause.OrderByColumn{Column: clause.Column{Raw: true, Name: qualifiedMeasure}, Desc: desc})
+	if qualifiedKey == "" {
+		// Fallback for entities without resolvable key metadata.
+		return ordered
+	}
+
+	var candidates []map[string]interface{}
+	if err := ordered.Session(&gorm.Session{}).
+		Select(fmt.Sprintf("%s as __odata_key, COALESCE(%s, 0) as __odata_measure", qualifiedKey, qualifiedMeasure)).
+		Find(&candidates).Error; err != nil {
+		return ordered
+	}
+
+	if len(candidates) == 0 {
+		return db.Limit(0)
+	}
+
+	selectedKeys := make([]interface{}, 0, len(candidates))
+	cumulative := 0.0
+	for _, row := range candidates {
+		key, ok := row["__odata_key"]
+		if !ok {
+			continue
+		}
+		selectedKeys = append(selectedKeys, key)
+		cumulative += toFloat64(row["__odata_measure"])
+		if cumulative >= threshold {
+			break
+		}
+	}
+
+	if len(selectedKeys) == 0 {
+		return db.Limit(0)
+	}
+
+	return db.Where(fmt.Sprintf("%s IN ?", qualifiedKey), selectedKeys).
+		Order(clause.OrderByColumn{Column: clause.Column{Raw: true, Name: qualifiedMeasure}, Desc: desc})
 }
 
 // applyGroupBy applies a groupby transformation to the GORM query
