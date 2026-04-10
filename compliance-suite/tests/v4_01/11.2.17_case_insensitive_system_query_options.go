@@ -135,6 +135,19 @@ func CaseInsensitiveSystemQueryOptions() *framework.TestSuite {
 	)
 
 	suite.AddTest(
+		"test_apply_case_and_dollar_prefix",
+		"$apply accepts mixed case and no-$ forms equivalently",
+		func(ctx *framework.TestContext) error {
+			canonical := "/Products?$apply=filter(Price%20gt%2010)"
+			return assertEquivalentResponses(ctx, canonical, []string{
+				"/Products?$APPLY=filter(Price%20gt%2010)",
+				"/Products?$Apply=filter(Price%20gt%2010)",
+				"/Products?apply=filter(Price%20gt%2010)",
+			})
+		},
+	)
+
+	suite.AddTest(
 		"test_filter_operator_names_case_insensitive",
 		"4.01 logical/arithmetic operator names are case-insensitive",
 		func(ctx *framework.TestContext) error {
@@ -249,6 +262,22 @@ func CaseInsensitiveSystemQueryOptions() *framework.TestSuite {
 			}
 			if err := ctx.AssertODataError(upperCaseFunctionResp, http.StatusBadRequest, "unsupported function"); err != nil {
 				return framework.NewError(fmt.Sprintf("4.0 should reject upper-case canonical function names with strict error payload: %v", err))
+			}
+
+			mixedCaseApplyResp, err := ctx.GET("/Products?$APPLY=filter(Price%20gt%2010)&$top=1", headers...)
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertODataError(mixedCaseApplyResp, http.StatusBadRequest, "unknown query option"); err != nil {
+				return framework.NewError(fmt.Sprintf("4.0 should reject mixed-case $apply option name with strict error payload: %v", err))
+			}
+
+			noDollarApplyResp, err := ctx.GET("/Products?apply=filter(Price%20gt%2010)&$top=1", headers...)
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(noDollarApplyResp, http.StatusOK); err != nil {
+				return framework.NewError(fmt.Sprintf("4.0 should treat no-$ apply as custom option and ignore it: %v", err))
 			}
 
 			return nil
