@@ -408,7 +408,7 @@ func ParseQueryOptionsWithConfigAndCaseSensitivity(queryParams url.Values, entit
 		return nil, err
 	}
 
-	if err := parseApplyOption(queryParams, entityMetadata, options, config); err != nil {
+	if err := parseApplyOption(queryParams, entityMetadata, options, config, caseInsensitive); err != nil {
 		return nil, err
 	}
 
