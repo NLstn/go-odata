@@ -272,6 +272,53 @@ func TestContextURL_ApplyGroupByNoAggregate(t *testing.T) {
 	}
 }
 
+func TestContextURL_ApplyJoin(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("Failed to open database: %v", err)
+	}
+
+	if err := db.AutoMigrate(&ApplyJoinProduct{}, &ApplyJoinSale{}); err != nil {
+		t.Fatalf("Failed to migrate: %v", err)
+	}
+
+	product := ApplyJoinProduct{ID: 1, Name: "Laptop", Category: "Electronics"}
+	if err := db.Create(&product).Error; err != nil {
+		t.Fatalf("Failed to create product: %v", err)
+	}
+	if err := db.Create(&ApplyJoinSale{ID: 1, ApplyJoinProductID: 1, Amount: 999}).Error; err != nil {
+		t.Fatalf("Failed to create sale: %v", err)
+	}
+
+	svc, err := odata.NewService(db)
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
+	if err := svc.RegisterEntity(&ApplyJoinProduct{}); err != nil {
+		t.Fatalf("Failed to register product entity: %v", err)
+	}
+	if err := svc.RegisterEntity(&ApplyJoinSale{}); err != nil {
+		t.Fatalf("Failed to register sale entity: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/ApplyJoinProducts?$apply=join(Sales%20as%20Sale)", nil)
+	w := httptest.NewRecorder()
+	svc.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	ctx := getContextURL(t, w.Body.Bytes())
+	wantSuffix := "$metadata#ApplyJoinProducts(Sale())"
+	if ctx == "" {
+		t.Fatal("@odata.context is missing from response")
+	}
+	if len(ctx) < len(wantSuffix) || ctx[len(ctx)-len(wantSuffix):] != wantSuffix {
+		t.Errorf("@odata.context = %q, want suffix %q", ctx, wantSuffix)
+	}
+}
+
 // TestContextURL_SelectSingleProp verifies that $select with a single property produces
 // #ContextTestProducts(Name) as the context URL fragment.
 func TestContextURL_SelectSingleProp(t *testing.T) {

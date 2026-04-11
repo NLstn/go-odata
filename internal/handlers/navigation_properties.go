@@ -352,6 +352,25 @@ func (h *EntityHandler) createNavFetchFunc(relatedDB *gorm.DB, targetMetadata *m
 			db = db.Scopes(scopes...)
 		}
 
+		if hasLeadingStructuralApplyTransformation(modifiedOptions.Apply) {
+			var (
+				results []map[string]interface{}
+				err     error
+			)
+			switch modifiedOptions.Apply[0].Type {
+			case query.ApplyTypeConcat:
+				results, err = h.executeConcatApplyPipelineForMetadata(db, &modifiedOptions, nil, "", targetMetadata)
+			case query.ApplyTypeJoin, query.ApplyTypeOuterJoin:
+				results, err = h.executeJoinApplyPipelineForMetadata(db, &modifiedOptions, targetMetadata)
+			default:
+				err = fmt.Errorf("unsupported structural apply transformation: %s", modifiedOptions.Apply[0].Type)
+			}
+			if err != nil {
+				return nil, err
+			}
+			return results, nil
+		}
+
 		db = query.ApplyQueryOptions(db, &modifiedOptions, targetMetadata, h.logger)
 
 		if query.ShouldUseMapResults(queryOptions) {

@@ -22,6 +22,8 @@ func TestParseApply_TransformationCatalog_AllSupported(t *testing.T) {
 		{name: "top", apply: "top(2)", expectedType: ApplyTypeTop},
 		{name: "search", apply: "search(Laptop)", expectedType: ApplyTransformationType("search")},
 		{name: "concat", apply: "concat(filter(Price gt 100),filter(Price le 100))", expectedType: ApplyTransformationType("concat")},
+		{name: "join", apply: "join(Lines as Line)", expectedType: ApplyTransformationType("join")},
+		{name: "outerjoin", apply: "outerjoin(Lines as Line)", expectedType: ApplyTransformationType("outerjoin")},
 		{name: "topcount", apply: "topcount(2,Price)", expectedType: ApplyTransformationType("topcount")},
 		{name: "bottomcount", apply: "bottomcount(2,Price)", expectedType: ApplyTransformationType("bottomcount")},
 		{name: "toppercent", apply: "toppercent(100,Price)", expectedType: ApplyTransformationType("toppercent")},

@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/preference"
 	"github.com/nlstn/go-odata/internal/query"
 	"github.com/nlstn/go-odata/internal/response"
@@ -271,6 +272,25 @@ func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.Qu
 		fts = nil
 	}
 
+	if hasLeadingStructuralApplyTransformation(modifiedOptions.Apply) {
+		var (
+			results []map[string]interface{}
+			err     error
+		)
+		switch modifiedOptions.Apply[0].Type {
+		case query.ApplyTypeConcat:
+			results, err = h.executeConcatApplyPipelineForMetadata(db, &modifiedOptions, fts, tableName, h.metadata)
+		case query.ApplyTypeJoin, query.ApplyTypeOuterJoin:
+			results, err = h.executeJoinApplyPipelineForMetadata(db, &modifiedOptions, h.metadata)
+		default:
+			err = fmt.Errorf("unsupported structural apply transformation: %s", modifiedOptions.Apply[0].Type)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return results, nil
+	}
+
 	// Apply query options with FTS support
 	db = query.ApplyQueryOptionsWithFTS(db, &modifiedOptions, h.metadata, fts, tableName, h.logger)
 
@@ -283,14 +303,6 @@ func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.Qu
 	}
 
 	if query.ShouldUseMapResults(queryOptions) {
-		if len(modifiedOptions.Apply) == 1 && modifiedOptions.Apply[0].Type == query.ApplyTypeConcat && modifiedOptions.Apply[0].Concat != nil {
-			results, err := h.executeTopLevelConcatApply(db, &modifiedOptions, fts, tableName)
-			if err != nil {
-				return nil, err
-			}
-			return results, nil
-		}
-
 		var results []map[string]interface{}
 		if err := db.Find(&results).Error; err != nil {
 			return nil, err
@@ -338,9 +350,204 @@ func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.Qu
 	return sliceValue, nil
 }
 
-func (h *EntityHandler) executeTopLevelConcatApply(db *gorm.DB, options *query.QueryOptions, fts *query.FTSManager, tableName string) ([]map[string]interface{}, error) {
-	if options == nil || len(options.Apply) != 1 || options.Apply[0].Type != query.ApplyTypeConcat || options.Apply[0].Concat == nil {
-		return nil, fmt.Errorf("invalid concat apply options")
+func hasLeadingStructuralApplyTransformation(apply []query.ApplyTransformation) bool {
+	if len(apply) == 0 {
+		return false
+	}
+
+	first := apply[0]
+	switch first.Type {
+	case query.ApplyTypeConcat:
+		return first.Concat != nil
+	case query.ApplyTypeJoin, query.ApplyTypeOuterJoin:
+		return first.Join != nil
+	default:
+		return false
+	}
+}
+
+func applyMapTopSkip(results []map[string]interface{}, top *int, skip *int) []map[string]interface{} {
+	if skip != nil {
+		s := *skip
+		if s >= len(results) {
+			results = []map[string]interface{}{}
+		} else if s > 0 {
+			results = results[s:]
+		}
+	}
+
+	if top != nil {
+		t := *top
+		if t <= 0 {
+			results = []map[string]interface{}{}
+		} else if t < len(results) {
+			results = results[:t]
+		}
+	}
+
+	return results
+}
+
+func applySupportedTailTransformations(results []map[string]interface{}, tail []query.ApplyTransformation) ([]map[string]interface{}, error) {
+	for _, tr := range tail {
+		switch tr.Type {
+		case query.ApplyTypeIdentity:
+			// no-op
+		case query.ApplyTypeOrderBy:
+			applyMapOrderBy(results, tr.OrderBy)
+		case query.ApplyTypeSkip:
+			results = applyMapTopSkip(results, nil, tr.Skip)
+		case query.ApplyTypeTop:
+			results = applyMapTopSkip(results, tr.Top, nil)
+		default:
+			return nil, fmt.Errorf("unsupported transformation after structural apply execution: %s", tr.Type)
+		}
+	}
+
+	return results, nil
+}
+
+func cloneMap(in map[string]interface{}) map[string]interface{} {
+	if len(in) == 0 {
+		return map[string]interface{}{}
+	}
+	out := make(map[string]interface{}, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
+}
+
+func entityValueToMap(value reflect.Value, entityMetadata *metadata.EntityMetadata) map[string]interface{} {
+	for value.IsValid() && value.Kind() == reflect.Ptr {
+		if value.IsNil() {
+			return nil
+		}
+		value = value.Elem()
+	}
+	if !value.IsValid() || value.Kind() != reflect.Struct || entityMetadata == nil {
+		return nil
+	}
+
+	result := make(map[string]interface{})
+	for _, prop := range entityMetadata.Properties {
+		if prop.IsNavigationProp {
+			continue
+		}
+		field := value.FieldByName(prop.FieldName)
+		if !field.IsValid() || !field.CanInterface() {
+			continue
+		}
+		result[prop.JsonName] = field.Interface()
+	}
+
+	return result
+}
+
+func childPreloadScope(targetMetadata *metadata.EntityMetadata) func(*gorm.DB) *gorm.DB {
+	return func(db *gorm.DB) *gorm.DB {
+		if targetMetadata != nil && targetMetadata.KeyProperty != nil && targetMetadata.KeyProperty.ColumnName != "" {
+			return db.Order(targetMetadata.KeyProperty.ColumnName)
+		}
+		return db
+	}
+}
+
+func (h *EntityHandler) executeJoinApplyPipelineForMetadata(db *gorm.DB, options *query.QueryOptions, entityMetadata *metadata.EntityMetadata) ([]map[string]interface{}, error) {
+	if options == nil || !hasLeadingStructuralApplyTransformation(options.Apply) {
+		return nil, fmt.Errorf("invalid join apply pipeline")
+	}
+	if entityMetadata == nil {
+		return nil, fmt.Errorf("missing entity metadata for join apply")
+	}
+
+	join := options.Apply[0]
+	if join.Join == nil {
+		return nil, fmt.Errorf("missing join transformation payload")
+	}
+
+	navProp := entityMetadata.FindNavigationProperty(join.Join.Property)
+	if navProp == nil || !navProp.NavigationIsArray {
+		return nil, fmt.Errorf("navigation property '%s' is not a collection", join.Join.Property)
+	}
+
+	targetMetadata, err := entityMetadata.ResolveNavigationTarget(navProp.Name)
+	if err != nil {
+		return nil, err
+	}
+
+	baseResults := reflect.New(reflect.SliceOf(entityMetadata.EntityType)).Interface()
+	joinDB := db.Session(&gorm.Session{}).Preload(navProp.Name, childPreloadScope(targetMetadata))
+	if err := joinDB.Find(baseResults).Error; err != nil {
+		return nil, err
+	}
+
+	flattened := make([]map[string]interface{}, 0)
+	items := reflect.ValueOf(baseResults).Elem()
+	for i := 0; i < items.Len(); i++ {
+		parentValue := items.Index(i)
+		parentMap := entityValueToMap(parentValue, entityMetadata)
+		if parentMap == nil {
+			continue
+		}
+
+		navValue := parentValue.FieldByName(navProp.FieldName)
+		for navValue.IsValid() && navValue.Kind() == reflect.Ptr {
+			if navValue.IsNil() {
+				break
+			}
+			navValue = navValue.Elem()
+		}
+
+		if !navValue.IsValid() || (navValue.Kind() != reflect.Slice && navValue.Kind() != reflect.Array) {
+			if join.Type == query.ApplyTypeOuterJoin {
+				row := cloneMap(parentMap)
+				row[join.Join.Alias] = nil
+				flattened = append(flattened, row)
+			}
+			continue
+		}
+
+		if navValue.Len() == 0 {
+			if join.Type == query.ApplyTypeOuterJoin {
+				row := cloneMap(parentMap)
+				row[join.Join.Alias] = nil
+				flattened = append(flattened, row)
+			}
+			continue
+		}
+
+		for j := 0; j < navValue.Len(); j++ {
+			row := cloneMap(parentMap)
+			row[join.Join.Alias] = entityValueToMap(navValue.Index(j), targetMetadata)
+			flattened = append(flattened, row)
+		}
+	}
+
+	flattened, err = applySupportedTailTransformations(flattened, options.Apply[1:])
+	if err != nil {
+		return nil, err
+	}
+
+	if len(options.OrderBy) > 0 {
+		applyMapOrderBy(flattened, options.OrderBy)
+	}
+	flattened = applyMapTopSkip(flattened, options.Top, options.Skip)
+
+	if len(options.Select) > 0 && options.Compute != nil {
+		computedAliases := make(map[string]bool)
+		for _, expr := range options.Compute.Expressions {
+			computedAliases[expr.Alias] = true
+		}
+		flattened = query.ApplySelectToMapResults(flattened, options.Select, entityMetadata, computedAliases)
+	}
+
+	return flattened, nil
+}
+
+func (h *EntityHandler) executeConcatApplyPipelineForMetadata(db *gorm.DB, options *query.QueryOptions, fts *query.FTSManager, tableName string, entityMetadata *metadata.EntityMetadata) ([]map[string]interface{}, error) {
+	if options == nil || len(options.Apply) == 0 || options.Apply[0].Type != query.ApplyTypeConcat || options.Apply[0].Concat == nil {
+		return nil, fmt.Errorf("invalid concat apply pipeline")
 	}
 
 	concat := options.Apply[0].Concat
@@ -349,14 +556,12 @@ func (h *EntityHandler) executeTopLevelConcatApply(db *gorm.DB, options *query.Q
 	for _, sequence := range concat.Sequences {
 		seqOptions := *options
 		seqOptions.Apply = sequence
-		// $orderby/$skip/$top query options are applied after the whole $apply pipeline.
-		// For concat, that means after concatenating all sequence results.
 		seqOptions.OrderBy = nil
 		seqOptions.Skip = nil
 		seqOptions.Top = nil
 
 		seqDB := db.Session(&gorm.Session{})
-		seqDB = query.ApplyQueryOptionsWithFTS(seqDB, &seqOptions, h.metadata, fts, tableName, h.logger)
+		seqDB = query.ApplyQueryOptionsWithFTS(seqDB, &seqOptions, entityMetadata, fts, tableName, h.logger)
 
 		var part []map[string]interface{}
 		if err := seqDB.Find(&part).Error; err != nil {
@@ -365,34 +570,25 @@ func (h *EntityHandler) executeTopLevelConcatApply(db *gorm.DB, options *query.Q
 		results = append(results, part...)
 	}
 
+	tail := options.Apply[1:]
+	var err error
+	results, err = applySupportedTailTransformations(results, tail)
+	if err != nil {
+		return nil, err
+	}
+
 	if len(options.OrderBy) > 0 {
 		applyMapOrderBy(results, options.OrderBy)
 	}
 
-	if options.Skip != nil {
-		skip := *options.Skip
-		if skip >= len(results) {
-			results = []map[string]interface{}{}
-		} else if skip > 0 {
-			results = results[skip:]
-		}
-	}
-
-	if options.Top != nil {
-		top := *options.Top
-		if top <= 0 {
-			results = []map[string]interface{}{}
-		} else if top < len(results) {
-			results = results[:top]
-		}
-	}
+	results = applyMapTopSkip(results, options.Top, options.Skip)
 
 	if len(options.Select) > 0 && options.Compute != nil {
 		computedAliases := make(map[string]bool)
 		for _, expr := range options.Compute.Expressions {
 			computedAliases[expr.Alias] = true
 		}
-		results = query.ApplySelectToMapResults(results, options.Select, h.metadata, computedAliases)
+		results = query.ApplySelectToMapResults(results, options.Select, entityMetadata, computedAliases)
 	}
 
 	return results, nil

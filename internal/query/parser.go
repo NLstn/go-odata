@@ -66,6 +66,7 @@ type ApplyTransformation struct {
 	Skip      *int
 	Search    *string
 	Concat    *ConcatTransformation
+	Join      *JoinTransformation
 	Set       *SetTransformation
 }
 
@@ -83,6 +84,8 @@ const (
 	ApplyTypeSkip          ApplyTransformationType = "skip"
 	ApplyTypeSearch        ApplyTransformationType = "search"
 	ApplyTypeConcat        ApplyTransformationType = "concat"
+	ApplyTypeJoin          ApplyTransformationType = "join"
+	ApplyTypeOuterJoin     ApplyTransformationType = "outerjoin"
 	ApplyTypeTopCount      ApplyTransformationType = "topcount"
 	ApplyTypeBottomCount   ApplyTransformationType = "bottomcount"
 	ApplyTypeTopPercent    ApplyTransformationType = "toppercent"
@@ -95,6 +98,13 @@ const (
 // an independent transformation sequence.
 type ConcatTransformation struct {
 	Sequences [][]ApplyTransformation
+}
+
+// JoinTransformation represents join(p as Alias) or outerjoin(p as Alias)
+// over a collection-valued navigation property.
+type JoinTransformation struct {
+	Property string
+	Alias    string
 }
 
 // SetTransformation captures measure-based set transformations.

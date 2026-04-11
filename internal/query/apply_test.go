@@ -8,12 +8,19 @@ import (
 )
 
 // TestEntity for testing apply transformations
+type ApplyTestLine struct {
+	ID                int    `json:"ID" odata:"key"`
+	ApplyTestEntityID int    `json:"ApplyTestEntityID"`
+	Label             string `json:"Label"`
+}
+
 type ApplyTestEntity struct {
-	ID       int     `json:"ID" odata:"key"`
-	Name     string  `json:"Name"`
-	Category string  `json:"Category"`
-	Price    float64 `json:"Price"`
-	Quantity int     `json:"Quantity"`
+	ID       int             `json:"ID" odata:"key"`
+	Name     string          `json:"Name"`
+	Category string          `json:"Category"`
+	Price    float64         `json:"Price"`
+	Quantity int             `json:"Quantity"`
+	Lines    []ApplyTestLine `json:"Lines" gorm:"foreignKey:ApplyTestEntityID"`
 }
 
 func getApplyTestMetadata(t *testing.T) *metadata.EntityMetadata {
@@ -794,6 +801,48 @@ func TestParseApply_TransformationKeywordCaseVersionBehavior(t *testing.T) {
 	t.Run("4.0 rejects mixed-case transformation keywords", func(t *testing.T) {
 		if _, err := parseApplyWithCaseSensitivity("FILTER(Price gt 10)", meta, 0, false); err == nil {
 			t.Fatal("expected 4.0 mode to reject mixed-case FILTER transformation")
+		}
+	})
+}
+
+func TestParseApply_JoinTransformations(t *testing.T) {
+	meta := getApplyTestMetadata(t)
+
+	t.Run("join parses collection navigation property", func(t *testing.T) {
+		transformations, err := parseApply("join(Lines as Line)", meta, 0)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(transformations) != 1 {
+			t.Fatalf("expected 1 transformation, got %d", len(transformations))
+		}
+		if transformations[0].Type != ApplyTypeJoin || transformations[0].Join == nil {
+			t.Fatalf("expected join transformation, got %+v", transformations[0])
+		}
+		if transformations[0].Join.Property != "Lines" || transformations[0].Join.Alias != "Line" {
+			t.Fatalf("unexpected join payload: %+v", transformations[0].Join)
+		}
+	})
+
+	t.Run("outerjoin parses collection navigation property", func(t *testing.T) {
+		transformations, err := parseApply("outerjoin(Lines as Line)", meta, 0)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if transformations[0].Type != ApplyTypeOuterJoin || transformations[0].Join == nil {
+			t.Fatalf("expected outerjoin transformation, got %+v", transformations[0])
+		}
+	})
+
+	t.Run("join rejects non-collection property", func(t *testing.T) {
+		if _, err := parseApply("join(Name as N)", meta, 0); err == nil {
+			t.Fatal("expected join on structural property to fail")
+		}
+	})
+
+	t.Run("join rejects unsupported nested transformation sequence", func(t *testing.T) {
+		if _, err := parseApply("join(Lines as Line,filter(Label eq 'x'))", meta, 0); err == nil {
+			t.Fatal("expected join with nested transformation sequence to fail")
 		}
 	})
 }
