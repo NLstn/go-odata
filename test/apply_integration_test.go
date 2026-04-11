@@ -22,6 +22,19 @@ type ApplyTestProduct struct {
 	Quantity int     `json:"Quantity"`
 }
 
+type ApplyJoinSale struct {
+	ID                 uint    `json:"ID" gorm:"primaryKey" odata:"key"`
+	ApplyJoinProductID uint    `json:"ApplyJoinProductID"`
+	Amount             float64 `json:"Amount"`
+}
+
+type ApplyJoinProduct struct {
+	ID       uint            `json:"ID" gorm:"primaryKey" odata:"key"`
+	Name     string          `json:"Name"`
+	Category string          `json:"Category"`
+	Sales    []ApplyJoinSale `json:"Sales" gorm:"foreignKey:ApplyJoinProductID"`
+}
+
 func TestIntegrationApplyGroupBy(t *testing.T) {
 	// Initialize database
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
@@ -576,6 +589,158 @@ func TestIntegrationApplyConcat_StrictSemantics(t *testing.T) {
 
 		if len(value) != 5 {
 			t.Fatalf("Expected 5 items after global $top, got %d", len(value))
+		}
+	})
+
+	t.Run("top apply transformation executes after concat", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/ApplyTestProducts?$apply=concat(identity,identity)/top(5)", nil)
+		w := httptest.NewRecorder()
+		service.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("Expected status %d, got %d. Body: %s", http.StatusOK, w.Code, w.Body.String())
+		}
+
+		var response map[string]interface{}
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+			t.Fatalf("Failed to parse JSON: %v", err)
+		}
+
+		value, ok := response["value"].([]interface{})
+		if !ok {
+			t.Fatal("value is not an array")
+		}
+
+		if len(value) != 5 {
+			t.Fatalf("Expected 5 items after apply top() post-concat, got %d", len(value))
+		}
+	})
+}
+
+func TestIntegrationApplyJoinOuterJoin(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("Failed to open database: %v", err)
+	}
+
+	if err := db.AutoMigrate(&ApplyJoinProduct{}, &ApplyJoinSale{}); err != nil {
+		t.Fatalf("Failed to migrate: %v", err)
+	}
+
+	products := []ApplyJoinProduct{
+		{ID: 1, Name: "Laptop", Category: "Electronics"},
+		{ID: 2, Name: "Mouse", Category: "Electronics"},
+		{ID: 3, Name: "Desk", Category: "Furniture"},
+	}
+	for _, product := range products {
+		if err := db.Create(&product).Error; err != nil {
+			t.Fatalf("Failed to create product: %v", err)
+		}
+	}
+
+	sales := []ApplyJoinSale{
+		{ID: 1, ApplyJoinProductID: 1, Amount: 1000},
+		{ID: 2, ApplyJoinProductID: 1, Amount: 250},
+		{ID: 3, ApplyJoinProductID: 3, Amount: 800},
+	}
+	for _, sale := range sales {
+		if err := db.Create(&sale).Error; err != nil {
+			t.Fatalf("Failed to create sale: %v", err)
+		}
+	}
+
+	service, err := odata.NewService(db)
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
+	_ = service.RegisterEntity(&ApplyJoinProduct{})
+	_ = service.RegisterEntity(&ApplyJoinSale{})
+
+	t.Run("join duplicates parents per related child and drops empty collections", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/ApplyJoinProducts?$apply=join(Sales%20as%20Sale)", nil)
+		w := httptest.NewRecorder()
+		service.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("Expected status %d, got %d. Body: %s", http.StatusOK, w.Code, w.Body.String())
+		}
+
+		var response map[string]interface{}
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+			t.Fatalf("Failed to parse JSON: %v", err)
+		}
+
+		value := response["value"].([]interface{})
+		if len(value) != 3 {
+			t.Fatalf("Expected 3 joined rows, got %d", len(value))
+		}
+
+		for _, item := range value {
+			row := item.(map[string]interface{})
+			if row["Name"] == "Mouse" {
+				t.Fatal("join should not include parent with empty collection")
+			}
+			sale, ok := row["Sale"].(map[string]interface{})
+			if !ok {
+				t.Fatalf("expected Sale object, got %T", row["Sale"])
+			}
+			if _, ok := sale["Amount"]; !ok {
+				t.Fatalf("expected joined Sale to include Amount, got %v", sale)
+			}
+		}
+	})
+
+	t.Run("outerjoin preserves parents with empty collections using null alias", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/ApplyJoinProducts?$apply=outerjoin(Sales%20as%20Sale)", nil)
+		w := httptest.NewRecorder()
+		service.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("Expected status %d, got %d. Body: %s", http.StatusOK, w.Code, w.Body.String())
+		}
+
+		var response map[string]interface{}
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+			t.Fatalf("Failed to parse JSON: %v", err)
+		}
+
+		value := response["value"].([]interface{})
+		if len(value) != 4 {
+			t.Fatalf("Expected 4 outerjoined rows, got %d", len(value))
+		}
+
+		foundEmptyParent := false
+		for _, item := range value {
+			row := item.(map[string]interface{})
+			if row["Name"] == "Mouse" {
+				foundEmptyParent = true
+				if row["Sale"] != nil {
+					t.Fatalf("expected outerjoin alias to be null for empty collection, got %v", row["Sale"])
+				}
+			}
+		}
+		if !foundEmptyParent {
+			t.Fatal("outerjoin should preserve parent with empty collection")
+		}
+	})
+
+	t.Run("top apply transformation executes after join", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/ApplyJoinProducts?$apply=join(Sales%20as%20Sale)/top(2)", nil)
+		w := httptest.NewRecorder()
+		service.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("Expected status %d, got %d. Body: %s", http.StatusOK, w.Code, w.Body.String())
+		}
+
+		var response map[string]interface{}
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+			t.Fatalf("Failed to parse JSON: %v", err)
+		}
+
+		value := response["value"].([]interface{})
+		if len(value) != 2 {
+			t.Fatalf("Expected 2 rows after top() following join, got %d", len(value))
 		}
 	})
 }

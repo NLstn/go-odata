@@ -53,7 +53,16 @@ func ContextPropertiesFromApply(transformations []ApplyTransformation) []string 
 					}
 				}
 			}
-		// filter and compute do not change the output shape
+		case ApplyTypeJoin, ApplyTypeOuterJoin:
+			hasShapeChange = true
+			if t.Join != nil && t.Join.Alias != "" {
+				contextProp := t.Join.Alias + "()"
+				if !propSet[contextProp] {
+					propSet[contextProp] = true
+					properties = append(properties, contextProp)
+				}
+			}
+			// filter and compute do not change the output shape
 		}
 	}
 

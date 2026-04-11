@@ -128,3 +128,18 @@ func TestContextPropertiesFromApply_ComputeOnly(t *testing.T) {
 		t.Errorf("expected nil for compute-only pipeline, got %v", result)
 	}
 }
+
+func TestContextPropertiesFromApply_Join(t *testing.T) {
+	transformations := []ApplyTransformation{
+		{
+			Type: ApplyTypeJoin,
+			Join: &JoinTransformation{Alias: "Sale"},
+		},
+	}
+
+	result := ContextPropertiesFromApply(transformations)
+	expected := []string{"Sale()"}
+	if !reflect.DeepEqual(result, expected) {
+		t.Errorf("ContextPropertiesFromApply() = %v, want %v", result, expected)
+	}
+}

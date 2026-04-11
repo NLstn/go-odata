@@ -468,6 +468,125 @@ func ApplyTransformationCatalog() *framework.TestSuite {
 	)
 
 	suite.AddTest(
+		"test_apply_join",
+		"join duplicates parent rows for each related child and excludes parents with empty collections",
+		func(ctx *framework.TestContext) error {
+			descriptionResp, err := ctx.GET("/ProductDescriptions")
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(descriptionResp, 200); err != nil {
+				return err
+			}
+			descriptionCount, err := applyValueCount(descriptionResp.Body)
+			if err != nil {
+				return err
+			}
+
+			applyExpr := url.QueryEscape("join(Descriptions as Description)")
+			resp, err := ctx.GET("/Products?$apply=" + applyExpr)
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(resp, 200); err != nil {
+				return err
+			}
+
+			items, err := parseApplyItems(resp)
+			if err != nil {
+				return err
+			}
+			if len(items) != descriptionCount {
+				return fmt.Errorf("expected join result size %d to equal description count, got %d", descriptionCount, len(items))
+			}
+
+			for i, item := range items {
+				if _, ok := firstPresent(item, "Description", "description"); !ok {
+					return fmt.Errorf("joined row %d missing Description alias", i)
+				}
+				if rawName, ok := firstPresent(item, "Name", "name"); ok {
+					if name, ok := rawName.(string); ok && name == "Desk" {
+						return fmt.Errorf("join should exclude products with empty Descriptions collection")
+					}
+				}
+			}
+
+			return nil
+		},
+	)
+
+	suite.AddTest(
+		"test_apply_outerjoin",
+		"outerjoin preserves parents with empty collections by emitting a null alias row",
+		func(ctx *framework.TestContext) error {
+			productsResp, err := ctx.GET("/Products?$expand=Descriptions")
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(productsResp, 200); err != nil {
+				return err
+			}
+
+			var expanded struct {
+				Value []map[string]interface{} `json:"value"`
+			}
+			if err := json.Unmarshal(productsResp.Body, &expanded); err != nil {
+				return fmt.Errorf("failed to parse expanded products response: %w", err)
+			}
+
+			emptyParents := 0
+			descriptionCount := 0
+			for _, product := range expanded.Value {
+				rawDescriptions, ok := firstPresent(product, "Descriptions", "descriptions")
+				if !ok || rawDescriptions == nil {
+					emptyParents++
+					continue
+				}
+				descriptions, ok := rawDescriptions.([]interface{})
+				if !ok {
+					return fmt.Errorf("expanded Descriptions value has unexpected type %T", rawDescriptions)
+				}
+				descriptionCount += len(descriptions)
+				if len(descriptions) == 0 {
+					emptyParents++
+				}
+			}
+
+			applyExpr := url.QueryEscape("outerjoin(Descriptions as Description)")
+			resp, err := ctx.GET("/Products?$apply=" + applyExpr)
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(resp, 200); err != nil {
+				return err
+			}
+
+			items, err := parseApplyItems(resp)
+			if err != nil {
+				return err
+			}
+			expected := descriptionCount + emptyParents
+			if len(items) != expected {
+				return fmt.Errorf("expected outerjoin result size %d, got %d", expected, len(items))
+			}
+
+			foundNullAlias := false
+			for _, item := range items {
+				rawDesc, ok := firstPresent(item, "Description", "description")
+				if ok && rawDesc == nil {
+					foundNullAlias = true
+					break
+				}
+			}
+			if !foundNullAlias {
+				return fmt.Errorf("expected outerjoin result to include at least one null Description alias")
+			}
+
+			return nil
+		},
+	)
+
+	suite.AddTest(
 		"test_apply_groupby_nested_sequence",
 		"groupby second parameter accepts a transformation sequence",
 		func(ctx *framework.TestContext) error {

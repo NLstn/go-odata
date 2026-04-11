@@ -165,6 +165,8 @@ const (
 	ApplyTypeAggregate ApplyTransformationType = query.ApplyTypeAggregate
 	ApplyTypeFilter    ApplyTransformationType = query.ApplyTypeFilter
 	ApplyTypeCompute   ApplyTransformationType = query.ApplyTypeCompute
+	ApplyTypeJoin      ApplyTransformationType = query.ApplyTypeJoin
+	ApplyTypeOuterJoin ApplyTransformationType = query.ApplyTypeOuterJoin
 )
 
 // Aggregation method constants

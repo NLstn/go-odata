@@ -98,6 +98,8 @@ func canonicalizeApplyTransformationKeyword(transStr string) string {
 		"bottomsum(",
 		"search(",
 		"concat(",
+		"join(",
+		"outerjoin(",
 		"top(",
 		"skip(",
 	}
@@ -182,6 +184,10 @@ func parseApplyTransformationWithAliases(transStr string, entityMetadata *metada
 		return parseSearchTransformation(transStr)
 	} else if strings.HasPrefix(transStr, "concat(") {
 		return parseConcatTransformation(transStr, entityMetadata, maxInClauseSize, caseInsensitive)
+	} else if strings.HasPrefix(transStr, "join(") {
+		return parseJoinTransformation(transStr, entityMetadata, ApplyTypeJoin, caseInsensitive)
+	} else if strings.HasPrefix(transStr, "outerjoin(") {
+		return parseJoinTransformation(transStr, entityMetadata, ApplyTypeOuterJoin, caseInsensitive)
 	} else if strings.HasPrefix(transStr, "topcount(") {
 		return parseSetTransformation(transStr, entityMetadata, ApplyTypeTopCount)
 	} else if strings.HasPrefix(transStr, "bottomcount(") {
@@ -413,6 +419,60 @@ func parseConcatTransformation(transStr string, entityMetadata *metadata.EntityM
 	return &ApplyTransformation{
 		Type:   ApplyTypeConcat,
 		Concat: &ConcatTransformation{Sequences: sequences},
+	}, nil
+}
+
+func parseJoinTransformation(transStr string, entityMetadata *metadata.EntityMetadata, t ApplyTransformationType, caseInsensitive bool) (*ApplyTransformation, error) {
+	keyword := string(t) + "("
+	content := transStr[len(keyword):]
+	if !strings.HasSuffix(content, ")") {
+		return nil, fmt.Errorf("missing closing parenthesis in %s", t)
+	}
+	content = strings.TrimSpace(content[:len(content)-1])
+	if content == "" {
+		return nil, fmt.Errorf("%s requires a collection navigation property and alias", t)
+	}
+
+	parts := splitAggregateExpressions(content)
+	if len(parts) == 0 {
+		return nil, fmt.Errorf("%s requires a collection navigation property and alias", t)
+	}
+	if len(parts) > 1 {
+		return nil, fmt.Errorf("%s with nested transformation sequence is not yet supported", t)
+	}
+
+	binding := strings.TrimSpace(parts[0])
+	separatorIndex := strings.Index(strings.ToLower(binding), " as ")
+	if caseInsensitive {
+		separatorIndex = strings.Index(strings.ToLower(binding), " as ")
+	}
+	if separatorIndex < 0 {
+		return nil, fmt.Errorf("invalid %s format, expected '%s(Property as Alias)'", t, t)
+	}
+
+	property := strings.TrimSpace(binding[:separatorIndex])
+	alias := strings.TrimSpace(binding[separatorIndex+4:])
+	if property == "" || alias == "" {
+		return nil, fmt.Errorf("invalid %s format, expected '%s(Property as Alias)'", t, t)
+	}
+	if entityMetadata == nil {
+		return nil, fmt.Errorf("entity metadata is required for %s", t)
+	}
+
+	navProp := entityMetadata.FindNavigationProperty(property)
+	if navProp == nil {
+		return nil, fmt.Errorf("navigation property '%s' does not exist in entity type", property)
+	}
+	if !navProp.NavigationIsArray {
+		return nil, fmt.Errorf("navigation property '%s' is not a collection", property)
+	}
+
+	return &ApplyTransformation{
+		Type: t,
+		Join: &JoinTransformation{
+			Property: navProp.Name,
+			Alias:    alias,
+		},
 	}, nil
 }
 
