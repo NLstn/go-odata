@@ -68,6 +68,7 @@ type ApplyTransformation struct {
 	Concat    *ConcatTransformation
 	Join      *JoinTransformation
 	Set       *SetTransformation
+	Function  *string
 }
 
 // ApplyTransformationType represents the type of apply transformation
@@ -92,6 +93,10 @@ const (
 	ApplyTypeBottomPercent ApplyTransformationType = "bottompercent"
 	ApplyTypeTopSum        ApplyTransformationType = "topsum"
 	ApplyTypeBottomSum     ApplyTransformationType = "bottomsum"
+	ApplyTypeAncestors     ApplyTransformationType = "ancestors"
+	ApplyTypeDescendants   ApplyTransformationType = "descendants"
+	ApplyTypeTraverse      ApplyTransformationType = "traverse"
+	ApplyTypeFunction      ApplyTransformationType = "function"
 )
 
 // ConcatTransformation represents concat(seq1,seq2,...) where each argument is
@@ -103,8 +108,9 @@ type ConcatTransformation struct {
 // JoinTransformation represents join(p as Alias) or outerjoin(p as Alias)
 // over a collection-valued navigation property.
 type JoinTransformation struct {
-	Property string
-	Alias    string
+	Property  string
+	Alias     string
+	Transform []ApplyTransformation
 }
 
 // SetTransformation captures measure-based set transformations.

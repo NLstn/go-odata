@@ -286,6 +286,13 @@ func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.Qu
 			err = fmt.Errorf("unsupported structural apply transformation: %s", modifiedOptions.Apply[0].Type)
 		}
 		if err != nil {
+			if strings.Contains(err.Error(), "unsupported structural apply transformation") || strings.Contains(err.Error(), "unsupported transformation after structural apply execution") {
+				return nil, &collectionRequestError{
+					StatusCode: http.StatusBadRequest,
+					ErrorCode:  ErrMsgInvalidQueryOptions,
+					Message:    err.Error(),
+				}
+			}
 			return nil, err
 		}
 		return results, nil
@@ -393,6 +400,8 @@ func applySupportedTailTransformations(results []map[string]interface{}, tail []
 		switch tr.Type {
 		case query.ApplyTypeIdentity:
 			// no-op
+		case query.ApplyTypeFilter:
+			results = applyMapFilter(results, tr.Filter)
 		case query.ApplyTypeOrderBy:
 			applyMapOrderBy(results, tr.OrderBy)
 		case query.ApplyTypeSkip:
@@ -405,6 +414,130 @@ func applySupportedTailTransformations(results []map[string]interface{}, tail []
 	}
 
 	return results, nil
+}
+
+func applyMapFilter(results []map[string]interface{}, filter *query.FilterExpression) []map[string]interface{} {
+	if filter == nil || len(results) == 0 {
+		return results
+	}
+
+	filtered := make([]map[string]interface{}, 0, len(results))
+	for _, row := range results {
+		if evaluateMapFilterExpression(row, filter) {
+			filtered = append(filtered, row)
+		}
+	}
+
+	return filtered
+}
+
+func evaluateMapFilterExpression(row map[string]interface{}, expr *query.FilterExpression) bool {
+	if expr == nil {
+		return true
+	}
+
+	if expr.Left != nil && expr.Right != nil {
+		left := evaluateMapFilterExpression(row, expr.Left)
+		right := evaluateMapFilterExpression(row, expr.Right)
+		result := false
+		switch expr.Logical {
+		case query.LogicalAnd:
+			result = left && right
+		case query.LogicalOr:
+			result = left || right
+		default:
+			result = false
+		}
+		if expr.IsNot {
+			return !result
+		}
+		return result
+	}
+
+	left, ok := getNestedMapValueCaseInsensitive(row, expr.Property)
+	if !ok {
+		return false
+	}
+
+	result := evaluateFilterComparison(left, expr.Operator, expr.Value)
+	if expr.IsNot {
+		return !result
+	}
+	return result
+}
+
+func getNestedMapValueCaseInsensitive(row map[string]interface{}, propertyPath string) (interface{}, bool) {
+	segments := strings.Split(propertyPath, "/")
+	if len(segments) == 0 {
+		return nil, false
+	}
+
+	var current interface{} = row
+	for _, segment := range segments {
+		m, ok := current.(map[string]interface{})
+		if !ok {
+			return nil, false
+		}
+
+		next, found := getMapValueCaseInsensitive(m, segment)
+		if !found {
+			return nil, false
+		}
+		current = next
+	}
+
+	return current, true
+}
+
+func evaluateFilterComparison(left interface{}, op query.FilterOperator, right interface{}) bool {
+	switch op {
+	case query.OpEqual:
+		return compareMapValue(left, right) == 0
+	case query.OpNotEqual:
+		return compareMapValue(left, right) != 0
+	case query.OpGreaterThan:
+		return compareMapValue(left, right) > 0
+	case query.OpGreaterThanOrEqual:
+		return compareMapValue(left, right) >= 0
+	case query.OpLessThan:
+		return compareMapValue(left, right) < 0
+	case query.OpLessThanOrEqual:
+		return compareMapValue(left, right) <= 0
+	case query.OpContains:
+		return strings.Contains(strings.ToLower(fmt.Sprintf("%v", left)), strings.ToLower(fmt.Sprintf("%v", right)))
+	case query.OpStartsWith:
+		return strings.HasPrefix(strings.ToLower(fmt.Sprintf("%v", left)), strings.ToLower(fmt.Sprintf("%v", right)))
+	case query.OpEndsWith:
+		return strings.HasSuffix(strings.ToLower(fmt.Sprintf("%v", left)), strings.ToLower(fmt.Sprintf("%v", right)))
+	default:
+		return false
+	}
+}
+
+func compareMapValue(left interface{}, right interface{}) int {
+	if lf, ok := toFloat64(left); ok {
+		if rf, ok := toFloat64(right); ok {
+			switch {
+			case lf < rf:
+				return -1
+			case lf > rf:
+				return 1
+			default:
+				return 0
+			}
+		}
+	}
+
+	ls := fmt.Sprintf("%v", left)
+	rs := fmt.Sprintf("%v", right)
+	switch {
+	case ls < rs:
+		return -1
+	case ls > rs:
+		return 1
+	default:
+		return 0
+	}
 }
 
 func cloneMap(in map[string]interface{}) map[string]interface{} {
@@ -521,6 +654,23 @@ func (h *EntityHandler) executeJoinApplyPipelineForMetadata(db *gorm.DB, options
 			row := cloneMap(parentMap)
 			row[join.Join.Alias] = entityValueToMap(navValue.Index(j), targetMetadata)
 			flattened = append(flattened, row)
+		}
+	}
+
+	if len(join.Join.Transform) > 0 {
+		flattenedTransforms := make([]query.ApplyTransformation, 0, len(join.Join.Transform))
+		for _, tr := range join.Join.Transform {
+			switch tr.Type {
+			case query.ApplyTypeIdentity, query.ApplyTypeFilter, query.ApplyTypeOrderBy, query.ApplyTypeSkip, query.ApplyTypeTop:
+				flattenedTransforms = append(flattenedTransforms, tr)
+			default:
+				return nil, fmt.Errorf("unsupported nested %s transformation: %s", join.Type, tr.Type)
+			}
+		}
+		var err error
+		flattened, err = applySupportedTailTransformations(flattened, flattenedTransforms)
+		if err != nil {
+			return nil, err
 		}
 	}
 

@@ -30,6 +30,10 @@ func TestParseApply_TransformationCatalog_AllSupported(t *testing.T) {
 		{name: "bottompercent", apply: "bottompercent(100,Price)", expectedType: ApplyTransformationType("bottompercent")},
 		{name: "topsum", apply: "topsum(100000,Price)", expectedType: ApplyTransformationType("topsum")},
 		{name: "bottomsum", apply: "bottomsum(100000,Price)", expectedType: ApplyTransformationType("bottomsum")},
+		{name: "ancestors", apply: "ancestors()", expectedType: ApplyTransformationType("ancestors")},
+		{name: "descendants", apply: "descendants()", expectedType: ApplyTransformationType("descendants")},
+		{name: "traverse", apply: "traverse()", expectedType: ApplyTransformationType("traverse")},
+		{name: "service-defined-function", apply: "Default.CustomSetTransform()", expectedType: ApplyTransformationType("function")},
 	}
 
 	for _, tt := range tests {
