@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/nlstn/go-odata/internal/metadata"
 )
@@ -100,6 +101,9 @@ func canonicalizeApplyTransformationKeyword(transStr string) string {
 		"concat(",
 		"join(",
 		"outerjoin(",
+		"ancestors(",
+		"descendants(",
+		"traverse(",
 		"top(",
 		"skip(",
 	}
@@ -200,6 +204,14 @@ func parseApplyTransformationWithAliases(transStr string, entityMetadata *metada
 		return parseSetTransformation(transStr, entityMetadata, ApplyTypeTopSum)
 	} else if strings.HasPrefix(transStr, "bottomsum(") {
 		return parseSetTransformation(transStr, entityMetadata, ApplyTypeBottomSum)
+	} else if strings.HasPrefix(transStr, "ancestors(") {
+		return parseHierarchyTransformation(transStr, ApplyTypeAncestors)
+	} else if strings.HasPrefix(transStr, "descendants(") {
+		return parseHierarchyTransformation(transStr, ApplyTypeDescendants)
+	} else if strings.HasPrefix(transStr, "traverse(") {
+		return parseHierarchyTransformation(transStr, ApplyTypeTraverse)
+	} else if fnName, ok := parseServiceDefinedFunctionTransformation(transStr); ok {
+		return &ApplyTransformation{Type: ApplyTypeFunction, Function: &fnName}, nil
 	}
 
 	return nil, fmt.Errorf("unknown transformation: %s", transStr)
@@ -437,8 +449,8 @@ func parseJoinTransformation(transStr string, entityMetadata *metadata.EntityMet
 	if len(parts) == 0 {
 		return nil, fmt.Errorf("%s requires a collection navigation property and alias", t)
 	}
-	if len(parts) > 1 {
-		return nil, fmt.Errorf("%s with nested transformation sequence is not yet supported", t)
+	if len(parts) > 2 {
+		return nil, fmt.Errorf("invalid %s format, expected '%s(Property as Alias[,transform-sequence])'", t, t)
 	}
 
 	binding := strings.TrimSpace(parts[0])
@@ -467,13 +479,88 @@ func parseJoinTransformation(transStr string, entityMetadata *metadata.EntityMet
 		return nil, fmt.Errorf("navigation property '%s' is not a collection", property)
 	}
 
+	var nestedTransform []ApplyTransformation
+	if len(parts) == 2 {
+		nestedStr := strings.TrimSpace(parts[1])
+		if nestedStr == "" {
+			return nil, fmt.Errorf("invalid %s format, expected nested transformation sequence", t)
+		}
+		parsed, err := parseApplyWithCaseSensitivity(nestedStr, entityMetadata, 0, caseInsensitive)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse nested transformation sequence: %w", err)
+		}
+		nestedTransform = parsed
+	}
+
 	return &ApplyTransformation{
 		Type: t,
 		Join: &JoinTransformation{
-			Property: navProp.Name,
-			Alias:    alias,
+			Property:  navProp.Name,
+			Alias:     alias,
+			Transform: nestedTransform,
 		},
 	}, nil
+}
+
+func parseHierarchyTransformation(transStr string, t ApplyTransformationType) (*ApplyTransformation, error) {
+	keyword := string(t) + "("
+	content := transStr[len(keyword):]
+	if !strings.HasSuffix(content, ")") {
+		return nil, fmt.Errorf("missing closing parenthesis in %s", t)
+	}
+	content = strings.TrimSpace(content[:len(content)-1])
+	if content != "" {
+		return nil, fmt.Errorf("%s currently requires empty parameter list", t)
+	}
+
+	return &ApplyTransformation{Type: t}, nil
+}
+
+func parseServiceDefinedFunctionTransformation(transStr string) (string, bool) {
+	open := strings.IndexByte(transStr, '(')
+	if open <= 0 || !strings.HasSuffix(transStr, ")") {
+		return "", false
+	}
+
+	name := strings.TrimSpace(transStr[:open])
+	if name == "" || !strings.Contains(name, ".") {
+		return "", false
+	}
+
+	args := strings.TrimSpace(transStr[open+1 : len(transStr)-1])
+	if args != "" {
+		return "", false
+	}
+
+	parts := strings.Split(name, ".")
+	if len(parts) < 2 {
+		return "", false
+	}
+	for _, part := range parts {
+		if !isIdentifier(part) {
+			return "", false
+		}
+	}
+
+	return name, true
+}
+
+func isIdentifier(value string) bool {
+	if value == "" {
+		return false
+	}
+	for i, r := range value {
+		if i == 0 {
+			if !unicode.IsLetter(r) && r != '_' {
+				return false
+			}
+			continue
+		}
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_' {
+			return false
+		}
+	}
+	return true
 }
 
 // parseSetTransformation parses topcount/bottomcount/toppercent/bottompercent/topsum/bottomsum.

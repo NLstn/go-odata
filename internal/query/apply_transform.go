@@ -89,6 +89,12 @@ func applyTransformations(db *gorm.DB, transformations []ApplyTransformation, en
 			// concat is parsed and carried through the transformation model.
 			// Full UNION-ALL execution is not yet implemented at SQL-builder layer.
 			// Leave the current set unchanged.
+		case ApplyTypeAncestors, ApplyTypeDescendants, ApplyTypeTraverse:
+			// Hierarchy transformations are recognized and carried through.
+			// Full hierarchy semantics are handled outside the generic SQL-builder path.
+		case ApplyTypeFunction:
+			// Service-defined set transformations are recognized by the parser.
+			// Generic SQL-builder execution currently treats them as pass-through.
 		}
 	}
 	return db

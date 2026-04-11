@@ -840,9 +840,17 @@ func TestParseApply_JoinTransformations(t *testing.T) {
 		}
 	})
 
-	t.Run("join rejects unsupported nested transformation sequence", func(t *testing.T) {
-		if _, err := parseApply("join(Lines as Line,filter(Label eq 'x'))", meta, 0); err == nil {
-			t.Fatal("expected join with nested transformation sequence to fail")
+	t.Run("join parses nested transformation sequence", func(t *testing.T) {
+		transformations, err := parseApply("join(Lines as Line,identity)", meta, 0)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(transformations) != 1 || transformations[0].Join == nil {
+			t.Fatalf("expected join transformation, got %+v", transformations)
+		}
+		nested := transformations[0].Join.Transform
+		if len(nested) != 1 || nested[0].Type != ApplyTypeIdentity {
+			t.Fatalf("expected nested identity transformation, got %+v", nested)
 		}
 	})
 }

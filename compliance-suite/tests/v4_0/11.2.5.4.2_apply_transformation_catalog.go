@@ -3,7 +3,10 @@ package v4_0
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/url"
+	"reflect"
+	"sort"
 
 	"github.com/nlstn/go-odata/compliance-suite/framework"
 )
@@ -40,6 +43,33 @@ func applyProductNames(respBody []byte) ([]string, error) {
 	return names, nil
 }
 
+func applyEntityIDs(respBody []byte) ([]string, error) {
+	items, err := parseApplyItems(&framework.HTTPResponse{Body: respBody})
+	if err != nil {
+		return nil, err
+	}
+
+	ids := make([]string, 0, len(items))
+	for i, item := range items {
+		rawID, ok := firstPresent(item, "ID", "id")
+		if !ok {
+			return nil, fmt.Errorf("item %d missing ID field", i)
+		}
+		ids = append(ids, fmt.Sprintf("%v", rawID))
+	}
+
+	sort.Strings(ids)
+	return ids, nil
+}
+
+func decodePayload(respBody []byte) (interface{}, error) {
+	var payload interface{}
+	if err := json.Unmarshal(respBody, &payload); err != nil {
+		return nil, fmt.Errorf("failed to parse response payload: %w", err)
+	}
+	return payload, nil
+}
+
 // ApplyTransformationCatalog creates the 11.2.5.4.2 $apply transformation catalog suite.
 func ApplyTransformationCatalog() *framework.TestSuite {
 	suite := framework.NewTestSuite(
@@ -59,7 +89,7 @@ func ApplyTransformationCatalog() *framework.TestSuite {
 			if err := ctx.AssertStatusCode(baselineResp, 200); err != nil {
 				return err
 			}
-			baselineCount, err := applyValueCount(baselineResp.Body)
+			baselineIDs, err := applyEntityIDs(baselineResp.Body)
 			if err != nil {
 				return err
 			}
@@ -71,13 +101,12 @@ func ApplyTransformationCatalog() *framework.TestSuite {
 			if err := ctx.AssertStatusCode(resp, 200); err != nil {
 				return err
 			}
-
-			gotCount, err := applyValueCount(resp.Body)
+			gotIDs, err := applyEntityIDs(resp.Body)
 			if err != nil {
 				return err
 			}
-			if gotCount != baselineCount {
-				return fmt.Errorf("identity count mismatch: expected %d, got %d", baselineCount, gotCount)
+			if !reflect.DeepEqual(gotIDs, baselineIDs) {
+				return fmt.Errorf("identity result mismatch: expected IDs %v, got %v", baselineIDs, gotIDs)
 			}
 
 			return nil
@@ -123,7 +152,7 @@ func ApplyTransformationCatalog() *framework.TestSuite {
 			if err := ctx.AssertStatusCode(baselineResp, 200); err != nil {
 				return err
 			}
-			baselineCount, err := applyValueCount(baselineResp.Body)
+			baselineIDs, err := applyEntityIDs(baselineResp.Body)
 			if err != nil {
 				return err
 			}
@@ -136,13 +165,12 @@ func ApplyTransformationCatalog() *framework.TestSuite {
 			if err := ctx.AssertStatusCode(resp, 200); err != nil {
 				return err
 			}
-
-			count, err := applyValueCount(resp.Body)
+			gotIDs, err := applyEntityIDs(resp.Body)
 			if err != nil {
 				return err
 			}
-			if count != baselineCount {
-				return fmt.Errorf("search transformation count mismatch: expected %d, got %d", baselineCount, count)
+			if !reflect.DeepEqual(gotIDs, baselineIDs) {
+				return fmt.Errorf("search transformation mismatch: expected IDs %v, got %v", baselineIDs, gotIDs)
 			}
 
 			return nil
@@ -624,6 +652,251 @@ func ApplyTransformationCatalog() *framework.TestSuite {
 			}
 
 			return nil
+		},
+	)
+
+	suite.AddTest(
+		"test_apply_join_nested_sequence",
+		"join nested identity sequence is behaviorally equivalent to plain join",
+		func(ctx *framework.TestContext) error {
+			plainExpr := url.QueryEscape("join(Descriptions as Description)")
+			plainResp, err := ctx.GET("/Products?$apply=" + plainExpr)
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(plainResp, http.StatusOK); err != nil {
+				return err
+			}
+			plainPayload, err := decodePayload(plainResp.Body)
+			if err != nil {
+				return err
+			}
+
+			applyExpr := url.QueryEscape("join(Descriptions as Description,identity)")
+			resp, err := ctx.GET("/Products?$apply=" + applyExpr)
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(resp, http.StatusOK); err != nil {
+				return err
+			}
+			payload, err := decodePayload(resp.Body)
+			if err != nil {
+				return err
+			}
+			if !reflect.DeepEqual(payload, plainPayload) {
+				return fmt.Errorf("join nested identity must match plain join payload")
+			}
+
+			return nil
+		},
+	)
+
+	suite.AddTest(
+		"test_apply_outerjoin_nested_sequence",
+		"outerjoin nested identity sequence is behaviorally equivalent to plain outerjoin",
+		func(ctx *framework.TestContext) error {
+			plainExpr := url.QueryEscape("outerjoin(Descriptions as Description)")
+			plainResp, err := ctx.GET("/Products?$apply=" + plainExpr)
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(plainResp, http.StatusOK); err != nil {
+				return err
+			}
+			plainPayload, err := decodePayload(plainResp.Body)
+			if err != nil {
+				return err
+			}
+
+			applyExpr := url.QueryEscape("outerjoin(Descriptions as Description,identity)")
+			resp, err := ctx.GET("/Products?$apply=" + applyExpr)
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(resp, http.StatusOK); err != nil {
+				return err
+			}
+			payload, err := decodePayload(resp.Body)
+			if err != nil {
+				return err
+			}
+			if !reflect.DeepEqual(payload, plainPayload) {
+				return fmt.Errorf("outerjoin nested identity must match plain outerjoin payload")
+			}
+
+			return nil
+		},
+	)
+
+	suite.AddTest(
+		"test_apply_structural_concat_tail_filter",
+		"concat supports filter as a structural tail transformation",
+		func(ctx *framework.TestContext) error {
+			applyExpr := url.QueryEscape("concat(filter(Price gt 100),filter(Price gt 500))/filter(Price gt 1000)")
+			resp, err := ctx.GET("/Products?$apply=" + applyExpr)
+			if err != nil {
+				return err
+			}
+
+			if err := ctx.AssertStatusCode(resp, http.StatusOK); err != nil {
+				return err
+			}
+
+			var body struct {
+				Value []map[string]interface{} `json:"value"`
+			}
+			if err := json.Unmarshal(resp.Body, &body); err != nil {
+				return fmt.Errorf("failed to parse join filter response: %w", err)
+			}
+
+			for i, item := range body.Value {
+				rawPrice, ok := firstPresent(item, "Price", "price")
+				if !ok {
+					return fmt.Errorf("row %d missing Price", i)
+				}
+				price, ok := rawPrice.(float64)
+				if !ok {
+					return fmt.Errorf("row %d Price is not numeric", i)
+				}
+				if price <= 1000 {
+					return fmt.Errorf("row %d has Price=%v, expected > 1000", i, price)
+				}
+			}
+
+			return nil
+		},
+	)
+
+	suite.AddTest(
+		"test_apply_ancestors",
+		"ancestors requires fully-specified hierarchy parameters and must reject empty invocation",
+		func(ctx *framework.TestContext) error {
+			applyExpr := url.QueryEscape("ancestors()")
+			resp, err := ctx.GET("/Products?$apply=" + applyExpr)
+			if err != nil {
+				return err
+			}
+
+			return ctx.AssertODataError(resp, http.StatusBadRequest, "")
+		},
+	)
+
+	suite.AddTest(
+		"test_apply_descendants",
+		"descendants requires fully-specified hierarchy parameters and must reject empty invocation",
+		func(ctx *framework.TestContext) error {
+			applyExpr := url.QueryEscape("descendants()")
+			resp, err := ctx.GET("/Products?$apply=" + applyExpr)
+			if err != nil {
+				return err
+			}
+
+			return ctx.AssertODataError(resp, http.StatusBadRequest, "")
+		},
+	)
+
+	suite.AddTest(
+		"test_apply_traverse",
+		"traverse requires fully-specified hierarchy parameters and must reject empty invocation",
+		func(ctx *framework.TestContext) error {
+			applyExpr := url.QueryEscape("traverse()")
+			resp, err := ctx.GET("/Products?$apply=" + applyExpr)
+			if err != nil {
+				return err
+			}
+
+			return ctx.AssertODataError(resp, http.StatusBadRequest, "")
+		},
+	)
+
+	suite.AddTest(
+		"test_apply_structural_join_tail_filter",
+		"join supports filter as a structural tail transformation",
+		func(ctx *framework.TestContext) error {
+			applyExpr := url.QueryEscape("join(Descriptions as Description)/filter(Price gt 1000)")
+			resp, err := ctx.GET("/Products?$apply=" + applyExpr)
+			if err != nil {
+				return err
+			}
+
+			if err := ctx.AssertStatusCode(resp, http.StatusOK); err != nil {
+				return err
+			}
+
+			var body struct {
+				Value []map[string]interface{} `json:"value"`
+			}
+			if err := json.Unmarshal(resp.Body, &body); err != nil {
+				return fmt.Errorf("failed to parse outerjoin filter response: %w", err)
+			}
+
+			for i, item := range body.Value {
+				rawPrice, ok := firstPresent(item, "Price", "price")
+				if !ok {
+					return fmt.Errorf("row %d missing Price", i)
+				}
+				price, ok := rawPrice.(float64)
+				if !ok {
+					return fmt.Errorf("row %d Price is not numeric", i)
+				}
+				if price <= 1000 {
+					return fmt.Errorf("row %d has Price=%v, expected > 1000", i, price)
+				}
+			}
+
+			return nil
+		},
+	)
+
+	suite.AddTest(
+		"test_apply_structural_outerjoin_tail_filter",
+		"outerjoin supports filter as a structural tail transformation",
+		func(ctx *framework.TestContext) error {
+			applyExpr := url.QueryEscape("outerjoin(Descriptions as Description)/filter(Price gt 1000)")
+			resp, err := ctx.GET("/Products?$apply=" + applyExpr)
+			if err != nil {
+				return err
+			}
+
+			if err := ctx.AssertStatusCode(resp, http.StatusOK); err != nil {
+				return err
+			}
+
+			items, err := parseApplyItems(resp)
+			if err != nil {
+				return err
+			}
+
+			for i, item := range items {
+				rawPrice, ok := firstPresent(item, "Price", "price")
+				if !ok {
+					return fmt.Errorf("row %d missing Price", i)
+				}
+				price, ok := rawPrice.(float64)
+				if !ok {
+					return fmt.Errorf("row %d Price is not numeric", i)
+				}
+				if price <= 1000 {
+					return fmt.Errorf("row %d has Price=%v, expected > 1000", i, price)
+				}
+			}
+
+			return nil
+		},
+	)
+
+	suite.AddTest(
+		"test_apply_service_defined_set_function",
+		"unknown service-defined set function transformation is rejected with OData error payload",
+		func(ctx *framework.TestContext) error {
+			applyExpr := url.QueryEscape("Default.CustomSetTransform()")
+			resp, err := ctx.GET("/Products?$apply=" + applyExpr)
+			if err != nil {
+				return err
+			}
+
+			return ctx.AssertODataError(resp, http.StatusBadRequest, "")
 		},
 	)
 

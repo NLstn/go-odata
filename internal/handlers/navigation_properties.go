@@ -366,6 +366,13 @@ func (h *EntityHandler) createNavFetchFunc(relatedDB *gorm.DB, targetMetadata *m
 				err = fmt.Errorf("unsupported structural apply transformation: %s", modifiedOptions.Apply[0].Type)
 			}
 			if err != nil {
+				if strings.Contains(err.Error(), "unsupported structural apply transformation") || strings.Contains(err.Error(), "unsupported transformation after structural apply execution") {
+					return nil, &collectionRequestError{
+						StatusCode: http.StatusBadRequest,
+						ErrorCode:  ErrMsgInvalidQueryOptions,
+						Message:    err.Error(),
+					}
+				}
 				return nil, err
 			}
 			return results, nil

@@ -160,6 +160,58 @@ func CaseInsensitiveSystemQueryOptions() *framework.TestSuite {
 	)
 
 	suite.AddTest(
+		"test_apply_hierarchy_empty_invocation_rejected_in_4_01",
+		"4.01 still requires valid hierarchy transformation arguments and rejects empty invocations",
+		func(ctx *framework.TestContext) error {
+			headers := []framework.Header{{Key: "OData-MaxVersion", Value: "4.01"}}
+			cases := []string{
+				"/Products?$apply=ancestors()",
+				"/Products?$apply=descendants()",
+				"/Products?$apply=traverse()",
+				"/Products?$apply=ANCESTORS()",
+				"/Products?$apply=DeScEnDaNtS()",
+				"/Products?$apply=TrAvErSe()",
+			}
+
+			for _, path := range cases {
+				resp, err := ctx.GET(path, headers...)
+				if err != nil {
+					return err
+				}
+				if err := ctx.AssertODataError(resp, http.StatusBadRequest, ""); err != nil {
+					return framework.NewError(fmt.Sprintf("expected %s to be rejected in 4.01 with strict error payload: %v", path, err))
+				}
+			}
+
+			return nil
+		},
+	)
+
+	suite.AddTest(
+		"test_apply_unknown_service_defined_function_rejected_in_4_01",
+		"4.01 rejects unknown service-defined set transformations in $apply",
+		func(ctx *framework.TestContext) error {
+			headers := []framework.Header{{Key: "OData-MaxVersion", Value: "4.01"}}
+			cases := []string{
+				"/Products?$apply=Default.CustomSetTransform()",
+				"/Products?$apply=default.customsettransform()",
+			}
+
+			for _, path := range cases {
+				resp, err := ctx.GET(path, headers...)
+				if err != nil {
+					return err
+				}
+				if err := ctx.AssertODataError(resp, http.StatusBadRequest, ""); err != nil {
+					return framework.NewError(fmt.Sprintf("expected %s to be rejected in 4.01 with strict error payload: %v", path, err))
+				}
+			}
+
+			return nil
+		},
+	)
+
+	suite.AddTest(
 		"test_filter_operator_names_case_insensitive",
 		"4.01 logical/arithmetic operator names are case-insensitive",
 		func(ctx *framework.TestContext) error {
