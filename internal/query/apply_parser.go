@@ -211,7 +211,7 @@ func parseApplyTransformationWithAliases(transStr string, entityMetadata *metada
 	} else if strings.HasPrefix(transStr, "traverse(") {
 		return parseHierarchyTransformation(transStr, ApplyTypeTraverse)
 	} else if fnName, ok := parseServiceDefinedFunctionTransformation(transStr); ok {
-		return &ApplyTransformation{Type: ApplyTypeFunction, Function: &fnName}, nil
+		return nil, fmt.Errorf("service-defined set transformation '%s' is not supported", fnName)
 	}
 
 	return nil, fmt.Errorf("unknown transformation: %s", transStr)
@@ -509,11 +509,11 @@ func parseHierarchyTransformation(transStr string, t ApplyTransformationType) (*
 		return nil, fmt.Errorf("missing closing parenthesis in %s", t)
 	}
 	content = strings.TrimSpace(content[:len(content)-1])
-	if content != "" {
-		return nil, fmt.Errorf("%s currently requires empty parameter list", t)
+	if content == "" {
+		return nil, fmt.Errorf("%s requires fully-specified hierarchy parameters and must not be invoked without arguments", t)
 	}
-
-	return &ApplyTransformation{Type: t}, nil
+	// Hierarchy traversal semantics are not yet implemented
+	return nil, fmt.Errorf("%s requires fully-specified hierarchy parameters; hierarchy traversal is not yet supported", t)
 }
 
 func parseServiceDefinedFunctionTransformation(transStr string) (string, bool) {

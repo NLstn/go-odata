@@ -334,104 +334,104 @@ func stringContains(s, substr string) bool {
 
 // TestBuildContextURLWithSelect tests the buildContextURLWithSelect function
 func TestBuildContextURLWithSelect(t *testing.T) {
-tests := []struct {
-name          string
-entitySetName string
-selectedProps []string
-expectedFrag  string // expected fragment after $metadata#
-}{
-{
-name:          "no select",
-entitySetName: "Products",
-selectedProps: nil,
-expectedFrag:  "Products",
-},
-{
-name:          "empty select list",
-entitySetName: "Products",
-selectedProps: []string{},
-expectedFrag:  "Products",
-},
-{
-name:          "single property",
-entitySetName: "Products",
-selectedProps: []string{"name"},
-expectedFrag:  "Products(name)",
-},
-{
-name:          "multiple properties",
-entitySetName: "Products",
-selectedProps: []string{"id", "name", "price"},
-expectedFrag:  "Products(id,name,price)",
-},
-{
-name:          "navigation path",
-entitySetName: "Products(1)/Descriptions",
-selectedProps: []string{"language", "text"},
-expectedFrag:  "Products(1)/Descriptions(language,text)",
-},
-}
+	tests := []struct {
+		name          string
+		entitySetName string
+		selectedProps []string
+		expectedFrag  string // expected fragment after $metadata#
+	}{
+		{
+			name:          "no select",
+			entitySetName: "Products",
+			selectedProps: nil,
+			expectedFrag:  "Products",
+		},
+		{
+			name:          "empty select list",
+			entitySetName: "Products",
+			selectedProps: []string{},
+			expectedFrag:  "Products",
+		},
+		{
+			name:          "single property",
+			entitySetName: "Products",
+			selectedProps: []string{"name"},
+			expectedFrag:  "Products(name)",
+		},
+		{
+			name:          "multiple properties",
+			entitySetName: "Products",
+			selectedProps: []string{"id", "name", "price"},
+			expectedFrag:  "Products(id,name,price)",
+		},
+		{
+			name:          "navigation path",
+			entitySetName: "Products(1)/Descriptions",
+			selectedProps: []string{"language", "text"},
+			expectedFrag:  "Products(1)/Descriptions(language,text)",
+		},
+	}
 
-for _, tt := range tests {
-t.Run(tt.name, func(t *testing.T) {
-req := httptest.NewRequest(http.MethodGet, "http://example.com/"+tt.entitySetName, nil)
-got := buildContextURLWithSelect(req, tt.entitySetName, tt.selectedProps)
-want := "http://example.com/$metadata#" + tt.expectedFrag
-if got != want {
-t.Errorf("buildContextURLWithSelect() = %q, want %q", got, want)
-}
-})
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "http://example.com/"+tt.entitySetName, nil)
+			got := buildContextURLWithSelect(req, tt.entitySetName, tt.selectedProps)
+			want := "http://example.com/$metadata#" + tt.expectedFrag
+			if got != want {
+				t.Errorf("buildContextURLWithSelect() = %q, want %q", got, want)
+			}
+		})
+	}
 }
 
 // TestBuildEntityContextURL tests the BuildEntityContextURL function
 func TestBuildEntityContextURL(t *testing.T) {
-tests := []struct {
-name          string
-entitySetName string
-selectedProps []string
-expectedFrag  string // expected fragment after $metadata#
-}{
-{
-name:          "no select",
-entitySetName: "Products",
-selectedProps: nil,
-expectedFrag:  "Products/$entity",
-},
-{
-name:          "empty select list",
-entitySetName: "Products",
-selectedProps: []string{},
-expectedFrag:  "Products/$entity",
-},
-{
-name:          "single property",
-entitySetName: "Products",
-selectedProps: []string{"name"},
-expectedFrag:  "Products(name)/$entity",
-},
-{
-name:          "multiple properties",
-entitySetName: "Products",
-selectedProps: []string{"id", "name", "price"},
-expectedFrag:  "Products(id,name,price)/$entity",
-},
-{
-name:          "navigation path",
-entitySetName: "Products(1)/Category",
-selectedProps: nil,
-expectedFrag:  "Products(1)/Category/$entity",
-},
-}
+	tests := []struct {
+		name          string
+		entitySetName string
+		selectedProps []string
+		expectedFrag  string // expected fragment after $metadata#
+	}{
+		{
+			name:          "no select",
+			entitySetName: "Products",
+			selectedProps: nil,
+			expectedFrag:  "Products/$entity",
+		},
+		{
+			name:          "empty select list",
+			entitySetName: "Products",
+			selectedProps: []string{},
+			expectedFrag:  "Products/$entity",
+		},
+		{
+			name:          "single property",
+			entitySetName: "Products",
+			selectedProps: []string{"name"},
+			expectedFrag:  "Products(name)/$entity",
+		},
+		{
+			name:          "multiple properties",
+			entitySetName: "Products",
+			selectedProps: []string{"id", "name", "price"},
+			expectedFrag:  "Products(id,name,price)/$entity",
+		},
+		{
+			name:          "navigation path",
+			entitySetName: "Products(1)/Category",
+			selectedProps: nil,
+			expectedFrag:  "Products(1)/Category/$entity",
+		},
+	}
 
-for _, tt := range tests {
-t.Run(tt.name, func(t *testing.T) {
-req := httptest.NewRequest(http.MethodGet, "http://example.com/"+tt.entitySetName, nil)
-got := BuildEntityContextURL(req, tt.entitySetName, tt.selectedProps)
-want := "http://example.com/$metadata#" + tt.expectedFrag
-if got != want {
-t.Errorf("BuildEntityContextURL() = %q, want %q", got, want)
-}
-})
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "http://example.com/"+tt.entitySetName, nil)
+			got := BuildEntityContextURL(req, tt.entitySetName, tt.selectedProps)
+			want := "http://example.com/$metadata#" + tt.expectedFrag
+			if got != want {
+				t.Errorf("BuildEntityContextURL() = %q, want %q", got, want)
+			}
+		})
+	}
 }

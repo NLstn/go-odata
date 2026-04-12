@@ -272,6 +272,23 @@ func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.Qu
 		fts = nil
 	}
 
+	if structuralIdx := findFirstStructuralTransformation(modifiedOptions.Apply); structuralIdx > 0 {
+		structural := modifiedOptions.Apply[structuralIdx]
+		switch structural.Type {
+		case query.ApplyTypeConcat:
+			modifiedOptions.Apply = promoteConcatToLeading(structuralIdx, modifiedOptions.Apply)
+		case query.ApplyTypeJoin, query.ApplyTypeOuterJoin:
+			prefix := modifiedOptions.Apply[:structuralIdx]
+			prefixOptions := modifiedOptions
+			prefixOptions.Apply = prefix
+			prefixOptions.OrderBy = nil
+			prefixOptions.Skip = nil
+			prefixOptions.Top = nil
+			db = query.ApplyQueryOptionsWithFTS(db, &prefixOptions, h.metadata, fts, tableName, h.logger)
+			modifiedOptions.Apply = modifiedOptions.Apply[structuralIdx:]
+		}
+	}
+
 	if hasLeadingStructuralApplyTransformation(modifiedOptions.Apply) {
 		var (
 			results []map[string]interface{}
@@ -373,6 +390,52 @@ func hasLeadingStructuralApplyTransformation(apply []query.ApplyTransformation) 
 	}
 }
 
+func findFirstStructuralTransformation(apply []query.ApplyTransformation) int {
+	for i, tr := range apply {
+		switch tr.Type {
+		case query.ApplyTypeConcat:
+			if tr.Concat != nil {
+				return i
+			}
+		case query.ApplyTypeJoin, query.ApplyTypeOuterJoin:
+			if tr.Join != nil {
+				return i
+			}
+		}
+	}
+
+	return -1
+}
+
+func promoteConcatToLeading(concatIdx int, apply []query.ApplyTransformation) []query.ApplyTransformation {
+	if concatIdx <= 0 || concatIdx >= len(apply) {
+		return apply
+	}
+
+	prefix := apply[:concatIdx]
+	concat := apply[concatIdx]
+	if concat.Concat == nil {
+		return apply
+	}
+
+	newSequences := make([][]query.ApplyTransformation, len(concat.Concat.Sequences))
+	for i, seq := range concat.Concat.Sequences {
+		newSeq := make([]query.ApplyTransformation, 0, len(prefix)+len(seq))
+		newSeq = append(newSeq, prefix...)
+		newSeq = append(newSeq, seq...)
+		newSequences[i] = newSeq
+	}
+
+	newConcat := concat
+	newConcat.Concat = &query.ConcatTransformation{Sequences: newSequences}
+
+	result := make([]query.ApplyTransformation, 0, 1+len(apply)-concatIdx-1)
+	result = append(result, newConcat)
+	result = append(result, apply[concatIdx+1:]...)
+
+	return result
+}
+
 func applyMapTopSkip(results []map[string]interface{}, top *int, skip *int) []map[string]interface{} {
 	if skip != nil {
 		s := *skip
@@ -408,12 +471,262 @@ func applySupportedTailTransformations(results []map[string]interface{}, tail []
 			results = applyMapTopSkip(results, nil, tr.Skip)
 		case query.ApplyTypeTop:
 			results = applyMapTopSkip(results, tr.Top, nil)
+		case query.ApplyTypeAggregate:
+			var err error
+			results, err = applyMapAggregate(results, tr.Aggregate)
+			if err != nil {
+				return nil, err
+			}
+		case query.ApplyTypeGroupBy:
+			var err error
+			results, err = applyMapGroupBy(results, tr.GroupBy)
+			if err != nil {
+				return nil, err
+			}
+		case query.ApplyTypeCompute:
+			var err error
+			results, err = applyMapCompute(results, tr.Compute)
+			if err != nil {
+				return nil, err
+			}
 		default:
 			return nil, fmt.Errorf("unsupported transformation after structural apply execution: %s", tr.Type)
 		}
 	}
 
 	return results, nil
+}
+
+func applyMapAggregate(results []map[string]interface{}, agg *query.AggregateTransformation) ([]map[string]interface{}, error) {
+	if agg == nil || len(agg.Expressions) == 0 {
+		return results, nil
+	}
+
+	row := make(map[string]interface{})
+
+	for _, expr := range agg.Expressions {
+		switch {
+		case expr.Property == "$count":
+			row[expr.Alias] = float64(len(results))
+		case expr.Method == query.AggregationCount:
+			count := 0
+			for _, r := range results {
+				if v, ok := getNestedMapValueCaseInsensitive(r, expr.Property); ok && v != nil {
+					count++
+				}
+			}
+			row[expr.Alias] = float64(count)
+		case expr.Method == query.AggregationCountDistinct:
+			seen := make(map[string]bool)
+			for _, r := range results {
+				if v, ok := getNestedMapValueCaseInsensitive(r, expr.Property); ok && v != nil {
+					seen[fmt.Sprintf("%v", v)] = true
+				}
+			}
+			row[expr.Alias] = float64(len(seen))
+		case expr.Method == query.AggregationSum:
+			sum := 0.0
+			for _, r := range results {
+				if v, ok := getNestedMapValueCaseInsensitive(r, expr.Property); ok {
+					if f, ok2 := toFloat64(v); ok2 {
+						sum += f
+					}
+				}
+			}
+			row[expr.Alias] = sum
+		case expr.Method == query.AggregationAvg:
+			sum := 0.0
+			count := 0
+			for _, r := range results {
+				if v, ok := getNestedMapValueCaseInsensitive(r, expr.Property); ok {
+					if f, ok2 := toFloat64(v); ok2 {
+						sum += f
+						count++
+					}
+				}
+			}
+			if count > 0 {
+				row[expr.Alias] = sum / float64(count)
+			} else {
+				row[expr.Alias] = nil
+			}
+		case expr.Method == query.AggregationMin:
+			var minVal *float64
+			for _, r := range results {
+				if v, ok := getNestedMapValueCaseInsensitive(r, expr.Property); ok {
+					if f, ok2 := toFloat64(v); ok2 {
+						if minVal == nil || f < *minVal {
+							minVal = &f
+						}
+					}
+				}
+			}
+			if minVal != nil {
+				row[expr.Alias] = *minVal
+			} else {
+				row[expr.Alias] = nil
+			}
+		case expr.Method == query.AggregationMax:
+			var maxVal *float64
+			for _, r := range results {
+				if v, ok := getNestedMapValueCaseInsensitive(r, expr.Property); ok {
+					if f, ok2 := toFloat64(v); ok2 {
+						if maxVal == nil || f > *maxVal {
+							maxVal = &f
+						}
+					}
+				}
+			}
+			if maxVal != nil {
+				row[expr.Alias] = *maxVal
+			} else {
+				row[expr.Alias] = nil
+			}
+		default:
+			return nil, fmt.Errorf("unsupported aggregation method: %s", expr.Method)
+		}
+	}
+
+	return []map[string]interface{}{row}, nil
+}
+
+func applyMapGroupBy(results []map[string]interface{}, groupBy *query.GroupByTransformation) ([]map[string]interface{}, error) {
+	if groupBy == nil {
+		return results, nil
+	}
+
+	groups := make(map[string][]map[string]interface{})
+	groupOrder := make([]string, 0)
+	keyRowsByKey := make(map[string]map[string]interface{})
+
+	for _, row := range results {
+		keyParts := make([]string, 0, len(groupBy.Properties))
+		keyRow := make(map[string]interface{})
+
+		for _, prop := range groupBy.Properties {
+			val, _ := getNestedMapValueCaseInsensitive(row, prop)
+			keyParts = append(keyParts, fmt.Sprintf("%v=%v", prop, val))
+			keyRow[prop] = val
+		}
+
+		key := strings.Join(keyParts, "|")
+
+		if _, exists := groups[key]; !exists {
+			groupOrder = append(groupOrder, key)
+			keyRowsByKey[key] = keyRow
+		}
+		groups[key] = append(groups[key], row)
+	}
+
+	output := make([]map[string]interface{}, 0, len(groups))
+
+	for _, key := range groupOrder {
+		groupRows := groups[key]
+		outRow := cloneMap(keyRowsByKey[key])
+
+		if len(groupBy.Transform) > 0 {
+			for _, tr := range groupBy.Transform {
+				switch tr.Type {
+				case query.ApplyTypeFilter:
+					groupRows = applyMapFilter(groupRows, tr.Filter)
+				case query.ApplyTypeAggregate:
+					aggRows, err := applyMapAggregate(groupRows, tr.Aggregate)
+					if err != nil {
+						return nil, err
+					}
+					if len(aggRows) > 0 {
+						for k, v := range aggRows[0] {
+							outRow[k] = v
+						}
+					}
+					groupRows = aggRows
+				default:
+					return nil, fmt.Errorf("unsupported nested groupby transformation: %s", tr.Type)
+				}
+			}
+			if len(groupRows) == 0 {
+				continue
+			}
+		}
+
+		output = append(output, outRow)
+	}
+
+	return output, nil
+}
+
+func applyMapCompute(results []map[string]interface{}, compute *query.ComputeTransformation) ([]map[string]interface{}, error) {
+	if compute == nil || len(compute.Expressions) == 0 {
+		return results, nil
+	}
+
+	output := make([]map[string]interface{}, 0, len(results))
+	for _, row := range results {
+		newRow := cloneMap(row)
+		for _, expr := range compute.Expressions {
+			val, err := evaluateMapComputeExpression(row, expr.Expression)
+			if err != nil {
+				return nil, fmt.Errorf("failed to evaluate compute expression '%s': %w", expr.Alias, err)
+			}
+			newRow[expr.Alias] = val
+		}
+		output = append(output, newRow)
+	}
+	return output, nil
+}
+
+func evaluateMapComputeExpression(row map[string]interface{}, expr *query.FilterExpression) (interface{}, error) {
+	if expr == nil {
+		return nil, nil
+	}
+
+	// Literal value (no property, no children)
+	if expr.Property == "" && expr.Left == nil && expr.Right == nil && expr.Value != nil {
+		return expr.Value, nil
+	}
+
+	// Property lookup (no children, no operator arithmetic)
+	if expr.Property != "" && expr.Left == nil && expr.Right == nil {
+		val, _ := getNestedMapValueCaseInsensitive(row, expr.Property)
+		return val, nil
+	}
+
+	// Arithmetic binary expression
+	if expr.Left != nil && expr.Right != nil {
+		leftVal, err := evaluateMapComputeExpression(row, expr.Left)
+		if err != nil {
+			return nil, err
+		}
+		rightVal, err := evaluateMapComputeExpression(row, expr.Right)
+		if err != nil {
+			return nil, err
+		}
+
+		lf, lok := toFloat64(leftVal)
+		rf, rok := toFloat64(rightVal)
+
+		if !lok || !rok {
+			return nil, fmt.Errorf("non-numeric operands in compute arithmetic expression")
+		}
+
+		switch expr.Operator {
+		case query.OpAdd:
+			return lf + rf, nil
+		case query.OpSub:
+			return lf - rf, nil
+		case query.OpMul:
+			return lf * rf, nil
+		case query.OpDiv:
+			if rf == 0 {
+				return nil, fmt.Errorf("division by zero in compute expression")
+			}
+			return lf / rf, nil
+		default:
+			return nil, fmt.Errorf("unsupported operator in compute expression: %s", expr.Operator)
+		}
+	}
+
+	return nil, fmt.Errorf("invalid compute expression structure")
 }
 
 func applyMapFilter(results []map[string]interface{}, filter *query.FilterExpression) []map[string]interface{} {

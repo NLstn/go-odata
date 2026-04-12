@@ -30,10 +30,6 @@ func TestParseApply_TransformationCatalog_AllSupported(t *testing.T) {
 		{name: "bottompercent", apply: "bottompercent(100,Price)", expectedType: ApplyTransformationType("bottompercent")},
 		{name: "topsum", apply: "topsum(100000,Price)", expectedType: ApplyTransformationType("topsum")},
 		{name: "bottomsum", apply: "bottomsum(100000,Price)", expectedType: ApplyTransformationType("bottomsum")},
-		{name: "ancestors", apply: "ancestors()", expectedType: ApplyTransformationType("ancestors")},
-		{name: "descendants", apply: "descendants()", expectedType: ApplyTransformationType("descendants")},
-		{name: "traverse", apply: "traverse()", expectedType: ApplyTransformationType("traverse")},
-		{name: "service-defined-function", apply: "Default.CustomSetTransform()", expectedType: ApplyTransformationType("function")},
 	}
 
 	for _, tt := range tests {
@@ -47,6 +43,32 @@ func TestParseApply_TransformationCatalog_AllSupported(t *testing.T) {
 			}
 			if trans[0].Type != tt.expectedType {
 				t.Fatalf("parseApply(%q) expected type %q, got %q", tt.apply, tt.expectedType, trans[0].Type)
+			}
+		})
+	}
+}
+
+// TestParseApply_TransformationCatalog_Unsupported verifies that transformations
+// not supported by the library (hierarchy traversal, service-defined functions)
+// return parse errors rather than silently succeeding.
+func TestParseApply_TransformationCatalog_Unsupported(t *testing.T) {
+	meta := getApplyTestMetadata(t)
+
+	tests := []struct {
+		name  string
+		apply string
+	}{
+		{name: "ancestors-empty", apply: "ancestors()"},
+		{name: "descendants-empty", apply: "descendants()"},
+		{name: "traverse-empty", apply: "traverse()"},
+		{name: "service-defined-function", apply: "Default.CustomSetTransform()"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := parseApply(tt.apply, meta, 0)
+			if err == nil {
+				t.Fatalf("parseApply(%q) expected an error but got none", tt.apply)
 			}
 		})
 	}
