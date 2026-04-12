@@ -495,15 +495,18 @@ func NewServiceWithConfig(db *gorm.DB, cfg ServiceConfig) (*Service, error) {
 		maxBatchSize = DefaultMaxBatchSize
 	}
 
+	actionsMap := make(map[string][]*actions.ActionDefinition)
+	functionsMap := make(map[string][]*actions.FunctionDefinition)
+
 	s := &Service{
 		db:                         db,
 		entities:                   entities,
 		entityContainerAnnotations: metadata.NewAnnotationCollection(),
 		handlers:                   handlersMap,
-		metadataHandler:            handlers.NewMetadataHandler(entities),
+		actions:                    actionsMap,
+		functions:                  functionsMap,
+		metadataHandler:            handlers.NewMetadataHandlerWithOperations(entities, actionsMap, functionsMap),
 		serviceDocumentHandler:     handlers.NewServiceDocumentHandler(entities, logger),
-		actions:                    make(map[string][]*actions.ActionDefinition),
-		functions:                  make(map[string][]*actions.FunctionDefinition),
 		namespace:                  DefaultNamespace,
 		deltaTracker:               tracker,
 		changeTrackingPersistent:   cfg.PersistentChangeTracking,

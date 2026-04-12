@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"net/http"
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -110,6 +111,8 @@ func (h *MetadataHandler) buildMetadataDocument(model metadataModel, ver version
 
 	builder.WriteString(h.buildEnumTypes(model))
 	builder.WriteString(h.buildEntityTypes(model))
+	builder.WriteString(h.buildFunctionTypes(model))
+	builder.WriteString(h.buildActionTypes(model))
 	builder.WriteString(h.buildEntityContainer(model))
 	builder.WriteString(h.buildAnnotations(model))
 
@@ -118,6 +121,51 @@ func (h *MetadataHandler) buildMetadataDocument(model metadataModel, ver version
 </edmx:Edmx>`)
 
 	return builder.String()
+}
+
+func (h *MetadataHandler) getEdmTypeName(t reflect.Type) string {
+	if t == nil {
+		return "Edm.String"
+	}
+
+	// Handle pointer types
+	if t.Kind() == reflect.Ptr {
+		return h.getEdmTypeName(t.Elem())
+	}
+
+	// Handle slice/array types (Collection)
+	if t.Kind() == reflect.Slice || t.Kind() == reflect.Array {
+		elemType := h.getEdmTypeName(t.Elem())
+		return fmt.Sprintf("Collection(%s)", elemType)
+	}
+
+	// Handle basic types
+	switch t.Kind() {
+	case reflect.String:
+		return "Edm.String"
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32:
+		return "Edm.Int32"
+	case reflect.Int64:
+		return "Edm.Int64"
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32:
+		return "Edm.Int32"
+	case reflect.Uint64:
+		return "Edm.Int64"
+	case reflect.Float32:
+		return "Edm.Single"
+	case reflect.Float64:
+		return "Edm.Double"
+	case reflect.Bool:
+		return "Edm.Boolean"
+	case reflect.Struct:
+		// Check for time.Time
+		if t.String() == "time.Time" {
+			return "Edm.DateTimeOffset"
+		}
+		return fmt.Sprintf("%s.%s", h.namespaceOrDefault(), t.Name())
+	default:
+		return "Edm.String"
+	}
 }
 
 func (h *MetadataHandler) buildEnumTypes(model metadataModel) string {
@@ -167,6 +215,90 @@ func (h *MetadataHandler) buildEntityTypes(model metadataModel) string {
 	for _, entityMeta := range model.entities {
 		builder.WriteString(h.buildEntityType(model, entityMeta))
 	}
+	return builder.String()
+}
+
+func (h *MetadataHandler) buildFunctionTypes(model metadataModel) string {
+	if len(model.functions) == 0 {
+		return ""
+	}
+
+	var builder strings.Builder
+
+	// Group functions by name (for overload signatures)
+	for funcName, funcDefs := range model.functions {
+		for _, funcDef := range funcDefs {
+			builder.WriteString(fmt.Sprintf(`      <Function Name="%s" IsBound="%v">`+"\n", funcName, funcDef.IsBound))
+
+			if funcDef.IsBound {
+				bindingType := h.operationBindingType(model, funcDef.EntitySet)
+				builder.WriteString(fmt.Sprintf(`        <Parameter Name="bindingParameter" Type="%s" Nullable="false" />`+"\n", bindingType))
+			}
+
+			// Add parameters
+			if len(funcDef.Parameters) > 0 {
+				for _, param := range funcDef.Parameters {
+					paramType := h.getEdmTypeName(param.Type)
+					nullable := "false"
+					if !param.Required {
+						nullable = "true"
+					}
+					builder.WriteString(fmt.Sprintf(`        <Parameter Name="%s" Type="%s" Nullable="%s" />
+`, param.Name, paramType, nullable))
+				}
+			}
+
+			if funcDef.ReturnType != nil {
+				returnType := h.getEdmTypeName(funcDef.ReturnType)
+				builder.WriteString(fmt.Sprintf(`        <ReturnType Type="%s" />`+"\n", returnType))
+			}
+
+			builder.WriteString(`      </Function>` + "\n")
+		}
+	}
+
+	return builder.String()
+}
+
+func (h *MetadataHandler) buildActionTypes(model metadataModel) string {
+	if len(model.actions) == 0 {
+		return ""
+	}
+
+	var builder strings.Builder
+
+	// Group actions by name (for overload signatures)
+	for actionName, actionDefs := range model.actions {
+		for _, actionDef := range actionDefs {
+			builder.WriteString(fmt.Sprintf(`      <Action Name="%s" IsBound="%v">`+"\n", actionName, actionDef.IsBound))
+
+			if actionDef.IsBound {
+				bindingType := h.operationBindingType(model, actionDef.EntitySet)
+				builder.WriteString(fmt.Sprintf(`        <Parameter Name="bindingParameter" Type="%s" Nullable="false" />`+"\n", bindingType))
+			}
+
+			// Add parameters
+			if len(actionDef.Parameters) > 0 {
+				for _, param := range actionDef.Parameters {
+					paramType := h.getEdmTypeName(param.Type)
+					nullable := "false"
+					if !param.Required {
+						nullable = "true"
+					}
+					builder.WriteString(fmt.Sprintf(`        <Parameter Name="%s" Type="%s" Nullable="%s" />
+`, param.Name, paramType, nullable))
+				}
+			}
+
+			if actionDef.ReturnType != nil {
+				returnType := h.getEdmTypeName(actionDef.ReturnType)
+				builder.WriteString(fmt.Sprintf(`        <ReturnType Type="%s" />`+"\n", returnType))
+			}
+
+			builder.WriteString(`      </Action>` + "\n")
+		}
+	}
+
 	return builder.String()
 }
 
@@ -314,9 +446,47 @@ func (h *MetadataHandler) buildEntityContainer(model metadataModel) string {
 		}
 	}
 
+	// Add FunctionImport elements for unbound functions
+	seenFunctionImports := make(map[string]struct{})
+	for funcName, funcDefs := range model.functions {
+		for _, funcDef := range funcDefs {
+			if funcDef.IsBound {
+				continue
+			}
+			if _, exists := seenFunctionImports[funcName]; exists {
+				continue
+			}
+			seenFunctionImports[funcName] = struct{}{}
+			builder.WriteString(fmt.Sprintf(`        <FunctionImport Name="%s" Function="%s.%s" />`+"\n", funcName, model.namespace, funcName))
+		}
+	}
+
+	// Add ActionImport elements for unbound actions
+	seenActionImports := make(map[string]struct{})
+	for actionName, actionDefs := range model.actions {
+		for _, actionDef := range actionDefs {
+			if actionDef.IsBound {
+				continue
+			}
+			if _, exists := seenActionImports[actionName]; exists {
+				continue
+			}
+			seenActionImports[actionName] = struct{}{}
+			builder.WriteString(fmt.Sprintf(`        <ActionImport Name="%s" Action="%s.%s" />`+"\n", actionName, model.namespace, actionName))
+		}
+	}
+
 	builder.WriteString(`      </EntityContainer>
 `)
 	return builder.String()
+}
+
+func (h *MetadataHandler) operationBindingType(model metadataModel, entitySetName string) string {
+	entityMeta, ok := model.entities[entitySetName]
+	if !ok || entityMeta == nil {
+		return "Edm.String"
+	}
+	return model.qualifiedTypeName(entityMeta.EntityName)
 }
 
 // buildAnnotations builds the Annotations sections for all annotated targets

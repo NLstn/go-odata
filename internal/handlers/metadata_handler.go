@@ -10,6 +10,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/nlstn/go-odata/internal/actions"
 	"github.com/nlstn/go-odata/internal/auth"
 	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/response"
@@ -45,7 +46,9 @@ import (
 // - Namespace reads: Single RLock (fast path in namespaceOrDefault)
 // - Namespace writes: Single Lock + cache clear (rare operation)
 type MetadataHandler struct {
-	entities map[string]*metadata.EntityMetadata
+	entities  map[string]*metadata.EntityMetadata
+	actions   map[string][]*actions.ActionDefinition
+	functions map[string][]*actions.FunctionDefinition
 	// Lock-free cached metadata documents by version (key: version string)
 	cachedXML            sync.Map     // map[string]string
 	cachedJSON           sync.Map     // map[string][]byte
@@ -60,10 +63,19 @@ type MetadataHandler struct {
 
 const defaultNamespace = "ODataService"
 
-// NewMetadataHandler creates a new metadata handler
+// NewMetadataHandler creates a new metadata handler.
+//
+// It keeps backward compatibility for callers that don't need operation metadata.
 func NewMetadataHandler(entities map[string]*metadata.EntityMetadata) *MetadataHandler {
+	return NewMetadataHandlerWithOperations(entities, nil, nil)
+}
+
+// NewMetadataHandlerWithOperations creates a new metadata handler with action/function metadata support.
+func NewMetadataHandlerWithOperations(entities map[string]*metadata.EntityMetadata, actions map[string][]*actions.ActionDefinition, functions map[string][]*actions.FunctionDefinition) *MetadataHandler {
 	h := &MetadataHandler{
 		entities:  entities,
+		actions:   actions,
+		functions: functions,
 		namespace: defaultNamespace,
 		logger:    slog.Default(),
 	}
@@ -306,6 +318,8 @@ func (h *MetadataHandler) newMetadataModel() metadataModel {
 	model := metadataModel{
 		namespace:            h.namespaceOrDefault(),
 		entities:             h.entities,
+		actions:              h.actions,
+		functions:            h.functions,
 		containerAnnotations: h.containerAnnotations,
 	}
 	model.buildEntityTypeToSetNameMap()
@@ -315,6 +329,8 @@ func (h *MetadataHandler) newMetadataModel() metadataModel {
 type metadataModel struct {
 	namespace              string
 	entities               map[string]*metadata.EntityMetadata
+	actions                map[string][]*actions.ActionDefinition
+	functions              map[string][]*actions.FunctionDefinition
 	containerAnnotations   *metadata.AnnotationCollection
 	entityTypeToSetNameMap map[string]string // Cache for EntityName -> EntitySetName lookups
 }

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/nlstn/go-odata/internal/actions"
 	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/version"
 )
@@ -109,6 +110,8 @@ func (h *MetadataHandler) buildMetadataJSON(model metadataModel, ver version.Ver
 	csdl[model.namespace] = odataService
 
 	h.addJSONEnumTypes(model, odataService)
+	h.addJSONFunctionTypes(model, odataService)
+	h.addJSONActionTypes(model, odataService)
 
 	for _, entityMeta := range model.entities {
 		entityType := h.buildJSONEntityType(model, entityMeta)
@@ -133,6 +136,114 @@ func (h *MetadataHandler) addJSONEnumTypes(model metadataModel, odataService map
 		enumType := h.buildJSONEnumType(definition.info)
 		odataService[definition.name] = enumType
 	}
+}
+
+func (h *MetadataHandler) addJSONFunctionTypes(model metadataModel, odataService map[string]interface{}) {
+	for funcName, funcDefs := range model.functions {
+		overloads := make([]map[string]interface{}, 0, len(funcDefs))
+		for _, funcDef := range funcDefs {
+			overloads = append(overloads, h.buildJSONFunctionType(model, funcDef))
+		}
+		if len(overloads) == 1 {
+			odataService[funcName] = overloads[0]
+		} else {
+			odataService[funcName] = overloads
+		}
+	}
+}
+
+func (h *MetadataHandler) addJSONActionTypes(model metadataModel, odataService map[string]interface{}) {
+	for actionName, actionDefs := range model.actions {
+		overloads := make([]map[string]interface{}, 0, len(actionDefs))
+		for _, actionDef := range actionDefs {
+			overloads = append(overloads, h.buildJSONActionType(model, actionDef))
+		}
+		if len(overloads) == 1 {
+			odataService[actionName] = overloads[0]
+		} else {
+			odataService[actionName] = overloads
+		}
+	}
+}
+
+func (h *MetadataHandler) buildJSONFunctionType(model metadataModel, funcDef *actions.FunctionDefinition) map[string]interface{} {
+	funcType := map[string]interface{}{
+		"$Kind":    "Function",
+		"$IsBound": funcDef.IsBound,
+	}
+
+	params := make([]map[string]interface{}, 0, len(funcDef.Parameters)+1)
+	if funcDef.IsBound {
+		params = append(params, map[string]interface{}{
+			"$Name":     "bindingParameter",
+			"$Type":     h.operationBindingType(model, funcDef.EntitySet),
+			"$Nullable": false,
+		})
+	}
+
+	if funcDef.ReturnType != nil {
+		returnType := h.getEdmTypeName(funcDef.ReturnType)
+		funcType["$ReturnType"] = map[string]interface{}{
+			"$Type": returnType,
+		}
+	}
+
+	if len(funcDef.Parameters) > 0 {
+		for _, param := range funcDef.Parameters {
+			paramType := h.getEdmTypeName(param.Type)
+			paramDef := map[string]interface{}{
+				"$Name":     param.Name,
+				"$Type":     paramType,
+				"$Nullable": !param.Required,
+			}
+			params = append(params, paramDef)
+		}
+	}
+	if len(params) > 0 {
+		funcType["$Parameter"] = params
+	}
+
+	return funcType
+}
+
+func (h *MetadataHandler) buildJSONActionType(model metadataModel, actionDef *actions.ActionDefinition) map[string]interface{} {
+	actionType := map[string]interface{}{
+		"$Kind":    "Action",
+		"$IsBound": actionDef.IsBound,
+	}
+
+	params := make([]map[string]interface{}, 0, len(actionDef.Parameters)+1)
+	if actionDef.IsBound {
+		params = append(params, map[string]interface{}{
+			"$Name":     "bindingParameter",
+			"$Type":     h.operationBindingType(model, actionDef.EntitySet),
+			"$Nullable": false,
+		})
+	}
+
+	if actionDef.ReturnType != nil {
+		returnType := h.getEdmTypeName(actionDef.ReturnType)
+		actionType["$ReturnType"] = map[string]interface{}{
+			"$Type": returnType,
+		}
+	}
+
+	if len(actionDef.Parameters) > 0 {
+		for _, param := range actionDef.Parameters {
+			paramType := h.getEdmTypeName(param.Type)
+			paramDef := map[string]interface{}{
+				"$Name":     param.Name,
+				"$Type":     paramType,
+				"$Nullable": !param.Required,
+			}
+			params = append(params, paramDef)
+		}
+	}
+	if len(params) > 0 {
+		actionType["$Parameter"] = params
+	}
+
+	return actionType
 }
 
 func (h *MetadataHandler) buildJSONEnumType(info *enumTypeInfo) map[string]interface{} {
@@ -352,6 +463,44 @@ func (h *MetadataHandler) buildJSONEntityContainer(model metadataModel) map[stri
 			}
 
 			container[entitySetName] = entitySet
+		}
+	}
+
+	// Add FunctionImport elements for unbound functions
+	seenFunctionImports := make(map[string]struct{})
+	for funcName, funcDefs := range model.functions {
+		for _, funcDef := range funcDefs {
+			if funcDef.IsBound {
+				continue
+			}
+			if _, exists := seenFunctionImports[funcName]; exists {
+				continue
+			}
+			seenFunctionImports[funcName] = struct{}{}
+			funcImport := map[string]interface{}{
+				"$Kind":     "FunctionImport",
+				"$Function": fmt.Sprintf("%s.%s", model.namespace, funcName),
+			}
+			container[funcName] = funcImport
+		}
+	}
+
+	// Add ActionImport elements for unbound actions
+	seenActionImports := make(map[string]struct{})
+	for actionName, actionDefs := range model.actions {
+		for _, actionDef := range actionDefs {
+			if actionDef.IsBound {
+				continue
+			}
+			if _, exists := seenActionImports[actionName]; exists {
+				continue
+			}
+			seenActionImports[actionName] = struct{}{}
+			actionImport := map[string]interface{}{
+				"$Kind":   "ActionImport",
+				"$Action": fmt.Sprintf("%s.%s", model.namespace, actionName),
+			}
+			container[actionName] = actionImport
 		}
 	}
 
