@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/nlstn/go-odata/internal/metadata"
+	"github.com/nlstn/go-odata/internal/odataerrors"
 	"github.com/nlstn/go-odata/internal/query"
 	"github.com/nlstn/go-odata/internal/response"
 	"github.com/nlstn/go-odata/internal/trackchanges"
@@ -201,6 +202,23 @@ func validateQueryOptionsForNegotiatedVersion(queryOptions *query.QueryOptions, 
 	return nil
 }
 
+// validateSchemaVersionBinding validates the $schemaversion value against the advertised schema version.
+// It returns an OData 404 error for unknown versions, or a 400 error when schema versioning is not advertised.
+func (h *EntityHandler) validateSchemaVersionBinding(requested string) error {
+	if h.schemaVersion == "" {
+		// Service does not advertise schema versioning; per spec, reject requests with $schemaversion.
+		return fmt.Errorf("invalid $schemaversion: this service does not advertise a schema version")
+	}
+	if requested == "*" || requested == h.schemaVersion {
+		return nil
+	}
+	return &odataerrors.ODataError{
+		StatusCode: http.StatusNotFound,
+		Code:       odataerrors.ErrorCodeNotFound,
+		Message:    fmt.Sprintf("schema version %q not found; the advertised schema version is %q", requested, h.schemaVersion),
+	}
+}
+
 func (h *EntityHandler) parseQueryOptionsByNegotiatedVersion(r *http.Request, entityMetadata *metadata.EntityMetadata, config *query.ParserConfig) (*query.QueryOptions, error) {
 	caseInsensitive := isCaseInsensitiveSystemQueryParsingEnabled(r)
 	queryOptions, err := query.ParseQueryOptionsWithConfigAndCaseSensitivity(
@@ -213,8 +231,15 @@ func (h *EntityHandler) parseQueryOptionsByNegotiatedVersion(r *http.Request, en
 		return nil, err
 	}
 
-	if err := validateQueryOptionsForNegotiatedVersion(queryOptions, version.GetVersion(r.Context())); err != nil {
+	negotiated := version.GetVersion(r.Context())
+	if err := validateQueryOptionsForNegotiatedVersion(queryOptions, negotiated); err != nil {
 		return nil, err
+	}
+
+	if queryOptions.SchemaVersion != nil && negotiated.Supports("schemaversion") {
+		if err := h.validateSchemaVersionBinding(*queryOptions.SchemaVersion); err != nil {
+			return nil, err
+		}
 	}
 
 	return queryOptions, nil

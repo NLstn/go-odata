@@ -59,6 +59,9 @@ type MetadataHandler struct {
 	containerAnnotations *metadata.AnnotationCollection
 	logger               *slog.Logger
 	policy               auth.Policy
+	// schemaVersion is the advertised schema version included in the metadata document.
+	// Controlled by SetSchemaVersion; protected by namespaceMu for thread safety.
+	schemaVersion string
 }
 
 const defaultNamespace = "ODataService"
@@ -143,6 +146,27 @@ func (h *MetadataHandler) SetNamespace(namespace string) {
 // SetEntityContainerAnnotations configures the annotations applied to the entity container.
 func (h *MetadataHandler) SetEntityContainerAnnotations(annotations *metadata.AnnotationCollection) {
 	h.containerAnnotations = annotations
+}
+
+// SetSchemaVersion configures the schema version advertised in the metadata document.
+// When set, the metadata includes a Core.SchemaVersion annotation, and data requests
+// with $schemaversion are validated against this value.
+// Clears the metadata cache.
+func (h *MetadataHandler) SetSchemaVersion(v string) {
+	h.namespaceMu.Lock()
+	defer h.namespaceMu.Unlock()
+	h.schemaVersion = v
+	// Clear cache so updated metadata is regenerated on next request
+	h.cachedXML.Range(func(key, value interface{}) bool {
+		h.cachedXML.Delete(key)
+		return true
+	})
+	h.cachedJSON.Range(func(key, value interface{}) bool {
+		h.cachedJSON.Delete(key)
+		return true
+	})
+	h.cacheSizeXML.Store(0)
+	h.cacheSizeJSON.Store(0)
 }
 
 // namespaceOrDefault returns the current namespace or the default if empty.
@@ -315,12 +339,17 @@ func (h *MetadataHandler) handleOptionsMetadata(w http.ResponseWriter) {
 }
 
 func (h *MetadataHandler) newMetadataModel() metadataModel {
+	h.namespaceMu.RLock()
+	sv := h.schemaVersion
+	h.namespaceMu.RUnlock()
+
 	model := metadataModel{
 		namespace:            h.namespaceOrDefault(),
 		entities:             h.entities,
 		actions:              h.actions,
 		functions:            h.functions,
 		containerAnnotations: h.containerAnnotations,
+		schemaVersion:        sv,
 	}
 	model.buildEntityTypeToSetNameMap()
 	return model
@@ -333,6 +362,9 @@ type metadataModel struct {
 	functions              map[string][]*actions.FunctionDefinition
 	containerAnnotations   *metadata.AnnotationCollection
 	entityTypeToSetNameMap map[string]string // Cache for EntityName -> EntitySetName lookups
+	// schemaVersion is the advertised schema version for Core.SchemaVersion annotation.
+	// Empty string means schema versioning is not advertised.
+	schemaVersion string
 }
 
 type enumTypeInfo struct {
@@ -378,6 +410,12 @@ func (m metadataModel) collectEnumDefinitions() map[string]*enumTypeInfo {
 // collectUsedVocabularies returns a sorted list of unique vocabulary namespaces used in annotations
 func (m metadataModel) collectUsedVocabularies() []string {
 	seen := make(map[string]bool)
+
+	// When a schema version is advertised the Core vocabulary is required for the
+	// Core.SchemaVersion annotation.
+	if m.schemaVersion != "" {
+		seen["Org.OData.Core.V1"] = true
+	}
 
 	if m.containerAnnotations != nil {
 		for _, ns := range m.containerAnnotations.UsedVocabularies() {

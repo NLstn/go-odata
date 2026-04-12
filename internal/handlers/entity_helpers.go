@@ -9,6 +9,7 @@ import (
 	"reflect"
 
 	"github.com/nlstn/go-odata/internal/etag"
+	"github.com/nlstn/go-odata/internal/odataerrors"
 	"github.com/nlstn/go-odata/internal/query"
 	"github.com/nlstn/go-odata/internal/response"
 	"gorm.io/gorm"
@@ -24,7 +25,10 @@ func (e *requestError) Error() string {
 	return e.Message
 }
 
-func (h *EntityHandler) writeRequestError(w http.ResponseWriter, r *http.Request, err error, defaultStatus int, defaultCode string) {
+// writeRequestError writes an error response, honouring the status code embedded in
+// *requestError, *odataerrors.ODataError and *hookerrors.HookError. defaultStatus and
+// defaultCode are used as fallbacks when the error carries no status information.
+func (h *EntityHandler) writeRequestError(w http.ResponseWriter, r *http.Request, err error, defaultStatus int, defaultCode string) { //nolint:unparam // defaultStatus is always 400 today but kept for future callers
 	if err == nil {
 		return
 	}
@@ -60,7 +64,10 @@ func (h *EntityHandler) writeRequestError(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if writeErr := response.WriteError(w, r, defaultStatus, defaultCode, err.Error()); writeErr != nil {
+	// Use BuildODataErrorResponse to handle *odataerrors.ODataError and *hookerrors.HookError
+	// with their embedded status codes, then fall back to the provided defaults.
+	status, odataErr := response.BuildODataErrorResponse(err, defaultStatus, defaultCode)
+	if writeErr := response.WriteODataError(w, r, status, odataErr); writeErr != nil {
 		h.logger.Error("Error writing error response", "error", writeErr)
 	}
 }
@@ -68,6 +75,11 @@ func (h *EntityHandler) writeRequestError(w http.ResponseWriter, r *http.Request
 func (h *EntityHandler) parseSingleEntityQueryOptions(r *http.Request) (*query.QueryOptions, error) {
 	queryOptions, err := h.parseQueryOptionsByNegotiatedVersion(r, h.metadata, nil)
 	if err != nil {
+		// Pass through errors that already carry a specific status code (e.g. 404 for schema version mismatch).
+		var odataErr *odataerrors.ODataError
+		if errors.As(err, &odataErr) {
+			return nil, err
+		}
 		return nil, &requestError{
 			StatusCode: http.StatusBadRequest,
 			ErrorCode:  ErrMsgInvalidQueryOptions,

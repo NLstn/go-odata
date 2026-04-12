@@ -503,6 +503,15 @@ func (h *MetadataHandler) operationBindingType(model metadataModel, entitySetNam
 func (h *MetadataHandler) buildAnnotations(model metadataModel) string {
 	var builder strings.Builder
 
+	// Advertise schema versioning via Core.SchemaVersion annotation on the Schema namespace.
+	// This annotation signals to clients that $schemaversion is supported (OData 4.01, §11.2.12).
+	if model.schemaVersion != "" {
+		builder.WriteString(fmt.Sprintf(`      <Annotations Target="%s">
+        <Annotation Term="Core.SchemaVersion" String="%s" />
+      </Annotations>
+`, model.namespace, escapeXML(model.schemaVersion)))
+	}
+
 	if model.containerAnnotations != nil && model.containerAnnotations.Len() > 0 {
 		target := fmt.Sprintf("%s.Container", model.namespace)
 		builder.WriteString(fmt.Sprintf(`      <Annotations Target="%s">

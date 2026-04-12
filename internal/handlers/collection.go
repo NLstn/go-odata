@@ -84,7 +84,7 @@ func (h *EntityHandler) handleGetCount(w http.ResponseWriter, r *http.Request) {
 
 	queryOptions, err := h.parseQueryOptionsByNegotiatedVersion(r, h.metadata, nil)
 	if err != nil {
-		WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidQueryOptions, err.Error())
+		h.writeRequestError(w, r, err, http.StatusBadRequest, ErrMsgInvalidQueryOptions)
 		return
 	}
 
@@ -121,7 +121,7 @@ func (h *EntityHandler) handleGetCount(w http.ResponseWriter, r *http.Request) {
 func (h *EntityHandler) handleGetCountOverwrite(w http.ResponseWriter, r *http.Request) {
 	queryOptions, err := h.parseQueryOptionsByNegotiatedVersion(r, h.metadata, nil)
 	if err != nil {
-		WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidQueryOptions, err.Error())
+		h.writeRequestError(w, r, err, http.StatusBadRequest, ErrMsgInvalidQueryOptions)
 		return
 	}
 
