@@ -69,6 +69,10 @@ func (h *ServiceDocumentHandler) handleGetServiceDocument(w http.ResponseWriter,
 	singletons := make([]string, 0)
 
 	for name, meta := range h.entities {
+		// Skip entities that are only accessible via navigation properties
+		if meta.IsAccessibleOnlyViaNavigation {
+			continue
+		}
 		if meta.IsSingleton {
 			singletons = append(singletons, name)
 		} else {

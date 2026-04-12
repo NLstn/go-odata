@@ -21,6 +21,11 @@ type EntityMetadata struct {
 	HasStream     bool               // True if this is a media entity (has a media stream)
 	IsOpenType    bool               // True if this is an open type that supports dynamic properties
 	IsVirtual     bool               // True if this is a virtual entity (no database backing store, requires overwrite handlers)
+	// IsAccessibleOnlyViaNavigation indicates that this entity cannot be accessed as a top-level entity set.
+	// Direct requests to the entity set (e.g. GET /EntitySet or GET /EntitySet(key)) will return 404.
+	// The entity is only accessible through navigation properties of its parent entity.
+	// Set this by implementing IsAccessibleOnlyViaNavigation() bool on your entity type.
+	IsAccessibleOnlyViaNavigation bool
 	// ChangeTrackingEnabled indicates whether $deltatoken and change tracking responses are enabled for this entity set
 	ChangeTrackingEnabled bool
 	StreamProperties      []PropertyMetadata // Named stream properties on this entity
@@ -177,6 +182,9 @@ func AnalyzeEntity(entity interface{}) (*EntityMetadata, error) {
 	// Detect if this is an open type (has IsOpenType() method)
 	detectOpenType(metadata, entity)
 
+	// Detect if this entity is only accessible via navigation properties (has IsAccessibleOnlyViaNavigation() method)
+	detectAccessibleOnlyViaNavigation(metadata, entity)
+
 	// Detect stream properties
 	detectStreamProperties(metadata)
 
@@ -314,6 +322,9 @@ func AnalyzeVirtualEntity(entity interface{}) (*EntityMetadata, error) {
 
 	// Detect if this is an open type (has IsOpenType() method)
 	detectOpenType(metadata, entity)
+
+	// Detect if this entity is only accessible via navigation properties (has IsAccessibleOnlyViaNavigation() method)
+	detectAccessibleOnlyViaNavigation(metadata, entity)
 
 	// Detect stream properties
 	detectStreamProperties(metadata)
@@ -903,6 +914,14 @@ func detectMediaEntity(metadata *EntityMetadata, entity interface{}) {
 func detectOpenType(metadata *EntityMetadata, entity interface{}) {
 	if result, ok := callBoolMethod(metadata.EntityType, entity, "IsOpenType"); ok {
 		metadata.IsOpenType = result
+	}
+}
+
+// detectAccessibleOnlyViaNavigation checks if the entity implements IsAccessibleOnlyViaNavigation() bool method.
+// When true, direct access to the entity set is rejected; the entity is only reachable via navigation properties.
+func detectAccessibleOnlyViaNavigation(metadata *EntityMetadata, entity interface{}) {
+	if result, ok := callBoolMethod(metadata.EntityType, entity, "IsAccessibleOnlyViaNavigation"); ok {
+		metadata.IsAccessibleOnlyViaNavigation = result
 	}
 }
 

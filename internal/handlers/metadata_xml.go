@@ -434,6 +434,10 @@ func (h *MetadataHandler) buildEntityContainer(model metadataModel) string {
 	builder.WriteString(`      <EntityContainer Name="Container">
 `)
 	for entitySetName, entityMeta := range model.entities {
+		// Skip entities that are only accessible via navigation properties (no top-level EntitySet entry)
+		if entityMeta.IsAccessibleOnlyViaNavigation {
+			continue
+		}
 		navigationBindings := h.navigationBindings(model, entityMeta)
 		if entityMeta.IsSingleton {
 			builder.WriteString(fmt.Sprintf(`        <Singleton Name="%s" Type="%s">

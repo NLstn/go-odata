@@ -1022,110 +1022,144 @@ func TestAnalyzeEntity_ComputedField(t *testing.T) {
 // TestContainmentNavigationProperty verifies that the odata:"containment" tag sets
 // NavigationContainsTarget on the navigation property metadata.
 func TestContainmentNavigationProperty(t *testing.T) {
-type ContainedChild struct {
-ID       int    `json:"ID" odata:"key"`
-ParentID int    `json:"ParentID"`
-Value    string `json:"Value"`
-}
+	type ContainedChild struct {
+		ID       int    `json:"ID" odata:"key"`
+		ParentID int    `json:"ParentID"`
+		Value    string `json:"Value"`
+	}
 
-type ParentWithContainment struct {
-ID       int              `json:"ID" odata:"key"`
-Name     string           `json:"Name"`
-Children []ContainedChild `json:"Children,omitempty" gorm:"foreignKey:ParentID" odata:"containment"`
-}
+	type ParentWithContainment struct {
+		ID       int              `json:"ID" odata:"key"`
+		Name     string           `json:"Name"`
+		Children []ContainedChild `json:"Children,omitempty" gorm:"foreignKey:ParentID" odata:"containment"`
+	}
 
-meta, err := AnalyzeEntity(ParentWithContainment{})
-if err != nil {
-t.Fatalf("AnalyzeEntity() error = %v", err)
-}
+	meta, err := AnalyzeEntity(ParentWithContainment{})
+	if err != nil {
+		t.Fatalf("AnalyzeEntity() error = %v", err)
+	}
 
-var childrenProp *PropertyMetadata
-for i, prop := range meta.Properties {
-if prop.Name == "Children" {
-childrenProp = &meta.Properties[i]
-break
-}
-}
+	var childrenProp *PropertyMetadata
+	for i, prop := range meta.Properties {
+		if prop.Name == "Children" {
+			childrenProp = &meta.Properties[i]
+			break
+		}
+	}
 
-if childrenProp == nil {
-t.Fatal("Children navigation property not found")
-}
+	if childrenProp == nil {
+		t.Fatal("Children navigation property not found")
+	}
 
-if !childrenProp.IsNavigationProp {
-t.Error("Children should be a navigation property")
-}
+	if !childrenProp.IsNavigationProp {
+		t.Error("Children should be a navigation property")
+	}
 
-if !childrenProp.NavigationContainsTarget {
-t.Error("Children.NavigationContainsTarget should be true when tagged with odata:\"containment\"")
-}
+	if !childrenProp.NavigationContainsTarget {
+		t.Error("Children.NavigationContainsTarget should be true when tagged with odata:\"containment\"")
+	}
 }
 
 // TestNonContainmentNavigationProperty verifies that navigation properties without the
 // odata:"containment" tag do NOT have NavigationContainsTarget set.
 func TestNonContainmentNavigationProperty(t *testing.T) {
-type Child struct {
-ID       int    `json:"ID" odata:"key"`
-ParentID int    `json:"ParentID"`
-}
+	type Child struct {
+		ID       int `json:"ID" odata:"key"`
+		ParentID int `json:"ParentID"`
+	}
 
-type Parent struct {
-ID       int     `json:"ID" odata:"key"`
-Name     string  `json:"Name"`
-Children []Child `json:"Children,omitempty" gorm:"foreignKey:ParentID"`
-}
+	type Parent struct {
+		ID       int     `json:"ID" odata:"key"`
+		Name     string  `json:"Name"`
+		Children []Child `json:"Children,omitempty" gorm:"foreignKey:ParentID"`
+	}
 
-meta, err := AnalyzeEntity(Parent{})
-if err != nil {
-t.Fatalf("AnalyzeEntity() error = %v", err)
-}
+	meta, err := AnalyzeEntity(Parent{})
+	if err != nil {
+		t.Fatalf("AnalyzeEntity() error = %v", err)
+	}
 
-var childrenProp *PropertyMetadata
-for i, prop := range meta.Properties {
-if prop.Name == "Children" {
-childrenProp = &meta.Properties[i]
-break
-}
-}
+	var childrenProp *PropertyMetadata
+	for i, prop := range meta.Properties {
+		if prop.Name == "Children" {
+			childrenProp = &meta.Properties[i]
+			break
+		}
+	}
 
-if childrenProp == nil {
-t.Fatal("Children navigation property not found")
-}
+	if childrenProp == nil {
+		t.Fatal("Children navigation property not found")
+	}
 
-if childrenProp.NavigationContainsTarget {
-t.Error("Children.NavigationContainsTarget should be false when not tagged with odata:\"containment\"")
-}
+	if childrenProp.NavigationContainsTarget {
+		t.Error("Children.NavigationContainsTarget should be false when not tagged with odata:\"containment\"")
+	}
 }
 
 // TestIsOpenType verifies that entities implementing IsOpenType() bool have IsOpenType set on their metadata.
 func TestIsOpenType(t *testing.T) {
-// We can't add methods to a local type, so we use a named package-level type (openTypeDetectEntity).
-meta, err := AnalyzeEntity(openTypeDetectEntity{})
-if err != nil {
-t.Fatalf("AnalyzeEntity() error = %v", err)
-}
+	// We can't add methods to a local type, so we use a named package-level type (openTypeDetectEntity).
+	meta, err := AnalyzeEntity(openTypeDetectEntity{})
+	if err != nil {
+		t.Fatalf("AnalyzeEntity() error = %v", err)
+	}
 
-if !meta.IsOpenType {
-t.Error("IsOpenType should be true for entity implementing IsOpenType() bool returning true")
-}
+	if !meta.IsOpenType {
+		t.Error("IsOpenType should be true for entity implementing IsOpenType() bool returning true")
+	}
 }
 
 // TestIsNotOpenType verifies that entities without IsOpenType() have IsOpenType=false.
 func TestIsNotOpenType(t *testing.T) {
-meta, err := AnalyzeEntity(TestProduct{})
-if err != nil {
-t.Fatalf("AnalyzeEntity() error = %v", err)
-}
+	meta, err := AnalyzeEntity(TestProduct{})
+	if err != nil {
+		t.Fatalf("AnalyzeEntity() error = %v", err)
+	}
 
-if meta.IsOpenType {
-t.Error("IsOpenType should be false for entities without IsOpenType() method")
-}
+	if meta.IsOpenType {
+		t.Error("IsOpenType should be false for entities without IsOpenType() method")
+	}
 }
 
 // openTypeDetectEntity is a named type used by TestIsOpenType
 type openTypeDetectEntity struct {
-ID int `json:"ID" odata:"key"`
+	ID int `json:"ID" odata:"key"`
 }
 
 func (openTypeDetectEntity) IsOpenType() bool {
-return true
+	return true
+}
+
+// TestIsAccessibleOnlyViaNavigation verifies that entities implementing IsAccessibleOnlyViaNavigation()
+// have the IsAccessibleOnlyViaNavigation field set to true on their metadata.
+func TestIsAccessibleOnlyViaNavigation(t *testing.T) {
+	meta, err := AnalyzeEntity(navOnlyEntity{})
+	if err != nil {
+		t.Fatalf("AnalyzeEntity() error = %v", err)
+	}
+
+	if !meta.IsAccessibleOnlyViaNavigation {
+		t.Error("IsAccessibleOnlyViaNavigation should be true for entity implementing IsAccessibleOnlyViaNavigation() bool returning true")
+	}
+}
+
+// TestIsNotAccessibleOnlyViaNavigation verifies that regular entities have IsAccessibleOnlyViaNavigation=false.
+func TestIsNotAccessibleOnlyViaNavigation(t *testing.T) {
+	meta, err := AnalyzeEntity(TestProduct{})
+	if err != nil {
+		t.Fatalf("AnalyzeEntity() error = %v", err)
+	}
+
+	if meta.IsAccessibleOnlyViaNavigation {
+		t.Error("IsAccessibleOnlyViaNavigation should be false for entities without IsAccessibleOnlyViaNavigation() method")
+	}
+}
+
+// navOnlyEntity is a named type used by TestIsAccessibleOnlyViaNavigation
+type navOnlyEntity struct {
+	ID int `json:"ID" odata:"key"`
+}
+
+func (navOnlyEntity) IsAccessibleOnlyViaNavigation() bool {
+	return true
 }
