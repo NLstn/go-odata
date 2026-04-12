@@ -138,6 +138,77 @@ func TestRouter_HeadUnboundFunction_InvokesActionInvoker(t *testing.T) {
 	}
 }
 
+func TestRouter_GetUnboundParameterlessFunction_NoParens_401Invokes(t *testing.T) {
+	invoked := false
+	invoker := func(_ http.ResponseWriter, _ *http.Request, name, key string, isBound bool, entitySet string) {
+		invoked = true
+		if name != "TopProducts" || key != "" || isBound || entitySet != "" {
+			t.Fatalf("unexpected invocation parameters: name=%s key=%s bound=%v set=%s", name, key, isBound, entitySet)
+		}
+	}
+
+	r := newTestRouter(nil, nil, map[string][]*actions.FunctionDefinition{
+		"TopProducts": []*actions.FunctionDefinition{
+			{Name: "TopProducts", IsBound: false, Parameters: nil},
+		},
+	}, invoker)
+
+	req := httptest.NewRequest(http.MethodGet, "/TopProducts", nil)
+	req.Header.Set("OData-MaxVersion", "4.01")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if !invoked {
+		t.Fatal("expected action invoker to be called for OData 4.01 shorthand function call")
+	}
+}
+
+func TestRouter_GetUnboundParameterlessFunction_NoParens_40Rejected(t *testing.T) {
+	invoked := false
+	r := newTestRouter(nil, nil, map[string][]*actions.FunctionDefinition{
+		"TopProducts": []*actions.FunctionDefinition{
+			{Name: "TopProducts", IsBound: false, Parameters: nil},
+		},
+	}, func(http.ResponseWriter, *http.Request, string, string, bool, string) {
+		invoked = true
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/TopProducts", nil)
+	req.Header.Set("OData-MaxVersion", "4.0")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, rec.Code)
+	}
+	if invoked {
+		t.Fatal("expected action invoker not to be called for OData 4.0 shorthand function call")
+	}
+	if !strings.Contains(strings.ToLower(rec.Body.String()), "parentheses") {
+		t.Fatalf("expected error response to mention parentheses, got %q", rec.Body.String())
+	}
+}
+
+func TestRouter_GetUnboundFunction_NoParensWithFunctionParams_NotInvoked(t *testing.T) {
+	invoked := false
+	r := newTestRouter(nil, nil, map[string][]*actions.FunctionDefinition{
+		"TopProducts": []*actions.FunctionDefinition{
+			{Name: "TopProducts", IsBound: false, Parameters: []actions.ParameterDefinition{{Name: "count", Required: true}}},
+		},
+	}, func(http.ResponseWriter, *http.Request, string, string, bool, string) {
+		invoked = true
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/TopProducts?count=3", nil)
+	req.Header.Set("OData-MaxVersion", "4.01")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if invoked {
+		t.Fatal("expected shorthand invocation without parentheses not to invoke function with explicit parameters")
+	}
+}
+
 func TestRouter_StreamPropertyRefRejected(t *testing.T) {
 	handler := newStubEntityHandler()
 	handler.streamProps["Photo"] = true
