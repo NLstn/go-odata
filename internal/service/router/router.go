@@ -153,6 +153,24 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	switch req.Method {
 	case http.MethodGet, http.MethodHead:
+		if !strings.Contains(path, "(") && !strings.Contains(path, ")") {
+			if _, exists := r.functions[path]; exists {
+				supportsNoParens := negotiatedVersion.Major > 4 || (negotiatedVersion.Major == 4 && negotiatedVersion.Minor >= 1)
+				if !supportsNoParens {
+					if writeErr := response.WriteError(w, req, http.StatusBadRequest, "Invalid function invocation",
+						"Function invocations without parentheses require OData 4.01 negotiation; use parentheses syntax (FunctionName())"); writeErr != nil {
+						r.logger.Error("Error writing error response", "error", writeErr)
+					}
+					return
+				}
+
+				if r.hasUnboundParameterlessFunction(path) && !hasNonSystemQueryParams(req.URL.Query()) {
+					r.actionInvoker(w, req, path, "", false, "")
+					return
+				}
+			}
+		}
+
 		if strings.Contains(path, "(") && strings.Contains(path, ")") {
 			pathWithoutParams := path
 			if idx := strings.Index(path, "("); idx != -1 {
@@ -223,6 +241,33 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	r.routeRequest(w, req, handler, components)
+}
+
+func (r *Router) hasUnboundParameterlessFunction(name string) bool {
+	defs, ok := r.functions[name]
+	if !ok {
+		return false
+	}
+
+	for _, def := range defs {
+		if def == nil {
+			continue
+		}
+		if !def.IsBound && len(def.Parameters) == 0 {
+			return true
+		}
+	}
+
+	return false
+}
+
+func hasNonSystemQueryParams(values map[string][]string) bool {
+	for key := range values {
+		if !strings.HasPrefix(key, "$") {
+			return true
+		}
+	}
+	return false
 }
 
 // SetAsyncMonitor configures the router to delegate monitor requests to the async manager.
