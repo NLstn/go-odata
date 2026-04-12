@@ -276,6 +276,10 @@ func (h *MetadataHandler) buildJSONEntityType(model metadataModel, entityMeta *m
 	entityType := make(map[string]interface{})
 	entityType["$Kind"] = "EntityType"
 
+	if entityMeta.IsOpenType {
+		entityType["$OpenType"] = true
+	}
+
 	keyNames := make([]string, 0, len(entityMeta.KeyProperties))
 	for _, keyProp := range entityMeta.KeyProperties {
 		keyNames = append(keyNames, keyProp.JsonName)
@@ -373,6 +377,10 @@ func (h *MetadataHandler) buildJSONNavigationProperty(model metadataModel, prop 
 		navProp["$Type"] = model.qualifiedTypeName(prop.NavigationTarget)
 	} else {
 		navProp["$Type"] = model.qualifiedTypeName(prop.NavigationTarget)
+	}
+
+	if prop.NavigationContainsTarget {
+		navProp["$ContainsTarget"] = true
 	}
 
 	if len(prop.ReferentialConstraints) > 0 {

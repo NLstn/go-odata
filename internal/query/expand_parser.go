@@ -427,6 +427,10 @@ func validateExpandSelect(selectedProps []string, entityMetadata *metadata.Entit
 		}
 
 		if !propertyExists(propName, entityMetadata) {
+			// Open types allow dynamic (undeclared) properties in $select
+			if entityMetadata != nil && entityMetadata.IsOpenType {
+				continue
+			}
 			return fmt.Errorf("property '%s' does not exist in entity type", propName)
 		}
 	}

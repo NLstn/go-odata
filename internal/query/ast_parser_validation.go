@@ -126,6 +126,11 @@ func propertyAllowedInFilter(ctx *conversionContext, property string) bool {
 		return true
 	}
 
+	// Open types allow dynamic (undeclared) properties in filter expressions
+	if ctx.entityMetadata != nil && ctx.entityMetadata.IsOpenType {
+		return true
+	}
+
 	return isCollectionCountPath(property, ctx.entityMetadata)
 }
 
