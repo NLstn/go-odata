@@ -271,6 +271,34 @@ func ApplyTransformationCatalog() *framework.TestSuite {
 	)
 
 	suite.AddTest(
+		"test_apply_toppercent_measure_semantics",
+		"toppercent uses cumulative measure ratio, not row count percentage",
+		func(ctx *framework.TestContext) error {
+			applyExpr := url.QueryEscape("toppercent(50,Price)")
+			resp, err := ctx.GET("/Products?$apply=" + applyExpr)
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(resp, 200); err != nil {
+				return err
+			}
+
+			names, err := applyProductNames(resp.Body)
+			if err != nil {
+				return err
+			}
+			if len(names) != 2 {
+				return fmt.Errorf("expected 2 products for toppercent(50,Price), got %d", len(names))
+			}
+			if names[0] != "Premium Laptop Pro" || names[1] != "Laptop" {
+				return fmt.Errorf("expected [Premium Laptop Pro Laptop], got %v", names)
+			}
+
+			return nil
+		},
+	)
+
+	suite.AddTest(
 		"test_apply_bottompercent_100",
 		"bottompercent(100,...) returns the full set",
 		func(ctx *framework.TestContext) error {
@@ -301,6 +329,31 @@ func ApplyTransformationCatalog() *framework.TestSuite {
 			}
 			if count != baselineCount {
 				return fmt.Errorf("expected %d items, got %d", baselineCount, count)
+			}
+
+			return nil
+		},
+	)
+
+	suite.AddTest(
+		"test_apply_top_bottom_positive_parameter_validation",
+		"top/bottom count and percent reject non-positive first arguments",
+		func(ctx *framework.TestContext) error {
+			invalidExprs := []string{
+				"topcount(0,Price)",
+				"bottomcount(0,Price)",
+				"toppercent(0,Price)",
+				"bottompercent(0,Price)",
+			}
+
+			for _, expr := range invalidExprs {
+				resp, err := ctx.GET("/Products?$apply=" + url.QueryEscape(expr))
+				if err != nil {
+					return err
+				}
+				if err := ctx.AssertStatusCode(resp, http.StatusBadRequest); err != nil {
+					return fmt.Errorf("%s: %w", expr, err)
+				}
 			}
 
 			return nil

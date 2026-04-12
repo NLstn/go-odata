@@ -2,7 +2,6 @@ package query
 
 import (
 	"fmt"
-	"math"
 	"reflect"
 	"strings"
 
@@ -163,47 +162,15 @@ func applySetTransformation(db *gorm.DB, transformation ApplyTransformation, ent
 		}
 		return db.Order(clause.OrderByColumn{Column: clause.Column{Raw: true, Name: qualifiedMeasure}, Desc: false}).Limit(*transformation.Set.Count)
 	case ApplyTypeTopPercent:
-		if transformation.Set.Parameter <= 0 {
-			return db.Limit(0)
-		}
 		if transformation.Set.Parameter >= 100 {
 			return db
 		}
-		// Approximate via row count percentage. Precision improvements can be layered
-		// with window functions in a follow-up without changing parser contracts.
-		var n int64
-		countDB := db.Session(&gorm.Session{NewDB: true})
-		if countDB.Statement != nil && countDB.Statement.Model == nil {
-			countDB = countDB.Model(reflect.New(entityMetadata.EntityType).Interface())
-		}
-		if countDB.Count(&n).Error != nil || n <= 0 {
-			return db.Limit(0)
-		}
-		k := int(math.Ceil((transformation.Set.Parameter / 100.0) * float64(n)))
-		if k < 0 {
-			k = 0
-		}
-		return db.Order(clause.OrderByColumn{Column: clause.Column{Raw: true, Name: qualifiedMeasure}, Desc: true}).Limit(k)
+		return applyPercentThresholdSetTransformation(db, qualifiedKey, qualifiedMeasure, transformation.Set.Parameter, true)
 	case ApplyTypeBottomPercent:
-		if transformation.Set.Parameter <= 0 {
-			return db.Limit(0)
-		}
 		if transformation.Set.Parameter >= 100 {
 			return db
 		}
-		var n int64
-		countDB := db.Session(&gorm.Session{NewDB: true})
-		if countDB.Statement != nil && countDB.Statement.Model == nil {
-			countDB = countDB.Model(reflect.New(entityMetadata.EntityType).Interface())
-		}
-		if countDB.Count(&n).Error != nil || n <= 0 {
-			return db.Limit(0)
-		}
-		k := int(math.Ceil((transformation.Set.Parameter / 100.0) * float64(n)))
-		if k < 0 {
-			k = 0
-		}
-		return db.Order(clause.OrderByColumn{Column: clause.Column{Raw: true, Name: qualifiedMeasure}, Desc: false}).Limit(k)
+		return applyPercentThresholdSetTransformation(db, qualifiedKey, qualifiedMeasure, transformation.Set.Parameter, false)
 	case ApplyTypeTopSum:
 		return applySumThresholdSetTransformation(db, qualifiedKey, qualifiedMeasure, transformation.Set.Parameter, true)
 	case ApplyTypeBottomSum:
@@ -211,6 +178,30 @@ func applySetTransformation(db *gorm.DB, transformation ApplyTransformation, ent
 	default:
 		return db
 	}
+}
+
+func applyPercentThresholdSetTransformation(db *gorm.DB, qualifiedKey string, qualifiedMeasure string, percent float64, desc bool) *gorm.DB {
+	if percent <= 0 {
+		return db.Limit(0)
+	}
+
+	var total struct {
+		Total float64
+	}
+	totalDB := db.Session(&gorm.Session{})
+	if err := totalDB.Select(fmt.Sprintf("COALESCE(SUM(%s), 0) as total", qualifiedMeasure)).Scan(&total).Error; err != nil {
+		return db.Limit(0)
+	}
+	if total.Total <= 0 {
+		return db.Limit(0)
+	}
+
+	threshold := (percent / 100.0) * total.Total
+	if threshold <= 0 {
+		return db.Limit(0)
+	}
+
+	return applySumThresholdSetTransformation(db, qualifiedKey, qualifiedMeasure, threshold, desc)
 }
 
 func qualifyMeasureForSetTransformation(dialect string, entityMetadata *metadata.EntityMetadata, measureCol string, measureName string) string {

@@ -886,6 +886,18 @@ func parseNonNegativeInt(str, paramName string) (int, error) {
 	return value, nil
 }
 
+// parsePositiveInt parses a string as a strictly positive integer.
+func parsePositiveInt(str, paramName string) (int, error) {
+	var value int
+	if _, err := fmt.Sscanf(str, "%d", &value); err != nil {
+		return 0, fmt.Errorf("invalid %s: must be a positive integer", paramName)
+	}
+	if value <= 0 {
+		return 0, fmt.Errorf("invalid %s: must be a positive integer", paramName)
+	}
+	return value, nil
+}
+
 // mergeNavigationSelects processes $select with navigation paths and merges them into expand options
 // For example: $select=Product/Name with $expand=Product should result in Product being expanded with $select=Name
 func mergeNavigationSelects(options *QueryOptions) {

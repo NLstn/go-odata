@@ -586,7 +586,7 @@ func parseSetTransformation(transStr string, entityMetadata *metadata.EntityMeta
 
 	switch t {
 	case ApplyTypeTopCount, ApplyTypeBottomCount:
-		count, err := parseNonNegativeInt(valueStr, string(t))
+		count, err := parsePositiveInt(valueStr, string(t))
 		if err != nil {
 			return nil, err
 		}
@@ -597,8 +597,8 @@ func parseSetTransformation(transStr string, entityMetadata *metadata.EntityMeta
 		if err != nil {
 			return nil, fmt.Errorf("invalid %s value: %s", t, valueStr)
 		}
-		if (t == ApplyTypeTopPercent || t == ApplyTypeBottomPercent) && (v < 0 || v > 100) {
-			return nil, fmt.Errorf("%s value must be between 0 and 100", t)
+		if (t == ApplyTypeTopPercent || t == ApplyTypeBottomPercent) && (v <= 0 || v > 100) {
+			return nil, fmt.Errorf("%s value must be greater than 0 and less than or equal to 100", t)
 		}
 		set.Parameter = v
 	default:
