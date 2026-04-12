@@ -19,6 +19,7 @@ type EntityMetadata struct {
 	IsSingleton   bool               // True if this is a singleton (single instance accessible by name)
 	SingletonName string             // Name of the singleton (if IsSingleton is true)
 	HasStream     bool               // True if this is a media entity (has a media stream)
+	IsOpenType    bool               // True if this is an open type that supports dynamic properties
 	IsVirtual     bool               // True if this is a virtual entity (no database backing store, requires overwrite handlers)
 	// ChangeTrackingEnabled indicates whether $deltatoken and change tracking responses are enabled for this entity set
 	ChangeTrackingEnabled bool
@@ -75,6 +76,7 @@ type PropertyMetadata struct {
 	NavigationTargetTableName string // Database table name for navigation target (computed once)
 	ForeignKeyColumnName      string // Foreign key column name for navigation properties (computed once)
 	NavigationIsArray         bool   // True for collection navigation properties
+	NavigationContainsTarget  bool   // True if this is a containment navigation property (ContainsTarget="true")
 	IsETag                    bool   // True if this property should be used for ETag generation
 	IsComplexType             bool   // True if this property is a complex type (embedded struct)
 	EmbeddedPrefix            string
@@ -171,6 +173,9 @@ func AnalyzeEntity(entity interface{}) (*EntityMetadata, error) {
 
 	// Detect if this is a media entity (has HasStream() method)
 	detectMediaEntity(metadata, entity)
+
+	// Detect if this is an open type (has IsOpenType() method)
+	detectOpenType(metadata, entity)
 
 	// Detect stream properties
 	detectStreamProperties(metadata)
@@ -306,6 +311,9 @@ func AnalyzeVirtualEntity(entity interface{}) (*EntityMetadata, error) {
 
 	// Detect if this is a media entity (has HasStream() method)
 	detectMediaEntity(metadata, entity)
+
+	// Detect if this is an open type (has IsOpenType() method)
+	detectOpenType(metadata, entity)
 
 	// Detect stream properties
 	detectStreamProperties(metadata)
@@ -664,6 +672,8 @@ func processODataTagPart(property *PropertyMetadata, part string, metadata *Enti
 		property.IsAuto = true
 	case part == "computed":
 		property.IsComputed = true
+	case part == "containment":
+		property.NavigationContainsTarget = true
 	case strings.HasPrefix(part, "annotation:"):
 		// Handle annotation tags: annotation:Core.Computed or annotation:Org.OData.Core.V1.Description=Some description
 		annotationValue := strings.TrimPrefix(part, "annotation:")
@@ -909,6 +919,40 @@ func detectMediaEntity(metadata *EntityMetadata, entity interface{}) {
 			result := method.Call(nil)
 			if len(result) > 0 && result[0].Kind() == reflect.Bool {
 				metadata.HasStream = result[0].Bool()
+			}
+		}
+	}
+}
+
+// detectOpenType checks if the entity implements IsOpenType() bool method.
+// Open types allow dynamic properties that are not declared in the schema.
+func detectOpenType(metadata *EntityMetadata, entity interface{}) {
+	entityType := metadata.EntityType
+
+	// Check for both value and pointer receivers
+	valueType := entityType
+	ptrType := reflect.PointerTo(entityType)
+
+	// Check if IsOpenType method exists
+	if hasMethod(valueType, "IsOpenType") || hasMethod(ptrType, "IsOpenType") {
+		// Call the method to get the actual value
+		val := reflect.ValueOf(entity)
+		if val.Kind() == reflect.Ptr {
+			val = val.Elem()
+		}
+
+		// Try to call IsOpenType() to get the value
+		method := val.MethodByName("IsOpenType")
+		if !method.IsValid() {
+			// Try on pointer
+			ptrVal := val.Addr()
+			method = ptrVal.MethodByName("IsOpenType")
+		}
+
+		if method.IsValid() && method.Type().NumIn() == 0 && method.Type().NumOut() == 1 {
+			result := method.Call(nil)
+			if len(result) > 0 && result[0].Kind() == reflect.Bool {
+				metadata.IsOpenType = result[0].Bool()
 			}
 		}
 	}

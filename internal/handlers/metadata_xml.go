@@ -308,10 +308,15 @@ func (h *MetadataHandler) buildEntityType(model metadataModel, entityMeta *metad
 		hasStreamAttr = ` HasStream="true"`
 	}
 
+	openTypeAttr := ""
+	if entityMeta.IsOpenType {
+		openTypeAttr = ` OpenType="true"`
+	}
+
 	var builder strings.Builder
-	builder.WriteString(fmt.Sprintf(`      <EntityType Name="%s"%s>
+	builder.WriteString(fmt.Sprintf(`      <EntityType Name="%s"%s%s>
         <Key>
-`, entityMeta.EntityName, hasStreamAttr))
+`, entityMeta.EntityName, hasStreamAttr, openTypeAttr))
 
 	for _, keyProp := range entityMeta.KeyProperties {
 		builder.WriteString(fmt.Sprintf(`          <PropertyRef Name="%s" />
@@ -399,9 +404,14 @@ func (h *MetadataHandler) buildNavigationProperties(model metadataModel, entityM
 			typeName = fmt.Sprintf("Collection(%s)", typeName)
 		}
 
+		containsTargetAttr := ""
+		if prop.NavigationContainsTarget {
+			containsTargetAttr = ` ContainsTarget="true"`
+		}
+
 		if len(prop.ReferentialConstraints) > 0 {
-			builder.WriteString(fmt.Sprintf(`        <NavigationProperty Name="%s" Type="%s">
-`, prop.JsonName, typeName))
+			builder.WriteString(fmt.Sprintf(`        <NavigationProperty Name="%s" Type="%s"%s>
+`, prop.JsonName, typeName, containsTargetAttr))
 			builder.WriteString(`          <ReferentialConstraint>
 `)
 			for dependent, principal := range prop.ReferentialConstraints {
@@ -412,8 +422,8 @@ func (h *MetadataHandler) buildNavigationProperties(model metadataModel, entityM
         </NavigationProperty>
 `)
 		} else {
-			builder.WriteString(fmt.Sprintf(`        <NavigationProperty Name="%s" Type="%s" />
-`, prop.JsonName, typeName))
+			builder.WriteString(fmt.Sprintf(`        <NavigationProperty Name="%s" Type="%s"%s />
+`, prop.JsonName, typeName, containsTargetAttr))
 		}
 	}
 	return builder.String()
