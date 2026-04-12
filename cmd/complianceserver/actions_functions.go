@@ -64,10 +64,9 @@ func registerFunctions(service *odata.Service, db *gorm.DB) {
 			category := params["category"].(string)
 
 			var products []entities.Product
-			if err := db.Model(&entities.Product{}).
-				Joins("Category").
-				Where("Category.Name = ?", category).
-				Order("Products.Price DESC").
+			if err := db.
+				Where("category_id IN (?)", db.Model(&entities.Category{}).Select("id").Where("name = ?", category)).
+				Order("price DESC").
 				Limit(int(count)).
 				Find(&products).Error; err != nil {
 				return nil, err
