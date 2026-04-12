@@ -900,5 +900,268 @@ func ApplyTransformationCatalog() *framework.TestSuite {
 		},
 	)
 
+	suite.AddTest(
+		"test_apply_join_aggregate_tail",
+		"join with aggregate tail returns aggregated count of all joined rows",
+		func(ctx *framework.TestContext) error {
+			applyExpr := url.QueryEscape("join(Descriptions as Description)/aggregate($count as TotalCount)")
+			resp, err := ctx.GET("/Products?$apply=" + applyExpr)
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(resp, http.StatusOK); err != nil {
+				return err
+			}
+
+			items, err := parseApplyItems(resp)
+			if err != nil {
+				return err
+			}
+			if len(items) != 1 {
+				return fmt.Errorf("expected exactly 1 result row, got %d", len(items))
+			}
+
+			rawCount, ok := firstPresent(items[0], "TotalCount", "totalCount")
+			if !ok {
+				return fmt.Errorf("result row missing TotalCount field")
+			}
+			count, ok := rawCount.(float64)
+			if !ok {
+				return fmt.Errorf("TotalCount is not numeric, got %T: %v", rawCount, rawCount)
+			}
+			if count < 7 {
+				return fmt.Errorf("expected TotalCount >= 7 (7 product descriptions linked to products), got %v", count)
+			}
+
+			return nil
+		},
+	)
+
+	suite.AddTest(
+		"test_apply_join_groupby_tail",
+		"join with groupby tail groups joined rows by a parent property",
+		func(ctx *framework.TestContext) error {
+			applyExpr := url.QueryEscape("join(Descriptions as Description)/groupby((CategoryID))")
+			resp, err := ctx.GET("/Products?$apply=" + applyExpr)
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(resp, http.StatusOK); err != nil {
+				return err
+			}
+
+			items, err := parseApplyItems(resp)
+			if err != nil {
+				return err
+			}
+			if len(items) < 1 {
+				return fmt.Errorf("expected at least 1 group, got 0")
+			}
+			// There are 3 categories total; only products with descriptions (Electronics and Kitchen)
+			// appear in the join result, so we expect at most 3 groups.
+			if len(items) > 3 {
+				return fmt.Errorf("expected at most 3 category groups, got %d", len(items))
+			}
+
+			for i, item := range items {
+				if _, ok := firstPresent(item, "CategoryID", "categoryID"); !ok {
+					return fmt.Errorf("group %d missing CategoryID field", i)
+				}
+			}
+
+			return nil
+		},
+	)
+
+	suite.AddTest(
+		"test_apply_concat_aggregate_tail",
+		"concat with aggregate tail returns aggregated count of concatenated rows",
+		func(ctx *framework.TestContext) error {
+			// Get baseline counts for each filter
+			gt0Resp, err := ctx.GET("/Products?$filter=" + url.QueryEscape("Price gt 0") + "&$count=true")
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(gt0Resp, http.StatusOK); err != nil {
+				return err
+			}
+			gt0Count, err := applyValueCount(gt0Resp.Body)
+			if err != nil {
+				return err
+			}
+
+			gt100Resp, err := ctx.GET("/Products?$filter=" + url.QueryEscape("Price gt 100") + "&$count=true")
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(gt100Resp, http.StatusOK); err != nil {
+				return err
+			}
+			gt100Count, err := applyValueCount(gt100Resp.Body)
+			if err != nil {
+				return err
+			}
+
+			expectedTotal := gt0Count + gt100Count
+
+			applyExpr := url.QueryEscape("concat(filter(Price gt 0),filter(Price gt 100))/aggregate($count as TotalCount)")
+			resp, err := ctx.GET("/Products?$apply=" + applyExpr)
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(resp, http.StatusOK); err != nil {
+				return err
+			}
+
+			items, err := parseApplyItems(resp)
+			if err != nil {
+				return err
+			}
+			if len(items) != 1 {
+				return fmt.Errorf("expected exactly 1 result row from aggregate, got %d", len(items))
+			}
+
+			rawCount, ok := firstPresent(items[0], "TotalCount", "totalCount")
+			if !ok {
+				return fmt.Errorf("result row missing TotalCount field")
+			}
+			count, ok := rawCount.(float64)
+			if !ok {
+				return fmt.Errorf("TotalCount is not numeric, got %T: %v", rawCount, rawCount)
+			}
+			if int(count) != expectedTotal {
+				return fmt.Errorf("expected TotalCount=%d (Price>0: %d + Price>100: %d), got %v",
+					expectedTotal, gt0Count, gt100Count, count)
+			}
+
+			return nil
+		},
+	)
+
+	suite.AddTest(
+		"test_apply_filter_then_concat",
+		"filter followed by concat uses filtered input set for each concat sequence",
+		func(ctx *framework.TestContext) error {
+			baselineExpr := url.QueryEscape("filter(Price gt 0)")
+			baselineResp, err := ctx.GET("/Products?$apply=" + baselineExpr)
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(baselineResp, http.StatusOK); err != nil {
+				return err
+			}
+			baselineCount, err := applyValueCount(baselineResp.Body)
+			if err != nil {
+				return err
+			}
+
+			applyExpr := url.QueryEscape("filter(Price gt 0)/concat(identity,identity)/aggregate($count as Total)")
+			resp, err := ctx.GET("/Products?$apply=" + applyExpr)
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(resp, http.StatusOK); err != nil {
+				return err
+			}
+
+			items, err := parseApplyItems(resp)
+			if err != nil {
+				return err
+			}
+			if len(items) != 1 {
+				return fmt.Errorf("expected exactly 1 result row from aggregate, got %d", len(items))
+			}
+
+			rawTotal, ok := firstPresent(items[0], "Total", "total")
+			if !ok {
+				return fmt.Errorf("result row missing Total field")
+			}
+			total, ok := rawTotal.(float64)
+			if !ok {
+				return fmt.Errorf("Total is not numeric, got %T: %v", rawTotal, rawTotal)
+			}
+
+			expected := baselineCount * 2
+			if int(total) != expected {
+				return fmt.Errorf("expected Total=%d (2 * baseline %d), got %v", expected, baselineCount, total)
+			}
+
+			return nil
+		},
+	)
+
+	suite.AddTest(
+		"test_apply_filter_then_join",
+		"filter followed by join applies filter to parent entities before joining",
+		func(ctx *framework.TestContext) error {
+			filteredExpandedResp, err := ctx.GET("/Products?$filter=" + url.QueryEscape("Price gt 1000") + "&$expand=Descriptions")
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(filteredExpandedResp, http.StatusOK); err != nil {
+				return err
+			}
+
+			var expanded struct {
+				Value []map[string]interface{} `json:"value"`
+			}
+			if err := json.Unmarshal(filteredExpandedResp.Body, &expanded); err != nil {
+				return fmt.Errorf("failed to parse filtered expanded products response: %w", err)
+			}
+
+			expectedRows := 0
+			for i, product := range expanded.Value {
+				rawDescriptions, ok := firstPresent(product, "Descriptions", "descriptions")
+				if !ok || rawDescriptions == nil {
+					continue
+				}
+				descriptions, ok := rawDescriptions.([]interface{})
+				if !ok {
+					return fmt.Errorf("expanded Descriptions value for product %d has unexpected type %T", i, rawDescriptions)
+				}
+				expectedRows += len(descriptions)
+			}
+
+			applyExpr := url.QueryEscape("filter(Price gt 1000)/join(Descriptions as D)")
+			resp, err := ctx.GET("/Products?$apply=" + applyExpr)
+			if err != nil {
+				return err
+			}
+			if err := ctx.AssertStatusCode(resp, http.StatusOK); err != nil {
+				return err
+			}
+
+			var body struct {
+				Value []map[string]interface{} `json:"value"`
+			}
+			if err := json.Unmarshal(resp.Body, &body); err != nil {
+				return fmt.Errorf("failed to parse filtered join response: %w", err)
+			}
+			if len(body.Value) != expectedRows {
+				return fmt.Errorf("expected %d joined rows for filtered products, got %d", expectedRows, len(body.Value))
+			}
+
+			for i, item := range body.Value {
+				rawPrice, ok := firstPresent(item, "Price", "price")
+				if !ok {
+					return fmt.Errorf("row %d missing Price", i)
+				}
+				price, ok := rawPrice.(float64)
+				if !ok {
+					return fmt.Errorf("row %d Price is not numeric", i)
+				}
+				if price <= 1000 {
+					return fmt.Errorf("row %d has Price=%v, expected > 1000", i, price)
+				}
+
+				if _, ok := firstPresent(item, "D", "d"); !ok {
+					return fmt.Errorf("row %d missing join alias D", i)
+				}
+			}
+
+			return nil
+		},
+	)
+
 	return suite
 }
