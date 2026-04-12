@@ -1,6 +1,7 @@
 package query
 
 import (
+	"encoding/json"
 	"reflect"
 	"testing"
 )
@@ -408,6 +409,9 @@ func TestToFloat64(t *testing.T) {
 		{"uint32", uint32(10), 10.0},
 		{"uint16", uint16(10), 10.0},
 		{"uint8", uint8(10), 10.0},
+		{"numeric string", "10.75", 10.75},
+		{"numeric bytes", []byte("10.25"), 10.25},
+		{"json.Number", json.Number("12.5"), 12.5},
 		{"string", "not a number", 0},
 		{"bool", true, 0},
 	}
