@@ -1,7 +1,9 @@
 package query
 
 import (
+	"encoding/json"
 	"reflect"
+	"strconv"
 	"strings"
 
 	"github.com/nlstn/go-odata/internal/metadata"
@@ -278,6 +280,21 @@ func toFloat64(val interface{}) float64 {
 		return float64(v)
 	case uint8:
 		return float64(v)
+	case string:
+		if n, err := strconv.ParseFloat(strings.TrimSpace(v), 64); err == nil {
+			return n
+		}
+		return 0
+	case []byte:
+		if n, err := strconv.ParseFloat(strings.TrimSpace(string(v)), 64); err == nil {
+			return n
+		}
+		return 0
+	case json.Number:
+		if n, err := v.Float64(); err == nil {
+			return n
+		}
+		return 0
 	default:
 		return 0
 	}
