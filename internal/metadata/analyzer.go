@@ -893,69 +893,49 @@ func tryGetEntitySetName(checkType reflect.Type, entityType reflect.Type) string
 
 // detectMediaEntity checks if the entity implements HasStream() method
 func detectMediaEntity(metadata *EntityMetadata, entity interface{}) {
-	entityType := metadata.EntityType
-
-	// Check for both value and pointer receivers
-	valueType := entityType
-	ptrType := reflect.PointerTo(entityType)
-
-	// Check if HasStream method exists
-	if hasMethod(valueType, "HasStream") || hasMethod(ptrType, "HasStream") {
-		// Call the method to get the actual value
-		val := reflect.ValueOf(entity)
-		if val.Kind() == reflect.Ptr {
-			val = val.Elem()
-		}
-
-		// Try to call HasStream() to get the value
-		method := val.MethodByName("HasStream")
-		if !method.IsValid() {
-			// Try on pointer
-			ptrVal := val.Addr()
-			method = ptrVal.MethodByName("HasStream")
-		}
-
-		if method.IsValid() && method.Type().NumIn() == 0 && method.Type().NumOut() == 1 {
-			result := method.Call(nil)
-			if len(result) > 0 && result[0].Kind() == reflect.Bool {
-				metadata.HasStream = result[0].Bool()
-			}
-		}
+	if result, ok := callBoolMethod(metadata.EntityType, entity, "HasStream"); ok {
+		metadata.HasStream = result
 	}
 }
 
 // detectOpenType checks if the entity implements IsOpenType() bool method.
 // Open types allow dynamic properties that are not declared in the schema.
 func detectOpenType(metadata *EntityMetadata, entity interface{}) {
-	entityType := metadata.EntityType
+	if result, ok := callBoolMethod(metadata.EntityType, entity, "IsOpenType"); ok {
+		metadata.IsOpenType = result
+	}
+}
 
-	// Check for both value and pointer receivers
+// callBoolMethod calls a no-argument method that returns a single bool on the given entity.
+// It tries both value and pointer receivers. Returns (result, true) if the method was found
+// and called successfully, or (false, false) otherwise.
+func callBoolMethod(entityType reflect.Type, entity interface{}, methodName string) (bool, bool) {
 	valueType := entityType
 	ptrType := reflect.PointerTo(entityType)
 
-	// Check if IsOpenType method exists
-	if hasMethod(valueType, "IsOpenType") || hasMethod(ptrType, "IsOpenType") {
-		// Call the method to get the actual value
-		val := reflect.ValueOf(entity)
-		if val.Kind() == reflect.Ptr {
-			val = val.Elem()
-		}
+	if !hasMethod(valueType, methodName) && !hasMethod(ptrType, methodName) {
+		return false, false
+	}
 
-		// Try to call IsOpenType() to get the value
-		method := val.MethodByName("IsOpenType")
-		if !method.IsValid() {
-			// Try on pointer
-			ptrVal := val.Addr()
-			method = ptrVal.MethodByName("IsOpenType")
-		}
+	val := reflect.ValueOf(entity)
+	if val.Kind() == reflect.Ptr {
+		val = val.Elem()
+	}
 
-		if method.IsValid() && method.Type().NumIn() == 0 && method.Type().NumOut() == 1 {
-			result := method.Call(nil)
-			if len(result) > 0 && result[0].Kind() == reflect.Bool {
-				metadata.IsOpenType = result[0].Bool()
-			}
+	method := val.MethodByName(methodName)
+	if !method.IsValid() {
+		ptrVal := val.Addr()
+		method = ptrVal.MethodByName(methodName)
+	}
+
+	if method.IsValid() && method.Type().NumIn() == 0 && method.Type().NumOut() == 1 {
+		result := method.Call(nil)
+		if len(result) > 0 && result[0].Kind() == reflect.Bool {
+			return result[0].Bool(), true
 		}
 	}
+
+	return false, false
 }
 
 // detectStreamProperties finds properties tagged with odata:"stream"
