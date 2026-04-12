@@ -684,6 +684,33 @@ func TestParseApply_NewSetTransformations(t *testing.T) {
 	}
 }
 
+func TestParseApply_SetTransformationsRejectNonPositiveFirstArgument(t *testing.T) {
+	meta := getApplyTestMetadata(t)
+
+	tests := []struct {
+		name  string
+		apply string
+	}{
+		{name: "topcount-zero", apply: "topcount(0,Price)"},
+		{name: "bottomcount-zero", apply: "bottomcount(0,Price)"},
+		{name: "topcount-negative", apply: "topcount(-1,Price)"},
+		{name: "bottomcount-negative", apply: "bottomcount(-1,Price)"},
+		{name: "toppercent-zero", apply: "toppercent(0,Price)"},
+		{name: "bottompercent-zero", apply: "bottompercent(0,Price)"},
+		{name: "toppercent-negative", apply: "toppercent(-0.1,Price)"},
+		{name: "bottompercent-negative", apply: "bottompercent(-0.1,Price)"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := parseApply(tt.apply, meta, 0)
+			if err == nil {
+				t.Fatalf("expected parse error for %q", tt.apply)
+			}
+		})
+	}
+}
+
 func TestParseApply_GroupByNestedSequence(t *testing.T) {
 	meta := getApplyTestMetadata(t)
 
