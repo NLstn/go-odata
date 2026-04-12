@@ -5,14 +5,17 @@ import (
 	"net/http"
 
 	"github.com/nlstn/go-odata/internal/auth"
+	"github.com/nlstn/go-odata/internal/response"
 )
 
 // HandleCollection handles GET, HEAD, POST, and OPTIONS requests for entity collections
 func (h *EntityHandler) HandleCollection(w http.ResponseWriter, r *http.Request) {
 	// Check if the entity is only accessible via navigation properties
 	if h.metadata != nil && h.metadata.IsAccessibleOnlyViaNavigation {
-		WriteError(w, r, http.StatusNotFound, "Entity set not found",
-			fmt.Sprintf("'%s' is not a top-level entity set; it can only be accessed via navigation from its parent entity", h.metadata.EntitySetName))
+		if err := response.WriteError(w, r, http.StatusNotFound, "Entity set not found",
+			fmt.Sprintf("'%s' is not a top-level entity set; it can only be accessed via navigation from its parent entity", h.metadata.EntitySetName)); err != nil {
+			h.logger.Error("Error writing error response", "error", err)
+		}
 		return
 	}
 
@@ -57,8 +60,10 @@ func (h *EntityHandler) handleOptionsCollection(w http.ResponseWriter) {
 func (h *EntityHandler) HandleCount(w http.ResponseWriter, r *http.Request) {
 	// Check if the entity is only accessible via navigation properties
 	if h.metadata != nil && h.metadata.IsAccessibleOnlyViaNavigation {
-		WriteError(w, r, http.StatusNotFound, "Entity set not found",
-			fmt.Sprintf("'%s' is not a top-level entity set; it can only be accessed via navigation from its parent entity", h.metadata.EntitySetName))
+		if err := response.WriteError(w, r, http.StatusNotFound, "Entity set not found",
+			fmt.Sprintf("'%s' is not a top-level entity set; it can only be accessed via navigation from its parent entity", h.metadata.EntitySetName)); err != nil {
+			h.logger.Error("Error writing error response", "error", err)
+		}
 		return
 	}
 
