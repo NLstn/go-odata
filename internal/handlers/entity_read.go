@@ -303,9 +303,7 @@ func (h *EntityHandler) HandleCollectionRef(w http.ResponseWriter, r *http.Reque
 	// Parse query options (support filtering, ordering, pagination for references)
 	queryOptions, err := h.parseQueryOptionsByNegotiatedVersion(r, h.metadata, nil)
 	if err != nil {
-		if writeErr := response.WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidQueryOptions, err.Error()); writeErr != nil {
-			h.logger.Error("Error writing error response", "error", writeErr)
-		}
+		h.writeRequestError(w, r, err, http.StatusBadRequest, ErrMsgInvalidQueryOptions)
 		return
 	}
 

@@ -442,6 +442,9 @@ type Service struct {
 	maxExpandDepth int
 	// maxBatchSize limits the number of sub-requests in a batch request
 	maxBatchSize int
+	// schemaVersion is the advertised schema version. When set, it is included as
+	// Core.SchemaVersion in the metadata document and used for $schemaversion binding validation.
+	schemaVersion string
 	// basePath is the configured base path for mounting the service at a custom path
 	basePath   string
 	basePathMu sync.RWMutex
@@ -1035,6 +1038,10 @@ func (s *Service) RegisterEntity(entity interface{}, cacheConfigs ...EntityCache
 	// Set security limits
 	handler.SetMaxInClauseSize(s.maxInClauseSize)
 	handler.SetMaxExpandDepth(s.maxExpandDepth)
+	// Propagate schema version if already configured
+	if s.schemaVersion != "" {
+		handler.SetSchemaVersion(s.schemaVersion)
+	}
 	s.handlers[entityMetadata.EntitySetName] = handler
 
 	if err := s.configureEntityCache(entityMetadata, handler, cacheCfg); err != nil {
@@ -1156,6 +1163,10 @@ func (s *Service) RegisterSingleton(entity interface{}, singletonName string) er
 	// Set security limits
 	handler.SetMaxInClauseSize(s.maxInClauseSize)
 	handler.SetMaxExpandDepth(s.maxExpandDepth)
+	// Propagate schema version if already configured
+	if s.schemaVersion != "" {
+		handler.SetSchemaVersion(s.schemaVersion)
+	}
 	s.handlers[singletonName] = handler
 
 	s.logger.Debug("Registered singleton",
@@ -1243,6 +1254,10 @@ func (s *Service) RegisterVirtualEntity(entity interface{}) error {
 	// Set security limits
 	handler.SetMaxInClauseSize(s.maxInClauseSize)
 	handler.SetMaxExpandDepth(s.maxExpandDepth)
+	// Propagate schema version if already configured
+	if s.schemaVersion != "" {
+		handler.SetSchemaVersion(s.schemaVersion)
+	}
 	s.handlers[entityMetadata.EntitySetName] = handler
 
 	s.logger.Debug("Registered virtual entity",
@@ -1664,6 +1679,26 @@ func (s *Service) SetNamespace(namespace string) error {
 		handler.SetNamespace(trimmed)
 	}
 	return nil
+}
+
+// SetSchemaVersion configures the schema version advertised by the service.
+//
+// When set, the service includes a Core.SchemaVersion annotation in the metadata
+// document, signalling to OData 4.01 clients that $schemaversion binding is supported.
+// Entity requests that supply $schemaversion must match this value or use the wildcard
+// "*".  Requests with an unrecognised schema version receive HTTP 404.
+//
+// Call this before registering entities or, if called after, be aware that only
+// handlers registered afterwards will pick it up automatically. All already-registered
+// handlers are updated when this method is called.
+//
+// An empty string disables schema versioning.
+func (s *Service) SetSchemaVersion(v string) {
+	s.schemaVersion = v
+	s.metadataHandler.SetSchemaVersion(v)
+	for _, handler := range s.handlers {
+		handler.SetSchemaVersion(v)
+	}
 }
 
 // SetBasePath configures the path prefix for the service mount point.

@@ -47,6 +47,9 @@ type EntityHandler struct {
 	maxInClauseSize int
 	// maxExpandDepth limits the depth of nested $expand operations
 	maxExpandDepth int
+	// schemaVersion is the advertised schema version for $schemaversion binding validation.
+	// When empty, schema version binding is not enforced.
+	schemaVersion string
 	// entityCache is the optional local in-memory SQLite cache for the full entity dataset.
 	// When non-nil and valid, collection reads are served from the cache instead
 	// of querying the primary database.
@@ -106,6 +109,13 @@ func (h *EntityHandler) SetLogger(logger *slog.Logger) {
 // SetPolicy sets the authorization policy for the handler.
 func (h *EntityHandler) SetPolicy(policy auth.Policy) {
 	h.policy = policy
+}
+
+// SetSchemaVersion configures the advertised schema version for $schemaversion binding validation.
+// When set, requests that include $schemaversion must match this value (or use the wildcard "*").
+// An empty string disables schema version binding.
+func (h *EntityHandler) SetSchemaVersion(v string) {
+	h.schemaVersion = v
 }
 
 // SetEntitiesMetadata sets the entities metadata registry for navigation property handling

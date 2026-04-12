@@ -66,7 +66,7 @@ func (h *EntityHandler) handleGetCollectionOverwrite(w http.ResponseWriter, r *h
 	// Parse and validate query options
 	queryOptions, err := h.parseQueryOptionsByNegotiatedVersion(r, h.metadata, h.getParserConfig())
 	if err != nil {
-		h.writeInvalidQueryError(w, r, err)
+		h.writeRequestError(w, r, err, http.StatusBadRequest, ErrMsgInvalidQueryOptions)
 		return
 	}
 
