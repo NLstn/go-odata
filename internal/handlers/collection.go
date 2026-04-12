@@ -9,6 +9,13 @@ import (
 
 // HandleCollection handles GET, HEAD, POST, and OPTIONS requests for entity collections
 func (h *EntityHandler) HandleCollection(w http.ResponseWriter, r *http.Request) {
+	// Check if the entity is only accessible via navigation properties
+	if h.metadata != nil && h.metadata.IsAccessibleOnlyViaNavigation {
+		WriteError(w, r, http.StatusNotFound, "Entity set not found",
+			fmt.Sprintf("'%s' is not a top-level entity set; it can only be accessed via navigation from its parent entity", h.metadata.EntitySetName))
+		return
+	}
+
 	// Check if the method is disabled
 	// Map HEAD to GET for method checking since HEAD is semantically equivalent to GET
 	methodToCheck := r.Method
@@ -48,6 +55,13 @@ func (h *EntityHandler) handleOptionsCollection(w http.ResponseWriter) {
 
 // HandleCount handles GET, HEAD, and OPTIONS requests for entity collection count (e.g., /Products/$count)
 func (h *EntityHandler) HandleCount(w http.ResponseWriter, r *http.Request) {
+	// Check if the entity is only accessible via navigation properties
+	if h.metadata != nil && h.metadata.IsAccessibleOnlyViaNavigation {
+		WriteError(w, r, http.StatusNotFound, "Entity set not found",
+			fmt.Sprintf("'%s' is not a top-level entity set; it can only be accessed via navigation from its parent entity", h.metadata.EntitySetName))
+		return
+	}
+
 	// Check if GET method is disabled (applies to both GET and HEAD)
 	if r.Method == http.MethodGet || r.Method == http.MethodHead {
 		if h.isMethodDisabled(http.MethodGet) {

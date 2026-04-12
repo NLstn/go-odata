@@ -13,6 +13,15 @@ import (
 
 // HandleMediaEntityValue handles GET, PUT, and OPTIONS requests for media entity binary content (e.g., MediaItems(1)/$value)
 func (h *EntityHandler) HandleMediaEntityValue(w http.ResponseWriter, r *http.Request, entityKey string) {
+	// Check if the entity is only accessible via navigation properties
+	if h.metadata != nil && h.metadata.IsAccessibleOnlyViaNavigation {
+		if err := response.WriteError(w, r, http.StatusNotFound, "Entity set not found",
+			fmt.Sprintf("'%s' is not a top-level entity set; it can only be accessed via navigation from its parent entity", h.metadata.EntitySetName)); err != nil {
+			h.logger.Error("Error writing error response", "error", err)
+		}
+		return
+	}
+
 	// Check if this is actually a media entity
 	if !h.metadata.HasStream {
 		if err := response.WriteError(w, r, http.StatusBadRequest, "Not a media entity",

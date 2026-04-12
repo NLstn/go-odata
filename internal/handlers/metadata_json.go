@@ -434,6 +434,10 @@ func (h *MetadataHandler) buildJSONEntityContainer(model metadataModel) map[stri
 	}
 
 	for entitySetName, entityMeta := range model.entities {
+		// Skip entities that are only accessible via navigation properties (no top-level EntitySet entry)
+		if entityMeta.IsAccessibleOnlyViaNavigation {
+			continue
+		}
 		if entityMeta.IsSingleton {
 			singleton := map[string]interface{}{
 				"$Type": model.qualifiedTypeName(entityMeta.EntityName),

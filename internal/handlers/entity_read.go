@@ -15,6 +15,15 @@ import (
 
 // HandleEntity handles GET, HEAD, DELETE, PATCH, PUT, and OPTIONS requests for individual entities
 func (h *EntityHandler) HandleEntity(w http.ResponseWriter, r *http.Request, entityKey string) {
+	// Check if the entity is only accessible via navigation properties
+	if h.metadata != nil && h.metadata.IsAccessibleOnlyViaNavigation {
+		if err := response.WriteError(w, r, http.StatusNotFound, "Entity set not found",
+			fmt.Sprintf("'%s' is not a top-level entity set; it can only be accessed via navigation from its parent entity", h.metadata.EntitySetName)); err != nil {
+			h.logger.Error("Error writing error response", "error", err)
+		}
+		return
+	}
+
 	// Check if the method is disabled
 	// Map HEAD to GET for method checking since HEAD is semantically equivalent to GET
 	methodToCheck := r.Method
@@ -189,6 +198,15 @@ func (h *EntityHandler) handleGetEntityOverwrite(w http.ResponseWriter, r *http.
 
 // HandleEntityRef handles GET requests for entity references (e.g., Products(1)/$ref)
 func (h *EntityHandler) HandleEntityRef(w http.ResponseWriter, r *http.Request, entityKey string) {
+	// Check if the entity is only accessible via navigation properties
+	if h.metadata != nil && h.metadata.IsAccessibleOnlyViaNavigation {
+		if err := response.WriteError(w, r, http.StatusNotFound, "Entity set not found",
+			fmt.Sprintf("'%s' is not a top-level entity set; it can only be accessed via navigation from its parent entity", h.metadata.EntitySetName)); err != nil {
+			h.logger.Error("Error writing error response", "error", err)
+		}
+		return
+	}
+
 	ctx := r.Context()
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		if err := response.WriteError(w, r, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
@@ -269,6 +287,15 @@ func (h *EntityHandler) HandleEntityRef(w http.ResponseWriter, r *http.Request, 
 
 // HandleCollectionRef handles GET requests for collection references (e.g., Products/$ref)
 func (h *EntityHandler) HandleCollectionRef(w http.ResponseWriter, r *http.Request) {
+	// Check if the entity is only accessible via navigation properties
+	if h.metadata != nil && h.metadata.IsAccessibleOnlyViaNavigation {
+		if err := response.WriteError(w, r, http.StatusNotFound, "Entity set not found",
+			fmt.Sprintf("'%s' is not a top-level entity set; it can only be accessed via navigation from its parent entity", h.metadata.EntitySetName)); err != nil {
+			h.logger.Error("Error writing error response", "error", err)
+		}
+		return
+	}
+
 	ctx := r.Context()
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		if err := response.WriteError(w, r, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,

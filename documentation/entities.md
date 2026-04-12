@@ -14,6 +14,7 @@ This guide covers how to define entities in go-odata using Go structs with appro
 - [Supported Tags](#supported-tags)
 - [Computed and Excluded Fields](#computed-and-excluded-fields)
 - [Read Hooks and Query Options](#read-hooks-and-query-options)
+- [Navigation-Only Entities](#navigation-only-entities)
 
 ## Basic Entity
 
@@ -614,3 +615,36 @@ svc, err := odata.NewServiceWithConfig(db, odata.ServiceConfig{
 
 Use `"simple"` to disable stemming and stop-word removal entirely (treats every word as a literal lexeme).  This is useful when indexing data in multiple languages or when precision matters more than recall.
 
+
+## Navigation-Only Entities
+
+Sometimes an entity should not be accessible as a top-level entity set. For example, `OrderItems` makes semantic sense only within the context of their parent `Order`, not as a standalone resource. You can restrict direct access by implementing `IsAccessibleOnlyViaNavigation() bool` on your entity type:
+
+```go
+type OrderItem struct {
+    ID      int    `json:"ID" gorm:"primaryKey" odata:"key"`
+    OrderID int    `json:"OrderID"`
+    Product string `json:"Product"`
+    Qty     int    `json:"Quantity"`
+}
+
+// IsAccessibleOnlyViaNavigation prevents direct URL access to this entity set.
+// Clients must navigate through a parent entity, e.g. GET /Orders(1)/Items.
+func (OrderItem) IsAccessibleOnlyViaNavigation() bool {
+    return true
+}
+
+type Order struct {
+    ID    int         `json:"ID" gorm:"primaryKey" odata:"key"`
+    Name  string      `json:"Name"`
+    Items []OrderItem `json:"Items,omitempty" gorm:"foreignKey:OrderID"`
+}
+```
+
+With this configuration:
+
+- `GET /OrderItems` → **404 Not Found**
+- `GET /OrderItems(1)` → **404 Not Found**
+- `GET /Orders(1)/Items` → **200 OK** (navigation access through parent)
+
+The entity type is still reflected in the OData `$metadata` document (so clients understand the data model), but `OrderItems` is excluded from the service document and the `EntityContainer` so clients are not misled into thinking direct access is possible.
