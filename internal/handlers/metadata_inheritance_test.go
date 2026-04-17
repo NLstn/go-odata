@@ -224,13 +224,13 @@ func TestBaseType_JSON(t *testing.T) {
 		t.Fatalf("Status = %v, want %v", w.Code, http.StatusOK)
 	}
 
-	var doc map[string]interface{}
-	if err := json.Unmarshal(w.Body.Bytes(), &doc); err != nil {
+	var jsonDoc map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &jsonDoc); err != nil {
 		t.Fatalf("Response is not valid JSON: %v\nBody: %s", err, w.Body.String())
 	}
 
 	// Navigate into the schema
-	schema, ok := findJSONSchema(doc)
+	schema, ok := findJSONSchema(jsonDoc)
 	if !ok {
 		t.Fatalf("Could not find schema in JSON metadata.\nBody:\n%s", w.Body.String())
 	}
@@ -280,12 +280,12 @@ func TestAbstract_JSON(t *testing.T) {
 		t.Fatalf("Status = %v, want %v", w.Code, http.StatusOK)
 	}
 
-	var doc map[string]interface{}
-	if err := json.Unmarshal(w.Body.Bytes(), &doc); err != nil {
+	var jsonDoc map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &jsonDoc); err != nil {
 		t.Fatalf("Response is not valid JSON: %v\nBody: %s", err, w.Body.String())
 	}
 
-	schema, ok := findJSONSchema(doc)
+	schema, ok := findJSONSchema(jsonDoc)
 	if !ok {
 		t.Fatalf("Could not find schema in JSON metadata.\nBody:\n%s", w.Body.String())
 	}
@@ -301,9 +301,9 @@ func TestAbstract_JSON(t *testing.T) {
 }
 
 // findJSONSchema navigates the CSDL JSON document to locate the first schema map.
-func findJSONSchema(doc map[string]interface{}) (map[string]interface{}, bool) {
+func findJSONSchema(jsonDoc map[string]interface{}) (map[string]interface{}, bool) {
 	// CSDL JSON: {"$Version":"4.0","$EntityContainer":"...","Namespace.":{"EntityType":...}}
-	for k, v := range doc {
+	for k, v := range jsonDoc {
 		if k == "$Version" || k == "$EntityContainer" || k == "$Reference" {
 			continue
 		}
