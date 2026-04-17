@@ -83,7 +83,7 @@ func TestClosedType_FilterRejectsDynamicProperty(t *testing.T) {
 func TestOpenType_SelectAllowsDynamicProperty(t *testing.T) {
 	meta := getOpenTypeTestMetadata(t)
 
-	err := validateExpandSelect([]string{"DynamicProp"}, meta, nil)
+	err := validateExpandSelect([]string{"DynamicProp"}, meta, nil, true)
 	if err != nil {
 		t.Errorf("Expected no error for dynamic property in $select on open type, got: %v", err)
 	}
@@ -94,7 +94,7 @@ func TestOpenType_SelectAllowsDynamicProperty(t *testing.T) {
 func TestClosedType_SelectRejectsDynamicProperty(t *testing.T) {
 	meta := getTestMetadata(t)
 
-	err := validateExpandSelect([]string{"DynamicProp"}, meta, nil)
+	err := validateExpandSelect([]string{"DynamicProp"}, meta, nil, true)
 	if err == nil {
 		t.Error("Expected error for unknown property in $select on closed type, got nil")
 	}

@@ -21,11 +21,15 @@ func parseExpandWithConfig(expandStr string, entityMetadata *metadata.EntityMeta
 		return nil, err
 	}
 
-	// Expand wildcard '*' to all navigation properties (OData v4.01 section 5.1.3)
+	// Expand wildcard '*' to all navigation properties (OData v4.01 section 5.1.3).
+	// Only valid when OData v4.01 is negotiated (caseInsensitive=true).
 	expandedParts := make([]string, 0, len(parts))
 	for _, part := range parts {
 		trimmed := strings.TrimSpace(part)
 		if trimmed == "*" {
+			if !caseInsensitive {
+				return nil, fmt.Errorf("$expand=* is only supported in OData v4.01")
+			}
 			if entityMetadata == nil {
 				// Without metadata we cannot enumerate navigation properties
 				return nil, fmt.Errorf("$expand=* requires entity metadata to resolve navigation properties")
@@ -217,7 +221,7 @@ func parseNestedExpandOptionsCoreWithConfig(expand *ExpandOption, optionsStr str
 				if targetMetadata == nil {
 					return errNavMetadataMissingForSelect
 				}
-				if err := validateExpandSelect(expand.Select, targetMetadata, computedAliases); err != nil {
+				if err := validateExpandSelect(expand.Select, targetMetadata, computedAliases, caseInsensitive); err != nil {
 					return err
 				}
 			}
@@ -415,7 +419,7 @@ func splitExpandOptionsParts(optionsStr string) ([]string, error) {
 	return result, nil
 }
 
-func validateExpandSelect(selectedProps []string, entityMetadata *metadata.EntityMetadata, computedAliases map[string]bool) error {
+func validateExpandSelect(selectedProps []string, entityMetadata *metadata.EntityMetadata, computedAliases map[string]bool, caseInsensitive bool) error {
 	if entityMetadata == nil {
 		return errEntityMetadataIsNil
 	}
@@ -425,8 +429,11 @@ func validateExpandSelect(selectedProps []string, entityMetadata *metadata.Entit
 			continue
 		}
 
-		// Wildcard '*' is always valid per OData v4.01 section 5.1.3
+		// Wildcard '*' is valid in OData v4.01 (caseInsensitive=true) per section 5.1.3.
 		if propName == "*" {
+			if !caseInsensitive {
+				return fmt.Errorf("invalid $select: wildcard '*' is only supported in OData v4.01")
+			}
 			continue
 		}
 
