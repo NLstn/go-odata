@@ -280,11 +280,22 @@ func (h *MetadataHandler) buildJSONEntityType(model metadataModel, entityMeta *m
 		entityType["$OpenType"] = true
 	}
 
-	keyNames := make([]string, 0, len(entityMeta.KeyProperties))
-	for _, keyProp := range entityMeta.KeyProperties {
-		keyNames = append(keyNames, keyProp.JsonName)
+	if entityMeta.IsAbstract {
+		entityType["$Abstract"] = true
 	}
-	entityType["$Key"] = keyNames
+
+	if entityMeta.BaseType != "" {
+		entityType["$BaseType"] = entityMeta.BaseType
+	}
+
+	// Derived types (BaseType set) inherit their key from the base type; omit the $Key element.
+	if entityMeta.BaseType == "" {
+		keyNames := make([]string, 0, len(entityMeta.KeyProperties))
+		for _, keyProp := range entityMeta.KeyProperties {
+			keyNames = append(keyNames, keyProp.JsonName)
+		}
+		entityType["$Key"] = keyNames
+	}
 
 	// Add entity-level annotations
 	if entityMeta.Annotations != nil {

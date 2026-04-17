@@ -313,18 +313,31 @@ func (h *MetadataHandler) buildEntityType(model metadataModel, entityMeta *metad
 		openTypeAttr = ` OpenType="true"`
 	}
 
-	var builder strings.Builder
-	builder.WriteString(fmt.Sprintf(`      <EntityType Name="%s"%s%s>
-        <Key>
-`, entityMeta.EntityName, hasStreamAttr, openTypeAttr))
-
-	for _, keyProp := range entityMeta.KeyProperties {
-		builder.WriteString(fmt.Sprintf(`          <PropertyRef Name="%s" />
-`, keyProp.JsonName))
+	abstractAttr := ""
+	if entityMeta.IsAbstract {
+		abstractAttr = ` Abstract="true"`
 	}
 
-	builder.WriteString(`        </Key>
+	baseTypeAttr := ""
+	if entityMeta.BaseType != "" {
+		baseTypeAttr = fmt.Sprintf(` BaseType="%s"`, entityMeta.BaseType)
+	}
+
+	var builder strings.Builder
+	builder.WriteString(fmt.Sprintf(`      <EntityType Name="%s"%s%s%s%s>
+`, entityMeta.EntityName, hasStreamAttr, openTypeAttr, abstractAttr, baseTypeAttr))
+
+	// Derived types (BaseType set) inherit their key from the base type; omit the Key element.
+	if entityMeta.BaseType == "" {
+		builder.WriteString(`        <Key>
 `)
+		for _, keyProp := range entityMeta.KeyProperties {
+			builder.WriteString(fmt.Sprintf(`          <PropertyRef Name="%s" />
+`, keyProp.JsonName))
+		}
+		builder.WriteString(`        </Key>
+`)
+	}
 
 	builder.WriteString(h.buildRegularProperties(model, entityMeta))
 	builder.WriteString(h.buildNavigationProperties(model, entityMeta))

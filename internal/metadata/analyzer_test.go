@@ -1163,3 +1163,77 @@ type navOnlyEntity struct {
 func (navOnlyEntity) IsAccessibleOnlyViaNavigation() bool {
 	return true
 }
+
+// baseTypeDetectEntity is a named type that implements ODataBaseType() to declare a base type.
+type baseTypeDetectEntity struct {
+	NumDoors int32 `json:"NumDoors"`
+}
+
+func (baseTypeDetectEntity) ODataBaseType() string {
+	return "TestNamespace.BaseEntity"
+}
+
+// TestBaseType_Detection verifies that entities implementing ODataBaseType() have BaseType populated.
+func TestBaseType_Detection(t *testing.T) {
+	meta, err := AnalyzeEntity(baseTypeDetectEntity{})
+	if err != nil {
+		t.Fatalf("AnalyzeEntity() error = %v", err)
+	}
+
+	if meta.BaseType != "TestNamespace.BaseEntity" {
+		t.Errorf("BaseType = %q, want %q", meta.BaseType, "TestNamespace.BaseEntity")
+	}
+}
+
+// TestBaseType_NoKeyRequired verifies that a derived entity type (with BaseType) does not require a key.
+func TestBaseType_NoKeyRequired(t *testing.T) {
+	_, err := AnalyzeEntity(baseTypeDetectEntity{})
+	if err != nil {
+		t.Errorf("AnalyzeEntity() should not require a key for a derived type, got error: %v", err)
+	}
+}
+
+// TestBaseType_NotSet verifies that regular entities have BaseType="".
+func TestBaseType_NotSet(t *testing.T) {
+	meta, err := AnalyzeEntity(TestProduct{})
+	if err != nil {
+		t.Fatalf("AnalyzeEntity() error = %v", err)
+	}
+
+	if meta.BaseType != "" {
+		t.Errorf("BaseType should be empty for entities without ODataBaseType() method, got: %q", meta.BaseType)
+	}
+}
+
+// abstractTypeDetectEntity is a named type that implements IsAbstract().
+type abstractTypeDetectEntity struct {
+	ID int `json:"ID" odata:"key"`
+}
+
+func (abstractTypeDetectEntity) IsAbstract() bool {
+	return true
+}
+
+// TestIsAbstract_Detection verifies that entities implementing IsAbstract() have IsAbstract=true.
+func TestIsAbstract_Detection(t *testing.T) {
+	meta, err := AnalyzeEntity(abstractTypeDetectEntity{})
+	if err != nil {
+		t.Fatalf("AnalyzeEntity() error = %v", err)
+	}
+
+	if !meta.IsAbstract {
+		t.Error("IsAbstract should be true for entity implementing IsAbstract() bool returning true")
+	}
+}
+
+// TestIsNotAbstract verifies that regular entities have IsAbstract=false.
+func TestIsNotAbstract(t *testing.T) {
+	meta, err := AnalyzeEntity(TestProduct{})
+	if err != nil {
+		t.Fatalf("AnalyzeEntity() error = %v", err)
+	}
+
+	if meta.IsAbstract {
+		t.Error("IsAbstract should be false for entities without IsAbstract() method")
+	}
+}

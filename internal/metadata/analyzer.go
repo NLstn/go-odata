@@ -33,6 +33,14 @@ type EntityMetadata struct {
 	DisabledMethods map[string]bool
 	// DefaultMaxTop is the default maximum number of results to return if no explicit $top is set
 	DefaultMaxTop *int
+	// BaseType holds the qualified name of the base entity type for inheritance (e.g. "Namespace.Vehicle").
+	// When set, the EDMX output will include a BaseType attribute and omit the Key element (keys are inherited).
+	// Implement ODataBaseType() string on the entity struct to set this value.
+	BaseType string
+	// IsAbstract marks this entity type as abstract in the EDMX output (Abstract="true").
+	// Abstract types cannot be instantiated directly; they serve as base types for derived types.
+	// Implement IsAbstract() bool on the entity struct to set this value.
+	IsAbstract bool
 	// TypeDiscriminator holds information about the type discriminator property for polymorphic entities
 	// This is used for isof() filter function and type casting in URLs
 	TypeDiscriminator *TypeDiscriminatorInfo
@@ -155,8 +163,15 @@ func AnalyzeEntity(entity interface{}) (*EntityMetadata, error) {
 		metadata.Properties = append(metadata.Properties, property)
 	}
 
-	// Validate that we have at least one key property
-	if len(metadata.KeyProperties) == 0 {
+	// Detect base type early so key validation can be relaxed for derived types
+	detectBaseType(metadata, entity)
+
+	// Detect abstract flag early alongside base type
+	detectAbstractType(metadata, entity)
+
+	// Validate that we have at least one key property.
+	// Derived entity types (BaseType != "") inherit their key from the base type, so no key is required.
+	if len(metadata.KeyProperties) == 0 && metadata.BaseType == "" {
 		return nil, fmt.Errorf("entity %s must have at least one key property (use `odata:\"key\"` tag or name field 'ID')", metadata.EntityName)
 	}
 
@@ -296,8 +311,15 @@ func AnalyzeVirtualEntity(entity interface{}) (*EntityMetadata, error) {
 		metadata.Properties = append(metadata.Properties, property)
 	}
 
-	// Validate that we have at least one key property
-	if len(metadata.KeyProperties) == 0 {
+	// Detect base type early so key validation can be relaxed for derived types
+	detectBaseType(metadata, entity)
+
+	// Detect abstract flag early alongside base type
+	detectAbstractType(metadata, entity)
+
+	// Validate that we have at least one key property.
+	// Derived entity types (BaseType != "") inherit their key from the base type, so no key is required.
+	if len(metadata.KeyProperties) == 0 && metadata.BaseType == "" {
 		return nil, fmt.Errorf("entity %s must have at least one key property (use `odata:\"key\"` tag or name field 'ID')", metadata.EntityName)
 	}
 
@@ -955,6 +977,55 @@ func callBoolMethod(entityType reflect.Type, entity interface{}, methodName stri
 	}
 
 	return false, false
+}
+
+// callStringMethod calls a no-argument method that returns a single string on the given entity.
+// It tries both value and pointer receivers. Returns (result, true) if the method was found
+// and called successfully, or ("", false) otherwise.
+func callStringMethod(entityType reflect.Type, entity interface{}, methodName string) (string, bool) {
+	valueType := entityType
+	ptrType := reflect.PointerTo(entityType)
+
+	if !hasMethod(valueType, methodName) && !hasMethod(ptrType, methodName) {
+		return "", false
+	}
+
+	val := reflect.ValueOf(entity)
+	if val.Kind() == reflect.Ptr {
+		val = val.Elem()
+	}
+
+	method := val.MethodByName(methodName)
+	if !method.IsValid() {
+		ptrVal := val.Addr()
+		method = ptrVal.MethodByName(methodName)
+	}
+
+	if method.IsValid() && method.Type().NumIn() == 0 && method.Type().NumOut() == 1 {
+		result := method.Call(nil)
+		if len(result) > 0 && result[0].Kind() == reflect.String {
+			return result[0].String(), true
+		}
+	}
+
+	return "", false
+}
+
+// detectBaseType checks if the entity implements ODataBaseType() string method.
+// When set, the entity type is treated as a derived type in the EDMX output:
+// a BaseType attribute is emitted and the Key element is omitted (keys are inherited).
+func detectBaseType(meta *EntityMetadata, entity interface{}) {
+	if result, ok := callStringMethod(meta.EntityType, entity, "ODataBaseType"); ok && result != "" {
+		meta.BaseType = result
+	}
+}
+
+// detectAbstractType checks if the entity implements IsAbstract() bool method.
+// Abstract entity types cannot be instantiated directly; they serve as base types for derived types.
+func detectAbstractType(meta *EntityMetadata, entity interface{}) {
+	if result, ok := callBoolMethod(meta.EntityType, entity, "IsAbstract"); ok {
+		meta.IsAbstract = result
+	}
 }
 
 // detectStreamProperties finds properties tagged with odata:"stream"
