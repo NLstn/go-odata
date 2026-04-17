@@ -384,3 +384,56 @@ func TestInfixArithmetic_MixedSymbolsAndKeywords(t *testing.T) {
 		})
 	}
 }
+
+func TestInfixArithmetic_DivBy(t *testing.T) {
+meta := getTestMetadata(t)
+
+tests := []struct {
+name      string
+filter    string
+expectErr bool
+}{
+{
+name:      "divby infix simple",
+filter:    "Price divby 1.5 gt 50",
+expectErr: false,
+},
+{
+name:      "divby infix with comparison",
+filter:    "Price divby 2.0 eq 25.0",
+expectErr: false,
+},
+{
+name:      "divby infix in complex expression",
+filter:    "Price divby 10 lt 10 or Category eq 'Books'",
+expectErr: false,
+},
+}
+
+for _, tt := range tests {
+t.Run(tt.name, func(t *testing.T) {
+tokenizer := NewTokenizer(tt.filter)
+tokens, err := tokenizer.TokenizeAll()
+if err != nil {
+t.Fatalf("Tokenization failed: %v", err)
+}
+
+parser := NewASTParser(tokens)
+ast, err := parser.Parse()
+if err != nil {
+t.Fatalf("Parsing failed: %v", err)
+}
+
+defer ReleaseASTNode(ast)
+
+filterExpr, err := ASTToFilterExpression(ast, meta)
+if (err != nil) != tt.expectErr {
+t.Errorf("Expected error: %v, got: %v", tt.expectErr, err)
+}
+
+if !tt.expectErr && filterExpr == nil {
+t.Error("Expected non-nil FilterExpression")
+}
+})
+}
+}

@@ -204,6 +204,7 @@ const (
 	OpSub                FilterOperator = "sub"
 	OpMul                FilterOperator = "mul"
 	OpDiv                FilterOperator = "div"
+	OpDivBy              FilterOperator = "divby"
 	OpMod                FilterOperator = "mod"
 	// Math functions
 	OpCeiling FilterOperator = "ceiling"

@@ -130,6 +130,16 @@ func usesInOperator(filter *query.FilterExpression) bool {
 	return usesInOperator(filter.Left) || usesInOperator(filter.Right)
 }
 
+func usesDivByOperator(filter *query.FilterExpression) bool {
+	if filter == nil {
+		return false
+	}
+	if filter.Operator == query.OpDivBy {
+		return true
+	}
+	return usesDivByOperator(filter.Left) || usesDivByOperator(filter.Right)
+}
+
 func expandHasCompute(expands []query.ExpandOption) bool {
 	for _, expand := range expands {
 		if expand.Compute != nil {
@@ -185,6 +195,10 @@ func validateQueryOptionsForNegotiatedVersion(queryOptions *query.QueryOptions, 
 
 	if usesInOperator(queryOptions.Filter) || expandHasInOperator(queryOptions.Expand) || applyHasInOperator(queryOptions.Apply) {
 		return fmt.Errorf("invalid $filter: 'in' operator is not supported in OData %s", negotiated.String())
+	}
+
+	if usesDivByOperator(queryOptions.Filter) {
+		return fmt.Errorf("invalid $filter: 'divby' operator is not supported in OData %s", negotiated.String())
 	}
 
 	if queryOptions.Compute != nil || expandHasCompute(queryOptions.Expand) || applyHasCompute(queryOptions.Apply) {

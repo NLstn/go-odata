@@ -154,6 +154,11 @@ func evaluateSingleComputeExpression(entityVal reflect.Value, expr *FilterExpres
 				return leftFloat / rightFloat
 			}
 			return nil
+		case "divby":
+			if rightFloat != 0 {
+				return leftFloat / rightFloat
+			}
+			return nil
 		case "add":
 			return leftFloat + rightFloat
 		case "sub":
@@ -178,6 +183,11 @@ func evaluateSingleComputeExpression(entityVal reflect.Value, expr *FilterExpres
 		case OpMul:
 			return leftFloat * rightFloat
 		case OpDiv:
+			if rightFloat != 0 {
+				return leftFloat / rightFloat
+			}
+			return nil
+		case OpDivBy:
 			if rightFloat != 0 {
 				return leftFloat / rightFloat
 			}

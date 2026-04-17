@@ -648,6 +648,12 @@ func buildComputeExpressionSQL(dialect string, expr *FilterExpression, entityMet
 			sqlOp = "*"
 		case OpDiv:
 			sqlOp = "/"
+		case OpDivBy:
+			// divby performs decimal division; cast left operand to avoid integer truncation
+			if dialect == "postgres" {
+				return fmt.Sprintf("(CAST(%s AS FLOAT) / %s)", leftSQL, rightSQL)
+			}
+			return fmt.Sprintf("(CAST(%s AS REAL) / %s)", leftSQL, rightSQL)
 		case OpMod:
 			sqlOp = "%"
 		default:
@@ -674,6 +680,12 @@ func buildComputeExpressionSQL(dialect string, expr *FilterExpression, entityMet
 			sqlOp = "*"
 		case "div":
 			sqlOp = "/"
+		case "divby":
+			// divby performs decimal division; cast left operand to avoid integer truncation
+			if dialect == "postgres" {
+				return fmt.Sprintf("(CAST(%s AS FLOAT) / %s)", leftSQL, rightSQL)
+			}
+			return fmt.Sprintf("(CAST(%s AS REAL) / %s)", leftSQL, rightSQL)
 		case "mod":
 			sqlOp = "%"
 		default:

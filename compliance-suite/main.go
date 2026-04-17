@@ -789,6 +789,11 @@ func main() {
 			Suite:   v4_01.InOperator,
 		})
 		testSuites = append(testSuites, TestSuiteInfo{
+			Name:    "11.5.1.1_filter_divby_operator",
+			Version: "4.01",
+			Suite:   v4_01.FilterDivByOperator,
+		})
+		testSuites = append(testSuites, TestSuiteInfo{
 			Name:    "11.2.5.8_query_compute",
 			Version: "4.01",
 			Suite:   v4_01.QueryCompute,
