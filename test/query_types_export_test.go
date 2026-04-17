@@ -123,6 +123,9 @@ func TestExportedFilterOperators(t *testing.T) {
 	if odata.OpDiv != "div" {
 		t.Errorf("Expected OpDiv to be 'div', got %v", odata.OpDiv)
 	}
+	if odata.OpDivBy != "divby" {
+		t.Errorf("Expected OpDivBy to be 'divby', got %v", odata.OpDivBy)
+	}
 	if odata.OpMod != "mod" {
 		t.Errorf("Expected OpMod to be 'mod', got %v", odata.OpMod)
 	}

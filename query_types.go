@@ -117,11 +117,12 @@ const (
 	OpHas FilterOperator = query.OpHas
 
 	// Arithmetic operators
-	OpAdd FilterOperator = query.OpAdd
-	OpSub FilterOperator = query.OpSub
-	OpMul FilterOperator = query.OpMul
-	OpDiv FilterOperator = query.OpDiv
-	OpMod FilterOperator = query.OpMod
+	OpAdd   FilterOperator = query.OpAdd
+	OpSub   FilterOperator = query.OpSub
+	OpMul   FilterOperator = query.OpMul
+	OpDiv   FilterOperator = query.OpDiv
+	OpDivBy FilterOperator = query.OpDivBy
+	OpMod   FilterOperator = query.OpMod
 
 	// Math functions
 	OpCeiling FilterOperator = query.OpCeiling

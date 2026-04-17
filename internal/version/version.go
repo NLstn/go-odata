@@ -46,6 +46,9 @@ func (v Version) Supports(feature string) bool {
 	case "in-operator":
 		// The 'in' operator was added in OData 4.01
 		return v.Major > 4 || (v.Major == 4 && v.Minor >= 1)
+	case "divby-operator":
+		// The 'divby' decimal division operator was added in OData 4.01
+		return v.Major > 4 || (v.Major == 4 && v.Minor >= 1)
 	case "case-insensitive-functions":
 		// Case-insensitive string functions added in 4.01
 		return v.Major > 4 || (v.Major == 4 && v.Minor >= 1)

@@ -43,7 +43,7 @@ func (p *ASTParser) parseTerm() (ASTNode, error) {
 	for p.currentToken().Type == TokenArithmetic &&
 		(p.currentToken().Value == "*" || p.currentToken().Value == "/" ||
 			p.currentToken().Value == "mul" || p.currentToken().Value == "div" ||
-			p.currentToken().Value == "mod") {
+			p.currentToken().Value == "divby" || p.currentToken().Value == "mod") {
 		op := p.advance()
 		right, err := p.parsePrimary()
 		if err != nil {

@@ -442,6 +442,8 @@ func convertBinaryArithmeticExprWithContext(binExpr *BinaryExpr, ctx *conversion
 		op = OpMul
 	case "div", "/":
 		op = OpDiv
+	case "divby":
+		op = OpDivBy
 	case "mod":
 		op = OpMod
 	default:

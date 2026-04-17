@@ -721,6 +721,11 @@ func evaluateMapComputeExpression(row map[string]interface{}, expr *query.Filter
 				return nil, fmt.Errorf("division by zero in compute expression")
 			}
 			return lf / rf, nil
+		case query.OpDivBy:
+			if rf == 0 {
+				return nil, fmt.Errorf("division by zero in compute expression")
+			}
+			return lf / rf, nil
 		default:
 			return nil, fmt.Errorf("unsupported operator in compute expression: %s", expr.Operator)
 		}

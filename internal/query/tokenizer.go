@@ -773,6 +773,9 @@ func (t *Tokenizer) classifyKeywordFast(value string, pos int) *Token {
 		if t.keywordEquals(value, "false") {
 			return t.getToken(TokenBoolean, "false", pos)
 		}
+		if t.keywordEquals(value, "divby") {
+			return t.getToken(TokenArithmetic, "divby", pos)
+		}
 	}
 	return nil
 }
