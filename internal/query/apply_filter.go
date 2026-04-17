@@ -1224,6 +1224,51 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 		default: // sqlite
 			return "datetime('now')", nil
 		}
+	case OpFractionalSeconds:
+		switch dialect {
+		case "postgres":
+			// Use a Go variable for the text-normalized cast to avoid duplicating the expression.
+			normalizedCast := fmt.Sprintf("CAST(NULLIF(CAST(%s AS TEXT), '') AS TIMESTAMP)", columnName)
+			return fmt.Sprintf("(EXTRACT(SECOND FROM %s) - FLOOR(EXTRACT(SECOND FROM %s)))", normalizedCast, normalizedCast), nil
+		case "mysql", "mariadb":
+			return fmt.Sprintf("(MICROSECOND(%s) / 1000000.0)", columnName), nil
+		default: // sqlite
+			return fmt.Sprintf("(CAST(strftime('%%f', %s) AS REAL) - CAST(strftime('%%S', %s) AS INTEGER))", columnName, columnName), nil
+		}
+	case OpTotalOffsetMinutes:
+		switch dialect {
+		case "postgres":
+			return fmt.Sprintf("(EXTRACT(TIMEZONE FROM CAST(NULLIF(CAST(%s AS TEXT), '') AS TIMESTAMPTZ)) / 60)::INT", columnName), nil
+		default: // sqlite, mysql - timezone offset not natively stored; return 0
+			return "0", nil
+		}
+	case OpTotalSeconds:
+		switch dialect {
+		case "postgres":
+			return fmt.Sprintf("EXTRACT(EPOCH FROM CAST(NULLIF(CAST(%s AS TEXT), '') AS INTERVAL))", columnName), nil
+		case "mysql", "mariadb":
+			return fmt.Sprintf("TIME_TO_SEC(%s)", columnName), nil
+		default: // sqlite - SQLite has no native interval type; assumes the column stores a numeric value representing total seconds
+			return fmt.Sprintf("CAST(%s AS REAL)", columnName), nil
+		}
+	case OpMinDatetime:
+		switch dialect {
+		case "postgres":
+			return "'0001-01-01 00:00:00+00'::TIMESTAMPTZ", nil
+		case "mysql", "mariadb":
+			return "'0001-01-01 00:00:00'", nil
+		default: // sqlite
+			return "datetime('0001-01-01T00:00:00')", nil
+		}
+	case OpMaxDatetime:
+		switch dialect {
+		case "postgres":
+			return "'9999-12-31 23:59:59.9999999+00'::TIMESTAMPTZ", nil
+		case "mysql", "mariadb":
+			return "'9999-12-31 23:59:59'", nil
+		default: // sqlite
+			return "datetime('9999-12-31T23:59:59')", nil
+		}
 	case OpCeiling:
 		switch dialect {
 		case "postgres":
