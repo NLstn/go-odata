@@ -179,8 +179,23 @@ func (h *EntityHandler) writeEntityResponseWithETag(w http.ResponseWriter, r *ht
 	// Check if the requested format is supported
 	if !response.IsAcceptableFormat(r) {
 		if err := response.WriteError(w, r, http.StatusNotAcceptable, "Not Acceptable",
-			"The requested format is not supported. Only application/json is supported for data responses."); err != nil {
+			"The requested format is not supported. Only application/json and application/atom+xml are supported for data responses."); err != nil {
 			h.logger.Error("Error writing error response", "error", err)
+		}
+		return
+	}
+
+	// Use pre-computed ETag if provided, otherwise generate it
+	etagValue := precomputedETag
+	if etagValue == "" && h.metadata.ETagProperty != nil {
+		etagValue = etag.Generate(result, h.metadata)
+	}
+
+	// Handle Atom format
+	if response.IsAtomFormat(r) {
+		entityID := h.buildEntityIDFromResult(result, r)
+		if err := response.WriteAtomEntity(w, r, h.metadata.EntitySetName, entityID, result, etagValue, status); err != nil {
+			h.logger.Error("Error writing Atom entity response", "error", err)
 		}
 		return
 	}
@@ -188,12 +203,6 @@ func (h *EntityHandler) writeEntityResponseWithETag(w http.ResponseWriter, r *ht
 	// Get metadata level
 	metadataLevel := response.GetODataMetadataLevel(r)
 	contextURL := response.BuildEntityContextURL(r, h.metadata.EntitySetName, selectedProps)
-
-	// Use pre-computed ETag if provided, otherwise generate it
-	etagValue := precomputedETag
-	if etagValue == "" && h.metadata.ETagProperty != nil {
-		etagValue = etag.Generate(result, h.metadata)
-	}
 
 	odataResponse := h.buildOrderedEntityResponseWithMetadata(result, contextURL, metadataLevel, r, etagValue, expandOptions)
 
