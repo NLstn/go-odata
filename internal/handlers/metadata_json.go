@@ -110,6 +110,7 @@ func (h *MetadataHandler) buildMetadataJSON(model metadataModel, ver version.Ver
 	csdl[model.namespace] = odataService
 
 	h.addJSONEnumTypes(model, odataService)
+	h.addJSONTypeDefinitions(model, odataService)
 	h.addJSONFunctionTypes(model, odataService)
 	h.addJSONActionTypes(model, odataService)
 
@@ -136,6 +137,46 @@ func (h *MetadataHandler) addJSONEnumTypes(model metadataModel, odataService map
 		enumType := h.buildJSONEnumType(definition.info)
 		odataService[definition.name] = enumType
 	}
+}
+
+func (h *MetadataHandler) addJSONTypeDefinitions(model metadataModel, odataService map[string]interface{}) {
+	typeDefinitions := h.sortedTypeDefinitions(model)
+	for _, definition := range typeDefinitions {
+		typeDef := h.buildJSONTypeDefinition(definition.info)
+		if typeDef != nil {
+			odataService[definition.name] = typeDef
+		}
+	}
+}
+
+func (h *MetadataHandler) buildJSONTypeDefinition(info *typeDefinitionInfo) map[string]interface{} {
+	if info == nil {
+		return nil
+	}
+
+	underlyingType := info.UnderlyingType
+	if underlyingType == "" {
+		underlyingType = "Edm.String"
+	}
+
+	typeDef := map[string]interface{}{
+		"$Kind":           "TypeDefinition",
+		"$UnderlyingType": underlyingType,
+	}
+
+	if info.MaxLength > 0 && (underlyingType == "Edm.String" || underlyingType == "Edm.Binary") {
+		typeDef["$MaxLength"] = info.MaxLength
+	}
+	if underlyingType == "Edm.Decimal" {
+		if info.Precision > 0 {
+			typeDef["$Precision"] = info.Precision
+		}
+		if info.Scale > 0 {
+			typeDef["$Scale"] = info.Scale
+		}
+	}
+
+	return typeDef
 }
 
 func (h *MetadataHandler) addJSONFunctionTypes(model metadataModel, odataService map[string]interface{}) {

@@ -362,102 +362,102 @@ func TestArithmeticFunctions_SQLGeneration(t *testing.T) {
 }
 
 func TestArithmeticFunctions_DivBy(t *testing.T) {
-meta := getTestMetadata(t)
+	meta := getTestMetadata(t)
 
-tests := []struct {
-name      string
-filter    string
-expectErr bool
-}{
-{
-name:      "divby simple",
-filter:    "Price divby 1.5 gt 25",
-expectErr: false,
-},
-{
-name:      "divby with comparison",
-filter:    "Price divby 2.0 eq 25.0",
-expectErr: false,
-},
-{
-name:      "divby in complex expression",
-filter:    "Price divby 10 lt 50 and Category eq 'Electronics'",
-expectErr: false,
-},
-}
+	tests := []struct {
+		name      string
+		filter    string
+		expectErr bool
+	}{
+		{
+			name:      "divby simple",
+			filter:    "Price divby 1.5 gt 25",
+			expectErr: false,
+		},
+		{
+			name:      "divby with comparison",
+			filter:    "Price divby 2.0 eq 25.0",
+			expectErr: false,
+		},
+		{
+			name:      "divby in complex expression",
+			filter:    "Price divby 10 lt 50 and Category eq 'Electronics'",
+			expectErr: false,
+		},
+	}
 
-for _, tt := range tests {
-t.Run(tt.name, func(t *testing.T) {
-tokenizer := NewTokenizer(tt.filter)
-tokens, err := tokenizer.TokenizeAll()
-if err != nil {
-t.Fatalf("Tokenization failed: %v", err)
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tokenizer := NewTokenizer(tt.filter)
+			tokens, err := tokenizer.TokenizeAll()
+			if err != nil {
+				t.Fatalf("Tokenization failed: %v", err)
+			}
 
-parser := NewASTParser(tokens)
-ast, err := parser.Parse()
-if err != nil {
-t.Fatalf("Parsing failed: %v", err)
-}
+			parser := NewASTParser(tokens)
+			ast, err := parser.Parse()
+			if err != nil {
+				t.Fatalf("Parsing failed: %v", err)
+			}
 
-defer ReleaseASTNode(ast)
+			defer ReleaseASTNode(ast)
 
-filterExpr, err := ASTToFilterExpression(ast, meta)
-if (err != nil) != tt.expectErr {
-t.Errorf("Expected error: %v, got: %v", tt.expectErr, err)
-}
+			filterExpr, err := ASTToFilterExpression(ast, meta)
+			if (err != nil) != tt.expectErr {
+				t.Errorf("Expected error: %v, got: %v", tt.expectErr, err)
+			}
 
-if !tt.expectErr && filterExpr == nil {
-t.Error("Expected non-nil FilterExpression")
-}
-})
-}
+			if !tt.expectErr && filterExpr == nil {
+				t.Error("Expected non-nil FilterExpression")
+			}
+		})
+	}
 }
 
 func TestArithmeticFunctions_DivBy_SQLGeneration(t *testing.T) {
-meta := getTestMetadata(t)
+	meta := getTestMetadata(t)
 
-tests := []struct {
-name           string
-filter         string
-expectErr      bool
-expectedSQL    string
-expectedArgsNo int
-}{
-{
-name:           "divby SQL uses CAST for decimal division",
-filter:         "Price divby 1.5 gt 25",
-expectErr:      false,
-expectedSQL:    "(CAST(price AS REAL) / ?) > ?",
-expectedArgsNo: 2,
-},
-{
-name:           "divby infix SQL uses CAST for decimal division",
-filter:         "Price divby 2 eq 25",
-expectErr:      false,
-expectedSQL:    "(CAST(price AS REAL) / ?) = ?",
-expectedArgsNo: 2,
-},
-}
+	tests := []struct {
+		name           string
+		filter         string
+		expectErr      bool
+		expectedSQL    string
+		expectedArgsNo int
+	}{
+		{
+			name:           "divby SQL uses CAST for decimal division",
+			filter:         "Price divby 1.5 gt 25",
+			expectErr:      false,
+			expectedSQL:    "(CAST(price AS REAL) / ?) > ?",
+			expectedArgsNo: 2,
+		},
+		{
+			name:           "divby infix SQL uses CAST for decimal division",
+			filter:         "Price divby 2 eq 25",
+			expectErr:      false,
+			expectedSQL:    "(CAST(price AS REAL) / ?) = ?",
+			expectedArgsNo: 2,
+		},
+	}
 
-for _, tt := range tests {
-t.Run(tt.name, func(t *testing.T) {
-filterExpr, err := parseFilter(tt.filter, meta, nil, 0)
-if (err != nil) != tt.expectErr {
-t.Fatalf("Expected error: %v, got: %v", tt.expectErr, err)
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			filterExpr, err := parseFilter(tt.filter, meta, nil, 0)
+			if (err != nil) != tt.expectErr {
+				t.Fatalf("Expected error: %v, got: %v", tt.expectErr, err)
+			}
 
-if tt.expectErr {
-return
-}
+			if tt.expectErr {
+				return
+			}
 
-sql, args := buildFilterCondition("sqlite", filterExpr, meta)
-if !sqlEquivalent(tt.expectedSQL, sql) {
-t.Errorf("Expected SQL: %s, got: %s", tt.expectedSQL, sql)
-}
-if len(args) != tt.expectedArgsNo {
-t.Errorf("Expected %d args, got %d", tt.expectedArgsNo, len(args))
-}
-})
-}
+			sql, args := buildFilterCondition("sqlite", filterExpr, meta)
+			if !sqlEquivalent(tt.expectedSQL, sql) {
+				t.Errorf("Expected SQL: %s, got: %s", tt.expectedSQL, sql)
+			}
+			if len(args) != tt.expectedArgsNo {
+				t.Errorf("Expected %d args, got %d", tt.expectedArgsNo, len(args))
+			}
+		})
+	}
 }

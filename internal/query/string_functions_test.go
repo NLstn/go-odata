@@ -777,4 +777,3 @@ func TestStringFunctions_MatchesPatternSQLGeneration(t *testing.T) {
 		})
 	}
 }
-

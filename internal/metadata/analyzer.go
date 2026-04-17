@@ -113,6 +113,9 @@ type PropertyMetadata struct {
 	EnumMembers        []EnumMember // Enum members for metadata generation
 	EnumUnderlyingType string       // Underlying EDM type (e.g., Edm.Int32)
 	EnumType           reflect.Type // Underlying Go enum type
+	// TypeDefinition properties
+	IsTypeDefinition   bool   // True if this property uses a registered TypeDefinition
+	TypeDefinitionName string // OData name of the TypeDefinition (for metadata generation)
 	// Binary properties
 	ContentType string // MIME type for binary properties (e.g., "image/svg+xml"), used when serving /$value
 	// Stream properties
@@ -461,6 +464,21 @@ func analyzeField(field reflect.StructField, metadata *EntityMetadata) (Property
 			return PropertyMetadata{}, fmt.Errorf("unsupported enum type for field %s: %w", field.Name, err)
 		}
 		property.EnumUnderlyingType = underlyingType
+	}
+
+	// Auto-detect TypeDefinition: if the field type (or its element after deref) is registered
+	// as a TypeDefinition and the property is not already an enum, mark it accordingly.
+	if !property.IsEnum && !property.IsTypeDefinition {
+		fieldType := field.Type
+		for fieldType.Kind() == reflect.Ptr {
+			fieldType = fieldType.Elem()
+		}
+		if tdInfo, ok := GetTypeDefinition(fieldType); ok {
+			property.IsTypeDefinition = true
+			if property.TypeDefinitionName == "" {
+				property.TypeDefinitionName = tdInfo.Name
+			}
+		}
 	}
 
 	// Auto-detect annotations from property flags
