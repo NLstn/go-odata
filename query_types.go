@@ -113,6 +113,9 @@ const (
 	OpSubstring  FilterOperator = query.OpSubstring
 	OpConcat     FilterOperator = query.OpConcat
 
+	// OData v4.01 string functions
+	OpMatchesPattern FilterOperator = query.OpMatchesPattern
+
 	// Enum operator
 	OpHas FilterOperator = query.OpHas
 

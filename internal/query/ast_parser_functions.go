@@ -113,7 +113,7 @@ func isSingleArgFunction(name string) bool {
 // isTwoArgFunction checks if a function takes two arguments
 func isTwoArgFunction(name string) bool {
 	return name == "contains" || name == "startswith" || name == "endswith" ||
-		name == "indexof" || name == "has"
+		name == "indexof" || name == "has" || name == "matchespattern"
 }
 
 // isArithmeticFunction checks if a function is an arithmetic function

@@ -235,6 +235,8 @@ const (
 	OpGeoDistance   FilterOperator = "geo.distance"
 	OpGeoLength     FilterOperator = "geo.length"
 	OpGeoIntersects FilterOperator = "geo.intersects"
+	// OData v4.01 string functions
+	OpMatchesPattern FilterOperator = "matchespattern"
 )
 
 // LogicalOperator represents logical operators for combining filters

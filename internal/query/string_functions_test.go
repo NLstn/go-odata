@@ -647,3 +647,134 @@ func TestStringFunctions_SQLGeneration(t *testing.T) {
 		})
 	}
 }
+
+func TestStringFunctions_MatchesPattern(t *testing.T) {
+	meta := getTestMetadata(t)
+
+	tests := []struct {
+		name      string
+		filter    string
+		expectErr bool
+	}{
+		{
+			name:      "matchesPattern simple",
+			filter:    "matchesPattern(Name, '^Lap')",
+			expectErr: false,
+		},
+		{
+			name:      "matchesPattern uppercase start",
+			filter:    "matchesPattern(Name, '^[A-Z]')",
+			expectErr: false,
+		},
+		{
+			name:      "matchesPattern digit",
+			filter:    "matchesPattern(Name, '[0-9]+')",
+			expectErr: false,
+		},
+		{
+			name:      "matchesPattern in complex expression",
+			filter:    "matchesPattern(Name, '^Lap') and Price gt 100",
+			expectErr: false,
+		},
+		{
+			name:      "matchesPattern wrong argument count - 1 arg",
+			filter:    "matchesPattern(Name)",
+			expectErr: true,
+		},
+		{
+			name:      "matchesPattern wrong argument count - 3 args",
+			filter:    "matchesPattern(Name, 'a', 'b')",
+			expectErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tokenizer := NewTokenizer(tt.filter)
+			tokens, err := tokenizer.TokenizeAll()
+			if err != nil {
+				if !tt.expectErr {
+					t.Fatalf("Tokenization failed: %v", err)
+				}
+				return
+			}
+
+			parser := NewASTParser(tokens)
+			ast, err := parser.Parse()
+			if err != nil {
+				if !tt.expectErr {
+					t.Fatalf("Parsing failed: %v", err)
+				}
+				return
+			}
+
+			defer ReleaseASTNode(ast)
+
+			filterExpr, err := ASTToFilterExpression(ast, meta)
+			if (err != nil) != tt.expectErr {
+				t.Errorf("Expected error: %v, got: %v", tt.expectErr, err)
+			}
+
+			if !tt.expectErr && filterExpr == nil {
+				t.Error("Expected non-nil FilterExpression")
+			}
+		})
+	}
+}
+
+func TestStringFunctions_MatchesPatternSQLGeneration(t *testing.T) {
+	meta := getTestMetadata(t)
+
+	tests := []struct {
+		name           string
+		filter         string
+		dialect        string
+		expectedSQL    string
+		expectedArgsNo int
+	}{
+		{
+			name:           "matchesPattern SQLite REGEXP",
+			filter:         "matchesPattern(Name, '^[A-Z]')",
+			dialect:        "sqlite",
+			expectedSQL:    `"name" REGEXP ?`,
+			expectedArgsNo: 1,
+		},
+		{
+			name:           "matchesPattern PostgreSQL tilde operator",
+			filter:         "matchesPattern(Name, '^[A-Z]')",
+			dialect:        "postgres",
+			expectedSQL:    `"name" ~ ?`,
+			expectedArgsNo: 1,
+		},
+		{
+			name:           "matchesPattern MySQL REGEXP",
+			filter:         "matchesPattern(Name, '^[A-Z]')",
+			dialect:        "mysql",
+			expectedSQL:    "`name` REGEXP ?",
+			expectedArgsNo: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			filterExpr, err := parseFilter(tt.filter, meta, nil, 0)
+			if err != nil {
+				t.Fatalf("Unexpected parse error: %v", err)
+			}
+
+			sql, args := buildFilterCondition(tt.dialect, filterExpr, meta)
+			if sql != tt.expectedSQL {
+				t.Errorf("Expected SQL: %q, got: %q", tt.expectedSQL, sql)
+			}
+			if len(args) != tt.expectedArgsNo {
+				t.Errorf("Expected %d args, got %d", tt.expectedArgsNo, len(args))
+			}
+			if len(args) > 0 {
+				if args[0] != "^[A-Z]" {
+					t.Errorf("Expected pattern arg '^[A-Z]', got: %v", args[0])
+				}
+			}
+		})
+	}
+}
+
