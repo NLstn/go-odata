@@ -85,6 +85,16 @@ func FromGoType(goType reflect.Type) (string, error) {
 		return "Edm.Guid", nil
 	}
 
+	// json.RawMessage represents arbitrary JSON → Edm.Untyped (must be checked before []byte)
+	if goType.PkgPath() == "encoding/json" && goType.Name() == "RawMessage" {
+		return "Edm.Untyped", nil
+	}
+
+	// interface{} / any → Edm.Untyped
+	if goType.Kind() == reflect.Interface {
+		return "Edm.Untyped", nil
+	}
+
 	// Handle byte slices
 	if goType.Kind() == reflect.Slice && goType.Elem().Kind() == reflect.Uint8 {
 		return "Edm.Binary", nil

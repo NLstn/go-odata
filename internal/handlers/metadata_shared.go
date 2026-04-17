@@ -61,6 +61,9 @@ func (h *MetadataHandler) propertyEdmType(model metadataModel, prop *metadata.Pr
 	if prop.IsEnum && prop.EnumTypeName != "" {
 		return model.qualifiedTypeName(prop.EnumTypeName)
 	}
+	if prop.IsUntyped {
+		return "Edm.Untyped"
+	}
 	return getEdmType(prop.Type)
 }
 
