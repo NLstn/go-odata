@@ -13,7 +13,7 @@ import (
 )
 
 // Document is an entity with Edm.Untyped properties.
-type DocumentEntity struct {
+type Document struct {
 	ID      string          `json:"id" gorm:"primarykey" odata:"key"`
 	Title   string          `json:"title" odata:"required"`
 	Payload json.RawMessage `json:"payload" gorm:"type:text"`
@@ -27,7 +27,7 @@ func setupUntypedTestService(t *testing.T) (*odata.Service, *gorm.DB) {
 		t.Fatalf("Failed to connect to database: %v", err)
 	}
 
-	if err := db.AutoMigrate(&DocumentEntity{}); err != nil {
+	if err := db.AutoMigrate(&Document{}); err != nil {
 		t.Fatalf("Failed to auto-migrate: %v", err)
 	}
 
@@ -36,7 +36,7 @@ func setupUntypedTestService(t *testing.T) (*odata.Service, *gorm.DB) {
 		t.Fatalf("NewService() error: %v", err)
 	}
 
-	if err := service.RegisterEntity(&DocumentEntity{}); err != nil {
+	if err := service.RegisterEntity(&Document{}); err != nil {
 		t.Fatalf("Failed to register entity: %v", err)
 	}
 
@@ -82,14 +82,14 @@ func TestUntypedPropertyInJSONMetadata(t *testing.T) {
 		t.Fatalf("failed to parse JSON metadata: %v", err)
 	}
 
-	// Navigate to the DocumentEntity type definition
+	// Navigate to the Document type definition
 	svc, ok := meta["ODataService"].(map[string]interface{})
 	if !ok {
 		t.Fatalf("expected ODataService key in metadata, got: %v", meta)
 	}
-	docEntity, ok := svc["DocumentEntity"].(map[string]interface{})
+	docEntity, ok := svc["Document"].(map[string]interface{})
 	if !ok {
-		t.Fatalf("expected DocumentEntity in ODataService, got keys: %v", keys(svc))
+		t.Fatalf("expected Document in ODataService, got keys: %v", keys(svc))
 	}
 
 	// Payload: json.RawMessage should be Edm.Untyped
