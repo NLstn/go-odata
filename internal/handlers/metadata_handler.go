@@ -373,6 +373,14 @@ type enumTypeInfo struct {
 	UnderlyingType string
 }
 
+type typeDefinitionInfo struct {
+	Name           string
+	UnderlyingType string
+	Precision      int
+	Scale          int
+	MaxLength      int
+}
+
 func (m metadataModel) qualifiedTypeName(typeName string) string {
 	return fmt.Sprintf("%s.%s", m.namespace, typeName)
 }
@@ -405,6 +413,39 @@ func (m metadataModel) collectEnumDefinitions() map[string]*enumTypeInfo {
 	}
 
 	return enumDefinitions
+}
+
+// collectTypeDefinitions returns a map of TypeDefinition name to typeDefinitionInfo
+// collected from all registered type definition properties across all entities.
+func (m metadataModel) collectTypeDefinitions() map[string]*typeDefinitionInfo {
+	typeDefinitions := make(map[string]*typeDefinitionInfo)
+
+	for _, entityMeta := range m.entities {
+		for _, prop := range entityMeta.Properties {
+			if !prop.IsTypeDefinition || prop.TypeDefinitionName == "" {
+				continue
+			}
+
+			if _, exists := typeDefinitions[prop.TypeDefinitionName]; exists {
+				continue
+			}
+
+			tdInfo, ok := metadata.GetTypeDefinition(prop.Type)
+			if !ok {
+				continue
+			}
+
+			typeDefinitions[prop.TypeDefinitionName] = &typeDefinitionInfo{
+				Name:           tdInfo.Name,
+				UnderlyingType: tdInfo.UnderlyingType,
+				Precision:      tdInfo.Precision,
+				Scale:          tdInfo.Scale,
+				MaxLength:      tdInfo.MaxLength,
+			}
+		}
+	}
+
+	return typeDefinitions
 }
 
 // collectUsedVocabularies returns a sorted list of unique vocabulary namespaces used in annotations

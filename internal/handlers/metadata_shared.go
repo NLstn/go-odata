@@ -16,6 +16,11 @@ type namedEnumDefinition struct {
 	info *enumTypeInfo
 }
 
+type namedTypeDefinition struct {
+	name string
+	info *typeDefinitionInfo
+}
+
 func (h *MetadataHandler) navigationBindings(model metadataModel, entityMeta *metadata.EntityMetadata) []navigationBinding {
 	bindings := make([]navigationBinding, 0, len(entityMeta.Properties))
 	for _, prop := range entityMeta.Properties {
@@ -57,12 +62,42 @@ func (h *MetadataHandler) sortedEnumDefinitions(model metadataModel) []namedEnum
 	return sorted
 }
 
+func (h *MetadataHandler) sortedTypeDefinitions(model metadataModel) []namedTypeDefinition {
+	typeDefinitions := model.collectTypeDefinitions()
+	if len(typeDefinitions) == 0 {
+		return nil
+	}
+
+	names := make([]string, 0, len(typeDefinitions))
+	for name := range typeDefinitions {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	sorted := make([]namedTypeDefinition, 0, len(names))
+	for _, name := range names {
+		info := typeDefinitions[name]
+		if info == nil {
+			continue
+		}
+		sorted = append(sorted, namedTypeDefinition{
+			name: name,
+			info: info,
+		})
+	}
+
+	return sorted
+}
+
 func (h *MetadataHandler) propertyEdmType(model metadataModel, prop *metadata.PropertyMetadata) string {
 	if prop.IsEnum && prop.EnumTypeName != "" {
 		return model.qualifiedTypeName(prop.EnumTypeName)
 	}
 	if prop.IsUntyped {
 		return "Edm.Untyped"
+	}
+	if prop.IsTypeDefinition && prop.TypeDefinitionName != "" {
+		return model.qualifiedTypeName(prop.TypeDefinitionName)
 	}
 	return getEdmType(prop.Type)
 }

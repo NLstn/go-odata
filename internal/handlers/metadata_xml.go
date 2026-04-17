@@ -110,6 +110,7 @@ func (h *MetadataHandler) buildMetadataDocument(model metadataModel, ver version
 `, model.namespace))
 
 	builder.WriteString(h.buildEnumTypes(model))
+	builder.WriteString(h.buildTypeDefinitions(model))
 	builder.WriteString(h.buildEntityTypes(model))
 	builder.WriteString(h.buildFunctionTypes(model))
 	builder.WriteString(h.buildActionTypes(model))
@@ -218,6 +219,46 @@ func (h *MetadataHandler) buildEnumType(enumTypeName string, info *enumTypeInfo)
 
 	builder.WriteString("      </EnumType>\n")
 	return builder.String()
+}
+
+func (h *MetadataHandler) buildTypeDefinitions(model metadataModel) string {
+	typeDefinitions := h.sortedTypeDefinitions(model)
+	if len(typeDefinitions) == 0 {
+		return ""
+	}
+
+	var builder strings.Builder
+	for _, definition := range typeDefinitions {
+		builder.WriteString(h.buildTypeDefinition(definition.name, definition.info))
+	}
+
+	return builder.String()
+}
+
+func (h *MetadataHandler) buildTypeDefinition(name string, info *typeDefinitionInfo) string {
+	if info == nil {
+		return ""
+	}
+
+	underlyingType := info.UnderlyingType
+	if underlyingType == "" {
+		underlyingType = "Edm.String"
+	}
+
+	var facets strings.Builder
+	if info.MaxLength > 0 && (underlyingType == "Edm.String" || underlyingType == "Edm.Binary") {
+		facets.WriteString(fmt.Sprintf(` MaxLength="%d"`, info.MaxLength))
+	}
+	if underlyingType == "Edm.Decimal" {
+		if info.Precision > 0 {
+			facets.WriteString(fmt.Sprintf(` Precision="%d"`, info.Precision))
+		}
+		if info.Scale > 0 {
+			facets.WriteString(fmt.Sprintf(` Scale="%d"`, info.Scale))
+		}
+	}
+
+	return fmt.Sprintf("      <TypeDefinition Name=%q UnderlyingType=%q%s />\n", name, underlyingType, facets.String())
 }
 
 func (h *MetadataHandler) buildEntityTypes(model metadataModel) string {
