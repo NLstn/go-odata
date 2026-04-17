@@ -1119,10 +1119,14 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 		return fmt.Sprintf("(%s / ?)", columnName), []interface{}{value}
 	case OpDivBy:
 		// divby performs decimal (floating-point) division; cast to avoid integer truncation
-		if dialect == "postgres" {
+		switch dialect {
+		case "postgres":
 			return fmt.Sprintf("(CAST(%s AS FLOAT) / ?)", columnName), []interface{}{value}
+		case "mysql", "mariadb":
+			return fmt.Sprintf("(CAST(%s AS DOUBLE) / ?)", columnName), []interface{}{value}
+		default:
+			return fmt.Sprintf("(CAST(%s AS REAL) / ?)", columnName), []interface{}{value}
 		}
-		return fmt.Sprintf("(CAST(%s AS REAL) / ?)", columnName), []interface{}{value}
 	case OpMod:
 		return fmt.Sprintf("(%s %% ?)", columnName), []interface{}{value}
 	case OpYear:
