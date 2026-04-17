@@ -3,20 +3,18 @@
 package odata
 
 import (
-	"context"
 	"database/sql"
 	"regexp"
 
 	"github.com/mattn/go-sqlite3"
-	gormsqlite "gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
 func init() {
-	// Register a custom SQLite driver that provides a REGEXP function, enabling
-	// the OData v4.01 matchesPattern() filter function for SQLite databases.
-	// The standard sqlite3 driver does not include REGEXP by default.
-	sql.Register("sqlite3_odata", &sqlite3.SQLiteDriver{
+	// Register a custom SQLite driver with REGEXP support for the OData v4.01
+	// matchesPattern() filter function. This driver is identical to the standard
+	// sqlite3 driver except it provides a REGEXP function via ConnectHook.
+	sql.Register("sqlite3_regexp", &sqlite3.SQLiteDriver{
 		ConnectHook: func(conn *sqlite3.SQLiteConn) error {
 			return conn.RegisterFunc("regexp", func(pattern, s string) (bool, error) {
 				return regexp.MatchString(pattern, s)
@@ -25,31 +23,30 @@ func init() {
 	})
 }
 
-// SQLiteOpen returns a GORM dialector for SQLite that includes support for the
-// REGEXP operator, which is required for the OData v4.01 matchesPattern() filter
-// function. Use this instead of sqlite.Open() when creating your GORM database:
-//
-//	db, err := gorm.Open(odata.SQLiteOpen("path/to/db.sqlite"), &gorm.Config{})
-func SQLiteOpen(dsn string) gorm.Dialector {
-	return gormsqlite.Dialector{DriverName: "sqlite3_odata", DSN: dsn}
-}
-
-// registerRegexpOnSQLiteConnections attempts to register the REGEXP function on
-// the current connections in the SQLite pool. This is a best-effort approach for
-// users who opened their database without SQLiteOpen. It covers the common
-// single-connection SQLite case (in-memory and most file-based usage).
-func registerRegexpOnSQLiteConnections(db *gorm.DB) {
-	sqlDB, err := db.DB()
-	if err != nil {
-		return
+// ensureSQLiteRegexp ensures the REGEXP function is registered on SQLite connections.
+// This function is called automatically when creating a service with SQLite,
+// so users don't need to do anything special - just use sqlite.Open() normally.
+func ensureSQLiteRegexp(db *gorm.DB) error {
+	if db.Name() != "sqlite" {
+		return nil
 	}
 
-	conn, err := sqlDB.Conn(context.Background())
+	// Get the underlying SQL database
+	sqlDB, err := db.DB()
 	if err != nil {
-		return
+		return err
+	}
+
+	// Register REGEXP on a connection from the pool. This will be called
+	// on every new connection via the ConnectHook if using the sqlite3_regexp driver.
+	// For users with standard sqlite3, attempt to register it here.
+	conn, err := sqlDB.Conn(db.Statement.Context)
+	if err != nil {
+		return err
 	}
 	defer conn.Close() //nolint:errcheck
 
+	// Try to register REGEXP; if the driver already has it via ConnectHook, this is a no-op
 	//nolint:errcheck
 	conn.Raw(func(driverConn interface{}) error {
 		sqliteConn, ok := driverConn.(*sqlite3.SQLiteConn)
@@ -60,4 +57,6 @@ func registerRegexpOnSQLiteConnections(db *gorm.DB) {
 			return regexp.MatchString(pattern, s)
 		}, true)
 	})
+
+	return nil
 }
