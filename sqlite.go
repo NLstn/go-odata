@@ -50,7 +50,8 @@ func registerRegexpOnSQLiteConnections(db *gorm.DB) {
 	}
 	defer conn.Close() //nolint:errcheck
 
-	_ = conn.Raw(func(driverConn interface{}) error {
+	//nolint:errcheck
+	conn.Raw(func(driverConn interface{}) error {
 		sqliteConn, ok := driverConn.(*sqlite3.SQLiteConn)
 		if !ok {
 			return nil

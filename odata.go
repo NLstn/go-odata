@@ -560,7 +560,7 @@ func NewServiceWithConfig(db *gorm.DB, cfg ServiceConfig) (*Service, error) {
 
 	// For SQLite, ensure the REGEXP function is registered on existing connections
 	// so that the OData v4.01 matchesPattern() filter function works correctly.
-	if db.Dialector.Name() == "sqlite" {
+	if db.Name() == "sqlite" {
 		registerRegexpOnSQLiteConnections(db)
 	}
 
