@@ -489,6 +489,275 @@ func TestParseQueryOptions_WithSearch(t *testing.T) {
 	}
 }
 
+func TestNormalizeQueryParams(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    url.Values
+		wantKeys []string // expected normalized keys (order independent)
+	}{
+		{
+			name:     "dollar-prefixed lowercase key is unchanged",
+			input:    url.Values{"$filter": {"Price gt 10"}},
+			wantKeys: []string{"$filter"},
+		},
+		{
+			name:     "dollar-prefixed uppercase key is lowercased",
+			input:    url.Values{"$FILTER": {"Price gt 10"}},
+			wantKeys: []string{"$filter"},
+		},
+		{
+			name:     "dollar-prefixed mixed-case key is lowercased",
+			input:    url.Values{"$Filter": {"Price gt 10"}, "$TOP": {"5"}},
+			wantKeys: []string{"$filter", "$top"},
+		},
+		{
+			name:     "non-dollar known option gets dollar prefix",
+			input:    url.Values{"filter": {"Price gt 10"}},
+			wantKeys: []string{"$filter"},
+		},
+		{
+			name:     "non-dollar known option (uppercase) gets dollar prefix",
+			input:    url.Values{"FILTER": {"Price gt 10"}},
+			wantKeys: []string{"$filter"},
+		},
+		{
+			name:     "multiple non-dollar known options get dollar prefix",
+			input:    url.Values{"filter": {"Price gt 10"}, "top": {"3"}, "select": {"Name"}},
+			wantKeys: []string{"$filter", "$top", "$select"},
+		},
+		{
+			name:     "non-dollar unknown option is left unchanged",
+			input:    url.Values{"customParam": {"value"}},
+			wantKeys: []string{"customParam"},
+		},
+		{
+			name:     "non-dollar unknown option that resembles an odata option is left unchanged",
+			input:    url.Values{"filtre": {"value"}},
+			wantKeys: []string{"filtre"},
+		},
+		{
+			name:     "dollar unknown option is left unchanged",
+			input:    url.Values{"$unknownoption": {"value"}},
+			wantKeys: []string{"$unknownoption"},
+		},
+		{
+			name:     "values are preserved during normalization",
+			input:    url.Values{"filter": {"Price gt 10 and Name eq 'test'"}},
+			wantKeys: []string{"$filter"},
+		},
+		{
+			name:     "empty input returns empty output",
+			input:    url.Values{},
+			wantKeys: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := NormalizeQueryParams(tt.input)
+
+			if len(result) != len(tt.wantKeys) {
+				t.Errorf("expected %d keys, got %d: %v", len(tt.wantKeys), len(result), result)
+				return
+			}
+
+			for _, key := range tt.wantKeys {
+				if _, exists := result[key]; !exists {
+					t.Errorf("expected key %q to be present in result %v", key, result)
+				}
+			}
+		})
+	}
+}
+
+func TestNormalizeQueryParams_PreservesValues(t *testing.T) {
+	input := url.Values{
+		"filter": {"Price gt 10"},
+		"top":    {"5"},
+		"select": {"Name,Price"},
+	}
+
+	result := NormalizeQueryParams(input)
+
+	if got := result.Get("$filter"); got != "Price gt 10" {
+		t.Errorf("expected $filter value 'Price gt 10', got %q", got)
+	}
+	if got := result.Get("$top"); got != "5" {
+		t.Errorf("expected $top value '5', got %q", got)
+	}
+	if got := result.Get("$select"); got != "Name,Price" {
+		t.Errorf("expected $select value 'Name,Price', got %q", got)
+	}
+}
+
+func TestNormalizeQueryParams_MergesDuplicateKeys(t *testing.T) {
+	// When both $filter and filter are provided, they should be merged
+	// (the duplicate will later be caught by validateQueryOptions)
+	input := url.Values{
+		"$filter": {"Price gt 10"},
+		"filter":  {"Price lt 100"},
+	}
+
+	result := NormalizeQueryParams(input)
+
+	// Both values should be merged under $filter
+	filterValues := result["$filter"]
+	if len(filterValues) != 2 {
+		t.Errorf("expected 2 values merged under $filter (for duplicate detection), got %d: %v", len(filterValues), filterValues)
+	}
+}
+
+func TestParseQueryOptionsWithConfigAndCaseSensitivity_NoDollarPrefix(t *testing.T) {
+	meta := getTestMetadata(t)
+
+	tests := []struct {
+		name            string
+		queryString     string
+		caseInsensitive bool
+		expectError     bool
+		validate        func(*testing.T, *QueryOptions)
+	}{
+		{
+			name:            "v4.01: filter without dollar prefix",
+			queryString:     "filter=Price gt 100",
+			caseInsensitive: true,
+			expectError:     false,
+			validate: func(t *testing.T, opts *QueryOptions) {
+				if opts.Filter == nil {
+					t.Error("Expected filter to be parsed")
+				}
+			},
+		},
+		{
+			name:            "v4.01: select without dollar prefix",
+			queryString:     "select=Name,Price",
+			caseInsensitive: true,
+			expectError:     false,
+			validate: func(t *testing.T, opts *QueryOptions) {
+				if len(opts.Select) != 2 {
+					t.Errorf("Expected 2 selected properties, got %d", len(opts.Select))
+				}
+			},
+		},
+		{
+			name:            "v4.01: top without dollar prefix",
+			queryString:     "top=5",
+			caseInsensitive: true,
+			expectError:     false,
+			validate: func(t *testing.T, opts *QueryOptions) {
+				if opts.Top == nil || *opts.Top != 5 {
+					t.Errorf("Expected top=5, got %v", opts.Top)
+				}
+			},
+		},
+		{
+			name:            "v4.01: skip without dollar prefix",
+			queryString:     "skip=3",
+			caseInsensitive: true,
+			expectError:     false,
+			validate: func(t *testing.T, opts *QueryOptions) {
+				if opts.Skip == nil || *opts.Skip != 3 {
+					t.Errorf("Expected skip=3, got %v", opts.Skip)
+				}
+			},
+		},
+		{
+			name:            "v4.01: mixed-case dollar prefix",
+			queryString:     "$TOP=10",
+			caseInsensitive: true,
+			expectError:     false,
+			validate: func(t *testing.T, opts *QueryOptions) {
+				if opts.Top == nil || *opts.Top != 10 {
+					t.Errorf("Expected top=10, got %v", opts.Top)
+				}
+			},
+		},
+		{
+			name:            "v4.01: count without dollar prefix",
+			queryString:     "count=true",
+			caseInsensitive: true,
+			expectError:     false,
+			validate: func(t *testing.T, opts *QueryOptions) {
+				if !opts.Count {
+					t.Error("Expected count to be true")
+				}
+			},
+		},
+		{
+			name:            "v4.0: filter without dollar prefix is silently ignored",
+			queryString:     "filter=Price gt 100",
+			caseInsensitive: false,
+			expectError:     false,
+			validate: func(t *testing.T, opts *QueryOptions) {
+				if opts.Filter != nil {
+					t.Error("Expected filter to be nil (non-$ option ignored in v4.0)")
+				}
+			},
+		},
+		{
+			name:            "v4.0: top without dollar prefix is silently ignored",
+			queryString:     "top=5",
+			caseInsensitive: false,
+			expectError:     false,
+			validate: func(t *testing.T, opts *QueryOptions) {
+				if opts.Top != nil {
+					t.Errorf("Expected top to be nil (non-$ option ignored in v4.0), got %v", opts.Top)
+				}
+			},
+		},
+		{
+			name:            "v4.0: mixed-case dollar prefix is rejected",
+			queryString:     "$FILTER=Price gt 100",
+			caseInsensitive: false,
+			expectError:     true,
+		},
+		{
+			name:            "v4.01: duplicate options across dollar forms rejected",
+			queryString:     "$filter=Price gt 100&filter=Price lt 200",
+			caseInsensitive: true,
+			expectError:     true,
+		},
+		{
+			name:            "v4.01: unknown parameter without dollar is ignored",
+			queryString:     "filtre=Price gt 100",
+			caseInsensitive: true,
+			expectError:     false,
+			validate: func(t *testing.T, opts *QueryOptions) {
+				if opts.Filter != nil {
+					t.Error("Expected filter to be nil for unknown 'filtre' parameter")
+				}
+			},
+		},
+		{
+			name:            "v4.01: unknown parameter with dollar is rejected",
+			queryString:     "$filtre=Price gt 100",
+			caseInsensitive: true,
+			expectError:     true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			queryParams := ParseRawQuery(tt.queryString)
+			opts, err := ParseQueryOptionsWithConfigAndCaseSensitivity(queryParams, meta, nil, tt.caseInsensitive)
+
+			if tt.expectError {
+				if err == nil {
+					t.Error("Expected error but got none")
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+				return
+			}
+			if tt.validate != nil {
+				tt.validate(t, opts)
+			}
+		})
+	}
+}
+
 func TestSetMaxInClauseSizeRecursive(t *testing.T) {
 	t.Run("nil filter", func(t *testing.T) {
 		setMaxInClauseSizeRecursive(nil, 100)
