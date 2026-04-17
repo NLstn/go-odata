@@ -173,7 +173,8 @@ func TestPutEntity_WithMissingFields(t *testing.T) {
 }
 
 func TestPutEntity_NonExistent(t *testing.T) {
-	// PUT to a non-existent resource should create the entity (upsert semantics per OData v4 spec 11.4.4)
+	// PUT to a non-existent resource should return 404 per OData v4 spec (section 11.4.3)
+	// Use POST to create new entities
 	service, db := setupPutTestService(t)
 
 	replacementData := PutTestProduct{
@@ -190,21 +191,15 @@ func TestPutEntity_NonExistent(t *testing.T) {
 
 	service.ServeHTTP(w, req)
 
-	// Should return 201 Created (upsert semantics)
-	if w.Code != http.StatusCreated {
-		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusCreated, w.Body.String())
+	// Should return 404 Not Found (per OData v4 spec)
+	if w.Code != http.StatusNotFound {
+		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusNotFound, w.Body.String())
 	}
 
-	// Verify the entity was created with key 999
-	var created PutTestProduct
-	if err := db.First(&created, 999).Error; err != nil {
-		t.Errorf("Entity with key 999 not found after upsert: %v", err)
-	}
-	if created.Name != "New Laptop" {
-		t.Errorf("Name = %v, want 'New Laptop'", created.Name)
-	}
-	if created.Price != 999.99 {
-		t.Errorf("Price = %v, want 999.99", created.Price)
+	// Verify the entity was NOT created (404 response means entity doesn't exist and wasn't created)
+	var notCreated PutTestProduct
+	if err := db.First(&notCreated, 999).Error; err == nil {
+		t.Errorf("Entity with key 999 should not exist after PUT to non-existent resource")
 	}
 }
 
@@ -499,6 +494,7 @@ func TestPutEntity_DifferenceFromPatch(t *testing.T) {
 
 // TestPutUpsert_GetAfterCreate verifies that a GET request after an upsert returns the new entity.
 func TestPutUpsert_GetAfterCreate(t *testing.T) {
+		// Per OData v4 spec, PUT to non-existent entity returns 404 (not 201 create)
 	service, _ := setupPutTestService(t)
 
 	// PUT to non-existent key
@@ -512,41 +508,44 @@ func TestPutUpsert_GetAfterCreate(t *testing.T) {
 	putW := httptest.NewRecorder()
 	service.ServeHTTP(putW, putReq)
 
-	if putW.Code != http.StatusCreated {
-		t.Fatalf("PUT (upsert) status = %v, want %v. Body: %s", putW.Code, http.StatusCreated, putW.Body.String())
+	if putW.Code != http.StatusNotFound {
+		t.Fatalf("PUT (upsert) status = %v, want %v. Body: %s", putW.Code, http.StatusNotFound, putW.Body.String())
 	}
 
-	// GET the newly created entity
+	// GET to verify entity was NOT created
 	getReq := httptest.NewRequest(http.MethodGet, "/PutTestProducts(42)", nil)
 	getW := httptest.NewRecorder()
 	service.ServeHTTP(getW, getReq)
 
-	if getW.Code != http.StatusOK {
-		t.Fatalf("GET after upsert status = %v, want 200", getW.Code)
-	}
-
-	var resp map[string]interface{}
-	if err := json.NewDecoder(getW.Body).Decode(&resp); err != nil {
-		t.Fatalf("Failed to decode GET response: %v", err)
-	}
-	if resp["name"] != "Brand New Product" {
-		t.Errorf("GET name = %v, want 'Brand New Product'", resp["name"])
+	if getW.Code != http.StatusNotFound {
+		t.Fatalf("GET after PUT (404) should return 404, got %v", getW.Code)
 	}
 }
 
 // TestPutUpsert_ThenUpdate verifies that upsert followed by PUT update works correctly.
 func TestPutUpsert_ThenUpdate(t *testing.T) {
+		// First PUT to non-existent entity returns 404 per OData v4 spec
 	service, db := setupPutTestService(t)
 
-	// First PUT – upsert (entity does not exist yet)
+	// First, create an entity so we can test UPDATE  
+	initialProduct := PutTestProduct{
+		ID:    77,
+		Name:  "Initial",
+		Price: 10.0,
+	}
+	if err := db.Create(&initialProduct).Error; err != nil {
+		t.Fatalf("Failed to create initial entity: %v", err)
+	}
+
+	// First PUT – update (entity now exists)
 	body1, _ := json.Marshal(map[string]interface{}{"name": "Initial", "price": 10.0})
 	req1 := httptest.NewRequest(http.MethodPut, "/PutTestProducts(77)", bytes.NewBuffer(body1))
 	req1.Header.Set("Content-Type", "application/json")
 	w1 := httptest.NewRecorder()
 	service.ServeHTTP(w1, req1)
 
-	if w1.Code != http.StatusCreated {
-		t.Fatalf("First PUT status = %v, want 201", w1.Code)
+	if w1.Code != http.StatusNoContent {
+		t.Fatalf("First PUT status = %v, want 204", w1.Code)
 	}
 
 	// Second PUT – regular update (entity now exists)
@@ -572,6 +571,7 @@ func TestPutUpsert_ThenUpdate(t *testing.T) {
 
 // TestPutUpsert_CompositeKey verifies upsert with a composite key.
 func TestPutUpsert_CompositeKey(t *testing.T) {
+		// Per OData v4 spec, PUT to non-existent entity returns 404 (not 201 create)
 	service, db := setupPutCompositeKeyTestService(t)
 
 	body, _ := json.Marshal(map[string]interface{}{
@@ -584,15 +584,13 @@ func TestPutUpsert_CompositeKey(t *testing.T) {
 	w := httptest.NewRecorder()
 	service.ServeHTTP(w, req)
 
-	if w.Code != http.StatusCreated {
-		t.Fatalf("PUT (upsert) status = %v, want 201. Body: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("PUT (upsert) status = %v, want 404. Body: %s", w.Code, w.Body.String())
 	}
 
-	var created PutTestProductCompositeKey
-	if err := db.Where("product_id = ? AND language_key = ?", 5, "FR").First(&created).Error; err != nil {
-		t.Fatalf("Entity not found after composite-key upsert: %v", err)
-	}
-	if created.Name != "New Entry" {
-		t.Errorf("Name = %v, want 'New Entry'", created.Name)
+	// Verify entity was NOT created
+	var notCreated PutTestProductCompositeKey
+	if err := db.Where("product_id = ? AND language_key = ?", 5, "FR").First(&notCreated).Error; err == nil {
+		t.Fatalf("Entity should not exist after PUT to non-existent composite key")
 	}
 }
