@@ -15,6 +15,8 @@ This guide covers how to define entities in go-odata using Go structs with appro
 - [Computed and Excluded Fields](#computed-and-excluded-fields)
 - [Read Hooks and Query Options](#read-hooks-and-query-options)
 - [Navigation-Only Entities](#navigation-only-entities)
+- [Entity Type Inheritance](#entity-type-inheritance)
+- [Abstract Entity Types](#abstract-entity-types)
 
 ## Basic Entity
 
@@ -653,3 +655,109 @@ With this configuration:
 - `GET /Orders(1)/Items` → **200 OK** (navigation access through parent)
 
 The entity type is still reflected in the OData `$metadata` document (so clients understand the data model), but `OrderItems` is excluded from the service document and the `EntityContainer` so clients are not misled into thinking direct access is possible.
+
+## Entity Type Inheritance
+
+go-odata supports OData entity type inheritance (OData v4.0, Section 10.2). A derived entity type extends a base entity type, inheriting all its properties and key definitions.
+
+To declare a derived entity type, implement `ODataBaseType() string` returning the fully-qualified name of the base entity type:
+
+```go
+// Vehicle is the base entity type with a key and shared properties.
+type Vehicle struct {
+    ID   string `json:"ID" odata:"key"`
+    Make string `json:"Make"`
+}
+
+// Car is a derived entity type that extends Vehicle.
+// It only declares its own additional properties; the key is inherited from Vehicle.
+type Car struct {
+    NumDoors int32 `json:"NumDoors"`
+}
+
+// ODataBaseType declares the fully-qualified base type name.
+// The namespace defaults to the service namespace (e.g. "MyService").
+func (Car) ODataBaseType() string {
+    return "MyService.Vehicle"
+}
+```
+
+**Register both types:**
+
+```go
+if err := service.RegisterEntity(&Vehicle{}); err != nil {
+    log.Fatal(err)
+}
+if err := service.RegisterEntity(&Car{}); err != nil {
+    log.Fatal(err)
+}
+```
+
+**Effect on the metadata document:**
+
+- `Vehicle` is emitted with a `<Key>` element containing `ID`.
+- `Car` is emitted with `BaseType="MyService.Vehicle"` and **no** `<Key>` element (the key is inherited from the base type).
+
+```xml
+<EntityType Name="Vehicle">
+  <Key><PropertyRef Name="ID"/></Key>
+  <Property Name="ID" Type="Edm.String" Nullable="false"/>
+  <Property Name="Make" Type="Edm.String"/>
+</EntityType>
+
+<EntityType Name="Car" BaseType="MyService.Vehicle">
+  <Property Name="NumDoors" Type="Edm.Int32"/>
+</EntityType>
+```
+
+## Abstract Entity Types
+
+Abstract entity types (OData v4.0, Section 10.2.1) serve as base types in a type hierarchy but cannot be instantiated directly. They are useful for defining shared structure and behaviour that concrete derived types must implement.
+
+To mark an entity type as abstract, implement `IsAbstract() bool` returning `true`:
+
+```go
+// Vehicle is an abstract base type. It cannot be instantiated directly.
+type Vehicle struct {
+    ID   string `json:"ID" odata:"key"`
+    Make string `json:"Make"`
+}
+
+// IsAbstract marks this type as abstract in the OData metadata document.
+func (Vehicle) IsAbstract() bool {
+    return true
+}
+
+// Car is a concrete derived type that extends the abstract Vehicle.
+type Car struct {
+    NumDoors int32 `json:"NumDoors"`
+}
+
+func (Car) ODataBaseType() string {
+    return "MyService.Vehicle"
+}
+```
+
+**Effect on the metadata document:**
+
+The `Abstract="true"` attribute is emitted on the base type:
+
+```xml
+<EntityType Name="Vehicle" Abstract="true">
+  <Key><PropertyRef Name="ID"/></Key>
+  <Property Name="ID" Type="Edm.String" Nullable="false"/>
+  <Property Name="Make" Type="Edm.String"/>
+</EntityType>
+
+<EntityType Name="Car" BaseType="MyService.Vehicle">
+  <Property Name="NumDoors" Type="Edm.Int32"/>
+</EntityType>
+```
+
+In the JSON CSDL format (`$metadata` with `Accept: application/json`), the abstract flag is represented as `"$Abstract": true`.
+
+**Notes:**
+
+- An abstract type must still define at least one key property (unless it is itself a derived type).
+- Concrete derived types set `IsAbstract() bool` to `false` (or omit the method entirely).
+- A type can be both abstract and a derived type by implementing both `IsAbstract()` and `ODataBaseType()`.
