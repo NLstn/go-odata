@@ -46,9 +46,13 @@ func WriteODataCollectionWithNavigationAndSelect(w http.ResponseWriter, r *http.
 }
 
 func writeODataCollectionResponse(w http.ResponseWriter, r *http.Request, entitySetName string, data interface{}, count *int64, nextLink, deltaLink *string, selectedProps []string) error {
+	if IsAtomFormat(r) {
+		return WriteAtomCollection(w, r, entitySetName, data, count, nextLink, deltaLink, nil)
+	}
+
 	if !IsAcceptableFormat(r) {
 		return WriteError(w, r, http.StatusNotAcceptable, "Not Acceptable",
-			"The requested format is not supported. Only application/json is supported for data responses.")
+			"The requested format is not supported. Only application/json and application/atom+xml are supported for data responses.")
 	}
 
 	metadataLevel := GetODataMetadataLevel(r)
@@ -100,7 +104,19 @@ func writeODataCollectionResponse(w http.ResponseWriter, r *http.Request, entity
 func writeODataCollectionWithNavigationResponse(w http.ResponseWriter, r *http.Request, entitySetName string, data interface{}, count *int64, nextLink, deltaLink *string, metadata EntityMetadataProvider, expandOptions []query.ExpandOption, selectedNavProps []string, fullMetadata *metadata.EntityMetadata, selectedProps []string) error {
 	if !IsAcceptableFormat(r) {
 		return WriteError(w, r, http.StatusNotAcceptable, "Not Acceptable",
-			"The requested format is not supported. Only application/json is supported for data responses.")
+			"The requested format is not supported. Only application/json and application/atom+xml are supported for data responses.")
+	}
+
+	if IsAtomFormat(r) {
+		// For Atom format, transform data with minimal metadata to populate @odata.id per entry.
+		transformedData := addNavigationLinks(data, metadata, expandOptions, selectedNavProps, r, entitySetName, MetadataMinimal, fullMetadata)
+		if transformedData == nil {
+			transformedData = []interface{}{}
+		}
+		keyProps := metadata.GetKeyProperties()
+		err := WriteAtomCollection(w, r, entitySetName, transformedData, count, nextLink, deltaLink, keyProps)
+		releaseOrderedMaps(transformedData)
+		return err
 	}
 
 	metadataLevel := GetODataMetadataLevel(r)
@@ -165,7 +181,7 @@ func writeODataCollectionWithNavigationResponse(w http.ResponseWriter, r *http.R
 func WriteODataDeltaResponse(w http.ResponseWriter, r *http.Request, entitySetName string, entries []map[string]interface{}, deltaLink *string) error {
 	if !IsAcceptableFormat(r) {
 		return WriteError(w, r, http.StatusNotAcceptable, "Not Acceptable",
-			"The requested format is not supported. Only application/json is supported for data responses.")
+			"The requested format is not supported. Only application/json and application/atom+xml are supported for data responses.")
 	}
 
 	metadataLevel := GetODataMetadataLevel(r)

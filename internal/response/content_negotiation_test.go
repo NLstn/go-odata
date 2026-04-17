@@ -3,6 +3,7 @@ package response
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 )
 
@@ -42,8 +43,8 @@ func TestIsAcceptableFormat(t *testing.T) {
 		{
 			name:         "Accept atom+xml only",
 			acceptHeader: "application/atom+xml",
-			want:         false,
-			description:  "Should reject application/atom+xml (not supported for data)",
+			want:         true,
+			description:  "Should accept application/atom+xml (Atom format is supported for data)",
 		},
 		{
 			name:         "Accept wildcard",
@@ -106,6 +107,18 @@ func TestIsAcceptableFormat(t *testing.T) {
 			description: "Should reject $format=application/xml for data endpoints",
 		},
 		{
+			name:        "Format parameter atom",
+			formatParam: "atom",
+			want:        true,
+			description: "Should accept $format=atom for Atom/XML responses",
+		},
+		{
+			name:        "Format parameter application/atom+xml",
+			formatParam: "application/atom+xml",
+			want:        true,
+			description: "Should accept $format=application/atom+xml for Atom/XML responses",
+		},
+		{
 			name:         "Format parameter overrides Accept",
 			acceptHeader: "application/json",
 			formatParam:  "xml",
@@ -116,12 +129,12 @@ func TestIsAcceptableFormat(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			url := "/test"
+			rawURL := "/test"
 			if tt.formatParam != "" {
-				url += "?$format=" + tt.formatParam
+				rawURL += "?$format=" + url.QueryEscape(tt.formatParam)
 			}
 
-			req := httptest.NewRequest(http.MethodGet, url, nil)
+			req := httptest.NewRequest(http.MethodGet, rawURL, nil)
 			if tt.acceptHeader != "" {
 				req.Header.Set("Accept", tt.acceptHeader)
 			}
@@ -135,7 +148,7 @@ func TestIsAcceptableFormat(t *testing.T) {
 	}
 }
 
-// TestDataEndpointsRejectXML tests that data endpoints properly reject XML requests
+// TestDataEndpointsRejectXML tests that data endpoints properly handle XML requests
 func TestDataEndpointsRejectXML(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -144,7 +157,7 @@ func TestDataEndpointsRejectXML(t *testing.T) {
 	}{
 		{"Pure XML", "application/xml", true},
 		{"Pure text/xml", "text/xml", true},
-		{"Pure atom+xml", "application/atom+xml", true},
+		{"Pure atom+xml", "application/atom+xml", false}, // Atom format is now supported
 		{"XML with quality", "application/xml;q=0.9", true},
 		{"JSON only", "application/json", false},
 		{"Wildcard only", "*/*", false},

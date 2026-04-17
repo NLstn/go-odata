@@ -1008,3 +1008,19 @@ func (h *EntityHandler) buildEntityIDFromMap(entityMap map[string]interface{}, r
 
 	return fmt.Sprintf("%s/%s(%s)", baseURL, h.metadata.EntitySetName, strings.Join(parts, ","))
 }
+
+// buildEntityIDFromResult builds the @odata.id value from an entity result (any type).
+func (h *EntityHandler) buildEntityIDFromResult(result interface{}, r *http.Request) string {
+	resultValue := reflect.ValueOf(result)
+	switch resultValue.Kind() {
+	case reflect.Ptr:
+		return h.buildEntityIDFromValue(resultValue.Elem(), r)
+	case reflect.Struct:
+		return h.buildEntityIDFromValue(resultValue, r)
+	case reflect.Map:
+		if mapResult, ok := result.(map[string]interface{}); ok {
+			return h.buildEntityIDFromMap(mapResult, r)
+		}
+	}
+	return ""
+}

@@ -226,13 +226,14 @@ func extractMetadataFromAccept(accept string) string {
 }
 
 // IsAcceptableFormat checks if the requested format via Accept header or $format is supported
-// Returns true if the format is acceptable (JSON or wildcard), false otherwise (e.g., XML)
+// Returns true if the format is acceptable (JSON, Atom/XML, or wildcard), false otherwise
 func IsAcceptableFormat(r *http.Request) bool {
-	format := r.URL.Query().Get("$format")
+	format := getFormatParameter(r.URL.RawQuery)
 	if format != "" {
 		parts := strings.Split(format, ";")
 		baseFormat := strings.TrimSpace(parts[0])
-		return baseFormat == "json" || baseFormat == "application/json"
+		return baseFormat == "json" || baseFormat == "application/json" ||
+			baseFormat == "atom" || baseFormat == "application/atom+xml"
 	}
 
 	accept := r.Header.Get("Accept")
@@ -272,14 +273,18 @@ func IsAcceptableFormat(r *http.Request) bool {
 		mediaTypes = append(mediaTypes, mediaType{mimeType: mimeType, quality: quality})
 	}
 
-	var bestJSON, bestXML, bestWildcard float64
+	var bestJSON, bestAtom, bestXML, bestWildcard float64
 	for _, mt := range mediaTypes {
 		switch mt.mimeType {
 		case "application/json":
 			if mt.quality > bestJSON {
 				bestJSON = mt.quality
 			}
-		case "application/xml", "text/xml", "application/atom+xml":
+		case "application/atom+xml":
+			if mt.quality > bestAtom {
+				bestAtom = mt.quality
+			}
+		case "application/xml", "text/xml":
 			if mt.quality > bestXML {
 				bestXML = mt.quality
 			}
@@ -294,6 +299,9 @@ func IsAcceptableFormat(r *http.Request) bool {
 		return true
 	}
 	if bestJSON > 0 {
+		return true
+	}
+	if bestAtom > 0 {
 		return true
 	}
 	if bestXML > 0 {
