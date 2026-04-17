@@ -828,6 +828,11 @@ func main() {
 			Version: "4.01",
 			Suite:   v4_01.JSONBatch,
 		})
+		testSuites = append(testSuites, TestSuiteInfo{
+			Name:    "11.2.5.14_wildcard_select_expand",
+			Version: "4.01",
+			Suite:   v4_01.WildcardSelectExpand,
+		})
 	}
 
 	if len(testSuites) == 0 {

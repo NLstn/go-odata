@@ -559,6 +559,11 @@ func parseSelectOption(queryParams url.Values, entityMetadata *metadata.EntityMe
 
 		// Validate that all selected properties exist (either as entity properties or computed properties).
 		for _, propName := range selectedProps {
+			// Wildcard '*' selects all declared structural properties (OData v4.01 section 5.1.3)
+			if propName == "*" {
+				continue
+			}
+
 			// Handle navigation property paths (e.g., "Product/Name")
 			if strings.Contains(propName, "/") {
 				parts := strings.SplitN(propName, "/", 2)

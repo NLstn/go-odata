@@ -8,9 +8,25 @@ import (
 	"gorm.io/gorm"
 )
 
+// selectContainsWildcard returns true if the selected properties list contains the wildcard '*'.
+// Per OData v4.01 section 5.1.3, '*' means all declared structural properties.
+func selectContainsWildcard(selectedProperties []string) bool {
+	for _, p := range selectedProperties {
+		if strings.TrimSpace(p) == "*" {
+			return true
+		}
+	}
+	return false
+}
+
 // applySelect applies select clause to fetch only specified columns at database level
 func applySelect(db *gorm.DB, selectedProperties []string, expandOptions []ExpandOption, entityMetadata *metadata.EntityMetadata) *gorm.DB {
 	if len(selectedProperties) == 0 {
+		return db
+	}
+
+	// Wildcard '*' selects all structural properties — no column restriction needed at DB level.
+	if selectContainsWildcard(selectedProperties) {
 		return db
 	}
 
@@ -91,6 +107,11 @@ func applySelect(db *gorm.DB, selectedProperties []string, expandOptions []Expan
 // This is called after the query to convert the result to the correct format for OData responses
 func ApplySelect(results interface{}, selectedProperties []string, entityMetadata *metadata.EntityMetadata, expandOptions []ExpandOption) interface{} {
 	if len(selectedProperties) == 0 {
+		return results
+	}
+
+	// Wildcard '*' means all structural properties — same as no $select.
+	if selectContainsWildcard(selectedProperties) {
 		return results
 	}
 
@@ -188,6 +209,11 @@ func ApplySelectToEntity(entity interface{}, selectedProperties []string, entity
 		return entity
 	}
 
+	// Wildcard '*' means all structural properties — same as no $select.
+	if selectContainsWildcard(selectedProperties) {
+		return entity
+	}
+
 	selectedPropMap := make(map[string]bool)
 	navPropSelects := make(map[string][]string)
 
@@ -274,6 +300,11 @@ func ApplySelectToEntity(entity interface{}, selectedProperties []string, entity
 // The computedAliases parameter specifies which properties are computed
 func ApplySelectToMapResults(results []map[string]interface{}, selectedProperties []string, entityMetadata *metadata.EntityMetadata, computedAliases map[string]bool) []map[string]interface{} {
 	if len(selectedProperties) == 0 {
+		return results
+	}
+
+	// Wildcard '*' means all structural properties — same as no $select.
+	if selectContainsWildcard(selectedProperties) {
 		return results
 	}
 
