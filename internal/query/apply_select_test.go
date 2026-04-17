@@ -465,4 +465,13 @@ func TestParseSelectWildcard(t *testing.T) {
 			t.Errorf("expected Select=[*], got %v", opts.Select)
 		}
 	})
+
+	t.Run("$select=* is rejected in OData 4.0 mode even without metadata", func(t *testing.T) {
+		params := url.Values{}
+		params.Set("$select", "*")
+		_, err := ParseQueryOptionsWithConfigAndCaseSensitivity(params, nil, nil, false)
+		if err == nil {
+			t.Fatal("expected error for $select=* in OData 4.0 mode without metadata, got nil")
+		}
+	})
 }

@@ -40,19 +40,18 @@ func parseExpandWithConfig(expandStr string, entityMetadata *metadata.EntityMeta
 				}
 			}
 		} else {
-			expandedParts = append(expandedParts, part)
+			expandedParts = append(expandedParts, trimmed)
 		}
 	}
 
 	result := make([]ExpandOption, 0, len(expandedParts))
 
 	for _, part := range expandedParts {
-		trimmed := strings.TrimSpace(part)
-		if trimmed == "" {
+		if part == "" {
 			continue
 		}
 
-		expand, err := parseSingleExpandCoreWithConfig(trimmed, entityMetadata, true, config, currentDepth, caseInsensitive)
+		expand, err := parseSingleExpandCoreWithConfig(part, entityMetadata, true, config, currentDepth, caseInsensitive)
 		if err != nil {
 			return nil, err
 		}
