@@ -1627,91 +1627,113 @@ func TestParseExpandWithAllNestedOptionsIncludingCountAndLevels(t *testing.T) {
 
 // TestParseExpandWildcard tests $expand=* wildcard (OData v4.01 section 5.1.3)
 func TestParseExpandWildcard(t *testing.T) {
-authorMeta, _ := buildAuthorBookMetadata(t)
+	authorMeta, _ := buildAuthorBookMetadata(t)
 
-t.Run("$expand=* expands to all navigation properties", func(t *testing.T) {
-params := url.Values{}
-params.Set("$expand", "*")
+	t.Run("$expand=* expands to all navigation properties (OData v4.01)", func(t *testing.T) {
+		params := url.Values{}
+		params.Set("$expand", "*")
 
-opts, err := ParseQueryOptions(params, authorMeta)
-if err != nil {
-t.Fatalf("unexpected error for $expand=*: %v", err)
-}
+		opts, err := ParseQueryOptions(params, authorMeta) // defaults to 4.01 mode
+		if err != nil {
+			t.Fatalf("unexpected error for $expand=* in OData 4.01 mode: %v", err)
+		}
 
-// TestAuthor has one navigation property: Books
-if len(opts.Expand) == 0 {
-t.Fatal("expected at least one expand option for $expand=*")
-}
+		// TestAuthor has one navigation property: Books
+		if len(opts.Expand) == 0 {
+			t.Fatal("expected at least one expand option for $expand=*")
+		}
 
-found := false
-for _, e := range opts.Expand {
-if e.NavigationProperty == "Books" {
-found = true
-break
-}
-}
-if !found {
-t.Errorf("expected 'Books' to be in expand options, got %v", opts.Expand)
-}
-})
+		found := false
+		for _, e := range opts.Expand {
+			if e.NavigationProperty == "Books" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected 'Books' to be in expand options, got %v", opts.Expand)
+		}
+	})
 
-t.Run("$expand=* without metadata returns error", func(t *testing.T) {
-params := url.Values{}
-params.Set("$expand", "*")
+	t.Run("$expand=* is rejected in OData 4.0 mode", func(t *testing.T) {
+		params := url.Values{}
+		params.Set("$expand", "*")
 
-_, err := ParseQueryOptions(params, nil)
-if err == nil {
-t.Fatal("expected error when using $expand=* without metadata")
-}
-})
+		_, err := ParseQueryOptionsWithConfigAndCaseSensitivity(params, authorMeta, nil, false)
+		if err == nil {
+			t.Fatal("expected error for $expand=* in OData 4.0 mode, got nil")
+		}
+	})
 
-t.Run("$expand=* with multiple navigation properties", func(t *testing.T) {
-authorWithPublisherMeta, err := metadata.AnalyzeEntity(&TestAuthorWithPublisher{})
-if err != nil {
-t.Fatalf("Failed to analyze entity: %v", err)
-}
-bookWithPublisherMeta, err := metadata.AnalyzeEntity(&TestBookWithPublisher{})
-if err != nil {
-t.Fatalf("Failed to analyze entity: %v", err)
-}
-publisherMeta, err := metadata.AnalyzeEntity(&TestPublisher{})
-if err != nil {
-t.Fatalf("Failed to analyze entity: %v", err)
-}
-setEntitiesRegistry(authorWithPublisherMeta, bookWithPublisherMeta, publisherMeta)
+	t.Run("$expand=* without metadata returns error", func(t *testing.T) {
+		params := url.Values{}
+		params.Set("$expand", "*")
 
-params := url.Values{}
-params.Set("$expand", "*")
+		_, err := ParseQueryOptions(params, nil)
+		if err == nil {
+			t.Fatal("expected error when using $expand=* without metadata")
+		}
+	})
 
-opts, err := ParseQueryOptions(params, authorWithPublisherMeta)
-if err != nil {
-t.Fatalf("unexpected error for $expand=*: %v", err)
-}
+	t.Run("$expand=* with multiple navigation properties", func(t *testing.T) {
+		authorWithPublisherMeta, err := metadata.AnalyzeEntity(&TestAuthorWithPublisher{})
+		if err != nil {
+			t.Fatalf("Failed to analyze entity: %v", err)
+		}
+		bookWithPublisherMeta, err := metadata.AnalyzeEntity(&TestBookWithPublisher{})
+		if err != nil {
+			t.Fatalf("Failed to analyze entity: %v", err)
+		}
+		publisherMeta, err := metadata.AnalyzeEntity(&TestPublisher{})
+		if err != nil {
+			t.Fatalf("Failed to analyze entity: %v", err)
+		}
+		setEntitiesRegistry(authorWithPublisherMeta, bookWithPublisherMeta, publisherMeta)
 
-// TestAuthorWithPublisher has two navigation properties: Publisher and Books
-if len(opts.Expand) != 2 {
-t.Fatalf("expected 2 expand options for entity with 2 nav props, got %d", len(opts.Expand))
-}
-})
+		params := url.Values{}
+		params.Set("$expand", "*")
+
+		opts, err := ParseQueryOptions(params, authorWithPublisherMeta)
+		if err != nil {
+			t.Fatalf("unexpected error for $expand=*: %v", err)
+		}
+
+		// TestAuthorWithPublisher has two navigation properties: Publisher and Books
+		if len(opts.Expand) != 2 {
+			t.Fatalf("expected 2 expand options for entity with 2 nav props, got %d", len(opts.Expand))
+		}
+	})
 }
 
 // TestParseExpandWildcardInNestedSelect tests that $select=* works inside nested $expand
 func TestParseExpandWildcardInNestedSelect(t *testing.T) {
-authorMeta, _ := buildAuthorBookMetadata(t)
+	authorMeta, _ := buildAuthorBookMetadata(t)
 
-params := url.Values{}
-params.Set("$expand", "Books($select=*)")
+	t.Run("$select=* in nested expand is allowed in OData 4.01 mode", func(t *testing.T) {
+		params := url.Values{}
+		params.Set("$expand", "Books($select=*)")
 
-opts, err := ParseQueryOptions(params, authorMeta)
-if err != nil {
-t.Fatalf("unexpected error for $expand=Books($select=*): %v", err)
-}
+		opts, err := ParseQueryOptions(params, authorMeta) // defaults to 4.01 mode
+		if err != nil {
+			t.Fatalf("unexpected error for $expand=Books($select=*): %v", err)
+		}
 
-if len(opts.Expand) != 1 {
-t.Fatalf("expected 1 expand option, got %d", len(opts.Expand))
-}
+		if len(opts.Expand) != 1 {
+			t.Fatalf("expected 1 expand option, got %d", len(opts.Expand))
+		}
 
-if len(opts.Expand[0].Select) != 1 || opts.Expand[0].Select[0] != "*" {
-t.Errorf("expected Select=[*] in nested expand, got %v", opts.Expand[0].Select)
-}
+		if len(opts.Expand[0].Select) != 1 || opts.Expand[0].Select[0] != "*" {
+			t.Errorf("expected Select=[*] in nested expand, got %v", opts.Expand[0].Select)
+		}
+	})
+
+	t.Run("$select=* in nested expand is rejected in OData 4.0 mode", func(t *testing.T) {
+		params := url.Values{}
+		params.Set("$expand", "Books($select=*)")
+
+		_, err := ParseQueryOptionsWithConfigAndCaseSensitivity(params, authorMeta, nil, false)
+		if err == nil {
+			t.Fatal("expected error for $select=* in nested expand in OData 4.0 mode, got nil")
+		}
+	})
 }

@@ -433,19 +433,28 @@ func TestSelectWildcard(t *testing.T) {
 func TestParseSelectWildcard(t *testing.T) {
 	meta := getSelectTestMetadata(t)
 
-	t.Run("$select=* passes validation with metadata", func(t *testing.T) {
+	t.Run("$select=* passes validation with metadata in OData 4.01 mode", func(t *testing.T) {
 		params := url.Values{}
 		params.Set("$select", "*")
-		opts, err := ParseQueryOptions(params, meta)
+		opts, err := ParseQueryOptions(params, meta) // defaults to caseInsensitive=true (4.01)
 		if err != nil {
-			t.Fatalf("unexpected error for $select=*: %v", err)
+			t.Fatalf("unexpected error for $select=* in OData 4.01 mode: %v", err)
 		}
 		if len(opts.Select) != 1 || opts.Select[0] != "*" {
 			t.Errorf("expected Select=[*], got %v", opts.Select)
 		}
 	})
 
-	t.Run("$select=* passes validation without metadata", func(t *testing.T) {
+	t.Run("$select=* is rejected in OData 4.0 mode", func(t *testing.T) {
+		params := url.Values{}
+		params.Set("$select", "*")
+		_, err := ParseQueryOptionsWithConfigAndCaseSensitivity(params, meta, nil, false)
+		if err == nil {
+			t.Fatal("expected error for $select=* in OData 4.0 mode, got nil")
+		}
+	})
+
+	t.Run("$select=* passes validation without metadata (version not checked without metadata)", func(t *testing.T) {
 		params := url.Values{}
 		params.Set("$select", "*")
 		opts, err := ParseQueryOptions(params, nil)

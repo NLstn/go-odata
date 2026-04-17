@@ -400,7 +400,7 @@ func ParseQueryOptionsWithConfigAndCaseSensitivity(queryParams url.Values, entit
 		return nil, err
 	}
 
-	if err := parseSelectOption(queryParams, entityMetadata, options); err != nil {
+	if err := parseSelectOption(queryParams, entityMetadata, options, caseInsensitive); err != nil {
 		return nil, err
 	}
 
@@ -528,7 +528,7 @@ func parseFilterOption(queryParams url.Values, entityMetadata *metadata.EntityMe
 }
 
 // parseSelectOption parses the $select query parameter
-func parseSelectOption(queryParams url.Values, entityMetadata *metadata.EntityMetadata, options *QueryOptions) error {
+func parseSelectOption(queryParams url.Values, entityMetadata *metadata.EntityMetadata, options *QueryOptions, caseInsensitive bool) error {
 	if selectStr := queryParams.Get("$select"); selectStr != "" {
 		selectedProps := parseSelect(selectStr)
 
@@ -559,8 +559,12 @@ func parseSelectOption(queryParams url.Values, entityMetadata *metadata.EntityMe
 
 		// Validate that all selected properties exist (either as entity properties or computed properties).
 		for _, propName := range selectedProps {
-			// Wildcard '*' selects all declared structural properties (OData v4.01 section 5.1.3)
+			// Wildcard '*' selects all declared structural properties (OData v4.01 section 5.1.3).
+			// It is only valid when OData v4.01 is negotiated (caseInsensitive=true).
 			if propName == "*" {
+				if !caseInsensitive {
+					return fmt.Errorf("invalid $select: wildcard '*' is only supported in OData v4.01")
+				}
 				continue
 			}
 
