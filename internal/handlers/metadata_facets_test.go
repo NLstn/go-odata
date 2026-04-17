@@ -289,15 +289,17 @@ func TestMetadataWithReferentialConstraintsJSON(t *testing.T) {
 
 func TestEdmTypeMapping(t *testing.T) {
 	type TypeMappingEntity struct {
-		ID            int        `json:"id" odata:"key"`
-		CreatedAt     time.Time  `json:"createdAt"`
-		CreatedAtPtr  *time.Time `json:"createdAtPtr"`
-		IntField      int        `json:"intField"`
-		Int64Field    int64      `json:"int64Field"`
-		Float64Field  float64    `json:"float64Field"`
-		StringField   string     `json:"stringField"`
-		BoolField     bool       `json:"boolField"`
-		BinaryContent []byte     `json:"binaryContent"`
+		ID            int              `json:"id" odata:"key"`
+		CreatedAt     time.Time        `json:"createdAt"`
+		CreatedAtPtr  *time.Time       `json:"createdAtPtr"`
+		IntField      int              `json:"intField"`
+		Int64Field    int64            `json:"int64Field"`
+		Float64Field  float64          `json:"float64Field"`
+		StringField   string           `json:"stringField"`
+		BoolField     bool             `json:"boolField"`
+		BinaryContent []byte           `json:"binaryContent"`
+		RawField      json.RawMessage  `json:"rawField"`
+		AnyField      interface{}      `json:"anyField"`
 	}
 
 	entityMeta, err := metadata.AnalyzeEntity(TypeMappingEntity{})
@@ -315,6 +317,8 @@ func TestEdmTypeMapping(t *testing.T) {
 		"StringField":   "Edm.String",
 		"BoolField":     "Edm.Boolean",
 		"BinaryContent": "Edm.Binary",
+		"RawField":      "Edm.Untyped",
+		"AnyField":      "Edm.Untyped",
 	}
 
 	found := make(map[string]bool)

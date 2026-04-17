@@ -133,6 +133,16 @@ func (h *MetadataHandler) getEdmTypeName(t reflect.Type) string {
 		return h.getEdmTypeName(t.Elem())
 	}
 
+	// interface{} / any → Edm.Untyped
+	if t.Kind() == reflect.Interface {
+		return "Edm.Untyped"
+	}
+
+	// json.RawMessage → Edm.Untyped (must be checked before the slice/array branch)
+	if t.PkgPath() == "encoding/json" && t.Name() == "RawMessage" {
+		return "Edm.Untyped"
+	}
+
 	// Handle slice/array types (Collection)
 	if t.Kind() == reflect.Slice || t.Kind() == reflect.Array {
 		elemType := h.getEdmTypeName(t.Elem())

@@ -1,6 +1,7 @@
 package edm
 
 import (
+	"encoding/json"
 	"reflect"
 	"testing"
 	"time"
@@ -101,6 +102,16 @@ func TestFromGoTypeTable(t *testing.T) {
 			name:     "uint8 maps to Edm.Byte",
 			goType:   reflect.TypeOf(uint8(0)),
 			expected: "Edm.Byte",
+		},
+		{
+			name:     "json.RawMessage maps to Edm.Untyped",
+			goType:   reflect.TypeOf(json.RawMessage{}),
+			expected: "Edm.Untyped",
+		},
+		{
+			name:     "interface{} maps to Edm.Untyped",
+			goType:   reflect.TypeOf((*interface{})(nil)).Elem(),
+			expected: "Edm.Untyped",
 		},
 		{
 			name:    "unsupported kind",

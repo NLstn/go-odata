@@ -491,6 +491,11 @@ func getEdmType(goType reflect.Type) string {
 		goType = goType.Elem()
 	}
 
+	// interface{} / any → Edm.Untyped
+	if goType.Kind() == reflect.Interface {
+		return "Edm.Untyped"
+	}
+
 	// Check for specific types by name
 	typeName := goType.String()
 	switch typeName {
@@ -500,6 +505,8 @@ func getEdmType(goType reflect.Type) string {
 		return "Edm.Guid"
 	case "decimal.Decimal", "github.com/shopspring/decimal.Decimal":
 		return "Edm.Decimal"
+	case "json.RawMessage", "encoding/json.RawMessage":
+		return "Edm.Untyped"
 	}
 
 	switch goType.Kind() {

@@ -123,6 +123,8 @@ type PropertyMetadata struct {
 	IsAuto bool // True if this property is automatically set server-side (clients cannot provide/modify it)
 	// Computed properties
 	IsComputed bool // True if this property is computed server-side and has no database column
+	// Untyped properties
+	IsUntyped bool // True if this property is Edm.Untyped (arbitrary JSON)
 	// Annotations
 	Annotations *AnnotationCollection // OData vocabulary annotations for this property
 }
@@ -705,6 +707,8 @@ func processODataTagPart(property *PropertyMetadata, part string, metadata *Enti
 		property.IsAuto = true
 	case part == "computed":
 		property.IsComputed = true
+	case part == "untyped":
+		property.IsUntyped = true
 	case part == "containment":
 		property.NavigationContainsTarget = true
 	case strings.HasPrefix(part, "annotation:"):

@@ -346,6 +346,7 @@ This distinction follows the OData v4 URL conventions where path segments contai
 | `flags` | Marks the enum property as a flags enum (supports bitwise combinations) | `odata:"enum=Permissions,flags"` |
 | `contenttype=TYPE` | Sets the MIME content type for binary (`[]byte`) properties | `odata:"contenttype=image/png"` |
 | `stream` | Marks the field as an OData named stream property (`Edm.Stream`) | `odata:"stream"` |
+| `untyped` | Marks the field as `Edm.Untyped` — the property can hold arbitrary JSON values | `odata:"untyped"` |
 | `annotation:TERM` | Adds an OData vocabulary annotation to the property | `odata:"annotation:Core.Immutable"` |
 
 ### JSON Tags
@@ -402,6 +403,10 @@ Go types are automatically mapped to EDM types in the OData metadata:
 | `bool` | `Edm.Boolean` |
 | `time.Time` | `Edm.DateTimeOffset` |
 | `[]byte` | `Edm.Binary` |
+| `json.RawMessage` | `Edm.Untyped` |
+| `interface{}` / `any` | `Edm.Untyped` |
+
+Properties tagged with `odata:"untyped"` are always reported as `Edm.Untyped` in the metadata document regardless of their Go type.
 
 ## Computed and Excluded Fields
 
