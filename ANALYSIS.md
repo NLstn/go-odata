@@ -52,8 +52,6 @@ Now I have a thorough understanding of the library. Here is the gap analysis:
 
 | Missing Feature | Spec | Notes |
 |---|---|---|
-| `odata.allow-entityreferences` | v4.0 | Preference to allow `@odata.id` entity references in responses instead of inline content |
-| `odata.include-annotations` | v4.0 | Preference to control which instance annotations are included in responses |
 
 ### HTTP Operations
 

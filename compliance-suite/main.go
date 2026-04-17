@@ -328,6 +328,16 @@ func main() {
 			Suite:   v4_0.HeaderPrefer,
 		})
 		testSuites = append(testSuites, TestSuiteInfo{
+			Name:    "8.2.8.1_preference_allow_entityreferences",
+			Version: "4.0",
+			Suite:   v4_0.PreferenceAllowEntityReferences,
+		})
+		testSuites = append(testSuites, TestSuiteInfo{
+			Name:    "8.2.8.4_preference_include_annotations",
+			Version: "4.0",
+			Suite:   v4_0.PreferenceIncludeAnnotations,
+		})
+		testSuites = append(testSuites, TestSuiteInfo{
 			Name:    "8.2.9_header_maxversion",
 			Version: "4.0",
 			Suite:   v4_0.HeaderMaxVersion,

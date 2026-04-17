@@ -358,3 +358,228 @@ func TestSanitizeForAsyncDispatch_MultipleRespondAsyncTokens(t *testing.T) {
 		t.Fatalf("expected sanitized header 'return=minimal', got '%s'", sanitized)
 	}
 }
+
+// Tests for odata.allow-entityreferences
+
+func TestParsePrefer_AllowEntityReferences(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Prefer", "odata.allow-entityreferences")
+	pref := ParsePrefer(req)
+
+	if !pref.AllowEntityReferences {
+		t.Error("AllowEntityReferences should be true")
+	}
+}
+
+func TestParsePrefer_AllowEntityReferencesCaseInsensitive(t *testing.T) {
+	headers := []string{
+		"ODATA.ALLOW-ENTITYREFERENCES",
+		"Odata.Allow-EntityReferences",
+		"odata.allow-entityreferences",
+	}
+	for _, h := range headers {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.Header.Set("Prefer", h)
+		pref := ParsePrefer(req)
+
+		if !pref.AllowEntityReferences {
+			t.Errorf("AllowEntityReferences should be true for header: %s", h)
+		}
+	}
+}
+
+func TestGetPreferenceApplied_AllowEntityReferences_NotAppliedByDefault(t *testing.T) {
+	pref := &Preference{AllowEntityReferences: true}
+
+	if applied := pref.GetPreferenceApplied(); applied != "" {
+		t.Fatalf("expected empty applied preferences before Apply, got %q", applied)
+	}
+}
+
+func TestGetPreferenceApplied_AllowEntityReferences_Applied(t *testing.T) {
+	pref := &Preference{AllowEntityReferences: true}
+	pref.ApplyAllowEntityReferences()
+
+	if applied := pref.GetPreferenceApplied(); applied != "odata.allow-entityreferences" {
+		t.Fatalf("expected 'odata.allow-entityreferences', got %q", applied)
+	}
+}
+
+func TestApplyAllowEntityReferences_WhenNotRequested(t *testing.T) {
+	pref := &Preference{}
+	pref.ApplyAllowEntityReferences()
+
+	if applied := pref.GetPreferenceApplied(); applied != "" {
+		t.Fatalf("ApplyAllowEntityReferences should be no-op when not requested, got %q", applied)
+	}
+}
+
+// Tests for odata.include-annotations
+
+func TestParsePrefer_IncludeAnnotationsWildcard(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Prefer", `odata.include-annotations="*"`)
+	pref := ParsePrefer(req)
+
+	if pref.IncludeAnnotations == nil {
+		t.Fatal("IncludeAnnotations should be set")
+	}
+	if *pref.IncludeAnnotations != "*" {
+		t.Errorf("expected '*', got %q", *pref.IncludeAnnotations)
+	}
+}
+
+func TestParsePrefer_IncludeAnnotationsUnquoted(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Prefer", "odata.include-annotations=*")
+	pref := ParsePrefer(req)
+
+	if pref.IncludeAnnotations == nil {
+		t.Fatal("IncludeAnnotations should be set for unquoted value")
+	}
+	if *pref.IncludeAnnotations != "*" {
+		t.Errorf("expected '*', got %q", *pref.IncludeAnnotations)
+	}
+}
+
+func TestParsePrefer_IncludeAnnotationsSpecificTerm(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Prefer", `odata.include-annotations="Org.OData.Core.V1.Computed"`)
+	pref := ParsePrefer(req)
+
+	if pref.IncludeAnnotations == nil {
+		t.Fatal("IncludeAnnotations should be set")
+	}
+	if *pref.IncludeAnnotations != "Org.OData.Core.V1.Computed" {
+		t.Errorf("expected 'Org.OData.Core.V1.Computed', got %q", *pref.IncludeAnnotations)
+	}
+}
+
+func TestParsePrefer_IncludeAnnotationsExcludePattern(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Prefer", `odata.include-annotations="*,-Org.OData.Core.V1.Description"`)
+	pref := ParsePrefer(req)
+
+	if pref.IncludeAnnotations == nil {
+		t.Fatal("IncludeAnnotations should be set")
+	}
+	if *pref.IncludeAnnotations != "*,-Org.OData.Core.V1.Description" {
+		t.Errorf("expected '*,-Org.OData.Core.V1.Description', got %q", *pref.IncludeAnnotations)
+	}
+}
+
+func TestParsePrefer_IncludeAnnotationsNotSet(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Prefer", "return=minimal")
+	pref := ParsePrefer(req)
+
+	if pref.IncludeAnnotations != nil {
+		t.Errorf("IncludeAnnotations should be nil when not in header, got %q", *pref.IncludeAnnotations)
+	}
+}
+
+func TestGetPreferenceApplied_IncludeAnnotations_NotAppliedByDefault(t *testing.T) {
+	filter := "*"
+	pref := &Preference{IncludeAnnotations: &filter}
+
+	if applied := pref.GetPreferenceApplied(); applied != "" {
+		t.Fatalf("expected empty applied preferences before Apply, got %q", applied)
+	}
+}
+
+func TestGetPreferenceApplied_IncludeAnnotations_Applied(t *testing.T) {
+	filter := "*"
+	pref := &Preference{IncludeAnnotations: &filter}
+	pref.ApplyIncludeAnnotations()
+
+	if applied := pref.GetPreferenceApplied(); applied != `odata.include-annotations="*"` {
+		t.Fatalf("expected 'odata.include-annotations=\"*\"', got %q", applied)
+	}
+}
+
+func TestApplyIncludeAnnotations_WhenNotRequested(t *testing.T) {
+	pref := &Preference{}
+	pref.ApplyIncludeAnnotations()
+
+	if applied := pref.GetPreferenceApplied(); applied != "" {
+		t.Fatalf("ApplyIncludeAnnotations should be no-op when not requested, got %q", applied)
+	}
+}
+
+// Tests for MatchesAnnotationFilter
+
+func TestMatchesAnnotationFilter_Empty(t *testing.T) {
+	if MatchesAnnotationFilter("Org.OData.Core.V1.Computed", "") {
+		t.Error("empty filter should not match any annotation")
+	}
+}
+
+func TestMatchesAnnotationFilter_Wildcard(t *testing.T) {
+	if !MatchesAnnotationFilter("Org.OData.Core.V1.Computed", "*") {
+		t.Error("'*' should match all annotations")
+	}
+	if !MatchesAnnotationFilter("Custom.Term", "*") {
+		t.Error("'*' should match any annotation")
+	}
+}
+
+func TestMatchesAnnotationFilter_ExcludeAll(t *testing.T) {
+	if MatchesAnnotationFilter("Org.OData.Core.V1.Computed", "-*") {
+		t.Error("'-*' should exclude all annotations")
+	}
+}
+
+func TestMatchesAnnotationFilter_SpecificTerm(t *testing.T) {
+	if !MatchesAnnotationFilter("Org.OData.Core.V1.Computed", "Org.OData.Core.V1.Computed") {
+		t.Error("exact match should include the annotation")
+	}
+	if MatchesAnnotationFilter("Org.OData.Core.V1.Description", "Org.OData.Core.V1.Computed") {
+		t.Error("exact match should exclude non-matching annotations")
+	}
+}
+
+func TestMatchesAnnotationFilter_NamespaceWildcard(t *testing.T) {
+	if !MatchesAnnotationFilter("Org.OData.Core.V1.Computed", "Org.OData.Core.V1.*") {
+		t.Error("namespace wildcard should match annotations in that namespace")
+	}
+	if MatchesAnnotationFilter("Custom.Term", "Org.OData.Core.V1.*") {
+		t.Error("namespace wildcard should not match annotations from other namespaces")
+	}
+}
+
+func TestMatchesAnnotationFilter_CombinedRules(t *testing.T) {
+	// Include all, except Description
+	filter := "*,-Org.OData.Core.V1.Description"
+	if !MatchesAnnotationFilter("Org.OData.Core.V1.Computed", filter) {
+		t.Error("'*,-Description' should include Computed")
+	}
+	if MatchesAnnotationFilter("Org.OData.Core.V1.Description", filter) {
+		t.Error("'*,-Description' should exclude Description")
+	}
+}
+
+func TestMatchesAnnotationFilter_ExcludeAllIncludeSpecific(t *testing.T) {
+	// Exclude all, include only Computed
+	filter := "-*,Org.OData.Core.V1.Computed"
+	if !MatchesAnnotationFilter("Org.OData.Core.V1.Computed", filter) {
+		t.Error("'-*,Computed' should include Computed")
+	}
+	if MatchesAnnotationFilter("Org.OData.Core.V1.Description", filter) {
+		t.Error("'-*,Computed' should exclude Description")
+	}
+}
+
+func TestMatchesAnnotationFilter_LastRuleWins(t *testing.T) {
+	// Wildcard then exclude same term - last rule wins
+	filter := "*,-Org.OData.Core.V1.Computed"
+	if MatchesAnnotationFilter("Org.OData.Core.V1.Computed", filter) {
+		t.Error("'-Computed' should override earlier '*'")
+	}
+}
+
+func TestMatchesAnnotationFilter_CaseInsensitiveTermMatch(t *testing.T) {
+	// OData term names comparison should be case-insensitive
+	if !MatchesAnnotationFilter("Org.OData.Core.V1.Computed", "org.odata.core.v1.computed") {
+		t.Error("term matching should be case-insensitive")
+	}
+}
