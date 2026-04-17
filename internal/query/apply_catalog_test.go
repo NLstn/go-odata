@@ -30,6 +30,9 @@ func TestParseApply_TransformationCatalog_AllSupported(t *testing.T) {
 		{name: "bottompercent", apply: "bottompercent(100,Price)", expectedType: ApplyTransformationType("bottompercent")},
 		{name: "topsum", apply: "topsum(100000,Price)", expectedType: ApplyTransformationType("topsum")},
 		{name: "bottomsum", apply: "bottomsum(100000,Price)", expectedType: ApplyTransformationType("bottomsum")},
+		{name: "groupby-all", apply: "groupby(($all))", expectedType: ApplyTypeGroupBy},
+		{name: "nest", apply: "nest($apply=aggregate(Price with sum as Total))", expectedType: ApplyTypeNest},
+		{name: "from", apply: "from(Lines)", expectedType: ApplyTypeFrom},
 	}
 
 	for _, tt := range tests {

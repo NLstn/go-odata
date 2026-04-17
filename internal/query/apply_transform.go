@@ -94,6 +94,16 @@ func applyTransformations(db *gorm.DB, transformations []ApplyTransformation, en
 		case ApplyTypeFunction:
 			// Service-defined set transformations are recognized by the parser.
 			// Generic SQL-builder execution currently treats them as pass-through.
+		case ApplyTypeNest:
+			// nest() produces a nested sub-collection property on each result row.
+			// Full sub-query nesting requires post-processing outside the SQL builder.
+			// Leave the current set unchanged; the parsed NestTransformation is available
+			// in the transformation model for higher-level handlers to act on.
+		case ApplyTypeFrom:
+			// from() changes the input collection to a related navigation path.
+			// Implementing this requires following a navigation property to a related
+			// entity set and rebasing the query, which is not yet supported at the
+			// SQL-builder layer. Leave the current set unchanged.
 		}
 	}
 	return db
@@ -276,7 +286,19 @@ func applySumThresholdSetTransformation(db *gorm.DB, qualifiedKey string, qualif
 
 // applyGroupBy applies a groupby transformation to the GORM query
 func applyGroupBy(db *gorm.DB, groupBy *GroupByTransformation, entityMetadata *metadata.EntityMetadata) *gorm.DB {
-	if groupBy == nil || len(groupBy.Properties) == 0 {
+	if groupBy == nil {
+		return db
+	}
+
+	// When $all is used, aggregate across the entire input set without any grouping.
+	// This is semantically equivalent to a top-level aggregate() transformation, but
+	// expressed inside groupby to allow referencing all input properties in subsequent
+	// transformations.
+	if groupBy.AllValues {
+		return applyGroupByAll(db, groupBy, entityMetadata)
+	}
+
+	if len(groupBy.Properties) == 0 {
 		return db
 	}
 
@@ -321,6 +343,36 @@ func applyGroupBy(db *gorm.DB, groupBy *GroupByTransformation, entityMetadata *m
 
 	if len(groupByColumns) > 0 {
 		db = db.Group(strings.Join(groupByColumns, ", "))
+	}
+
+	if len(selectColumns) > 0 {
+		db = db.Select(strings.Join(selectColumns, ", "))
+	}
+
+	return db
+}
+
+// applyGroupByAll applies the $all variant of groupby: aggregate over the entire
+// input set without any GROUP BY clause, producing a single result row.
+func applyGroupByAll(db *gorm.DB, groupBy *GroupByTransformation, entityMetadata *metadata.EntityMetadata) *gorm.DB {
+	dialect := getDatabaseDialect(db)
+
+	selectColumns := make([]string, 0)
+	if len(groupBy.Transform) > 0 {
+		for _, trans := range groupBy.Transform {
+			if trans.Type == ApplyTypeAggregate && trans.Aggregate != nil {
+				for _, aggExpr := range trans.Aggregate.Expressions {
+					aggSQL := buildAggregateSQLWithDB(db, dialect, aggExpr, entityMetadata)
+					if aggSQL != "" {
+						selectColumns = append(selectColumns, aggSQL)
+					}
+				}
+			}
+		}
+	} else {
+		// Default to COUNT(*) with no grouping
+		selectColumns = append(selectColumns, fmt.Sprintf("COUNT(*) as %s", quoteIdent(dialect, "$count")))
+		db = setAliasExprInDB(db, "$count", "COUNT(*)")
 	}
 
 	if len(selectColumns) > 0 {

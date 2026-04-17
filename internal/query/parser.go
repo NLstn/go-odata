@@ -69,6 +69,8 @@ type ApplyTransformation struct {
 	Join      *JoinTransformation
 	Set       *SetTransformation
 	Function  *string
+	Nest      *NestTransformation
+	From      *FromTransformation
 }
 
 // ApplyTransformationType represents the type of apply transformation
@@ -97,6 +99,8 @@ const (
 	ApplyTypeDescendants   ApplyTransformationType = "descendants"
 	ApplyTypeTraverse      ApplyTransformationType = "traverse"
 	ApplyTypeFunction      ApplyTransformationType = "function"
+	ApplyTypeNest          ApplyTransformationType = "nest"
+	ApplyTypeFrom          ApplyTransformationType = "from"
 )
 
 // ConcatTransformation represents concat(seq1,seq2,...) where each argument is
@@ -124,9 +128,26 @@ type SetTransformation struct {
 	Count     *int
 }
 
+// NestTransformation represents a nest($apply=...) transformation that nests
+// a transformation sequence result as a sub-collection property on each input entity.
+// The Alias field holds the name of the nested collection property in the response.
+type NestTransformation struct {
+	Apply []ApplyTransformation
+	Alias string
+}
+
+// FromTransformation represents a from(NavigationPath)/... transformation that
+// changes the current input collection to a related collection before applying
+// the subsequent transformation sequence.
+type FromTransformation struct {
+	Path      string
+	Transform []ApplyTransformation
+}
+
 // GroupByTransformation represents a groupby transformation
 type GroupByTransformation struct {
 	Properties []string
+	AllValues  bool                  // True when $all is used instead of a property list
 	Transform  []ApplyTransformation // Nested transformations (typically aggregate)
 }
 

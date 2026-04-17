@@ -87,6 +87,12 @@ type ComputeTransformation = query.ComputeTransformation
 // ComputeExpression re-exports the compute expression type for external consumers.
 type ComputeExpression = query.ComputeExpression
 
+// NestTransformation re-exports the nest transformation type for external consumers.
+type NestTransformation = query.NestTransformation
+
+// FromTransformation re-exports the from transformation type for external consumers.
+type FromTransformation = query.FromTransformation
+
 // ParserConfig re-exports the parser configuration type for external consumers.
 type ParserConfig = query.ParserConfig
 
@@ -176,6 +182,8 @@ const (
 	ApplyTypeCompute   ApplyTransformationType = query.ApplyTypeCompute
 	ApplyTypeJoin      ApplyTransformationType = query.ApplyTypeJoin
 	ApplyTypeOuterJoin ApplyTransformationType = query.ApplyTypeOuterJoin
+	ApplyTypeNest      ApplyTransformationType = query.ApplyTypeNest
+	ApplyTypeFrom      ApplyTransformationType = query.ApplyTypeFrom
 )
 
 // Aggregation method constants
