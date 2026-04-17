@@ -382,8 +382,8 @@ func TestHandlePatch_InvalidJSON(t *testing.T) {
 }
 
 func TestHandlePut_NotFound(t *testing.T) {
-	// PUT to a non-existent key should create the entity (upsert semantics per OData v4 spec 11.4.4)
-	handler, db := setupWriteTestHandler(t)
+	// PUT to a non-existent key should return 404 per OData v4 spec (section 11.4.3)
+	handler, _ := setupWriteTestHandler(t)
 
 	body := `{"ID": 999, "Name": "Updated"}`
 	req := httptest.NewRequest(http.MethodPut, "/WriteTestEntities(999)", strings.NewReader(body))
@@ -392,18 +392,10 @@ func TestHandlePut_NotFound(t *testing.T) {
 
 	handler.HandleEntity(w, req, "999")
 
-	if w.Code != http.StatusCreated {
-		t.Errorf("Status = %v, want %v (upsert should create)", w.Code, http.StatusCreated)
+	if w.Code != http.StatusNotFound {
+		t.Errorf("Status = %v, want %v", w.Code, http.StatusNotFound)
 	}
 
-	// Verify the entity was created
-	var created WriteTestEntity
-	if err := db.First(&created, 999).Error; err != nil {
-		t.Errorf("Entity 999 not found after upsert: %v", err)
-	}
-	if created.Name != "Updated" {
-		t.Errorf("Name = %q, want %q", created.Name, "Updated")
-	}
 }
 
 func TestHandlePut_InvalidJSON(t *testing.T) {
