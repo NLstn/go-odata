@@ -598,3 +598,191 @@ func TestPostEntity_RespondAsyncHonorsRepresentationPreference(t *testing.T) {
 		t.Fatalf("unexpected entity name %v", response["name"])
 	}
 }
+
+// AnnotatedPreferProduct has vocabulary annotations for testing odata.include-annotations
+type AnnotatedPreferProduct struct {
+	ID    uint    `json:"ID" gorm:"primaryKey;autoIncrement" odata:"key"`
+	Name  string  `json:"Name"`
+	Price float64 `json:"Price"`
+	Tag   string  `json:"Tag" odata:"annotation:Core.Description=Tag label"`
+}
+
+func setupAnnotatedPreferService(t *testing.T) (*odata.Service, *gorm.DB) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("Failed to connect to database: %v", err)
+	}
+	if err := db.AutoMigrate(&AnnotatedPreferProduct{}); err != nil {
+		t.Fatalf("Failed to migrate: %v", err)
+	}
+	service, err := odata.NewService(db)
+	if err != nil {
+		t.Fatalf("Failed to create service: %v", err)
+	}
+	if err := service.RegisterEntity(&AnnotatedPreferProduct{}); err != nil {
+		t.Fatalf("Failed to register entity: %v", err)
+	}
+	return service, db
+}
+
+// TestPrefer_AllowEntityReferences_AcceptedOnCollectionRead checks that
+// Prefer: odata.allow-entityreferences is accepted and echoed in Preference-Applied.
+func TestPrefer_AllowEntityReferences_AcceptedOnCollectionRead(t *testing.T) {
+	service, db := setupAnnotatedPreferService(t)
+	db.Create(&AnnotatedPreferProduct{Name: "Widget", Price: 9.99})
+
+	req := httptest.NewRequest(http.MethodGet, "/AnnotatedPreferProducts?$top=2", nil)
+	req.Header.Set("Prefer", "odata.allow-entityreferences")
+	w := httptest.NewRecorder()
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	applied := w.Header().Get("Preference-Applied")
+	if applied != "odata.allow-entityreferences" {
+		t.Errorf("Preference-Applied = %q, want \"odata.allow-entityreferences\"", applied)
+	}
+
+	var resp map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if resp["value"] == nil {
+		t.Error("response must include 'value' array")
+	}
+}
+
+// TestPrefer_AllowEntityReferences_AcceptedOnEntityRead checks that
+// Prefer: odata.allow-entityreferences is echoed in Preference-Applied on single entity GET.
+func TestPrefer_AllowEntityReferences_AcceptedOnEntityRead(t *testing.T) {
+	service, db := setupAnnotatedPreferService(t)
+	db.Create(&AnnotatedPreferProduct{Name: "Gadget", Price: 19.99})
+
+	req := httptest.NewRequest(http.MethodGet, "/AnnotatedPreferProducts(1)", nil)
+	req.Header.Set("Prefer", "odata.allow-entityreferences")
+	w := httptest.NewRecorder()
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	applied := w.Header().Get("Preference-Applied")
+	if applied != "odata.allow-entityreferences" {
+		t.Errorf("Preference-Applied = %q, want \"odata.allow-entityreferences\"", applied)
+	}
+}
+
+// TestPrefer_IncludeAnnotations_WildcardIncludesAll verifies that
+// Prefer: odata.include-annotations="*" keeps vocabulary annotations in full metadata.
+func TestPrefer_IncludeAnnotations_WildcardIncludesAll(t *testing.T) {
+	service, db := setupAnnotatedPreferService(t)
+	db.Create(&AnnotatedPreferProduct{Name: "Alpha", Price: 5.0, Tag: "sale"})
+
+	req := httptest.NewRequest(http.MethodGet, "/AnnotatedPreferProducts(1)?$format=application/json;odata.metadata=full", nil)
+	req.Header.Set("Prefer", `odata.include-annotations="*"`)
+	w := httptest.NewRecorder()
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	applied := w.Header().Get("Preference-Applied")
+	if applied != `odata.include-annotations="*"` {
+		t.Errorf("Preference-Applied = %q, want odata.include-annotations=\"*\"", applied)
+	}
+
+	var resp map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	// The Tag property has a Core.Description annotation; it should be present.
+	if _, ok := resp["Tag@Org.OData.Core.V1.Description"]; !ok {
+		t.Errorf("expected Tag@Org.OData.Core.V1.Description in response with include-annotations=*, got keys: %v", resp)
+	}
+}
+
+// TestPrefer_IncludeAnnotations_ExcludeAllSuppressesAnnotations verifies that
+// Prefer: odata.include-annotations="-*" removes vocabulary annotations from the response.
+func TestPrefer_IncludeAnnotations_ExcludeAllSuppressesAnnotations(t *testing.T) {
+	service, db := setupAnnotatedPreferService(t)
+	db.Create(&AnnotatedPreferProduct{Name: "Beta", Price: 7.0, Tag: "new"})
+
+	req := httptest.NewRequest(http.MethodGet, "/AnnotatedPreferProducts(1)?$format=application/json;odata.metadata=full", nil)
+	req.Header.Set("Prefer", `odata.include-annotations="-*"`)
+	w := httptest.NewRecorder()
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	// No vocabulary annotation should appear even in full metadata.
+	if _, ok := resp["Tag@Org.OData.Core.V1.Description"]; ok {
+		t.Error("Tag@Org.OData.Core.V1.Description should be absent with include-annotations=\"-*\"")
+	}
+}
+
+// TestPrefer_IncludeAnnotations_CollectionResponse verifies annotation filtering on collection reads.
+func TestPrefer_IncludeAnnotations_CollectionResponse(t *testing.T) {
+	service, db := setupAnnotatedPreferService(t)
+	db.Create(&AnnotatedPreferProduct{Name: "Gamma", Price: 12.0, Tag: "clearance"})
+
+	req := httptest.NewRequest(http.MethodGet, "/AnnotatedPreferProducts?$top=1&$format=application/json;odata.metadata=full", nil)
+	req.Header.Set("Prefer", `odata.include-annotations="*"`)
+	w := httptest.NewRecorder()
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	applied := w.Header().Get("Preference-Applied")
+	if applied != `odata.include-annotations="*"` {
+		t.Errorf("Preference-Applied = %q, want odata.include-annotations=\"*\"", applied)
+	}
+
+	var resp map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	values, ok := resp["value"].([]interface{})
+	if !ok || len(values) == 0 {
+		t.Fatal("expected non-empty value array")
+	}
+	item, ok := values[0].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected first item to be a map")
+	}
+	if _, ok := item["Tag@Org.OData.Core.V1.Description"]; !ok {
+		t.Errorf("expected Tag@Org.OData.Core.V1.Description in collection item with include-annotations=*, got keys: %v", item)
+	}
+}
+
+// TestPrefer_IncludeAnnotations_PreferenceApplied_NotSetWithoutAnnotations verifies that
+// the Preference-Applied header is still set even when there are no annotations to filter.
+func TestPrefer_IncludeAnnotations_PreferenceApplied_AlwaysSetWhenRequested(t *testing.T) {
+	service, db := setupPreferTestService(t)
+	db.Create(&PreferTestProduct{Name: "Zeta", Price: 3.0})
+
+	req := httptest.NewRequest(http.MethodGet, "/PreferTestProducts(1)", nil)
+	req.Header.Set("Prefer", `odata.include-annotations="*"`)
+	w := httptest.NewRecorder()
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	applied := w.Header().Get("Preference-Applied")
+	if applied != `odata.include-annotations="*"` {
+		t.Errorf("Preference-Applied should be set whenever include-annotations is requested, got %q", applied)
+	}
+}

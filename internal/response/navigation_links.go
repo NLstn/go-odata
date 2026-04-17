@@ -9,6 +9,7 @@ import (
 
 	"github.com/nlstn/go-odata/internal/etag"
 	internalMetadata "github.com/nlstn/go-odata/internal/metadata"
+	"github.com/nlstn/go-odata/internal/preference"
 	"github.com/nlstn/go-odata/internal/query"
 )
 
@@ -30,16 +31,22 @@ func addNavigationLinks(data interface{}, metadata EntityMetadataProvider, expan
 
 	baseURL := buildBaseURL(r)
 
+	// Parse annotation filter from odata.include-annotations preference
+	var annotationFilter *string
+	if pref := preference.ParsePrefer(r); pref.IncludeAnnotations != nil {
+		annotationFilter = pref.IncludeAnnotations
+	}
+
 	for i := 0; i < dataValue.Len(); i++ {
 		entity := dataValue.Index(i)
 
 		if entity.Kind() == reflect.Map {
-			entityMap := processMapEntity(entity, metadata, expandOptions, selectedNavProps, baseURL, entitySetName, metadataLevel, fullMetadata)
+			entityMap := processMapEntity(entity, metadata, expandOptions, selectedNavProps, baseURL, entitySetName, metadataLevel, fullMetadata, annotationFilter)
 			if entityMap != nil {
 				result[i] = entityMap
 			}
 		} else {
-			orderedMap := processStructEntityOrdered(entity, metadata, expandOptions, selectedNavProps, baseURL, entitySetName, metadataLevel, fullMetadata)
+			orderedMap := processStructEntityOrdered(entity, metadata, expandOptions, selectedNavProps, baseURL, entitySetName, metadataLevel, fullMetadata, annotationFilter)
 			result[i] = orderedMap
 		}
 	}
@@ -47,7 +54,7 @@ func addNavigationLinks(data interface{}, metadata EntityMetadataProvider, expan
 	return result
 }
 
-func processMapEntity(entity reflect.Value, metadata EntityMetadataProvider, expandOptions []query.ExpandOption, selectedNavProps []string, baseURL, entitySetName string, metadataLevel string, fullMetadata *internalMetadata.EntityMetadata) map[string]interface{} {
+func processMapEntity(entity reflect.Value, metadata EntityMetadataProvider, expandOptions []query.ExpandOption, selectedNavProps []string, baseURL, entitySetName string, metadataLevel string, fullMetadata *internalMetadata.EntityMetadata, annotationFilter *string) map[string]interface{} {
 	entityMap, ok := entity.Interface().(map[string]interface{})
 	if !ok {
 		return nil
@@ -78,6 +85,9 @@ func processMapEntity(entity reflect.Value, metadata EntityMetadataProvider, exp
 		// Add entity-level vocabulary annotations for full metadata
 		if fullMetadata != nil && fullMetadata.Annotations != nil && fullMetadata.Annotations.Len() > 0 {
 			for _, annotation := range fullMetadata.Annotations.Get() {
+				if annotationFilter != nil && !preference.MatchesAnnotationFilter(annotation.QualifiedTerm(), *annotationFilter) {
+					continue
+				}
 				annotationKey := "@" + annotation.QualifiedTerm()
 				entityMap[annotationKey] = annotation.Value
 			}
@@ -93,6 +103,9 @@ func processMapEntity(entity reflect.Value, metadata EntityMetadataProvider, exp
 				}
 				if prop.Annotations != nil && prop.Annotations.Len() > 0 {
 					for _, annotation := range prop.Annotations.Get() {
+						if annotationFilter != nil && !preference.MatchesAnnotationFilter(annotation.QualifiedTerm(), *annotationFilter) {
+							continue
+						}
 						annotationKey := prop.JsonName + "@" + annotation.QualifiedTerm()
 						entityMap[annotationKey] = annotation.Value
 					}
@@ -144,7 +157,7 @@ func processMapEntity(entity reflect.Value, metadata EntityMetadataProvider, exp
 	return entityMap
 }
 
-func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataProvider, expandOptions []query.ExpandOption, selectedNavProps []string, baseURL, entitySetName string, metadataLevel string, fullMetadata *internalMetadata.EntityMetadata) *OrderedMap {
+func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataProvider, expandOptions []query.ExpandOption, selectedNavProps []string, baseURL, entitySetName string, metadataLevel string, fullMetadata *internalMetadata.EntityMetadata, annotationFilter *string) *OrderedMap {
 	entityType := entity.Type()
 	fieldInfos := getFieldInfos(entityType)
 
@@ -207,6 +220,9 @@ func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataPro
 		// Add entity-level vocabulary annotations for full metadata
 		if fullMetadata != nil && fullMetadata.Annotations != nil && fullMetadata.Annotations.Len() > 0 {
 			for _, annotation := range fullMetadata.Annotations.Get() {
+				if annotationFilter != nil && !preference.MatchesAnnotationFilter(annotation.QualifiedTerm(), *annotationFilter) {
+					continue
+				}
 				annotationKey := "@" + annotation.QualifiedTerm()
 				entityMap.Set(annotationKey, annotation.Value)
 			}
@@ -258,6 +274,9 @@ func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataPro
 				if fullProp := fullPropMetaByName[field.Name]; fullProp != nil {
 					if fullProp.Annotations != nil && fullProp.Annotations.Len() > 0 {
 						for _, annotation := range fullProp.Annotations.Get() {
+							if annotationFilter != nil && !preference.MatchesAnnotationFilter(annotation.QualifiedTerm(), *annotationFilter) {
+								continue
+							}
 							annotationKey := info.JsonName + "@" + annotation.QualifiedTerm()
 							entityMap.Set(annotationKey, annotation.Value)
 						}

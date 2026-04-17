@@ -10,6 +10,7 @@ import (
 
 	"github.com/nlstn/go-odata/internal/etag"
 	"github.com/nlstn/go-odata/internal/odataerrors"
+	"github.com/nlstn/go-odata/internal/preference"
 	"github.com/nlstn/go-odata/internal/query"
 	"github.com/nlstn/go-odata/internal/response"
 	"gorm.io/gorm"
@@ -183,6 +184,18 @@ func (h *EntityHandler) writeEntityResponseWithETag(w http.ResponseWriter, r *ht
 			h.logger.Error("Error writing error response", "error", err)
 		}
 		return
+	}
+
+	// Honor odata.include-annotations and odata.allow-entityreferences preferences on entity reads.
+	pref := preference.ParsePrefer(r)
+	if pref.IncludeAnnotations != nil {
+		pref.ApplyIncludeAnnotations()
+	}
+	if pref.AllowEntityReferences {
+		pref.ApplyAllowEntityReferences()
+	}
+	if applied := pref.GetPreferenceApplied(); applied != "" {
+		w.Header().Set(HeaderPreferenceApplied, applied)
 	}
 
 	// Use pre-computed ETag if provided, otherwise generate it

@@ -10,6 +10,7 @@ import (
 
 	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/odataerrors"
+	"github.com/nlstn/go-odata/internal/preference"
 	"github.com/nlstn/go-odata/internal/query"
 	"github.com/nlstn/go-odata/internal/response"
 	"github.com/nlstn/go-odata/internal/trackchanges"
@@ -562,7 +563,11 @@ func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{
 
 		// Add entity-level vocabulary annotations for full metadata
 		if h.metadata.Annotations != nil && h.metadata.Annotations.Len() > 0 {
+			pref := preference.ParsePrefer(r)
 			for _, annotation := range h.metadata.Annotations.Get() {
+				if pref.IncludeAnnotations != nil && !preference.MatchesAnnotationFilter(annotation.QualifiedTerm(), *pref.IncludeAnnotations) {
+					continue
+				}
 				annotationKey := "@" + annotation.QualifiedTerm()
 				odataResponse.Set(annotationKey, annotation.Value)
 			}
@@ -605,6 +610,7 @@ func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{
 			}
 
 			// Iterate over map keys in a consistent order
+			pref := preference.ParsePrefer(r)
 			for _, key := range reflect.ValueOf(mapResult).MapKeys() {
 				keyStr := key.String()
 				value := reflect.ValueOf(mapResult).MapIndex(key)
@@ -615,6 +621,9 @@ func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{
 					propMeta := h.findPropertyMetadata(keyStr)
 					if propMeta != nil && propMeta.Annotations != nil && propMeta.Annotations.Len() > 0 {
 						for _, annotation := range propMeta.Annotations.Get() {
+							if pref.IncludeAnnotations != nil && !preference.MatchesAnnotationFilter(annotation.QualifiedTerm(), *pref.IncludeAnnotations) {
+								continue
+							}
 							annotationKey := keyStr + "@" + annotation.QualifiedTerm()
 							odataResponse.Set(annotationKey, annotation.Value)
 						}
@@ -665,6 +674,7 @@ func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{
 		resultValue = resultValue.Elem()
 	}
 
+	pref := preference.ParsePrefer(r)
 	entityType := resultValue.Type()
 	for i := 0; i < resultValue.NumField(); i++ {
 		field := entityType.Field(i)
@@ -731,6 +741,9 @@ func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{
 			// Regular property - add property-level annotations first (for full metadata)
 			if metadataLevel == "full" && propMeta != nil && propMeta.Annotations != nil && propMeta.Annotations.Len() > 0 {
 				for _, annotation := range propMeta.Annotations.Get() {
+					if pref.IncludeAnnotations != nil && !preference.MatchesAnnotationFilter(annotation.QualifiedTerm(), *pref.IncludeAnnotations) {
+						continue
+					}
 					annotationKey := jsonName + "@" + annotation.QualifiedTerm()
 					odataResponse.Set(annotationKey, annotation.Value)
 				}

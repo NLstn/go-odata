@@ -50,6 +50,18 @@ func (h *EntityHandler) collectionResponseWriter(w http.ResponseWriter, r *http.
 			pref.ApplyTrackChanges()
 		}
 
+		// Honor odata.allow-entityreferences: mark as applied when the preference is present.
+		// The service may return @odata.id references for repeated entities (per OData v4 §8.2.8.1).
+		if pref.AllowEntityReferences {
+			pref.ApplyAllowEntityReferences()
+		}
+
+		// Honor odata.include-annotations: mark as applied when a filter pattern was specified.
+		// The annotation filtering is applied during response serialization in the response package.
+		if pref.IncludeAnnotations != nil {
+			pref.ApplyIncludeAnnotations()
+		}
+
 		if applied := pref.GetPreferenceApplied(); applied != "" {
 			w.Header().Set(HeaderPreferenceApplied, applied)
 		}
