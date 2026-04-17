@@ -12,7 +12,7 @@ import (
 // Per OData v4.01 section 5.1.3, '*' means all declared structural properties.
 func selectContainsWildcard(selectedProperties []string) bool {
 	for _, p := range selectedProperties {
-		if strings.TrimSpace(p) == "*" {
+		if p == "*" {
 			return true
 		}
 	}
