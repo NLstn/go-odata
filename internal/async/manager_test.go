@@ -21,6 +21,12 @@ func newTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("failed to open database: %v", err)
 	}
+	t.Cleanup(func() {
+		sqlDB, err := db.DB()
+		if err == nil {
+			_ = sqlDB.Close()
+		}
+	})
 	return db
 }
 
@@ -344,6 +350,7 @@ func TestJobRetryAfter(t *testing.T) {
 		if duration != retryDuration {
 			t.Errorf("expected retry duration %v, got %v", retryDuration, duration)
 		}
+		job.Wait()
 	})
 
 	t.Run("without retry-after", func(t *testing.T) {
@@ -359,6 +366,7 @@ func TestJobRetryAfter(t *testing.T) {
 		if ok {
 			t.Error("expected retry-after to not be set")
 		}
+		job.Wait()
 	})
 }
 
