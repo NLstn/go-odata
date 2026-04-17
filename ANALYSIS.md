@@ -28,9 +28,8 @@ Now I have a thorough understanding of the library. Here is the gap analysis:
 | Missing Feature | Spec | Notes |
 |---|---|---|
 | `rollup()` | v4.0 aggregation ext. | Subtotals at multiple aggregation levels within `groupby` |
-| `$all` in `groupby` | v4.0 aggregation ext. | Aggregates across all values (no grouping) |
-| `from()` clause in aggregate | v4.0 aggregation ext. | Aggregate from a related collection path |
-| `nest()` transformation | v4.0 aggregation ext. | Nests a transformation result as a sub-collection |
+| `from()` clause in aggregate | v4.0 aggregation ext. | Aggregate from a related collection path; parsed but navigation-based execution not yet supported at SQL-builder layer |
+| `nest()` transformation | v4.0 aggregation ext. | Nests a transformation result as a sub-collection; parsed but sub-query nesting not yet executed at SQL-builder layer |
 
 ### Metadata / EDMX (CSDL)
 

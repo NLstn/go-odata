@@ -106,6 +106,8 @@ func canonicalizeApplyTransformationKeyword(transStr string) string {
 		"traverse(",
 		"top(",
 		"skip(",
+		"nest(",
+		"from(",
 	}
 
 	for _, keyword := range keywords {
@@ -210,6 +212,10 @@ func parseApplyTransformationWithAliases(transStr string, entityMetadata *metada
 		return parseHierarchyTransformation(transStr, ApplyTypeDescendants)
 	} else if strings.HasPrefix(transStr, "traverse(") {
 		return parseHierarchyTransformation(transStr, ApplyTypeTraverse)
+	} else if strings.HasPrefix(transStr, "nest(") {
+		return parseNestTransformation(transStr, entityMetadata, maxInClauseSize, caseInsensitive)
+	} else if strings.HasPrefix(transStr, "from(") {
+		return parseFromTransformation(transStr)
 	} else if fnName, ok := parseServiceDefinedFunctionTransformation(transStr); ok {
 		return nil, fmt.Errorf("service-defined set transformation '%s' is not supported", fnName)
 	}
@@ -257,6 +263,7 @@ func extractAliasesFromTransformation(trans *ApplyTransformation, aliases map[st
 // parseGroupBy parses a groupby transformation
 // Format: groupby((prop1,prop2), aggregate(expr))
 // or: groupby((prop1,prop2))
+// or: groupby(($all), aggregate(expr))  -- aggregates over the entire input set
 func parseGroupBy(transStr string, entityMetadata *metadata.EntityMetadata, caseInsensitive bool) (*ApplyTransformation, error) {
 	if !strings.HasPrefix(transStr, "groupby(") {
 		return nil, errInvalidGroupByFormat
@@ -273,6 +280,7 @@ func parseGroupBy(transStr string, entityMetadata *metadata.EntityMetadata, case
 	// Parse the groupby properties and optional transformations
 	// Format: (prop1,prop2), aggregate(...)
 	// or: (prop1,prop2)
+	// or: ($all), aggregate(...)
 
 	// Find the properties section (first parenthesized section)
 	if !strings.HasPrefix(content, "(") {
@@ -286,17 +294,30 @@ func parseGroupBy(transStr string, entityMetadata *metadata.EntityMetadata, case
 	}
 
 	propsStr := content[1:propsEndIdx] // Extract properties without outer parentheses
-	properties := parseGroupByProperties(propsStr)
+	propsStr = strings.TrimSpace(propsStr)
 
-	// Validate properties
-	for _, prop := range properties {
-		if !propertyExists(prop, entityMetadata) {
-			return nil, fmt.Errorf("property '%s' does not exist in entity type", prop)
+	// Check for $all special keyword: groupby(($all), ...)
+	// $all means aggregate across all values without any grouping.
+	allValues := strings.EqualFold(propsStr, "$all")
+
+	var groupBy *GroupByTransformation
+	if allValues {
+		groupBy = &GroupByTransformation{
+			AllValues: true,
 		}
-	}
+	} else {
+		properties := parseGroupByProperties(propsStr)
 
-	groupBy := &GroupByTransformation{
-		Properties: properties,
+		// Validate properties
+		for _, prop := range properties {
+			if !propertyExists(prop, entityMetadata) {
+				return nil, fmt.Errorf("property '%s' does not exist in entity type", prop)
+			}
+		}
+
+		groupBy = &GroupByTransformation{
+			Properties: properties,
+		}
 	}
 
 	// Check if there are nested transformations after the properties
@@ -980,4 +1001,97 @@ func findMatchingCloseParen(s string, startIdx int) int {
 	}
 
 	return -1 // No matching closing parenthesis found
+}
+
+// parseNestTransformation parses a nest($apply=...) or nest($apply=..., alias) transformation.
+// Format: nest($apply=transformationSequence)
+// or:     nest($apply=transformationSequence, alias)
+//
+// The nest transformation nests the result of an inner $apply transformation as a
+// sub-collection property on each entity in the current input set.
+func parseNestTransformation(transStr string, entityMetadata *metadata.EntityMetadata, maxInClauseSize int, caseInsensitive bool) (*ApplyTransformation, error) {
+	content := transStr[len("nest("):]
+	if !strings.HasSuffix(content, ")") {
+		return nil, fmt.Errorf("missing closing parenthesis in nest")
+	}
+	content = strings.TrimSpace(content[:len(content)-1])
+	if content == "" {
+		return nil, fmt.Errorf("nest requires a $apply= argument")
+	}
+
+	// Parse: $apply=transformationSequence[, alias]
+	// Split at the top-level comma to separate $apply= value from optional alias
+	applyPrefix := "$apply="
+	if !strings.HasPrefix(strings.ToLower(content), applyPrefix) {
+		return nil, fmt.Errorf("nest argument must start with $apply=")
+	}
+	applyContent := content[len(applyPrefix):]
+
+	// Check for an optional alias after the transformation sequence
+	alias := ""
+	// Split top-level: everything before the last top-level comma is the $apply, after is alias
+	commaIdx := -1
+	depth := 0
+	for i := 0; i < len(applyContent); i++ {
+		switch applyContent[i] {
+		case '(':
+			depth++
+		case ')':
+			depth--
+		case ',':
+			if depth == 0 {
+				commaIdx = i
+			}
+		}
+	}
+	if commaIdx >= 0 {
+		alias = strings.TrimSpace(applyContent[commaIdx+1:])
+		applyContent = strings.TrimSpace(applyContent[:commaIdx])
+	}
+
+	innerTransforms, err := parseApplyWithCaseSensitivity(applyContent, entityMetadata, maxInClauseSize, caseInsensitive)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse nest inner transformation: %w", err)
+	}
+
+	return &ApplyTransformation{
+		Type: ApplyTypeNest,
+		Nest: &NestTransformation{
+			Apply: innerTransforms,
+			Alias: alias,
+		},
+	}, nil
+}
+
+// parseFromTransformation parses a from(NavigationPath) transformation.
+// Format: from(NavigationPath)
+//
+// The from transformation changes the current input collection to the related collection
+// identified by NavigationPath before applying the subsequent transformation sequence.
+// At the SQL-builder layer this is a pass-through; higher-level handlers may act on
+// the FromTransformation.Path to rebase the query onto the related collection.
+func parseFromTransformation(transStr string) (*ApplyTransformation, error) {
+	content := transStr[len("from("):]
+	if !strings.HasSuffix(content, ")") {
+		return nil, fmt.Errorf("missing closing parenthesis in from")
+	}
+	content = strings.TrimSpace(content[:len(content)-1])
+	if content == "" {
+		return nil, fmt.Errorf("from requires a navigation path argument")
+	}
+
+	// Split "NavigationPath/transformationSequence" at the first slash
+	// that is not inside parentheses.
+	// The navigation path is the part inside the from() parens.
+	// However, per the spec, the from() call itself only contains the path;
+	// subsequent transformations are chained via '/' at the outer level.
+	// Here the parser receives just the content of from(...), which is the path.
+	path := content
+
+	return &ApplyTransformation{
+		Type: ApplyTypeFrom,
+		From: &FromTransformation{
+			Path: path,
+		},
+	}, nil
 }
