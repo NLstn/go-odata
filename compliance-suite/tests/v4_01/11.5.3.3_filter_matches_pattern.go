@@ -205,8 +205,6 @@ func MatchesPatternFilter() *framework.TestSuite {
 	)
 
 	// Test 6: Verify matchesPattern is OData v4.01-specific by checking it works when 4.01 is negotiated
-	// Note: The implementation also supports 4.0 clients as a convenience (per the spec, the function is
-	// available to 4.01 clients), so this test verifies the positive case under 4.01 negotiation.
 	suite.AddTest(
 		"test_matchespattern_version_negotiation_4_01",
 		"matchesPattern works correctly when OData-MaxVersion: 4.01 is negotiated",
@@ -243,6 +241,25 @@ func MatchesPatternFilter() *framework.TestSuite {
 				}
 			}
 			return nil
+		},
+	)
+
+	// Test 7: matchesPattern is rejected when OData-MaxVersion: 4.0 is negotiated (4.01-only feature)
+	suite.AddTest(
+		"test_matchespattern_version_negotiation_4_0_rejected",
+		"matchesPattern returns 400 Bad Request when OData-MaxVersion: 4.0 is negotiated (4.01-only feature)",
+		func(ctx *framework.TestContext) error {
+			pattern := `^[A-Z]`
+			filterExpr := fmt.Sprintf("matchesPattern(Name,'%s')", pattern)
+			encodedFilter := url.QueryEscape(filterExpr)
+			resp, err := ctx.GETWithHeaders(
+				"/Products?$filter="+encodedFilter,
+				map[string]string{"OData-MaxVersion": "4.0"},
+			)
+			if err != nil {
+				return err
+			}
+			return ctx.AssertStatusCode(resp, http.StatusBadRequest)
 		},
 	)
 

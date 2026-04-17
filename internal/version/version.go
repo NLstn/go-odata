@@ -58,6 +58,9 @@ func (v Version) Supports(feature string) bool {
 	case "schemaversion":
 		// $schemaversion system query option added in OData 4.01 (§11.2.12)
 		return v.Major > 4 || (v.Major == 4 && v.Minor >= 1)
+	case "matchespattern":
+		// matchesPattern() filter function added in OData 4.01 (§11.5.3.3)
+		return v.Major > 4 || (v.Major == 4 && v.Minor >= 1)
 	default:
 		return false
 	}

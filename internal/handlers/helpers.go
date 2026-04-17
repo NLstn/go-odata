@@ -140,6 +140,19 @@ func usesDivByOperator(filter *query.FilterExpression) bool {
 	return usesDivByOperator(filter.Left) || usesDivByOperator(filter.Right)
 }
 
+func usesMatchesPattern(filter *query.FilterExpression) bool {
+	if filter == nil {
+		return false
+	}
+	if filter.Operator == query.OpMatchesPattern {
+		return true
+	}
+	if filter.Left != nil && filter.Left.Operator == query.OpMatchesPattern {
+		return true
+	}
+	return usesMatchesPattern(filter.Left) || usesMatchesPattern(filter.Right)
+}
+
 func expandHasCompute(expands []query.ExpandOption) bool {
 	for _, expand := range expands {
 		if expand.Compute != nil {
@@ -199,6 +212,12 @@ func validateQueryOptionsForNegotiatedVersion(queryOptions *query.QueryOptions, 
 
 	if usesDivByOperator(queryOptions.Filter) {
 		return fmt.Errorf("invalid $filter: 'divby' operator is not supported in OData %s", negotiated.String())
+	}
+
+	if !negotiated.Supports("matchespattern") {
+		if usesMatchesPattern(queryOptions.Filter) {
+			return fmt.Errorf("invalid $filter: matchesPattern() is not supported in OData %s", negotiated.String())
+		}
 	}
 
 	if queryOptions.Compute != nil || expandHasCompute(queryOptions.Expand) || applyHasCompute(queryOptions.Apply) {
