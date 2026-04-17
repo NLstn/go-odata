@@ -213,7 +213,21 @@ func (h *EntityHandler) handlePatchEntity(w http.ResponseWriter, r *http.Request
 			return newTransactionHandledError(err)
 		}
 
+		// Process deep update: update related entities with inline navigation property data
+		navPropsToRemove, err := h.processDeepUpdateNavigationProperties(ctx, entity, updateData, tx)
+		if err != nil {
+			if writeErr := response.WriteError(w, r, http.StatusBadRequest, "Failed to deep update related entity", err.Error()); writeErr != nil {
+				h.logger.Error("Error writing error response", "error", writeErr)
+			}
+			return newTransactionHandledError(err)
+		}
+
 		h.removeODataBindAnnotations(updateData)
+
+		// Remove processed navigation property keys so GORM does not treat them as columns
+		for _, key := range navPropsToRemove {
+			delete(updateData, key)
+		}
 
 		if err := h.validateDataTypes(updateData); err != nil {
 			if writeErr := response.WriteError(w, r, http.StatusBadRequest, "Invalid data type", err.Error()); writeErr != nil {
@@ -327,8 +341,9 @@ func (h *EntityHandler) returnUpdatedEntity(w http.ResponseWriter, r *http.Reque
 	h.writeEntityResponseWithETag(w, r, updatedEntity, "", http.StatusOK, nil, nil)
 }
 
-// handlePutEntity handles PUT requests for individual entities
-// PUT performs a complete replacement according to OData v4 spec
+// handlePutEntity handles PUT requests for individual entities.
+// PUT performs a complete replacement (OData v4 spec section 11.4.3).
+// If the entity does not exist, it is created (upsert semantics, section 11.4.4).
 func (h *EntityHandler) handlePutEntity(w http.ResponseWriter, r *http.Request, entityKey string) {
 	// Check if there's an overwrite handler
 	if h.overwrite.hasUpdate() {
@@ -357,6 +372,7 @@ func (h *EntityHandler) handlePutEntity(w http.ResponseWriter, r *http.Request, 
 	pref := preference.ParsePrefer(r)
 
 	var changeEvents []changeEvent
+	var createdEntity interface{} // non-nil when the entity was created via upsert
 
 	ctx := r.Context()
 	if err := h.runInTransaction(ctx, r, func(tx *gorm.DB, hookReq *http.Request) error {
@@ -370,28 +386,16 @@ func (h *EntityHandler) handlePutEntity(w http.ResponseWriter, r *http.Request, 
 			return newTransactionHandledError(err)
 		}
 
-		if err := db.First(entity).Error; err != nil {
-			h.handleFetchError(w, r, err, entityKey)
-			return newTransactionHandledError(err)
+		fetchErr := db.First(entity).Error
+		if fetchErr != nil && fetchErr != gorm.ErrRecordNotFound {
+			// Real database error – not just a missing record
+			h.writeDatabaseError(w, r, fetchErr)
+			return newTransactionHandledError(fetchErr)
 		}
 
-		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptorWithEntity(h.metadata, entityKey, entity, nil), auth.OperationUpdate, h.logger) {
-			return newTransactionHandledError(errAuthorizationDenied)
-		}
+		notFound := fetchErr == gorm.ErrRecordNotFound
 
-		if h.metadata.ETagProperty != nil {
-			ifMatch := r.Header.Get(HeaderIfMatch)
-			currentETag := etag.Generate(entity, h.metadata)
-
-			if !etag.Match(ifMatch, currentETag) {
-				if writeErr := response.WriteError(w, r, http.StatusPreconditionFailed, ErrMsgPreconditionFailed,
-					ErrDetailPreconditionFailed); writeErr != nil {
-					h.logger.Error("Error writing error response", "error", writeErr)
-				}
-				return newTransactionHandledError(errETagMismatch)
-			}
-		}
-
+		// Parse the replacement entity from the request body (needed for both paths)
 		replacementEntity := reflect.New(h.metadata.EntityType).Interface()
 		if err := json.NewDecoder(r.Body).Decode(replacementEntity); err != nil {
 			if writeErr := response.WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidRequestBody,
@@ -401,45 +405,94 @@ func (h *EntityHandler) handlePutEntity(w http.ResponseWriter, r *http.Request, 
 			return newTransactionHandledError(err)
 		}
 
-		if err := h.preserveKeyProperties(entity, replacementEntity); err != nil {
-			if writeErr := response.WriteError(w, r, http.StatusInternalServerError, ErrMsgInternalError, err.Error()); writeErr != nil {
-				h.logger.Error("Error writing error response", "error", writeErr)
+		if notFound {
+			// Upsert path: the entity does not exist, so create it with the key from the URL.
+			if err := h.applyKeyFromURL(entityKey, replacementEntity); err != nil {
+				if writeErr := response.WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidKey, err.Error()); writeErr != nil {
+					h.logger.Error("Error writing error response", "error", writeErr)
+				}
+				return newTransactionHandledError(err)
 			}
-			return newTransactionHandledError(err)
-		}
 
-		// Preserve server-managed timestamp fields (like CreatedAt) to avoid MySQL zero datetime issues
-		h.preserveTimestampFields(entity, replacementEntity)
+			if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, "", nil), auth.OperationCreate, h.logger) {
+				return newTransactionHandledError(errAuthorizationDenied)
+			}
 
-		// Preserve immutable properties (annotated with Core.Immutable)
-		h.preserveImmutableProperties(entity, replacementEntity)
+			if err := h.callBeforeCreate(replacementEntity, hookReq); err != nil {
+				h.writeHookError(w, r, err, http.StatusForbidden, "Authorization failed")
+				return newTransactionHandledError(err)
+			}
 
-		if err := h.callBeforeUpdate(entity, hookReq); err != nil {
-			h.writeHookError(w, r, err, http.StatusForbidden, "Authorization failed")
-			return newTransactionHandledError(err)
-		}
+			if err := tx.Create(replacementEntity).Error; err != nil {
+				h.writeDatabaseError(w, r, err)
+				return newTransactionHandledError(err)
+			}
 
-		// Manually increment ETag property (Version field) for PUT operations
-		// GORM's BeforeUpdate hook is not triggered reliably with Updates()
-		if h.metadata.ETagProperty != nil {
-			h.incrementETagProperty(entity)
-			// Copy the incremented version to the replacement entity
-			h.copyETagProperty(entity, replacementEntity)
-		}
+			if err := h.callAfterCreate(replacementEntity, hookReq); err != nil {
+				h.logger.Error("AfterCreate hook failed", "error", err)
+			}
 
-		if err := tx.Model(entity).Select("*").Updates(replacementEntity).Error; err != nil {
-			h.writeDatabaseError(w, r, err)
-			return newTransactionHandledError(err)
-		}
-
-		if err := h.callAfterUpdate(entity, hookReq); err != nil {
-			h.logger.Error("AfterUpdate hook failed", "error", err)
-		}
-
-		if err := tx.First(entity).Error; err != nil {
-			h.logger.Error("Error refreshing entity for change tracking", "error", err)
+			changeEvents = append(changeEvents, changeEvent{entity: replacementEntity, changeType: trackchanges.ChangeTypeAdded})
+			createdEntity = replacementEntity
 		} else {
-			changeEvents = append(changeEvents, changeEvent{entity: entity, changeType: trackchanges.ChangeTypeUpdated})
+			// Update path: entity exists, perform a full replacement.
+			if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptorWithEntity(h.metadata, entityKey, entity, nil), auth.OperationUpdate, h.logger) {
+				return newTransactionHandledError(errAuthorizationDenied)
+			}
+
+			if h.metadata.ETagProperty != nil {
+				ifMatch := r.Header.Get(HeaderIfMatch)
+				currentETag := etag.Generate(entity, h.metadata)
+
+				if !etag.Match(ifMatch, currentETag) {
+					if writeErr := response.WriteError(w, r, http.StatusPreconditionFailed, ErrMsgPreconditionFailed,
+						ErrDetailPreconditionFailed); writeErr != nil {
+						h.logger.Error("Error writing error response", "error", writeErr)
+					}
+					return newTransactionHandledError(errETagMismatch)
+				}
+			}
+
+			if err := h.preserveKeyProperties(entity, replacementEntity); err != nil {
+				if writeErr := response.WriteError(w, r, http.StatusInternalServerError, ErrMsgInternalError, err.Error()); writeErr != nil {
+					h.logger.Error("Error writing error response", "error", writeErr)
+				}
+				return newTransactionHandledError(err)
+			}
+
+			// Preserve server-managed timestamp fields (like CreatedAt) to avoid MySQL zero datetime issues
+			h.preserveTimestampFields(entity, replacementEntity)
+
+			// Preserve immutable properties (annotated with Core.Immutable)
+			h.preserveImmutableProperties(entity, replacementEntity)
+
+			if err := h.callBeforeUpdate(entity, hookReq); err != nil {
+				h.writeHookError(w, r, err, http.StatusForbidden, "Authorization failed")
+				return newTransactionHandledError(err)
+			}
+
+			// Manually increment ETag property (Version field) for PUT operations
+			// GORM's BeforeUpdate hook is not triggered reliably with Updates()
+			if h.metadata.ETagProperty != nil {
+				h.incrementETagProperty(entity)
+				// Copy the incremented version to the replacement entity
+				h.copyETagProperty(entity, replacementEntity)
+			}
+
+			if err := tx.Model(entity).Select("*").Updates(replacementEntity).Error; err != nil {
+				h.writeDatabaseError(w, r, err)
+				return newTransactionHandledError(err)
+			}
+
+			if err := h.callAfterUpdate(entity, hookReq); err != nil {
+				h.logger.Error("AfterUpdate hook failed", "error", err)
+			}
+
+			if err := tx.First(entity).Error; err != nil {
+				h.logger.Error("Error refreshing entity for change tracking", "error", err)
+			} else {
+				changeEvents = append(changeEvents, changeEvent{entity: entity, changeType: trackchanges.ChangeTypeUpdated})
+			}
 		}
 
 		return nil
@@ -453,9 +506,29 @@ func (h *EntityHandler) handlePutEntity(w http.ResponseWriter, r *http.Request, 
 
 	h.finalizeChangeEvents(ctx, changeEvents)
 
-	// Invalidate the entity cache so that subsequent reads reflect the update.
+	// Invalidate the entity cache so that subsequent reads reflect the change.
 	h.invalidateCache()
 
+	if createdEntity != nil {
+		// 201 Created response for the upsert (create) path
+		location := h.buildEntityLocation(r, createdEntity)
+		w.Header().Set("Location", location)
+
+		if applied := pref.GetPreferenceApplied(); applied != "" {
+			w.Header().Set(HeaderPreferenceApplied, applied)
+		}
+
+		if pref.ShouldReturnContent(true) {
+			SetODataHeader(w, HeaderODataEntityId, location)
+			h.writeEntityResponseWithETag(w, r, createdEntity, "", http.StatusCreated, nil, nil)
+		} else {
+			SetODataHeader(w, HeaderODataEntityId, location)
+			w.WriteHeader(http.StatusCreated)
+		}
+		return
+	}
+
+	// 204 No Content (or 200 OK) response for the update path
 	db, err := h.buildKeyQuery(h.db.WithContext(ctx), entityKey)
 	if err != nil {
 		h.writeDatabaseError(w, r, err)
@@ -463,6 +536,74 @@ func (h *EntityHandler) handlePutEntity(w http.ResponseWriter, r *http.Request, 
 	}
 
 	h.writeUpdateResponse(w, r, pref, db)
+}
+
+// applyKeyFromURL parses the URL entity key and sets the corresponding key properties on the
+// entity. This is used for upsert operations (PUT to a non-existent resource) where the key
+// is provided exclusively via the URL and must be stamped onto the new entity.
+func (h *EntityHandler) applyKeyFromURL(entityKey string, entity interface{}) error {
+	entityVal := reflect.ValueOf(entity).Elem()
+
+	// Try composite key format first (e.g. "productID=1,languageKey=EN")
+	components := &response.ODataURLComponents{
+		EntityKeyMap: make(map[string]string),
+	}
+	if err := parseCompositeKey(entityKey, components); err == nil && len(components.EntityKeyMap) > 0 {
+		for _, keyProp := range h.metadata.KeyProperties {
+			rawValue, found := components.EntityKeyMap[keyProp.JsonName]
+			if !found {
+				rawValue, found = components.EntityKeyMap[keyProp.Name]
+			}
+			if !found {
+				return fmt.Errorf("missing key property '%s' in URL", keyProp.JsonName)
+			}
+			field := entityVal.FieldByName(keyProp.Name)
+			if !field.IsValid() || !field.CanSet() {
+				return fmt.Errorf("cannot set key property '%s'", keyProp.Name)
+			}
+			converted := convertKeyValue(rawValue, keyProp.JsonName, h.metadata.KeyProperties)
+			if err := setEntityFieldValue(field, converted); err != nil {
+				return fmt.Errorf("cannot set key property '%s': %w", keyProp.Name, err)
+			}
+		}
+		return nil
+	}
+
+	// Single-key format (e.g. "999" or "EN")
+	if len(h.metadata.KeyProperties) != 1 {
+		return fmt.Errorf("entity has composite keys, please use composite key format: key1=value1,key2=value2")
+	}
+	keyProp := h.metadata.KeyProperties[0]
+	field := entityVal.FieldByName(keyProp.Name)
+	if !field.IsValid() || !field.CanSet() {
+		return fmt.Errorf("cannot set key property '%s'", keyProp.Name)
+	}
+	converted := convertKeyValue(entityKey, keyProp.JsonName, h.metadata.KeyProperties)
+	if err := setEntityFieldValue(field, converted); err != nil {
+		return fmt.Errorf("cannot set key property '%s': %w", keyProp.Name, err)
+	}
+	return nil
+}
+
+// setEntityFieldValue sets a reflect.Value to the given interface value, handling type conversions.
+func setEntityFieldValue(field reflect.Value, value interface{}) error {
+	if value == nil {
+		field.SetZero()
+		return nil
+	}
+	val := reflect.ValueOf(value)
+	if !val.IsValid() {
+		return fmt.Errorf("invalid value")
+	}
+	if val.Type().AssignableTo(field.Type()) {
+		field.Set(val)
+		return nil
+	}
+	if val.Type().ConvertibleTo(field.Type()) {
+		field.Set(val.Convert(field.Type()))
+		return nil
+	}
+	return fmt.Errorf("cannot assign value of type %s to field of type %s", val.Type(), field.Type())
 }
 
 // preserveKeyProperties copies key property values from source to destination

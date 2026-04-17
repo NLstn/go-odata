@@ -173,7 +173,8 @@ func TestPutEntity_WithMissingFields(t *testing.T) {
 }
 
 func TestPutEntity_NonExistent(t *testing.T) {
-	service, _ := setupPutTestService(t)
+	// PUT to a non-existent resource should create the entity (upsert semantics per OData v4 spec 11.4.4)
+	service, db := setupPutTestService(t)
 
 	replacementData := PutTestProduct{
 		Name:        "New Laptop",
@@ -189,9 +190,21 @@ func TestPutEntity_NonExistent(t *testing.T) {
 
 	service.ServeHTTP(w, req)
 
-	// Should return 404 Not Found
-	if w.Code != http.StatusNotFound {
-		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusNotFound, w.Body.String())
+	// Should return 201 Created (upsert semantics)
+	if w.Code != http.StatusCreated {
+		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusCreated, w.Body.String())
+	}
+
+	// Verify the entity was created with key 999
+	var created PutTestProduct
+	if err := db.First(&created, 999).Error; err != nil {
+		t.Errorf("Entity with key 999 not found after upsert: %v", err)
+	}
+	if created.Name != "New Laptop" {
+		t.Errorf("Name = %v, want 'New Laptop'", created.Name)
+	}
+	if created.Price != 999.99 {
+		t.Errorf("Price = %v, want 999.99", created.Price)
 	}
 }
 
@@ -481,5 +494,105 @@ func TestPutEntity_DifferenceFromPatch(t *testing.T) {
 	}
 	if updated.Category != "" {
 		t.Errorf("Category = %v, want empty string (default for PUT)", updated.Category)
+	}
+}
+
+// TestPutUpsert_GetAfterCreate verifies that a GET request after an upsert returns the new entity.
+func TestPutUpsert_GetAfterCreate(t *testing.T) {
+	service, _ := setupPutTestService(t)
+
+	// PUT to non-existent key
+	body, _ := json.Marshal(map[string]interface{}{
+		"name":  "Brand New Product",
+		"price": 42.0,
+	})
+
+	putReq := httptest.NewRequest(http.MethodPut, "/PutTestProducts(42)", bytes.NewBuffer(body))
+	putReq.Header.Set("Content-Type", "application/json")
+	putW := httptest.NewRecorder()
+	service.ServeHTTP(putW, putReq)
+
+	if putW.Code != http.StatusCreated {
+		t.Fatalf("PUT (upsert) status = %v, want %v. Body: %s", putW.Code, http.StatusCreated, putW.Body.String())
+	}
+
+	// GET the newly created entity
+	getReq := httptest.NewRequest(http.MethodGet, "/PutTestProducts(42)", nil)
+	getW := httptest.NewRecorder()
+	service.ServeHTTP(getW, getReq)
+
+	if getW.Code != http.StatusOK {
+		t.Fatalf("GET after upsert status = %v, want 200", getW.Code)
+	}
+
+	var resp map[string]interface{}
+	if err := json.NewDecoder(getW.Body).Decode(&resp); err != nil {
+		t.Fatalf("Failed to decode GET response: %v", err)
+	}
+	if resp["name"] != "Brand New Product" {
+		t.Errorf("GET name = %v, want 'Brand New Product'", resp["name"])
+	}
+}
+
+// TestPutUpsert_ThenUpdate verifies that upsert followed by PUT update works correctly.
+func TestPutUpsert_ThenUpdate(t *testing.T) {
+	service, db := setupPutTestService(t)
+
+	// First PUT – upsert (entity does not exist yet)
+	body1, _ := json.Marshal(map[string]interface{}{"name": "Initial", "price": 10.0})
+	req1 := httptest.NewRequest(http.MethodPut, "/PutTestProducts(77)", bytes.NewBuffer(body1))
+	req1.Header.Set("Content-Type", "application/json")
+	w1 := httptest.NewRecorder()
+	service.ServeHTTP(w1, req1)
+
+	if w1.Code != http.StatusCreated {
+		t.Fatalf("First PUT status = %v, want 201", w1.Code)
+	}
+
+	// Second PUT – regular update (entity now exists)
+	body2, _ := json.Marshal(map[string]interface{}{"name": "Updated", "price": 20.0})
+	req2 := httptest.NewRequest(http.MethodPut, "/PutTestProducts(77)", bytes.NewBuffer(body2))
+	req2.Header.Set("Content-Type", "application/json")
+	w2 := httptest.NewRecorder()
+	service.ServeHTTP(w2, req2)
+
+	if w2.Code != http.StatusNoContent {
+		t.Fatalf("Second PUT status = %v, want 204", w2.Code)
+	}
+
+	// Verify final state
+	var product PutTestProduct
+	if err := db.First(&product, 77).Error; err != nil {
+		t.Fatalf("Entity 77 not found: %v", err)
+	}
+	if product.Name != "Updated" {
+		t.Errorf("Name = %v, want 'Updated'", product.Name)
+	}
+}
+
+// TestPutUpsert_CompositeKey verifies upsert with a composite key.
+func TestPutUpsert_CompositeKey(t *testing.T) {
+	service, db := setupPutCompositeKeyTestService(t)
+
+	body, _ := json.Marshal(map[string]interface{}{
+		"name":        "New Entry",
+		"description": "Created via upsert",
+	})
+
+	req := httptest.NewRequest(http.MethodPut, "/PutTestProductCompositeKeys(productID=5,languageKey='FR')", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("PUT (upsert) status = %v, want 201. Body: %s", w.Code, w.Body.String())
+	}
+
+	var created PutTestProductCompositeKey
+	if err := db.Where("product_id = ? AND language_key = ?", 5, "FR").First(&created).Error; err != nil {
+		t.Fatalf("Entity not found after composite-key upsert: %v", err)
+	}
+	if created.Name != "New Entry" {
+		t.Errorf("Name = %v, want 'New Entry'", created.Name)
 	}
 }
