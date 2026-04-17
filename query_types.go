@@ -129,15 +129,20 @@ const (
 	OpRound   FilterOperator = query.OpRound
 
 	// Date functions
-	OpYear   FilterOperator = query.OpYear
-	OpMonth  FilterOperator = query.OpMonth
-	OpDay    FilterOperator = query.OpDay
-	OpHour   FilterOperator = query.OpHour
-	OpMinute FilterOperator = query.OpMinute
-	OpSecond FilterOperator = query.OpSecond
-	OpDate   FilterOperator = query.OpDate
-	OpTime   FilterOperator = query.OpTime
-	OpNow    FilterOperator = query.OpNow
+	OpYear               FilterOperator = query.OpYear
+	OpMonth              FilterOperator = query.OpMonth
+	OpDay                FilterOperator = query.OpDay
+	OpHour               FilterOperator = query.OpHour
+	OpMinute             FilterOperator = query.OpMinute
+	OpSecond             FilterOperator = query.OpSecond
+	OpDate               FilterOperator = query.OpDate
+	OpTime               FilterOperator = query.OpTime
+	OpNow                FilterOperator = query.OpNow
+	OpFractionalSeconds  FilterOperator = query.OpFractionalSeconds
+	OpTotalOffsetMinutes FilterOperator = query.OpTotalOffsetMinutes
+	OpTotalSeconds       FilterOperator = query.OpTotalSeconds
+	OpMinDatetime        FilterOperator = query.OpMinDatetime
+	OpMaxDatetime        FilterOperator = query.OpMaxDatetime
 
 	// Lambda operators
 	OpAny FilterOperator = query.OpAny

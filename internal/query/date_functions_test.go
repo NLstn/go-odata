@@ -633,6 +633,27 @@ func TestDateFunctions_SQLGeneration(t *testing.T) {
 			expectedSQL:    "CAST(strftime('%m', created_at) AS INTEGER) <= ?",
 			expectedArgsNo: 1,
 		},
+		{
+			name:           "fractionalseconds SQL",
+			filter:         "fractionalseconds(CreatedAt) gt 0.5",
+			expectErr:      false,
+			expectedSQL:    "(CAST(strftime('%f', created_at) AS REAL) - CAST(strftime('%S', created_at) AS INTEGER)) > ?",
+			expectedArgsNo: 1,
+		},
+		{
+			name:           "totaloffsetminutes SQL",
+			filter:         "totaloffsetminutes(CreatedAt) eq -300",
+			expectErr:      false,
+			expectedSQL:    "0 = ?",
+			expectedArgsNo: 1,
+		},
+		{
+			name:           "totalseconds SQL",
+			filter:         "totalseconds(CreatedAt) gt 3600",
+			expectErr:      false,
+			expectedSQL:    "CAST(created_at AS REAL) > ?",
+			expectedArgsNo: 1,
+		},
 	}
 
 	for _, tt := range tests {
@@ -675,6 +696,281 @@ func TestDateFunctions_SQLGeneration(t *testing.T) {
 			}
 			if len(args) != tt.expectedArgsNo {
 				t.Errorf("Expected %d args, got %d", tt.expectedArgsNo, len(args))
+			}
+		})
+	}
+}
+
+func TestDateFunctions_FractionalSeconds(t *testing.T) {
+	meta := getTestMetadataWithDate(t)
+
+	tests := []struct {
+		name      string
+		filter    string
+		expectErr bool
+	}{
+		{
+			name:      "fractionalseconds simple",
+			filter:    "fractionalseconds(CreatedAt) gt 0.5",
+			expectErr: false,
+		},
+		{
+			name:      "fractionalseconds eq zero",
+			filter:    "fractionalseconds(CreatedAt) eq 0",
+			expectErr: false,
+		},
+		{
+			name:      "fractionalseconds wrong argument count",
+			filter:    "fractionalseconds(CreatedAt, 2024) gt 0",
+			expectErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tokenizer := NewTokenizer(tt.filter)
+			tokens, err := tokenizer.TokenizeAll()
+			if err != nil {
+				if !tt.expectErr {
+					t.Fatalf("Tokenization failed: %v", err)
+				}
+				return
+			}
+
+			parser := NewASTParser(tokens)
+			ast, err := parser.Parse()
+			if err != nil {
+				if !tt.expectErr {
+					t.Fatalf("Parsing failed: %v", err)
+				}
+				return
+			}
+
+			defer ReleaseASTNode(ast)
+
+			filterExpr, err := ASTToFilterExpression(ast, meta)
+			if (err != nil) != tt.expectErr {
+				t.Errorf("Expected error: %v, got: %v", tt.expectErr, err)
+			}
+
+			if !tt.expectErr && filterExpr == nil {
+				t.Error("Expected non-nil FilterExpression")
+			}
+		})
+	}
+}
+
+func TestDateFunctions_TotalOffsetMinutes(t *testing.T) {
+	meta := getTestMetadataWithDate(t)
+
+	tests := []struct {
+		name      string
+		filter    string
+		expectErr bool
+	}{
+		{
+			name:      "totaloffsetminutes simple",
+			filter:    "totaloffsetminutes(CreatedAt) eq -300",
+			expectErr: false,
+		},
+		{
+			name:      "totaloffsetminutes zero offset",
+			filter:    "totaloffsetminutes(CreatedAt) eq 0",
+			expectErr: false,
+		},
+		{
+			name:      "totaloffsetminutes wrong argument count",
+			filter:    "totaloffsetminutes(CreatedAt, 2024) eq 0",
+			expectErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tokenizer := NewTokenizer(tt.filter)
+			tokens, err := tokenizer.TokenizeAll()
+			if err != nil {
+				if !tt.expectErr {
+					t.Fatalf("Tokenization failed: %v", err)
+				}
+				return
+			}
+
+			parser := NewASTParser(tokens)
+			ast, err := parser.Parse()
+			if err != nil {
+				if !tt.expectErr {
+					t.Fatalf("Parsing failed: %v", err)
+				}
+				return
+			}
+
+			defer ReleaseASTNode(ast)
+
+			filterExpr, err := ASTToFilterExpression(ast, meta)
+			if (err != nil) != tt.expectErr {
+				t.Errorf("Expected error: %v, got: %v", tt.expectErr, err)
+			}
+
+			if !tt.expectErr && filterExpr == nil {
+				t.Error("Expected non-nil FilterExpression")
+			}
+		})
+	}
+}
+
+func TestDateFunctions_TotalSeconds(t *testing.T) {
+	// Note: totalseconds() per OData spec operates on Edm.Duration values.
+	// The test entity uses a time.Time (datetime) field for parsing validation;
+	// metadata type checking for argument types is not enforced at the query layer.
+	meta := getTestMetadataWithDate(t)
+
+	tests := []struct {
+		name      string
+		filter    string
+		expectErr bool
+	}{
+		{
+			name:      "totalseconds simple",
+			filter:    "totalseconds(CreatedAt) gt 3600",
+			expectErr: false,
+		},
+		{
+			name:      "totalseconds eq zero",
+			filter:    "totalseconds(CreatedAt) eq 0",
+			expectErr: false,
+		},
+		{
+			name:      "totalseconds wrong argument count",
+			filter:    "totalseconds(CreatedAt, 2024) gt 0",
+			expectErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tokenizer := NewTokenizer(tt.filter)
+			tokens, err := tokenizer.TokenizeAll()
+			if err != nil {
+				if !tt.expectErr {
+					t.Fatalf("Tokenization failed: %v", err)
+				}
+				return
+			}
+
+			parser := NewASTParser(tokens)
+			ast, err := parser.Parse()
+			if err != nil {
+				if !tt.expectErr {
+					t.Fatalf("Parsing failed: %v", err)
+				}
+				return
+			}
+
+			defer ReleaseASTNode(ast)
+
+			filterExpr, err := ASTToFilterExpression(ast, meta)
+			if (err != nil) != tt.expectErr {
+				t.Errorf("Expected error: %v, got: %v", tt.expectErr, err)
+			}
+
+			if !tt.expectErr && filterExpr == nil {
+				t.Error("Expected non-nil FilterExpression")
+			}
+		})
+	}
+}
+
+func TestDateFunctions_MinMaxDatetime(t *testing.T) {
+	meta := getTestMetadataWithDate(t)
+
+	tests := []struct {
+		name      string
+		filter    string
+		expectErr bool
+	}{
+		{
+			name:      "mindatetime on right side",
+			filter:    "CreatedAt ge mindatetime()",
+			expectErr: false,
+		},
+		{
+			name:      "maxdatetime on right side",
+			filter:    "CreatedAt le maxdatetime()",
+			expectErr: false,
+		},
+		{
+			name:      "mindatetime with wrong arg count",
+			filter:    "mindatetime(CreatedAt) eq '2024-01-01'",
+			expectErr: true,
+		},
+		{
+			name:      "maxdatetime with wrong arg count",
+			filter:    "maxdatetime(CreatedAt) eq '9999-12-31'",
+			expectErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tokenizer := NewTokenizer(tt.filter)
+			tokens, err := tokenizer.TokenizeAll()
+			if err != nil {
+				if !tt.expectErr {
+					t.Fatalf("Tokenization failed: %v", err)
+				}
+				return
+			}
+
+			parser := NewASTParser(tokens)
+			ast, err := parser.Parse()
+			if err != nil {
+				if !tt.expectErr {
+					t.Fatalf("Parsing failed: %v", err)
+				}
+				return
+			}
+
+			defer ReleaseASTNode(ast)
+
+			filterExpr, err := ASTToFilterExpression(ast, meta)
+			if (err != nil) != tt.expectErr {
+				t.Errorf("Expected error: %v, got: %v", tt.expectErr, err)
+			}
+
+			if !tt.expectErr && filterExpr == nil {
+				t.Error("Expected non-nil FilterExpression")
+			}
+		})
+	}
+}
+
+func TestDateFunctions_MinMaxDatetimeSQL(t *testing.T) {
+	tests := []struct {
+		name        string
+		op          FilterOperator
+		expectedSQL string
+	}{
+		{
+			name:        "mindatetime sqlite",
+			op:          OpMinDatetime,
+			expectedSQL: "datetime('0001-01-01T00:00:00')",
+		},
+		{
+			name:        "maxdatetime sqlite",
+			op:          OpMaxDatetime,
+			expectedSQL: "datetime('9999-12-31T23:59:59')",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			sql, args := buildFunctionSQL("sqlite", tc.op, "", nil)
+			if sql != tc.expectedSQL {
+				t.Errorf("expected SQL %q, got %q", tc.expectedSQL, sql)
+			}
+			if len(args) != 0 {
+				t.Errorf("expected 0 args, got %d", len(args))
 			}
 		})
 	}

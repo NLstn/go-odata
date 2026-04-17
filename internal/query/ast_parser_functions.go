@@ -97,7 +97,7 @@ func convertFunctionCallExprWithContext(n *FunctionCallExpr, entityMetadata *met
 
 // isZeroArgFunction checks if a function takes zero arguments
 func isZeroArgFunction(name string) bool {
-	return name == "now"
+	return name == "now" || name == "mindatetime" || name == "maxdatetime"
 }
 
 // isSingleArgFunction checks if a function takes a single argument
@@ -106,6 +106,7 @@ func isSingleArgFunction(name string) bool {
 		name == "year" || name == "month" || name == "day" ||
 		name == "hour" || name == "minute" || name == "second" ||
 		name == "date" || name == "time" ||
+		name == "fractionalseconds" || name == "totaloffsetminutes" || name == "totalseconds" ||
 		name == "ceiling" || name == "floor" || name == "round"
 }
 
