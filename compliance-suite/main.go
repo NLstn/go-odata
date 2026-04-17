@@ -833,6 +833,11 @@ func main() {
 			Version: "4.01",
 			Suite:   v4_01.WildcardSelectExpand,
 		})
+		testSuites = append(testSuites, TestSuiteInfo{
+			Name:    "11.5.3.3_filter_matches_pattern",
+			Version: "4.01",
+			Suite:   v4_01.MatchesPatternFilter,
+		})
 	}
 
 	if len(testSuites) == 0 {

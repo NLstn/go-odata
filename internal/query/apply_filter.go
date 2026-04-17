@@ -582,6 +582,9 @@ func buildStandardComparison(dialect string, operator FilterOperator, columnName
 	case OpEndsWith:
 		return buildLikeComparison(dialect, columnName, value, true, false)
 
+	case OpMatchesPattern:
+		return buildRegexComparison(dialect, columnName, value)
+
 	case OpHas:
 		return fmt.Sprintf("(%s & ?) = ?", columnName), []interface{}{value, value}
 
@@ -901,6 +904,8 @@ func buildFilterConditionForLambda(dialect string, filter *FilterExpression, nav
 		return buildLikeComparison(dialect, columnName, filter.Value, false, true)
 	case OpEndsWith:
 		return buildLikeComparison(dialect, columnName, filter.Value, true, false)
+	case OpMatchesPattern:
+		return buildRegexComparison(dialect, columnName, filter.Value)
 	default:
 		return "", nil
 	}

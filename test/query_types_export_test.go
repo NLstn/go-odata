@@ -109,6 +109,9 @@ func TestExportedFilterOperators(t *testing.T) {
 	if odata.OpEndsWith != "endswith" {
 		t.Errorf("Expected OpEndsWith to be 'endswith', got %v", odata.OpEndsWith)
 	}
+	if odata.OpMatchesPattern != "matchespattern" {
+		t.Errorf("Expected OpMatchesPattern to be 'matchespattern', got %v", odata.OpMatchesPattern)
+	}
 
 	// Test arithmetic operators
 	if odata.OpAdd != "add" {
