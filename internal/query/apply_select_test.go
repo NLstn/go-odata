@@ -1,6 +1,7 @@
 package query
 
 import (
+	"net/url"
 	"strings"
 	"testing"
 
@@ -370,6 +371,89 @@ func TestApplySelectDatabaseLevel(t *testing.T) {
 			if strings.Contains(selectExpr, "member_id") {
 				t.Fatalf("expected child FK column member_id NOT to appear in parent SELECT, got: %v", selects)
 			}
+		}
+	})
+}
+
+// TestSelectWildcard tests $select=* wildcard behaviour (OData v4.01 section 5.1.3)
+func TestSelectWildcard(t *testing.T) {
+	meta := getSelectTestMetadata(t)
+	db := getSelectTestDB(t)
+
+	products := []selectTestProduct{
+		{ID: 1, Name: "Product1", Price: 10.5, Description: "Desc1", CategoryID: 1},
+		{ID: 2, Name: "Product2", Price: 20.0, Description: "Desc2", CategoryID: 2},
+	}
+
+	t.Run("ApplySelect with wildcard returns results unchanged", func(t *testing.T) {
+		result := ApplySelect(products, []string{"*"}, meta, []ExpandOption{})
+		// Wildcard should not filter — result should equal the input (not converted to maps)
+		if _, ok := result.([]selectTestProduct); !ok {
+			t.Fatal("expected result to be []selectTestProduct (unchanged), got something else")
+		}
+	})
+
+	t.Run("ApplySelectToEntity with wildcard returns entity unchanged", func(t *testing.T) {
+		p := selectTestProduct{ID: 1, Name: "Product1", Price: 10.5}
+		result := ApplySelectToEntity(&p, []string{"*"}, meta, []ExpandOption{})
+		if result != &p {
+			t.Fatal("expected entity to be returned unchanged when wildcard is used")
+		}
+	})
+
+	t.Run("ApplySelectToMapResults with wildcard returns all entries unchanged", func(t *testing.T) {
+		mapResults := []map[string]interface{}{
+			{"ID": 1, "name": "Product1", "price": 10.5, "description": "Desc1"},
+			{"ID": 2, "name": "Product2", "price": 20.0, "description": "Desc2"},
+		}
+		result := ApplySelectToMapResults(mapResults, []string{"*"}, meta, map[string]bool{})
+		if len(result) != 2 {
+			t.Fatalf("expected 2 results, got %d", len(result))
+		}
+		for _, r := range result {
+			if _, ok := r["description"]; !ok {
+				t.Error("expected 'description' to be present when wildcard is used")
+			}
+		}
+	})
+
+	t.Run("applySelect with wildcard applies no column restriction", func(t *testing.T) {
+		result := applySelect(db, []string{"*"}, nil, meta)
+		if result == nil {
+			t.Fatal("expected non-nil db")
+		}
+		// Wildcard: no SELECT clause should be added (fetch all columns)
+		if len(result.Statement.Selects) != 0 {
+			t.Errorf("expected no SELECT clause for wildcard, got: %v", result.Statement.Selects)
+		}
+	})
+}
+
+// TestParseSelectWildcard tests that $select=* parses without validation errors
+func TestParseSelectWildcard(t *testing.T) {
+	meta := getSelectTestMetadata(t)
+
+	t.Run("$select=* passes validation with metadata", func(t *testing.T) {
+		params := url.Values{}
+		params.Set("$select", "*")
+		opts, err := ParseQueryOptions(params, meta)
+		if err != nil {
+			t.Fatalf("unexpected error for $select=*: %v", err)
+		}
+		if len(opts.Select) != 1 || opts.Select[0] != "*" {
+			t.Errorf("expected Select=[*], got %v", opts.Select)
+		}
+	})
+
+	t.Run("$select=* passes validation without metadata", func(t *testing.T) {
+		params := url.Values{}
+		params.Set("$select", "*")
+		opts, err := ParseQueryOptions(params, nil)
+		if err != nil {
+			t.Fatalf("unexpected error for $select=* without metadata: %v", err)
+		}
+		if len(opts.Select) != 1 || opts.Select[0] != "*" {
+			t.Errorf("expected Select=[*], got %v", opts.Select)
 		}
 	})
 }

@@ -20,9 +20,29 @@ func parseExpandWithConfig(expandStr string, entityMetadata *metadata.EntityMeta
 	if err != nil {
 		return nil, err
 	}
-	result := make([]ExpandOption, 0, len(parts))
 
+	// Expand wildcard '*' to all navigation properties (OData v4.01 section 5.1.3)
+	expandedParts := make([]string, 0, len(parts))
 	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed == "*" {
+			if entityMetadata == nil {
+				// Without metadata we cannot enumerate navigation properties
+				return nil, fmt.Errorf("$expand=* requires entity metadata to resolve navigation properties")
+			}
+			for _, prop := range entityMetadata.Properties {
+				if prop.IsNavigationProp {
+					expandedParts = append(expandedParts, prop.JsonName)
+				}
+			}
+		} else {
+			expandedParts = append(expandedParts, part)
+		}
+	}
+
+	result := make([]ExpandOption, 0, len(expandedParts))
+
+	for _, part := range expandedParts {
 		trimmed := strings.TrimSpace(part)
 		if trimmed == "" {
 			continue
@@ -402,6 +422,11 @@ func validateExpandSelect(selectedProps []string, entityMetadata *metadata.Entit
 
 	for _, propName := range selectedProps {
 		if computedAliases != nil && computedAliases[propName] {
+			continue
+		}
+
+		// Wildcard '*' is always valid per OData v4.01 section 5.1.3
+		if propName == "*" {
 			continue
 		}
 
