@@ -620,6 +620,7 @@ func applyMapGroupBy(results []map[string]interface{}, groupBy *query.GroupByTra
 
 		for _, prop := range groupBy.Properties {
 			val, _ := getNestedMapValueCaseInsensitive(row, prop)
+			val = dereferencePointerValue(val)
 			keyParts = append(keyParts, fmt.Sprintf("%v=%v", prop, val))
 			keyRow[prop] = val
 		}
@@ -730,6 +731,7 @@ func applyMapGroupByForProps(results []map[string]interface{}, levelProps []stri
 
 		for _, prop := range levelProps {
 			val, _ := getNestedMapValueCaseInsensitive(row, prop)
+			val = dereferencePointerValue(val)
 			keyParts = append(keyParts, fmt.Sprintf("%v=%v", prop, val))
 			keyRow[prop] = val
 		}
@@ -1228,6 +1230,26 @@ func getMapValueCaseInsensitive(m map[string]interface{}, key string) (interface
 		}
 	}
 	return nil, false
+}
+
+// dereferencePointerValue dereferences a pointer value to its underlying value.
+// GORM scans nullable/pointer struct fields (e.g. CategoryID *uint) as pointer
+// values in map results. When building a group-by key with fmt.Sprintf, pointer
+// addresses are printed instead of the pointed-to value, so two rows with the
+// same CategoryID but different pointer addresses would get different keys.
+// This function resolves the underlying value so that grouping works correctly.
+func dereferencePointerValue(v interface{}) interface{} {
+	if v == nil {
+		return nil
+	}
+	rv := reflect.ValueOf(v)
+	for rv.Kind() == reflect.Ptr {
+		if rv.IsNil() {
+			return nil
+		}
+		rv = rv.Elem()
+	}
+	return rv.Interface()
 }
 
 func compareMapValues(left interface{}, leftOK bool, right interface{}, rightOK bool) int {
