@@ -31,6 +31,25 @@ func (h *MetadataHandler) navigationBindings(model metadataModel, entityMeta *me
 				target: targetEntitySet,
 			})
 		}
+
+		// For complex type properties, include navigation bindings for navigation properties
+		// nested within the complex type using paths like "AddressProp/NavProp".
+		if prop.IsComplexType && len(prop.ComplexTypeFields) > 0 {
+			seen := make(map[*metadata.PropertyMetadata]bool)
+			for _, complexField := range prop.ComplexTypeFields {
+				if seen[complexField] {
+					continue
+				}
+				seen[complexField] = true
+				if complexField.IsNavigationProp {
+					targetEntitySet := model.getEntitySetNameForType(complexField.NavigationTarget)
+					bindings = append(bindings, navigationBinding{
+						path:   prop.JsonName + "/" + complexField.JsonName,
+						target: targetEntitySet,
+					})
+				}
+			}
+		}
 	}
 	return bindings
 }

@@ -575,6 +575,78 @@ func getEdmType(goType reflect.Type) string {
 	}
 }
 
+// complexTypeInfo holds metadata for a complex type discovered in entity properties.
+type complexTypeInfo struct {
+	TypeName string
+	Fields   []*metadata.PropertyMetadata // deduplicated, sorted property list
+}
+
+// collectComplexTypes scans all registered entities and returns a map from complex type name
+// to its complexTypeInfo. Duplicate complex type definitions (same Go struct used by multiple
+// entities or properties) are merged into a single entry.
+func (m metadataModel) collectComplexTypes() map[string]*complexTypeInfo {
+	complexTypes := make(map[string]*complexTypeInfo)
+
+	for _, entityMeta := range m.entities {
+		for i := range entityMeta.Properties {
+			prop := &entityMeta.Properties[i]
+			if !prop.IsComplexType || len(prop.ComplexTypeFields) == 0 {
+				continue
+			}
+
+			typeName := complexTypeGoName(prop)
+			if typeName == "" {
+				continue
+			}
+
+			if _, exists := complexTypes[typeName]; exists {
+				continue
+			}
+
+			complexTypes[typeName] = &complexTypeInfo{
+				TypeName: typeName,
+				Fields:   uniqueComplexTypeProps(prop.ComplexTypeFields),
+			}
+		}
+	}
+
+	return complexTypes
+}
+
+// complexTypeGoName returns the Go struct name used as the OData complex type name.
+func complexTypeGoName(prop *metadata.PropertyMetadata) string {
+	t := prop.Type
+	for t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+	if t.Kind() != reflect.Struct {
+		return ""
+	}
+	return t.Name()
+}
+
+// uniqueComplexTypeProps returns a deduplicated, name-sorted list of properties from a
+// ComplexTypeFields map. The map stores each property twice (by struct name and by JSON
+// name), so pointer-based deduplication is required.
+func uniqueComplexTypeProps(fields map[string]*metadata.PropertyMetadata) []*metadata.PropertyMetadata {
+	seen := make(map[*metadata.PropertyMetadata]bool, len(fields))
+	result := make([]*metadata.PropertyMetadata, 0, len(fields)/2+1)
+
+	for _, prop := range fields {
+		if seen[prop] {
+			continue
+		}
+		seen[prop] = true
+		result = append(result, prop)
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Name < result[j].Name
+	})
+
+	return result
+}
+
 // pluralize creates a simple pluralized form of the entity name
 func pluralize(word string) string {
 	if word == "" {

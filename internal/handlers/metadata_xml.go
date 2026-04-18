@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -111,6 +112,7 @@ func (h *MetadataHandler) buildMetadataDocument(model metadataModel, ver version
 
 	builder.WriteString(h.buildEnumTypes(model))
 	builder.WriteString(h.buildTypeDefinitions(model))
+	builder.WriteString(h.buildComplexTypes(model))
 	builder.WriteString(h.buildEntityTypes(model))
 	builder.WriteString(h.buildFunctionTypes(model))
 	builder.WriteString(h.buildActionTypes(model))
@@ -259,6 +261,84 @@ func (h *MetadataHandler) buildTypeDefinition(name string, info *typeDefinitionI
 	}
 
 	return fmt.Sprintf("      <TypeDefinition Name=%q UnderlyingType=%q%s />\n", name, underlyingType, facets.String())
+}
+
+func (h *MetadataHandler) buildComplexTypes(model metadataModel) string {
+	complexTypes := model.collectComplexTypes()
+	if len(complexTypes) == 0 {
+		return ""
+	}
+
+	names := make([]string, 0, len(complexTypes))
+	for name := range complexTypes {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	var builder strings.Builder
+	for _, name := range names {
+		builder.WriteString(h.buildComplexType(model, complexTypes[name]))
+	}
+	return builder.String()
+}
+
+func (h *MetadataHandler) buildComplexType(model metadataModel, info *complexTypeInfo) string {
+	var builder strings.Builder
+	builder.WriteString(fmt.Sprintf("      <ComplexType Name=%q>\n", info.TypeName))
+
+	for _, prop := range info.Fields {
+		if prop.IsNavigationProp {
+			continue
+		}
+
+		edmType := h.propertyEdmType(model, prop)
+		nullableValue, _ := h.propertyNullable(prop)
+		nullable := "false"
+		if nullableValue {
+			nullable = "true"
+		}
+
+		attrs := fmt.Sprintf(`Name="%s" Type="%s" Nullable="%s"`, prop.JsonName, edmType, nullable)
+
+		if prop.MaxLength > 0 && (edmType == "Edm.String" || edmType == "Edm.Binary") {
+			attrs += fmt.Sprintf(` MaxLength="%d"`, prop.MaxLength)
+		}
+		if edmType == "Edm.Decimal" {
+			if prop.Precision > 0 {
+				attrs += fmt.Sprintf(` Precision="%d"`, prop.Precision)
+			}
+			if prop.Scale > 0 {
+				attrs += fmt.Sprintf(` Scale="%d"`, prop.Scale)
+			}
+		}
+		if prop.DefaultValue != "" {
+			attrs += fmt.Sprintf(` DefaultValue="%s"`, prop.DefaultValue)
+		}
+
+		builder.WriteString(fmt.Sprintf("        <Property %s />\n", attrs))
+	}
+
+	for _, prop := range info.Fields {
+		if !prop.IsNavigationProp {
+			continue
+		}
+
+		navTypeName := model.qualifiedTypeName(prop.NavigationTarget)
+		if prop.NavigationIsArray {
+			navTypeName = fmt.Sprintf("Collection(%s)", navTypeName)
+		}
+
+		containsTargetAttr := ""
+		if prop.NavigationContainsTarget {
+			containsTargetAttr = ` ContainsTarget="true"`
+		}
+
+		builder.WriteString(fmt.Sprintf("        <NavigationProperty Name=%q Type=%q%s />\n",
+			prop.JsonName, navTypeName, containsTargetAttr))
+	}
+
+	builder.WriteString("      </ComplexType>\n")
+	return builder.String()
 }
 
 func (h *MetadataHandler) buildEntityTypes(model metadataModel) string {
