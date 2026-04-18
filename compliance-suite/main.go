@@ -443,6 +443,11 @@ func main() {
 			Suite:   v4_0.ApplyTransformationCatalog,
 		})
 		testSuites = append(testSuites, TestSuiteInfo{
+			Name:    "11.2.5.4.3_apply_rollup",
+			Version: "4.0",
+			Suite:   v4_0.QueryApplyRollup,
+		})
+		testSuites = append(testSuites, TestSuiteInfo{
 			Name:    "11.2.5.5_query_count",
 			Version: "4.0",
 			Suite:   v4_0.QueryCount,

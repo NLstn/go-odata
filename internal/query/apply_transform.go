@@ -15,6 +15,27 @@ import (
 // when multiple requests are processed concurrently.
 const aliasExprsKey = "_odata_alias_exprs"
 
+// rollupGroupByKey is used to communicate a rollup GroupByTransformation from the
+// SQL-builder layer to the handler for in-memory post-processing.
+const rollupGroupByKey = "_odata_rollup_groupby"
+
+// SetRollupGroupByInDB stores a rollup GroupByTransformation in the GORM context.
+// The handler retrieves this after fetching raw rows and performs in-memory rollup.
+func SetRollupGroupByInDB(db *gorm.DB, groupBy *GroupByTransformation) *gorm.DB {
+	return db.Set(rollupGroupByKey, groupBy)
+}
+
+// GetRollupGroupByFromDB retrieves the rollup GroupByTransformation from the GORM context.
+// Returns nil, false when no rollup is pending.
+func GetRollupGroupByFromDB(db *gorm.DB) (*GroupByTransformation, bool) {
+	if val, ok := db.Get(rollupGroupByKey); ok {
+		if groupBy, ok := val.(*GroupByTransformation); ok {
+			return groupBy, true
+		}
+	}
+	return nil, false
+}
+
 // applyTransformations applies apply transformations to the GORM query
 func applyTransformations(db *gorm.DB, transformations []ApplyTransformation, entityMetadata *metadata.EntityMetadata) *gorm.DB {
 	if db.Statement != nil && db.Statement.Dest == nil {
@@ -34,6 +55,12 @@ func applyTransformations(db *gorm.DB, transformations []ApplyTransformation, en
 			// identity is a no-op transformation.
 		case ApplyTypeGroupBy:
 			db = applyGroupBy(db, transformation.GroupBy, entityMetadata)
+			// For rollup groupby the aggregation is performed in-memory by the handler.
+			// Do not set hasGrouping (so subsequent top-level filters remain WHERE clauses)
+			// and do not attempt SQL-level processing of nested transforms.
+			if transformation.GroupBy != nil && transformation.GroupBy.Rollup != nil {
+				break
+			}
 			hasGrouping = true
 			if transformation.GroupBy != nil {
 				for _, nested := range transformation.GroupBy.Transform {
@@ -298,6 +325,11 @@ func applyGroupBy(db *gorm.DB, groupBy *GroupByTransformation, entityMetadata *m
 		return applyGroupByAll(db, groupBy, entityMetadata)
 	}
 
+	// When rollup() is used in the property list, delegate to the rollup handler.
+	if groupBy.Rollup != nil {
+		return applyGroupByWithRollup(db, groupBy, entityMetadata)
+	}
+
 	if len(groupBy.Properties) == 0 {
 		return db
 	}
@@ -350,6 +382,45 @@ func applyGroupBy(db *gorm.DB, groupBy *GroupByTransformation, entityMetadata *m
 	}
 
 	return db
+}
+
+// applyGroupByWithRollup handles groupby with a rollup() spec by storing the
+// GroupByTransformation in the GORM context for in-memory post-processing by the
+// handler. Unlike regular groupby, rollup produces multiple aggregation levels
+// (subtotals) that cannot be expressed as a single SQL GROUP BY clause on all
+// database backends. The handler detects the rollup marker via GetRollupGroupByFromDB
+// and calls the in-memory rollup aggregation after fetching raw entity rows.
+func applyGroupByWithRollup(db *gorm.DB, groupBy *GroupByTransformation, _ *metadata.EntityMetadata) *gorm.DB {
+	// Store the full GroupByTransformation (including its nested aggregate and the
+	// RollupSpec) in the GORM context. The handler will pick this up and perform
+	// the multi-level in-memory aggregation.
+	return SetRollupGroupByInDB(db, groupBy)
+}
+
+// buildRollupGroupByClause constructs the dialect-appropriate GROUP BY clause for ROLLUP.
+// regularColumns are always grouped; rollupColumns are wrapped in ROLLUP().
+// This helper is provided for databases that support SQL ROLLUP syntax natively
+// (PostgreSQL, MySQL ≥ 8.0, SQL Server). SQLite does not support ROLLUP and uses
+// the in-memory path instead.
+func buildRollupGroupByClause(dialect string, regularColumns []string, rollupColumns []string) string {
+	if len(rollupColumns) == 0 {
+		return strings.Join(regularColumns, ", ")
+	}
+
+	switch dialect {
+	case "postgres", "sqlserver":
+		// PostgreSQL / SQL Server: GROUP BY regular, ROLLUP(col1, col2)
+		if len(regularColumns) > 0 {
+			return strings.Join(regularColumns, ", ") + ", ROLLUP(" + strings.Join(rollupColumns, ", ") + ")"
+		}
+		return "ROLLUP(" + strings.Join(rollupColumns, ", ") + ")"
+	default:
+		// MySQL, MariaDB: GROUP BY col1, col2 WITH ROLLUP
+		allCols := make([]string, 0, len(regularColumns)+len(rollupColumns))
+		allCols = append(allCols, regularColumns...)
+		allCols = append(allCols, rollupColumns...)
+		return strings.Join(allCols, ", ") + " WITH ROLLUP"
+	}
 }
 
 // applyGroupByAll applies the $all variant of groupby: aggregate over the entire
