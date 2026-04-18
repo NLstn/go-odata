@@ -625,7 +625,7 @@ func complexTypeGoName(prop *metadata.PropertyMetadata) string {
 	return t.Name()
 }
 
-// uniqueComplexTypeProps returns a deduplicated, name-sorted list of properties from a
+// uniqueComplexTypeProps returns a deduplicated, struct-name-sorted list of properties from a
 // ComplexTypeFields map. The map stores each property twice (by struct name and by JSON
 // name), so pointer-based deduplication is required.
 func uniqueComplexTypeProps(fields map[string]*metadata.PropertyMetadata) []*metadata.PropertyMetadata {
