@@ -390,11 +390,47 @@ func applyGroupBy(db *gorm.DB, groupBy *GroupByTransformation, entityMetadata *m
 // (subtotals) that cannot be expressed as a single SQL GROUP BY clause on all
 // database backends. The handler detects the rollup marker via GetRollupGroupByFromDB
 // and calls the in-memory rollup aggregation after fetching raw entity rows.
-func applyGroupByWithRollup(db *gorm.DB, groupBy *GroupByTransformation, _ *metadata.EntityMetadata) *gorm.DB {
-	// Store the full GroupByTransformation (including its nested aggregate and the
-	// RollupSpec) in the GORM context. The handler will pick this up and perform
-	// the multi-level in-memory aggregation.
-	return SetRollupGroupByInDB(db, groupBy)
+//
+// A SELECT clause is added so that every column in the result map is keyed by its
+// OData/JSON name (e.g. "CategoryID" rather than the snake_case SQL alias
+// "category_id"). Without this, getNestedMapValueCaseInsensitive cannot match the
+// groupby property names when the OData name differs from the SQL column name.
+func applyGroupByWithRollup(db *gorm.DB, groupBy *GroupByTransformation, entityMetadata *metadata.EntityMetadata) *gorm.DB {
+	// Store the full GroupByTransformation in the GORM context so the handler
+	// can perform in-memory multi-level aggregation after fetching raw rows.
+	db = SetRollupGroupByInDB(db, groupBy)
+
+	if entityMetadata == nil {
+		return db
+	}
+
+	dialect := getDatabaseDialect(db)
+	tableName := entityMetadata.TableName
+
+	// Build a SELECT clause that aliases every scalar (non-navigation, non-computed)
+	// property column with its JSON name.
+	// This ensures the result map keys match the OData property names used during
+	// the in-memory grouping and aggregation step.
+	selectColumns := make([]string, 0, len(entityMetadata.Properties))
+	for _, prop := range entityMetadata.Properties {
+		// Skip navigation properties and server-computed properties — they have no
+		// real database column to SELECT from the base table.
+		if prop.IsNavigationProp || prop.IsComputed {
+			continue
+		}
+		columnName := prop.ColumnName
+		if columnName == "" {
+			columnName = prop.JsonName
+		}
+		qualified := quoteTableName(dialect, tableName) + "." + quoteIdent(dialect, columnName)
+		selectColumns = append(selectColumns, fmt.Sprintf("%s as %s", qualified, quoteIdent(dialect, prop.JsonName)))
+	}
+
+	if len(selectColumns) > 0 {
+		db = db.Select(strings.Join(selectColumns, ", "))
+	}
+
+	return db
 }
 
 // buildRollupGroupByClause constructs the dialect-appropriate GROUP BY clause for ROLLUP.

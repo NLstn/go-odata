@@ -237,3 +237,130 @@ func toFloat64Interface(v interface{}) float64 {
 	}
 	return 0
 }
+
+// RollupProduct mirrors the dev-server Product structure: it has a nullable FK
+// (CategoryID *uint) whose SQL column name is "category_id" (snake_case), while
+// the OData/JSON name is "CategoryID" (PascalCase). This case exposed the bug
+// where getNestedMapValueCaseInsensitive would fail to match snake_case keys.
+type RollupProduct struct {
+	ID         uint    `json:"ID" gorm:"primaryKey" odata:"key"`
+	Name       string  `json:"Name"`
+	Price      float64 `json:"Price"`
+	CategoryID *uint   `json:"CategoryID" odata:"nullable"`
+}
+
+func setupRollupProductService(t *testing.T) *httptest.Server {
+	t.Helper()
+
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("Failed to open database: %v", err)
+	}
+	if err := db.AutoMigrate(&RollupProduct{}); err != nil {
+		t.Fatalf("Failed to migrate: %v", err)
+	}
+
+	cat1 := uint(1)
+	cat2 := uint(2)
+	cat3 := uint(3)
+	products := []RollupProduct{
+		{ID: 1, Name: "A", Price: 100, CategoryID: &cat1},
+		{ID: 2, Name: "B", Price: 200, CategoryID: &cat1},
+		{ID: 3, Name: "C", Price: 300, CategoryID: &cat1},
+		{ID: 4, Name: "D", Price: 400, CategoryID: &cat2},
+		{ID: 5, Name: "E", Price: 500, CategoryID: &cat2},
+		{ID: 6, Name: "F", Price: 600, CategoryID: &cat3},
+		{ID: 7, Name: "G", Price: 700, CategoryID: &cat3},
+	}
+	if err := db.Create(&products).Error; err != nil {
+		t.Fatalf("Failed to create products: %v", err)
+	}
+
+	svc, err := odata.NewService(db)
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
+	_ = svc.RegisterEntity(&RollupProduct{})
+
+	return httptest.NewServer(svc)
+}
+
+// TestIntegrationApplyRollupNullableFKProperty verifies rollup works correctly
+// when the groupby property is a nullable FK column whose SQL name is snake_case
+// (e.g. category_id) but OData/JSON name is PascalCase (e.g. CategoryID).
+// This is the scenario that was failing in the compliance tests.
+func TestIntegrationApplyRollupNullableFKProperty(t *testing.T) {
+	srv := setupRollupProductService(t)
+	defer srv.Close()
+
+	t.Run("rollup with null includes grand total, CategoryID is nullable FK", func(t *testing.T) {
+		// 3 categories × totals + 1 grand total = 4 rows
+		url := srv.URL + "/RollupProducts?$apply=groupby((rollup(null,CategoryID)),aggregate(Price%20with%20sum%20as%20Total))"
+		resp, err := http.Get(url) //nolint:noctx
+		if err != nil {
+			t.Fatalf("GET failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+		}
+
+		result := getJSONBody(t, resp)
+		values, ok := result["value"].([]interface{})
+		if !ok {
+			t.Fatalf("expected 'value' array, got: %T", result["value"])
+		}
+
+		if len(values) != 4 {
+			t.Fatalf("expected 4 rows (3 categories + grand total), got %d: %v", len(values), values)
+		}
+
+		var grandTotalFound bool
+		for _, v := range values {
+			row := v.(map[string]interface{})
+			if row["CategoryID"] == nil {
+				grandTotalFound = true
+				total := toFloat64Interface(row["Total"])
+				if total != 2800 {
+					t.Errorf("expected grand total=2800, got %v", total)
+				}
+			}
+		}
+		if !grandTotalFound {
+			t.Error("expected grand total row with CategoryID=null")
+		}
+	})
+
+	t.Run("rollup without null does not include grand total, CategoryID is nullable FK", func(t *testing.T) {
+		// 3 category rows, no grand total
+		url := srv.URL + "/RollupProducts?$apply=groupby((rollup(CategoryID)),aggregate(Price%20with%20sum%20as%20Total))"
+		resp, err := http.Get(url) //nolint:noctx
+		if err != nil {
+			t.Fatalf("GET failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+		}
+
+		result := getJSONBody(t, resp)
+		values, ok := result["value"].([]interface{})
+		if !ok {
+			t.Fatalf("expected 'value' array, got: %T", result["value"])
+		}
+
+		if len(values) != 3 {
+			t.Fatalf("expected 3 rows (one per category, no grand total), got %d: %v", len(values), values)
+		}
+		for _, v := range values {
+			row := v.(map[string]interface{})
+			if row["CategoryID"] == nil {
+				t.Error("unexpected grand total row (rollup without null should not include grand total)")
+			}
+		}
+	})
+}
