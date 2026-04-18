@@ -708,9 +708,20 @@ func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{
 
 			if isExpanded {
 				updatedValue := fieldValue.Interface()
+				truncated := false
+				var activeExpandOpt *query.ExpandOption
 				if propMeta != nil && len(expandOptions) > 0 {
 					expandOpt := query.FindExpandOption(expandOptions, propMeta.Name, propMeta.JsonName)
 					if expandOpt != nil {
+						activeExpandOpt = expandOpt
+						// Detect truncation for collection navigation properties (OData v4 §11.2.5.7).
+						if expandOpt.Top != nil && propMeta.NavigationIsArray {
+							truncatedVal, wasTruncated := response.TruncateExpandedCollectionToTop(fieldValue, *expandOpt.Top)
+							if wasTruncated {
+								updatedValue = truncatedVal.Interface()
+								truncated = true
+							}
+						}
 						if targetMetadata, err := h.metadata.ResolveNavigationTarget(propMeta.Name); err == nil {
 							var count *int
 							updatedValue, count = response.ApplyExpandOptionToValue(updatedValue, expandOpt, targetMetadata)
@@ -718,6 +729,16 @@ func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{
 								odataResponse.Set(jsonName+"@odata.count", *count)
 							}
 						}
+					}
+				}
+
+				// Emit @odata.nextLink when the expanded collection was truncated.
+				if truncated && activeExpandOpt != nil && r != nil && metadataLevel != "none" {
+					keySegment := h.buildKeySegmentFromEntity(resultValue)
+					if keySegment != "" {
+						baseURL := response.BuildBaseURL(r)
+						nextLink := response.BuildExpandedCollectionNextLink(baseURL, h.metadata.EntitySetName, keySegment, propMeta.JsonName, activeExpandOpt)
+						odataResponse.Set(jsonName+"@odata.nextLink", nextLink)
 					}
 				}
 

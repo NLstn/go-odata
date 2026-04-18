@@ -1621,3 +1621,226 @@ func TestOrderByNavigationPropertyMultipleClauses(t *testing.T) {
 		}
 	}
 }
+
+// TestExpandWithNestedTopNextLinkSingleEntity tests that @odata.nextLink is emitted for a
+// truncated expanded collection on a single entity response (OData v4 §11.2.5.7).
+func TestExpandWithNestedTopNextLinkSingleEntity(t *testing.T) {
+	db := setupRelationTestDB(t)
+	authorMeta, _ := metadata.AnalyzeEntity(&Author{})
+	bookMeta, _ := metadata.AnalyzeEntity(&Book{})
+	handler := NewEntityHandler(db, authorMeta, nil)
+	handler.SetEntitiesMetadata(map[string]*metadata.EntityMetadata{
+		authorMeta.EntitySetName: authorMeta,
+		bookMeta.EntitySetName:   bookMeta,
+	})
+
+	// Author 1 has 2 books; $top=1 should truncate and emit @odata.nextLink.
+	req := httptest.NewRequest(http.MethodGet, "http://localhost:8080/Authors(1)?$expand=Books($top=1)", nil)
+	req.Host = "localhost:8080"
+	w := httptest.NewRecorder()
+
+	handler.HandleEntity(w, req, "1")
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected status 200, got %d", w.Code)
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+
+	books, ok := resp["Books"].([]interface{})
+	if !ok {
+		t.Fatal("Expected Books to be expanded as an array")
+	}
+	if len(books) != 1 {
+		t.Errorf("Expected exactly 1 book due to $top=1, got %d", len(books))
+	}
+
+	nextLink, hasNextLink := resp["Books@odata.nextLink"]
+	if !hasNextLink {
+		t.Fatal("Expected Books@odata.nextLink to be present when expanded collection is truncated")
+	}
+
+	// The next link should point to Authors(1)/Books with $skip=1.
+	expectedNextLink := "http://localhost:8080/Authors(1)/Books?$skip=1"
+	if nextLink != expectedNextLink {
+		t.Errorf("Expected Books@odata.nextLink = %q, got %q", expectedNextLink, nextLink)
+	}
+}
+
+// TestExpandWithNestedTopNextLinkNoTruncation tests that @odata.nextLink is NOT emitted when
+// the expanded collection has fewer items than $top.
+func TestExpandWithNestedTopNextLinkNoTruncation(t *testing.T) {
+	db := setupRelationTestDB(t)
+	authorMeta, _ := metadata.AnalyzeEntity(&Author{})
+	bookMeta, _ := metadata.AnalyzeEntity(&Book{})
+	handler := NewEntityHandler(db, authorMeta, nil)
+	handler.SetEntitiesMetadata(map[string]*metadata.EntityMetadata{
+		authorMeta.EntitySetName: authorMeta,
+		bookMeta.EntitySetName:   bookMeta,
+	})
+
+	// Author 1 has 2 books; $top=10 is larger than available → no next link.
+	req := httptest.NewRequest(http.MethodGet, "http://localhost:8080/Authors(1)?$expand=Books($top=10)", nil)
+	req.Host = "localhost:8080"
+	w := httptest.NewRecorder()
+
+	handler.HandleEntity(w, req, "1")
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected status 200, got %d", w.Code)
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+
+	books, ok := resp["Books"].([]interface{})
+	if !ok {
+		t.Fatal("Expected Books to be expanded as an array")
+	}
+	if len(books) != 2 {
+		t.Errorf("Expected 2 books (all books for author 1), got %d", len(books))
+	}
+
+	if _, hasNextLink := resp["Books@odata.nextLink"]; hasNextLink {
+		t.Error("Expected no Books@odata.nextLink when all items fit within $top")
+	}
+}
+
+// TestExpandWithNestedTopNextLinkCollection tests that @odata.nextLink is emitted inside each
+// expanded entity in a collection response when $top truncates the expanded collection.
+func TestExpandWithNestedTopNextLinkCollection(t *testing.T) {
+	db := setupRelationTestDB(t)
+	authorMeta, _ := metadata.AnalyzeEntity(&Author{})
+	bookMeta, _ := metadata.AnalyzeEntity(&Book{})
+	handler := NewEntityHandler(db, authorMeta, nil)
+	handler.SetEntitiesMetadata(map[string]*metadata.EntityMetadata{
+		authorMeta.EntitySetName: authorMeta,
+		bookMeta.EntitySetName:   bookMeta,
+	})
+
+	// All 3 authors each have 2 books; $top=1 on Books should produce next links for all.
+	q := url.Values{}
+	q.Set("$orderby", "ID")
+	q.Set("$expand", "Books($orderby=ID;$top=1)")
+	req := httptest.NewRequest(http.MethodGet, "http://localhost:8080/Authors?"+q.Encode(), nil)
+	req.Host = "localhost:8080"
+	w := httptest.NewRecorder()
+
+	handler.HandleCollection(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected status 200, got %d", w.Code)
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+
+	values, ok := resp["value"].([]interface{})
+	if !ok || len(values) != 3 {
+		t.Fatalf("Expected 3 authors in response, got %v", len(values))
+	}
+
+	expectedFirstBookIDs := map[float64]float64{
+		1: 1,
+		2: 3,
+		3: 5,
+	}
+	expectedNextLinks := map[float64]string{
+		1: "http://localhost:8080/Authors(1)/Books?$skip=1",
+		2: "http://localhost:8080/Authors(2)/Books?$skip=1",
+		3: "http://localhost:8080/Authors(3)/Books?$skip=1",
+	}
+
+	for _, v := range values {
+		author, ok := v.(map[string]interface{})
+		if !ok {
+			t.Fatal("Expected author to be a JSON object")
+		}
+
+		authorID, _ := author["ID"].(float64)
+
+		books, ok := author["Books"].([]interface{})
+		if !ok {
+			t.Fatalf("Expected Books to be expanded for author %v", authorID)
+		}
+		if len(books) != 1 {
+			t.Errorf("Expected 1 book for author %v (due to $top=1), got %d", authorID, len(books))
+		}
+
+		// Verify the first book ID matches expectations.
+		book, ok := books[0].(map[string]interface{})
+		if !ok {
+			t.Fatal("Expected book entry to be a JSON object")
+		}
+		bookID, _ := book["ID"].(float64)
+		if expectedFirstBookIDs[authorID] != bookID {
+			t.Errorf("Author %v: expected first book ID %v, got %v", authorID, expectedFirstBookIDs[authorID], bookID)
+		}
+
+		// Verify @odata.nextLink is present.
+		nextLink, hasNextLink := author["Books@odata.nextLink"]
+		if !hasNextLink {
+			t.Errorf("Expected Books@odata.nextLink for author %v", authorID)
+			continue
+		}
+		if nextLink != expectedNextLinks[authorID] {
+			t.Errorf("Author %v: expected Books@odata.nextLink = %q, got %q", authorID, expectedNextLinks[authorID], nextLink)
+		}
+	}
+}
+
+// TestExpandWithNestedTopNextLinkSkipOffset tests that @odata.nextLink uses the correct $skip
+// value when $skip is also specified in the expand option.
+func TestExpandWithNestedTopNextLinkSkipOffset(t *testing.T) {
+	db := setupRelationTestDB(t)
+	authorMeta, _ := metadata.AnalyzeEntity(&Author{})
+	bookMeta, _ := metadata.AnalyzeEntity(&Book{})
+	handler := NewEntityHandler(db, authorMeta, nil)
+	handler.SetEntitiesMetadata(map[string]*metadata.EntityMetadata{
+		authorMeta.EntitySetName: authorMeta,
+		bookMeta.EntitySetName:   bookMeta,
+	})
+
+	// Author 3 has books 5 and 6. With $skip=0;$top=1, we get book 5 and a next link at $skip=1.
+	// Verifying the next link incorporates the existing skip correctly.
+	req := httptest.NewRequest(http.MethodGet, "http://localhost:8080/Authors(3)?$expand=Books($orderby=ID;$skip=0;$top=1)", nil)
+	req.Host = "localhost:8080"
+	w := httptest.NewRecorder()
+
+	handler.HandleEntity(w, req, "3")
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected status 200, got %d", w.Code)
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+
+	books, ok := resp["Books"].([]interface{})
+	if !ok {
+		t.Fatal("Expected Books to be expanded as an array")
+	}
+	if len(books) != 1 {
+		t.Errorf("Expected 1 book, got %d", len(books))
+	}
+
+	nextLink, hasNextLink := resp["Books@odata.nextLink"]
+	if !hasNextLink {
+		t.Fatal("Expected Books@odata.nextLink")
+	}
+
+	// skip=0 + top=1 → next skip = 1.
+	expectedNextLink := "http://localhost:8080/Authors(3)/Books?$skip=1"
+	if nextLink != expectedNextLink {
+		t.Errorf("Expected Books@odata.nextLink = %q, got %q", expectedNextLink, nextLink)
+	}
+}

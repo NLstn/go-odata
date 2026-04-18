@@ -80,7 +80,8 @@ func applyExpandCallback(db *gorm.DB, expandOpt ExpandOption, targetMetadata *me
 		db = applyOffsetWithLimit(db, *expandOpt.Skip, expandOpt.Top)
 	}
 	if expandOpt.Top != nil {
-		db = db.Limit(*expandOpt.Top)
+		// Fetch top+1 items so the response layer can detect truncation and emit @odata.nextLink.
+		db = db.Limit(*expandOpt.Top + 1)
 	}
 
 	// Recursively apply nested expand options
