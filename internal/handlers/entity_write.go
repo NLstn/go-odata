@@ -493,28 +493,6 @@ func (h *EntityHandler) handlePutEntity(w http.ResponseWriter, r *http.Request, 
 
 	h.writeUpdateResponse(w, r, pref, db)
 }
-
-// setEntityFieldValue sets a reflect.Value to the given interface value, handling type conversions.
-func setEntityFieldValue(field reflect.Value, value interface{}) error {
-	if value == nil {
-		field.SetZero()
-		return nil
-	}
-	val := reflect.ValueOf(value)
-	if !val.IsValid() {
-		return fmt.Errorf("invalid value")
-	}
-	if val.Type().AssignableTo(field.Type()) {
-		field.Set(val)
-		return nil
-	}
-	if val.Type().ConvertibleTo(field.Type()) {
-		field.Set(val.Convert(field.Type()))
-		return nil
-	}
-	return fmt.Errorf("cannot assign value of type %s to field of type %s", val.Type(), field.Type())
-}
-
 // preserveKeyProperties copies key property values from source to destination
 func (h *EntityHandler) preserveKeyProperties(source, destination interface{}) error {
 	sourceVal := reflect.ValueOf(source).Elem()
