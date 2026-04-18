@@ -111,6 +111,7 @@ func (h *MetadataHandler) buildMetadataJSON(model metadataModel, ver version.Ver
 
 	h.addJSONEnumTypes(model, odataService)
 	h.addJSONTypeDefinitions(model, odataService)
+	h.addJSONComplexTypes(model, odataService)
 	h.addJSONFunctionTypes(model, odataService)
 	h.addJSONActionTypes(model, odataService)
 
@@ -177,6 +178,28 @@ func (h *MetadataHandler) buildJSONTypeDefinition(info *typeDefinitionInfo) map[
 	}
 
 	return typeDef
+}
+
+func (h *MetadataHandler) addJSONComplexTypes(model metadataModel, odataService map[string]interface{}) {
+	for typeName, info := range model.collectComplexTypes() {
+		odataService[typeName] = h.buildJSONComplexType(model, info)
+	}
+}
+
+func (h *MetadataHandler) buildJSONComplexType(model metadataModel, info *complexTypeInfo) map[string]interface{} {
+	complexType := map[string]interface{}{
+		"$Kind": "ComplexType",
+	}
+
+	for _, prop := range info.Fields {
+		if prop.IsNavigationProp {
+			complexType[prop.JsonName] = h.buildJSONNavigationProperty(model, prop)
+		} else {
+			complexType[prop.JsonName] = h.buildJSONPropertyDefinition(model, prop)
+		}
+	}
+
+	return complexType
 }
 
 func (h *MetadataHandler) addJSONFunctionTypes(model metadataModel, odataService map[string]interface{}) {
