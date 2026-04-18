@@ -45,7 +45,7 @@ Now I have a thorough understanding of the library. Here is the gap analysis:
 | Missing Feature | Spec | Notes |
 |---|---|---|
 | XML/Atom format for data responses | v4.0 | `$format=atom` / `Accept: application/atom+xml`; XML is supported only for `$metadata`, not entity/collection responses |
-| `@odata.nextLink` inside expanded collections | v4.0 | Server-driven paging within `$expand` results when the expanded collection is truncated |
+| `@odata.nextLink` inside expanded collections | v4.0 | ~~Server-driven paging within `$expand` results when the expanded collection is truncated~~ **Implemented**: when `$top` is set in the expand option and more items exist, `PropertyName@odata.nextLink` is emitted on the enclosing entity |
 
 ### `Prefer` Header
 

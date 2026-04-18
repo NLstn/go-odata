@@ -298,6 +298,13 @@ func isPropertyExpanded(prop PropertyMetadata, expandOptions []query.ExpandOptio
 
 func processNavigationPropertyOrderedWithMetadata(entityMap *OrderedMap, entity reflect.Value, propMeta *PropertyMetadata, fieldValue reflect.Value, jsonName string, expandOpt *query.ExpandOption, selectedNavProps []string, baseURL, entitySetName string, metadata EntityMetadataProvider, metadataLevel string, keySegment string, fullMetadata *internalMetadata.EntityMetadata) {
 	if expandOpt != nil {
+		// Detect truncation for collection navigation properties: when $top is set and
+		// the collection has top+1 items, the server fetched one extra to detect "has more".
+		truncated := false
+		if expandOpt.Top != nil && propMeta.NavigationIsArray {
+			fieldValue, truncated = TruncateExpandedCollectionToTop(fieldValue, *expandOpt.Top)
+		}
+
 		updatedValue := fieldValue.Interface()
 		if fullMetadata != nil {
 			if targetMetadata, err := fullMetadata.ResolveNavigationTarget(propMeta.Name); err == nil {
@@ -308,6 +315,12 @@ func processNavigationPropertyOrderedWithMetadata(entityMap *OrderedMap, entity 
 				}
 			}
 		}
+
+		// Emit @odata.nextLink when the expanded collection was truncated (OData v4 §11.2.5.7).
+		if truncated && keySegment != "" {
+			entityMap.Set(jsonName+"@odata.nextLink", BuildExpandedCollectionNextLink(baseURL, entitySetName, keySegment, jsonName, expandOpt))
+		}
+
 		entityMap.Set(jsonName, updatedValue)
 		return
 	}
@@ -330,6 +343,34 @@ func isPropertySelectedForLinks(prop PropertyMetadata, selectedNavProps []string
 		}
 	}
 	return false
+}
+
+// TruncateExpandedCollectionToTop truncates the collection value to top items.
+// It returns the (possibly truncated) value and a boolean indicating whether truncation occurred.
+// The caller passes top+1 items to signal "has more"; this function slices to top.
+func TruncateExpandedCollectionToTop(v reflect.Value, top int) (reflect.Value, bool) {
+	val := v
+	for val.Kind() == reflect.Ptr {
+		if val.IsNil() {
+			return v, false
+		}
+		val = val.Elem()
+	}
+	if (val.Kind() == reflect.Slice || val.Kind() == reflect.Array) && val.Len() > top {
+		return val.Slice(0, top), true
+	}
+	return v, false
+}
+
+// BuildExpandedCollectionNextLink constructs the @odata.nextLink URL for a truncated expanded
+// collection. The URL points to the navigation property resource with $skip set to the next page.
+func BuildExpandedCollectionNextLink(baseURL, entitySetName, keySegment, jsonName string, expandOpt *query.ExpandOption) string {
+	skip := 0
+	if expandOpt.Skip != nil {
+		skip = *expandOpt.Skip
+	}
+	nextSkip := skip + *expandOpt.Top
+	return fmt.Sprintf("%s/%s(%s)/%s?$skip=%d", baseURL, entitySetName, keySegment, jsonName, nextSkip)
 }
 
 // BuildKeySegmentFromEntity builds the key segment for URLs from an entity and metadata.

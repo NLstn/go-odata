@@ -416,8 +416,9 @@ func applyPerParentPagination(values reflect.Value, skip *int, top *int) reflect
 
 	end := values.Len()
 	if top != nil && *top >= 0 {
-		if start+*top < end {
-			end = start + *top
+		// Fetch top+1 items so the response layer can detect truncation and emit @odata.nextLink.
+		if start+*top+1 < end {
+			end = start + *top + 1
 		}
 	}
 
