@@ -407,15 +407,20 @@ func applyGroupByWithRollup(db *gorm.DB, groupBy *GroupByTransformation, entityM
 	dialect := getDatabaseDialect(db)
 	tableName := entityMetadata.TableName
 
-	// Build a SELECT clause that aliases every scalar (non-navigation, non-computed)
-	// property column with its JSON name.
+	// Build a SELECT clause that aliases every scalar (non-navigation, non-computed,
+	// non-complex-type) property column with its JSON name.
 	// This ensures the result map keys match the OData property names used during
 	// the in-memory grouping and aggregation step.
+	//
+	// Complex types (embedded structs like ShippingAddress) are stored as multiple
+	// flattened columns (e.g. shipping_street, shipping_city) in the database and
+	// do not have a direct column named after the parent property. They must be
+	// skipped here; the rollup grouping operates on scalar scalar-typed properties only.
 	selectColumns := make([]string, 0, len(entityMetadata.Properties))
 	for _, prop := range entityMetadata.Properties {
-		// Skip navigation properties and server-computed properties — they have no
-		// real database column to SELECT from the base table.
-		if prop.IsNavigationProp || prop.IsComputed {
+		// Skip navigation properties, server-computed properties, and complex types
+		// (embedded structs) — none of these have a single database column to SELECT.
+		if prop.IsNavigationProp || prop.IsComputed || prop.IsComplexType {
 			continue
 		}
 		columnName := prop.ColumnName
