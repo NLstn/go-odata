@@ -293,7 +293,9 @@ func applyMapRollup(results []map[string]interface{}, groupBy *GroupByTransforma
 	// Import the handler function by calling the same logic — reproduce the helper here
 	// since we're testing the query package directly.
 	rollup := groupBy.Rollup
-	allProps := append(groupBy.Properties, rollup.Properties...) //nolint:gocritic
+	allProps := make([]string, 0, len(groupBy.Properties)+len(rollup.Properties))
+	allProps = append(allProps, groupBy.Properties...)
+	allProps = append(allProps, rollup.Properties...)
 
 	var levels [][]string
 	for i := 0; i <= len(rollup.Properties); i++ {

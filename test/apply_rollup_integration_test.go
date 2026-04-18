@@ -64,16 +64,6 @@ func getJSONBody(t *testing.T, resp *http.Response) map[string]interface{} {
 	return result
 }
 
-func getRollupValue(t *testing.T, row map[string]interface{}, keys ...string) interface{} {
-	t.Helper()
-	for _, k := range keys {
-		if v, ok := row[k]; ok {
-			return v
-		}
-	}
-	return nil
-}
-
 func TestIntegrationApplyRollup(t *testing.T) {
 	srv := setupRollupService(t)
 	defer srv.Close()
@@ -247,6 +237,3 @@ func toFloat64Interface(v interface{}) float64 {
 	}
 	return 0
 }
-
-// Ensure getRollupValue doesn't cause unused warning
-var _ = getRollupValue
