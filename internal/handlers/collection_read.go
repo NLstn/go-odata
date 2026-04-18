@@ -676,7 +676,9 @@ func applyMapGroupBy(results []map[string]interface{}, groupBy *query.GroupByTra
 // and optionally a grand-total row when IncludeGrandTotal is true.
 func applyMapGroupByRollup(results []map[string]interface{}, groupBy *query.GroupByTransformation) ([]map[string]interface{}, error) {
 	rollup := groupBy.Rollup
-	allProps := append(groupBy.Properties, rollup.Properties...) //nolint:gocritic
+	allProps := make([]string, 0, len(groupBy.Properties)+len(rollup.Properties))
+	allProps = append(allProps, groupBy.Properties...)
+	allProps = append(allProps, rollup.Properties...)
 
 	// Compute the levels: from finest to coarsest grain.
 	// Level i uses all regular properties + the first (N-i) rollup properties.
