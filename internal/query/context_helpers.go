@@ -31,6 +31,15 @@ func ContextPropertiesFromApply(transformations []ApplyTransformation) []string 
 						properties = append(properties, p)
 					}
 				}
+				// Include rollup properties in the output shape.
+				if t.GroupBy.Rollup != nil {
+					for _, p := range t.GroupBy.Rollup.Properties {
+						if !propSet[p] {
+							propSet[p] = true
+							properties = append(properties, p)
+						}
+					}
+				}
 				// Collect aggregate aliases from nested transforms inside groupby
 				for _, nested := range t.GroupBy.Transform {
 					if nested.Type == ApplyTypeAggregate && nested.Aggregate != nil {

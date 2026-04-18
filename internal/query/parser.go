@@ -149,6 +149,19 @@ type GroupByTransformation struct {
 	Properties []string
 	AllValues  bool                  // True when $all is used instead of a property list
 	Transform  []ApplyTransformation // Nested transformations (typically aggregate)
+	Rollup     *RollupSpec           // Non-nil when rollup() is used in the property list
+}
+
+// RollupSpec represents a rollup() function call within the groupby property list.
+// It defines a hierarchy of grouping levels that produce subtotals.
+// For example, rollup(null, Region, Country) produces rows grouped by (Region, Country),
+// then by (Region), and finally a grand total row where all rollup columns are null.
+type RollupSpec struct {
+	// Properties lists the rollup dimensions from most to least specific.
+	Properties []string
+	// IncludeGrandTotal is true when null was provided as the first argument to rollup().
+	// When true, a grand total row (all rollup dimensions null) is included in the result.
+	IncludeGrandTotal bool
 }
 
 // AggregateTransformation represents an aggregate transformation

@@ -264,6 +264,7 @@ func extractAliasesFromTransformation(trans *ApplyTransformation, aliases map[st
 // Format: groupby((prop1,prop2), aggregate(expr))
 // or: groupby((prop1,prop2))
 // or: groupby(($all), aggregate(expr))  -- aggregates over the entire input set
+// or: groupby((rollup(null,prop1,prop2)), aggregate(expr))  -- rollup aggregation
 func parseGroupBy(transStr string, entityMetadata *metadata.EntityMetadata, caseInsensitive bool) (*ApplyTransformation, error) {
 	if !strings.HasPrefix(transStr, "groupby(") {
 		return nil, errInvalidGroupByFormat
@@ -281,6 +282,7 @@ func parseGroupBy(transStr string, entityMetadata *metadata.EntityMetadata, case
 	// Format: (prop1,prop2), aggregate(...)
 	// or: (prop1,prop2)
 	// or: ($all), aggregate(...)
+	// or: (rollup(null,prop1,prop2)), aggregate(...)
 
 	// Find the properties section (first parenthesized section)
 	if !strings.HasPrefix(content, "(") {
@@ -306,17 +308,15 @@ func parseGroupBy(transStr string, entityMetadata *metadata.EntityMetadata, case
 			AllValues: true,
 		}
 	} else {
-		properties := parseGroupByProperties(propsStr)
-
-		// Validate properties
-		for _, prop := range properties {
-			if !propertyExists(prop, entityMetadata) {
-				return nil, fmt.Errorf("property '%s' does not exist in entity type", prop)
-			}
+		// Parse the property list, which may contain rollup() specs and/or regular properties
+		regularProps, rollupSpec, err := parseGroupByPropertyList(propsStr, entityMetadata)
+		if err != nil {
+			return nil, err
 		}
 
 		groupBy = &GroupByTransformation{
-			Properties: properties,
+			Properties: regularProps,
+			Rollup:     rollupSpec,
 		}
 	}
 
@@ -629,22 +629,83 @@ func parseSetTransformation(transStr string, entityMetadata *metadata.EntityMeta
 	return &ApplyTransformation{Type: t, Set: set}, nil
 }
 
-// parseGroupByProperties parses a comma-separated list of properties
-func parseGroupByProperties(propsStr string) []string {
+// parseGroupByPropertyList parses the content inside the outer parentheses of groupby((…)).
+// It handles both regular property names and rollup() specs, returning them separately.
+// At most one rollup() spec is permitted per groupby property list.
+func parseGroupByPropertyList(propsStr string, entityMetadata *metadata.EntityMetadata) (regularProps []string, rollup *RollupSpec, err error) {
 	propsStr = strings.TrimSpace(propsStr)
 	if propsStr == "" {
-		return []string{}
+		return nil, nil, nil
 	}
 
-	parts := strings.Split(propsStr, ",")
-	properties := make([]string, 0, len(parts))
+	// Use paren-aware split so commas inside rollup(...) are not treated as separators.
+	parts := splitAggregateExpressions(propsStr)
+
 	for _, part := range parts {
-		prop := strings.TrimSpace(part)
-		if prop != "" {
-			properties = append(properties, prop)
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+
+		// Check whether this part is a rollup() spec (case-insensitive).
+		if strings.HasPrefix(strings.ToLower(part), "rollup(") {
+			if rollup != nil {
+				return nil, nil, fmt.Errorf("only one rollup() spec is allowed per groupby property list")
+			}
+			rollup, err = parseRollupSpec(part, entityMetadata)
+			if err != nil {
+				return nil, nil, err
+			}
+		} else {
+			// Regular property
+			if entityMetadata != nil && !propertyExists(part, entityMetadata) {
+				return nil, nil, fmt.Errorf("property '%s' does not exist in entity type", part)
+			}
+			regularProps = append(regularProps, part)
 		}
 	}
-	return properties
+
+	return regularProps, rollup, nil
+}
+
+// parseRollupSpec parses a rollup() function call within a groupby property list.
+// Format: rollup(null, prop1, prop2, ...)   -- includes grand total row
+//
+//	rollup(prop1, prop2, ...)             -- no grand total row
+func parseRollupSpec(rollupStr string, entityMetadata *metadata.EntityMetadata) (*RollupSpec, error) {
+	// Strip "rollup(" prefix (case-insensitive already handled by caller) and trailing ")"
+	lcStr := strings.ToLower(rollupStr)
+	if !strings.HasPrefix(lcStr, "rollup(") || !strings.HasSuffix(rollupStr, ")") {
+		return nil, fmt.Errorf("invalid rollup() format")
+	}
+	content := strings.TrimSpace(rollupStr[7 : len(rollupStr)-1])
+	if content == "" {
+		return nil, fmt.Errorf("rollup() requires at least one property")
+	}
+
+	args := splitAggregateExpressions(content)
+	spec := &RollupSpec{}
+
+	for _, arg := range args {
+		arg = strings.TrimSpace(arg)
+		if arg == "" {
+			continue
+		}
+		if strings.EqualFold(arg, "null") {
+			spec.IncludeGrandTotal = true
+		} else {
+			if entityMetadata != nil && !propertyExists(arg, entityMetadata) {
+				return nil, fmt.Errorf("property '%s' does not exist in entity type", arg)
+			}
+			spec.Properties = append(spec.Properties, arg)
+		}
+	}
+
+	if len(spec.Properties) == 0 {
+		return nil, fmt.Errorf("rollup() requires at least one property argument (excluding null)")
+	}
+
+	return spec, nil
 }
 
 // parseAggregate parses an aggregate transformation

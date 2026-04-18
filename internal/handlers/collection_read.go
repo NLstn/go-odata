@@ -331,6 +331,16 @@ func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.Qu
 		if err := db.Find(&results).Error; err != nil {
 			return nil, err
 		}
+
+		// When a rollup() groupby was used, apply the multi-level aggregation in memory.
+		if rollupGroupBy, ok := query.GetRollupGroupByFromDB(db); ok {
+			var err error
+			results, err = applyMapGroupByRollup(results, rollupGroupBy)
+			if err != nil {
+				return nil, err
+			}
+		}
+
 		// If $select is specified, filter out computed properties that aren't selected
 		if len(queryOptions.Select) > 0 && queryOptions.Compute != nil {
 			computedAliases := make(map[string]bool)
@@ -595,6 +605,11 @@ func applyMapGroupBy(results []map[string]interface{}, groupBy *query.GroupByTra
 		return results, nil
 	}
 
+	// When rollup() is used, produce multiple aggregation levels in memory.
+	if groupBy.Rollup != nil {
+		return applyMapGroupByRollup(results, groupBy)
+	}
+
 	groups := make(map[string][]map[string]interface{})
 	groupOrder := make([]string, 0)
 	keyRowsByKey := make(map[string]map[string]interface{})
@@ -626,6 +641,121 @@ func applyMapGroupBy(results []map[string]interface{}, groupBy *query.GroupByTra
 
 		if len(groupBy.Transform) > 0 {
 			for _, tr := range groupBy.Transform {
+				switch tr.Type {
+				case query.ApplyTypeFilter:
+					groupRows = applyMapFilter(groupRows, tr.Filter)
+				case query.ApplyTypeAggregate:
+					aggRows, err := applyMapAggregate(groupRows, tr.Aggregate)
+					if err != nil {
+						return nil, err
+					}
+					if len(aggRows) > 0 {
+						for k, v := range aggRows[0] {
+							outRow[k] = v
+						}
+					}
+					groupRows = aggRows
+				default:
+					return nil, fmt.Errorf("unsupported nested groupby transformation: %s", tr.Type)
+				}
+			}
+			if len(groupRows) == 0 {
+				continue
+			}
+		}
+
+		output = append(output, outRow)
+	}
+
+	return output, nil
+}
+
+// applyMapGroupByRollup implements the in-memory rollup aggregation for
+// groupby((rollup(…)), aggregate(…)) transformations.
+// It produces one output row per rollup level, ordered from most- to least-specific,
+// and optionally a grand-total row when IncludeGrandTotal is true.
+func applyMapGroupByRollup(results []map[string]interface{}, groupBy *query.GroupByTransformation) ([]map[string]interface{}, error) {
+	rollup := groupBy.Rollup
+	allProps := append(groupBy.Properties, rollup.Properties...) //nolint:gocritic
+
+	// Compute the levels: from finest to coarsest grain.
+	// Level i uses all regular properties + the first (N-i) rollup properties.
+	// E.g. rollup(A, B) has levels: [A,B], [A], and grand-total if IncludeGrandTotal.
+	var levels [][]string
+	for i := 0; i <= len(rollup.Properties); i++ {
+		// include regular props + the first (len-i) rollup props
+		numRollup := len(rollup.Properties) - i
+		level := make([]string, 0, len(groupBy.Properties)+numRollup)
+		level = append(level, groupBy.Properties...)
+		level = append(level, rollup.Properties[:numRollup]...)
+		levels = append(levels, level)
+	}
+	// The last entry is the grand total (all rollup props are null).
+	// Only include it if IncludeGrandTotal is true.
+	if !rollup.IncludeGrandTotal {
+		// Remove the grand total level (last entry: regular props only)
+		levels = levels[:len(levels)-1]
+	}
+
+	output := make([]map[string]interface{}, 0)
+
+	for _, levelProps := range levels {
+		levelRows, err := applyMapGroupByForProps(results, levelProps, allProps, groupBy.Transform)
+		if err != nil {
+			return nil, err
+		}
+		output = append(output, levelRows...)
+	}
+
+	return output, nil
+}
+
+// applyMapGroupByForProps groups rows by levelProps, applies nested transforms,
+// and sets any property in allProps not in levelProps to nil (rollup null marker).
+func applyMapGroupByForProps(results []map[string]interface{}, levelProps []string, allProps []string, transforms []query.ApplyTransformation) ([]map[string]interface{}, error) {
+	groups := make(map[string][]map[string]interface{})
+	groupOrder := make([]string, 0)
+	keyRowsByKey := make(map[string]map[string]interface{})
+
+	levelPropSet := make(map[string]bool, len(levelProps))
+	for _, p := range levelProps {
+		levelPropSet[p] = true
+	}
+
+	for _, row := range results {
+		keyParts := make([]string, 0, len(levelProps))
+		keyRow := make(map[string]interface{})
+
+		for _, prop := range levelProps {
+			val, _ := getNestedMapValueCaseInsensitive(row, prop)
+			keyParts = append(keyParts, fmt.Sprintf("%v=%v", prop, val))
+			keyRow[prop] = val
+		}
+
+		key := strings.Join(keyParts, "|")
+		if _, exists := groups[key]; !exists {
+			groupOrder = append(groupOrder, key)
+			keyRowsByKey[key] = keyRow
+		}
+		groups[key] = append(groups[key], row)
+	}
+
+	output := make([]map[string]interface{}, 0, len(groups))
+
+	for _, key := range groupOrder {
+		groupRows := groups[key]
+		outRow := cloneMap(keyRowsByKey[key])
+
+		// Set properties that belong to allProps but are not in levelProps to nil
+		// (they represent the rolled-up dimensions for this aggregation level).
+		for _, prop := range allProps {
+			if !levelPropSet[prop] {
+				outRow[prop] = nil
+			}
+		}
+
+		if len(transforms) > 0 {
+			for _, tr := range transforms {
 				switch tr.Type {
 				case query.ApplyTypeFilter:
 					groupRows = applyMapFilter(groupRows, tr.Filter)

@@ -93,6 +93,10 @@ type NestTransformation = query.NestTransformation
 // FromTransformation re-exports the from transformation type for external consumers.
 type FromTransformation = query.FromTransformation
 
+// RollupSpec re-exports the rollup specification type for external consumers.
+// It represents a rollup() function call within a groupby property list.
+type RollupSpec = query.RollupSpec
+
 // ParserConfig re-exports the parser configuration type for external consumers.
 type ParserConfig = query.ParserConfig
 
