@@ -253,6 +253,91 @@ func TestIsAcceptableFormatWithMetadata(t *testing.T) {
 	}
 }
 
+func TestGetIEEE754Compatible(t *testing.T) {
+	tests := []struct {
+		name         string
+		acceptHeader string
+		formatParam  string
+		expected     bool
+	}{
+		{name: "No headers defaults to false", expected: false},
+		{name: "Accept true", acceptHeader: "application/json;IEEE754Compatible=true", expected: true},
+		{name: "Accept false", acceptHeader: "application/json;IEEE754Compatible=false", expected: false},
+		{name: "Accept wildcard true", acceptHeader: "*/*;IEEE754Compatible=true", expected: true},
+		{name: "Invalid value ignored", acceptHeader: "application/json;IEEE754Compatible=maybe", expected: false},
+		{name: "$format true", formatParam: "application/json;IEEE754Compatible=true", expected: true},
+		{name: "$format false", formatParam: "application/json;IEEE754Compatible=false", expected: false},
+		{name: "$format overrides Accept", acceptHeader: "application/json;IEEE754Compatible=false", formatParam: "application/json;IEEE754Compatible=true", expected: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/test", nil)
+			if tt.formatParam != "" {
+				q := req.URL.Query()
+				q.Set("$format", tt.formatParam)
+				req.URL.RawQuery = q.Encode()
+			}
+			if tt.acceptHeader != "" {
+				req.Header.Set("Accept", tt.acceptHeader)
+			}
+
+			got := GetIEEE754Compatible(req)
+			if got != tt.expected {
+				t.Fatalf("GetIEEE754Compatible() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestBuildJSONContentType(t *testing.T) {
+	tests := []struct {
+		name         string
+		acceptHeader string
+		formatParam  string
+		expected     string
+	}{
+		{
+			name:     "Default minimal without IEEE",
+			expected: "application/json;odata.metadata=minimal",
+		},
+		{
+			name:         "Metadata full no IEEE",
+			acceptHeader: "application/json;odata.metadata=full",
+			expected:     "application/json;odata.metadata=full",
+		},
+		{
+			name:         "Metadata none with IEEE",
+			acceptHeader: "application/json;odata.metadata=none;IEEE754Compatible=true",
+			expected:     "application/json;odata.metadata=none;IEEE754Compatible=true",
+		},
+		{
+			name:        "$format full with IEEE",
+			formatParam: "application/json;odata.metadata=full;IEEE754Compatible=true",
+			expected:    "application/json;odata.metadata=full;IEEE754Compatible=true",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/test", nil)
+			if tt.formatParam != "" {
+				q := req.URL.Query()
+				q.Set("$format", tt.formatParam)
+				req.URL.RawQuery = q.Encode()
+			}
+			if tt.acceptHeader != "" {
+				req.Header.Set("Accept", tt.acceptHeader)
+			}
+
+			got := BuildJSONContentType(req)
+			if got != tt.expected {
+				t.Fatalf("BuildJSONContentType() = %q, want %q", got, tt.expected)
+			}
+		})
+	}
+}
+
 // TestGetFormatParameter tests the getFormatParameter helper function
 func TestGetFormatParameter(t *testing.T) {
 	tests := []struct {
