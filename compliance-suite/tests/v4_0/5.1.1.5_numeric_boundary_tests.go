@@ -104,10 +104,11 @@ func NumericBoundaryTests() *framework.TestSuite {
 	)
 
 	suite.AddTest(
-		"test_decimal_precision",
-		"Decimal type preserves precision",
+		"test_double_string_payload_rejected",
+		"Edm.Double property rejects string numeric payload without IEEE754 decimal semantics",
 		func(ctx *framework.TestContext) error {
-			// Create product with high-precision decimal
+			// Product.Price is Edm.Double in the compliance model. Sending a string
+			// for a strongly-typed float64 field must fail request-body parsing.
 			precision := "123.456789012345"
 
 			categoryID, err := firstEntityID(ctx, "Categories")
@@ -117,7 +118,7 @@ func NumericBoundaryTests() *framework.TestSuite {
 
 			payload := map[string]interface{}{
 				"Name":       "Precision Test",
-				"Price":      precision, // As string to preserve precision
+				"Price":      precision,
 				"CategoryID": categoryID,
 				"Status":     1,
 			}
@@ -129,33 +130,20 @@ func NumericBoundaryTests() *framework.TestSuite {
 				return err
 			}
 
-			if resp.StatusCode != 201 {
-				// Server might not support high precision
-				return ctx.Skip(fmt.Sprintf("Product creation failed: %d", resp.StatusCode))
+			if resp.StatusCode != 400 {
+				return fmt.Errorf("expected 400 when posting string to Edm.Double, got %d", resp.StatusCode)
 			}
 
-			var result map[string]interface{}
-			if err := json.Unmarshal(resp.Body, &result); err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
-			}
-
-			// Check if precision was preserved
-			price := result["Price"]
-			priceStr := fmt.Sprintf("%v", price)
-
-			ctx.Log(fmt.Sprintf("Decimal stored as: %s", priceStr))
-
-			// Note: Some precision loss is acceptable in JSON serialization
-			// Main check is that value is approximately correct
+			ctx.Log("String payload to Edm.Double correctly rejected with 400")
 			return nil
 		},
 	)
 
 	suite.AddTest(
-		"test_decimal_scale",
-		"Decimal scale validation",
+		"test_double_numeric_payload_accepted",
+		"Edm.Double property accepts numeric payload",
 		func(ctx *framework.TestContext) error {
-			// Test decimal with many decimal places
+			// Numeric JSON values should bind to float64/Edm.Double fields.
 			manyDecimals := 123.123456789012345
 
 			categoryID, err := firstEntityID(ctx, "Categories")
@@ -177,17 +165,86 @@ func NumericBoundaryTests() *framework.TestSuite {
 				return err
 			}
 
-			// Should either accept or reject based on schema
-			if resp.StatusCode != 201 && resp.StatusCode != 400 {
-				return fmt.Errorf("unexpected status %d", resp.StatusCode)
+			if resp.StatusCode != 201 {
+				return fmt.Errorf("expected 201 for numeric payload to Edm.Double, got %d", resp.StatusCode)
 			}
 
-			if resp.StatusCode == 400 {
-				ctx.Log("Decimal scale validation enforced (400)")
-			} else {
-				ctx.Log("Decimal scale accepted (201)")
+			ctx.Log("Numeric payload to Edm.Double accepted")
+			return nil
+		},
+	)
+
+	suite.AddTest(
+		"test_decimal_ieee754_string_payload",
+		"Edm.Decimal accepts string payload with IEEE754Compatible=true and returns string",
+		func(ctx *framework.TestContext) error {
+			payload := map[string]interface{}{
+				"Name":   "Decimal IEEE754 String",
+				"Amount": "123.456789012345678901",
 			}
 
+			resp, err := ctx.POST("/DecimalSamples", payload,
+				framework.Header{Key: "Content-Type", Value: "application/json;IEEE754Compatible=true"},
+				framework.Header{Key: "Accept", Value: "application/json;IEEE754Compatible=true"},
+			)
+			if err != nil {
+				return err
+			}
+
+			if resp.StatusCode != 201 {
+				return fmt.Errorf("expected 201 for IEEE754 decimal string payload, got %d", resp.StatusCode)
+			}
+
+			var result map[string]interface{}
+			if err := json.Unmarshal(resp.Body, &result); err != nil {
+				return fmt.Errorf("response should be valid JSON: %w", err)
+			}
+
+			if _, ok := result["Amount"].(string); !ok {
+				return fmt.Errorf("expected Amount to be serialized as string with IEEE754Compatible=true, got %T", result["Amount"])
+			}
+
+			contentType := resp.Headers.Get("Content-Type")
+			if !strings.Contains(strings.ToLower(contentType), "ieee754compatible=true") {
+				return fmt.Errorf("expected Content-Type to include IEEE754Compatible=true, got %q", contentType)
+			}
+
+			ctx.Log("Edm.Decimal IEEE754 string request/response behavior verified")
+			return nil
+		},
+	)
+
+	suite.AddTest(
+		"test_decimal_default_number_payload",
+		"Edm.Decimal defaults to JSON number representation when IEEE754Compatible is not requested",
+		func(ctx *framework.TestContext) error {
+			payload := map[string]interface{}{
+				"Name":   "Decimal Numeric",
+				"Amount": 42.125,
+			}
+
+			resp, err := ctx.POST("/DecimalSamples", payload,
+				framework.Header{Key: "Content-Type", Value: "application/json"},
+				framework.Header{Key: "Accept", Value: "application/json"},
+			)
+			if err != nil {
+				return err
+			}
+
+			if resp.StatusCode != 201 {
+				return fmt.Errorf("expected 201 for default decimal numeric payload, got %d", resp.StatusCode)
+			}
+
+			var result map[string]interface{}
+			if err := json.Unmarshal(resp.Body, &result); err != nil {
+				return fmt.Errorf("response should be valid JSON: %w", err)
+			}
+
+			if _, ok := result["Amount"].(float64); !ok {
+				return fmt.Errorf("expected Amount to be a JSON number without IEEE754Compatible=true, got %T", result["Amount"])
+			}
+
+			ctx.Log("Edm.Decimal default numeric JSON behavior verified")
 			return nil
 		},
 	)

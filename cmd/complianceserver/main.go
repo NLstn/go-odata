@@ -143,6 +143,11 @@ func main() {
 		log.Fatal("Failed to register ReadOnlyItem entity:", err)
 	}
 
+	// Register a dedicated decimal entity for numeric compliance checks.
+	if err := service.RegisterEntity(&entities.DecimalSample{}); err != nil {
+		log.Fatal("Failed to register DecimalSample entity:", err)
+	}
+
 	if err := service.RegisterEntitySetAnnotation("ReadOnlyItems",
 		"Org.OData.Capabilities.V1.InsertRestrictions",
 		map[string]interface{}{"Insertable": false}); err != nil {

@@ -43,6 +43,8 @@ func seedDatabase(db *gorm.DB) error {
 	_ = db.Migrator().DropTable(&entities.CompanyInfo{})
 	//nolint:errcheck
 	_ = db.Migrator().DropTable(&entities.MediaItem{})
+	//nolint:errcheck
+	_ = db.Migrator().DropTable(&entities.DecimalSample{})
 
 	// Drop FTS tables if they exist to ensure search indexes are rebuilt
 	// Only for SQLite - FTS tables are virtual tables specific to SQLite
@@ -60,7 +62,7 @@ func seedDatabase(db *gorm.DB) error {
 	}
 
 	// Recreate tables with fresh schema (auto-increment counters are automatically reset)
-	if err := db.AutoMigrate(&entities.Category{}, &entities.Product{}, &entities.ProductDescription{}, &entities.CompanyInfo{}, &entities.MediaItem{}, &entities.ReadOnlyItem{}); err != nil {
+	if err := db.AutoMigrate(&entities.Category{}, &entities.Product{}, &entities.ProductDescription{}, &entities.CompanyInfo{}, &entities.MediaItem{}, &entities.ReadOnlyItem{}, &entities.DecimalSample{}); err != nil {
 		return fmt.Errorf("failed to migrate database: %w", err)
 	}
 
@@ -144,8 +146,17 @@ func seedDatabase(db *gorm.DB) error {
 		return fmt.Errorf("failed to seed read-only items: %w", err)
 	}
 
-	fmt.Printf("Database seeded with %d categories, %d products, %d descriptions, %d media items, %d read-only items, and company info\n",
-		len(sampleCategories), len(sampleProducts), len(sampleDescriptions), len(sampleMediaItems), len(sampleReadOnlyItems))
+	// Seed decimal samples.
+	sampleDecimalSamples := entities.GetSampleDecimalSamples()
+	for i := range sampleDecimalSamples {
+		sampleDecimalSamples[i].ID = uuid.New()
+	}
+	if err := db.Create(&sampleDecimalSamples).Error; err != nil {
+		return fmt.Errorf("failed to seed decimal samples: %w", err)
+	}
+
+	fmt.Printf("Database seeded with %d categories, %d products, %d descriptions, %d media items, %d read-only items, %d decimal samples, and company info\n",
+		len(sampleCategories), len(sampleProducts), len(sampleDescriptions), len(sampleMediaItems), len(sampleReadOnlyItems), len(sampleDecimalSamples))
 	return nil
 }
 
