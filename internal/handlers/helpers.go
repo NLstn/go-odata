@@ -2,11 +2,14 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"reflect"
 	"strconv"
 	"strings"
+
+	"github.com/shopspring/decimal"
 
 	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/odataerrors"
@@ -516,6 +519,7 @@ func (h *EntityHandler) buildEntityResponseWithMetadata(navValue reflect.Value, 
 // buildOrderedEntityResponseWithMetadata builds an ordered OData entity response with metadata level support
 func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{}, contextURL string, metadataLevel string, r *http.Request, etagValue string, expandOptions []query.ExpandOption) *response.OrderedMap {
 	odataResponse := response.NewOrderedMap()
+	ieee754Compatible := response.GetIEEE754Compatible(r)
 
 	// Only include @odata.context for minimal and full metadata (not for none)
 	if metadataLevel != "none" {
@@ -630,7 +634,7 @@ func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{
 					}
 				}
 
-				odataResponse.Set(keyStr, value.Interface())
+				odataResponse.Set(keyStr, normalizeDecimalForJSON(value.Interface(), ieee754Compatible))
 			}
 		}
 
@@ -770,7 +774,7 @@ func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{
 				}
 			}
 			// Then include the property value
-			odataResponse.Set(jsonName, fieldValue.Interface())
+			odataResponse.Set(jsonName, normalizeDecimalForJSON(fieldValue.Interface(), ieee754Compatible))
 		}
 	}
 
@@ -794,6 +798,26 @@ func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{
 	}
 
 	return odataResponse
+}
+
+func normalizeDecimalForJSON(value interface{}, ieee754Compatible bool) interface{} {
+	switch v := value.(type) {
+	case decimal.Decimal:
+		if ieee754Compatible {
+			return v.String()
+		}
+		return json.Number(v.String())
+	case *decimal.Decimal:
+		if v == nil {
+			return nil
+		}
+		if ieee754Compatible {
+			return v.String()
+		}
+		return json.Number(v.String())
+	}
+
+	return value
 }
 
 // findPropertyMetadata finds metadata for a property by field name, JSON name, or FieldName

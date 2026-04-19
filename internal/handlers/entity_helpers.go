@@ -235,13 +235,13 @@ func (h *EntityHandler) writeEntityResponseWithETag(w http.ResponseWriter, r *ht
 			}
 			return
 		}
-		w.Header().Set(HeaderContentType, fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
+		w.Header().Set(HeaderContentType, response.BuildJSONContentType(r))
 		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(jsonBytes)))
 		w.WriteHeader(status)
 		return
 	}
 
-	w.Header().Set(HeaderContentType, fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
+	w.Header().Set(HeaderContentType, response.BuildJSONContentType(r))
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(odataResponse); err != nil {
 		h.logger.Error("Error writing entity response", "error", err)

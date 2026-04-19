@@ -122,6 +122,49 @@ func GetODataMetadataLevel(r *http.Request) string {
 	return MetadataMinimal
 }
 
+// GetIEEE754Compatible extracts IEEE754Compatible format parameter value from
+// $format or Accept. Returns false when unspecified.
+func GetIEEE754Compatible(r *http.Request) bool {
+	format := getFormatParameter(r.URL.RawQuery)
+	if format != "" {
+		if value, ok := extractIEEE754FromMediaType(format); ok {
+			return value
+		}
+	}
+
+	accept := r.Header.Get("Accept")
+	if accept != "" {
+		parts := strings.Split(accept, ",")
+		for _, part := range parts {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+
+			subparts := strings.Split(part, ";")
+			mimeType := strings.TrimSpace(subparts[0])
+			if mimeType != "application/json" && mimeType != "*/*" && mimeType != "application/*" {
+				continue
+			}
+
+			if value, ok := extractIEEE754FromParts(subparts[1:]); ok {
+				return value
+			}
+		}
+	}
+
+	return false
+}
+
+// BuildJSONContentType builds the OData JSON Content-Type value from request format negotiation.
+func BuildJSONContentType(r *http.Request) string {
+	metadataLevel := GetODataMetadataLevel(r)
+	if GetIEEE754Compatible(r) {
+		return fmt.Sprintf("application/json;odata.metadata=%s;IEEE754Compatible=true", metadataLevel)
+	}
+	return fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel)
+}
+
 func getFormatParameter(rawQuery string) string {
 	params := strings.Split(rawQuery, "&")
 	for _, param := range params {
@@ -223,6 +266,40 @@ func extractMetadataFromAccept(accept string) string {
 	}
 
 	return MetadataMinimal
+}
+
+func extractIEEE754FromMediaType(mediaType string) (bool, bool) {
+	parts := strings.Split(mediaType, ";")
+	return extractIEEE754FromParts(parts[1:])
+}
+
+func extractIEEE754FromParts(parts []string) (bool, bool) {
+	for _, param := range parts {
+		param = strings.TrimSpace(param)
+		if param == "" {
+			continue
+		}
+
+		segments := strings.SplitN(param, "=", 2)
+		if len(segments) != 2 {
+			continue
+		}
+
+		key := strings.TrimSpace(segments[0])
+		value := strings.TrimSpace(segments[1])
+		if !strings.EqualFold(key, "IEEE754Compatible") {
+			continue
+		}
+
+		if strings.EqualFold(value, "true") {
+			return true, true
+		}
+		if strings.EqualFold(value, "false") {
+			return false, true
+		}
+	}
+
+	return false, false
 }
 
 // IsAcceptableFormat checks if the requested format via Accept header or $format is supported
