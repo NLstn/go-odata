@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nlstn/go-odata/internal/metadata"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -287,6 +288,53 @@ func TestApplyGroupByRollup_SQL(t *testing.T) {
 	})
 }
 
+func TestApplyGroupByRollup_SkipsStreamMarkerColumns(t *testing.T) {
+	type RollupStreamEntity struct {
+		ID               int      `json:"ID" odata:"key"`
+		Category         string   `json:"Category"`
+		Price            float64  `json:"Price"`
+		Photo            struct{} `json:"-" gorm:"-" odata:"stream"`
+		PhotoContentType string   `json:"-"`
+		PhotoContent     []byte   `json:"-"`
+	}
+
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
+	if err != nil {
+		t.Fatalf("failed to open in-memory SQLite: %v", err)
+	}
+
+	if err := db.AutoMigrate(&RollupStreamEntity{}); err != nil {
+		t.Fatalf("failed to migrate: %v", err)
+	}
+
+	seed := []RollupStreamEntity{
+		{ID: 1, Category: "A", Price: 10, PhotoContentType: "image/jpeg", PhotoContent: []byte("x")},
+		{ID: 2, Category: "A", Price: 15, PhotoContentType: "image/jpeg", PhotoContent: []byte("y")},
+	}
+	if err := db.Create(&seed).Error; err != nil {
+		t.Fatalf("failed to seed data: %v", err)
+	}
+
+	meta, err := metadata.AnalyzeEntity(RollupStreamEntity{})
+	if err != nil {
+		t.Fatalf("failed to analyze entity metadata: %v", err)
+	}
+
+	transformations, err := parseApply("groupby((rollup(null,Category)),aggregate(Price with sum as Total))", meta, 0)
+	if err != nil {
+		t.Fatalf("parseApply failed: %v", err)
+	}
+
+	resultDB := applyTransformations(db.Session(&gorm.Session{}), transformations, meta)
+
+	var rawResults []map[string]interface{}
+	if err := resultDB.Find(&rawResults).Error; err != nil {
+		t.Fatalf("rollup pre-aggregation query failed: %v", err)
+	}
+}
+
 // applyMapRollup is a thin wrapper used in tests to call the rollup in-memory processing.
 // In production this is invoked by the handler via applyMapGroupByRollup.
 func applyMapRollup(results []map[string]interface{}, groupBy *GroupByTransformation) ([]map[string]interface{}, error) {
@@ -403,39 +451,39 @@ func TestBuildRollupGroupByClause(t *testing.T) {
 		wantNotContains string
 	}{
 		{
-			name:          "postgres with single rollup column",
-			dialect:       "postgres",
+			name:           "postgres with single rollup column",
+			dialect:        "postgres",
 			regularColumns: []string{},
-			rollupColumns: []string{`"col1"`},
-			wantContains:  `ROLLUP("col1")`,
+			rollupColumns:  []string{`"col1"`},
+			wantContains:   `ROLLUP("col1")`,
 		},
 		{
-			name:          "postgres with regular and rollup columns",
-			dialect:       "postgres",
+			name:           "postgres with regular and rollup columns",
+			dialect:        "postgres",
 			regularColumns: []string{`"reg"`},
-			rollupColumns: []string{`"col1"`, `"col2"`},
-			wantContains:  `ROLLUP("col1", "col2")`,
+			rollupColumns:  []string{`"col1"`, `"col2"`},
+			wantContains:   `ROLLUP("col1", "col2")`,
 		},
 		{
-			name:          "sqlite with single rollup column",
-			dialect:       "sqlite",
+			name:           "sqlite with single rollup column",
+			dialect:        "sqlite",
 			regularColumns: []string{},
-			rollupColumns: []string{"`col1`"},
-			wantContains:  "WITH ROLLUP",
+			rollupColumns:  []string{"`col1`"},
+			wantContains:   "WITH ROLLUP",
 		},
 		{
-			name:          "mysql with regular and rollup columns",
-			dialect:       "mysql",
+			name:           "mysql with regular and rollup columns",
+			dialect:        "mysql",
 			regularColumns: []string{"`reg`"},
-			rollupColumns: []string{"`col1`", "`col2`"},
-			wantContains:  "WITH ROLLUP",
+			rollupColumns:  []string{"`col1`", "`col2`"},
+			wantContains:   "WITH ROLLUP",
 		},
 		{
-			name:          "sqlserver with rollup columns",
-			dialect:       "sqlserver",
+			name:           "sqlserver with rollup columns",
+			dialect:        "sqlserver",
 			regularColumns: []string{},
-			rollupColumns: []string{"[col1]", "[col2]"},
-			wantContains:  "ROLLUP([col1], [col2])",
+			rollupColumns:  []string{"[col1]", "[col2]"},
+			wantContains:   "ROLLUP([col1], [col2])",
 		},
 	}
 
