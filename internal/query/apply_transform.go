@@ -420,7 +420,7 @@ func applyGroupByWithRollup(db *gorm.DB, groupBy *GroupByTransformation, entityM
 	for _, prop := range entityMetadata.Properties {
 		// Skip navigation properties, server-computed properties, and complex types
 		// (embedded structs) — none of these have a single database column to SELECT.
-		if prop.IsNavigationProp || prop.IsComputed || prop.IsComplexType {
+		if prop.IsNavigationProp || prop.IsComputed || prop.IsComplexType || prop.IsStream {
 			continue
 		}
 		columnName := prop.ColumnName
