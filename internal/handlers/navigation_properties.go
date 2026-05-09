@@ -184,7 +184,7 @@ func (h *EntityHandler) handleNavigationCollectionWithQueryOptions(w http.Respon
 		return
 	}
 
-	relatedDB := h.buildNavigationRelatedQuery(parent, targetMetadata)
+	relatedDB := h.buildNavigationRelatedQuery(parent, navProp, targetMetadata)
 	navigationPath := fmt.Sprintf("%s(%s)/%s", h.metadata.EntitySetName, entityKey, navProp.JsonName)
 
 	h.executeCollectionQuery(w, r, &collectionExecutionContext{
@@ -230,11 +230,48 @@ func (h *EntityHandler) verifyAndFetchParentEntity(w http.ResponseWriter, r *htt
 	return parent, nil
 }
 
-// buildNavigationRelatedQuery builds a GORM query for the related collection with foreign key constraints
-func (h *EntityHandler) buildNavigationRelatedQuery(parent interface{}, targetMetadata *metadata.EntityMetadata) *gorm.DB {
+// buildNavigationRelatedQuery builds a GORM query for the related collection with foreign key constraints.
+// It honours explicit GORM foreignKey/references tags on the navigation property before falling back
+// to the convention-based <EntityName><KeyName> approach.
+func (h *EntityHandler) buildNavigationRelatedQuery(parent interface{}, navProp *metadata.PropertyMetadata, targetMetadata *metadata.EntityMetadata) *gorm.DB {
 	relatedDB := h.db.Model(reflect.New(targetMetadata.EntityType).Interface())
 	parentValue := reflect.ValueOf(parent).Elem()
 
+	// Prefer explicit referential constraints from GORM foreignKey/references tags.
+	if len(navProp.ReferentialConstraints) > 0 {
+		for dependentProp, principalProp := range navProp.ReferentialConstraints {
+			principalField := parentValue.FieldByName(principalProp)
+			if !principalField.IsValid() {
+				continue
+			}
+			// Resolve column name from the dependent property on the target entity.
+			var dependentColumn string
+			if prop := targetMetadata.FindProperty(dependentProp); prop != nil && prop.ColumnName != "" {
+				dependentColumn = prop.ColumnName
+			} else {
+				dependentColumn = toSnakeCase(dependentProp)
+			}
+			relatedDB = relatedDB.Where(fmt.Sprintf("%s = ?", dependentColumn), principalField.Interface())
+		}
+		return relatedDB
+	}
+
+	// Fall back to the pre-computed ForeignKeyColumnName (set from the GORM foreignKey tag).
+	if navProp.ForeignKeyColumnName != "" {
+		fkColumns := strings.Split(navProp.ForeignKeyColumnName, ",")
+		for i, keyProp := range h.metadata.KeyProperties {
+			if i >= len(fkColumns) {
+				break
+			}
+			keyFieldValue := parentValue.FieldByName(keyProp.Name)
+			if keyFieldValue.IsValid() {
+				relatedDB = relatedDB.Where(fmt.Sprintf("%s = ?", strings.TrimSpace(fkColumns[i])), keyFieldValue.Interface())
+			}
+		}
+		return relatedDB
+	}
+
+	// Last resort: derive FK column from entity name + key property name (convention).
 	for _, keyProp := range h.metadata.KeyProperties {
 		keyFieldValue := parentValue.FieldByName(keyProp.Name)
 		if keyFieldValue.IsValid() {

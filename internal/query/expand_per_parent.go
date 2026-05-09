@@ -24,6 +24,16 @@ func ApplyPerParentExpand(db *gorm.DB, results interface{}, expandOptions []Expa
 	for _, expandOpt := range expandOptions {
 		navProp := findNavigationProperty(expandOpt.NavigationProperty, entityMetadata)
 		if !needsPerParentExpand(expandOpt, navProp) {
+			// Even if this expand doesn't need per-parent processing itself, recurse into
+			// already-loaded children when the nested expands need per-parent processing.
+			if len(expandOpt.Expand) > 0 && navProp != nil && navProp.IsNavigationProp {
+				targetMetadata, err := entityMetadata.ResolveNavigationTarget(expandOpt.NavigationProperty)
+				if err == nil {
+					if err := applyNestedPerParentExpand(db, parentValues, navProp, expandOpt.Expand, targetMetadata); err != nil {
+						return err
+					}
+				}
+			}
 			continue
 		}
 
@@ -482,6 +492,68 @@ func getStructFieldValue(parentStruct reflect.Value, propName string) (interface
 	}
 
 	return nil, false
+}
+
+// applyNestedPerParentExpand recurses into already-loaded navigation property children
+// to apply nested per-parent expand options (e.g. $expand=A($expand=B($top=1))).
+// When A itself has no $top/$skip, it was loaded via GORM preload, but its children (B)
+// may still need per-parent processing. This function collects all loaded A items across
+// all parents and calls ApplyPerParentExpand on them so that B's $top is honoured.
+func applyNestedPerParentExpand(db *gorm.DB, parentValues []reflect.Value, navProp *metadata.PropertyMetadata, nestedExpand []ExpandOption, targetMetadata *metadata.EntityMetadata) error {
+	fieldName := navProp.FieldName
+	if fieldName == "" {
+		fieldName = navProp.Name
+	}
+
+	// Collect already-loaded child values as *TargetEntity pointers so that mutations
+	// performed by ApplyPerParentExpand are reflected in the original parent structs.
+	childPtrType := reflect.PointerTo(targetMetadata.EntityType)
+	allChildren := reflect.MakeSlice(reflect.SliceOf(childPtrType), 0, 0)
+
+	for _, parentVal := range parentValues {
+		parentStruct := dereferenceValue(parentVal)
+		if !parentStruct.IsValid() || parentStruct.Kind() != reflect.Struct {
+			continue
+		}
+
+		field := parentStruct.FieldByName(fieldName)
+		if !field.IsValid() {
+			continue
+		}
+
+		switch field.Kind() {
+		case reflect.Slice, reflect.Array:
+			for i := 0; i < field.Len(); i++ {
+				item := field.Index(i)
+				switch item.Kind() {
+				case reflect.Struct:
+					if item.CanAddr() {
+						allChildren = reflect.Append(allChildren, item.Addr())
+					}
+				case reflect.Ptr:
+					if !item.IsNil() {
+						allChildren = reflect.Append(allChildren, item)
+					}
+				}
+			}
+		case reflect.Struct:
+			if field.CanAddr() {
+				allChildren = reflect.Append(allChildren, field.Addr())
+			}
+		case reflect.Ptr:
+			if !field.IsNil() {
+				allChildren = reflect.Append(allChildren, field)
+			}
+		}
+	}
+
+	if allChildren.Len() == 0 {
+		return nil
+	}
+
+	ptr := reflect.New(allChildren.Type())
+	ptr.Elem().Set(allChildren)
+	return ApplyPerParentExpand(db, ptr.Interface(), nestedExpand, targetMetadata)
 }
 
 func setNavigationValue(parentStruct reflect.Value, navProp *metadata.PropertyMetadata, value reflect.Value) error {
