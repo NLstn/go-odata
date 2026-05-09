@@ -137,7 +137,17 @@ func applyNestedExpandAnnotationsToStruct(entityVal reflect.Value, expandOptions
 			if expandOpt != nil {
 				targetMetadata, err := metadata.ResolveNavigationTarget(propMeta.Name)
 				if err == nil {
-					updatedValue, count := ApplyExpandOptionToValue(fieldVal.Interface(), expandOpt, targetMetadata)
+					// Apply $top truncation for collection navigation properties.
+					// When a nested expand uses $top, ApplyPerParentExpand fetches top+1 items
+					// (one extra for nextLink detection). We must trim back to top here because
+					// this path (struct → map conversion) does not go through
+					// processNavigationPropertyOrderedWithMetadata, which is where the
+					// trimming normally happens for top-level expanded collections.
+					fv := fieldVal
+					if expandOpt.Top != nil && propMeta.NavigationIsArray && fv.Kind() == reflect.Slice {
+						fv, _ = TruncateExpandedCollectionToTop(fv, *expandOpt.Top)
+					}
+					updatedValue, count := ApplyExpandOptionToValue(fv.Interface(), expandOpt, targetMetadata)
 					result[jsonName] = updatedValue
 					if count != nil {
 						result[jsonName+"@odata.count"] = *count
