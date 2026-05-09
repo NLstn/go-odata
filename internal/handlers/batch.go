@@ -16,6 +16,7 @@ import (
 	"net/http/httptest"
 	"net/textproto"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -752,7 +753,17 @@ func (h *BatchHandler) executeRequestInTransaction(req *batchRequest, tx *gorm.D
 
 // createErrorResponse creates an error response
 func (h *BatchHandler) createErrorResponse(statusCode int, message string) batchResponse {
-	errorBody := fmt.Sprintf(`{"error":{"code":"%d","message":"%s"}}`, statusCode, message)
+	payload := map[string]map[string]string{
+		"error": {
+			"code":    strconv.Itoa(statusCode),
+			"message": message,
+		},
+	}
+	errorBody, err := json.Marshal(payload)
+	if err != nil {
+		errorBody = []byte(`{"error":{"code":"500","message":"Internal Server Error"}}`)
+	}
+
 	headers := http.Header{}
 	headers.Set("Content-Type", "application/json")
 	// Use version 4.01 for batch error responses (no request context available)
@@ -761,7 +772,7 @@ func (h *BatchHandler) createErrorResponse(statusCode int, message string) batch
 	return batchResponse{
 		StatusCode: statusCode,
 		Headers:    headers,
-		Body:       []byte(errorBody),
+		Body:       errorBody,
 	}
 }
 
