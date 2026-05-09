@@ -551,6 +551,9 @@ func applyNestedPerParentExpand(db *gorm.DB, parentValues []reflect.Value, navPr
 		return nil
 	}
 
+	// ApplyPerParentExpand accepts an interface{} for results, so we wrap the collected
+	// slice of child pointers in a reflect.New pointer so the function can dereference
+	// it via reflect and iterate over the addressable child values.
 	ptr := reflect.New(allChildren.Type())
 	ptr.Elem().Set(allChildren)
 	return ApplyPerParentExpand(db, ptr.Interface(), nestedExpand, targetMetadata)

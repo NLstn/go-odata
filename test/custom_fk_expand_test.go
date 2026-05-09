@@ -50,8 +50,8 @@ func setupCustomFKTestDB(t *testing.T) *gorm.DB {
 		{ID: "suite-1", Name: "Suite One"},
 		{ID: "suite-2", Name: "Suite Two"},
 	}
-	for _, s := range suites {
-		db.Create(&s)
+	if err := db.Create(&suites).Error; err != nil {
+		t.Fatalf("Failed to seed suites: %v", err)
 	}
 
 	runs := []CustomFKRun{
@@ -60,8 +60,8 @@ func setupCustomFKTestDB(t *testing.T) *gorm.DB {
 		{ID: "run-1c", SuiteID: "suite-1", Name: "Run 1C", Order: 2},
 		{ID: "run-2a", SuiteID: "suite-2", Name: "Run 2A", Order: 1},
 	}
-	for _, r := range runs {
-		db.Create(&r)
+	if err := db.Create(&runs).Error; err != nil {
+		t.Fatalf("Failed to seed runs: %v", err)
 	}
 
 	return db
@@ -324,9 +324,15 @@ func TestNestedExpandWithTopOnCustomFK(t *testing.T) {
 		{ID: "ns-run-1b", SuiteID: "ns-suite-1", Name: "Run 1B", Order: 1},
 		{ID: "ns-run-2a", SuiteID: "ns-suite-2", Name: "Run 2A", Order: 1},
 	}
-	db.Create(&systems)
-	db.Create(&suites)
-	db.Create(&runs)
+	if err := db.Create(&systems).Error; err != nil {
+		t.Fatalf("seed systems: %v", err)
+	}
+	if err := db.Create(&suites).Error; err != nil {
+		t.Fatalf("seed suites: %v", err)
+	}
+	if err := db.Create(&runs).Error; err != nil {
+		t.Fatalf("seed runs: %v", err)
+	}
 
 	svc, err := odata.NewService(db)
 	if err != nil {
