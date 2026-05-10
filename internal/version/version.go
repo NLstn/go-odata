@@ -61,6 +61,9 @@ func (v Version) Supports(feature string) bool {
 	case "matchespattern":
 		// matchesPattern() filter function added in OData 4.01 (§11.5.3.3)
 		return v.Major > 4 || (v.Major == 4 && v.Minor >= 1)
+	case "unprefixed-preferences":
+		// OData 4.01 requires supported OData preference names without the odata. prefix.
+		return v.Major > 4 || (v.Major == 4 && v.Minor >= 1)
 	default:
 		return false
 	}
