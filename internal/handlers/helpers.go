@@ -144,6 +144,30 @@ func usesDivByOperator(filter *query.FilterExpression) bool {
 	return usesDivByOperator(filter.Left) || usesDivByOperator(filter.Right)
 }
 
+func expandHasDivByOperator(expands []query.ExpandOption) bool {
+	for _, expand := range expands {
+		if usesDivByOperator(expand.Filter) {
+			return true
+		}
+		if expandHasDivByOperator(expand.Expand) {
+			return true
+		}
+	}
+	return false
+}
+
+func applyHasDivByOperator(apply []query.ApplyTransformation) bool {
+	for _, transform := range apply {
+		if usesDivByOperator(transform.Filter) {
+			return true
+		}
+		if transform.GroupBy != nil && applyHasDivByOperator(transform.GroupBy.Transform) {
+			return true
+		}
+	}
+	return false
+}
+
 func usesMatchesPattern(filter *query.FilterExpression) bool {
 	if filter == nil {
 		return false
@@ -155,6 +179,30 @@ func usesMatchesPattern(filter *query.FilterExpression) bool {
 		return true
 	}
 	return usesMatchesPattern(filter.Left) || usesMatchesPattern(filter.Right)
+}
+
+func expandHasMatchesPattern(expands []query.ExpandOption) bool {
+	for _, expand := range expands {
+		if usesMatchesPattern(expand.Filter) {
+			return true
+		}
+		if expandHasMatchesPattern(expand.Expand) {
+			return true
+		}
+	}
+	return false
+}
+
+func applyHasMatchesPattern(apply []query.ApplyTransformation) bool {
+	for _, transform := range apply {
+		if usesMatchesPattern(transform.Filter) {
+			return true
+		}
+		if transform.GroupBy != nil && applyHasMatchesPattern(transform.GroupBy.Transform) {
+			return true
+		}
+	}
+	return false
 }
 
 func expandHasCompute(expands []query.ExpandOption) bool {
@@ -214,12 +262,12 @@ func validateQueryOptionsForNegotiatedVersion(queryOptions *query.QueryOptions, 
 		return fmt.Errorf("invalid $filter: 'in' operator is not supported in OData %s", negotiated.String())
 	}
 
-	if usesDivByOperator(queryOptions.Filter) {
+	if usesDivByOperator(queryOptions.Filter) || expandHasDivByOperator(queryOptions.Expand) || applyHasDivByOperator(queryOptions.Apply) {
 		return fmt.Errorf("invalid $filter: 'divby' operator is not supported in OData %s", negotiated.String())
 	}
 
 	if !negotiated.Supports("matchespattern") {
-		if usesMatchesPattern(queryOptions.Filter) {
+		if usesMatchesPattern(queryOptions.Filter) || expandHasMatchesPattern(queryOptions.Expand) || applyHasMatchesPattern(queryOptions.Apply) {
 			return fmt.Errorf("invalid $filter: matchesPattern() is not supported in OData %s", negotiated.String())
 		}
 	}
