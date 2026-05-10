@@ -404,7 +404,8 @@ func TestGetFormatParameter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := getFormatParameter(tt.rawQuery)
+			req := httptest.NewRequest(http.MethodGet, "/test?"+tt.rawQuery, nil)
+			got := getFormatParameter(req)
 			if got != tt.expected {
 				t.Errorf("getFormatParameter(%q) = %q, want %q",
 					tt.rawQuery, got, tt.expected)

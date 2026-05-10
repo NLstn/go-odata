@@ -22,7 +22,7 @@ const (
 // IsAtomFormat returns true if the request asks for Atom/XML format via
 // $format=atom, $format=application/atom+xml, or Accept: application/atom+xml.
 func IsAtomFormat(r *http.Request) bool {
-	format := getFormatParameter(r.URL.RawQuery)
+	format := getFormatParameter(r)
 	if format != "" {
 		parts := strings.Split(format, ";")
 		baseFormat := strings.TrimSpace(parts[0])
