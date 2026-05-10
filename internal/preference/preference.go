@@ -15,20 +15,24 @@ type Preference struct {
 	RespondAsyncRequested bool
 	AllowEntityReferences bool    // odata.allow-entityreferences preference (OData v4.0, §8.2.8.1)
 	IncludeAnnotations    *string // odata.include-annotations preference value (OData v4.0, §8.2.8.4)
+	OmitValues            *string // omit-values / odata.omit-values preference value (OData v4.01, §8.2.8.6)
+	OmitValuesPrefixed    bool
 
 	trackChangesApplied       bool
 	respondAsyncApplied       bool
 	allowEntityRefsApplied    bool
 	includeAnnotationsApplied bool
+	omitValuesApplied         bool
 }
 
 // ParsePrefer parses the Prefer header from an HTTP request
 // According to OData v4 spec, the Prefer header can contain:
 // - return=representation: requests the service to return the created/updated entity
 // - return=minimal: requests the service to return minimal or no content (default for PATCH/PUT)
-// - odata.maxpagesize=n: requests the service to limit page size to n items
+// - odata.maxpagesize=n / maxpagesize=n: requests the service to limit page size to n items
 // - odata.allow-entityreferences: allows service to return @odata.id references (OData v4.0, §8.2.8.1)
 // - odata.include-annotations: controls which instance annotations are included (OData v4.0, §8.2.8.4)
+// - odata.omit-values / omit-values: controls omitted default/null values (OData v4.01, §8.2.8.6)
 func ParsePrefer(r *http.Request) *Preference {
 	pref := &Preference{}
 
@@ -51,21 +55,25 @@ func ParsePrefer(r *http.Request) *Preference {
 			pref.ReturnMinimal = true
 		case "respond-async":
 			pref.RespondAsyncRequested = true
-		case "odata.allow-entityreferences":
+		case "odata.allow-entityreferences", "allow-entityreferences":
 			pref.AllowEntityReferences = true
 		default:
 			// Check for odata.maxpagesize preference
-			if strings.HasPrefix(pLower, "odata.maxpagesize=") {
-				maxPageSizeStr := strings.TrimPrefix(p, "odata.maxpagesize=")
-				maxPageSizeStr = strings.TrimPrefix(maxPageSizeStr, "odata.maxPageSize=")
-				maxPageSizeStr = strings.TrimPrefix(maxPageSizeStr, "odata.MaxPageSize=")
+			if value, ok := preferenceValue(p, pLower, "odata.maxpagesize"); ok {
+				maxPageSizeStr := value
 				if maxPageSize, err := strconv.Atoi(maxPageSizeStr); err == nil && maxPageSize > 0 {
 					pref.MaxPageSize = &maxPageSize
 				}
 				continue
 			}
+			if value, ok := preferenceValue(p, pLower, "maxpagesize"); ok {
+				if maxPageSize, err := strconv.Atoi(value); err == nil && maxPageSize > 0 {
+					pref.MaxPageSize = &maxPageSize
+				}
+				continue
+			}
 
-			if strings.HasPrefix(pLower, "odata.track-changes") {
+			if strings.HasPrefix(pLower, "odata.track-changes") || strings.HasPrefix(pLower, "track-changes") {
 				pref.TrackChangesRequested = true
 				continue
 			}
@@ -75,19 +83,46 @@ func ParsePrefer(r *http.Request) *Preference {
 			//   odata.include-annotations="*"
 			//   odata.include-annotations=*
 			//   odata.include-annotations="*,-Org.OData.Core.V1.Description"
-			if strings.HasPrefix(pLower, "odata.include-annotations=") {
-				val := p[len("odata.include-annotations="):]
-				// Strip surrounding quotes if present
-				if len(val) >= 2 && val[0] == '"' && val[len(val)-1] == '"' {
-					val = val[1 : len(val)-1]
-				}
+			if val, ok := preferenceValue(p, pLower, "odata.include-annotations"); ok {
+				val = trimPreferenceQuotes(val)
 				pref.IncludeAnnotations = &val
+				continue
+			}
+			if val, ok := preferenceValue(p, pLower, "include-annotations"); ok {
+				val = trimPreferenceQuotes(val)
+				pref.IncludeAnnotations = &val
+				continue
+			}
+			if val, ok := preferenceValue(p, pLower, "odata.omit-values"); ok {
+				val = trimPreferenceQuotes(val)
+				pref.OmitValues = &val
+				pref.OmitValuesPrefixed = true
+				continue
+			}
+			if val, ok := preferenceValue(p, pLower, "omit-values"); ok {
+				val = trimPreferenceQuotes(val)
+				pref.OmitValues = &val
 				continue
 			}
 		}
 	}
 
 	return pref
+}
+
+func preferenceValue(original, lower, name string) (string, bool) {
+	prefix := strings.ToLower(name) + "="
+	if !strings.HasPrefix(lower, prefix) {
+		return "", false
+	}
+	return original[len(prefix):], true
+}
+
+func trimPreferenceQuotes(value string) string {
+	if len(value) >= 2 && value[0] == '"' && value[len(value)-1] == '"' {
+		return value[1 : len(value)-1]
+	}
+	return value
 }
 
 // ShouldReturnContent determines if content should be returned based on preferences and operation
@@ -128,6 +163,9 @@ func (p *Preference) GetPreferenceApplied() string {
 	if p.includeAnnotationsApplied && p.IncludeAnnotations != nil {
 		applied = append(applied, `odata.include-annotations="`+*p.IncludeAnnotations+`"`)
 	}
+	if p.omitValuesApplied && p.OmitValues != nil {
+		applied = append(applied, "omit-values="+*p.OmitValues)
+	}
 	return strings.Join(applied, ", ")
 }
 
@@ -161,6 +199,13 @@ func (p *Preference) ApplyAllowEntityReferences() {
 func (p *Preference) ApplyIncludeAnnotations() {
 	if p.IncludeAnnotations != nil {
 		p.includeAnnotationsApplied = true
+	}
+}
+
+// ApplyOmitValues marks the omit-values preference as applied.
+func (p *Preference) ApplyOmitValues(allowUnprefixed bool) {
+	if p.OmitValues != nil && (allowUnprefixed || p.OmitValuesPrefixed) {
+		p.omitValuesApplied = true
 	}
 }
 

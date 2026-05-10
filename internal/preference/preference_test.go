@@ -194,6 +194,7 @@ func TestParsePrefer_MaxPageSizeCaseVariations(t *testing.T) {
 		{"Lowercase", "odata.maxpagesize=100", 100},
 		{"CamelCase", "odata.maxPageSize=200", 200},
 		{"PascalCase", "odata.MaxPageSize=300", 300},
+		{"Unprefixed", "maxpagesize=400", 400},
 	}
 
 	for _, tc := range testCases {
@@ -242,6 +243,16 @@ func TestParsePrefer_TrackChanges(t *testing.T) {
 	applied := pref.GetPreferenceApplied()
 	if applied != "odata.track-changes" {
 		t.Fatalf("expected Preference-Applied to include track changes, got %s", applied)
+	}
+}
+
+func TestParsePrefer_TrackChangesUnprefixed(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Prefer", "track-changes")
+
+	pref := ParsePrefer(req)
+	if !pref.TrackChangesRequested {
+		t.Fatalf("expected unprefixed track-changes to be requested")
 	}
 }
 
@@ -376,6 +387,7 @@ func TestParsePrefer_AllowEntityReferencesCaseInsensitive(t *testing.T) {
 		"ODATA.ALLOW-ENTITYREFERENCES",
 		"Odata.Allow-EntityReferences",
 		"odata.allow-entityreferences",
+		"allow-entityreferences",
 	}
 	for _, h := range headers {
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -439,6 +451,71 @@ func TestParsePrefer_IncludeAnnotationsUnquoted(t *testing.T) {
 	}
 	if *pref.IncludeAnnotations != "*" {
 		t.Errorf("expected '*', got %q", *pref.IncludeAnnotations)
+	}
+}
+
+func TestParsePrefer_IncludeAnnotationsUnprefixed(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Prefer", `include-annotations="*"`)
+	pref := ParsePrefer(req)
+
+	if pref.IncludeAnnotations == nil {
+		t.Fatal("IncludeAnnotations should be set for unprefixed value")
+	}
+	if *pref.IncludeAnnotations != "*" {
+		t.Errorf("expected '*', got %q", *pref.IncludeAnnotations)
+	}
+}
+
+func TestParsePrefer_OmitValues(t *testing.T) {
+	tests := []struct {
+		name   string
+		header string
+		want   string
+	}{
+		{"UnprefixedNulls", "omit-values=nulls", "nulls"},
+		{"PrefixedDefaults", "odata.omit-values=defaults", "defaults"},
+		{"Quoted", `omit-values="nulls"`, "nulls"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			req.Header.Set("Prefer", tt.header)
+			pref := ParsePrefer(req)
+
+			if pref.OmitValues == nil {
+				t.Fatal("OmitValues should be set")
+			}
+			if *pref.OmitValues != tt.want {
+				t.Fatalf("expected %q, got %q", tt.want, *pref.OmitValues)
+			}
+
+			pref.ApplyOmitValues(true)
+			if applied := pref.GetPreferenceApplied(); applied != "omit-values="+tt.want {
+				t.Fatalf("expected omit-values preference to be applied, got %q", applied)
+			}
+		})
+	}
+}
+
+func TestApplyOmitValues_UnprefixedNotAppliedWhenDisallowed(t *testing.T) {
+	value := "nulls"
+	pref := &Preference{OmitValues: &value}
+	pref.ApplyOmitValues(false)
+
+	if applied := pref.GetPreferenceApplied(); applied != "" {
+		t.Fatalf("expected unprefixed omit-values not to apply when disallowed, got %q", applied)
+	}
+}
+
+func TestApplyOmitValues_PrefixedAppliedWhenUnprefixedDisallowed(t *testing.T) {
+	value := "nulls"
+	pref := &Preference{OmitValues: &value, OmitValuesPrefixed: true}
+	pref.ApplyOmitValues(false)
+
+	if applied := pref.GetPreferenceApplied(); applied != "omit-values=nulls" {
+		t.Fatalf("expected prefixed omit-values to apply, got %q", applied)
 	}
 }
 
