@@ -351,7 +351,9 @@ func IsAcceptableFormat(r *http.Request) bool {
 	}
 
 	var bestJSON, bestAtom, bestXML, bestWildcard float64
+	sawAnyAcceptType := false
 	for _, mt := range mediaTypes {
+		sawAnyAcceptType = true
 		switch mt.mimeType {
 		case "application/json":
 			if mt.quality > bestJSON {
@@ -382,6 +384,10 @@ func IsAcceptableFormat(r *http.Request) bool {
 		return true
 	}
 	if bestXML > 0 {
+		return false
+	}
+
+	if sawAnyAcceptType {
 		return false
 	}
 

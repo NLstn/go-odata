@@ -83,6 +83,18 @@ func TestIsAcceptableFormat(t *testing.T) {
 			description:  "Should accept browser-like headers with wildcard",
 		},
 		{
+			name:         "Accept text/html only",
+			acceptHeader: "text/html",
+			want:         false,
+			description:  "Should reject text/html when no supported media type is offered",
+		},
+		{
+			name:         "Accept JSON explicitly disallowed",
+			acceptHeader: "application/json;q=0",
+			want:         false,
+			description:  "Should reject when JSON is explicitly not acceptable",
+		},
+		{
 			name:        "Format parameter json",
 			formatParam: "json",
 			want:        true,
