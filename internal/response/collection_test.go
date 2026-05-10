@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/nlstn/go-odata/internal/version"
 )
 
 func TestAddIndexAnnotationsAddsIndexesToMaps(t *testing.T) {
@@ -132,4 +134,22 @@ func TestWriteODataDeltaResponse(t *testing.T) {
 	if !ok || len(value) != 1 {
 		t.Fatalf("expected single entry in delta response")
 	}
+}
+
+func TestShouldAddIndexAnnotations_401Normalization(t *testing.T) {
+	t.Run("odata 4.01 accepts unprefixed index", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "http://example.com/Products?index=true", nil)
+		req = req.WithContext(version.WithVersion(req.Context(), version.Version{Major: 4, Minor: 1}))
+		if !shouldAddIndexAnnotations(req) {
+			t.Fatalf("expected unprefixed index to be recognized in OData 4.01")
+		}
+	})
+
+	t.Run("odata 4.0 requires prefixed index", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "http://example.com/Products?index=true", nil)
+		req = req.WithContext(version.WithVersion(req.Context(), version.Version{Major: 4, Minor: 0}))
+		if shouldAddIndexAnnotations(req) {
+			t.Fatalf("expected unprefixed index to be ignored in OData 4.0")
+		}
+	})
 }
