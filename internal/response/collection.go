@@ -7,6 +7,7 @@ import (
 
 	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/query"
+	"github.com/nlstn/go-odata/internal/version"
 )
 
 // WriteODataCollection writes an OData collection response.
@@ -221,8 +222,21 @@ func WriteODataDeltaResponse(w http.ResponseWriter, r *http.Request, entitySetNa
 
 // shouldAddIndexAnnotations checks if the $index query parameter is present in the request
 func shouldAddIndexAnnotations(r *http.Request) bool {
-	_, exists := r.URL.Query()["$index"]
-	return exists
+	queryParams := query.ParseRawQuery(r.URL.RawQuery)
+	_, prefixedExists := queryParams["$index"]
+	if prefixedExists {
+		return true
+	}
+
+	v := version.GetVersion(r.Context())
+	caseInsensitive := v.Major > 4 || (v.Major == 4 && v.Minor >= 1)
+	if !caseInsensitive {
+		return false
+	}
+
+	queryParams = query.NormalizeQueryParams(queryParams)
+	_, normalizedExists := queryParams["$index"]
+	return normalizedExists
 }
 
 // addIndexAnnotations adds @odata.index annotations to collection items
