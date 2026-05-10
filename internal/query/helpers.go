@@ -163,7 +163,7 @@ func propertyExistsWithNavCache(propertyName string, entityMetadata *metadata.En
 
 // parseSelect parses the $select query option
 func parseSelect(selectStr string) []string {
-	parts := strings.Split(selectStr, ",")
+	parts := splitAggregateExpressions(selectStr)
 	result := make([]string, 0, len(parts))
 	for _, part := range parts {
 		trimmed := strings.TrimSpace(part)
