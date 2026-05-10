@@ -48,6 +48,42 @@ func TestValidateQueryOptionsForNegotiatedVersion_Rejects401FeaturesIn40(t *test
 	}
 }
 
+func TestValidateQueryOptionsForNegotiatedVersion_RejectsNestedDivByIn40(t *testing.T) {
+	opts := &query.QueryOptions{
+		Expand: []query.ExpandOption{
+			{
+				NavigationProperty: "Orders",
+				Filter: &query.FilterExpression{
+					Operator: query.OpDivBy,
+				},
+			},
+		},
+	}
+
+	err := validateQueryOptionsForNegotiatedVersion(opts, version.Version{Major: 4, Minor: 0})
+	if err == nil {
+		t.Fatalf("expected nested divby to be rejected for OData 4.0")
+	}
+}
+
+func TestValidateQueryOptionsForNegotiatedVersion_RejectsNestedMatchesPatternIn40(t *testing.T) {
+	opts := &query.QueryOptions{
+		Apply: []query.ApplyTransformation{
+			{
+				Type: query.ApplyTypeFilter,
+				Filter: &query.FilterExpression{
+					Operator: query.OpMatchesPattern,
+				},
+			},
+		},
+	}
+
+	err := validateQueryOptionsForNegotiatedVersion(opts, version.Version{Major: 4, Minor: 0})
+	if err == nil {
+		t.Fatalf("expected nested matchesPattern to be rejected for OData 4.0")
+	}
+}
+
 func TestValidateQueryOptionsForNegotiatedVersion_Allows401FeaturesIn401(t *testing.T) {
 	opts := &query.QueryOptions{
 		Filter:        &query.FilterExpression{Operator: query.OpIn},
