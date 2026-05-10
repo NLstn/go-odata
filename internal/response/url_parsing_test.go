@@ -70,11 +70,11 @@ func TestParseODataURLComponentsCompositeKey(t *testing.T) {
 			expectKey:       "John Doe", // Quotes should be stripped
 		},
 		{
-			name:            "Single string key with mismatched quotes should not strip",
-			path:            "Keys('value\")",
+			name:            "Single string key with escaped single quote",
+			path:            "Keys('Bob''s')",
 			expectEntitySet: "Keys",
 			expectKeyMap:    map[string]string{},
-			expectKey:       "'value\"", // Quotes should NOT be stripped (mismatched)
+			expectKey:       "Bob's",
 		},
 		{
 			name:            "Single string key with embedded quotes",
@@ -114,6 +114,12 @@ func TestParseODataURLComponentsCompositeKey(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestParseODataURLComponentsMismatchedStringKeyQuotes(t *testing.T) {
+	if _, err := ParseODataURLComponents("Keys('value\")"); err == nil {
+		t.Fatal("expected error for unterminated string key literal")
 	}
 }
 

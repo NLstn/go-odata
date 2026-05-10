@@ -295,14 +295,11 @@ func ParseODataURLComponents(path string) (*ODataURLComponents, error) {
 
 func parseKeyPart(keyPart string, components *ODataURLComponents) error {
 	if !strings.Contains(keyPart, "=") {
-		// For single keys, strip surrounding quotes (same as composite keys)
 		cleanKey := keyPart
-		if len(cleanKey) >= 2 {
-			// Check if the key is surrounded by matching quotes
-			if (cleanKey[0] == '\'' && cleanKey[len(cleanKey)-1] == '\'') ||
-				(cleanKey[0] == '"' && cleanKey[len(cleanKey)-1] == '"') {
-				cleanKey = cleanKey[1 : len(cleanKey)-1]
-			}
+		if unquoted, ok, err := unquoteODataStringLiteral(cleanKey); err != nil {
+			return err
+		} else if ok {
+			cleanKey = unquoted
 		}
 		components.EntityKey = cleanKey
 		return nil
@@ -322,12 +319,10 @@ func parseKeyPart(keyPart string, components *ODataURLComponents) error {
 		keyName := strings.TrimSpace(parts[0])
 		keyValue := strings.TrimSpace(parts[1])
 
-		// Strip surrounding quotes if they match
-		if len(keyValue) >= 2 {
-			if (keyValue[0] == '\'' && keyValue[len(keyValue)-1] == '\'') ||
-				(keyValue[0] == '"' && keyValue[len(keyValue)-1] == '"') {
-				keyValue = keyValue[1 : len(keyValue)-1]
-			}
+		if unquoted, ok, err := unquoteODataStringLiteral(keyValue); err != nil {
+			return err
+		} else if ok {
+			keyValue = unquoted
 		}
 
 		components.EntityKeyMap[keyName] = keyValue
@@ -341,6 +336,26 @@ func parseKeyPart(keyPart string, components *ODataURLComponents) error {
 	}
 
 	return nil
+}
+
+func unquoteODataStringLiteral(value string) (string, bool, error) {
+	if len(value) < 2 {
+		return value, false, nil
+	}
+
+	quote := value[0]
+	if quote != '\'' && quote != '"' {
+		return value, false, nil
+	}
+	if value[len(value)-1] != quote {
+		return "", false, fmt.Errorf("unterminated string literal")
+	}
+
+	unquoted := value[1 : len(value)-1]
+	if quote == '\'' {
+		unquoted = strings.ReplaceAll(unquoted, "''", "'")
+	}
+	return unquoted, true, nil
 }
 
 func splitKeyPairs(input string) ([]string, error) {
