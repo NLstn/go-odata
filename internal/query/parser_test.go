@@ -45,6 +45,11 @@ func TestParseSelect(t *testing.T) {
 			expected:  []string{"Name", "Price", "Category"},
 		},
 		{
+			name:      "Nested select options",
+			selectStr: "Name,Category($select=Title;$top=1)",
+			expected:  []string{"Name", "Category($select=Title;$top=1)"},
+		},
+		{
 			name:      "Empty string",
 			selectStr: "",
 			expected:  []string{},
@@ -64,6 +69,35 @@ func TestParseSelect(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestParseQueryOptionsSelectNestedOptions(t *testing.T) {
+	params := url.Values{}
+	params.Set("$select", "Name,Category($select=Title;$top=1)")
+
+	opts, err := ParseQueryOptionsWithConfigAndCaseSensitivity(params, nil, nil, true)
+	if err != nil {
+		t.Fatalf("ParseQueryOptionsWithConfigAndCaseSensitivity returned error: %v", err)
+	}
+
+	if len(opts.Select) != 2 {
+		t.Fatalf("expected 2 selected properties, got %d", len(opts.Select))
+	}
+	if opts.Select[0] != "Name" || opts.Select[1] != "Category" {
+		t.Fatalf("unexpected select properties: %#v", opts.Select)
+	}
+	if len(opts.Expand) != 1 {
+		t.Fatalf("expected nested select to create one expand option, got %d", len(opts.Expand))
+	}
+	if opts.Expand[0].NavigationProperty != "Category" {
+		t.Fatalf("expected nested select expand for Category, got %q", opts.Expand[0].NavigationProperty)
+	}
+	if len(opts.Expand[0].Select) != 1 || opts.Expand[0].Select[0] != "Title" {
+		t.Fatalf("expected nested $select=Title, got %#v", opts.Expand[0].Select)
+	}
+	if opts.Expand[0].Top == nil || *opts.Expand[0].Top != 1 {
+		t.Fatalf("expected nested $top=1, got %#v", opts.Expand[0].Top)
 	}
 }
 

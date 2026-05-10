@@ -436,7 +436,7 @@ func ParseQueryOptionsWithConfigAndCaseSensitivity(queryParams url.Values, entit
 		return nil, err
 	}
 
-	if err := parseSelectOption(queryParams, entityMetadata, options, caseInsensitive); err != nil {
+	if err := parseSelectOption(queryParams, entityMetadata, options, config, caseInsensitive); err != nil {
 		return nil, err
 	}
 
@@ -564,9 +564,15 @@ func parseFilterOption(queryParams url.Values, entityMetadata *metadata.EntityMe
 }
 
 // parseSelectOption parses the $select query parameter
-func parseSelectOption(queryParams url.Values, entityMetadata *metadata.EntityMetadata, options *QueryOptions, caseInsensitive bool) error {
+func parseSelectOption(queryParams url.Values, entityMetadata *metadata.EntityMetadata, options *QueryOptions, config *ParserConfig, caseInsensitive bool) error {
 	if selectStr := queryParams.Get("$select"); selectStr != "" {
-		selectedProps := parseSelect(selectStr)
+		selectedProps, selectedExpands, err := parseSelectWithNestedOptions(selectStr, entityMetadata, config, caseInsensitive)
+		if err != nil {
+			return fmt.Errorf("invalid $select: %w", err)
+		}
+		if len(selectedExpands) > 0 {
+			options.Expand = mergeExpandOptions(options.Expand, selectedExpands)
+		}
 
 		// Wildcard '*' is only valid in OData v4.01 (caseInsensitive=true).
 		// Check this before the early metadata-nil return so it is always enforced.
@@ -640,6 +646,102 @@ func parseSelectOption(queryParams url.Values, entityMetadata *metadata.EntityMe
 		options.Select = selectedProps
 	}
 	return nil
+}
+
+func parseSelectWithNestedOptions(selectStr string, entityMetadata *metadata.EntityMetadata, config *ParserConfig, caseInsensitive bool) ([]string, []ExpandOption, error) {
+	parts := parseSelect(selectStr)
+	selectedProps := make([]string, 0, len(parts))
+	selectedExpands := make([]ExpandOption, 0)
+
+	for _, part := range parts {
+		if !strings.Contains(part, "(") {
+			selectedProps = append(selectedProps, part)
+			continue
+		}
+
+		openIdx := strings.IndexByte(part, '(')
+		if openIdx <= 0 || !strings.HasSuffix(part, ")") {
+			return nil, nil, fmt.Errorf("invalid nested select item %q", part)
+		}
+
+		navPropName := strings.TrimSpace(part[:openIdx])
+		if navPropName == "" {
+			return nil, nil, fmt.Errorf("invalid nested select item %q", part)
+		}
+
+		expand, err := parseSingleExpandCoreWithConfig(part, entityMetadata, entityMetadata != nil, config, 0, caseInsensitive)
+		if err != nil {
+			return nil, nil, err
+		}
+		selectedProps = append(selectedProps, navPropName)
+		selectedExpands = append(selectedExpands, expand)
+	}
+
+	return selectedProps, selectedExpands, nil
+}
+
+func mergeExpandOptions(existing []ExpandOption, additions []ExpandOption) []ExpandOption {
+	for _, addition := range additions {
+		merged := false
+		for i := range existing {
+			if existing[i].NavigationProperty != addition.NavigationProperty {
+				continue
+			}
+			if len(addition.Select) > 0 {
+				existing[i].Select = mergeStrings(existing[i].Select, addition.Select)
+			}
+			if len(addition.Expand) > 0 {
+				existing[i].Expand = mergeExpandOptions(existing[i].Expand, addition.Expand)
+			}
+			if addition.Filter != nil {
+				existing[i].Filter = addition.Filter
+			}
+			if len(addition.OrderBy) > 0 {
+				existing[i].OrderBy = addition.OrderBy
+			}
+			if addition.Top != nil {
+				existing[i].Top = addition.Top
+			}
+			if addition.Skip != nil {
+				existing[i].Skip = addition.Skip
+			}
+			if addition.Compute != nil {
+				existing[i].Compute = addition.Compute
+			}
+			if addition.Count {
+				existing[i].Count = true
+			}
+			if addition.Levels != nil {
+				existing[i].Levels = addition.Levels
+			}
+			merged = true
+			break
+		}
+		if !merged {
+			existing = append(existing, addition)
+		}
+	}
+	return existing
+}
+
+func mergeStrings(existing []string, additions []string) []string {
+	seen := make(map[string]bool, len(existing)+len(additions))
+	result := make([]string, 0, len(existing)+len(additions))
+	for _, value := range existing {
+		if seen[value] {
+			continue
+		}
+		seen[value] = true
+		result = append(result, value)
+	}
+	for _, value := range additions {
+		if seen[value] {
+			continue
+		}
+		seen[value] = true
+		result = append(result, value)
+	}
+	return result
 }
 
 // extractComputeAliasesFromString extracts aliases from a $compute string
