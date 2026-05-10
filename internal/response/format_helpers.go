@@ -3,13 +3,13 @@ package response
 import (
 	"fmt"
 	"net/http"
-	"net/url"
 	"reflect"
 	"sort"
 	"strings"
 
 	"github.com/nlstn/go-odata/internal/metadata"
 	oquery "github.com/nlstn/go-odata/internal/query"
+	"github.com/nlstn/go-odata/internal/version"
 )
 
 // Valid OData metadata levels per OData v4 specification
@@ -89,7 +89,7 @@ func validateMetadataValue(value string) error {
 // Returns an error if an invalid metadata value is specified.
 // Valid values are: "minimal", "full", "none"
 func ValidateODataMetadata(r *http.Request) error {
-	format := getFormatParameter(r.URL.RawQuery)
+	format := getFormatParameter(r)
 	if format != "" {
 		if err := validateMetadataInFormat(format); err != nil {
 			return err
@@ -109,7 +109,7 @@ func ValidateODataMetadata(r *http.Request) error {
 // GetODataMetadataLevel extracts the odata.metadata parameter value from the request
 // Returns "minimal" (default), "full", or "none" based on Accept header or $format parameter
 func GetODataMetadataLevel(r *http.Request) string {
-	format := getFormatParameter(r.URL.RawQuery)
+	format := getFormatParameter(r)
 	if format != "" {
 		return extractMetadataFromFormat(format)
 	}
@@ -125,7 +125,7 @@ func GetODataMetadataLevel(r *http.Request) string {
 // GetIEEE754Compatible extracts IEEE754Compatible format parameter value from
 // $format or Accept. Returns false when unspecified.
 func GetIEEE754Compatible(r *http.Request) bool {
-	format := getFormatParameter(r.URL.RawQuery)
+	format := getFormatParameter(r)
 	if format != "" {
 		if value, ok := extractIEEE754FromMediaType(format); ok {
 			return value
@@ -165,18 +165,22 @@ func BuildJSONContentType(r *http.Request) string {
 	return fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel)
 }
 
-func getFormatParameter(rawQuery string) string {
-	params := strings.Split(rawQuery, "&")
-	for _, param := range params {
-		if strings.HasPrefix(param, "$format=") || strings.HasPrefix(param, "%24format=") {
-			parts := strings.SplitN(param, "=", 2)
-			if len(parts) == 2 {
-				decoded, err := url.QueryUnescape(parts[1])
-				if err != nil {
-					return parts[1]
-				}
-				return decoded
-			}
+func getFormatParameter(r *http.Request) string {
+	queryParams := oquery.ParseRawQuery(r.URL.RawQuery)
+
+	v := version.GetVersion(r.Context())
+	caseInsensitive := v.Major > 4 || (v.Major == 4 && v.Minor >= 1)
+	if caseInsensitive {
+		queryParams = oquery.NormalizeQueryParams(queryParams)
+	}
+
+	if format := queryParams.Get("$format"); format != "" {
+		return format
+	}
+	if caseInsensitive {
+		// Preserve support for unprefixed 4.01-style system query options.
+		if format := queryParams.Get("format"); format != "" {
+			return format
 		}
 	}
 	return ""
@@ -305,7 +309,7 @@ func extractIEEE754FromParts(parts []string) (bool, bool) {
 // IsAcceptableFormat checks if the requested format via Accept header or $format is supported
 // Returns true if the format is acceptable (JSON, Atom/XML, or wildcard), false otherwise
 func IsAcceptableFormat(r *http.Request) bool {
-	format := getFormatParameter(r.URL.RawQuery)
+	format := getFormatParameter(r)
 	if format != "" {
 		parts := strings.Split(format, ";")
 		baseFormat := strings.TrimSpace(parts[0])

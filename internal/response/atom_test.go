@@ -7,6 +7,8 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+
+	"github.com/nlstn/go-odata/internal/version"
 )
 
 // TestIsAtomFormat tests the IsAtomFormat function
@@ -64,6 +66,24 @@ func TestIsAtomFormat(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestIsAtomFormat_UnprefixedFormat_401Only(t *testing.T) {
+	t.Run("odata 4.01 accepts unprefixed format", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/test?format=atom", nil)
+		req = req.WithContext(version.WithVersion(req.Context(), version.Version{Major: 4, Minor: 1}))
+		if !IsAtomFormat(req) {
+			t.Fatalf("expected unprefixed format=atom to be active for OData 4.01")
+		}
+	})
+
+	t.Run("odata 4.0 ignores unprefixed format", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/test?format=atom", nil)
+		req = req.WithContext(version.WithVersion(req.Context(), version.Version{Major: 4, Minor: 0}))
+		if IsAtomFormat(req) {
+			t.Fatalf("expected unprefixed format to be inactive for OData 4.0")
+		}
+	})
 }
 
 // TestWriteAtomCollection tests the WriteAtomCollection function
