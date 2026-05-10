@@ -193,6 +193,21 @@ func TestParseCompositeKey(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			name:    "Escaped single quote in string value",
+			keyPart: "ID=123,Name='Bob''s'",
+			wantKeyMap: map[string]string{
+				"ID":   "123",
+				"Name": "Bob's",
+			},
+			wantErr: false,
+		},
+		{
+			name:       "Unterminated string value",
+			keyPart:    "ID=123,Name='Bob",
+			wantKeyMap: nil,
+			wantErr:    true,
+		},
 	}
 
 	for _, tt := range tests {

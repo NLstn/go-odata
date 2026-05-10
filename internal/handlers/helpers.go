@@ -371,18 +371,36 @@ func parseCompositeKey(keyPart string, components *response.ODataURLComponents) 
 		keyName := strings.TrimSpace(parts[0])
 		keyValue := strings.TrimSpace(parts[1])
 
-		// Remove quotes from value if they match
-		if len(keyValue) >= 2 {
-			if (keyValue[0] == '\'' && keyValue[len(keyValue)-1] == '\'') ||
-				(keyValue[0] == '"' && keyValue[len(keyValue)-1] == '"') {
-				keyValue = keyValue[1 : len(keyValue)-1]
-			}
+		if unquoted, ok, err := unquoteODataStringLiteral(keyValue); err != nil {
+			return err
+		} else if ok {
+			keyValue = unquoted
 		}
 
 		components.EntityKeyMap[keyName] = keyValue
 	}
 
 	return nil
+}
+
+func unquoteODataStringLiteral(value string) (string, bool, error) {
+	if len(value) < 2 {
+		return value, false, nil
+	}
+
+	quote := value[0]
+	if quote != '\'' && quote != '"' {
+		return value, false, nil
+	}
+	if value[len(value)-1] != quote {
+		return "", false, fmt.Errorf("unterminated string literal")
+	}
+
+	unquoted := value[1 : len(value)-1]
+	if quote == '\'' {
+		unquoted = strings.ReplaceAll(unquoted, "''", "'")
+	}
+	return unquoted, true, nil
 }
 
 // handleFetchError writes appropriate error responses based on the fetch error type
