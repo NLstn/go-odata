@@ -36,9 +36,10 @@ func (h *EntityHandler) processDeepUpdateNavigationProperties(ctx context.Contex
 		// Always remove navigation property keys from updateData to prevent GORM column errors
 		keysToRemove = append(keysToRemove, key)
 
-		// Collection-valued navigation properties are not supported for deep update
+		// Collection-valued navigation properties require collection graph merge semantics.
+		// Silently dropping them would make a non-applied deep update look successful.
 		if navProp.NavigationIsArray {
-			continue
+			return nil, fmt.Errorf("deep update for collection-valued navigation property '%s' is not supported", key)
 		}
 
 		// Only proceed if the value is a map (inline entity data)
