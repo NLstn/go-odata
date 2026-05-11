@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/nlstn/go-odata/internal/storage"
 	"github.com/nlstn/go-odata/internal/trackchanges"
 	"gorm.io/gorm"
 )
@@ -55,8 +56,15 @@ func (h *EntityHandler) runInTransaction(ctx context.Context, r *http.Request, f
 		return fn(tx, requestWithTransaction(r, tx))
 	}
 
-	return h.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		return fn(tx, requestWithTransaction(r, tx))
+	if h.store == nil {
+		return h.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			return fn(tx, requestWithTransaction(r, tx))
+		})
+	}
+
+	return h.store.Transaction(ctx, func(tx storage.Tx) error {
+		txDB := tx.DB()
+		return fn(txDB, requestWithTransaction(r, txDB))
 	})
 }
 

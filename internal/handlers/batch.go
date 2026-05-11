@@ -22,6 +22,8 @@ import (
 
 	"github.com/nlstn/go-odata/internal/observability"
 	"github.com/nlstn/go-odata/internal/response"
+	"github.com/nlstn/go-odata/internal/storage"
+	"github.com/nlstn/go-odata/internal/storage/gormstore"
 	"github.com/nlstn/go-odata/internal/version"
 	"go.opentelemetry.io/otel/trace"
 	"gorm.io/gorm"
@@ -30,6 +32,7 @@ import (
 // BatchHandler handles $batch requests for OData v4
 type BatchHandler struct {
 	db            *gorm.DB
+	store         storage.Store
 	handlers      map[string]*EntityHandler
 	service       http.Handler
 	logger        *slog.Logger
@@ -42,8 +45,17 @@ type BatchHandler struct {
 
 // NewBatchHandler creates a new batch handler
 func NewBatchHandler(db *gorm.DB, handlers map[string]*EntityHandler, service http.Handler, maxBatchSize int) *BatchHandler {
+	return NewBatchHandlerWithStore(gormstore.New(db), handlers, service, maxBatchSize)
+}
+
+// NewBatchHandlerWithStore creates a new batch handler with a storage backend.
+func NewBatchHandlerWithStore(store storage.Store, handlers map[string]*EntityHandler, service http.Handler, maxBatchSize int) *BatchHandler {
+	if store == nil {
+		store = gormstore.New(nil)
+	}
 	return &BatchHandler{
-		db:           db,
+		db:           store.DB(context.Background()),
+		store:        store,
 		handlers:     handlers,
 		service:      service,
 		logger:       slog.Default(),
@@ -287,10 +299,11 @@ func (h *BatchHandler) processChangeset(r io.Reader, boundary string, remainingC
 	responses := []batchResponse{}
 
 	// Start a transaction for the changeset
-	tx := h.db.Begin()
-	if tx.Error != nil {
+	txAdapter, err := h.store.Begin(parentReq.Context())
+	if err != nil {
 		return []batchResponse{h.createErrorResponse(http.StatusInternalServerError, "Failed to start transaction")}, false
 	}
+	tx := txAdapter.DB()
 
 	pendingEvents := make([]pendingChangeEvent, 0)
 
@@ -1000,8 +1013,8 @@ func (h *BatchHandler) handleJSONBatch(w http.ResponseWriter, r *http.Request) {
 
 			// Start a transaction for the group if this is the first request.
 			if gs.tx == nil {
-				tx := h.db.Begin()
-				if tx.Error != nil {
+				txAdapter, beginErr := h.store.Begin(r.Context())
+				if beginErr != nil {
 					gs.failed = true
 					failedIDs[item.ID] = true
 					errResp := jsonBatchResponseItem{
@@ -1016,7 +1029,7 @@ func (h *BatchHandler) handleJSONBatch(w http.ResponseWriter, r *http.Request) {
 					}
 					continue
 				}
-				gs.tx = tx
+				gs.tx = txAdapter.DB()
 			}
 
 			// Resolve $<id> content-ID URL references within the group.
