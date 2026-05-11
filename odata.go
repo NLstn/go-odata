@@ -67,6 +67,8 @@ import (
 	"github.com/nlstn/go-odata/internal/service/operations"
 	servrouter "github.com/nlstn/go-odata/internal/service/router"
 	servruntime "github.com/nlstn/go-odata/internal/service/runtime"
+	"github.com/nlstn/go-odata/internal/storage"
+	"github.com/nlstn/go-odata/internal/storage/gormstore"
 	"github.com/nlstn/go-odata/internal/trackchanges"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
@@ -283,24 +285,37 @@ type EntityHook interface {
 //	Delete: ODataBeforeDelete -> DELETE -> ODataAfterDelete
 //	Read:   ODataBeforeReadCollection/ODataBeforeReadEntity -> SELECT + OData options -> ODataAfterReadCollection/ODataAfterReadEntity
 type ReadHook interface {
+	// Deprecated: prefer storage-agnostic hook methods (see ReadHookGeneric).
 	// ODataBeforeReadCollection is called before fetching a collection.
 	// Return GORM scopes to apply before OData options ($filter, $orderby, etc).
 	// These scopes are ideal for authorization filters and eager-loading.
 	ODataBeforeReadCollection(ctx context.Context, r *http.Request, opts *QueryOptions) ([]func(*gorm.DB) *gorm.DB, error)
 
+	// Deprecated: prefer storage-agnostic hook methods (see ReadHookGeneric).
 	// ODataAfterReadCollection is called after fetching a collection.
 	// It receives the results after all query processing and can redact or transform them.
 	// Return nil, nil to keep the original response.
 	ODataAfterReadCollection(ctx context.Context, r *http.Request, opts *QueryOptions, results interface{}) (interface{}, error)
 
+	// Deprecated: prefer storage-agnostic hook methods (see ReadHookGeneric).
 	// ODataBeforeReadEntity is called before fetching a single entity.
 	// Return GORM scopes to apply before OData options. Ideal for authorization and eager-loading.
 	ODataBeforeReadEntity(ctx context.Context, r *http.Request, opts *QueryOptions) ([]func(*gorm.DB) *gorm.DB, error)
 
+	// Deprecated: prefer storage-agnostic hook methods (see ReadHookGeneric).
 	// ODataAfterReadEntity is called after fetching a single entity.
 	// It receives the entity after all query processing and can redact or transform it.
 	// Return nil, nil to keep the original response.
 	ODataAfterReadEntity(ctx context.Context, r *http.Request, opts *QueryOptions, entity interface{}) (interface{}, error)
+}
+
+// ReadHookGeneric defines storage-agnostic optional read hooks.
+// When both generic and legacy GORM read hooks are implemented, generic hooks take precedence.
+type ReadHookGeneric interface {
+	ODataBeforeReadCollectionGeneric(ctx context.Context, r *http.Request, opts *QueryOptions) error
+	ODataAfterReadCollectionGeneric(ctx context.Context, r *http.Request, opts *QueryOptions, results interface{}) (interface{}, error)
+	ODataBeforeReadEntityGeneric(ctx context.Context, r *http.Request, opts *QueryOptions) error
+	ODataAfterReadEntityGeneric(ctx context.Context, r *http.Request, opts *QueryOptions, entity interface{}) (interface{}, error)
 }
 
 // CacheLevel controls whether and how an entity's data is cached in memory.
@@ -380,6 +395,8 @@ const (
 type Service struct {
 	// db holds the GORM database connection
 	db *gorm.DB
+	// store holds the internal storage backend abstraction
+	store storage.Store
 	// entities holds registered entity metadata keyed by entity set name
 	entities map[string]*metadata.EntityMetadata
 	// entityContainerAnnotations holds annotations applied to the entity container
@@ -503,6 +520,7 @@ func NewServiceWithConfig(db *gorm.DB, cfg ServiceConfig) (*Service, error) {
 
 	s := &Service{
 		db:                         db,
+		store:                      gormstore.New(db),
 		entities:                   entities,
 		entityContainerAnnotations: metadata.NewAnnotationCollection(),
 		handlers:                   handlersMap,
@@ -526,7 +544,7 @@ func NewServiceWithConfig(db *gorm.DB, cfg ServiceConfig) (*Service, error) {
 	s.serviceDocumentHandler.SetPolicy(s.policy)
 	s.operationsHandler = operations.NewHandler(s.actions, s.functions, s.handlers, s.entities, s.namespace, logger)
 	// Initialize batch handler with reference to service's internal handler (for changesets)
-	s.batchHandler = handlers.NewBatchHandler(db, handlersMap, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	s.batchHandler = handlers.NewBatchHandlerWithStore(s.store, handlersMap, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		s.serveHTTP(w, r, false)
 	}), maxBatchSize)
 	s.router = servrouter.NewRouter(
@@ -1017,7 +1035,7 @@ func (s *Service) RegisterEntity(entity interface{}, cacheConfigs ...EntityCache
 	}
 
 	// Create and store the handler
-	handler := handlers.NewEntityHandler(s.db, entityMetadata, s.logger)
+	handler := handlers.NewEntityHandlerWithStore(s.store, entityMetadata, s.logger)
 	handler.SetNamespace(s.namespace)
 	handler.SetEntitiesMetadata(s.entities)
 	handler.SetDeltaTracker(s.deltaTracker)
@@ -1143,7 +1161,7 @@ func (s *Service) RegisterSingleton(entity interface{}, singletonName string) er
 	}
 
 	// Create and store the handler (same handler type works for both entities and singletons)
-	handler := handlers.NewEntityHandler(s.db, singletonMetadata, s.logger)
+	handler := handlers.NewEntityHandlerWithStore(s.store, singletonMetadata, s.logger)
 	handler.SetNamespace(s.namespace)
 	handler.SetEntitiesMetadata(s.entities)
 	handler.SetFTSManager(s.ftsManager)
@@ -1234,7 +1252,7 @@ func (s *Service) RegisterVirtualEntity(entity interface{}) error {
 	}
 
 	// Create and store the handler (no database operations will be performed)
-	handler := handlers.NewEntityHandler(s.db, entityMetadata, s.logger)
+	handler := handlers.NewEntityHandlerWithStore(s.store, entityMetadata, s.logger)
 	handler.SetNamespace(s.namespace)
 	handler.SetEntitiesMetadata(s.entities)
 	handler.SetFTSManager(s.ftsManager)

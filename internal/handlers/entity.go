@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"reflect"
@@ -14,6 +15,8 @@ import (
 	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/observability"
 	"github.com/nlstn/go-odata/internal/query"
+	"github.com/nlstn/go-odata/internal/storage"
+	"github.com/nlstn/go-odata/internal/storage/gormstore"
 	"github.com/nlstn/go-odata/internal/trackchanges"
 	"gorm.io/gorm"
 )
@@ -21,6 +24,7 @@ import (
 // EntityHandler handles HTTP requests for entity collections
 type EntityHandler struct {
 	db                   *gorm.DB
+	store                storage.Store
 	metadata             *metadata.EntityMetadata
 	entitiesMetadata     map[string]*metadata.EntityMetadata
 	namespace            string
@@ -63,11 +67,31 @@ func NewEntityHandler(db *gorm.DB, entityMetadata *metadata.EntityMetadata, logg
 	}
 	h := &EntityHandler{
 		db:        db,
+		store:     gormstore.New(db),
 		metadata:  entityMetadata,
 		namespace: defaultNamespace,
 		logger:    logger,
 	}
 	// Initialize property map for O(1) lookups
+	h.initPropertyMap()
+	return h
+}
+
+// NewEntityHandlerWithStore creates a new entity handler with a storage backend.
+func NewEntityHandlerWithStore(store storage.Store, entityMetadata *metadata.EntityMetadata, logger *slog.Logger) *EntityHandler {
+	if store == nil {
+		store = gormstore.New(nil)
+	}
+	if logger == nil {
+		logger = slog.Default()
+	}
+	h := &EntityHandler{
+		db:        store.DB(context.Background()),
+		store:     store,
+		metadata:  entityMetadata,
+		namespace: defaultNamespace,
+		logger:    logger,
+	}
 	h.initPropertyMap()
 	return h
 }
@@ -363,7 +387,7 @@ func (h *EntityHandler) FetchEntity(entityKey string) (interface{}, error) {
 
 // IsNotFoundError checks if an error is a "not found" error
 func IsNotFoundError(err error) bool {
-	return err == gorm.ErrRecordNotFound
+	return errors.Is(err, gorm.ErrRecordNotFound) || errors.Is(err, storage.ErrNotFound)
 }
 
 // entityMatchesType checks if an entity matches a given type name.

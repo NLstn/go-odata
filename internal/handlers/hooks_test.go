@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/nlstn/go-odata/internal/metadata"
+	"github.com/nlstn/go-odata/internal/query"
+	"gorm.io/gorm"
 )
 
 // HookedTestEntity is a test entity with hooks
@@ -282,6 +284,51 @@ func TestCallBeforeDelete(t *testing.T) {
 				t.Errorf("callBeforeDelete() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
+	}
+}
+
+type genericReadHookEntity struct {
+	ID int `odata:"key"`
+}
+
+func (genericReadHookEntity) ODataBeforeReadCollectionGeneric(ctx context.Context, r *http.Request, opts *query.QueryOptions) error {
+	return errors.New("generic-before-collection")
+}
+func (genericReadHookEntity) ODataBeforeReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
+	return []func(*gorm.DB) *gorm.DB{func(db *gorm.DB) *gorm.DB { return db }}, nil
+}
+func (genericReadHookEntity) ODataAfterReadEntityGeneric(ctx context.Context, r *http.Request, opts *query.QueryOptions, entity interface{}) (interface{}, error) {
+	return map[string]interface{}{"source": "generic"}, nil
+}
+func (genericReadHookEntity) ODataAfterReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions, entity interface{}) (interface{}, error) {
+	return map[string]interface{}{"source": "legacy"}, nil
+}
+
+func TestGenericReadHookPrecedence(t *testing.T) {
+	meta, err := metadata.AnalyzeEntity(genericReadHookEntity{})
+	if err != nil {
+		t.Fatalf("analyze metadata: %v", err)
+	}
+	meta.Hooks.HasODataBeforeReadCollection = true
+	meta.Hooks.HasODataAfterReadEntity = true
+
+	req := httptest.NewRequest(http.MethodGet, "/any", nil)
+
+	_, beforeErr := callBeforeReadCollection(meta, req, &query.QueryOptions{})
+	if beforeErr == nil || beforeErr.Error() != "generic-before-collection" {
+		t.Fatalf("expected generic before hook error, got %v", beforeErr)
+	}
+
+	override, ok, afterErr := callAfterReadEntity(meta, req, &query.QueryOptions{}, map[string]interface{}{"id": 1})
+	if afterErr != nil {
+		t.Fatalf("unexpected error: %v", afterErr)
+	}
+	if !ok {
+		t.Fatal("expected override")
+	}
+	result, castOK := override.(map[string]interface{})
+	if !castOK || result["source"] != "generic" {
+		t.Fatalf("expected generic override, got %#v", override)
 	}
 }
 

@@ -111,7 +111,13 @@ func callHook(entity interface{}, methodName string, r *http.Request) error {
 
 // callBeforeReadCollection invokes the ODataBeforeReadCollection hook if defined and returns any scopes it produces.
 func callBeforeReadCollection(meta *metadata.EntityMetadata, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
-	if meta == nil || !meta.Hooks.HasODataBeforeReadCollection {
+	if meta == nil {
+		return nil, nil
+	}
+	if invoked, err := invokeGenericBeforeReadHook(meta, "ODataBeforeReadCollectionGeneric", r, opts); invoked {
+		return nil, err
+	}
+	if !meta.Hooks.HasODataBeforeReadCollection {
 		return nil, nil
 	}
 
@@ -141,7 +147,13 @@ func callBeforeReadCollection(meta *metadata.EntityMetadata, r *http.Request, op
 
 // callAfterReadCollection invokes the ODataAfterReadCollection hook if defined and returns an override when provided.
 func callAfterReadCollection(meta *metadata.EntityMetadata, r *http.Request, opts *query.QueryOptions, results interface{}) (interface{}, bool, error) {
-	if meta == nil || !meta.Hooks.HasODataAfterReadCollection {
+	if meta == nil {
+		return nil, false, nil
+	}
+	if override, hasOverride, invoked, err := invokeGenericAfterReadHook(meta, "ODataAfterReadCollectionGeneric", r, opts, results); invoked {
+		return override, hasOverride, err
+	}
+	if !meta.Hooks.HasODataAfterReadCollection {
 		return nil, false, nil
 	}
 
@@ -175,7 +187,13 @@ func callAfterReadCollection(meta *metadata.EntityMetadata, r *http.Request, opt
 
 // callBeforeReadEntity invokes the ODataBeforeReadEntity hook if defined and returns any scopes it produces.
 func callBeforeReadEntity(meta *metadata.EntityMetadata, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
-	if meta == nil || !meta.Hooks.HasODataBeforeReadEntity {
+	if meta == nil {
+		return nil, nil
+	}
+	if invoked, err := invokeGenericBeforeReadHook(meta, "ODataBeforeReadEntityGeneric", r, opts); invoked {
+		return nil, err
+	}
+	if !meta.Hooks.HasODataBeforeReadEntity {
 		return nil, nil
 	}
 
@@ -205,7 +223,13 @@ func callBeforeReadEntity(meta *metadata.EntityMetadata, r *http.Request, opts *
 
 // callAfterReadEntity invokes the ODataAfterReadEntity hook if defined and returns an override when provided.
 func callAfterReadEntity(meta *metadata.EntityMetadata, r *http.Request, opts *query.QueryOptions, entity interface{}) (interface{}, bool, error) {
-	if meta == nil || !meta.Hooks.HasODataAfterReadEntity {
+	if meta == nil {
+		return nil, false, nil
+	}
+	if override, hasOverride, invoked, err := invokeGenericAfterReadHook(meta, "ODataAfterReadEntityGeneric", r, opts, entity); invoked {
+		return override, hasOverride, err
+	}
+	if !meta.Hooks.HasODataAfterReadEntity {
 		return nil, false, nil
 	}
 
@@ -268,4 +292,46 @@ func callHookMethod(method reflect.Value, args ...interface{}) []reflect.Value {
 		callArgs[i] = reflect.ValueOf(arg)
 	}
 	return method.Call(callArgs)
+}
+
+func invokeGenericBeforeReadHook(meta *metadata.EntityMetadata, methodName string, r *http.Request, opts *query.QueryOptions) (bool, error) {
+	ctx := r.Context()
+	results, ok := invokeReadHook(meta, methodName, ctx, r, opts)
+	if !ok {
+		return false, nil
+	}
+	if len(results) > 0 {
+		if errVal := results[0]; errVal.IsValid() && !errVal.IsNil() {
+			if err, ok := errVal.Interface().(error); ok && err != nil {
+				return true, err
+			}
+		}
+	}
+	return true, nil
+}
+
+func invokeGenericAfterReadHook(meta *metadata.EntityMetadata, methodName string, r *http.Request, opts *query.QueryOptions, payload interface{}) (interface{}, bool, bool, error) {
+	ctx := r.Context()
+	results, ok := invokeReadHook(meta, methodName, ctx, r, opts, payload)
+	if !ok {
+		return nil, false, false, nil
+	}
+
+	overrideProvided := false
+	var override interface{}
+	if len(results) > 0 {
+		first := results[0]
+		if first.IsValid() && (first.Kind() != reflect.Interface || !first.IsNil()) {
+			override = first.Interface()
+			overrideProvided = true
+		}
+	}
+	if len(results) > 1 {
+		if errVal := results[1]; errVal.IsValid() && !errVal.IsNil() {
+			if err, ok := errVal.Interface().(error); ok && err != nil {
+				return nil, false, true, err
+			}
+		}
+	}
+	return override, overrideProvided, true, nil
 }
