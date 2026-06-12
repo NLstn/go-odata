@@ -3,6 +3,7 @@ package response
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"reflect"
 	"sort"
 	"strings"
@@ -409,12 +410,14 @@ func buildBaseURL(r *http.Request) string {
 		scheme = "https"
 	}
 
-	if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
+	if proto := strings.ToLower(strings.TrimSpace(r.Header.Get("X-Forwarded-Proto"))); proto == "http" || proto == "https" {
 		scheme = proto
 	}
 
-	host := r.Host
+	host := strings.TrimSpace(r.Host)
 	if host == "" {
+		host = "localhost:8080"
+	} else if parsed, err := url.Parse("http://" + host); err != nil || parsed.Host == "" || parsed.Host != host {
 		host = "localhost:8080"
 	}
 
