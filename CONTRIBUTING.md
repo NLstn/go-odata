@@ -124,29 +124,35 @@ go test ./test/...
 
 #### OData v4 Compliance Tests
 
-The compliance test suite validates strict OData v4 specification adherence:
+The compliance test suite validates strict OData v4 specification adherence. It lives in its own repository at [github.com/NLstn/odata-compliance-suite](https://github.com/NLstn/odata-compliance-suite). The suite is black-box: start the reference server (`cmd/complianceserver`) from this repo first, then point the suite at its URL.
 
 ```bash
-cd compliance-suite
+# 1. Start the reference server (in one terminal)
+go run ./cmd/complianceserver -db sqlite        # serves on http://localhost:9090
+
+# 2. Run the external compliance suite against it (in another terminal)
 
 # Run all compliance tests (4.0 + 4.01)
-go run .
+go run github.com/nlstn/odata-compliance-suite@latest -server http://localhost:9090
 
 # Run only OData 4.0 tests
-go run . -version 4.0
+go run github.com/nlstn/odata-compliance-suite@latest -server http://localhost:9090 -version 4.0
 
 # Run only OData 4.01 tests
-go run . -version 4.01
+go run github.com/nlstn/odata-compliance-suite@latest -server http://localhost:9090 -version 4.01
 
 # Run specific tests by pattern
-go run . -pattern filter
+go run github.com/nlstn/odata-compliance-suite@latest -server http://localhost:9090 -pattern filter
 
 # Run with verbose debug output
-go run . -debug
+go run github.com/nlstn/odata-compliance-suite@latest -server http://localhost:9090 -debug
 
-# Test against PostgreSQL instead of SQLite
-go run . -db postgres -dsn "host=localhost user=postgres password=postgres dbname=odata_test sslmode=disable"
+# Test against PostgreSQL instead of SQLite: start the server against PostgreSQL,
+# then run the suite as above
+go run ./cmd/complianceserver -db postgres -dsn "host=localhost user=postgres password=postgres dbname=odata_test sslmode=disable"
 ```
+
+The suite can also be run via its prebuilt binary, Docker image (`ghcr.io/nlstn/odata-compliance-suite`), or GitHub Action — see the suite repository for details.
 
 The compliance tests are **critical** for validating protocol correctness. All protocol changes must pass these tests.
 
@@ -204,7 +210,7 @@ golangci-lint run
    - **HTTP headers**: Correct Content-Type, OData-Version, etc.
 
 4. **Compliance tests**: Protocol changes must pass the compliance test suite
-   - Located in `compliance-suite/`
+   - Lives in its own repository at [github.com/NLstn/odata-compliance-suite](https://github.com/NLstn/odata-compliance-suite); contributions to the test suite should be made there
    - Tests are organized by OData version (v4.0, v4.01)
    - **Never make tests more lenient** to accommodate current implementation
    - If a compliance test fails, fix the implementation, not the test
@@ -276,7 +282,7 @@ golangci-lint run
 - **Package structure**:
   - Integration tests → `test/` directory (package `odata_test`)
   - Internal unit tests → `internal/*/` directories (same package as code)
-  - Compliance tests → `compliance-suite/tests/`
+  - Compliance tests → external [github.com/NLstn/odata-compliance-suite](https://github.com/NLstn/odata-compliance-suite) repository
 - **No cyclic dependencies**: Keep package dependencies acyclic
 
 ### Breaking Changes
@@ -322,8 +328,9 @@ Must be clearly documented and discussed before implementation (see [Versioning 
    # Run with race detection
    go test -race ./...
    
-   # Run compliance tests
-   cd compliance-suite && go run .
+   # Run compliance tests: start the reference server, then run the external suite
+   go run ./cmd/complianceserver -db sqlite        # serves on http://localhost:9090 (one terminal)
+   go run github.com/nlstn/odata-compliance-suite@latest -server http://localhost:9090  # (another terminal)
    
    # Lint your code
    golangci-lint run
