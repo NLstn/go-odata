@@ -7,7 +7,7 @@ on:
       - '**.go'
       - 'go.mod'
       - 'go.sum'
-      - 'compliance-suite/**'
+      - 'cmd/complianceserver/**'
       - '.github/workflows/sqlite-compliance.yml'
   pull_request:
     branches: [ main ]
@@ -15,7 +15,7 @@ on:
       - '**.go'
       - 'go.mod'
       - 'go.sum'
-      - 'compliance-suite/**'
+      - 'cmd/complianceserver/**'
       - '.github/workflows/sqlite-compliance.yml'
 
 permissions:
@@ -25,7 +25,7 @@ jobs:
   sqlite-compliance:
     name: SQLite Compliance Tests
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: Check out code
       uses: actions/checkout@v6
@@ -45,13 +45,21 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-go-1.25-
 
-    - name: Download dependencies
-      run: |
-        go mod download
-        cd compliance-suite
-        go mod download
+    - name: Build compliance server
+      run: cd cmd/complianceserver && go build -o "$RUNNER_TEMP/complianceserver" .
 
-    - name: Run compliance tests (SQLite)
+    - name: Start compliance server (SQLite)
       run: |
-        cd compliance-suite
-        go run . -db sqlite
+        nohup "$RUNNER_TEMP/complianceserver" -db sqlite -port 9090 \
+          > "$RUNNER_TEMP/server.log" 2>&1 &
+        echo "Started complianceserver (pid $!)"
+
+    - name: Run compliance suite
+      uses: NLstn/odata-compliance-suite@v1
+      with:
+        server: http://localhost:9090
+        timeout: 60
+
+    - name: Compliance server logs (on failure)
+      if: failure()
+      run: cat "$RUNNER_TEMP/server.log" || true

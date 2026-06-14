@@ -7,7 +7,7 @@ on:
       - '**.go'
       - 'go.mod'
       - 'go.sum'
-      - 'compliance-suite/**'
+      - 'cmd/complianceserver/**'
       - '.github/workflows/mysql-compliance.yml'
   pull_request:
     branches: [ main ]
@@ -15,7 +15,7 @@ on:
       - '**.go'
       - 'go.mod'
       - 'go.sum'
-      - 'compliance-suite/**'
+      - 'cmd/complianceserver/**'
       - '.github/workflows/mysql-compliance.yml'
 
 permissions:
@@ -25,7 +25,7 @@ jobs:
   mysql-compliance:
     name: MySQL Compliance Tests
     runs-on: ubuntu-latest
-    
+
     services:
       mysql:
         image: mysql:8
@@ -41,7 +41,7 @@ jobs:
           --health-retries 5
         ports:
           - 3306:3306
-    
+
     steps:
     - name: Check out code
       uses: actions/checkout@v6
@@ -61,13 +61,22 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-go-1.25-
 
-    - name: Download dependencies
-      run: |
-        go mod download
-        cd compliance-suite
-        go mod download
+    - name: Build compliance server
+      run: cd cmd/complianceserver && go build -o "$RUNNER_TEMP/complianceserver" .
 
-    - name: Run compliance tests (MySQL)
+    - name: Start compliance server (MySQL)
       run: |
-        cd compliance-suite
-        go run . -db mysql -dsn "odata:odata_test@tcp(localhost:3306)/odata_test?parseTime=true"
+        nohup "$RUNNER_TEMP/complianceserver" -db mysql \
+          -dsn "odata:odata_test@tcp(localhost:3306)/odata_test?parseTime=true" \
+          -port 9090 > "$RUNNER_TEMP/server.log" 2>&1 &
+        echo "Started complianceserver (pid $!)"
+
+    - name: Run compliance suite
+      uses: NLstn/odata-compliance-suite@v1
+      with:
+        server: http://localhost:9090
+        timeout: 60
+
+    - name: Compliance server logs (on failure)
+      if: failure()
+      run: cat "$RUNNER_TEMP/server.log" || true

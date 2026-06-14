@@ -300,12 +300,17 @@ Run the test suite:
 go test ./...
 
 # Run all compliance tests
-cd compliance-suite
-go run .
+# 1. Start the reference server (in one terminal)
+go run ./cmd/complianceserver -db sqlite        # serves on http://localhost:9090
+
+# 2. Run the external compliance suite against it (in another terminal)
+go run github.com/nlstn/odata-compliance-suite@latest -server http://localhost:9090
 
 # Run tests with race detection
 go test -race ./...
 ```
+
+The compliance test suite lives in its own repository: [github.com/NLstn/odata-compliance-suite](https://github.com/NLstn/odata-compliance-suite). This repo provides the reference OData server (`cmd/complianceserver`) that the suite runs against. The suite can also be run via its prebuilt binary, Docker image (`ghcr.io/nlstn/odata-compliance-suite`), or GitHub Action — see the suite repo for details.
 
 See the [Testing documentation](documentation/testing.md) for detailed information about unit tests, compliance tests, and performance profiling.
 
@@ -317,7 +322,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 1. Run all unit tests: `go test ./...`
 2. Run tests with race detection: `go test -race ./...`
-3. Run compliance tests: `cd compliance-suite && go run .`
+3. Run compliance tests: start the reference server with `go run ./cmd/complianceserver -db sqlite`, then run `go run github.com/nlstn/odata-compliance-suite@latest -server http://localhost:9090`
 4. Format your code: `go fmt ./...`
 5. Run go vet: `go vet ./...`
 6. Run linter: `golangci-lint run`

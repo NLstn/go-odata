@@ -46,12 +46,12 @@ When adding new tests:
 
 **CRITICAL: Compliance tests MUST strictly adhere to the OData v4 specification.**
 
-The `compliance-suite/` directory contains a Go-based test suite that validates the library's compliance with the official OData v4 specification. Tests are organized by OData version:
+The compliance test suite is a Go-based test suite that validates the library's compliance with the official OData v4 specification. It lives in its own repository at [github.com/NLstn/odata-compliance-suite](https://github.com/NLstn/odata-compliance-suite) (module path `github.com/nlstn/odata-compliance-suite`). This repo provides the reference OData server (`cmd/complianceserver`) that the suite runs against. Within the suite repository, tests are organized by OData version:
 
 - **`tests/v4_0/`** - OData 4.0 specification compliance tests
 - **`tests/v4_01/`** - OData 4.01-specific compliance tests
 - **`framework/`** - Test framework with HTTP client and assertions
-- **`main.go`** - Test runner with server management and reporting
+- **`main.go`** - Test runner and reporting
 
 ##### Compliance Test Requirements
 
@@ -81,28 +81,31 @@ The `compliance-suite/` directory contains a Go-based test suite that validates 
 
 4. **Running Compliance Tests**:
    
-   **IMPORTANT: Always run compliance tests using the Go-based test suite.**
+   **IMPORTANT: Always run compliance tests using the external Go-based test suite at [github.com/NLstn/odata-compliance-suite](https://github.com/NLstn/odata-compliance-suite).**
    
-   The test suite at `compliance-suite/` ensures:
-   - Proper test environment setup and cleanup
+   The suite is black-box: start the reference server (`cmd/complianceserver`) from this repo first, then point the suite at its URL. The suite does not start a server itself. It ensures:
    - Consistent execution across all test versions
    - Comprehensive reporting and error tracking
-   - Automatic server management
    
    ```bash
    # Run all compliance tests (4.0 + 4.01) - PREFERRED METHOD
-   cd compliance-suite
-   go run .
+   # 1. Start the reference server (in one terminal)
+   go run ./cmd/complianceserver -db sqlite        # serves on http://localhost:9090
+   
+   # 2. Run the external compliance suite against it (in another terminal)
+   go run github.com/nlstn/odata-compliance-suite@latest -server http://localhost:9090
    
    # Run only OData 4.0 tests
-   go run . -version 4.0
+   go run github.com/nlstn/odata-compliance-suite@latest -server http://localhost:9090 -version 4.0
    
    # Run only OData 4.01 tests
-   go run . -version 4.01
+   go run github.com/nlstn/odata-compliance-suite@latest -server http://localhost:9090 -version 4.01
    
    # Run specific tests by pattern
-   go run . -pattern filter
+   go run github.com/nlstn/odata-compliance-suite@latest -server http://localhost:9090 -pattern filter
    ```
+   
+   The suite can also be run via its prebuilt binary, Docker image (`ghcr.io/nlstn/odata-compliance-suite`), or GitHub Action — see the suite repository for details.
 
 5. **Test Coverage**: The Go-based test suite covers:
    - HTTP headers (Content-Type, OData-Version, OData-MaxVersion, Accept, Prefer, Error responses)
@@ -116,7 +119,7 @@ The `compliance-suite/` directory contains a Go-based test suite that validates 
    
    The suite is actively being expanded with tests ported from the legacy bash implementation.
 
-6. **Adding New Compliance Tests**:
+6. **Adding New Compliance Tests** (contribute these in the external [github.com/NLstn/odata-compliance-suite](https://github.com/NLstn/odata-compliance-suite) repository, not in this repo):
    - Choose the correct directory:
      - Add to `tests/v4_0/` for OData 4.0 features (applies to both 4.0 and 4.01)
      - Add to `tests/v4_01/` only for features new or different in OData 4.01
@@ -130,8 +133,8 @@ The `compliance-suite/` directory contains a Go-based test suite that validates 
    - Test both success cases and error cases
    - Validate response status codes, headers, and body structure
    - Ensure tests are idempotent and don't leave test data
-   - Register the test suite in `compliance-suite/main.go`
-   - Update `compliance-suite/README.md` with new test description
+   - Register the test suite in the compliance suite's `main.go`
+   - Update the compliance suite's `README.md` with new test description
 
 ### Requirements
 

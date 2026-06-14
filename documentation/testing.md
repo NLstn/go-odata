@@ -94,37 +94,45 @@ func TestEntityRetrieval(t *testing.T) {
 
 ## Compliance Tests
 
-The library includes a comprehensive OData v4 compliance test suite implemented in Go, covering the OData specification. Tests run on both SQLite and PostgreSQL to ensure cross-database compatibility.
+The OData v4 compliance test suite is a comprehensive, Go-based suite that validates compliance with the OData specification. It now lives in its own repository at [github.com/NLstn/odata-compliance-suite](https://github.com/NLstn/odata-compliance-suite) (module path `github.com/nlstn/odata-compliance-suite`).
+
+The suite is black-box: this repo provides the reference OData server (`cmd/complianceserver`) that you start first, then point the suite at its URL. The suite does not start a server itself. Run the suite against SQLite, PostgreSQL, MySQL, or MariaDB by choosing the database for the reference server.
 
 ### Running Compliance Tests
 
 ```bash
 # Run all compliance tests (4.0 + 4.01) with SQLite - RECOMMENDED
-cd compliance-suite
-go run .
+# 1. Start the reference server (in one terminal)
+go run ./cmd/complianceserver -db sqlite        # serves on http://localhost:9090
+
+# 2. Run the external compliance suite against it (in another terminal)
+go run github.com/nlstn/odata-compliance-suite@latest -server http://localhost:9090
 
 # Run all compliance tests with PostgreSQL
-cd compliance-suite
-go run . -db postgres -dsn "postgresql://user:pass@localhost:5432/dbname?sslmode=disable"
+# Start the server against PostgreSQL, then point the suite at it:
+go run ./cmd/complianceserver -db postgres -dsn "postgresql://user:pass@localhost:5432/dbname?sslmode=disable"
+go run github.com/nlstn/odata-compliance-suite@latest -server http://localhost:9090
 
 # Run only OData 4.0 tests
-go run . -version 4.0
+go run github.com/nlstn/odata-compliance-suite@latest -server http://localhost:9090 -version 4.0
 
 # Run only OData 4.01 tests
-go run . -version 4.01
+go run github.com/nlstn/odata-compliance-suite@latest -server http://localhost:9090 -version 4.01
 
 # Run specific tests by pattern
-go run . -pattern filter
+go run github.com/nlstn/odata-compliance-suite@latest -server http://localhost:9090 -pattern filter
 
 # Run with verbose output
-go run . -verbose
+go run github.com/nlstn/odata-compliance-suite@latest -server http://localhost:9090 -verbose
 
 # Run with debug mode (full HTTP details)
-go run . -debug
+go run github.com/nlstn/odata-compliance-suite@latest -server http://localhost:9090 -debug
 
 # Save report to file
-go run . -output compliance-report.md
+go run github.com/nlstn/odata-compliance-suite@latest -server http://localhost:9090 -output compliance-report.md
 ```
+
+The suite can also be run via its prebuilt binary, Docker image (`ghcr.io/nlstn/odata-compliance-suite`), or GitHub Action — see the [suite repository](https://github.com/NLstn/odata-compliance-suite) for details.
 
 ### What Compliance Tests Cover
 
@@ -141,9 +149,9 @@ The compliance tests verify:
 
 ### Compliance Test Structure
 
-Tests are organized by OData version:
-- `compliance-suite/tests/v4_0/` - OData 4.0 specification tests
-- `compliance-suite/tests/v4_01/` - OData 4.01-specific tests
+The compliance tests live in the external [github.com/NLstn/odata-compliance-suite](https://github.com/NLstn/odata-compliance-suite) repository, organized by OData version:
+- `tests/v4_0/` - OData 4.0 specification tests
+- `tests/v4_01/` - OData 4.01-specific tests
 
 Each test:
 - Tests one specific section of the OData specification
@@ -154,11 +162,13 @@ Each test:
 
 ### Adding New Compliance Tests
 
+Compliance tests now live in the external [github.com/NLstn/odata-compliance-suite](https://github.com/NLstn/odata-compliance-suite) repository. Contributions to the test suite should be made there. The guidance below describes how tests are structured within that repository.
+
 When adding new compliance tests:
 
-1. Choose the correct directory:
-   - Add to `compliance-suite/tests/v4_0/` for OData 4.0 features
-   - Add to `compliance-suite/tests/v4_01/` only for features new in OData 4.01
+1. Choose the correct directory (in the compliance suite repo):
+   - Add to `tests/v4_0/` for OData 4.0 features
+   - Add to `tests/v4_01/` only for features new in OData 4.01
 
 2. Create a new Go file with a function that returns `*framework.TestSuite`
 
@@ -181,9 +191,9 @@ func UpdateEntity() *framework.TestSuite {
 
 6. Ensure tests are idempotent (don't leave test data)
 
-7. Register the test suite in `compliance-suite/main.go`
+7. Register the test suite in the compliance suite's `main.go`
 
-8. Update `compliance-suite/README.md` with new test description
+8. Update the compliance suite's `README.md` with new test description
 
 ### Continuous Integration
 
@@ -389,7 +399,7 @@ Ensure all quality checks pass:
 
 1. ✅ Run all unit tests: `go test ./...`
 2. ✅ Run tests with race detection: `go test -race ./...`
-3. ✅ Run compliance tests: `cd compliance-suite && go run .`
+3. ✅ Run compliance tests: start the reference server with `go run ./cmd/complianceserver -db sqlite`, then run `go run github.com/nlstn/odata-compliance-suite@latest -server http://localhost:9090`
 4. ✅ Format your code: `go fmt ./...`
 5. ✅ Run go vet: `go vet ./...`
 6. ✅ Run linter: `golangci-lint run`

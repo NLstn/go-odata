@@ -162,8 +162,11 @@ The library includes comprehensive tests for geospatial functions:
 go test ./internal/query -v -run TestGeo
 
 # Run compliance tests with geospatial support
-cd compliance-suite
-go run . -pattern geo
+# 1. Start the reference server (in one terminal)
+go run ./cmd/complianceserver -db sqlite        # serves on http://localhost:9090
+
+# 2. Run the external compliance suite against it (in another terminal)
+go run github.com/nlstn/odata-compliance-suite@latest -server http://localhost:9090 -pattern geo
 ```
 
 ## OData v4 Compliance
