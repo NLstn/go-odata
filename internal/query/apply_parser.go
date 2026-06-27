@@ -260,6 +260,42 @@ func extractAliasesFromTransformation(trans *ApplyTransformation, aliases map[st
 	}
 }
 
+// AggregateAliases returns the set of aliases produced by aggregate()
+// transformations, including those nested inside a groupby(). These columns hold
+// numeric aggregates (sum/average/min/max/count/countdistinct), which some
+// database drivers (notably PostgreSQL, whose driver returns NUMERIC/DECIMAL as a
+// string) may surface as strings; callers use this set to normalize them back to
+// numbers so they serialize as JSON numbers.
+func AggregateAliases(transformations []ApplyTransformation) map[string]bool {
+	aliases := make(map[string]bool)
+	var walk func(t *ApplyTransformation)
+	walk = func(t *ApplyTransformation) {
+		if t == nil {
+			return
+		}
+		switch t.Type {
+		case ApplyTypeGroupBy:
+			if t.GroupBy != nil {
+				for i := range t.GroupBy.Transform {
+					walk(&t.GroupBy.Transform[i])
+				}
+			}
+		case ApplyTypeAggregate:
+			if t.Aggregate != nil {
+				for _, expr := range t.Aggregate.Expressions {
+					if expr.Alias != "" {
+						aliases[expr.Alias] = true
+					}
+				}
+			}
+		}
+	}
+	for i := range transformations {
+		walk(&transformations[i])
+	}
+	return aliases
+}
+
 // parseGroupBy parses a groupby transformation
 // Format: groupby((prop1,prop2), aggregate(expr))
 // or: groupby((prop1,prop2))

@@ -1060,6 +1060,70 @@ func buildFunctionComparison(dialect string, filter *FilterExpression, entityMet
 	return compSQL, allArgs
 }
 
+// iso8601DurationToSecondsSQL builds a CASE expression that converts an ISO-8601
+// duration string column (e.g. "P1D", "PT2H", "P1DT2H30M") into total seconds.
+// Edm.Duration values are stored as ISO-8601 strings, so each dialect parses the
+// string with its own primitives (INSTR/SUBSTR for SQLite, LOCATE/SUBSTRING for
+// MySQL/MariaDB, CHARINDEX/SUBSTRING for SQL Server). The algorithm mirrors the
+// SQLite implementation used in OpTotalSeconds.
+func iso8601DurationToSecondsSQL(c, dialect string) string {
+	var instr func(hay, needle string) string
+	var substr3 func(s, start, length string) string
+	var substr2 func(s, start string) string
+	var castInt func(x string) string
+	var castReal func(x string) string
+
+	switch dialect {
+	case "mysql", "mariadb":
+		instr = func(hay, needle string) string { return "LOCATE(" + needle + "," + hay + ")" }
+		substr3 = func(s, start, length string) string { return "SUBSTRING(" + s + "," + start + "," + length + ")" }
+		substr2 = func(s, start string) string { return "SUBSTRING(" + s + "," + start + ")" }
+		castInt = func(x string) string { return "CAST(" + x + " AS SIGNED)" }
+		castReal = func(x string) string { return "CAST(" + x + " AS DECIMAL(38,9))" }
+	case "sqlserver", "mssql":
+		instr = func(hay, needle string) string { return "CHARINDEX(" + needle + "," + hay + ")" }
+		substr3 = func(s, start, length string) string { return "SUBSTRING(" + s + "," + start + "," + length + ")" }
+		// SQL Server's SUBSTRING requires a length; 8000 covers any duration literal.
+		substr2 = func(s, start string) string { return "SUBSTRING(" + s + "," + start + ",8000)" }
+		castInt = func(x string) string { return "CAST(" + x + " AS INT)" }
+		castReal = func(x string) string { return "CAST(" + x + " AS FLOAT)" }
+	default: // sqlite
+		instr = func(hay, needle string) string { return "INSTR(" + hay + "," + needle + ")" }
+		substr3 = func(s, start, length string) string { return "SUBSTR(" + s + "," + start + "," + length + ")" }
+		substr2 = func(s, start string) string { return "SUBSTR(" + s + "," + start + ")" }
+		castInt = func(x string) string { return "CAST(" + x + " AS INTEGER)" }
+		castReal = func(x string) string { return "CAST(" + x + " AS REAL)" }
+	}
+
+	t := instr(c, "'T'")
+	d := instr(c, "'D'")
+	h := instr(c, "'H'")
+	s := instr(c, "'S'")
+	afterT := substr2(c, t+"+1")
+	mRel := instr(afterT, "'M'")
+	mAbs := t + "+" + mRel // absolute position of the minutes 'M' within c
+
+	// Days: digits before the first 'D' when it precedes any 'T'.
+	days := castInt("CASE WHEN "+d+">0 AND ("+t+"=0 OR "+d+"<"+t+")"+
+		" THEN "+substr3(c, "2", d+"-2")+" ELSE 0 END") + "*86400"
+	// Hours: digits between 'T' and 'H'.
+	hours := castInt("CASE WHEN "+t+">0 AND "+h+">"+t+
+		" THEN "+substr3(c, t+"+1", h+"-"+t+"-1")+" ELSE 0 END") + "*3600"
+	// Minutes: digits before 'M' (after 'T'), starting after 'H' if present.
+	minStart := "CASE WHEN " + h + ">" + t + " THEN " + h + "+1 ELSE " + t + "+1 END"
+	minLen := mAbs + "-1-CASE WHEN " + h + ">" + t + " THEN " + h + " ELSE " + t + " END"
+	minutes := castInt("CASE WHEN "+t+">0 AND "+mRel+">0"+
+		" THEN "+substr3(c, minStart, minLen)+" ELSE 0 END") + "*60"
+	// Seconds: digits before 'S', starting after the last of 'M'/'H'/'T'.
+	secStart := "CASE WHEN " + mRel + ">0 THEN " + mAbs + "+1 WHEN " + h + ">" + t + " THEN " + h + "+1 ELSE " + t + "+1 END"
+	secLen := s + "-CASE WHEN " + mRel + ">0 THEN " + mAbs + " WHEN " + h + ">" + t + " THEN " + h + " ELSE " + t + " END-1"
+	seconds := castReal("CASE WHEN " + t + ">0 AND " + s + ">" + t +
+		" THEN " + substr3(c, secStart, secLen) + " ELSE 0 END")
+
+	return "CASE WHEN " + c + " IS NULL THEN NULL WHEN " + c + " NOT LIKE 'P%' THEN NULL ELSE (" +
+		days + "+" + hours + "+" + minutes + "+" + seconds + ") END"
+}
+
 // buildFunctionSQL generates SQL for a function expression
 func buildFunctionSQL(dialect string, op FilterOperator, columnName string, value interface{}) (string, []interface{}) {
 	switch op {
@@ -1335,9 +1399,11 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 		case "postgres":
 			return fmt.Sprintf("EXTRACT(EPOCH FROM CAST(NULLIF(CAST(%s AS TEXT), '') AS INTERVAL))", columnName), nil
 		case "mysql", "mariadb":
-			return fmt.Sprintf("TIME_TO_SEC(%s)", columnName), nil
+			// Edm.Duration is stored as an ISO-8601 string; parse it rather than
+			// treating it as a clock TIME (TIME_TO_SEC cannot read "P1D").
+			return iso8601DurationToSecondsSQL(columnName, "mysql"), nil
 		case "sqlserver", "mssql":
-			return fmt.Sprintf("DATEDIFF_BIG(SECOND, '00:00:00', TRY_CONVERT(time, %s))", columnName), nil
+			return iso8601DurationToSecondsSQL(columnName, "sqlserver"), nil
 		default: // sqlite - parse ISO 8601 duration strings (e.g. P1D, PT2H, P1DT2H30M) into total seconds
 			c := columnName
 			return "CASE WHEN " + c + " IS NULL THEN NULL WHEN " + c + " NOT LIKE 'P%' THEN NULL ELSE (" +
@@ -1370,6 +1436,10 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 			return "'0001-01-01 00:00:00+00'::TIMESTAMPTZ", nil
 		case "mysql", "mariadb":
 			return "'0001-01-01 00:00:00'", nil
+		case "sqlserver", "mssql":
+			// SQL Server has no datetime() function; use datetime2 which (unlike the
+			// legacy datetime type) covers years from 0001.
+			return "CAST('0001-01-01T00:00:00' AS datetime2)", nil
 		default: // sqlite
 			return "datetime('0001-01-01T00:00:00')", nil
 		}
@@ -1379,6 +1449,8 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 			return "'9999-12-31 23:59:59.9999999+00'::TIMESTAMPTZ", nil
 		case "mysql", "mariadb":
 			return "'9999-12-31 23:59:59'", nil
+		case "sqlserver", "mssql":
+			return "CAST('9999-12-31T23:59:59' AS datetime2)", nil
 		default: // sqlite
 			return "datetime('9999-12-31T23:59:59')", nil
 		}
