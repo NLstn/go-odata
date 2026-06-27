@@ -137,26 +137,28 @@ func writeODataCollectionWithNavigationResponse(w http.ResponseWriter, r *http.R
 		transformedData = addIndexAnnotations(transformedData)
 	}
 
-	response := map[string]interface{}{
-		"value": transformedData,
-	}
-
+	// Build the envelope as an OrderedMap to avoid reflection-based map encoding.
+	// OData spec key order: @odata.context, @odata.count, @odata.nextLink, @odata.deltaLink, value.
+	envelope := AcquireOrderedMapWithCapacity(5)
 	if contextURL != "" {
-		response["@odata.context"] = contextURL
+		envelope.Set("@odata.context", contextURL)
 	}
 	if count != nil {
-		response["@odata.count"] = *count
+		envelope.Set("@odata.count", *count)
 	}
 	if nextLink != nil && *nextLink != "" {
-		response["@odata.nextLink"] = *nextLink
+		envelope.Set("@odata.nextLink", *nextLink)
 	}
 	if deltaLink != nil && *deltaLink != "" {
-		response["@odata.deltaLink"] = *deltaLink
+		envelope.Set("@odata.deltaLink", *deltaLink)
 	}
+	envelope.Set("value", transformedData)
 
 	if r.Method == http.MethodHead {
-		jsonBytes, err := json.Marshal(response)
+		jsonBytes, err := json.Marshal(envelope)
+		envelope.Release()
 		if err != nil {
+			releaseOrderedMaps(transformedData)
 			return WriteError(w, r, http.StatusInternalServerError, "Internal Server Error", "Failed to serialize response to JSON.")
 		}
 		w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
@@ -170,7 +172,8 @@ func writeODataCollectionWithNavigationResponse(w http.ResponseWriter, r *http.R
 	w.WriteHeader(http.StatusOK)
 	encoder := json.NewEncoder(w)
 	encoder.SetEscapeHTML(false)
-	err := encoder.Encode(response)
+	err := encoder.Encode(envelope)
+	envelope.Release()
 	// Always release the OrderedMap objects regardless of encoding outcome.
 	// MarshalJSON is called during Encode and produces its own copy of the bytes, so the
 	// maps are safe to return to the pool even when a subsequent write-to-network error occurs.
