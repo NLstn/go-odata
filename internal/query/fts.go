@@ -601,17 +601,27 @@ func (m *FTSManager) ApplyFTSSearch(db *gorm.DB, tableName string, searchQuery s
 		wsQuery := expr.toWebsearchQuery()
 		db = db.Where(fmt.Sprintf("%s.search_vector @@ websearch_to_tsquery('%s', ?)", ftsTableName, m.language), wsQuery)
 	case "FTS5":
-		// FTS5 MATCH natively supports AND, OR, NOT, and phrase search
+		// FTS5 binary NOT (A NOT B) supports one positive and one negative operand;
+		// unary/top-level NOT and compound NOT expressions have no FTS5 equivalent.
+		// Fall back to in-memory search so the caller can evaluate the full boolean
+		// expression correctly.
+		if expr.containsNot() {
+			return db, errFTSNotAvailable
+		}
 		ftsQuery := expr.toFTS5Query()
 		db = db.Where(fmt.Sprintf("%s MATCH ?", ftsTableName), ftsQuery)
 	default:
-		// FTS3/FTS4: supports AND (implicit), OR, and phrase; NOT is not supported
-		// and is silently dropped from the query (positive terms still match)
+		// FTS3/FTS4: the MATCH operator has no NOT support at all. Rather than
+		// silently dropping NOT clauses (producing wrong results) or passing the
+		// raw OData query string through (which causes a "malformed MATCH expression"
+		// 500 error), signal unavailability so the caller falls back to the in-memory
+		// evaluator which handles NOT correctly.
+		if expr.containsNot() {
+			return db, errFTSNotAvailable
+		}
 		ftsQuery := expr.toFTS34Query()
 		if ftsQuery == "" {
-			// toFTS34Query can return "" if the entire expression is negated;
-			// fall back to the raw query to avoid an empty MATCH clause
-			ftsQuery = searchQuery
+			return db, errFTSNotAvailable
 		}
 		db = db.Where(fmt.Sprintf("%s MATCH ?", ftsTableName), ftsQuery)
 	}

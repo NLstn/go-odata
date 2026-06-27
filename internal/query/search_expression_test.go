@@ -182,7 +182,8 @@ func TestToFTS34Query(t *testing.T) {
 		{"laptop", "laptop"},
 		{"laptop AND wireless", "laptop wireless"},
 		{"laptop OR phone", "(laptop OR phone)"},
-		// NOT is not supported by FTS3/4 and is dropped
+		// NOT is dropped by toFTS34Query itself; ApplyFTSSearch now returns
+		// errFTSNotAvailable before reaching this code when containsNot() is true.
 		{"laptop NOT phone", "laptop"},
 	}
 	for _, tt := range tests {
@@ -194,6 +195,74 @@ func TestToFTS34Query(t *testing.T) {
 			got := node.toFTS34Query()
 			if got != tt.expected {
 				t.Errorf("toFTS34Query(%q) = %q, want %q", tt.query, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestSearchExprNode_containsNot(t *testing.T) {
+	tests := []struct {
+		query    string
+		want     bool
+	}{
+		{"laptop", false},
+		{"laptop AND wireless", false},
+		{"laptop OR phone", false},
+		{"NOT laptop", true},
+		{"laptop NOT wireless", true},  // implicit AND with NOT right child
+		{"Mouse NOT Wireless", true},   // issue #732 case 1
+		{"NOT Laptop", true},           // issue #732 case 2
+	}
+	for _, tt := range tests {
+		t.Run(tt.query, func(t *testing.T) {
+			node := ParseSearchExpression(tt.query)
+			if node == nil {
+				t.Fatalf("ParseSearchExpression returned nil for %q", tt.query)
+			}
+			if got := node.containsNot(); got != tt.want {
+				t.Errorf("containsNot(%q) = %v, want %v", tt.query, got, tt.want)
+			}
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// FTS NOT fallback — issue #732
+// ---------------------------------------------------------------------------
+
+// TestFTSManager_ApplyFTSSearch_NOT_FallsBackToInMemory verifies that queries
+// containing NOT return errFTSNotAvailable so the caller can use in-memory
+// evaluation (which handles NOT correctly) instead of producing wrong results
+// or a 500 from an unsupported FTS3/4 MATCH syntax.
+func TestFTSManager_ApplyFTSSearch_NOT_FallsBackToInMemory(t *testing.T) {
+	db := newFTSTestDB(t)
+	if err := db.AutoMigrate(&FTSTestEntity{}); err != nil {
+		t.Fatalf("AutoMigrate: %v", err)
+	}
+	if err := db.Create(&[]FTSTestEntity{
+		{ID: 1, Name: "Wireless Mouse", Description: "ergonomic wireless mouse", Category: "Accessories"},
+		{ID: 2, Name: "Gaming Mouse Ultra", Description: "high-performance gaming mouse", Category: "Accessories"},
+		{ID: 3, Name: "Laptop Pro", Description: "professional laptop", Category: "Electronics"},
+	}).Error; err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	mgr := NewFTSManager(db)
+	if !mgr.IsFTSAvailable() {
+		t.Skip("FTS not available")
+	}
+
+	meta, err := metadata.AnalyzeEntity(FTSTestEntity{})
+	if err != nil {
+		t.Fatalf("AnalyzeEntity: %v", err)
+	}
+
+	for _, query := range []string{"Mouse NOT Wireless", "NOT Laptop"} {
+		t.Run(query, func(t *testing.T) {
+			q := db.Table("fts_test_entities")
+			_, err := mgr.ApplyFTSSearch(q, "fts_test_entities", query, meta)
+			if err == nil {
+				t.Errorf("ApplyFTSSearch(%q): expected errFTSNotAvailable, got nil", query)
 			}
 		})
 	}
