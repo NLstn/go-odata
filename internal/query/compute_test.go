@@ -506,6 +506,32 @@ func TestCompute_AliasExpression(t *testing.T) {
 	}
 }
 
+func TestCompute_SQLDoesNotUsePlaceholdersInSelectExpressions(t *testing.T) {
+	meta := getTestMetadata(t)
+
+	result, err := parseCompute("compute(Price mul 1.1 as PriceWithTax)", meta, 0)
+	if err != nil {
+		t.Fatalf("Unexpected error parsing compute: %v", err)
+	}
+	if result == nil || result.Compute == nil || len(result.Compute.Expressions) == 0 {
+		t.Fatal("Expected parsed compute expression")
+	}
+
+	computeSQL, alias, aliasExpr := buildComputeSQLWithDB("sqlite", result.Compute.Expressions[0], meta)
+	if alias != "PriceWithTax" {
+		t.Fatalf("Expected alias PriceWithTax, got %q", alias)
+	}
+	if computeSQL == "" || aliasExpr == "" {
+		t.Fatal("Expected non-empty SQL for compute expression")
+	}
+	if strings.Contains(computeSQL, "?") || strings.Contains(aliasExpr, "?") {
+		t.Fatalf("Compute SQL should inline constants in SELECT expressions, got computeSQL=%q aliasExpr=%q", computeSQL, aliasExpr)
+	}
+	if !strings.Contains(aliasExpr, "1.1") {
+		t.Fatalf("Expected literal constant in alias expression, got %q", aliasExpr)
+	}
+}
+
 // TestCompute_FilterWithComputedAlias tests that filters referencing computed aliases work on PostgreSQL
 func TestCompute_FilterWithComputedAlias(t *testing.T) {
 	meta := getTestMetadata(t)
