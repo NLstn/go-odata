@@ -38,7 +38,7 @@ func (h *EntityHandler) HandleComplexTypeProperty(w http.ResponseWriter, r *http
 		}
 		h.handleOptionsComplexTypeProperty(w)
 	default:
-		h.writeMethodNotAllowedError(w, r, r.Method, "complex property access")
+		h.writeMethodNotAllowedError(w, r, r.Method, "complex property access", "GET, HEAD, OPTIONS")
 	}
 }
 

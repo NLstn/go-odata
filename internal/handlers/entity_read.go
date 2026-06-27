@@ -31,7 +31,7 @@ func (h *EntityHandler) HandleEntity(w http.ResponseWriter, r *http.Request, ent
 		methodToCheck = http.MethodGet
 	}
 	if h.isMethodDisabled(methodToCheck) {
-		if err := response.WriteError(w, r, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+		if err := response.WriteMethodNotAllowed(w, r, h.allowedMethods([]string{"GET", "HEAD", "DELETE", "PATCH", "PUT"}), ErrMsgMethodNotAllowed,
 			fmt.Sprintf("Method %s is not allowed for this entity", r.Method)); err != nil {
 			h.logger.Error("Error writing error response", "error", err)
 		}
@@ -56,7 +56,7 @@ func (h *EntityHandler) HandleEntity(w http.ResponseWriter, r *http.Request, ent
 		}
 		h.handleOptionsEntity(w)
 	default:
-		if err := response.WriteError(w, r, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+		if err := response.WriteMethodNotAllowed(w, r, "GET, HEAD, DELETE, PATCH, PUT, OPTIONS", ErrMsgMethodNotAllowed,
 			fmt.Sprintf("Method %s is not supported for individual entities", r.Method)); err != nil {
 			h.logger.Error("Error writing error response", "error", err)
 		}
@@ -84,7 +84,7 @@ func (h *EntityHandler) handleGetEntity(w http.ResponseWriter, r *http.Request, 
 
 	// Check if this is a virtual entity without overwrite handler
 	if h.metadata.IsVirtual {
-		if err := response.WriteError(w, r, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+		if err := response.WriteMethodNotAllowed(w, r, "GET, HEAD, DELETE, PATCH, PUT, OPTIONS", ErrMsgMethodNotAllowed,
 			"Virtual entities require an overwrite handler for GetEntity operation"); err != nil {
 			h.logger.Error("Error writing error response", "error", err)
 		}
@@ -209,7 +209,7 @@ func (h *EntityHandler) HandleEntityRef(w http.ResponseWriter, r *http.Request, 
 
 	ctx := r.Context()
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		if err := response.WriteError(w, r, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+		if err := response.WriteMethodNotAllowed(w, r, "GET, HEAD, OPTIONS", ErrMsgMethodNotAllowed,
 			fmt.Sprintf("Method %s is not supported for entity references", r.Method)); err != nil {
 			h.logger.Error("Error writing error response", "error", err)
 		}
@@ -298,7 +298,7 @@ func (h *EntityHandler) HandleCollectionRef(w http.ResponseWriter, r *http.Reque
 
 	ctx := r.Context()
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		if err := response.WriteError(w, r, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+		if err := response.WriteMethodNotAllowed(w, r, "GET, HEAD, OPTIONS", ErrMsgMethodNotAllowed,
 			fmt.Sprintf("Method %s is not supported for collection references", r.Method)); err != nil {
 			h.logger.Error("Error writing error response", "error", err)
 		}

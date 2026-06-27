@@ -485,6 +485,7 @@ func (m *Manager) ServeMonitor(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet, http.MethodHead, "":
 		// continue
 	default:
+		w.Header().Set("Allow", "GET, HEAD, DELETE")
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}

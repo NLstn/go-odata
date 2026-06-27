@@ -195,7 +195,7 @@ func (h *Handler) HandleActionOrFunction(w http.ResponseWriter, r *http.Request,
 			h.logError("Error encoding response", err)
 		}
 	default:
-		if writeErr := response.WriteError(w, r, http.StatusMethodNotAllowed, "Method not allowed",
+		if writeErr := response.WriteMethodNotAllowed(w, r, "GET, HEAD, POST, OPTIONS", "Method not allowed",
 			fmt.Sprintf("Method %s is not allowed for actions or functions", r.Method)); writeErr != nil {
 			h.logError("Error writing error response", writeErr)
 		}

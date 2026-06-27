@@ -157,7 +157,7 @@ func (h *BatchHandler) HandleBatch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method != http.MethodPost {
-		if err := response.WriteError(w, r, http.StatusMethodNotAllowed, "Method not allowed",
+		if err := response.WriteMethodNotAllowed(w, r, "POST, OPTIONS", "Method not allowed",
 			"Only POST method is supported for $batch requests"); err != nil {
 			h.logger.Error("Error writing error response", "error", err)
 		}
@@ -618,7 +618,7 @@ func (h *BatchHandler) executeRequestInTransaction(req *batchRequest, tx *gorm.D
 			}
 			return
 		case "$batch":
-			if err := response.WriteError(w, r, http.StatusMethodNotAllowed, "Method not allowed",
+			if err := response.WriteMethodNotAllowed(w, r, "POST, OPTIONS", "Method not allowed",
 				"Nested $batch requests are not supported within transactional batch requests"); err != nil {
 				h.logger.Error("Error writing error response", "error", err)
 			}

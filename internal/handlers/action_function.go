@@ -39,7 +39,7 @@ func (h *ActionFunctionHandler) HandleActionOrFunction(w http.ResponseWriter, r 
 		// Functions are invoked with GET
 		h.handleFunction(w, r, name, key, isBound)
 	default:
-		if err := response.WriteError(w, r, http.StatusMethodNotAllowed, "Method not allowed",
+		if err := response.WriteMethodNotAllowed(w, r, "GET, HEAD, POST, OPTIONS", "Method not allowed",
 			fmt.Sprintf("Method %s is not allowed for actions or functions", r.Method)); err != nil {
 			slog.Default().Error("Error writing error response", "error", err)
 		}

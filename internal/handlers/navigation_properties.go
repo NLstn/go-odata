@@ -34,7 +34,7 @@ func (h *EntityHandler) HandleNavigationProperty(w http.ResponseWriter, r *http.
 		if isRef {
 			h.handlePutNavigationPropertyRef(w, r, entityKey, navigationProperty)
 		} else {
-			WriteError(w, r, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+			WriteMethodNotAllowed(w, r, "GET, HEAD, OPTIONS", ErrMsgMethodNotAllowed,
 				fmt.Sprintf("Method %s is not supported for navigation properties without $ref", r.Method))
 		}
 	case http.MethodPost:
@@ -44,7 +44,7 @@ func (h *EntityHandler) HandleNavigationProperty(w http.ResponseWriter, r *http.
 		if isRef {
 			h.handlePostNavigationPropertyRef(w, r, entityKey, navigationProperty)
 		} else {
-			WriteError(w, r, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+			WriteMethodNotAllowed(w, r, "GET, HEAD, OPTIONS", ErrMsgMethodNotAllowed,
 				fmt.Sprintf("Method %s is not supported for navigation properties without $ref", r.Method))
 		}
 	case http.MethodDelete:
@@ -54,7 +54,7 @@ func (h *EntityHandler) HandleNavigationProperty(w http.ResponseWriter, r *http.
 		if isRef {
 			h.handleDeleteNavigationPropertyRef(w, r, entityKey, navigationProperty)
 		} else {
-			WriteError(w, r, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+			WriteMethodNotAllowed(w, r, "GET, HEAD, OPTIONS", ErrMsgMethodNotAllowed,
 				fmt.Sprintf("Method %s is not supported for navigation properties without $ref", r.Method))
 		}
 	case http.MethodOptions:
@@ -67,8 +67,13 @@ func (h *EntityHandler) HandleNavigationProperty(w http.ResponseWriter, r *http.
 			h.handleOptionsNavigationProperty(w)
 		}
 	default:
-		WriteError(w, r, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
-			fmt.Sprintf("Method %s is not supported for navigation properties", r.Method))
+		if isRef {
+			WriteMethodNotAllowed(w, r, "GET, HEAD, PUT, POST, DELETE, OPTIONS", ErrMsgMethodNotAllowed,
+				fmt.Sprintf("Method %s is not supported for navigation properties", r.Method))
+		} else {
+			WriteMethodNotAllowed(w, r, "GET, HEAD, OPTIONS", ErrMsgMethodNotAllowed,
+				fmt.Sprintf("Method %s is not supported for navigation properties", r.Method))
+		}
 	}
 }
 
@@ -86,7 +91,7 @@ func (h *EntityHandler) HandleNavigationPropertyCount(w http.ResponseWriter, r *
 		}
 		h.handleOptionsNavigationPropertyCount(w)
 	default:
-		WriteError(w, r, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+		WriteMethodNotAllowed(w, r, "GET, HEAD, OPTIONS", ErrMsgMethodNotAllowed,
 			fmt.Sprintf("Method %s is not supported for navigation property $count", r.Method))
 	}
 }

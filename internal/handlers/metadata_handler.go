@@ -314,7 +314,7 @@ func (h *MetadataHandler) HandleMetadata(w http.ResponseWriter, r *http.Request)
 		}
 		h.handleOptionsMetadata(w)
 	default:
-		if err := response.WriteError(w, r, http.StatusMethodNotAllowed, "Method not allowed",
+		if err := response.WriteMethodNotAllowed(w, r, "GET, HEAD, OPTIONS", "Method not allowed",
 			fmt.Sprintf("Method %s is not supported for metadata document", r.Method)); err != nil {
 			h.logger.Error("Error writing error response", "error", err)
 		}

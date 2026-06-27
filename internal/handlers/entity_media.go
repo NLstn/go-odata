@@ -47,7 +47,7 @@ func (h *EntityHandler) HandleMediaEntityValue(w http.ResponseWriter, r *http.Re
 		}
 		h.handleOptionsMediaEntityValue(w)
 	default:
-		if err := response.WriteError(w, r, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+		if err := response.WriteMethodNotAllowed(w, r, "GET, HEAD, PUT, OPTIONS", ErrMsgMethodNotAllowed,
 			fmt.Sprintf("Method %s is not supported for media entity $value", r.Method)); err != nil {
 			h.logger.Error("Error writing error response", "error", err)
 		}

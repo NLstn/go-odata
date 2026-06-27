@@ -29,7 +29,7 @@ func (h *EntityHandler) HandleStreamProperty(w http.ResponseWriter, r *http.Requ
 		if isValue {
 			h.handlePutStreamProperty(w, r, entityKey, propertyName)
 		} else {
-			if err := response.WriteError(w, r, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+			if err := response.WriteMethodNotAllowed(w, r, "GET, HEAD, OPTIONS", ErrMsgMethodNotAllowed,
 				"PUT is only supported on stream properties with /$value"); err != nil {
 				h.logger.Error("Error writing error response", "error", err)
 			}
@@ -40,7 +40,11 @@ func (h *EntityHandler) HandleStreamProperty(w http.ResponseWriter, r *http.Requ
 		}
 		h.handleOptionsStreamProperty(w, isValue)
 	default:
-		h.writeMethodNotAllowedError(w, r, r.Method, "stream property access")
+		allow := "GET, HEAD, OPTIONS"
+		if isValue {
+			allow = "GET, HEAD, PUT, OPTIONS"
+		}
+		h.writeMethodNotAllowedError(w, r, r.Method, "stream property access", allow)
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"reflect"
 	"strings"
 	"sync"
@@ -290,6 +291,24 @@ func (h *EntityHandler) isMethodDisabled(method string) bool {
 		return false
 	}
 	return h.metadata.DisabledMethods[method]
+}
+
+// allowedMethods returns a comma-separated Allow header value built from candidates,
+// omitting any methods that are currently disabled, and always appending OPTIONS.
+// HEAD is controlled by the GET disable flag.
+func (h *EntityHandler) allowedMethods(candidates []string) string {
+	allowed := make([]string, 0, len(candidates)+1)
+	for _, m := range candidates {
+		checkMethod := m
+		if m == http.MethodHead {
+			checkMethod = http.MethodGet
+		}
+		if !h.isMethodDisabled(checkMethod) {
+			allowed = append(allowed, m)
+		}
+	}
+	allowed = append(allowed, http.MethodOptions)
+	return strings.Join(allowed, ", ")
 }
 
 // EnableChangeTracking turns on change tracking for this entity handler.

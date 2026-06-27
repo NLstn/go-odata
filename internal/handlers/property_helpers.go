@@ -106,9 +106,10 @@ func (h *EntityHandler) NavigationTargetSet(propertyName string) (string, bool) 
 	return "", false
 }
 
-// writeMethodNotAllowedError writes a method not allowed error for a specific context
-func (h *EntityHandler) writeMethodNotAllowedError(w http.ResponseWriter, r *http.Request, method, context string) {
-	if err := response.WriteError(w, r, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+// writeMethodNotAllowedError writes a method not allowed error for a specific context.
+// allow is the value to set in the Allow response header (e.g. "GET, HEAD, OPTIONS").
+func (h *EntityHandler) writeMethodNotAllowedError(w http.ResponseWriter, r *http.Request, method, context, allow string) {
+	if err := response.WriteMethodNotAllowed(w, r, allow, ErrMsgMethodNotAllowed,
 		fmt.Sprintf("Method %s is not supported for %s", method, context)); err != nil {
 		h.logger.Error("Error writing error response", "error", err)
 	}
