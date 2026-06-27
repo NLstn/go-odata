@@ -12,7 +12,7 @@ import (
 var bufferPool = sync.Pool{
 	New: func() interface{} {
 		buf := new(bytes.Buffer)
-		buf.Grow(512) // Pre-allocate reasonable capacity for typical JSON responses
+		buf.Grow(16 * 1024) // Pre-allocate 16KB; collection responses grow into the same buffer via marshalTo
 		return buf
 	},
 }
@@ -149,31 +149,39 @@ func (om *OrderedMap) ToMap() map[string]interface{} {
 	return om.values
 }
 
-// MarshalJSON implements json.Marshaler to maintain field order
-// Optimized version using streaming encoder to avoid per-value allocations
+// MarshalJSON implements json.Marshaler to maintain field order.
 func (om *OrderedMap) MarshalJSON() ([]byte, error) {
 	if len(om.keys) == 0 {
 		return []byte("{}"), nil
 	}
 
-	// Get buffer from pool
 	buf := bufferPool.Get().(*bytes.Buffer) //nolint:errcheck // sync.Pool.Get() doesn't return error
 	buf.Reset()
 	defer func() {
-		// Only return buffers to pool if they're not too large (< 64KB)
-		// This prevents unbounded memory growth from large responses
-		if buf.Cap() < 65536 {
+		// Pool buffers up to 512KB. With marshalTo writing the full collection
+		// JSON into one buffer, responses for top=100-500 can reach 100-500KB.
+		if buf.Cap() < 512*1024 {
 			bufferPool.Put(buf)
 		}
 	}()
 
-	// Estimate initial capacity
-	estimatedSize := len(om.keys) * 100
-	buf.Grow(estimatedSize)
+	buf.Grow(len(om.keys) * 100)
 
-	// Create a streaming encoder - this avoids intermediate allocations
+	if err := om.marshalTo(buf); err != nil {
+		return nil, err
+	}
+
+	result := make([]byte, buf.Len())
+	copy(result, buf.Bytes())
+	return result, nil
+}
+
+// marshalTo writes the JSON representation directly to buf.
+// Nested *OrderedMap and []interface{} values write into the same buf, eliminating
+// the per-entity bufferPool round-trip and intermediate copy that MarshalJSON performs.
+func (om *OrderedMap) marshalTo(buf *bytes.Buffer) error {
+	// enc is lazily used only for complex types (time.Time, decimal, etc.)
 	enc := json.NewEncoder(buf)
-	// Disable HTML escaping for better performance (not needed for OData responses)
 	enc.SetEscapeHTML(false)
 
 	buf.WriteByte('{')
@@ -183,41 +191,65 @@ func (om *OrderedMap) MarshalJSON() ([]byte, error) {
 			buf.WriteByte(',')
 		}
 
-		// Optimize for simple string keys (no special characters)
-		// This avoids the overhead of json.Marshal for keys
 		if needsEscaping(key) {
-			// Use json.Marshal for keys that need escaping
 			keyBytes, err := json.Marshal(key)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			buf.Write(keyBytes)
 		} else {
-			// Fast path: write key directly with quotes
 			buf.WriteByte('"')
 			buf.WriteString(key)
 			buf.WriteByte('"')
 		}
-
 		buf.WriteByte(':')
 
-		// Use streaming encoder for values - avoids intermediate []byte allocation
 		value := om.values[key]
 
-		// Fast path for common types to avoid encoder overhead
 		switch v := value.(type) {
 		case string:
 			if needsEscaping(v) {
 				if err := enc.Encode(v); err != nil {
-					return nil, err
+					return err
 				}
-				// Remove trailing newline added by Encode
 				buf.Truncate(buf.Len() - 1)
 			} else {
 				buf.WriteByte('"')
 				buf.WriteString(v)
 				buf.WriteByte('"')
 			}
+		case *OrderedMap:
+			if v == nil {
+				buf.WriteString("null")
+			} else {
+				if err := v.marshalTo(buf); err != nil {
+					return err
+				}
+			}
+		case []interface{}:
+			// Write *OrderedMap elements directly into buf to avoid per-entity
+			// bufferPool round-trips and intermediate copies.
+			buf.WriteByte('[')
+			for j, item := range v {
+				if j > 0 {
+					buf.WriteByte(',')
+				}
+				if elem, ok := item.(*OrderedMap); ok {
+					if elem == nil {
+						buf.WriteString("null")
+					} else {
+						if err := elem.marshalTo(buf); err != nil {
+							return err
+						}
+					}
+				} else {
+					if err := enc.Encode(item); err != nil {
+						return err
+					}
+					buf.Truncate(buf.Len() - 1)
+				}
+			}
+			buf.WriteByte(']')
 		case int:
 			writeInt(buf, int64(v))
 		case int64:
@@ -243,21 +275,15 @@ func (om *OrderedMap) MarshalJSON() ([]byte, error) {
 		case nil:
 			buf.WriteString("null")
 		default:
-			// Fall back to streaming encoder for complex types
 			if err := enc.Encode(value); err != nil {
-				return nil, err
+				return err
 			}
-			// Remove trailing newline added by Encode
 			buf.Truncate(buf.Len() - 1)
 		}
 	}
 
 	buf.WriteByte('}')
-
-	// Create a copy of the buffer contents since we're reusing the buffer
-	result := make([]byte, buf.Len())
-	copy(result, buf.Bytes())
-	return result, nil
+	return nil
 }
 
 // writeInt writes an int64 to the buffer without allocation
