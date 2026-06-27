@@ -457,6 +457,7 @@ func convertBinaryArithmeticExprWithContext(binExpr *BinaryExpr, ctx *conversion
 
 	// Extract property from left side
 	var property string
+	var leftExpr *FilterExpression
 	if leftIdent, ok := binExpr.Left.(*IdentifierExpr); ok {
 		property = leftIdent.Name
 		// Validate property exists (either in entity metadata or as a computed alias)
@@ -470,16 +471,16 @@ func convertBinaryArithmeticExprWithContext(binExpr *BinaryExpr, ctx *conversion
 		if err != nil {
 			return nil, err
 		}
-		// For nested expressions, we'll use a placeholder property
-		// The actual SQL generation will need to handle this recursively
-		property = leftFilterExpr.Property
+		property = ""
+		leftExpr = leftFilterExpr
 	} else {
 		// For other complex cases, use a placeholder
-		property = "_arithmetic_"
+		property = ""
 	}
 
 	// Extract value from right side
 	var value interface{}
+	var rightExpr *FilterExpression
 	if rightLit, ok := binExpr.Right.(*LiteralExpr); ok {
 		value = rightLit.Value
 	} else if rightIdent, ok := binExpr.Right.(*IdentifierExpr); ok {
@@ -491,9 +492,7 @@ func convertBinaryArithmeticExprWithContext(binExpr *BinaryExpr, ctx *conversion
 		if err != nil {
 			return nil, err
 		}
-		// For nested expressions, store the converted expression
-		// The actual SQL generation will need to handle this
-		value = rightFilterExpr
+		rightExpr = rightFilterExpr
 	} else {
 		return nil, errRightSideOfArithMustBeLitPropArith
 	}
@@ -502,6 +501,8 @@ func convertBinaryArithmeticExprWithContext(binExpr *BinaryExpr, ctx *conversion
 	expr.Property = property
 	expr.Operator = op
 	expr.Value = value
+	expr.Left = leftExpr
+	expr.Right = rightExpr
 	return expr, nil
 }
 

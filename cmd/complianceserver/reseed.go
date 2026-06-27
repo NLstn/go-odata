@@ -20,13 +20,11 @@ func seedDatabase(db *gorm.DB) error {
 	dialectName := db.Name()
 
 	// Drop all existing tables to ensure a clean state
-	// For PostgreSQL, we need to handle join tables explicitly first
-	if dialectName == "postgres" {
-		// Drop the many-to-many join table first to avoid foreign key constraint issues
-		// Intentionally ignoring errors if the table doesn't exist (first-time setup)
-		//nolint:errcheck
-		_ = db.Migrator().DropTable("product_relations")
-	}
+	// Drop the many-to-many join table first to avoid foreign key constraint issues
+	// across databases that retain join-table metadata after dropping the parent tables.
+	// Intentionally ignoring errors if the table doesn't exist (first-time setup).
+	//nolint:errcheck
+	_ = db.Migrator().DropTable("product_relations")
 
 	// Drop all entity tables in reverse dependency order
 	// ProductDescription -> Product -> Category (and CompanyInfo, MediaItem independently)

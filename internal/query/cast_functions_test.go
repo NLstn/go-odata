@@ -368,6 +368,53 @@ func TestCastFunction_SQLGeneration(t *testing.T) {
 	}
 }
 
+func TestCastFunction_SQLGenerationSQLServer(t *testing.T) {
+	meta := getTestMetadata(t)
+
+	tests := []struct {
+		name           string
+		filter         string
+		expectedSQL    string
+		expectedArgsNo int
+	}{
+		{
+			name:           "cast to NVARCHAR(MAX)",
+			filter:         "cast(Price, 'Edm.String') eq 'test'",
+			expectedSQL:    "CAST([price] AS NVARCHAR(MAX)) = ?",
+			expectedArgsNo: 1,
+		},
+		{
+			name:           "cast to INT",
+			filter:         "cast(Price, 'Edm.Int32') eq 100",
+			expectedSQL:    "CAST([price] AS INT) = ?",
+			expectedArgsNo: 1,
+		},
+		{
+			name:           "cast to DECIMAL",
+			filter:         "cast(Price, 'Edm.Decimal') gt 99.99",
+			expectedSQL:    "CAST([price] AS DECIMAL(38, 18)) > ?",
+			expectedArgsNo: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			filterExpr, err := parseFilter(tt.filter, meta, nil, 0)
+			if err != nil {
+				t.Fatalf("Unexpected parse error: %v", err)
+			}
+
+			sql, args := buildFilterCondition("sqlserver", filterExpr, meta)
+			if sql != tt.expectedSQL {
+				t.Errorf("Expected SQL:\n%s\nGot:\n%s", tt.expectedSQL, sql)
+			}
+			if len(args) != tt.expectedArgsNo {
+				t.Errorf("Expected %d args, got %d", tt.expectedArgsNo, len(args))
+			}
+		})
+	}
+}
+
 func TestCastFunction_WithOtherFunctions(t *testing.T) {
 	meta := getTestMetadata(t)
 

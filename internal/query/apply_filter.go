@@ -933,12 +933,20 @@ func buildLogicalConditionForLambda(dialect string, filter *FilterExpression, na
 // buildFunctionComparisonForLambda builds a function comparison for lambda predicates
 func buildFunctionComparisonForLambda(dialect string, filter *FilterExpression, navTargetMetadata *metadata.EntityMetadata) (string, []interface{}) {
 	funcExpr := filter.Left
-	// Quote the column name for proper database compatibility
-	columnName := quoteIdent(dialect, GetColumnName(funcExpr.Property, navTargetMetadata))
-
-	funcSQL, funcArgs := buildFunctionSQL(dialect, funcExpr.Operator, columnName, funcExpr.Value)
-	if funcSQL == "" {
-		return "", nil
+	var funcSQL string
+	var funcArgs []interface{}
+	if isArithmeticFilterOperator(funcExpr.Operator) {
+		funcSQL, funcArgs = buildComputeExpressionSQLWithArgs(dialect, funcExpr, navTargetMetadata)
+		if funcSQL == "" {
+			return "", nil
+		}
+	} else {
+		// Quote the column name for proper database compatibility
+		columnName := quoteIdent(dialect, GetColumnName(funcExpr.Property, navTargetMetadata))
+		funcSQL, funcArgs = buildFunctionSQL(dialect, funcExpr.Operator, columnName, funcExpr.Value)
+		if funcSQL == "" {
+			return "", nil
+		}
 	}
 
 	compSQL := buildComparisonSQL(filter.Operator, funcSQL)
@@ -950,14 +958,31 @@ func buildFunctionComparisonForLambda(dialect string, filter *FilterExpression, 
 	return compSQL, allArgs
 }
 
+func isArithmeticFilterOperator(op FilterOperator) bool {
+	switch op {
+	case OpAdd, OpSub, OpMul, OpDiv, OpDivBy, OpMod:
+		return true
+	default:
+		return false
+	}
+}
+
 // buildFunctionComparison builds a comparison with a function on the left side
 func buildFunctionComparison(dialect string, filter *FilterExpression, entityMetadata *metadata.EntityMetadata) (string, []interface{}) {
 	funcExpr := filter.Left
-	columnName := getQuotedColumnName(dialect, funcExpr.Property, entityMetadata)
-
-	funcSQL, funcArgs := buildFunctionSQL(dialect, funcExpr.Operator, columnName, funcExpr.Value)
-	if funcSQL == "" {
-		return "", nil
+	var funcSQL string
+	var funcArgs []interface{}
+	if isArithmeticFilterOperator(funcExpr.Operator) {
+		funcSQL, funcArgs = buildComputeExpressionSQLWithArgs(dialect, funcExpr, entityMetadata)
+		if funcSQL == "" {
+			return "", nil
+		}
+	} else {
+		columnName := getQuotedColumnName(dialect, funcExpr.Property, entityMetadata)
+		funcSQL, funcArgs = buildFunctionSQL(dialect, funcExpr.Operator, columnName, funcExpr.Value)
+		if funcSQL == "" {
+			return "", nil
+		}
 	}
 
 	// Check if right side is a FilterExpression (converted from FunctionCallExpr)
@@ -1020,10 +1045,18 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 	case OpTrim:
 		return fmt.Sprintf("TRIM(%s)", columnName), nil
 	case OpLength:
-		return fmt.Sprintf("LENGTH(%s)", columnName), nil
+		switch dialect {
+		case "sqlserver", "mssql":
+			return fmt.Sprintf("LEN(%s)", columnName), nil
+		default:
+			return fmt.Sprintf("LENGTH(%s)", columnName), nil
+		}
 	case OpIndexOf:
 		if dialect == "postgres" {
 			return fmt.Sprintf("(POSITION(? IN %s) - 1)", columnName), []interface{}{value}
+		}
+		if dialect == "sqlserver" || dialect == "mssql" {
+			return fmt.Sprintf("CHARINDEX(?, %s) - 1", columnName), []interface{}{value}
 		}
 		return fmt.Sprintf("INSTR(%s, ?) - 1", columnName), []interface{}{value}
 	case OpConcat:
@@ -1139,6 +1172,8 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 		case "postgres":
 			// Normalize via TEXT first so this works for both temporal columns and string-backed values.
 			return fmt.Sprintf("(EXTRACT(YEAR FROM CAST(NULLIF(CAST(%s AS TEXT), '') AS TIMESTAMP))::INT)", columnName), nil
+		case "sqlserver", "mssql":
+			return fmt.Sprintf("DATEPART(YEAR, TRY_CONVERT(datetime2, %s))", columnName), nil
 		case "mysql", "mariadb":
 			// MySQL/MariaDB can handle YEAR() on string dates
 			return fmt.Sprintf("YEAR(%s)", columnName), nil
@@ -1150,6 +1185,8 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 		case "postgres":
 			// Normalize via TEXT first so this works for both temporal columns and string-backed values.
 			return fmt.Sprintf("(EXTRACT(MONTH FROM CAST(NULLIF(CAST(%s AS TEXT), '') AS TIMESTAMP))::INT)", columnName), nil
+		case "sqlserver", "mssql":
+			return fmt.Sprintf("DATEPART(MONTH, TRY_CONVERT(datetime2, %s))", columnName), nil
 		case "mysql", "mariadb":
 			// MySQL/MariaDB can handle MONTH() on string dates
 			return fmt.Sprintf("MONTH(%s)", columnName), nil
@@ -1161,6 +1198,8 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 		case "postgres":
 			// Normalize via TEXT first so this works for both temporal columns and string-backed values.
 			return fmt.Sprintf("(EXTRACT(DAY FROM CAST(NULLIF(CAST(%s AS TEXT), '') AS TIMESTAMP))::INT)", columnName), nil
+		case "sqlserver", "mssql":
+			return fmt.Sprintf("DATEPART(DAY, TRY_CONVERT(datetime2, %s))", columnName), nil
 		case "mysql", "mariadb":
 			// MySQL/MariaDB can handle DAY() on string dates
 			return fmt.Sprintf("DAY(%s)", columnName), nil
@@ -1172,6 +1211,8 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 		case "postgres":
 			// Normalize via TEXT first so this works for both temporal columns and string-backed values.
 			return fmt.Sprintf("(EXTRACT(HOUR FROM CAST(NULLIF(CAST(%s AS TEXT), '') AS TIME))::INT)", columnName), nil
+		case "sqlserver", "mssql":
+			return fmt.Sprintf("DATEPART(HOUR, TRY_CONVERT(time, %s))", columnName), nil
 		case "mysql", "mariadb":
 			// MySQL/MariaDB can handle HOUR() on string time columns
 			return fmt.Sprintf("HOUR(%s)", columnName), nil
@@ -1183,6 +1224,8 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 		case "postgres":
 			// Normalize via TEXT first so this works for both temporal columns and string-backed values.
 			return fmt.Sprintf("(EXTRACT(MINUTE FROM CAST(NULLIF(CAST(%s AS TEXT), '') AS TIME))::INT)", columnName), nil
+		case "sqlserver", "mssql":
+			return fmt.Sprintf("DATEPART(MINUTE, TRY_CONVERT(time, %s))", columnName), nil
 		case "mysql", "mariadb":
 			// MySQL/MariaDB can handle MINUTE() on string time columns
 			return fmt.Sprintf("MINUTE(%s)", columnName), nil
@@ -1194,6 +1237,8 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 		case "postgres":
 			// Normalize via TEXT first so this works for both temporal columns and string-backed values.
 			return fmt.Sprintf("(EXTRACT(SECOND FROM CAST(NULLIF(CAST(%s AS TEXT), '') AS TIME))::INT)", columnName), nil
+		case "sqlserver", "mssql":
+			return fmt.Sprintf("DATEPART(SECOND, TRY_CONVERT(time, %s))", columnName), nil
 		case "mysql", "mariadb":
 			// MySQL/MariaDB can handle SECOND() on string time columns
 			return fmt.Sprintf("SECOND(%s)", columnName), nil
@@ -1205,6 +1250,8 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 		case "postgres":
 			// Normalize via TEXT first so this works for both temporal columns and string-backed values.
 			return fmt.Sprintf("(CAST(NULLIF(CAST(%s AS TEXT), '') AS DATE))", columnName), nil
+		case "sqlserver", "mssql":
+			return fmt.Sprintf("CAST(TRY_CONVERT(date, %s) AS DATE)", columnName), nil
 		case "mysql", "mariadb":
 			return fmt.Sprintf("DATE(%s)", columnName), nil
 		default: // sqlite
@@ -1215,6 +1262,8 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 		case "postgres":
 			// Normalize via TEXT first so this works for both temporal columns and string-backed values.
 			return fmt.Sprintf("(CAST(NULLIF(CAST(%s AS TEXT), '') AS TIME))", columnName), nil
+		case "sqlserver", "mssql":
+			return fmt.Sprintf("CAST(TRY_CONVERT(time, %s) AS TIME)", columnName), nil
 		case "mysql", "mariadb":
 			return fmt.Sprintf("TIME(%s)", columnName), nil
 		default: // sqlite
@@ -1226,6 +1275,8 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 			return "NOW()", nil
 		case "mysql":
 			return "NOW()", nil
+		case "sqlserver", "mssql":
+			return "SYSDATETIMEOFFSET()", nil
 		default: // sqlite
 			return "datetime('now')", nil
 		}
@@ -1235,6 +1286,8 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 			// Use a Go variable for the text-normalized cast to avoid duplicating the expression.
 			normalizedCast := fmt.Sprintf("CAST(NULLIF(CAST(%s AS TEXT), '') AS TIMESTAMP)", columnName)
 			return fmt.Sprintf("(EXTRACT(SECOND FROM %s) - FLOOR(EXTRACT(SECOND FROM %s)))", normalizedCast, normalizedCast), nil
+		case "sqlserver", "mssql":
+			return fmt.Sprintf("(DATEPART(MICROSECOND, TRY_CONVERT(datetime2, %s)) / 1000000.0)", columnName), nil
 		case "mysql", "mariadb":
 			return fmt.Sprintf("(MICROSECOND(%s) / 1000000.0)", columnName), nil
 		default: // sqlite
@@ -1244,6 +1297,8 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 		switch dialect {
 		case "postgres":
 			return fmt.Sprintf("(EXTRACT(TIMEZONE FROM CAST(NULLIF(CAST(%s AS TEXT), '') AS TIMESTAMPTZ)) / 60)::INT", columnName), nil
+		case "sqlserver", "mssql":
+			return fmt.Sprintf("DATEPART(TZOFFSET, TRY_CONVERT(datetimeoffset, %s))", columnName), nil
 		default: // sqlite, mysql - timezone offset not natively stored; return 0
 			return "0", nil
 		}
@@ -1253,6 +1308,8 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 			return fmt.Sprintf("EXTRACT(EPOCH FROM CAST(NULLIF(CAST(%s AS TEXT), '') AS INTERVAL))", columnName), nil
 		case "mysql", "mariadb":
 			return fmt.Sprintf("TIME_TO_SEC(%s)", columnName), nil
+		case "sqlserver", "mssql":
+			return fmt.Sprintf("DATEDIFF_BIG(SECOND, '00:00:00', TRY_CONVERT(time, %s))", columnName), nil
 		default: // sqlite - SQLite has no native interval type; assumes the column stores a numeric value representing total seconds
 			return fmt.Sprintf("CAST(%s AS REAL)", columnName), nil
 		}
@@ -1390,6 +1447,39 @@ func edmTypeToSQLType(dialect string, edmType string) string {
 		default:
 			return "CHAR"
 		}
+	case "sqlserver", "mssql":
+		switch edmType {
+		case "Edm.String":
+			return "NVARCHAR(MAX)"
+		case "Edm.Int32":
+			return "INT"
+		case "Edm.Int16":
+			return "SMALLINT"
+		case "Edm.Byte":
+			return "TINYINT"
+		case "Edm.SByte":
+			return "SMALLINT"
+		case "Edm.Int64":
+			return "BIGINT"
+		case "Edm.Decimal":
+			return "DECIMAL(38, 18)"
+		case "Edm.Double", "Edm.Single":
+			return "FLOAT"
+		case "Edm.Boolean":
+			return "BIT"
+		case "Edm.DateTimeOffset":
+			return "DATETIMEOFFSET"
+		case "Edm.Date":
+			return "DATE"
+		case "Edm.TimeOfDay":
+			return "TIME"
+		case "Edm.Guid":
+			return "UNIQUEIDENTIFIER"
+		case "Edm.Binary":
+			return "VARBINARY(MAX)"
+		default:
+			return "NVARCHAR(MAX)"
+		}
 	default: // sqlite and fallback
 		switch edmType {
 		case "Edm.String":
@@ -1424,11 +1514,17 @@ func buildSubstringSQL(dialect string, columnName string, value interface{}) (st
 		if dialect == "postgres" {
 			return fmt.Sprintf("SUBSTRING(%s FROM ? + 1 FOR LENGTH(%s))", columnName, columnName), []interface{}{args[0]}
 		}
+		if dialect == "sqlserver" || dialect == "mssql" {
+			return fmt.Sprintf("SUBSTRING(%s, ? + 1, LEN(%s))", columnName, columnName), []interface{}{args[0]}
+		}
 		return fmt.Sprintf("SUBSTR(%s, ? + 1, LENGTH(%s))", columnName, columnName), []interface{}{args[0]}
 	}
 	if len(args) == 2 {
 		if dialect == "postgres" {
 			return fmt.Sprintf("SUBSTRING(%s FROM ? + 1 FOR ?)", columnName), args
+		}
+		if dialect == "sqlserver" || dialect == "mssql" {
+			return fmt.Sprintf("SUBSTRING(%s, ? + 1, ?)", columnName), args
 		}
 		return fmt.Sprintf("SUBSTR(%s, ? + 1, ?)", columnName), args
 	}
