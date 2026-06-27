@@ -263,6 +263,11 @@ func convertComparisonExprWithContext(n *ComparisonExpr, ctx *conversionContext)
 			return nil, errInOperatorRequiresCollection
 		}
 
+		// Reject empty in-list: OData 4.01 ABNF requires at least one item
+		if len(collExpr.Values) == 0 {
+			return nil, errEmptyInList
+		}
+
 		// Extract values from collection
 		values := make([]interface{}, len(collExpr.Values))
 		for i, valueNode := range collExpr.Values {

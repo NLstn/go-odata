@@ -102,6 +102,7 @@ var (
 	// Collection errors
 	errCollectionValuesMustBeLiterals = errors.New("collection values must be literals")
 	errInOperatorRequiresCollection   = errors.New("'in' operator requires a collection on the right side")
+	errEmptyInList                    = errors.New("'in' operator requires a non-empty list")
 
 	// FTS errors
 	errFTSNotAvailable = errors.New("FTS is not available")

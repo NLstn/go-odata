@@ -28,9 +28,9 @@ func TestInOperator_Basic(t *testing.T) {
 			expectErr: false,
 		},
 		{
-			name:      "in operator with empty collection - should parse",
+			name:      "in operator with empty collection - should be rejected",
 			filter:    "Category in ()",
-			expectErr: false,
+			expectErr: true,
 		},
 		{
 			name:      "in operator with float values",
@@ -190,11 +190,9 @@ func TestInOperator_SQLGeneration(t *testing.T) {
 			expectErr:    false,
 		},
 		{
-			name:         "in operator with empty collection",
-			filter:       "Category in ()",
-			expectedSQL:  "1 = 0",
-			expectedArgs: 0,
-			expectErr:    false,
+			name:      "in operator with empty collection - should be rejected",
+			filter:    "Category in ()",
+			expectErr: true,
 		},
 	}
 
@@ -319,7 +317,7 @@ func TestInOperator_ValueValidation(t *testing.T) {
 			}
 
 			// Verify at least one value
-			if len(values) == 0 && tt.filter != "Category in ()" {
+			if len(values) == 0 {
 				t.Error("Expected at least one value in collection")
 			}
 		})
