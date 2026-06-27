@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/nlstn/go-odata/internal/etag"
 	internalMetadata "github.com/nlstn/go-odata/internal/metadata"
@@ -150,8 +151,7 @@ func processMapEntity(entity reflect.Value, metadata EntityMetadataProvider, exp
 }
 
 func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataProvider, expandOptions []query.ExpandOption, selectedNavProps []string, baseURL, entitySetName string, metadataLevel string, fullMetadata *internalMetadata.EntityMetadata, annotationFilter *string) *OrderedMap {
-	entityType := entity.Type()
-	fieldInfos := getFieldInfos(entityType)
+	fieldInfos := getFieldInfos(entity.Type())
 
 	// Pre-calculate capacity: fields + potential metadata annotations (etag, id, type)
 	capacity := entity.NumField() + 3
@@ -225,19 +225,11 @@ func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataPro
 	// Cache property metadata lookups per entity type
 	propMetaMap := getCachedPropertyMetadataMap(metadata)
 
-	// Pre-build a map for full property metadata by field name.
-	// Used for annotation lookups (full metadata) and enum value serialization (all levels).
+	// Get the dual-keyed (Name + JsonName) property metadata map for annotation/enum lookups.
+	// Cached per *EntityMetadata pointer — never rebuilt per entity.
 	var fullPropMetaByName map[string]*internalMetadata.PropertyMetadata
 	if fullMetadata != nil {
-		// Allocate capacity for Name and JsonName entries to avoid map reallocations
-		fullPropMetaByName = make(map[string]*internalMetadata.PropertyMetadata, len(fullMetadata.Properties)*2)
-		for i := range fullMetadata.Properties {
-			prop := &fullMetadata.Properties[i]
-			fullPropMetaByName[prop.Name] = prop
-			if prop.JsonName != "" && prop.JsonName != prop.Name {
-				fullPropMetaByName[prop.JsonName] = prop
-			}
-		}
+		fullPropMetaByName = getFullPropMetaByName(fullMetadata)
 	}
 
 	for j := 0; j < entity.NumField(); j++ {
@@ -246,8 +238,7 @@ func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataPro
 			continue
 		}
 
-		field := entityType.Field(j)
-		propMeta := propMetaMap[field.Name]
+		propMeta := propMetaMap[info.Name]
 
 		if propMeta != nil && propMeta.IsNavigationProp {
 			// For minimal metadata, skip navigation properties unless they're expanded
@@ -263,7 +254,7 @@ func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataPro
 			// Add property-level annotations first (for full metadata)
 			if metadataLevel == "full" && fullPropMetaByName != nil {
 				// O(1) lookup using pre-built map
-				if fullProp := fullPropMetaByName[field.Name]; fullProp != nil {
+				if fullProp := fullPropMetaByName[info.Name]; fullProp != nil {
 					if fullProp.Annotations != nil && fullProp.Annotations.Len() > 0 {
 						for _, annotation := range fullProp.Annotations.Get() {
 							if annotationFilter != nil && !preference.MatchesAnnotationFilter(annotation.QualifiedTerm(), *annotationFilter) {
@@ -277,7 +268,7 @@ func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataPro
 			}
 			// Then add the property value
 			fieldValue := entity.Field(j)
-			entityMap.Set(info.JsonName, enumOrRaw(fieldValue, fullPropMetaByName, field.Name))
+			entityMap.Set(info.JsonName, enumOrRaw(fieldValue, fullPropMetaByName, info.Name))
 		}
 	}
 
@@ -445,6 +436,28 @@ func formatInterfaceValue(v interface{}) string {
 	}
 }
 
+// fullPropMetaByNameCache caches the dual-keyed property metadata map per *EntityMetadata.
+// Built once on first access; EntityMetadata is immutable after registration.
+var fullPropMetaByNameCache sync.Map // map[*internalMetadata.EntityMetadata]map[string]*internalMetadata.PropertyMetadata
+
+// getFullPropMetaByName returns a map resolving both Name and JsonName to *PropertyMetadata.
+// The result is cached per *EntityMetadata pointer and never rebuilt.
+func getFullPropMetaByName(fullMetadata *internalMetadata.EntityMetadata) map[string]*internalMetadata.PropertyMetadata {
+	if cached, ok := fullPropMetaByNameCache.Load(fullMetadata); ok {
+		return cached.(map[string]*internalMetadata.PropertyMetadata) //nolint:errcheck
+	}
+	m := make(map[string]*internalMetadata.PropertyMetadata, len(fullMetadata.Properties)*2)
+	for i := range fullMetadata.Properties {
+		prop := &fullMetadata.Properties[i]
+		m[prop.Name] = prop
+		if prop.JsonName != "" && prop.JsonName != prop.Name {
+			m[prop.JsonName] = prop
+		}
+	}
+	actual, _ := fullPropMetaByNameCache.LoadOrStore(fullMetadata, m)
+	return actual.(map[string]*internalMetadata.PropertyMetadata) //nolint:errcheck
+}
+
 // buildKeySegmentFromEntityCached is an internal helper for building key segments
 func buildKeySegmentFromEntityCached(entity reflect.Value, metadata EntityMetadataProvider) string {
 	keyProps := metadata.GetKeyProperties()
@@ -452,10 +465,12 @@ func buildKeySegmentFromEntityCached(entity reflect.Value, metadata EntityMetada
 		return ""
 	}
 
+	entityType := entity.Type()
+
 	if len(keyProps) == 1 {
-		keyFieldValue := entity.FieldByName(keyProps[0].Name)
-		if keyFieldValue.IsValid() {
-			return formatKeyValue(keyFieldValue)
+		idx := getFieldIndexCached(entityType, keyProps[0].Name)
+		if idx != nil {
+			return formatKeyValue(entity.FieldByIndex(idx))
 		}
 		return ""
 	}
@@ -466,20 +481,22 @@ func buildKeySegmentFromEntityCached(entity reflect.Value, metadata EntityMetada
 	builder.Grow(len(keyProps) * 20)
 
 	for i, keyProp := range keyProps {
-		keyFieldValue := entity.FieldByName(keyProp.Name)
-		if keyFieldValue.IsValid() {
-			if i > 0 {
-				builder.WriteByte(',')
-			}
-			builder.WriteString(keyProp.JsonName)
-			if keyFieldValue.Kind() == reflect.String {
-				builder.WriteString("='")
-				builder.WriteString(keyFieldValue.String())
-				builder.WriteByte('\'')
-			} else {
-				builder.WriteByte('=')
-				builder.WriteString(formatKeyValue(keyFieldValue))
-			}
+		idx := getFieldIndexCached(entityType, keyProp.Name)
+		if idx == nil {
+			continue
+		}
+		keyFieldValue := entity.FieldByIndex(idx)
+		if i > 0 {
+			builder.WriteByte(',')
+		}
+		builder.WriteString(keyProp.JsonName)
+		if keyFieldValue.Kind() == reflect.String {
+			builder.WriteString("='")
+			builder.WriteString(keyFieldValue.String())
+			builder.WriteByte('\'')
+		} else {
+			builder.WriteByte('=')
+			builder.WriteString(formatKeyValue(keyFieldValue))
 		}
 	}
 

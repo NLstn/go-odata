@@ -8,6 +8,7 @@ import (
 
 // fieldInfo caches parsed information about a struct field
 type fieldInfo struct {
+	Name       string // Go struct field name
 	JsonName   string
 	IsExported bool
 }
@@ -32,6 +33,7 @@ func getFieldInfos(t reflect.Type) []fieldInfo {
 	for i := 0; i < numFields; i++ {
 		field := t.Field(i)
 		infos[i] = fieldInfo{
+			Name:       field.Name,
 			JsonName:   extractJsonFieldName(field),
 			IsExported: field.IsExported(),
 		}
@@ -76,6 +78,33 @@ var globalPropMetaCache sync.Map
 // object (different pointer each time = distinct cache key that is never evicted).
 type propertyMapProvider interface {
 	GetPropertyMap() map[string]*PropertyMetadata
+}
+
+// fieldIndexKey is the composite key for the field-index cache.
+type fieldIndexKey struct {
+	t    reflect.Type
+	name string
+}
+
+// globalFieldIndexCache caches reflect.Type field indices by (type, fieldName).
+// FieldByName does a linear scan; caching the index makes repeated lookups O(1).
+var globalFieldIndexCache sync.Map // map[fieldIndexKey][]int
+
+// getFieldIndexCached returns the field index path for the named field on t,
+// using FieldByIndex semantics (safe for embedded structs). Returns nil if not found.
+func getFieldIndexCached(t reflect.Type, name string) []int {
+	key := fieldIndexKey{t, name}
+	if cached, ok := globalFieldIndexCache.Load(key); ok {
+		return cached.([]int) //nolint:errcheck
+	}
+	sf, ok := t.FieldByName(name)
+	var idx []int
+	if ok {
+		// Copy to avoid retaining the larger StructField allocation.
+		idx = append([]int(nil), sf.Index...)
+	}
+	actual, _ := globalFieldIndexCache.LoadOrStore(key, idx)
+	return actual.([]int) //nolint:errcheck
 }
 
 // getCachedPropertyMetadataMap returns the entire property metadata map for a metadata provider
