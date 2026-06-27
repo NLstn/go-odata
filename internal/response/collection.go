@@ -168,16 +168,18 @@ func writeODataCollectionWithNavigationResponse(w http.ResponseWriter, r *http.R
 		return nil
 	}
 
-	w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
-	w.WriteHeader(http.StatusOK)
-	encoder := json.NewEncoder(w)
-	encoder.SetEscapeHTML(false)
-	err := encoder.Encode(envelope)
+	// Marshal to bytes first so we can set Content-Length and avoid the outer appendCompact
+	// re-scan that json.Encoder.Encode performs after calling MarshalJSON.
+	responseBytes, marshalErr := envelope.MarshalJSON()
 	envelope.Release()
-	// Always release the OrderedMap objects regardless of encoding outcome.
-	// MarshalJSON is called during Encode and produces its own copy of the bytes, so the
-	// maps are safe to return to the pool even when a subsequent write-to-network error occurs.
 	releaseOrderedMaps(transformedData)
+	if marshalErr != nil {
+		return marshalErr
+	}
+	w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(responseBytes)))
+	w.WriteHeader(http.StatusOK)
+	_, err := w.Write(responseBytes)
 	return err
 }
 
