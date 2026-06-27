@@ -21,14 +21,6 @@ func addNavigationLinks(data interface{}, metadata EntityMetadataProvider, expan
 
 	result := make([]interface{}, dataValue.Len())
 
-	// Fast path for "none" metadata level - no processing needed
-	if metadataLevel == "none" {
-		for i := 0; i < dataValue.Len(); i++ {
-			result[i] = dataValue.Index(i).Interface()
-		}
-		return result
-	}
-
 	baseURL := buildBaseURL(r)
 
 	// Parse annotation filter from odata.include-annotations preference
@@ -233,10 +225,10 @@ func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataPro
 	// Cache property metadata lookups per entity type
 	propMetaMap := getCachedPropertyMetadataMap(metadata)
 
-	// Pre-build a map for full property metadata by field name (for annotation lookup)
-	// Only build this map if we need it (full metadata level)
+	// Pre-build a map for full property metadata by field name.
+	// Used for annotation lookups (full metadata) and enum value serialization (all levels).
 	var fullPropMetaByName map[string]*internalMetadata.PropertyMetadata
-	if metadataLevel == "full" && fullMetadata != nil {
+	if fullMetadata != nil {
 		// Allocate capacity for Name and JsonName entries to avoid map reallocations
 		fullPropMetaByName = make(map[string]*internalMetadata.PropertyMetadata, len(fullMetadata.Properties)*2)
 		for i := range fullMetadata.Properties {
@@ -285,7 +277,7 @@ func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataPro
 			}
 			// Then add the property value
 			fieldValue := entity.Field(j)
-			entityMap.Set(info.JsonName, fieldValue.Interface())
+			entityMap.Set(info.JsonName, enumOrRaw(fieldValue, fullPropMetaByName, field.Name))
 		}
 	}
 
@@ -371,6 +363,21 @@ func BuildExpandedCollectionNextLink(baseURL, entitySetName, keySegment, jsonNam
 	}
 	nextSkip := skip + *expandOpt.Top
 	return fmt.Sprintf("%s/%s(%s)/%s?$skip=%d", baseURL, entitySetName, keySegment, jsonName, nextSkip)
+}
+
+// enumOrRaw returns the OData string representation for enum fields, or the raw value otherwise.
+func enumOrRaw(v reflect.Value, fullPropMetaByName map[string]*internalMetadata.PropertyMetadata, fieldName string) interface{} {
+	if fullPropMetaByName != nil {
+		if prop := fullPropMetaByName[fieldName]; prop != nil && prop.IsEnum && len(prop.EnumMembers) > 0 {
+			switch v.Kind() {
+			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+				return internalMetadata.EnumValueToString(v.Int(), prop.EnumMembers, prop.IsFlags)
+			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+				return internalMetadata.EnumValueToString(int64(v.Uint()), prop.EnumMembers, prop.IsFlags)
+			}
+		}
+	}
+	return v.Interface()
 }
 
 // BuildKeySegmentFromEntity builds the key segment for URLs from an entity and metadata.

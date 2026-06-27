@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -226,6 +227,50 @@ func convertEnumValueToInt64(value reflect.Value) (int64, error) {
 	default:
 		return 0, fmt.Errorf("unsupported enum value kind %s", value.Kind())
 	}
+}
+
+// EnumValueToString converts an integer enum value to its OData string representation.
+// For regular enums, returns the matching member name or the decimal string if not found.
+// For flags enums, returns a comma-separated list of member names in ascending value order,
+// or the decimal string if the value cannot be decomposed into known members.
+func EnumValueToString(value int64, members []EnumMember, isFlags bool) string {
+	if !isFlags {
+		for _, m := range members {
+			if m.Value == value {
+				return m.Name
+			}
+		}
+		return strconv.FormatInt(value, 10)
+	}
+
+	if value == 0 {
+		for _, m := range members {
+			if m.Value == 0 {
+				return m.Name
+			}
+		}
+		return "0"
+	}
+
+	var names []string
+	remaining := value
+	for _, m := range members {
+		if m.Value == 0 {
+			continue
+		}
+		if remaining&m.Value == m.Value {
+			names = append(names, m.Name)
+			remaining &^= m.Value
+		}
+	}
+
+	if remaining != 0 {
+		return strconv.FormatInt(value, 10)
+	}
+	if len(names) == 0 {
+		return "0"
+	}
+	return strings.Join(names, ",")
 }
 
 // DetermineEnumUnderlyingType returns the corresponding Edm type for the enum.
