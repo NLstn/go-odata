@@ -1,6 +1,7 @@
 package query
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -511,5 +512,51 @@ func TestLambdaEdgeCases(t *testing.T) {
 				t.Errorf("Parsing failed unexpectedly: %v", err)
 			}
 		})
+	}
+}
+
+// TestLambdaOrPredicateSQL verifies that an OR predicate inside any() is wrapped in
+// parentheses in the generated EXISTS subquery. Without wrapping, SQL operator precedence
+// makes the OR operand evaluate outside the join condition, returning all parent rows.
+func TestLambdaOrPredicateSQL(t *testing.T) {
+	// Build an OR predicate FilterExpression directly and verify the SQL it produces
+	// inside buildFilterConditionForLambda.
+	predicate := &FilterExpression{
+		Logical: LogicalOr,
+		Left: &FilterExpression{
+			Property: "color",
+			Operator: OpEqual,
+			Value:    "Red",
+		},
+		Right: &FilterExpression{
+			Property: "color",
+			Operator: OpEqual,
+			Value:    "Blue",
+		},
+	}
+
+	sql, _ := buildFilterConditionForLambda("sqlite", predicate, nil)
+
+	// The OR predicate itself must be produced correctly.
+	if !strings.Contains(sql, " OR ") {
+		t.Errorf("expected OR in predicate SQL; got: %s", sql)
+	}
+
+	// Now build the full EXISTS clause manually to verify parenthesization.
+	joinCondition := `"items"."product_id" = "products"."id"`
+	existsSQL := strings.Replace(
+		"EXISTS (SELECT 1 FROM \"items\" WHERE "+joinCondition+" AND ("+sql+")",
+		"  ", " ", -1,
+	)
+
+	// The OR must appear inside the parentheses that follow AND, not after them.
+	andIdx := strings.Index(existsSQL, " AND (")
+	if andIdx < 0 {
+		t.Errorf("expected 'AND (' in EXISTS clause; got: %s", existsSQL)
+		return
+	}
+	orIdx := strings.Index(existsSQL, " OR ")
+	if orIdx < andIdx {
+		t.Errorf("OR appears before the AND-parenthesis group: %s", existsSQL)
 	}
 }

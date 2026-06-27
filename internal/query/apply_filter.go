@@ -864,7 +864,7 @@ func buildLambdaCondition(dialect string, filter *FilterExpression, entityMetada
 
 	var sql string
 	if filter.Operator == OpAny {
-		sql = fmt.Sprintf("EXISTS (SELECT 1 FROM %s WHERE %s AND %s)",
+		sql = fmt.Sprintf("EXISTS (SELECT 1 FROM %s WHERE %s AND (%s))",
 			quoteIdent(dialect, relatedTableName), joinCondition, predicateSQL)
 	} else {
 		sql = fmt.Sprintf("NOT EXISTS (SELECT 1 FROM %s WHERE %s AND NOT (%s))",

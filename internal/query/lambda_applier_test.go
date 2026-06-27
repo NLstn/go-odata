@@ -440,7 +440,7 @@ func TestLambdaApplier_ComplexPredicates(t *testing.T) {
 		{
 			name:          "any with or condition",
 			filter:        "Descriptions/any(d: d/LanguageKey eq 'EN' or d/LanguageKey eq 'DE')",
-			expectedCount: 4, // Monitor has no descriptions, so it won't match, but all others have EN or DE
+			expectedCount: 3, // Laptop (EN+DE), Mouse (EN), Keyboard (EN+FR) match; Monitor has no descriptions
 		},
 	}
 
