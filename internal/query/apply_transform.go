@@ -192,12 +192,12 @@ func applySetTransformation(db *gorm.DB, transformation ApplyTransformation, ent
 		if transformation.Set.Count == nil {
 			return db
 		}
-		return db.Order(clause.OrderByColumn{Column: clause.Column{Raw: true, Name: qualifiedMeasure}, Desc: true}).Limit(*transformation.Set.Count)
+		return applySetMeasureOrder(db, qualifiedMeasure, true).Limit(*transformation.Set.Count)
 	case ApplyTypeBottomCount:
 		if transformation.Set.Count == nil {
 			return db
 		}
-		return db.Order(clause.OrderByColumn{Column: clause.Column{Raw: true, Name: qualifiedMeasure}, Desc: false}).Limit(*transformation.Set.Count)
+		return applySetMeasureOrder(db, qualifiedMeasure, false).Limit(*transformation.Set.Count)
 	case ApplyTypeTopPercent:
 		if transformation.Set.Parameter >= 100 {
 			return db
@@ -272,7 +272,7 @@ func applySumThresholdSetTransformation(db *gorm.DB, qualifiedKey string, qualif
 		return db.Limit(0)
 	}
 
-	ordered := db.Order(clause.OrderByColumn{Column: clause.Column{Raw: true, Name: qualifiedMeasure}, Desc: desc})
+	ordered := applySetMeasureOrder(db, qualifiedMeasure, desc)
 	if qualifiedKey == "" {
 		// Fallback for entities without resolvable key metadata.
 		return ordered
@@ -307,8 +307,21 @@ func applySumThresholdSetTransformation(db *gorm.DB, qualifiedKey string, qualif
 		return db.Limit(0)
 	}
 
-	return db.Where(fmt.Sprintf("%s IN ?", qualifiedKey), selectedKeys).
-		Order(clause.OrderByColumn{Column: clause.Column{Raw: true, Name: qualifiedMeasure}, Desc: desc})
+	return applySetMeasureOrder(db.Where(fmt.Sprintf("%s IN ?", qualifiedKey), selectedKeys), qualifiedMeasure, desc)
+}
+
+func applySetMeasureOrder(db *gorm.DB, qualifiedMeasure string, desc bool) *gorm.DB {
+	orderBy := clause.OrderBy{
+		Columns: []clause.OrderByColumn{
+			{
+				Column: clause.Column{Raw: true, Name: qualifiedMeasure},
+				Desc:   desc,
+			},
+		},
+	}
+	// Use Clauses() to overwrite existing ORDER BY and avoid duplicate ORDER terms
+	// that SQL Server rejects.
+	return db.Clauses(orderBy)
 }
 
 // applyGroupBy applies a groupby transformation to the GORM query
@@ -703,7 +716,12 @@ func buildComputeSQLWithDB(dialect string, computeExpr ComputeExpression, entity
 
 	expression := computeExpr.Expression
 
-	if expression.Left == nil && expression.Right == nil && expression.Operator != "" && expression.Property != "" && !isArithmeticFilterOperator(expression.Operator) && !(expression.Operator == OpEqual && expression.Value == true) {
+	if expression.Left == nil &&
+		expression.Right == nil &&
+		expression.Operator != "" &&
+		expression.Property != "" &&
+		!isArithmeticFilterOperator(expression.Operator) &&
+		(expression.Operator != OpEqual || expression.Value != true) {
 		prop := findProperty(expression.Property, entityMetadata)
 		if prop == nil {
 			return "", "", ""
@@ -865,7 +883,12 @@ func buildComputeExpressionSQL(dialect string, expr *FilterExpression, entityMet
 		}
 	}
 
-	if expr.Property != "" && expr.Value != nil && expr.Left == nil && expr.Right == nil && expr.Operator != "" && !(expr.Operator == OpEqual && expr.Value == true) {
+	if expr.Property != "" &&
+		expr.Value != nil &&
+		expr.Left == nil &&
+		expr.Right == nil &&
+		expr.Operator != "" &&
+		(expr.Operator != OpEqual || expr.Value != true) {
 		leftSQL := buildComputeExpressionSQL(dialect, &FilterExpression{Property: expr.Property}, entityMetadata)
 		rightSQL := buildComputeExpressionSQL(dialect, &FilterExpression{Value: expr.Value}, entityMetadata)
 		if leftSQL == "" || rightSQL == "" {
@@ -950,7 +973,12 @@ func buildComputeExpressionSQLWithArgs(dialect string, expr *FilterExpression, e
 		return "?", []interface{}{expr.Value}
 	}
 
-	if expr.Property != "" && expr.Value != nil && expr.Left == nil && expr.Right == nil && expr.Operator != "" && !(expr.Operator == OpEqual && expr.Value == true) {
+	if expr.Property != "" &&
+		expr.Value != nil &&
+		expr.Left == nil &&
+		expr.Right == nil &&
+		expr.Operator != "" &&
+		(expr.Operator != OpEqual || expr.Value != true) {
 		leftSQL, leftArgs := buildComputeExpressionSQLWithArgs(dialect, &FilterExpression{Property: expr.Property}, entityMetadata)
 		rightSQL, rightArgs := buildComputeExpressionSQLWithArgs(dialect, &FilterExpression{Value: expr.Value}, entityMetadata)
 		if leftSQL == "" || rightSQL == "" {

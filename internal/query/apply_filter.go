@@ -2,6 +2,7 @@ package query
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 
@@ -373,8 +374,8 @@ func resolveColumnName(db *gorm.DB, dialect string, propertyName string, entityM
 
 	// Special case: $count requires COUNT(*) expression for certain databases
 	if rawName == "$count" {
-		// PostgreSQL/MySQL/MariaDB don't support referencing SELECT aliases in HAVING/WHERE
-		if dialect == "postgres" || dialect == "mysql" || dialect == "mariadb" {
+		// PostgreSQL/MySQL/MariaDB/SQL Server don't reliably support referencing SELECT aliases in HAVING/WHERE
+		if dialect == "postgres" || dialect == "mysql" || dialect == "mariadb" || dialect == "sqlserver" || dialect == "mssql" {
 			if db != nil {
 				if expr, ok := getAliasExprFromDB(db, "$count"); ok {
 					return expr
@@ -391,7 +392,7 @@ func resolveColumnName(db *gorm.DB, dialect string, propertyName string, entityM
 	}
 
 	// Try to resolve aggregate/compute aliases for databases that don't support them
-	if dialect == "postgres" || dialect == "mysql" || dialect == "mariadb" {
+	if dialect == "postgres" || dialect == "mysql" || dialect == "mariadb" || dialect == "sqlserver" || dialect == "mssql" {
 		if db != nil {
 			if expr, ok := getAliasExprFromDB(db, rawName); ok {
 				return expr
@@ -511,6 +512,17 @@ func tryBuildRightSideFunctionComparison(dialect string, leftColumn string, oper
 // This handles all comparison operators like =, !=, >, <, IN, LIKE, etc.
 // Note: IN clause size validation is enforced during AST parsing, not here.
 func buildStandardComparison(dialect string, operator FilterOperator, columnName string, value interface{}, entityMetadata *metadata.EntityMetadata) (string, []interface{}) {
+	if (dialect == "sqlserver" || dialect == "mssql") && isNonFiniteNumber(value) {
+		// SQL Server drivers reject binding NaN/Inf values as query parameters.
+		// Return deterministic non-crashing comparisons for these literals.
+		switch operator {
+		case OpNotEqual:
+			return "1 = 1", []interface{}{}
+		case OpEqual, OpGreaterThan, OpGreaterThanOrEqual, OpLessThan, OpLessThanOrEqual:
+			return "1 = 0", []interface{}{}
+		}
+	}
+
 	// Check if this is a property-to-property comparison
 	// (e.g., "Price gt Cost" should generate "price > cost", not "price > 'Cost'")
 	if valueStr, ok := value.(string); ok && propertyExists(valueStr, entityMetadata) {
@@ -530,6 +542,7 @@ func buildStandardComparison(dialect string, operator FilterOperator, columnName
 		case OpLessThanOrEqual:
 			return fmt.Sprintf("%s <= %s", columnName, rightColumnName), []interface{}{}
 		}
+
 	}
 
 	switch operator {
@@ -623,6 +636,18 @@ func buildStandardComparison(dialect string, operator FilterOperator, columnName
 
 	default:
 		return "", nil
+	}
+}
+
+func isNonFiniteNumber(value interface{}) bool {
+	switch v := value.(type) {
+	case float64:
+		return math.IsNaN(v) || math.IsInf(v, 0)
+	case float32:
+		f := float64(v)
+		return math.IsNaN(f) || math.IsInf(f, 0)
+	default:
+		return false
 	}
 }
 
@@ -1166,6 +1191,9 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 			return fmt.Sprintf("(CAST(%s AS REAL) / ?)", columnName), []interface{}{value}
 		}
 	case OpMod:
+		if dialect == "sqlserver" || dialect == "mssql" {
+			return fmt.Sprintf("(CAST(%s AS DECIMAL(38,10)) %% CAST(? AS DECIMAL(38,10)))", columnName), []interface{}{value}
+		}
 		return fmt.Sprintf("(%s %% ?)", columnName), []interface{}{value}
 	case OpYear:
 		switch dialect {
@@ -1352,6 +1380,9 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 				columnName, columnName, columnName, columnName, columnName), nil
 		}
 	case OpRound:
+		if dialect == "sqlserver" || dialect == "mssql" {
+			return fmt.Sprintf("ROUND(%s, 0)", columnName), nil
+		}
 		return fmt.Sprintf("ROUND(%s)", columnName), nil
 	case OpCast:
 		if typeName, ok := value.(string); ok {
