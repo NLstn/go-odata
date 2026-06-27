@@ -228,6 +228,19 @@ func (p *searchParser) parsePrimary() *SearchExprNode {
 	}
 }
 
+// containsNot reports whether the expression tree has any NOT node at any depth.
+// Used to decide whether an FTS backend that cannot express NOT (FTS3/FTS4) or
+// cannot express unary/compound NOT (FTS5) should fall back to in-memory search.
+func (n *SearchExprNode) containsNot() bool {
+	if n == nil {
+		return false
+	}
+	if n.op == searchOpNot {
+		return true
+	}
+	return n.left.containsNot() || n.right.containsNot()
+}
+
 // --- FTS query serialization --------------------------------------------------
 
 // toFTS5Query converts the expression to SQLite FTS5 MATCH syntax.
