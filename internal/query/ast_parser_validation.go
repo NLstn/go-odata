@@ -312,7 +312,11 @@ func convertComparisonExprWithContext(n *ComparisonExpr, ctx *conversionContext)
 
 	// Resolve enum value literals (e.g. Namespace.TypeName'MemberName') to their numeric value
 	if enumLit, ok := n.Right.(*LiteralExpr); ok && enumLit.Type == "enum" {
-		resolved, err := resolveEnumMemberName(enumLit.Value.(string), property, entityMetadata)
+		strVal, ok := enumLit.Value.(string)
+		if !ok {
+			return nil, fmt.Errorf("internal error: enum literal has non-string value %T", enumLit.Value)
+		}
+		resolved, err := resolveEnumMemberName(strVal, property, entityMetadata)
 		if err != nil {
 			return nil, err
 		}
