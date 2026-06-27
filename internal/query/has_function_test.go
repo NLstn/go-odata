@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/nlstn/go-odata/internal/metadata"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
 func TestHasFunction(t *testing.T) {
@@ -99,6 +101,148 @@ func TestHasFunctionSQLGeneration(t *testing.T) {
 
 	if args[0] != int64(1) || args[1] != int64(1) {
 		t.Errorf("Expected args [1, 1], got %v", args)
+	}
+}
+
+// TestHasEnumValueLiteral verifies that the OData enum value literal syntax
+// (Namespace.TypeName'MemberName') works correctly with the has operator.
+func TestHasEnumValueLiteral(t *testing.T) {
+	entityMeta := &metadata.EntityMetadata{
+		EntityName: "Product",
+		Properties: []metadata.PropertyMetadata{
+			{
+				Name:      "Status",
+				FieldName: "Status",
+				JsonName:  "Status",
+				IsEnum:    true,
+				IsFlags:   true,
+				EnumMembers: []metadata.EnumMember{
+					{Name: "None", Value: 0},
+					{Name: "InStock", Value: 1},
+					{Name: "OnSale", Value: 2},
+					{Name: "Discontinued", Value: 4},
+					{Name: "Featured", Value: 8},
+				},
+			},
+		},
+	}
+
+	tests := []struct {
+		name          string
+		filter        string
+		wantValue     int64
+		wantErr       bool
+	}{
+		{
+			name:      "qualified enum literal with has infix",
+			filter:    "Status has MyService.ProductStatus'Featured'",
+			wantValue: 8,
+		},
+		{
+			name:      "qualified enum literal — case-insensitive member name",
+			filter:    "Status has MyService.ProductStatus'featured'",
+			wantValue: 8,
+		},
+		{
+			name:      "qualified enum literal — InStock",
+			filter:    "Status has MyService.ProductStatus'InStock'",
+			wantValue: 1,
+		},
+		{
+			name:    "unknown member name returns error",
+			filter:  "Status has MyService.ProductStatus'Unknown'",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			filter, err := parseFilter(tt.filter, entityMeta, nil, 0)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("expected error but got none (filter=%v)", filter)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if filter.Operator != OpHas {
+				t.Errorf("expected OpHas, got %s", filter.Operator)
+			}
+			if filter.Value != tt.wantValue {
+				t.Errorf("expected value %d, got %v", tt.wantValue, filter.Value)
+			}
+		})
+	}
+}
+
+// TestHasEnumValueLiteralSQL verifies end-to-end that enum value literals produce
+// the correct bitwise SQL and match the right rows in SQLite.
+func TestHasEnumValueLiteralSQL(t *testing.T) {
+	type Product struct {
+		ID     int    `gorm:"primaryKey"`
+		Name   string `gorm:"column:name"`
+		Status int    `gorm:"column:status"`
+	}
+
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	if err := db.AutoMigrate(&Product{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	// Status values: InStock=1, OnSale=2, Discontinued=4, Featured=8
+	products := []Product{
+		{ID: 1, Name: "Normal", Status: 1},        // InStock
+		{ID: 2, Name: "Sale", Status: 3},           // InStock|OnSale
+		{ID: 3, Name: "Featured", Status: 9},       // InStock|Featured
+		{ID: 4, Name: "FeaturedSale", Status: 11},  // InStock|OnSale|Featured
+		{ID: 5, Name: "Discontinued", Status: 4},   // Discontinued
+	}
+	if err := db.Create(&products).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	meta := &metadata.EntityMetadata{
+		EntityName: "Product",
+		Properties: []metadata.PropertyMetadata{
+			{Name: "ID", FieldName: "ID", JsonName: "ID", ColumnName: "id"},
+			{Name: "Name", FieldName: "Name", JsonName: "Name", ColumnName: "name"},
+			{
+				Name:       "Status",
+				FieldName:  "Status",
+				JsonName:   "Status",
+				ColumnName: "status",
+				IsEnum:     true,
+				IsFlags:    true,
+				EnumMembers: []metadata.EnumMember{
+					{Name: "InStock", Value: 1},
+					{Name: "OnSale", Value: 2},
+					{Name: "Discontinued", Value: 4},
+					{Name: "Featured", Value: 8},
+				},
+			},
+		},
+	}
+
+	filterExpr, err := parseFilter("Status has Svc.ProductStatus'Featured'", meta, nil, 0)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+
+	var count int64
+	if err := db.Model(&Product{}).Scopes(func(d *gorm.DB) *gorm.DB {
+		return ApplyFilterOnly(d, filterExpr, meta, nil)
+	}).Count(&count).Error; err != nil {
+		t.Fatalf("query: %v", err)
+	}
+
+	// Products 3 and 4 have the Featured bit set
+	if count != 2 {
+		t.Errorf("expected 2 products with Featured flag, got %d", count)
 	}
 }
 
