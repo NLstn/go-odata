@@ -72,15 +72,15 @@ func TestMaxInClauseSize(t *testing.T) {
 		}
 	})
 
-	// Test case 3: Empty IN clause should still work
+	// Test case 3: Empty IN clause must be rejected (OData 4.01 ABNF requires non-empty list)
 	t.Run("EmptyIN", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/TestSecurityEntities?$filter=ID%20in%20()", nil)
 		w := httptest.NewRecorder()
 		service.ServeHTTP(w, req)
 
-		// Empty IN clause is valid (returns no results)
-		if w.Code != http.StatusOK {
-			t.Errorf("Expected status 200, got %d. Body: %s", w.Code, w.Body.String())
+		// Empty IN clause is invalid per OData 4.01 spec
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("Expected status 400, got %d. Body: %s", w.Code, w.Body.String())
 		}
 	})
 }
