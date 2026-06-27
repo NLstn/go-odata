@@ -261,6 +261,18 @@ func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.Qu
 		db = h.applySkipTokenFilter(db, queryOptions)
 	}
 
+	applyTopInMemoryForMapResults := false
+	topInMemory := 0
+	if query.ShouldUseMapResults(queryOptions) && modifiedOptions.Top != nil &&
+		strings.EqualFold(db.Name(), "sqlserver") && len(modifiedOptions.OrderBy) == 0 {
+		// SQL Server requires ORDER BY for OFFSET/FETCH and GORM injects key ordering
+		// when LIMIT is used. For grouped/aggregated map results that do not project the
+		// key column, this can produce invalid SQL. Apply TOP in memory instead.
+		topInMemory = *modifiedOptions.Top
+		modifiedOptions.Top = nil
+		applyTopInMemoryForMapResults = true
+	}
+
 	// Get the table name for FTS from metadata (respects custom TableName() methods)
 	tableName := h.metadata.TableName
 
@@ -348,6 +360,9 @@ func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.Qu
 				computedAliases[expr.Alias] = true
 			}
 			results = query.ApplySelectToMapResults(results, queryOptions.Select, h.metadata, computedAliases)
+		}
+		if applyTopInMemoryForMapResults {
+			results = applyMapTopSkip(results, &topInMemory, nil)
 		}
 		return results, nil
 	}

@@ -765,6 +765,22 @@ func TestStringFunctions_MatchesPatternSQLGeneration(t *testing.T) {
 			expectedArgsNo: 1,
 			expectedArg:    "Lap%",
 		},
+		{
+			name:           "matchesPattern SQL Server uppercase prefix class",
+			filter:         "matchesPattern(Name, '^[A-Z]')",
+			dialect:        "sqlserver",
+			expectedSQL:    "[name] LIKE ? ESCAPE '\\'",
+			expectedArgsNo: 1,
+			expectedArg:    "[A-Z]%",
+		},
+		{
+			name:           "matchesPattern SQL Server class with quantifier",
+			filter:         "matchesPattern(Name, '^[A-Z]+$')",
+			dialect:        "sqlserver",
+			expectedSQL:    "[name] LIKE ? ESCAPE '\\'",
+			expectedArgsNo: 1,
+			expectedArg:    "[A-Z]%",
+		},
 	}
 
 	for _, tt := range tests {

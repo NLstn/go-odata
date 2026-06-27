@@ -70,6 +70,7 @@ func regexToLikePattern(pattern string) string {
 	sawWildcard := false
 
 	escaped := false
+	previousSupportsQuantifier := false
 	for i := 0; i < len(pattern); i++ {
 		ch := pattern[i]
 		if escaped {
@@ -81,14 +82,17 @@ func regexToLikePattern(pattern string) string {
 				b.WriteByte(ch)
 			}
 			escaped = false
+			previousSupportsQuantifier = true
 			continue
 		}
 
 		switch ch {
 		case '\\':
 			escaped = true
+			previousSupportsQuantifier = false
 		case '^', '$':
 			// Anchors are implicit in LIKE semantics.
+			previousSupportsQuantifier = false
 		case '[':
 			// Preserve SQL Server character classes, e.g. [A-Z].
 			j := i + 1
@@ -99,27 +103,43 @@ func regexToLikePattern(pattern string) string {
 				b.WriteString(pattern[i : j+1])
 				i = j
 				sawWildcard = true
+				previousSupportsQuantifier = true
 				continue
 			}
 			// Unclosed class: treat '[' literally.
 			b.WriteByte('[')
+			previousSupportsQuantifier = true
 		case '.':
 			if i+1 < len(pattern) && pattern[i+1] == '*' {
 				b.WriteByte('%')
 				sawWildcard = true
 				i++
+				previousSupportsQuantifier = false
 			} else {
 				b.WriteByte('_')
 				sawWildcard = true
+				previousSupportsQuantifier = true
 			}
-		case '*', '+', '?', '|', '(', ')', ']', '{', '}':
+		case '*', '+':
+			// Approximate quantifiers over the previous token:
+			//   *  -> zero-or-more
+			//   +  -> one-or-more
+			// LIKE can't encode minimum cardinality, so both become '%' after the token.
+			if previousSupportsQuantifier {
+				b.WriteByte('%')
+				sawWildcard = true
+			}
+			previousSupportsQuantifier = false
+		case '?', '|', '(', ')', ']', '{', '}':
 			// Unsupported regex operators are dropped from the approximation.
 			sawWildcard = true
+			previousSupportsQuantifier = false
 		default:
 			if ch == '%' || ch == '_' {
 				b.WriteByte('\\')
 			}
 			b.WriteByte(ch)
+			previousSupportsQuantifier = true
 		}
 	}
 
@@ -127,8 +147,11 @@ func regexToLikePattern(pattern string) string {
 		b.WriteByte('\\')
 	}
 
-	if strings.HasPrefix(pattern, "^") && !strings.HasSuffix(pattern, "$") && !sawWildcard {
-		b.WriteByte('%')
+	if strings.HasPrefix(pattern, "^") && !strings.HasSuffix(pattern, "$") {
+		current := b.String()
+		if !sawWildcard || !strings.HasSuffix(current, "%") {
+			b.WriteByte('%')
+		}
 	}
 
 	return b.String()
