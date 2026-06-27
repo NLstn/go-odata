@@ -685,22 +685,21 @@ func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{
 				keyStr := key.String()
 				value := reflect.ValueOf(mapResult).MapIndex(key)
 
+				// Use findPropertyMetadata for annotations (full metadata) and enum serialization
+				mapPropMeta := h.findPropertyMetadata(keyStr)
+
 				// Add property-level annotations for full metadata
-				if metadataLevel == "full" {
-					// Use findPropertyMetadata which now handles JsonName lookups via O(1) map
-					propMeta := h.findPropertyMetadata(keyStr)
-					if propMeta != nil && propMeta.Annotations != nil && propMeta.Annotations.Len() > 0 {
-						for _, annotation := range propMeta.Annotations.Get() {
-							if pref.IncludeAnnotations != nil && !preference.MatchesAnnotationFilter(annotation.QualifiedTerm(), *pref.IncludeAnnotations) {
-								continue
-							}
-							annotationKey := keyStr + "@" + annotation.QualifiedTerm()
-							odataResponse.Set(annotationKey, annotation.Value)
+				if metadataLevel == "full" && mapPropMeta != nil && mapPropMeta.Annotations != nil && mapPropMeta.Annotations.Len() > 0 {
+					for _, annotation := range mapPropMeta.Annotations.Get() {
+						if pref.IncludeAnnotations != nil && !preference.MatchesAnnotationFilter(annotation.QualifiedTerm(), *pref.IncludeAnnotations) {
+							continue
 						}
+						annotationKey := keyStr + "@" + annotation.QualifiedTerm()
+						odataResponse.Set(annotationKey, annotation.Value)
 					}
 				}
 
-				odataResponse.Set(keyStr, normalizeDecimalForJSON(value.Interface(), ieee754Compatible))
+				odataResponse.Set(keyStr, normalizeDecimalForJSON(enumMapValue(value, mapPropMeta), ieee754Compatible))
 			}
 		}
 
@@ -839,8 +838,8 @@ func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{
 					odataResponse.Set(annotationKey, annotation.Value)
 				}
 			}
-			// Then include the property value
-			odataResponse.Set(jsonName, normalizeDecimalForJSON(fieldValue.Interface(), ieee754Compatible))
+			// Then include the property value (enum fields are serialized as strings)
+			odataResponse.Set(jsonName, normalizeDecimalForJSON(enumFieldValue(fieldValue, propMeta), ieee754Compatible))
 		}
 	}
 
@@ -884,6 +883,36 @@ func normalizeDecimalForJSON(value interface{}, ieee754Compatible bool) interfac
 	}
 
 	return value
+}
+
+// enumFieldValue returns the OData string representation for enum properties, or the raw value otherwise.
+func enumFieldValue(v reflect.Value, propMeta *metadata.PropertyMetadata) interface{} {
+	if propMeta != nil && propMeta.IsEnum && len(propMeta.EnumMembers) > 0 {
+		switch v.Kind() {
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			return metadata.EnumValueToString(v.Int(), propMeta.EnumMembers, propMeta.IsFlags)
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			return metadata.EnumValueToString(int64(v.Uint()), propMeta.EnumMembers, propMeta.IsFlags)
+		}
+	}
+	return v.Interface()
+}
+
+// enumMapValue returns the OData string representation for enum map values, or the raw value otherwise.
+func enumMapValue(v reflect.Value, propMeta *metadata.PropertyMetadata) interface{} {
+	if propMeta != nil && propMeta.IsEnum && len(propMeta.EnumMembers) > 0 {
+		iv := v
+		if iv.Kind() == reflect.Interface {
+			iv = iv.Elem()
+		}
+		switch iv.Kind() {
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			return metadata.EnumValueToString(iv.Int(), propMeta.EnumMembers, propMeta.IsFlags)
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			return metadata.EnumValueToString(int64(iv.Uint()), propMeta.EnumMembers, propMeta.IsFlags)
+		}
+	}
+	return v.Interface()
 }
 
 // findPropertyMetadata finds metadata for a property by field name, JSON name, or FieldName

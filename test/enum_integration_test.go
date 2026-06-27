@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
 	odata "github.com/nlstn/go-odata"
@@ -37,6 +38,37 @@ func (ProductStatus) EnumMembers() map[string]int {
 		"Discontinued": int(ProductStatusDiscontinued),
 		"Featured":     int(ProductStatusFeatured),
 	}
+}
+
+// UnmarshalJSON decodes OData enum strings (e.g. "InStock,Featured") back to ProductStatus.
+func (s *ProductStatus) UnmarshalJSON(data []byte) error {
+	// Accept numeric form for backwards-compatibility during the transition period.
+	var n int32
+	if err := json.Unmarshal(data, &n); err == nil {
+		*s = ProductStatus(n)
+		return nil
+	}
+	var str string
+	if err := json.Unmarshal(data, &str); err != nil {
+		return err
+	}
+	members := map[string]ProductStatus{
+		"None":         ProductStatusNone,
+		"InStock":      ProductStatusInStock,
+		"OnSale":       ProductStatusOnSale,
+		"Discontinued": ProductStatusDiscontinued,
+		"Featured":     ProductStatusFeatured,
+	}
+	var result ProductStatus
+	for _, part := range strings.Split(str, ",") {
+		v, ok := members[strings.TrimSpace(part)]
+		if !ok {
+			return json.Unmarshal(data, (*int32)(s))
+		}
+		result |= v
+	}
+	*s = result
+	return nil
 }
 
 // EnumProduct represents a product entity with enum status for testing
@@ -439,6 +471,75 @@ func TestEnumStatusValues(t *testing.T) {
 	}
 	if product.Status&ProductStatusOnSale != 0 {
 		t.Error("Expected OnSale flag to NOT be set")
+	}
+}
+
+// TestEnumSerialization verifies that enum properties are serialized as OData member-name
+// strings (e.g. "InStock,Featured") rather than raw integers (e.g. 9).
+func TestEnumSerialization(t *testing.T) {
+	db := setupEnumTestDB(t)
+
+	service, err := odata.NewService(db)
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
+	if err := service.RegisterEntity(&EnumProduct{}); err != nil {
+		t.Fatalf("Failed to register EnumProduct entity: %v", err)
+	}
+
+	tests := []struct {
+		name           string
+		path           string
+		filter         string
+		expectedStatus string
+	}{
+		{
+			name:           "collection: single flag",
+			path:           "/EnumProducts",
+			filter:         "ID eq 3",
+			expectedStatus: "InStock",
+		},
+		{
+			name:           "collection: combined flags",
+			path:           "/EnumProducts",
+			filter:         "ID eq 1",
+			expectedStatus: "InStock,Featured",
+		},
+		{
+			name:           "single entity: combined flags",
+			path:           "/EnumProducts(4)",
+			expectedStatus: "InStock,OnSale,Featured",
+		},
+		{
+			name:           "single entity: single flag",
+			path:           "/EnumProducts(5)",
+			expectedStatus: "Discontinued",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			target := tt.path
+			if tt.filter != "" {
+				target += "?$filter=" + url.QueryEscape(tt.filter)
+			}
+			req := httptest.NewRequest(http.MethodGet, target, nil)
+			w := httptest.NewRecorder()
+
+			service.ServeHTTP(w, req)
+
+			if w.Code != http.StatusOK {
+				t.Fatalf("Expected status %d, got %d. Body: %s", http.StatusOK, w.Code, w.Body.String())
+			}
+
+			body := w.Body.String()
+
+			// The Status field must appear as a quoted string, not a bare integer.
+			quotedStatus := `"` + tt.expectedStatus + `"`
+			if !strings.Contains(body, quotedStatus) {
+				t.Errorf("Expected Status to be serialized as %s, body: %s", quotedStatus, body)
+			}
+		})
 	}
 }
 
