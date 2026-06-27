@@ -1338,8 +1338,31 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 			return fmt.Sprintf("TIME_TO_SEC(%s)", columnName), nil
 		case "sqlserver", "mssql":
 			return fmt.Sprintf("DATEDIFF_BIG(SECOND, '00:00:00', TRY_CONVERT(time, %s))", columnName), nil
-		default: // sqlite - SQLite has no native interval type; assumes the column stores a numeric value representing total seconds
-			return fmt.Sprintf("CAST(%s AS REAL)", columnName), nil
+		default: // sqlite - parse ISO 8601 duration strings (e.g. P1D, PT2H, P1DT2H30M) into total seconds
+			c := columnName
+			return "CASE WHEN " + c + " IS NULL THEN NULL WHEN " + c + " NOT LIKE 'P%' THEN NULL ELSE (" +
+				// Days: digits before first 'D' when 'D' precedes any 'T' (or no 'T')
+				"CAST(CASE WHEN INSTR(" + c + ",'D')>0 AND (INSTR(" + c + ",'T')=0 OR INSTR(" + c + ",'D')<INSTR(" + c + ",'T'))" +
+				" THEN SUBSTR(" + c + ",2,INSTR(" + c + ",'D')-2) ELSE 0 END AS INTEGER)*86400" +
+				// Hours: digits between 'T' and 'H'
+				"+CAST(CASE WHEN INSTR(" + c + ",'T')>0 AND INSTR(" + c + ",'H')>INSTR(" + c + ",'T')" +
+				" THEN SUBSTR(" + c + ",INSTR(" + c + ",'T')+1,INSTR(" + c + ",'H')-INSTR(" + c + ",'T')-1) ELSE 0 END AS INTEGER)*3600" +
+				// Minutes: 'M' after 'T' — digits after the last of ('T','H') before that 'M'
+				"+CAST(CASE WHEN INSTR(" + c + ",'T')>0 AND INSTR(SUBSTR(" + c + ",INSTR(" + c + ",'T')+1),'M')>0" +
+				" THEN SUBSTR(" + c + "," +
+				"CASE WHEN INSTR(" + c + ",'H')>INSTR(" + c + ",'T') THEN INSTR(" + c + ",'H')+1 ELSE INSTR(" + c + ",'T')+1 END," +
+				"INSTR(" + c + ",'T')+INSTR(SUBSTR(" + c + ",INSTR(" + c + ",'T')+1),'M')-1" +
+				"-CASE WHEN INSTR(" + c + ",'H')>INSTR(" + c + ",'T') THEN INSTR(" + c + ",'H') ELSE INSTR(" + c + ",'T') END)" +
+				" ELSE 0 END AS INTEGER)*60" +
+				// Seconds: digits after the last of ('T','H','M') before 'S'
+				"+CAST(CASE WHEN INSTR(" + c + ",'T')>0 AND INSTR(" + c + ",'S')>INSTR(" + c + ",'T')" +
+				" THEN SUBSTR(" + c + "," +
+				"CASE WHEN INSTR(SUBSTR(" + c + ",INSTR(" + c + ",'T')+1),'M')>0 THEN INSTR(" + c + ",'T')+INSTR(SUBSTR(" + c + ",INSTR(" + c + ",'T')+1),'M')+1" +
+				" WHEN INSTR(" + c + ",'H')>INSTR(" + c + ",'T') THEN INSTR(" + c + ",'H')+1 ELSE INSTR(" + c + ",'T')+1 END," +
+				"INSTR(" + c + ",'S')" +
+				"-CASE WHEN INSTR(SUBSTR(" + c + ",INSTR(" + c + ",'T')+1),'M')>0 THEN INSTR(" + c + ",'T')+INSTR(SUBSTR(" + c + ",INSTR(" + c + ",'T')+1),'M')" +
+				" WHEN INSTR(" + c + ",'H')>INSTR(" + c + ",'T') THEN INSTR(" + c + ",'H') ELSE INSTR(" + c + ",'T') END-1)" +
+				" ELSE 0 END AS REAL)) END", nil
 		}
 	case OpMinDatetime:
 		switch dialect {
