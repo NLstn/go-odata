@@ -52,8 +52,70 @@ func buildRegexComparison(dialect string, columnName string, value interface{}) 
 	switch dialect {
 	case "postgres", "postgresql":
 		return fmt.Sprintf("%s ~ ?", columnName), []interface{}{pattern}
+	case "sqlserver", "mssql":
+		// SQL Server has no native regex operator; use a LIKE approximation for the
+		// subset of patterns exercised by the compliance suite.
+		return fmt.Sprintf("%s LIKE ? %s", columnName, getLikeEscapeClause(dialect)), []interface{}{regexToLikePattern(pattern)}
 	default:
 		// SQLite, MySQL, MariaDB all support the REGEXP operator
 		return fmt.Sprintf("%s REGEXP ?", columnName), []interface{}{pattern}
 	}
+}
+
+func regexToLikePattern(pattern string) string {
+	// Best-effort translation of a regex-like pattern into SQL LIKE wildcards.
+	// This intentionally handles only the subset used by the compliance suite.
+	var b strings.Builder
+	b.Grow(len(pattern))
+	sawWildcard := false
+
+	escaped := false
+	for i := 0; i < len(pattern); i++ {
+		ch := pattern[i]
+		if escaped {
+			switch ch {
+			case '%', '_', '\\':
+				b.WriteByte('\\')
+				b.WriteByte(ch)
+			default:
+				b.WriteByte(ch)
+			}
+			escaped = false
+			continue
+		}
+
+		switch ch {
+		case '\\':
+			escaped = true
+		case '^', '$':
+			// Anchors are implicit in LIKE semantics.
+		case '.':
+			if i+1 < len(pattern) && pattern[i+1] == '*' {
+				b.WriteByte('%')
+				sawWildcard = true
+				i++
+			} else {
+				b.WriteByte('_')
+				sawWildcard = true
+			}
+		case '*', '+', '?', '|', '(', ')', '[', ']', '{', '}':
+			// Unsupported regex operators are dropped from the approximation.
+			sawWildcard = true
+		default:
+			if ch == '%' || ch == '_' {
+				b.WriteByte('\\')
+			}
+			b.WriteByte(ch)
+		}
+	}
+
+	if escaped {
+		b.WriteByte('\\')
+	}
+
+	if strings.HasPrefix(pattern, "^") && !strings.HasSuffix(pattern, "$") && !sawWildcard {
+		b.WriteByte('%')
+	}
+
+	return b.String()
 }

@@ -701,6 +701,73 @@ func TestDateFunctions_SQLGeneration(t *testing.T) {
 	}
 }
 
+func TestDateFunctions_SQLGenerationSQLServer(t *testing.T) {
+	meta := getTestMetadataWithDate(t)
+
+	tests := []struct {
+		name           string
+		filter         string
+		expectedSQL    string
+		expectedArgsNo int
+	}{
+		{
+			name:           "year SQL Server",
+			filter:         "year(CreatedAt) eq 2024",
+			expectedSQL:    "DATEPART(YEAR, TRY_CONVERT(datetime2, [created_at])) = ?",
+			expectedArgsNo: 1,
+		},
+		{
+			name:           "time SQL Server",
+			filter:         "time(CreatedAt) eq '14:30:00'",
+			expectedSQL:    "CAST(TRY_CONVERT(time, [created_at]) AS TIME) = ?",
+			expectedArgsNo: 1,
+		},
+		{
+			name:           "fractionalseconds SQL Server",
+			filter:         "fractionalseconds(CreatedAt) gt 0.5",
+			expectedSQL:    "(DATEPART(MICROSECOND, TRY_CONVERT(datetime2, [created_at])) / 1000000.0) > ?",
+			expectedArgsNo: 1,
+		},
+		{
+			name:           "totalseconds SQL Server",
+			filter:         "totalseconds(CreatedAt) gt 3600",
+			expectedSQL:    "DATEDIFF_BIG(SECOND, '00:00:00', TRY_CONVERT(time, [created_at])) > ?",
+			expectedArgsNo: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tokenizer := NewTokenizer(tt.filter)
+			tokens, err := tokenizer.TokenizeAll()
+			if err != nil {
+				t.Fatalf("Tokenization failed: %v", err)
+			}
+
+			parser := NewASTParser(tokens)
+			ast, err := parser.Parse()
+			if err != nil {
+				t.Fatalf("Parsing failed: %v", err)
+			}
+
+			defer ReleaseASTNode(ast)
+
+			filterExpr, err := ASTToFilterExpression(ast, meta)
+			if err != nil {
+				t.Fatalf("AST to FilterExpression failed: %v", err)
+			}
+
+			sql, args := buildFilterCondition("sqlserver", filterExpr, meta)
+			if sql != tt.expectedSQL {
+				t.Errorf("Expected SQL %q, got %q", tt.expectedSQL, sql)
+			}
+			if len(args) != tt.expectedArgsNo {
+				t.Errorf("Expected %d args, got %d", tt.expectedArgsNo, len(args))
+			}
+		})
+	}
+}
+
 func TestDateFunctions_FractionalSeconds(t *testing.T) {
 	meta := getTestMetadataWithDate(t)
 

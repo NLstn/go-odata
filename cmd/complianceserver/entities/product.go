@@ -1,6 +1,10 @@
 package entities
 
 import (
+	"database/sql/driver"
+	"fmt"
+	"math"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,6 +27,163 @@ const (
 	ProductStatusFeatured ProductStatus = 8
 )
 
+// RatingValue wraps an unsigned 8-bit rating while accepting wider SQL Server scan values.
+type RatingValue uint8
+
+// TemperatureValue wraps a signed 8-bit temperature while accepting wider SQL Server scan values.
+type TemperatureValue int8
+
+// QuantityValue wraps a signed 16-bit quantity while accepting wider SQL Server scan values.
+type QuantityValue int16
+
+func scanInt64Value(value any) (int64, error) {
+	switch v := value.(type) {
+	case int64:
+		return v, nil
+	case int32:
+		return int64(v), nil
+	case int16:
+		return int64(v), nil
+	case int8:
+		return int64(v), nil
+	case uint64:
+		if v > math.MaxInt64 {
+			return 0, fmt.Errorf("value %d out of range for signed integer", v)
+		}
+		return int64(v), nil
+	case uint32:
+		return int64(v), nil
+	case uint16:
+		return int64(v), nil
+	case uint8:
+		return int64(v), nil
+	case []byte:
+		n, err := strconv.ParseInt(string(v), 10, 64)
+		if err != nil {
+			return 0, err
+		}
+		return n, nil
+	case string:
+		n, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			return 0, err
+		}
+		return n, nil
+	default:
+		return 0, fmt.Errorf("cannot scan %T into signed integer", value)
+	}
+}
+
+func scanUint64Value(value any) (uint64, error) {
+	switch v := value.(type) {
+	case uint64:
+		return v, nil
+	case uint32:
+		return uint64(v), nil
+	case uint16:
+		return uint64(v), nil
+	case uint8:
+		return uint64(v), nil
+	case int64:
+		if v < 0 {
+			return 0, fmt.Errorf("value %d out of range for unsigned integer", v)
+		}
+		return uint64(v), nil
+	case int32:
+		if v < 0 {
+			return 0, fmt.Errorf("value %d out of range for unsigned integer", v)
+		}
+		return uint64(v), nil
+	case int16:
+		if v < 0 {
+			return 0, fmt.Errorf("value %d out of range for unsigned integer", v)
+		}
+		return uint64(v), nil
+	case int8:
+		if v < 0 {
+			return 0, fmt.Errorf("value %d out of range for unsigned integer", v)
+		}
+		return uint64(v), nil
+	case []byte:
+		n, err := strconv.ParseUint(string(v), 10, 64)
+		if err != nil {
+			return 0, err
+		}
+		return n, nil
+	case string:
+		n, err := strconv.ParseUint(v, 10, 64)
+		if err != nil {
+			return 0, err
+		}
+		return n, nil
+	default:
+		return 0, fmt.Errorf("cannot scan %T into unsigned integer", value)
+	}
+}
+
+func (v *RatingValue) Scan(value any) error {
+	if value == nil {
+		*v = 0
+		return nil
+	}
+
+	n, err := scanUint64Value(value)
+	if err != nil {
+		return err
+	}
+	if n > math.MaxUint8 {
+		return fmt.Errorf("value %d out of range for RatingValue", n)
+	}
+	*v = RatingValue(n)
+	return nil
+}
+
+func (v RatingValue) Value() (driver.Value, error) {
+	return int64(v), nil
+}
+
+func (v *TemperatureValue) Scan(value any) error {
+	if value == nil {
+		*v = 0
+		return nil
+	}
+
+	n, err := scanInt64Value(value)
+	if err != nil {
+		return err
+	}
+	if n < math.MinInt8 || n > math.MaxInt8 {
+		return fmt.Errorf("value %d out of range for TemperatureValue", n)
+	}
+	*v = TemperatureValue(n)
+	return nil
+}
+
+func (v TemperatureValue) Value() (driver.Value, error) {
+	return int64(v), nil
+}
+
+func (v *QuantityValue) Scan(value any) error {
+	if value == nil {
+		*v = 0
+		return nil
+	}
+
+	n, err := scanInt64Value(value)
+	if err != nil {
+		return err
+	}
+	if n < math.MinInt16 || n > math.MaxInt16 {
+		return fmt.Errorf("value %d out of range for QuantityValue", n)
+	}
+	*v = QuantityValue(n)
+	return nil
+}
+
+func (v QuantityValue) Value() (driver.Value, error) {
+	return int64(v), nil
+}
+
 // EnumMembers returns the enum member mapping for compliance metadata generation.
 func (ProductStatus) EnumMembers() map[string]int {
 	return map[string]int{
@@ -36,28 +197,28 @@ func (ProductStatus) EnumMembers() map[string]int {
 
 // Product represents a product entity for the compliance server
 type Product struct {
-	ID              uuid.UUID     `json:"ID" gorm:"type:char(36);primaryKey" odata:"key,generate=uuid"`
-	Name            string        `json:"Name" gorm:"not null" odata:"required,maxlength=100,searchable,annotation:Core.Description=Product display name"`
-	Description     *string       `json:"Description" odata:"nullable,maxlength=500,annotation:Core.Description=Detailed product description"` // Nullable description field
-	Price           float64       `json:"Price" gorm:"not null" odata:"required,precision=10,scale=2"`
-	Rating          uint8         `json:"Rating" odata:""`
-	Temperature     int8          `json:"Temperature" odata:""`
-	Quantity        int16         `json:"Quantity" odata:""`
-	Weight          float32       `json:"Weight" odata:""`
-	Data            []byte        `json:"Data,omitempty" odata:"nullable"`
-	ReleaseDate     string        `json:"ReleaseDate,omitempty" odata:""`
-	OpenTime        string        `json:"OpenTime,omitempty" odata:""`
-	ShippingTime    string        `json:"ShippingTime,omitempty" odata:""`
-	ProcessingTime  string        `json:"ProcessingTime,omitempty" odata:""`
-	Offset          string        `json:"Offset,omitempty" odata:""`
-	CategoryID      *uuid.UUID    `json:"CategoryID" gorm:"type:char(36)" odata:"nullable"` // Foreign key for Category navigation property
-	Status          ProductStatus `json:"Status" gorm:"not null" odata:"enum=ProductStatus,flags"`
-	Version         int           `json:"Version" gorm:"default:1" odata:"etag"` // Version field used for optimistic concurrency control via ETag
-	CreatedAt       time.Time     `json:"CreatedAt" gorm:"not null" odata:"annotation:Core.Computed"`
-	SerialNumber    *string       `json:"SerialNumber,omitempty" gorm:"type:varchar(50)" odata:"nullable,maxlength=50,annotation:Core.Immutable,annotation:Core.Description=Unique serial number assigned at creation"`
-	ProductType     string        `json:"ProductType,omitempty" gorm:"default:'Product'" odata:"maxlength=50"` // Discriminator for type inheritance
-	SpecialProperty *string       `json:"SpecialProperty,omitempty" odata:"nullable,maxlength=200"`            // Property for SpecialProduct derived type
-	SpecialFeature  *string       `json:"SpecialFeature,omitempty" odata:"nullable,maxlength=100"`             // Property for SpecialProduct derived type
+	ID              uuid.UUID        `json:"ID" gorm:"type:char(36);primaryKey" odata:"key,generate=uuid"`
+	Name            string           `json:"Name" gorm:"not null" odata:"required,maxlength=100,searchable,annotation:Core.Description=Product display name"`
+	Description     *string          `json:"Description" odata:"nullable,maxlength=500,annotation:Core.Description=Detailed product description"` // Nullable description field
+	Price           float64          `json:"Price" gorm:"not null" odata:"required,precision=10,scale=2"`
+	Rating          RatingValue      `json:"Rating" odata:""`
+	Temperature     TemperatureValue `json:"Temperature" odata:""`
+	Quantity        QuantityValue    `json:"Quantity" odata:""`
+	Weight          float32          `json:"Weight" odata:""`
+	Data            []byte           `json:"Data,omitempty" odata:"nullable"`
+	ReleaseDate     string           `json:"ReleaseDate,omitempty" odata:""`
+	OpenTime        string           `json:"OpenTime,omitempty" odata:""`
+	ShippingTime    string           `json:"ShippingTime,omitempty" odata:""`
+	ProcessingTime  string           `json:"ProcessingTime,omitempty" odata:""`
+	Offset          string           `json:"Offset,omitempty" odata:""`
+	CategoryID      *uuid.UUID       `json:"CategoryID" gorm:"type:char(36)" odata:"nullable"` // Foreign key for Category navigation property
+	Status          ProductStatus    `json:"Status" gorm:"not null" odata:"enum=ProductStatus,flags"`
+	Version         int              `json:"Version" gorm:"default:1" odata:"etag"` // Version field used for optimistic concurrency control via ETag
+	CreatedAt       time.Time        `json:"CreatedAt" gorm:"not null" odata:"annotation:Core.Computed"`
+	SerialNumber    *string          `json:"SerialNumber,omitempty" gorm:"type:varchar(50)" odata:"nullable,maxlength=50,annotation:Core.Immutable,annotation:Core.Description=Unique serial number assigned at creation"`
+	ProductType     string           `json:"ProductType,omitempty" gorm:"default:'Product'" odata:"maxlength=50"` // Discriminator for type inheritance
+	SpecialProperty *string          `json:"SpecialProperty,omitempty" odata:"nullable,maxlength=200"`            // Property for SpecialProduct derived type
+	SpecialFeature  *string          `json:"SpecialFeature,omitempty" odata:"nullable,maxlength=100"`             // Property for SpecialProduct derived type
 	// Complex type properties
 	ShippingAddress *Address    `json:"ShippingAddress,omitempty" gorm:"embedded;embeddedPrefix:shipping_" odata:"nullable"`
 	Dimensions      *Dimensions `json:"Dimensions,omitempty" gorm:"embedded;embeddedPrefix:dim_" odata:"nullable"`

@@ -731,6 +731,7 @@ func TestStringFunctions_MatchesPatternSQLGeneration(t *testing.T) {
 		dialect        string
 		expectedSQL    string
 		expectedArgsNo int
+		expectedArg    string
 	}{
 		{
 			name:           "matchesPattern SQLite REGEXP",
@@ -738,6 +739,7 @@ func TestStringFunctions_MatchesPatternSQLGeneration(t *testing.T) {
 			dialect:        "sqlite",
 			expectedSQL:    `"name" REGEXP ?`,
 			expectedArgsNo: 1,
+			expectedArg:    "^[A-Z]",
 		},
 		{
 			name:           "matchesPattern PostgreSQL tilde operator",
@@ -745,6 +747,7 @@ func TestStringFunctions_MatchesPatternSQLGeneration(t *testing.T) {
 			dialect:        "postgres",
 			expectedSQL:    `"name" ~ ?`,
 			expectedArgsNo: 1,
+			expectedArg:    "^[A-Z]",
 		},
 		{
 			name:           "matchesPattern MySQL REGEXP",
@@ -752,6 +755,15 @@ func TestStringFunctions_MatchesPatternSQLGeneration(t *testing.T) {
 			dialect:        "mysql",
 			expectedSQL:    "`name` REGEXP ?",
 			expectedArgsNo: 1,
+			expectedArg:    "^[A-Z]",
+		},
+		{
+			name:           "matchesPattern SQL Server LIKE approximation",
+			filter:         "matchesPattern(Name, '^Lap')",
+			dialect:        "sqlserver",
+			expectedSQL:    "[name] LIKE ? ESCAPE '\\'",
+			expectedArgsNo: 1,
+			expectedArg:    "Lap%",
 		},
 	}
 
@@ -769,10 +781,55 @@ func TestStringFunctions_MatchesPatternSQLGeneration(t *testing.T) {
 			if len(args) != tt.expectedArgsNo {
 				t.Errorf("Expected %d args, got %d", tt.expectedArgsNo, len(args))
 			}
-			if len(args) > 0 {
-				if args[0] != "^[A-Z]" {
-					t.Errorf("Expected pattern arg '^[A-Z]', got: %v", args[0])
-				}
+			if len(args) > 0 && args[0] != tt.expectedArg {
+				t.Errorf("Expected pattern arg %q, got: %v", tt.expectedArg, args[0])
+			}
+		})
+	}
+}
+
+func TestStringFunctions_SQLGenerationSQLServer(t *testing.T) {
+	meta := getTestMetadata(t)
+
+	tests := []struct {
+		name           string
+		filter         string
+		expectedSQL    string
+		expectedArgsNo int
+	}{
+		{
+			name:           "length SQL Server",
+			filter:         "length(Name) gt 10",
+			expectedSQL:    "LEN([name]) > ?",
+			expectedArgsNo: 1,
+		},
+		{
+			name:           "indexof SQL Server",
+			filter:         "indexof(Name, 'Lap') eq 1",
+			expectedSQL:    "CHARINDEX(?, [name]) - 1 = ?",
+			expectedArgsNo: 2,
+		},
+		{
+			name:           "substring SQL Server",
+			filter:         "substring(Name, 1, 3) eq 'apt'",
+			expectedSQL:    "SUBSTRING([name], ? + 1, ?) = ?",
+			expectedArgsNo: 3,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			filterExpr, err := parseFilter(tt.filter, meta, nil, 0)
+			if err != nil {
+				t.Fatalf("Unexpected parse error: %v", err)
+			}
+
+			sql, args := buildFilterCondition("sqlserver", filterExpr, meta)
+			if sql != tt.expectedSQL {
+				t.Errorf("Expected SQL: %q, got: %q", tt.expectedSQL, sql)
+			}
+			if len(args) != tt.expectedArgsNo {
+				t.Errorf("Expected %d args, got %d", tt.expectedArgsNo, len(args))
 			}
 		})
 	}
