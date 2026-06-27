@@ -544,9 +544,9 @@ func TestLambdaOrPredicateSQL(t *testing.T) {
 
 	// Now build the full EXISTS clause manually to verify parenthesization.
 	joinCondition := `"items"."product_id" = "products"."id"`
-	existsSQL := strings.Replace(
+	existsSQL := strings.ReplaceAll(
 		"EXISTS (SELECT 1 FROM \"items\" WHERE "+joinCondition+" AND ("+sql+")",
-		"  ", " ", -1,
+		"  ", " ",
 	)
 
 	// The OR must appear inside the parentheses that follow AND, not after them.
