@@ -12,6 +12,7 @@ import (
 	"github.com/nlstn/go-odata"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
+	"gorm.io/driver/sqlserver"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -21,8 +22,8 @@ var Db *gorm.DB
 
 func main() {
 	// Parse command-line flags
-	dbType := flag.String("db", "sqlite", "Database type: sqlite, postgres, mariadb, or mysql")
-	dbDSN := flag.String("dsn", "", "Database DSN (connection string). For postgres, use postgresql://... format. For mariadb/mysql, use username:password@tcp(host:port)/dbname. For sqlite, use file path")
+	dbType := flag.String("db", "sqlite", "Database type: sqlite, postgres, mariadb, mysql, or mssql")
+	dbDSN := flag.String("dsn", "", "Database DSN (connection string). For postgres, use postgresql://... format. For mariadb/mysql, use username:password@tcp(host:port)/dbname. For mssql, use sqlserver://username:password@host:port?database=dbname. For sqlite, use file path")
 	flag.Parse()
 
 	// Determine database configuration
@@ -86,8 +87,22 @@ func main() {
 		}
 		fmt.Println("🐬 Using MySQL database")
 
+	case "mssql":
+		dsn := *dbDSN
+		if dsn == "" {
+			dsn = os.Getenv("MSSQL_DSN")
+			if dsn == "" {
+				log.Fatal("MSSQL DSN required. Use -dsn flag or set MSSQL_DSN environment variable")
+			}
+		}
+		Db, err = gorm.Open(sqlserver.Open(dsn), &gorm.Config{})
+		if err != nil {
+			log.Fatal("Failed to connect to MSSQL database:", err)
+		}
+		fmt.Println("🪟 Using MSSQL database")
+
 	default:
-		log.Fatalf("Unsupported database type: %s. Use 'sqlite', 'postgres', 'mariadb', or 'mysql'", *dbType)
+		log.Fatalf("Unsupported database type: %s. Use 'sqlite', 'postgres', 'mariadb', 'mysql', or 'mssql'", *dbType)
 	}
 
 	// Auto-migrate the Product, ProductDescription, Category, CompanyInfo, and User models
