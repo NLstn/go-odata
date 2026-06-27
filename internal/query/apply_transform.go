@@ -837,8 +837,99 @@ func buildComputeSQLWithDB(dialect string, computeExpr ComputeExpression, entity
 // buildComputeExpressionSQL builds SQL for a sub-expression in a compute.
 
 func buildComputeExpressionSQL(dialect string, expr *FilterExpression, entityMetadata *metadata.EntityMetadata) string {
-	sql, _ := buildComputeExpressionSQLWithArgs(dialect, expr, entityMetadata)
-	return sql
+	if expr == nil {
+		return ""
+	}
+
+	if expr.Property != "" && expr.Left == nil && expr.Right == nil && (expr.Operator == "" || (expr.Operator == OpEqual && expr.Value == true)) {
+		prop := findProperty(expr.Property, entityMetadata)
+		if prop == nil {
+			return ""
+		}
+		return quoteIdent(dialect, prop.ColumnName)
+	}
+
+	if expr.Value != nil && expr.Property == "" && expr.Left == nil && expr.Right == nil {
+		switch v := expr.Value.(type) {
+		case nil:
+			return "NULL"
+		case bool:
+			if v {
+				return "1"
+			}
+			return "0"
+		case string:
+			return "'" + strings.ReplaceAll(v, "'", "''") + "'"
+		default:
+			return fmt.Sprintf("%v", v)
+		}
+	}
+
+	if expr.Property != "" && expr.Value != nil && expr.Left == nil && expr.Right == nil && expr.Operator != "" && !(expr.Operator == OpEqual && expr.Value == true) {
+		leftSQL := buildComputeExpressionSQL(dialect, &FilterExpression{Property: expr.Property}, entityMetadata)
+		rightSQL := buildComputeExpressionSQL(dialect, &FilterExpression{Value: expr.Value}, entityMetadata)
+		if leftSQL == "" || rightSQL == "" {
+			return ""
+		}
+		return buildArithmeticSQL(dialect, expr.Operator, leftSQL, rightSQL)
+	}
+
+	if expr.Left != nil && expr.Value != nil && expr.Right == nil && expr.Operator != "" {
+		leftSQL := buildComputeExpressionSQL(dialect, expr.Left, entityMetadata)
+		rightSQL := buildComputeExpressionSQL(dialect, &FilterExpression{Value: expr.Value}, entityMetadata)
+		if leftSQL == "" || rightSQL == "" {
+			return ""
+		}
+		return buildArithmeticSQL(dialect, expr.Operator, leftSQL, rightSQL)
+	}
+
+	if expr.Left != nil && expr.Right != nil && expr.Operator != "" {
+		leftSQL := buildComputeExpressionSQL(dialect, expr.Left, entityMetadata)
+		rightSQL := buildComputeExpressionSQL(dialect, expr.Right, entityMetadata)
+		if leftSQL == "" || rightSQL == "" {
+			return ""
+		}
+		return buildArithmeticSQL(dialect, expr.Operator, leftSQL, rightSQL)
+	}
+
+	if expr.Left != nil && expr.Right != nil && expr.Logical != "" {
+		leftSQL := buildComputeExpressionSQL(dialect, expr.Left, entityMetadata)
+		rightSQL := buildComputeExpressionSQL(dialect, expr.Right, entityMetadata)
+		if leftSQL == "" || rightSQL == "" {
+			return ""
+		}
+
+		op := FilterOperator(expr.Logical)
+		return buildArithmeticSQL(dialect, op, leftSQL, rightSQL)
+	}
+
+	return ""
+}
+
+func buildArithmeticSQL(dialect string, op FilterOperator, leftSQL string, rightSQL string) string {
+	switch op {
+	case OpAdd:
+		return fmt.Sprintf("(%s + %s)", leftSQL, rightSQL)
+	case OpSub:
+		return fmt.Sprintf("(%s - %s)", leftSQL, rightSQL)
+	case OpMul:
+		return fmt.Sprintf("(%s * %s)", leftSQL, rightSQL)
+	case OpDiv:
+		return fmt.Sprintf("(%s / %s)", leftSQL, rightSQL)
+	case OpDivBy:
+		switch dialect {
+		case "postgres":
+			return fmt.Sprintf("(CAST(%s AS FLOAT) / %s)", leftSQL, rightSQL)
+		case "mysql", "mariadb":
+			return fmt.Sprintf("(CAST(%s AS DOUBLE) / %s)", leftSQL, rightSQL)
+		default:
+			return fmt.Sprintf("(CAST(%s AS REAL) / %s)", leftSQL, rightSQL)
+		}
+	case OpMod:
+		return fmt.Sprintf("(%s %% %s)", leftSQL, rightSQL)
+	default:
+		return ""
+	}
 }
 
 // buildComputeExpressionSQLWithArgs builds SQL for arithmetic expressions while keeping bind args.
