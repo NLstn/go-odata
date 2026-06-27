@@ -31,7 +31,7 @@ func (h *EntityHandler) HandleStructuralProperty(w http.ResponseWriter, r *http.
 		}
 		h.handleOptionsStructuralProperty(w)
 	default:
-		h.writeMethodNotAllowedError(w, r, r.Method, "property access")
+		h.writeMethodNotAllowedError(w, r, r.Method, "property access", "GET, HEAD, OPTIONS")
 	}
 }
 

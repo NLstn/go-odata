@@ -70,6 +70,12 @@ type ODataError struct {
 	InnerError *ODataInnerError   `json:"innererror,omitempty"`
 }
 
+// WriteMethodNotAllowed writes a 405 Method Not Allowed response with the Allow header.
+func WriteMethodNotAllowed(w http.ResponseWriter, r *http.Request, allow string, message string, details string) error {
+	w.Header().Set("Allow", allow)
+	return WriteError(w, r, http.StatusMethodNotAllowed, message, details)
+}
+
 // WriteError writes an OData v4 compliant error response.
 func WriteError(w http.ResponseWriter, r *http.Request, code int, message string, details string) error {
 	odataErr := &ODataError{

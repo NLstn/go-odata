@@ -26,7 +26,7 @@ func (h *EntityHandler) HandleCollection(w http.ResponseWriter, r *http.Request)
 		methodToCheck = http.MethodGet
 	}
 	if h.isMethodDisabled(methodToCheck) {
-		WriteError(w, r, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+		WriteMethodNotAllowed(w, r, h.allowedMethods([]string{"GET", "HEAD", "POST"}), ErrMsgMethodNotAllowed,
 			fmt.Sprintf("Method %s is not allowed for this entity", r.Method))
 		return
 	}
@@ -45,7 +45,7 @@ func (h *EntityHandler) HandleCollection(w http.ResponseWriter, r *http.Request)
 		}
 		h.handleOptionsCollection(w)
 	default:
-		WriteError(w, r, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+		WriteMethodNotAllowed(w, r, "GET, HEAD, POST, OPTIONS", ErrMsgMethodNotAllowed,
 			fmt.Sprintf("Method %s is not supported for entity collections", r.Method))
 	}
 }
@@ -70,7 +70,7 @@ func (h *EntityHandler) HandleCount(w http.ResponseWriter, r *http.Request) {
 	// Check if GET method is disabled (applies to both GET and HEAD)
 	if r.Method == http.MethodGet || r.Method == http.MethodHead {
 		if h.isMethodDisabled(http.MethodGet) {
-			WriteError(w, r, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+			WriteMethodNotAllowed(w, r, h.allowedMethods([]string{"GET", "HEAD"}), ErrMsgMethodNotAllowed,
 				fmt.Sprintf("Method %s is not allowed for this entity", r.Method))
 			return
 		}
@@ -88,7 +88,7 @@ func (h *EntityHandler) HandleCount(w http.ResponseWriter, r *http.Request) {
 		}
 		h.handleOptionsCount(w)
 	default:
-		WriteError(w, r, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+		WriteMethodNotAllowed(w, r, "GET, HEAD, OPTIONS", ErrMsgMethodNotAllowed,
 			fmt.Sprintf("Method %s is not supported for $count", r.Method))
 	}
 }

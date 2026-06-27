@@ -264,7 +264,7 @@ func TestEntityHandler_writeMethodNotAllowedError(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/test", nil)
 
-	handler.writeMethodNotAllowedError(w, r, "POST", "structural properties")
+	handler.writeMethodNotAllowedError(w, r, "POST", "structural properties", "GET, HEAD, OPTIONS")
 
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Errorf("Status = %v, want %v", w.Code, http.StatusMethodNotAllowed)

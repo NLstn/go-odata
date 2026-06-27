@@ -45,7 +45,7 @@ func boolFromAnnotationValue(value interface{}) (bool, bool) {
 
 func (h *EntityHandler) enforceInsertRestrictions(w http.ResponseWriter, r *http.Request) bool {
 	if isOperationProhibited(h.metadata.EntitySetAnnotations, metadata.CapInsertRestrictions, "Insertable") {
-		h.writeMethodNotAllowedError(w, r, "POST", fmt.Sprintf("entity set '%s'", h.metadata.EntitySetName))
+		h.writeMethodNotAllowedError(w, r, "POST", fmt.Sprintf("entity set '%s'", h.metadata.EntitySetName), "GET, HEAD, OPTIONS")
 		return false
 	}
 
@@ -54,7 +54,7 @@ func (h *EntityHandler) enforceInsertRestrictions(w http.ResponseWriter, r *http
 
 func (h *EntityHandler) enforceUpdateRestrictions(w http.ResponseWriter, r *http.Request, method string) bool {
 	if isOperationProhibited(h.metadata.EntitySetAnnotations, metadata.CapUpdateRestrictions, "Updatable") {
-		h.writeMethodNotAllowedError(w, r, method, fmt.Sprintf("entity set '%s'", h.metadata.EntitySetName))
+		h.writeMethodNotAllowedError(w, r, method, fmt.Sprintf("entity set '%s'", h.metadata.EntitySetName), "GET, HEAD, DELETE, OPTIONS")
 		return false
 	}
 
@@ -63,7 +63,7 @@ func (h *EntityHandler) enforceUpdateRestrictions(w http.ResponseWriter, r *http
 
 func (h *EntityHandler) enforceDeleteRestrictions(w http.ResponseWriter, r *http.Request) bool {
 	if isOperationProhibited(h.metadata.EntitySetAnnotations, metadata.CapDeleteRestrictions, "Deletable") {
-		h.writeMethodNotAllowedError(w, r, "DELETE", fmt.Sprintf("entity set '%s'", h.metadata.EntitySetName))
+		h.writeMethodNotAllowedError(w, r, "DELETE", fmt.Sprintf("entity set '%s'", h.metadata.EntitySetName), "GET, HEAD, PUT, PATCH, OPTIONS")
 		return false
 	}
 

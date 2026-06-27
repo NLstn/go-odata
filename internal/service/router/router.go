@@ -192,14 +192,14 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			pathWithoutParams = path[:idx]
 		}
 		if r.isActionOrFunction(pathWithoutParams) {
-			if writeErr := response.WriteError(w, req, http.StatusMethodNotAllowed, "Method not allowed",
+			if writeErr := response.WriteMethodNotAllowed(w, req, "GET, HEAD, POST, OPTIONS", "Method not allowed",
 				fmt.Sprintf("Method %s is not allowed for actions or functions", req.Method)); writeErr != nil {
 				r.logger.Error("Error writing error response", "error", writeErr)
 			}
 			return
 		}
 		if r.isActionOrFunction(path) {
-			if writeErr := response.WriteError(w, req, http.StatusMethodNotAllowed, "Method not allowed",
+			if writeErr := response.WriteMethodNotAllowed(w, req, "GET, HEAD, POST, OPTIONS", "Method not allowed",
 				fmt.Sprintf("Method %s is not allowed for actions or functions", req.Method)); writeErr != nil {
 				r.logger.Error("Error writing error response", "error", writeErr)
 			}

@@ -23,7 +23,7 @@ func (h *EntityHandler) HandleSingleton(w http.ResponseWriter, r *http.Request) 
 		methodToCheck = http.MethodGet
 	}
 	if h.isMethodDisabled(methodToCheck) {
-		if err := response.WriteError(w, r, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+		if err := response.WriteMethodNotAllowed(w, r, h.allowedMethods([]string{"GET", "HEAD", "PUT", "PATCH"}), ErrMsgMethodNotAllowed,
 			fmt.Sprintf("Method %s is not allowed for this entity", r.Method)); err != nil {
 			h.logger.Error("Error writing error response", "error", err)
 		}
@@ -52,7 +52,7 @@ func (h *EntityHandler) HandleSingleton(w http.ResponseWriter, r *http.Request) 
 		}
 		h.handleOptionsSingleton(w)
 	default:
-		if err := response.WriteError(w, r, http.StatusMethodNotAllowed, ErrMsgMethodNotAllowed,
+		if err := response.WriteMethodNotAllowed(w, r, "GET, HEAD, PATCH, PUT, OPTIONS", ErrMsgMethodNotAllowed,
 			fmt.Sprintf("Method %s is not supported for singleton", r.Method)); err != nil {
 			h.logger.Error("Error writing error response", "error", err)
 		}
