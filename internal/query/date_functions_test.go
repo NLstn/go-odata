@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/nlstn/go-odata/internal/metadata"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
 // TestEntity with date field for date function tests
@@ -648,10 +650,29 @@ func TestDateFunctions_SQLGeneration(t *testing.T) {
 			expectedArgsNo: 1,
 		},
 		{
-			name:           "totalseconds SQL",
-			filter:         "totalseconds(CreatedAt) gt 3600",
-			expectErr:      false,
-			expectedSQL:    "CAST(created_at AS REAL) > ?",
+			name:      "totalseconds SQL",
+			filter:    "totalseconds(CreatedAt) gt 3600",
+			expectErr: false,
+			// The SQLite expression parses ISO 8601 duration strings into total seconds.
+			expectedSQL: "CASE WHEN \"created_at\" IS NULL THEN NULL WHEN \"created_at\" NOT LIKE 'P%' THEN NULL ELSE (" +
+				"CAST(CASE WHEN INSTR(\"created_at\",'D')>0 AND (INSTR(\"created_at\",'T')=0 OR INSTR(\"created_at\",'D')<INSTR(\"created_at\",'T'))" +
+				" THEN SUBSTR(\"created_at\",2,INSTR(\"created_at\",'D')-2) ELSE 0 END AS INTEGER)*86400" +
+				"+CAST(CASE WHEN INSTR(\"created_at\",'T')>0 AND INSTR(\"created_at\",'H')>INSTR(\"created_at\",'T')" +
+				" THEN SUBSTR(\"created_at\",INSTR(\"created_at\",'T')+1,INSTR(\"created_at\",'H')-INSTR(\"created_at\",'T')-1) ELSE 0 END AS INTEGER)*3600" +
+				"+CAST(CASE WHEN INSTR(\"created_at\",'T')>0 AND INSTR(SUBSTR(\"created_at\",INSTR(\"created_at\",'T')+1),'M')>0" +
+				" THEN SUBSTR(\"created_at\"," +
+				"CASE WHEN INSTR(\"created_at\",'H')>INSTR(\"created_at\",'T') THEN INSTR(\"created_at\",'H')+1 ELSE INSTR(\"created_at\",'T')+1 END," +
+				"INSTR(\"created_at\",'T')+INSTR(SUBSTR(\"created_at\",INSTR(\"created_at\",'T')+1),'M')-1" +
+				"-CASE WHEN INSTR(\"created_at\",'H')>INSTR(\"created_at\",'T') THEN INSTR(\"created_at\",'H') ELSE INSTR(\"created_at\",'T') END)" +
+				" ELSE 0 END AS INTEGER)*60" +
+				"+CAST(CASE WHEN INSTR(\"created_at\",'T')>0 AND INSTR(\"created_at\",'S')>INSTR(\"created_at\",'T')" +
+				" THEN SUBSTR(\"created_at\"," +
+				"CASE WHEN INSTR(SUBSTR(\"created_at\",INSTR(\"created_at\",'T')+1),'M')>0 THEN INSTR(\"created_at\",'T')+INSTR(SUBSTR(\"created_at\",INSTR(\"created_at\",'T')+1),'M')+1" +
+				" WHEN INSTR(\"created_at\",'H')>INSTR(\"created_at\",'T') THEN INSTR(\"created_at\",'H')+1 ELSE INSTR(\"created_at\",'T')+1 END," +
+				"INSTR(\"created_at\",'S')" +
+				"-CASE WHEN INSTR(SUBSTR(\"created_at\",INSTR(\"created_at\",'T')+1),'M')>0 THEN INSTR(\"created_at\",'T')+INSTR(SUBSTR(\"created_at\",INSTR(\"created_at\",'T')+1),'M')" +
+				" WHEN INSTR(\"created_at\",'H')>INSTR(\"created_at\",'T') THEN INSTR(\"created_at\",'H') ELSE INSTR(\"created_at\",'T') END-1)" +
+				" ELSE 0 END AS REAL)) END > ?",
 			expectedArgsNo: 1,
 		},
 	}
@@ -1040,5 +1061,68 @@ func TestDateFunctions_MinMaxDatetimeSQL(t *testing.T) {
 				t.Errorf("expected 0 args, got %d", len(args))
 			}
 		})
+	}
+}
+
+// TestTotalSecondsISO8601SQLite verifies that totalseconds() correctly parses ISO 8601
+// duration strings stored as text in SQLite (e.g. "P1D", "PT2H", "P1DT2H30M").
+func TestTotalSecondsISO8601SQLite(t *testing.T) {
+	type DurationRow struct {
+		ID           int    `gorm:"primaryKey"`
+		ShippingTime string `gorm:"column:shipping_time"`
+	}
+
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	if err := db.AutoMigrate(&DurationRow{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	rows := []DurationRow{
+		{ID: 1, ShippingTime: "P1D"},       // 86400 s
+		{ID: 2, ShippingTime: "PT2H"},      // 7200 s
+		{ID: 3, ShippingTime: "P2D"},       // 172800 s
+		{ID: 4, ShippingTime: "P1DT2H30M"}, // 95400 s
+		{ID: 5, ShippingTime: ""},          // empty — should be excluded
+	}
+	if err := db.Create(&rows).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	meta, err := metadata.AnalyzeEntity(DurationRow{})
+	if err != nil {
+		t.Fatalf("analyze: %v", err)
+	}
+
+	tests := []struct {
+		filter        string
+		expectedCount int
+		desc          string
+	}{
+		{"totalseconds(ShippingTime) gt 3600", 4, "all four valid durations (86400, 7200, 172800, 95400) > 3600"},
+		{"totalseconds(ShippingTime) eq 7200", 1, "only PT2H equals 7200"},
+		{"totalseconds(ShippingTime) ge 86400", 3, "P1D(86400), P2D(172800), P1DT2H30M(95400) >= 86400"},
+		{"totalseconds(ShippingTime) ge 0", 4, "all four valid durations; empty string excluded"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.filter, func(t *testing.T) {
+			filterExpr, err := parseFilter(tt.filter, meta, nil, 0)
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			var count int64
+			if err := db.Model(&DurationRow{}).Scopes(func(d *gorm.DB) *gorm.DB {
+				return ApplyFilterOnly(d, filterExpr, meta, nil)
+			}).Count(&count).Error; err != nil {
+				t.Fatalf("query: %v", err)
+			}
+			if int(count) != tt.expectedCount {
+				t.Errorf("%s: expected %d rows, got %d", tt.desc, tt.expectedCount, count)
+			}
+		})
+
 	}
 }
