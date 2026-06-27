@@ -2,9 +2,11 @@ package entities
 
 import (
 	"database/sql/driver"
+	"encoding/json"
 	"fmt"
 	"math"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -182,6 +184,36 @@ func (v *QuantityValue) Scan(value any) error {
 
 func (v QuantityValue) Value() (driver.Value, error) {
 	return int64(v), nil
+}
+
+// UnmarshalJSON decodes OData enum strings (e.g. "InStock,Featured") back to ProductStatus.
+func (s *ProductStatus) UnmarshalJSON(data []byte) error {
+	var n int32
+	if err := json.Unmarshal(data, &n); err == nil {
+		*s = ProductStatus(n)
+		return nil
+	}
+	var str string
+	if err := json.Unmarshal(data, &str); err != nil {
+		return err
+	}
+	members := map[string]ProductStatus{
+		"None":         ProductStatusNone,
+		"InStock":      ProductStatusInStock,
+		"OnSale":       ProductStatusOnSale,
+		"Discontinued": ProductStatusDiscontinued,
+		"Featured":     ProductStatusFeatured,
+	}
+	var result ProductStatus
+	for _, part := range strings.Split(str, ",") {
+		v, ok := members[strings.TrimSpace(part)]
+		if !ok {
+			return fmt.Errorf("unknown ProductStatus member: %q", strings.TrimSpace(part))
+		}
+		result |= v
+	}
+	*s = result
+	return nil
 }
 
 // EnumMembers returns the enum member mapping for compliance metadata generation.
