@@ -307,7 +307,7 @@ func applySumThresholdSetTransformation(db *gorm.DB, qualifiedKey string, qualif
 		return db.Limit(0)
 	}
 
-	return applySetMeasureOrder(db.Where(fmt.Sprintf("%s IN ?", qualifiedKey), selectedKeys), qualifiedMeasure, desc)
+	return db.Where(fmt.Sprintf("%s IN ?", qualifiedKey), selectedKeys)
 }
 
 func applySetMeasureOrder(db *gorm.DB, qualifiedMeasure string, desc bool) *gorm.DB {
@@ -767,7 +767,7 @@ func buildComputeSQLWithDB(dialect string, computeExpr ComputeExpression, entity
 				exprSQL = fmt.Sprintf("(CAST(%s AS REAL) / %s)", leftSQL, rightSQL)
 			}
 		case OpMod:
-			exprSQL = fmt.Sprintf("(%s %% %s)", leftSQL, rightSQL)
+			exprSQL = buildModuloSQL(dialect, leftSQL, rightSQL)
 		default:
 			return "", "", ""
 		}
@@ -802,7 +802,7 @@ func buildComputeSQLWithDB(dialect string, computeExpr ComputeExpression, entity
 				exprSQL = fmt.Sprintf("(CAST(%s AS REAL) / %s)", leftSQL, rightSQL)
 			}
 		case OpMod:
-			exprSQL = fmt.Sprintf("(%s %% %s)", leftSQL, rightSQL)
+			exprSQL = buildModuloSQL(dialect, leftSQL, rightSQL)
 		default:
 			return "", "", ""
 		}
@@ -841,7 +841,7 @@ func buildComputeSQLWithDB(dialect string, computeExpr ComputeExpression, entity
 				exprSQL = fmt.Sprintf("(CAST(%s AS REAL) / %s)", leftSQL, rightSQL)
 			}
 		case "mod":
-			exprSQL = fmt.Sprintf("(%s %% %s)", leftSQL, rightSQL)
+			exprSQL = buildModuloSQL(dialect, leftSQL, rightSQL)
 		default:
 			return "", "", ""
 		}
@@ -949,10 +949,17 @@ func buildArithmeticSQL(dialect string, op FilterOperator, leftSQL string, right
 			return fmt.Sprintf("(CAST(%s AS REAL) / %s)", leftSQL, rightSQL)
 		}
 	case OpMod:
-		return fmt.Sprintf("(%s %% %s)", leftSQL, rightSQL)
+		return buildModuloSQL(dialect, leftSQL, rightSQL)
 	default:
 		return ""
 	}
+}
+
+func buildModuloSQL(dialect string, leftSQL string, rightSQL string) string {
+	if dialect == "sqlserver" {
+		return fmt.Sprintf("(CAST(%s AS DECIMAL(38, 10)) %% CAST(%s AS DECIMAL(38, 10)))", leftSQL, rightSQL)
+	}
+	return fmt.Sprintf("(%s %% %s)", leftSQL, rightSQL)
 }
 
 // buildComputeExpressionSQLWithArgs builds SQL for arithmetic expressions while keeping bind args.
@@ -1005,7 +1012,7 @@ func buildComputeExpressionSQLWithArgs(dialect string, expr *FilterExpression, e
 				return fmt.Sprintf("(CAST(%s AS REAL) / %s)", leftSQL, rightSQL), append(leftArgs, rightArgs...)
 			}
 		case OpMod:
-			sqlOp = "%"
+			return buildModuloSQL(dialect, leftSQL, rightSQL), append(leftArgs, rightArgs...)
 		default:
 			return "", nil
 		}
@@ -1040,7 +1047,7 @@ func buildComputeExpressionSQLWithArgs(dialect string, expr *FilterExpression, e
 				return fmt.Sprintf("(CAST(%s AS REAL) / %s)", leftSQL, rightSQL), append(leftArgs, rightArgs...)
 			}
 		case OpMod:
-			sqlOp = "%"
+			return buildModuloSQL(dialect, leftSQL, rightSQL), append(leftArgs, rightArgs...)
 		default:
 			return "", nil
 		}
@@ -1075,7 +1082,7 @@ func buildComputeExpressionSQLWithArgs(dialect string, expr *FilterExpression, e
 				return fmt.Sprintf("(CAST(%s AS REAL) / %s)", leftSQL, rightSQL), append(leftArgs, rightArgs...)
 			}
 		case OpMod:
-			sqlOp = "%"
+			return buildModuloSQL(dialect, leftSQL, rightSQL), append(leftArgs, rightArgs...)
 		default:
 			return "", nil
 		}
@@ -1110,7 +1117,7 @@ func buildComputeExpressionSQLWithArgs(dialect string, expr *FilterExpression, e
 				return fmt.Sprintf("(CAST(%s AS REAL) / %s)", leftSQL, rightSQL), append(leftArgs, rightArgs...)
 			}
 		case "mod":
-			sqlOp = "%"
+			return buildModuloSQL(dialect, leftSQL, rightSQL), append(leftArgs, rightArgs...)
 		default:
 			return "", nil
 		}

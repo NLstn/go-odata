@@ -461,3 +461,21 @@ func TestArithmeticFunctions_DivBy_SQLGeneration(t *testing.T) {
 		})
 	}
 }
+
+func TestArithmeticFunctions_Mod_SQLServerGeneration(t *testing.T) {
+	meta := getTestMetadata(t)
+
+	filterExpr, err := parseFilter("Price mod 10 eq 0", meta, nil, 0)
+	if err != nil {
+		t.Fatalf("Unexpected parse error: %v", err)
+	}
+
+	sql, args := buildFilterCondition("sqlserver", filterExpr, meta)
+	expectedSQL := "(CAST([price] AS DECIMAL(38, 10)) % CAST(? AS DECIMAL(38, 10))) = ?"
+	if sql != expectedSQL {
+		t.Fatalf("Expected SQL: %q, got: %q", expectedSQL, sql)
+	}
+	if len(args) != 2 {
+		t.Fatalf("Expected 2 args, got %d", len(args))
+	}
+}
