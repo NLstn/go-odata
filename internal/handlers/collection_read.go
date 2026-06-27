@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/nlstn/go-odata/internal/metadata"
@@ -342,6 +343,25 @@ func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.Qu
 		var results []map[string]interface{}
 		if err := db.Find(&results).Error; err != nil {
 			return nil, err
+		}
+
+		// Some database drivers (notably PostgreSQL) return NUMERIC/DECIMAL columns
+		// — the result type of SUM/AVG and of MIN/MAX over a decimal column — as
+		// strings or []byte. Normalize aggregate columns to numbers so they
+		// serialize as JSON numbers, not strings. Done before any in-memory rollup
+		// so its arithmetic operates on numeric values.
+		if len(queryOptions.Apply) > 0 {
+			if aggAliases := query.AggregateAliases(queryOptions.Apply); len(aggAliases) > 0 {
+				for _, row := range results {
+					for alias := range aggAliases {
+						if v, ok := row[alias]; ok {
+							if num, converted := coerceNumericAggregate(v); converted {
+								row[alias] = num
+							}
+						}
+					}
+				}
+			}
 		}
 
 		// When a rollup() groupby was used, apply the multi-level aggregation in memory.
@@ -1764,4 +1784,24 @@ func (h *EntityHandler) getTotalCount(ctx context.Context, queryOptions *query.Q
 		return nil
 	}
 	return &count
+}
+
+// coerceNumericAggregate converts a string or []byte aggregate value to a
+// float64 when it parses as a number. Some database drivers (e.g. PostgreSQL)
+// return NUMERIC/DECIMAL aggregates as strings; this normalizes them so they
+// serialize as JSON numbers. Values that are already numeric, or strings that do
+// not parse as numbers (e.g. a min()/max() over a text column), are left
+// unchanged (converted=false).
+func coerceNumericAggregate(v interface{}) (float64, bool) {
+	switch n := v.(type) {
+	case string:
+		if f, err := strconv.ParseFloat(strings.TrimSpace(n), 64); err == nil {
+			return f, true
+		}
+	case []byte:
+		if f, err := strconv.ParseFloat(strings.TrimSpace(string(n)), 64); err == nil {
+			return f, true
+		}
+	}
+	return 0, false
 }

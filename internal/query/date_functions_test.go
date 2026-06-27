@@ -750,9 +750,10 @@ func TestDateFunctions_SQLGenerationSQLServer(t *testing.T) {
 			expectedArgsNo: 1,
 		},
 		{
-			name:           "totalseconds SQL Server",
-			filter:         "totalseconds(CreatedAt) gt 3600",
-			expectedSQL:    "DATEDIFF_BIG(SECOND, '00:00:00', TRY_CONVERT(time, [created_at])) > ?",
+			name:   "totalseconds SQL Server",
+			filter: "totalseconds(CreatedAt) gt 3600",
+			// Edm.Duration is an ISO-8601 string; SQL Server parses it with CHARINDEX/SUBSTRING.
+			expectedSQL:    "CASE WHEN [created_at] IS NULL THEN NULL WHEN [created_at] NOT LIKE 'P%' THEN NULL ELSE (CAST(CASE WHEN CHARINDEX('D',[created_at])>0 AND (CHARINDEX('T',[created_at])=0 OR CHARINDEX('D',[created_at])<CHARINDEX('T',[created_at])) THEN SUBSTRING([created_at],2,CHARINDEX('D',[created_at])-2) ELSE 0 END AS INT)*86400+CAST(CASE WHEN CHARINDEX('T',[created_at])>0 AND CHARINDEX('H',[created_at])>CHARINDEX('T',[created_at]) THEN SUBSTRING([created_at],CHARINDEX('T',[created_at])+1,CHARINDEX('H',[created_at])-CHARINDEX('T',[created_at])-1) ELSE 0 END AS INT)*3600+CAST(CASE WHEN CHARINDEX('T',[created_at])>0 AND CHARINDEX('M',SUBSTRING([created_at],CHARINDEX('T',[created_at])+1,8000))>0 THEN SUBSTRING([created_at],CASE WHEN CHARINDEX('H',[created_at])>CHARINDEX('T',[created_at]) THEN CHARINDEX('H',[created_at])+1 ELSE CHARINDEX('T',[created_at])+1 END,CHARINDEX('T',[created_at])+CHARINDEX('M',SUBSTRING([created_at],CHARINDEX('T',[created_at])+1,8000))-1-CASE WHEN CHARINDEX('H',[created_at])>CHARINDEX('T',[created_at]) THEN CHARINDEX('H',[created_at]) ELSE CHARINDEX('T',[created_at]) END) ELSE 0 END AS INT)*60+CAST(CASE WHEN CHARINDEX('T',[created_at])>0 AND CHARINDEX('S',[created_at])>CHARINDEX('T',[created_at]) THEN SUBSTRING([created_at],CASE WHEN CHARINDEX('M',SUBSTRING([created_at],CHARINDEX('T',[created_at])+1,8000))>0 THEN CHARINDEX('T',[created_at])+CHARINDEX('M',SUBSTRING([created_at],CHARINDEX('T',[created_at])+1,8000))+1 WHEN CHARINDEX('H',[created_at])>CHARINDEX('T',[created_at]) THEN CHARINDEX('H',[created_at])+1 ELSE CHARINDEX('T',[created_at])+1 END,CHARINDEX('S',[created_at])-CASE WHEN CHARINDEX('M',SUBSTRING([created_at],CHARINDEX('T',[created_at])+1,8000))>0 THEN CHARINDEX('T',[created_at])+CHARINDEX('M',SUBSTRING([created_at],CHARINDEX('T',[created_at])+1,8000)) WHEN CHARINDEX('H',[created_at])>CHARINDEX('T',[created_at]) THEN CHARINDEX('H',[created_at]) ELSE CHARINDEX('T',[created_at]) END-1) ELSE 0 END AS FLOAT)) END > ?",
 			expectedArgsNo: 1,
 		},
 	}
