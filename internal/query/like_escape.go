@@ -89,6 +89,20 @@ func regexToLikePattern(pattern string) string {
 			escaped = true
 		case '^', '$':
 			// Anchors are implicit in LIKE semantics.
+		case '[':
+			// Preserve SQL Server character classes, e.g. [A-Z].
+			j := i + 1
+			for j < len(pattern) && pattern[j] != ']' {
+				j++
+			}
+			if j < len(pattern) && pattern[j] == ']' {
+				b.WriteString(pattern[i : j+1])
+				i = j
+				sawWildcard = true
+				continue
+			}
+			// Unclosed class: treat '[' literally.
+			b.WriteByte('[')
 		case '.':
 			if i+1 < len(pattern) && pattern[i+1] == '*' {
 				b.WriteByte('%')
@@ -98,7 +112,7 @@ func regexToLikePattern(pattern string) string {
 				b.WriteByte('_')
 				sawWildcard = true
 			}
-		case '*', '+', '?', '|', '(', ')', '[', ']', '{', '}':
+		case '*', '+', '?', '|', '(', ')', ']', '{', '}':
 			// Unsupported regex operators are dropped from the approximation.
 			sawWildcard = true
 		default:
