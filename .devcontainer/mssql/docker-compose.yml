@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  app:
+    image: mcr.microsoft.com/devcontainers/go:1.25
+    volumes:
+      - ../..:/workspaces/go-odata:cached
+    command: sleep infinity
+    network_mode: service:db
+    environment:
+      # SQL Server connection environment variables
+      MSSQL_HOST: localhost
+      MSSQL_PORT: 1433
+      MSSQL_USER: sa
+      MSSQL_PASSWORD: StrongPassw0rd!
+      MSSQL_DATABASE: odata_test
+      # Also set MSSQL_DSN for easy connection
+      MSSQL_DSN: "sqlserver://sa:StrongPassw0rd!@localhost:1433?database=odata_test&encrypt=disable"
+
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    restart: unless-stopped
+    environment:
+      ACCEPT_EULA: Y
+      MSSQL_SA_PASSWORD: "StrongPassw0rd!"
+    ports:
+      - "1433:1433"
