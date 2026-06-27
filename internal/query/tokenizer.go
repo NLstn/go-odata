@@ -29,6 +29,7 @@ const (
 	TokenTime
 	TokenDateTime
 	TokenGUID
+	TokenEnumValue // OData enum value literal: Namespace.TypeName'MemberName'
 )
 
 // Token represents a single token in the filter expression
@@ -678,6 +679,16 @@ func (t *Tokenizer) tokenizeIdentifierOrKeyword(pos int) *Token {
 	}
 
 	value := t.readIdentifier()
+
+	// OData enum value literal: Namespace.TypeName'MemberName' (OData v4 §4.3)
+	// Qualified enum type names always contain a dot (e.g. "MyService.Status"),
+	// so we only merge identifier+'quoted' when the identifier has a dot.
+	// This avoids colliding with OData typed-literal prefixes like duration'P1D'
+	// or binary'...' which are plain keywords without dots.
+	if t.ch == '\'' && strings.ContainsRune(value, '.') {
+		memberName := t.readString()
+		return t.getToken(TokenEnumValue, value+"'"+memberName+"'", pos)
+	}
 
 	// Check for arithmetic functions: add, sub, mul, div, mod can be either
 	// functions (when followed by '(') or infix operators

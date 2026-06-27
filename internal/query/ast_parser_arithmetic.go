@@ -175,6 +175,12 @@ func (p *ASTParser) parseLiteral(token *Token) ASTNode {
 		expr.Value = token.Value
 		expr.Type = "guid"
 		return expr
+	case TokenEnumValue:
+		p.advance()
+		expr := AcquireLiteralExpr()
+		expr.Value = token.Value // full literal, e.g. "Namespace.TypeName'MemberName'"
+		expr.Type = "enum"
+		return expr
 	default:
 		return nil
 	}

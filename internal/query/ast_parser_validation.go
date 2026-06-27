@@ -3,6 +3,7 @@ package query
 import (
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/nlstn/go-odata/internal/metadata"
 )
@@ -309,6 +310,15 @@ func convertComparisonExprWithContext(n *ComparisonExpr, ctx *conversionContext)
 		return nil, err
 	}
 
+	// Resolve enum value literals (e.g. Namespace.TypeName'MemberName') to their numeric value
+	if enumLit, ok := n.Right.(*LiteralExpr); ok && enumLit.Type == "enum" {
+		resolved, err := resolveEnumMemberName(enumLit.Value.(string), property, entityMetadata)
+		if err != nil {
+			return nil, err
+		}
+		value = resolved
+	}
+
 	// Validate numeric value against numeric property
 	// Check for Int64 overflow
 	// Per OData v4 spec, numeric literals that overflow the target integer type should be rejected
@@ -323,6 +333,34 @@ func convertComparisonExprWithContext(n *ComparisonExpr, ctx *conversionContext)
 	expr.Operator = FilterOperator(n.Operator)
 	expr.Value = value
 	return expr, nil
+}
+
+// resolveEnumMemberName resolves an OData enum value literal such as
+// "Namespace.TypeName'MemberName'" to the int64 value of the named member
+// by looking it up in the property's registered enum members.
+func resolveEnumMemberName(enumLiteral string, property string, entityMetadata *metadata.EntityMetadata) (int64, error) {
+	start := strings.Index(enumLiteral, "'")
+	if start < 0 || !strings.HasSuffix(enumLiteral, "'") {
+		return 0, fmt.Errorf("invalid enum value literal: %s", enumLiteral)
+	}
+	memberName := enumLiteral[start+1 : len(enumLiteral)-1]
+
+	if entityMetadata == nil {
+		return 0, fmt.Errorf("cannot resolve enum member %q: no entity metadata available", memberName)
+	}
+
+	prop := entityMetadata.FindProperty(property)
+	if prop == nil {
+		return 0, fmt.Errorf("property %q not found in entity metadata", property)
+	}
+
+	for _, member := range prop.EnumMembers {
+		if strings.EqualFold(member.Name, memberName) {
+			return member.Value, nil
+		}
+	}
+
+	return 0, fmt.Errorf("enum member %q not found for property %q", memberName, property)
 }
 
 // validateValueAgainstPropertyType validates that a filter value is appropriate for the target property type.
