@@ -429,6 +429,128 @@ func TestSelectWildcard(t *testing.T) {
 	})
 }
 
+// selectTestStatus is a flags enum used to test enum-to-string serialization in $select.
+type selectTestStatus int32
+
+const (
+	selectTestStatusNone     selectTestStatus = 0
+	selectTestStatusActive   selectTestStatus = 1
+	selectTestStatusPremium  selectTestStatus = 2
+	selectTestStatusArchived selectTestStatus = 4
+)
+
+func (selectTestStatus) EnumMembers() map[string]int {
+	return map[string]int{
+		"None":     int(selectTestStatusNone),
+		"Active":   int(selectTestStatusActive),
+		"Premium":  int(selectTestStatusPremium),
+		"Archived": int(selectTestStatusArchived),
+	}
+}
+
+type selectTestProductWithEnum struct {
+	ID     int              `json:"ID" odata:"key"`
+	Name   string           `json:"name"`
+	Status selectTestStatus `json:"status" odata:"enum=selectTestStatus,flags"`
+}
+
+func getSelectTestEnumMetadata(t *testing.T) *metadata.EntityMetadata {
+	t.Helper()
+	meta, err := metadata.AnalyzeEntity(selectTestProductWithEnum{})
+	if err != nil {
+		t.Fatalf("AnalyzeEntity returned error: %v", err)
+	}
+	return meta
+}
+
+// TestApplySelectEnumSerialization verifies that enum fields are converted to their OData
+// string representation when $select is used (issue #738).
+func TestApplySelectEnumSerialization(t *testing.T) {
+	meta := getSelectTestEnumMetadata(t)
+
+	products := []selectTestProductWithEnum{
+		{ID: 1, Name: "Alpha", Status: selectTestStatusActive | selectTestStatusPremium}, // 3 → "Active,Premium"
+		{ID: 2, Name: "Beta", Status: selectTestStatusArchived},                          // 4 → "Archived"
+		{ID: 3, Name: "Gamma", Status: selectTestStatusNone},                             // 0 → "None"
+	}
+
+	t.Run("ApplySelect serializes enum field as string", func(t *testing.T) {
+		result := ApplySelect(products, []string{"name", "status"}, meta, []ExpandOption{})
+		maps, ok := result.([]map[string]interface{})
+		if !ok {
+			t.Fatalf("expected []map[string]interface{}, got %T", result)
+		}
+		if len(maps) != 3 {
+			t.Fatalf("expected 3 results, got %d", len(maps))
+		}
+
+		cases := []struct {
+			idx        int
+			wantName   string
+			wantStatus string
+		}{
+			{0, "Alpha", "Active,Premium"},
+			{1, "Beta", "Archived"},
+			{2, "Gamma", "None"},
+		}
+
+		for _, tc := range cases {
+			row := maps[tc.idx]
+			gotStatus, exists := row["status"]
+			if !exists {
+				t.Errorf("row %d: expected 'status' key", tc.idx)
+				continue
+			}
+			statusStr, isString := gotStatus.(string)
+			if !isString {
+				t.Errorf("row %d: expected status to be string, got %T (%v)", tc.idx, gotStatus, gotStatus)
+				continue
+			}
+			if statusStr != tc.wantStatus {
+				t.Errorf("row %d: expected status %q, got %q", tc.idx, tc.wantStatus, statusStr)
+			}
+			gotName, exists := row["name"]
+			if !exists {
+				t.Errorf("row %d: expected 'name' key", tc.idx)
+				continue
+			}
+			if gotName != tc.wantName {
+				t.Errorf("row %d: expected name %q, got %v", tc.idx, tc.wantName, gotName)
+			}
+		}
+	})
+
+	t.Run("ApplySelectToEntity serializes enum field as string", func(t *testing.T) {
+		p := selectTestProductWithEnum{ID: 1, Name: "Alpha", Status: selectTestStatusActive | selectTestStatusPremium}
+		result := ApplySelectToEntity(&p, []string{"name", "status"}, meta, []ExpandOption{})
+		resultMap, ok := result.(map[string]interface{})
+		if !ok {
+			t.Fatalf("expected map[string]interface{}, got %T", result)
+		}
+
+		gotStatus, exists := resultMap["status"]
+		if !exists {
+			t.Fatal("expected 'status' key in result")
+		}
+		statusStr, isString := gotStatus.(string)
+		if !isString {
+			t.Fatalf("expected status to be string, got %T (%v)", gotStatus, gotStatus)
+		}
+		if statusStr != "Active,Premium" {
+			t.Errorf("expected status %q, got %q", "Active,Premium", statusStr)
+		}
+	})
+
+	t.Run("ApplySelect without $select does not alter enum field type", func(t *testing.T) {
+		// Without $select, results should be returned unchanged (as the original struct slice).
+		result := ApplySelect(products, []string{}, meta, []ExpandOption{})
+		_, ok := result.([]selectTestProductWithEnum)
+		if !ok {
+			t.Fatalf("expected []selectTestProductWithEnum unchanged, got %T", result)
+		}
+	})
+}
+
 // TestParseSelectWildcard tests that $select=* parses without validation errors
 func TestParseSelectWildcard(t *testing.T) {
 	meta := getSelectTestMetadata(t)
