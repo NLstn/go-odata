@@ -847,6 +847,23 @@ func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{
 		}
 	}
 
+	// Add named stream property annotations per OData spec §8.8
+	if metadataLevel != "none" && entityID != "" && h.metadata != nil {
+		for _, streamProp := range h.metadata.StreamProperties {
+			readLink := entityID + "/" + streamProp.JsonName + "/$value"
+			odataResponse.Set(streamProp.JsonName+"@odata.mediaReadLink", readLink)
+
+			if streamProp.StreamContentTypeField != "" {
+				ctField := resultValue.FieldByName(streamProp.StreamContentTypeField)
+				if ctField.IsValid() && ctField.Kind() == reflect.String {
+					if ct := ctField.String(); ct != "" {
+						odataResponse.Set(streamProp.JsonName+"@odata.mediaContentType", ct)
+					}
+				}
+			}
+		}
+	}
+
 	// For minimal metadata, check if all key fields are present in struct
 	if metadataLevel == "minimal" {
 		if tempID, exists := odataResponse.ToMap()["__temp_entity_id"]; exists {
