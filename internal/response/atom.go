@@ -321,8 +321,11 @@ func extractAtomStructProperties(data interface{}) []atomDataProp {
 
 // isAtomControlKey returns true for OData control information keys that
 // should not appear as data properties in Atom responses.
+// This includes entity-level control info (@odata.*), temporary internal keys,
+// and property-level annotations (e.g. Photo@odata.mediaReadLink) which contain
+// "@" and cannot be used as XML element names.
 func isAtomControlKey(key string) bool {
-	return strings.HasPrefix(key, "@") || strings.HasPrefix(key, "__temp_")
+	return strings.Contains(key, "@") || strings.HasPrefix(key, "__temp_")
 }
 
 // extractAtomEntityID builds the full entity ID URL for an Atom entry.
