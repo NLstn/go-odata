@@ -415,6 +415,45 @@ func TestHandleSingleton_RemoveODataAnnotations(t *testing.T) {
 	}
 }
 
+func TestHandleSingleton_Get_Select(t *testing.T) {
+	handler, db := setupSingletonHandler(t)
+
+	settings := SingletonTestSettings{
+		ID:          1,
+		Theme:       "dark",
+		Language:    "en",
+		MaxPageSize: 50,
+		Version:     1,
+	}
+	if err := db.Create(&settings).Error; err != nil {
+		t.Fatalf("Failed to create test data: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/Settings?$select=Theme", nil)
+	w := httptest.NewRecorder()
+
+	handler.HandleSingleton(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var response map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	if _, ok := response["Theme"]; !ok {
+		t.Error("Expected selected property Theme in response")
+	}
+	if _, ok := response["Language"]; ok {
+		t.Error("Expected Language to be absent from $select response")
+	}
+	if _, ok := response["MaxPageSize"]; ok {
+		t.Error("Expected MaxPageSize to be absent from $select response")
+	}
+}
+
 func TestHandleSingleton_DisabledMethod(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
