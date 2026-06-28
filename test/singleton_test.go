@@ -463,6 +463,41 @@ func TestSingletonOptions(t *testing.T) {
 	}
 }
 
+// TestSingletonSelect tests that $select filters properties for singleton entities (issue #747)
+func TestSingletonSelect(t *testing.T) {
+	_, service := setupSingletonTestDB(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/Company?$select=Name,CEO", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+
+	// Selected properties must be present
+	if _, ok := response["Name"]; !ok {
+		t.Error("Expected Name in $select response")
+	}
+	if _, ok := response["CEO"]; !ok {
+		t.Error("Expected CEO in $select response")
+	}
+
+	// Non-selected properties must be absent
+	if _, ok := response["Founded"]; ok {
+		t.Error("Founded should be absent when not in $select")
+	}
+	if _, ok := response["HeadQuarter"]; ok {
+		t.Error("HeadQuarter should be absent when not in $select")
+	}
+}
+
 // TestSingletonHead tests HEAD request
 func TestSingletonHead(t *testing.T) {
 	_, service := setupSingletonTestDB(t)

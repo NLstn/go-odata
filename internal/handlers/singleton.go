@@ -10,6 +10,7 @@ import (
 	"github.com/nlstn/go-odata/internal/auth"
 	"github.com/nlstn/go-odata/internal/etag"
 	"github.com/nlstn/go-odata/internal/preference"
+	"github.com/nlstn/go-odata/internal/query"
 	"github.com/nlstn/go-odata/internal/response"
 )
 
@@ -61,6 +62,12 @@ func (h *EntityHandler) HandleSingleton(w http.ResponseWriter, r *http.Request) 
 
 // handleGetSingleton handles GET requests for singleton entities
 func (h *EntityHandler) handleGetSingleton(w http.ResponseWriter, r *http.Request) {
+	queryOptions, err := h.parseSingleEntityQueryOptions(r)
+	if err != nil {
+		h.writeRequestError(w, r, err, http.StatusBadRequest, ErrMsgInvalidQueryOptions)
+		return
+	}
+
 	// Create a new instance of the entity
 	entityInstance := reflect.New(h.metadata.EntityType).Interface()
 
@@ -82,8 +89,14 @@ func (h *EntityHandler) handleGetSingleton(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	// Apply $select if specified
+	var result interface{} = entityInstance
+	if len(queryOptions.Select) > 0 {
+		result = query.ApplySelectToEntity(entityInstance, queryOptions.Select, h.metadata, queryOptions.Expand)
+	}
+
 	// Write the singleton entity response
-	h.writeEntityResponseWithETag(w, r, entityInstance, "", http.StatusOK, nil, nil)
+	h.writeEntityResponseWithETag(w, r, result, "", http.StatusOK, queryOptions.Expand, queryOptions.Select)
 }
 
 // handlePatchSingleton handles PATCH requests for singleton entities (partial update)
