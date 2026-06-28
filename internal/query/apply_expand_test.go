@@ -388,3 +388,43 @@ func TestApplyExpand(t *testing.T) {
 		}
 	})
 }
+
+func TestParseExpandRefSuffix(t *testing.T) {
+	meta := getExpandTestMetadata(t)
+
+	t.Run("Category/$ref sets IsRef and strips suffix", func(t *testing.T) {
+		opts, err := parseExpandWithConfig("category/$ref", meta, nil, 0, false)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(opts) != 1 {
+			t.Fatalf("expected 1 expand option, got %d", len(opts))
+		}
+		if opts[0].NavigationProperty != "category" {
+			t.Errorf("NavigationProperty = %q, want %q", opts[0].NavigationProperty, "category")
+		}
+		if !opts[0].IsRef {
+			t.Error("expected IsRef = true")
+		}
+	})
+
+	t.Run("plain category does not set IsRef", func(t *testing.T) {
+		opts, err := parseExpandWithConfig("category", meta, nil, 0, false)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(opts) != 1 {
+			t.Fatalf("expected 1 expand option, got %d", len(opts))
+		}
+		if opts[0].IsRef {
+			t.Error("expected IsRef = false for plain expand")
+		}
+	})
+
+	t.Run("invalid navigation property with /$ref returns error", func(t *testing.T) {
+		_, err := parseExpandWithConfig("nonexistent/$ref", meta, nil, 0, false)
+		if err == nil {
+			t.Fatal("expected error for invalid navigation property, got nil")
+		}
+	})
+}

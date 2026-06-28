@@ -128,6 +128,13 @@ func splitWithDelimiter(input string, delimiter byte) ([]string, error) {
 func parseSingleExpandCoreWithConfig(expandStr string, entityMetadata *metadata.EntityMetadata, validateMetadata bool, config *ParserConfig, currentDepth int, caseInsensitive bool) (ExpandOption, error) {
 	expand := ExpandOption{}
 
+	// Strip the /$ref suffix per OData spec §5.1.3: "Category/$ref" means expand and return
+	// only entity references ({@odata.id}) rather than full entity representations.
+	if strings.HasSuffix(expandStr, "/$ref") {
+		expand.IsRef = true
+		expandStr = strings.TrimSuffix(expandStr, "/$ref")
+	}
+
 	// Check for nested query options: NavigationProp($select=...,...)
 	if idx := strings.Index(expandStr, "("); idx != -1 {
 		if !strings.HasSuffix(expandStr, ")") {

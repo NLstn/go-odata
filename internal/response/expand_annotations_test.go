@@ -1,6 +1,7 @@
 package response
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -230,5 +231,98 @@ func assertExpandedChildren(t *testing.T, value interface{}) {
 	}
 	if len(toys) != 2 {
 		t.Fatalf("expected 2 toys, got %d", len(toys))
+	}
+}
+
+// ---- $expand=Nav/$ref tests ----
+
+type refCategory struct {
+	ID   int    `json:"ID" odata:"key"`
+	Name string `json:"name"`
+}
+
+func TestApplyExpandOptionToValue_IsRef_SingleEntity(t *testing.T) {
+	catMeta := mustAnalyzeEntity(t, refCategory{})
+
+	expandOpt := &query.ExpandOption{IsRef: true}
+	cat := refCategory{ID: 7, Name: "Electronics"}
+
+	result, count := ApplyExpandOptionToValue(cat, expandOpt, catMeta)
+
+	if count != nil {
+		t.Fatalf("expected nil count for IsRef, got %v", *count)
+	}
+
+	ref, ok := result.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected map result, got %T", result)
+	}
+
+	odataID, ok := ref["@odata.id"]
+	if !ok {
+		t.Fatal("expected @odata.id in result")
+	}
+
+	expected := catMeta.EntitySetName + "(7)"
+	if odataID != expected {
+		t.Fatalf("@odata.id = %q, want %q", odataID, expected)
+	}
+
+	if len(ref) != 1 {
+		t.Fatalf("expected exactly 1 key in reference map, got %d: %v", len(ref), ref)
+	}
+}
+
+func TestApplyExpandOptionToValue_IsRef_Collection(t *testing.T) {
+	catMeta := mustAnalyzeEntity(t, refCategory{})
+
+	expandOpt := &query.ExpandOption{IsRef: true}
+	cats := []refCategory{
+		{ID: 1, Name: "Electronics"},
+		{ID: 2, Name: "Books"},
+	}
+
+	result, count := ApplyExpandOptionToValue(cats, expandOpt, catMeta)
+
+	if count != nil {
+		t.Fatalf("expected nil count for IsRef, got %v", *count)
+	}
+
+	refs, ok := result.([]interface{})
+	if !ok {
+		t.Fatalf("expected []interface{} result, got %T", result)
+	}
+
+	if len(refs) != 2 {
+		t.Fatalf("expected 2 references, got %d", len(refs))
+	}
+
+	for i, r := range refs {
+		ref, ok := r.(map[string]interface{})
+		if !ok {
+			t.Fatalf("refs[%d] is %T, want map", i, r)
+		}
+		odataID, ok := ref["@odata.id"].(string)
+		if !ok {
+			t.Fatalf("refs[%d] missing string @odata.id", i)
+		}
+		expectedID := catMeta.EntitySetName + fmt.Sprintf("(%d)", cats[i].ID)
+		if odataID != expectedID {
+			t.Fatalf("refs[%d] @odata.id = %q, want %q", i, odataID, expectedID)
+		}
+	}
+}
+
+func TestApplyExpandOptionToValue_IsRef_Nil(t *testing.T) {
+	catMeta := mustAnalyzeEntity(t, refCategory{})
+
+	expandOpt := &query.ExpandOption{IsRef: true}
+	result, count := ApplyExpandOptionToValue(nil, expandOpt, catMeta)
+
+	if count != nil {
+		t.Fatalf("expected nil count, got %v", *count)
+	}
+	if result != nil {
+		t.Fatalf("expected nil result for nil input, got %v", result)
 	}
 }
