@@ -36,6 +36,7 @@ type EntityHandler interface {
 	IsComplexTypeProperty(string) bool
 	NavigationTargetSet(string) (string, bool)
 	FetchEntity(string) (interface{}, error)
+	FetchNavEntityKey(entityKey, navPropName string) (string, error)
 }
 
 // HandlerResolver resolves an entity handler for the given entity set.
@@ -490,6 +491,39 @@ func (r *Router) handlePropertyRequest(w http.ResponseWriter, req *http.Request,
 
 			r.actionInvoker(w, req, lastOperationName, "", true, targetEntitySet)
 			return
+		}
+
+		// Handle chained navigation properties (e.g. Products(1)/Category/Products).
+		// OData §11.2.4.2: each navigation segment is resolved in turn against its parent entity.
+		if handler.IsNavigationProperty(firstSegment) {
+			targetEntitySet := r.getNavigationTargetEntitySet(handler, firstSegment)
+			targetHandler, targetExists := r.resolveHandler(targetEntitySet)
+			if targetExists {
+				intermediateKey, err := handler.FetchNavEntityKey(keyString, firstSegment)
+				if err != nil {
+					statusCode := http.StatusInternalServerError
+					if handlers.IsNotFoundError(err) {
+						statusCode = http.StatusNotFound
+					}
+					if writeErr := response.WriteError(w, req, statusCode, "Navigation path error",
+						fmt.Sprintf("Could not resolve navigation path: %v", err)); writeErr != nil {
+						r.logger.Error("Error writing error response", "error", writeErr)
+					}
+					return
+				}
+				newComponents := &response.ODataURLComponents{
+					EntitySet:          targetEntitySet,
+					EntityKey:          intermediateKey,
+					EntityKeyMap:       make(map[string]string),
+					NavigationProperty: propertySegments[1],
+					PropertySegments:   propertySegments[1:],
+					PropertyPath:       strings.Join(propertySegments[1:], "/"),
+					IsRef:              components.IsRef,
+					IsCount:            components.IsCount,
+				}
+				r.handlePropertyRequest(w, req, targetHandler, newComponents)
+				return
+			}
 		}
 	}
 
