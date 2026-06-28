@@ -334,7 +334,15 @@ func isValidDurationLiteral(value string) bool {
 // Examples: "PT1H" -> 3600, "P1D" -> 86400, "P1DT2H30M" -> 95400.
 // Returns 0 for empty or invalid strings.
 func parseDurationToSeconds(s string) float64 {
-	if s == "" || !strings.HasPrefix(s, "P") {
+	if s == "" {
+		return 0
+	}
+	neg := false
+	if strings.HasPrefix(s, "-") {
+		neg = true
+		s = s[1:]
+	}
+	if !strings.HasPrefix(s, "P") {
 		return 0
 	}
 
@@ -379,7 +387,11 @@ func parseDurationToSeconds(s string) float64 {
 		}
 	}
 
-	return days*86400 + hours*3600 + minutes*60 + secs
+	result := days*86400 + hours*3600 + minutes*60 + secs
+	if neg {
+		return -result
+	}
+	return result
 }
 
 // parsePropertyPath parses a property path with slashes (e.g., Orders/Items/any)
