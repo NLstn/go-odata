@@ -347,6 +347,18 @@ func (h *BatchHandler) processChangeset(r io.Reader, boundary string, remainingC
 
 		req.ContentID = contentID
 
+		// Per OData v4 spec §11.4.9.2, only modification requests (POST, PUT, PATCH, DELETE)
+		// are allowed inside a changeset. Reject GET and any other retrieval methods.
+		if req.Method != http.MethodPost && req.Method != http.MethodPut &&
+			req.Method != http.MethodPatch && req.Method != http.MethodDelete {
+			hasError = true
+			errResp := h.createErrorResponse(http.StatusBadRequest,
+				fmt.Sprintf("method %s is not allowed in a changeset; only POST, PUT, PATCH, and DELETE are permitted (OData v4 §11.4.9.2)", req.Method))
+			errResp.ContentID = contentID
+			responses = append(responses, errResp)
+			break
+		}
+
 		// Resolve any $<contentID> URL reference before dispatching the request.
 		// Per OData v4 spec §11.4.9.3, a request may use "$<contentID>" as a prefix in
 		// its URL to refer to the entity created by the earlier request with that Content-ID.

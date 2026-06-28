@@ -1904,3 +1904,47 @@ func TestJSONBatch_IDEchoedInResponse(t *testing.T) {
 		t.Errorf("Expected echoed id=uniqueID-123, got %v", r0["id"])
 	}
 }
+
+func TestBatchHandler_GetInChangesetRejected(t *testing.T) {
+	handler, db, _ := setupBatchTestHandler(t)
+
+	// Insert a product so the GET would succeed if it weren't rejected.
+	db.Create(&BatchTestProduct{ID: 1, Name: "Existing", Price: 5.00, Category: "Test"})
+
+	batchBoundary := "batch_outer"
+	changesetBoundary := "changeset_1"
+	body := fmt.Sprintf(`--%s
+Content-Type: multipart/mixed; boundary=%s
+
+--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+GET /BatchTestProducts(1) HTTP/1.1
+Accept: application/json
+
+
+--%s--
+
+--%s--
+`, batchBoundary, changesetBoundary, changesetBoundary, changesetBoundary, batchBoundary)
+
+	req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+	req.Header.Set("Content-Type", fmt.Sprintf("multipart/mixed; boundary=%s", batchBoundary))
+	w := httptest.NewRecorder()
+
+	handler.HandleBatch(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Outer batch status = %v, want %v", w.Code, http.StatusOK)
+	}
+
+	// The inner response for the GET inside a changeset must be 400.
+	body2 := w.Body.String()
+	if !strings.Contains(body2, "400") {
+		t.Errorf("Expected inner 400 response for GET inside changeset, got body: %s", body2)
+	}
+	if !strings.Contains(body2, "not allowed in a changeset") {
+		t.Errorf("Expected rejection message, got body: %s", body2)
+	}
+}
