@@ -1481,6 +1481,30 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 		return fmt.Sprintf("ROUND(%s)", columnName), nil
 	case OpCast:
 		if typeName, ok := value.(string); ok {
+			switch typeName {
+			case "Edm.Date":
+				switch dialect {
+				case "postgres", "postgresql":
+					return fmt.Sprintf("CAST(%s AS DATE)", columnName), nil
+				case "mysql", "mariadb":
+					return fmt.Sprintf("DATE(%s)", columnName), nil
+				case "sqlserver", "mssql":
+					return fmt.Sprintf("CAST(TRY_CONVERT(date, %s) AS DATE)", columnName), nil
+				default: // sqlite
+					return fmt.Sprintf("date(%s)", columnName), nil
+				}
+			case "Edm.TimeOfDay":
+				switch dialect {
+				case "postgres", "postgresql":
+					return fmt.Sprintf("CAST(%s AS TIME)", columnName), nil
+				case "mysql", "mariadb":
+					return fmt.Sprintf("TIME(%s)", columnName), nil
+				case "sqlserver", "mssql":
+					return fmt.Sprintf("CAST(TRY_CONVERT(time, %s) AS TIME)", columnName), nil
+				default: // sqlite
+					return fmt.Sprintf("time(%s)", columnName), nil
+				}
+			}
 			sqlType := edmTypeToSQLType(dialect, typeName)
 			return fmt.Sprintf("CAST(%s AS %s)", columnName, sqlType), nil
 		}
