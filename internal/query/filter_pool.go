@@ -40,6 +40,7 @@ func (f *FilterExpression) reset() {
 	f.Property = ""
 	f.Operator = ""
 	f.Value = nil
+	f.ValueType = ""
 	f.Left = nil
 	f.Right = nil
 	f.Logical = ""

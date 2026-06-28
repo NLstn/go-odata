@@ -328,6 +328,60 @@ func isValidDurationLiteral(value string) bool {
 	return strings.HasSuffix(body, "D")
 }
 
+// parseDurationToSeconds converts an ISO-8601 duration string (as used for Edm.Duration)
+// to its equivalent total number of seconds as a float64.
+// Handles days, hours, minutes, and seconds components.
+// Examples: "PT1H" -> 3600, "P1D" -> 86400, "P1DT2H30M" -> 95400.
+// Returns 0 for empty or invalid strings.
+func parseDurationToSeconds(s string) float64 {
+	if s == "" || !strings.HasPrefix(s, "P") {
+		return 0
+	}
+
+	body := s[1:] // strip leading 'P'
+	var days, hours, minutes float64
+	var secs float64
+
+	tIdx := strings.IndexByte(body, 'T')
+	datePart := body
+	timePart := ""
+	if tIdx >= 0 {
+		datePart = body[:tIdx]
+		timePart = body[tIdx+1:]
+	}
+
+	// Parse date part: only 'D' (days) is supported in Edm.Duration
+	if dIdx := strings.IndexByte(datePart, 'D'); dIdx >= 0 {
+		if v, err := strconv.ParseFloat(datePart[:dIdx], 64); err == nil {
+			days = v
+		}
+	}
+
+	// Parse time part: H, M, S
+	if timePart != "" {
+		rem := timePart
+		if hIdx := strings.IndexByte(rem, 'H'); hIdx >= 0 {
+			if v, err := strconv.ParseFloat(rem[:hIdx], 64); err == nil {
+				hours = v
+			}
+			rem = rem[hIdx+1:]
+		}
+		if mIdx := strings.IndexByte(rem, 'M'); mIdx >= 0 {
+			if v, err := strconv.ParseFloat(rem[:mIdx], 64); err == nil {
+				minutes = v
+			}
+			rem = rem[mIdx+1:]
+		}
+		if sIdx := strings.IndexByte(rem, 'S'); sIdx >= 0 {
+			if v, err := strconv.ParseFloat(rem[:sIdx], 64); err == nil {
+				secs = v
+			}
+		}
+	}
+
+	return days*86400 + hours*3600 + minutes*60 + secs
+}
+
 // parsePropertyPath parses a property path with slashes (e.g., Orders/Items/any)
 func (p *ASTParser) parsePropertyPath(initialProp string) (ASTNode, error) {
 	path := initialProp

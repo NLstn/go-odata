@@ -1127,3 +1127,139 @@ func TestTotalSecondsISO8601SQLite(t *testing.T) {
 
 	}
 }
+
+// TestDurationDirectComparisonSQL verifies that a direct duration literal comparison
+// (e.g. $filter=ShippingTime gt duration'PT1H') generates seconds-based SQL
+// rather than a raw string comparison (issue #736).
+func TestDurationDirectComparisonSQL(t *testing.T) {
+	type DurationRow struct {
+		ID           int    `gorm:"primaryKey"`
+		ShippingTime string `gorm:"column:shipping_time"`
+	}
+
+	meta, err := metadata.AnalyzeEntity(DurationRow{})
+	if err != nil {
+		t.Fatalf("analyze: %v", err)
+	}
+
+	tests := []struct {
+		filter   string
+		wantSecs float64
+		wantOp   string
+	}{
+		{"ShippingTime gt duration'PT1H'", 3600, ">"},
+		{"ShippingTime ge duration'P1D'", 86400, ">="},
+		{"ShippingTime lt duration'P1DT2H30M'", 95400, "<"},
+		{"ShippingTime eq duration'PT2H'", 7200, "="},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.filter, func(t *testing.T) {
+			filterExpr, err := parseFilter(tt.filter, meta, nil, 0)
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			if filterExpr.ValueType != "duration" {
+				t.Errorf("expected ValueType=duration, got %q", filterExpr.ValueType)
+			}
+			sql, args := buildFilterCondition("sqlite", filterExpr, meta)
+			if len(args) != 1 {
+				t.Fatalf("expected 1 bind arg, got %d; sql=%s", len(args), sql)
+			}
+			secs, ok := args[0].(float64)
+			if !ok {
+				t.Fatalf("expected float64 arg, got %T %v", args[0], args[0])
+			}
+			if secs != tt.wantSecs {
+				t.Errorf("expected %v seconds, got %v", tt.wantSecs, secs)
+			}
+			// Verify the SQL contains the comparison operator (not a raw string quote)
+			if !containsString(sql, tt.wantOp+" ?") {
+				t.Errorf("expected SQL to contain %q; got: %s", tt.wantOp+" ?", sql)
+			}
+			// The SQL must NOT contain a raw string literal like 'PT1H'
+			if containsString(sql, "'PT") || containsString(sql, "'P1") || containsString(sql, "'P2") {
+				t.Errorf("SQL contains raw duration string literal (string comparison bug): %s", sql)
+			}
+		})
+	}
+}
+
+// TestDurationDirectComparisonE2E verifies that direct duration literal filter
+// (e.g. $filter=ShippingTime gt duration'PT1H') returns the correct rows from SQLite.
+// This is the regression test for issue #736.
+func TestDurationDirectComparisonE2E(t *testing.T) {
+	type DurationRow struct {
+		ID           int    `gorm:"primaryKey"`
+		ShippingTime string `gorm:"column:shipping_time"`
+	}
+
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	if err := db.AutoMigrate(&DurationRow{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	rows := []DurationRow{
+		{ID: 1, ShippingTime: "P1D"},       // 86400 s
+		{ID: 2, ShippingTime: "PT2H"},      // 7200 s
+		{ID: 3, ShippingTime: "P2D"},       // 172800 s
+		{ID: 4, ShippingTime: "P1DT2H30M"}, // 95400 s
+		{ID: 5, ShippingTime: ""},          // empty — should be excluded
+	}
+	if err := db.Create(&rows).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	meta, err := metadata.AnalyzeEntity(DurationRow{})
+	if err != nil {
+		t.Fatalf("analyze: %v", err)
+	}
+
+	tests := []struct {
+		filter        string
+		expectedCount int
+		desc          string
+	}{
+		// These cases fail without the fix because lexicographic comparison gives
+		// wrong results: "P1D" < "PT1H" (string), but 86400 > 3600 (numeric).
+		{"ShippingTime gt duration'PT1H'", 4, "P1D,PT2H,P2D,P1DT2H30M are all > 1 hour"},
+		{"ShippingTime ge duration'P1D'", 3, "P1D,P2D,P1DT2H30M are >= 1 day"},
+		{"ShippingTime lt duration'PT3H'", 1, "only PT2H is < 3 hours"},
+		{"ShippingTime eq duration'PT2H'", 1, "only PT2H equals 2 hours"},
+		{"ShippingTime ne duration'PT2H'", 3, "P1D, P2D, P1DT2H30M are != 2 hours (empty excluded)"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.filter, func(t *testing.T) {
+			filterExpr, err := parseFilter(tt.filter, meta, nil, 0)
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			var count int64
+			if err := db.Model(&DurationRow{}).Scopes(func(d *gorm.DB) *gorm.DB {
+				return ApplyFilterOnly(d, filterExpr, meta, nil)
+			}).Count(&count).Error; err != nil {
+				t.Fatalf("query: %v", err)
+			}
+			if int(count) != tt.expectedCount {
+				t.Errorf("%s: expected %d rows, got %d", tt.desc, tt.expectedCount, count)
+			}
+		})
+	}
+}
+
+// containsString is a helper used by the duration comparison SQL tests.
+func containsString(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
+		func() bool {
+			for i := 0; i <= len(s)-len(substr); i++ {
+				if s[i:i+len(substr)] == substr {
+					return true
+				}
+			}
+			return false
+		}())
+}
