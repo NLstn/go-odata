@@ -52,6 +52,11 @@ func extractJsonFieldName(field reflect.StructField) string {
 		return field.Name
 	}
 
+	// json:"-" (without trailing comma) means "exclude this field from JSON"
+	if jsonTag == "-" {
+		return ""
+	}
+
 	// Fast path: check for comma (most common case)
 	if idx := strings.IndexByte(jsonTag, ','); idx != -1 {
 		if idx > 0 {

@@ -50,7 +50,7 @@ func TestExtractJsonFieldName(t *testing.T) {
 				Name: "FieldName",
 				Tag:  `json:"-"`,
 			},
-			expected: "-",
+			expected: "", // json:"-" means exclude from JSON; return empty string as exclusion signal
 		},
 		{
 			name: "JSON tag with comma only",

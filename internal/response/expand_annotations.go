@@ -126,6 +126,9 @@ func applyNestedExpandAnnotationsToStruct(entityVal reflect.Value, expandOptions
 		if !info.IsExported {
 			continue
 		}
+		if info.JsonName == "" {
+			continue
+		}
 
 		field := entityType.Field(i)
 		fieldVal := entityVal.Field(i)
