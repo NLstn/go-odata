@@ -254,6 +254,12 @@ func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataPro
 			expandOpt := query.FindExpandOption(expandOptions, propMeta.Name, propMeta.JsonName)
 			processNavigationPropertyOrderedWithMetadata(entityMap, entity, propMeta, fieldValue, info.JsonName, expandOpt, selectedNavProps, baseURL, entitySetName, metadata, metadataLevel, keySegment, fullMetadata)
 		} else {
+			// Skip stream properties — they are emitted as annotations below, not as inline values
+			if fullPropMetaByName != nil {
+				if fullProp := fullPropMetaByName[info.Name]; fullProp != nil && fullProp.IsStream {
+					continue
+				}
+			}
 			// Add property-level annotations first (for full metadata)
 			if metadataLevel == "full" && fullPropMetaByName != nil {
 				// O(1) lookup using pre-built map
@@ -272,6 +278,24 @@ func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataPro
 			// Then add the property value
 			fieldValue := entity.Field(j)
 			entityMap.Set(info.JsonName, enumOrRaw(fieldValue, fullPropMetaByName, info.Name))
+		}
+	}
+
+	// Add named stream property annotations per OData spec §8.8
+	if fullMetadata != nil && metadataLevel != "none" && keySegment != "" {
+		for _, streamProp := range fullMetadata.StreamProperties {
+			entityURL := baseURL + "/" + entitySetName + "(" + keySegment + ")"
+			readLink := entityURL + "/" + streamProp.JsonName + "/$value"
+			entityMap.Set(streamProp.JsonName+"@odata.mediaReadLink", readLink)
+
+			if streamProp.StreamContentTypeField != "" {
+				ctField := entity.FieldByName(streamProp.StreamContentTypeField)
+				if ctField.IsValid() && ctField.Kind() == reflect.String {
+					if ct := ctField.String(); ct != "" {
+						entityMap.Set(streamProp.JsonName+"@odata.mediaContentType", ct)
+					}
+				}
+			}
 		}
 	}
 
