@@ -132,6 +132,10 @@ func (h *mockEntityHandler) FetchEntity(_ string) (interface{}, error) {
 	return nil, nil
 }
 
+func (h *mockEntityHandler) FetchNavEntityKey(_ string, _ string) (string, error) {
+	return "", nil
+}
+
 func newRuntimeService(recorder *pathRecorder) *Service {
 	handler := &mockEntityHandler{record: recorder.record}
 	resolver := func(name string) (servrouter.EntityHandler, bool) {

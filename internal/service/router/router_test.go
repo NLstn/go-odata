@@ -31,13 +31,14 @@ func newTestAsyncManager(t *testing.T) *async.Manager {
 }
 
 type stubEntityHandler struct {
-	isSingleton       bool
-	navigationProps   map[string]bool
-	navigationTargets map[string]string
-	streamProps       map[string]bool
-	structuralProps   map[string]bool
-	complexProps      map[string]bool
-	calls             []string
+	isSingleton         bool
+	navigationProps     map[string]bool
+	navigationTargets   map[string]string
+	streamProps         map[string]bool
+	structuralProps     map[string]bool
+	complexProps        map[string]bool
+	calls               []string
+	fetchNavEntityKeyFn func(entityKey, navPropName string) (string, error)
 }
 
 func newStubEntityHandler() *stubEntityHandler {
@@ -122,6 +123,13 @@ func (h *stubEntityHandler) IsComplexTypeProperty(name string) bool {
 
 func (h *stubEntityHandler) FetchEntity(string) (interface{}, error) { return nil, nil }
 
+func (h *stubEntityHandler) FetchNavEntityKey(entityKey, navPropName string) (string, error) {
+	if h.fetchNavEntityKeyFn != nil {
+		return h.fetchNavEntityKeyFn(entityKey, navPropName)
+	}
+	return "", nil
+}
+
 func (h *stubEntityHandler) NavigationTargetSet(name string) (string, bool) {
 	if target, ok := h.navigationTargets[name]; ok {
 		return target, true
@@ -137,6 +145,28 @@ func boolToString(v bool) string {
 		return "true"
 	}
 	return "false"
+}
+
+func newTestRouterMulti(handlers map[string]EntityHandler, actionDefs map[string][]*actions.ActionDefinition, functionDefs map[string][]*actions.FunctionDefinition, invoker ActionInvoker) *Router {
+	if actionDefs == nil {
+		actionDefs = make(map[string][]*actions.ActionDefinition)
+	}
+	if functionDefs == nil {
+		functionDefs = make(map[string][]*actions.FunctionDefinition)
+	}
+	return NewRouter(
+		func(name string) (EntityHandler, bool) {
+			h, ok := handlers[name]
+			return h, ok
+		},
+		func(http.ResponseWriter, *http.Request) {},
+		func(http.ResponseWriter, *http.Request) {},
+		func(http.ResponseWriter, *http.Request) {},
+		actionDefs,
+		functionDefs,
+		invoker,
+		nil,
+	)
 }
 
 func newTestRouter(handler EntityHandler, actionDefs map[string][]*actions.ActionDefinition, functionDefs map[string][]*actions.FunctionDefinition, invoker ActionInvoker) *Router {
@@ -601,5 +631,36 @@ func TestRouter_FunctionCompositionWithRenamedNavigation(t *testing.T) {
 
 	if !invoked {
 		t.Fatalf("expected function composition to use navigation target entity set")
+	}
+}
+
+// TestRouter_ChainedNavigation verifies that a two-level navigation path like
+// GET /Products(1)/Category/Products dispatches to the target entity handler
+// (Categories) using the intermediate entity's key returned by FetchNavEntityKey.
+func TestRouter_ChainedNavigation(t *testing.T) {
+	productsHandler := newStubEntityHandler()
+	productsHandler.navigationProps["Category"] = true
+	productsHandler.navigationTargets["Category"] = "Categories"
+	productsHandler.fetchNavEntityKeyFn = func(_, _ string) (string, error) {
+		return "42", nil // Category with key 42
+	}
+
+	categoriesHandler := newStubEntityHandler()
+	categoriesHandler.navigationProps["Products"] = true
+
+	r := newTestRouterMulti(map[string]EntityHandler{
+		"Products":   productsHandler,
+		"Categories": categoriesHandler,
+	}, nil, nil, func(http.ResponseWriter, *http.Request, string, string, bool, string) {})
+
+	req := httptest.NewRequest(http.MethodGet, "/Products(1)/Category/Products", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if len(productsHandler.calls) != 0 {
+		t.Fatalf("Products handler should not have been called for the final nav, got %v", productsHandler.calls)
+	}
+	if len(categoriesHandler.calls) != 1 || categoriesHandler.calls[0] != "navigation:42:Products:false" {
+		t.Fatalf("expected Categories handler navigation:42:Products:false, got %v", categoriesHandler.calls)
 	}
 }

@@ -540,7 +540,8 @@ func (h *BatchHandler) executeRequestInTransaction(req *batchRequest, tx *gorm.D
 		return strings.Join(parts, ",")
 	}
 
-	handlePropertyRequest := func(w http.ResponseWriter, r *http.Request, handler *EntityHandler,
+	var handlePropertyRequest func(http.ResponseWriter, *http.Request, *EntityHandler, *response.ODataURLComponents, string)
+	handlePropertyRequest = func(w http.ResponseWriter, r *http.Request, handler *EntityHandler,
 		components *response.ODataURLComponents, key string) {
 		property := components.NavigationProperty
 		if property == "" {
@@ -554,6 +555,44 @@ func (h *BatchHandler) executeRequestInTransaction(req *batchRequest, tx *gorm.D
 		if components.IsCount {
 			handler.HandleNavigationPropertyCount(w, r, key, property)
 			return
+		}
+
+		// Handle chained navigation properties (e.g. Products(1)/Category/Products).
+		propertySegments := components.PropertySegments
+		if len(propertySegments) == 0 && property != "" {
+			propertySegments = []string{property}
+		}
+		if len(propertySegments) > 1 && handler.IsNavigationProperty(propertySegments[0]) {
+			targetEntitySet, hasTarget := handler.NavigationTargetSet(propertySegments[0])
+			if hasTarget {
+				targetHandler, targetExists := txHandlers[targetEntitySet]
+				if targetExists {
+					intermediateKey, err := handler.FetchNavEntityKey(key, propertySegments[0])
+					if err != nil {
+						statusCode := http.StatusInternalServerError
+						if IsNotFoundError(err) {
+							statusCode = http.StatusNotFound
+						}
+						if writeErr := response.WriteError(w, r, statusCode, "Navigation path error",
+							fmt.Sprintf("Could not resolve navigation path: %v", err)); writeErr != nil {
+							h.logger.Error("Error writing error response", "error", writeErr)
+						}
+						return
+					}
+					newComponents := &response.ODataURLComponents{
+						EntitySet:          targetEntitySet,
+						EntityKey:          intermediateKey,
+						EntityKeyMap:       make(map[string]string),
+						NavigationProperty: propertySegments[1],
+						PropertySegments:   propertySegments[1:],
+						PropertyPath:       strings.Join(propertySegments[1:], "/"),
+						IsRef:              components.IsRef,
+						IsCount:            components.IsCount,
+					}
+					handlePropertyRequest(w, r, targetHandler, newComponents, intermediateKey)
+					return
+				}
+			}
 		}
 
 		if handler.IsNavigationProperty(property) {

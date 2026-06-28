@@ -718,6 +718,64 @@ func (h *EntityHandler) fetchParentEntityWithNav(entityKey, navPropertyName stri
 	return parent, db.First(parent).Error
 }
 
+// FetchNavEntityKey fetches the key string of the entity pointed to by a single-valued
+// navigation property. Used by the router to resolve chained navigation paths like
+// Products(1)/Category/Products.
+func (h *EntityHandler) FetchNavEntityKey(entityKey, navPropName string) (string, error) {
+	navProp := h.findNavigationProperty(navPropName)
+	if navProp == nil {
+		return "", fmt.Errorf("navigation property '%s' not found", navPropName)
+	}
+	if navProp.NavigationIsArray {
+		return "", fmt.Errorf("navigation property '%s' is a collection; chained navigation requires a single-valued property", navPropName)
+	}
+	targetMetadata, err := h.getTargetMetadata(navProp.NavigationTarget)
+	if err != nil {
+		return "", fmt.Errorf("failed to get target metadata: %w", err)
+	}
+	parent, err := h.fetchParentEntityWithNav(entityKey, navProp.Name)
+	if err != nil {
+		return "", err
+	}
+	navFieldValue := h.extractNavigationField(parent, navProp.Name)
+	if !navFieldValue.IsValid() {
+		return "", fmt.Errorf("could not access navigation property '%s'", navPropName)
+	}
+	navEntity := navFieldValue
+	if navEntity.Kind() == reflect.Ptr {
+		if navEntity.IsNil() {
+			return "", gorm.ErrRecordNotFound
+		}
+		navEntity = navEntity.Elem()
+	}
+	keyValues := response.ExtractEntityKeys(navEntity.Interface(), targetMetadata.KeyProperties)
+	if len(keyValues) == 0 {
+		return "", fmt.Errorf("could not extract key from navigation entity '%s'", navPropName)
+	}
+	if len(targetMetadata.KeyProperties) == 1 {
+		return fmt.Sprint(keyValues[targetMetadata.KeyProperties[0].JsonName]), nil
+	}
+	// Composite key: build "key1=val1,key2='val2'" format (numeric values unquoted, strings quoted)
+	parts := make([]string, 0, len(targetMetadata.KeyProperties))
+	for _, keyProp := range targetMetadata.KeyProperties {
+		v := keyValues[keyProp.JsonName]
+		s := fmt.Sprint(v)
+		isNumeric := true
+		for _, ch := range s {
+			if ch < '0' || ch > '9' {
+				isNumeric = false
+				break
+			}
+		}
+		if isNumeric {
+			parts = append(parts, fmt.Sprintf("%s=%s", keyProp.JsonName, s))
+		} else {
+			parts = append(parts, fmt.Sprintf("%s='%s'", keyProp.JsonName, strings.ReplaceAll(s, "'", "''")))
+		}
+	}
+	return strings.Join(parts, ","), nil
+}
+
 // extractNavigationField extracts the navigation property field value from the parent entity
 func (h *EntityHandler) extractNavigationField(parent interface{}, navPropertyName string) reflect.Value {
 	parentValue := reflect.ValueOf(parent).Elem()
