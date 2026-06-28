@@ -238,11 +238,11 @@ type Product struct {
 	Quantity        QuantityValue    `json:"Quantity" odata:""`
 	Weight          float32          `json:"Weight" odata:""`
 	Data            []byte           `json:"Data,omitempty" odata:"nullable"`
-	ReleaseDate     string           `json:"ReleaseDate,omitempty" odata:""`
-	OpenTime        string           `json:"OpenTime,omitempty" odata:""`
-	ShippingTime    string           `json:"ShippingTime,omitempty" odata:""`
-	ProcessingTime  string           `json:"ProcessingTime,omitempty" odata:""`
-	Offset          string           `json:"Offset,omitempty" odata:""`
+	ReleaseDate     *string          `json:"ReleaseDate,omitempty" odata:"nullable"`
+	OpenTime        *string          `json:"OpenTime,omitempty" odata:"nullable"`
+	ShippingTime    *string          `json:"ShippingTime,omitempty" odata:"nullable"`
+	ProcessingTime  *string          `json:"ProcessingTime,omitempty" odata:"nullable"`
+	Offset          *string          `json:"Offset,omitempty" odata:"nullable"`
 	CategoryID      *uuid.UUID       `json:"CategoryID" gorm:"type:char(36)" odata:"nullable"` // Foreign key for Category navigation property
 	Status          ProductStatus    `json:"Status" gorm:"not null" odata:"enum=ProductStatus,flags"`
 	Version         int              `json:"Version" gorm:"default:1" odata:"etag"` // Version field used for optimistic concurrency control via ETag
@@ -312,11 +312,11 @@ func GetSampleProducts() []Product {
 			Quantity:        1200,
 			Weight:          3.14,
 			Data:            []byte("test"),
-			ReleaseDate:     "2024-01-15",
-			OpenTime:        "09:30:00",
-			ShippingTime:    "P1D",
-			ProcessingTime:  "PT45S",
-			Offset:          "P0D",
+			ReleaseDate:     stringPtr("2024-01-15"),
+			OpenTime:        stringPtr("09:30:00"),
+			ShippingTime:    stringPtr("P1D"),
+			ProcessingTime:  stringPtr("PT45S"),
+			Offset:          stringPtr("P0D"),
 			CategoryID:      nil, // Will be set during seeding after categories are created
 			Status:          ProductStatusInStock | ProductStatusFeatured,
 			Version:         1,
@@ -349,11 +349,11 @@ func GetSampleProducts() []Product {
 			Quantity:       300,
 			Weight:         0.09,
 			Data:           []byte{0x01, 0x02, 0x03},
-			ReleaseDate:    "2024-01-20",
-			OpenTime:       "08:15:00",
-			ShippingTime:   "PT2H",
-			ProcessingTime: "PT1.5S",
-			Offset:         "-P1D",
+			ReleaseDate:    stringPtr("2024-01-20"),
+			OpenTime:       stringPtr("08:15:00"),
+			ShippingTime:   stringPtr("PT2H"),
+			ProcessingTime: stringPtr("PT1.5S"),
+			Offset:         stringPtr("-P1D"),
 			CategoryID:     nil,                                        // Will be set during seeding
 			Status:         ProductStatusInStock | ProductStatusOnSale, // In stock and on sale
 			Version:        1,
@@ -384,11 +384,11 @@ func GetSampleProducts() []Product {
 			Quantity:       -200,
 			Weight:         0.0,
 			Data:           []byte{},
-			ReleaseDate:    "2024-01-01",
-			OpenTime:       "00:00:00",
-			ShippingTime:   "P2D",
-			ProcessingTime: "PT30M",
-			Offset:         "P0D",
+			ReleaseDate:    stringPtr("2024-01-01"),
+			OpenTime:       stringPtr("00:00:00"),
+			ShippingTime:   stringPtr("P2D"),
+			ProcessingTime: stringPtr("PT30M"),
+			Offset:         stringPtr("P0D"),
 			CategoryID:     nil,                  // Will be set during seeding
 			Status:         ProductStatusInStock, // Only in stock
 			Version:        1,
@@ -418,11 +418,11 @@ func GetSampleProducts() []Product {
 			Temperature:    127,
 			Quantity:       32767,
 			Weight:         150.0,
-			ReleaseDate:    "2024-12-31",
-			OpenTime:       "23:59:59",
-			ShippingTime:   "P1DT2H30M",
-			ProcessingTime: "PT45S",
-			Offset:         "P0D",
+			ReleaseDate:    stringPtr("2024-12-31"),
+			OpenTime:       stringPtr("23:59:59"),
+			ShippingTime:   stringPtr("P1DT2H30M"),
+			ProcessingTime: stringPtr("PT45S"),
+			Offset:         stringPtr("P0D"),
 			CategoryID:     nil,                       // Will be set during seeding
 			Status:         ProductStatusDiscontinued, // Discontinued
 			Version:        1,
