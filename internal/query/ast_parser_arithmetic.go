@@ -209,8 +209,21 @@ func (p *ASTParser) parseNumberLiteral(value string) ASTNode {
 	}
 
 	// Edm.Single literals may use an optional f/F suffix (e.g., 3.14f, 1.5e2f).
+	// Parse as float32 to preserve single-precision representation so that the
+	// resulting float64 matches exactly what is stored for float32 struct fields
+	// (i.e. float64(float32(x))). This is critical for equality comparisons in
+	// SQL: without this, "Weight eq 3.14f" would generate "weight = 3.14" which
+	// never equals the stored value 3.140000104904175 (float32 truncation).
 	if strings.HasSuffix(value, "f") || strings.HasSuffix(value, "F") {
 		value = value[:len(value)-1]
+		// strconv.ParseFloat with bitSize=32 returns the float64 value that is
+		// exactly float64(float32(x)), matching how float32 fields are stored.
+		if f32Val, err := strconv.ParseFloat(value, 32); err == nil {
+			expr := AcquireLiteralExpr()
+			expr.Value = f32Val
+			expr.Type = "number"
+			return expr
+		}
 	}
 
 	// Try to parse as integer first, then as float

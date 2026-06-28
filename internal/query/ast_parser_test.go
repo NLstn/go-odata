@@ -428,3 +428,70 @@ func TestASTParser_ComplexExpressions(t *testing.T) {
 		})
 	}
 }
+
+// TestParseNumberLiteral_SinglePrecisionSuffix verifies that Edm.Single literals
+// with an f/F suffix are parsed as float64(float32(x)) rather than a full
+// float64 parse. This matters for equality comparisons against float32 struct
+// fields: SQLite stores float32(3.14) as 3.140000104904175, so the filter value
+// must carry that same representation. Regression test for issue #737.
+func TestParseNumberLiteral_SinglePrecisionSuffix(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string // filter whose RHS is the Edm.Single literal under test
+		wantVal float64
+	}{
+		{
+			name:    "lowercase f suffix",
+			input:   "Price eq 3.14f",
+			wantVal: float64(float32(3.14)),
+		},
+		{
+			name:    "uppercase F suffix",
+			input:   "Price eq 3.14F",
+			wantVal: float64(float32(3.14)),
+		},
+		{
+			name:    "integer value with f suffix",
+			input:   "Price eq 1f",
+			wantVal: float64(float32(1)),
+		},
+		{
+			name:    "scientific notation with f suffix",
+			input:   "Price eq 1.5e2f",
+			wantVal: float64(float32(1.5e2)),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tokenizer := NewTokenizer(tt.input)
+			tokens, err := tokenizer.TokenizeAll()
+			if err != nil {
+				t.Fatalf("tokenization failed: %v", err)
+			}
+
+			parser := NewASTParser(tokens)
+			ast, err := parser.Parse()
+			if err != nil {
+				t.Fatalf("parsing failed: %v", err)
+			}
+			defer ReleaseASTNode(ast)
+
+			compExpr, ok := ast.(*ComparisonExpr)
+			if !ok {
+				t.Fatal("expected ComparisonExpr at AST root")
+			}
+			litExpr, ok := compExpr.Right.(*LiteralExpr)
+			if !ok {
+				t.Fatal("expected LiteralExpr on right side of comparison")
+			}
+			gotVal, ok := litExpr.Value.(float64)
+			if !ok {
+				t.Fatalf("expected float64 literal value, got %T", litExpr.Value)
+			}
+			if gotVal != tt.wantVal {
+				t.Errorf("single-precision literal %q: got %v, want %v (float64(float32(x)))", tt.input, gotVal, tt.wantVal)
+			}
+		})
+	}
+}
