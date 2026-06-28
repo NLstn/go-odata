@@ -161,6 +161,11 @@ func AnalyzeEntity(entity interface{}) (*EntityMetadata, error) {
 			continue
 		}
 
+		// Skip implementation fields excluded from JSON that have no OData-specific tag
+		if field.Tag.Get("json") == "-" && field.Tag.Get("odata") == "" {
+			continue
+		}
+
 		property, err := analyzeField(field, metadata)
 		if err != nil {
 			return nil, fmt.Errorf("error analyzing field %s: %w", field.Name, err)
@@ -247,6 +252,11 @@ func AnalyzeSingleton(entity interface{}, singletonName string) (*EntityMetadata
 			continue
 		}
 
+		// Skip implementation fields excluded from JSON that have no OData-specific tag
+		if field.Tag.Get("json") == "-" && field.Tag.Get("odata") == "" {
+			continue
+		}
+
 		property, err := analyzeField(field, metadata)
 		if err != nil {
 			return nil, fmt.Errorf("error analyzing field %s: %w", field.Name, err)
@@ -306,6 +316,11 @@ func AnalyzeVirtualEntity(entity interface{}) (*EntityMetadata, error) {
 
 		// Skip fields explicitly excluded from OData
 		if field.Tag.Get("odata") == "-" {
+			continue
+		}
+
+		// Skip implementation fields excluded from JSON that have no OData-specific tag
+		if field.Tag.Get("json") == "-" && field.Tag.Get("odata") == "" {
 			continue
 		}
 
@@ -849,7 +864,7 @@ func processFloatFacet(part, prefix string, target *float64) {
 // getJsonName extracts the JSON field name from struct tags
 func getJsonName(field reflect.StructField) string {
 	jsonTag := field.Tag.Get("json")
-	if jsonTag == "" {
+	if jsonTag == "" || jsonTag == "-" {
 		return field.Name
 	}
 
@@ -1065,19 +1080,33 @@ func detectStreamProperties(metadata *EntityMetadata) {
 		if strings.Contains(odataTag, "stream") {
 			prop.IsStream = true
 
-			// Look for associated content type and content fields
-			// Convention: for a stream property "Photo", look for "PhotoContentType" and "PhotoContent"
+			// Look for associated content type and content fields.
+			// Convention: for a stream property "Photo", look for "PhotoContentType" and "PhotoContent".
+			// These backing fields may carry json:"-" (excluded from OData properties) so we search
+			// the struct fields directly rather than only looking in metadata.Properties.
+			contentTypeName := prop.FieldName + "ContentType"
+			contentName := prop.FieldName + "Content"
+
+			// First, try OData-registered properties (backward compat)
 			for j := range metadata.Properties {
 				otherProp := &metadata.Properties[j]
-
-				// Check for content type field
-				if otherProp.FieldName == prop.FieldName+"ContentType" {
+				if otherProp.FieldName == contentTypeName {
 					prop.StreamContentTypeField = otherProp.FieldName
 				}
-
-				// Check for content field
-				if otherProp.FieldName == prop.FieldName+"Content" {
+				if otherProp.FieldName == contentName {
 					prop.StreamContentField = otherProp.FieldName
+				}
+			}
+
+			// If not found in properties, scan struct fields directly (handles json:"-" fields)
+			if prop.StreamContentTypeField == "" {
+				if _, ok := metadata.EntityType.FieldByName(contentTypeName); ok {
+					prop.StreamContentTypeField = contentTypeName
+				}
+			}
+			if prop.StreamContentField == "" {
+				if _, ok := metadata.EntityType.FieldByName(contentName); ok {
+					prop.StreamContentField = contentName
 				}
 			}
 

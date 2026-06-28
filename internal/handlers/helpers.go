@@ -828,6 +828,10 @@ func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{
 				}
 			}
 		} else {
+			// Stream properties appear via media annotations, not as inline values
+			if propMeta != nil && propMeta.IsStream {
+				continue
+			}
 			// Regular property - add property-level annotations first (for full metadata)
 			if metadataLevel == "full" && propMeta != nil && propMeta.Annotations != nil && propMeta.Annotations.Len() > 0 {
 				for _, annotation := range propMeta.Annotations.Get() {

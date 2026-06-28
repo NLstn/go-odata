@@ -237,6 +237,9 @@ func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataPro
 		if !info.IsExported {
 			continue
 		}
+		if info.JsonName == "" {
+			continue
+		}
 
 		propMeta := propMetaMap[info.Name]
 
