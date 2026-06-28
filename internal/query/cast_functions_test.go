@@ -339,6 +339,20 @@ func TestCastFunction_SQLGeneration(t *testing.T) {
 			expectedSQL:    "CAST(price AS REAL) >= ?",
 			expectedArgsNo: 1,
 		},
+		{
+			name:           "cast to Edm.Date uses date() on sqlite",
+			filter:         "cast(Name, 'Edm.Date') eq '2024-01-15'",
+			expectErr:      false,
+			expectedSQL:    "date(name) = ?",
+			expectedArgsNo: 1,
+		},
+		{
+			name:           "cast to Edm.TimeOfDay uses time() on sqlite",
+			filter:         "cast(Name, 'Edm.TimeOfDay') eq '10:30:00'",
+			expectErr:      false,
+			expectedSQL:    "time(name) = ?",
+			expectedArgsNo: 1,
+		},
 	}
 
 	for _, tt := range tests {
@@ -393,6 +407,18 @@ func TestCastFunction_SQLGenerationSQLServer(t *testing.T) {
 			name:           "cast to DECIMAL",
 			filter:         "cast(Price, 'Edm.Decimal') gt 99.99",
 			expectedSQL:    "CAST([price] AS DECIMAL(38, 18)) > ?",
+			expectedArgsNo: 1,
+		},
+		{
+			name:           "cast to Edm.Date uses TRY_CONVERT on sqlserver",
+			filter:         "cast(Name, 'Edm.Date') eq '2024-01-15'",
+			expectedSQL:    "CAST(TRY_CONVERT(date, [name]) AS DATE) = ?",
+			expectedArgsNo: 1,
+		},
+		{
+			name:           "cast to Edm.TimeOfDay uses TRY_CONVERT on sqlserver",
+			filter:         "cast(Name, 'Edm.TimeOfDay') eq '10:30:00'",
+			expectedSQL:    "CAST(TRY_CONVERT(time, [name]) AS TIME) = ?",
 			expectedArgsNo: 1,
 		},
 	}

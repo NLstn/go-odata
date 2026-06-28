@@ -169,13 +169,13 @@ func TestCastFunctions_Integration(t *testing.T) {
 		{
 			name:        "cast Date",
 			odataFilter: "cast(Name, 'Edm.Date') eq '2023-01-01'",
-			expectSQL:   "CAST(name AS TEXT) = ?",
+			expectSQL:   "date(name) = ?",
 			expectArgs:  1,
 		},
 		{
 			name:        "cast TimeOfDay",
 			odataFilter: "cast(Name, 'Edm.TimeOfDay') eq '12:00:00'",
-			expectSQL:   "CAST(name AS TEXT) = ?",
+			expectSQL:   "time(name) = ?",
 			expectArgs:  1,
 		},
 	}
