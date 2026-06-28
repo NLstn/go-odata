@@ -1,6 +1,7 @@
 package query
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -753,7 +754,7 @@ func TestDateFunctions_SQLGenerationSQLServer(t *testing.T) {
 			name:   "totalseconds SQL Server",
 			filter: "totalseconds(CreatedAt) gt 3600",
 			// Edm.Duration is an ISO-8601 string; SQL Server parses it with CHARINDEX/SUBSTRING.
-			expectedSQL:    "CASE WHEN [created_at] IS NULL THEN NULL WHEN [created_at] NOT LIKE 'P%' THEN NULL ELSE (CAST(CASE WHEN CHARINDEX('D',[created_at])>0 AND (CHARINDEX('T',[created_at])=0 OR CHARINDEX('D',[created_at])<CHARINDEX('T',[created_at])) THEN SUBSTRING([created_at],2,CHARINDEX('D',[created_at])-2) ELSE 0 END AS INT)*86400+CAST(CASE WHEN CHARINDEX('T',[created_at])>0 AND CHARINDEX('H',[created_at])>CHARINDEX('T',[created_at]) THEN SUBSTRING([created_at],CHARINDEX('T',[created_at])+1,CHARINDEX('H',[created_at])-CHARINDEX('T',[created_at])-1) ELSE 0 END AS INT)*3600+CAST(CASE WHEN CHARINDEX('T',[created_at])>0 AND CHARINDEX('M',SUBSTRING([created_at],CHARINDEX('T',[created_at])+1,8000))>0 THEN SUBSTRING([created_at],CASE WHEN CHARINDEX('H',[created_at])>CHARINDEX('T',[created_at]) THEN CHARINDEX('H',[created_at])+1 ELSE CHARINDEX('T',[created_at])+1 END,CHARINDEX('T',[created_at])+CHARINDEX('M',SUBSTRING([created_at],CHARINDEX('T',[created_at])+1,8000))-1-CASE WHEN CHARINDEX('H',[created_at])>CHARINDEX('T',[created_at]) THEN CHARINDEX('H',[created_at]) ELSE CHARINDEX('T',[created_at]) END) ELSE 0 END AS INT)*60+CAST(CASE WHEN CHARINDEX('T',[created_at])>0 AND CHARINDEX('S',[created_at])>CHARINDEX('T',[created_at]) THEN SUBSTRING([created_at],CASE WHEN CHARINDEX('M',SUBSTRING([created_at],CHARINDEX('T',[created_at])+1,8000))>0 THEN CHARINDEX('T',[created_at])+CHARINDEX('M',SUBSTRING([created_at],CHARINDEX('T',[created_at])+1,8000))+1 WHEN CHARINDEX('H',[created_at])>CHARINDEX('T',[created_at]) THEN CHARINDEX('H',[created_at])+1 ELSE CHARINDEX('T',[created_at])+1 END,CHARINDEX('S',[created_at])-CASE WHEN CHARINDEX('M',SUBSTRING([created_at],CHARINDEX('T',[created_at])+1,8000))>0 THEN CHARINDEX('T',[created_at])+CHARINDEX('M',SUBSTRING([created_at],CHARINDEX('T',[created_at])+1,8000)) WHEN CHARINDEX('H',[created_at])>CHARINDEX('T',[created_at]) THEN CHARINDEX('H',[created_at]) ELSE CHARINDEX('T',[created_at]) END-1) ELSE 0 END AS FLOAT)) END > ?",
+			expectedSQL:    "CASE WHEN [created_at] IS NULL THEN NULL WHEN [created_at] NOT LIKE 'P%' THEN NULL ELSE (CAST(CASE WHEN CHARINDEX('D',[created_at])>0 AND (CHARINDEX('T',[created_at])=0 OR CHARINDEX('D',[created_at])<CHARINDEX('T',[created_at])) THEN SUBSTRING([created_at],2,CHARINDEX('D',[created_at])-2) ELSE 0 END AS INT)*86400+CAST(CASE WHEN CHARINDEX('T',[created_at])>0 AND CHARINDEX('H',[created_at])>CHARINDEX('T',[created_at]) THEN SUBSTRING([created_at],CHARINDEX('T',[created_at])+1,CHARINDEX('H',[created_at])-CHARINDEX('T',[created_at])-1) ELSE 0 END AS INT)*3600+CAST(CASE WHEN CHARINDEX('T',[created_at])>0 AND CHARINDEX('M',SUBSTRING([created_at],CHARINDEX('T',[created_at])+1,8000))>0 THEN SUBSTRING([created_at],CASE WHEN CHARINDEX('H',[created_at])>CHARINDEX('T',[created_at]) THEN CHARINDEX('H',[created_at])+1 ELSE CHARINDEX('T',[created_at])+1 END,CHARINDEX('T',[created_at])+CHARINDEX('M',SUBSTRING([created_at],CHARINDEX('T',[created_at])+1,8000))-1-CASE WHEN CHARINDEX('H',[created_at])>CHARINDEX('T',[created_at]) THEN CHARINDEX('H',[created_at]) ELSE CHARINDEX('T',[created_at]) END) ELSE 0 END AS INT)*60+CAST(CASE WHEN CHARINDEX('T',[created_at])>0 AND CHARINDEX('S',[created_at])>CHARINDEX('T',[created_at]) THEN SUBSTRING([created_at],CASE WHEN CHARINDEX('M',SUBSTRING([created_at],CHARINDEX('T',[created_at])+1,8000))>0 THEN CHARINDEX('T',[created_at])+CHARINDEX('M',SUBSTRING([created_at],CHARINDEX('T',[created_at])+1,8000))+1 WHEN CHARINDEX('H',[created_at])>CHARINDEX('T',[created_at]) THEN CHARINDEX('H',[created_at])+1 ELSE CHARINDEX('T',[created_at])+1 END,CHARINDEX('S',[created_at])-CASE WHEN CHARINDEX('M',SUBSTRING([created_at],CHARINDEX('T',[created_at])+1,8000))>0 THEN CHARINDEX('T',[created_at])+CHARINDEX('M',SUBSTRING([created_at],CHARINDEX('T',[created_at])+1,8000)) WHEN CHARINDEX('H',[created_at])>CHARINDEX('T',[created_at]) THEN CHARINDEX('H',[created_at]) ELSE CHARINDEX('T',[created_at]) END-1) ELSE '0' END AS FLOAT)) END > ?",
 			expectedArgsNo: 1,
 		},
 	}
@@ -1174,11 +1175,11 @@ func TestDurationDirectComparisonSQL(t *testing.T) {
 				t.Errorf("expected %v seconds, got %v", tt.wantSecs, secs)
 			}
 			// Verify the SQL contains the comparison operator (not a raw string quote)
-			if !containsString(sql, tt.wantOp+" ?") {
+			if !strings.Contains(sql, tt.wantOp+" ?") {
 				t.Errorf("expected SQL to contain %q; got: %s", tt.wantOp+" ?", sql)
 			}
 			// The SQL must NOT contain a raw string literal like 'PT1H'
-			if containsString(sql, "'PT") || containsString(sql, "'P1") || containsString(sql, "'P2") {
+			if strings.Contains(sql, "'PT") || strings.Contains(sql, "'P1") || strings.Contains(sql, "'P2") {
 				t.Errorf("SQL contains raw duration string literal (string comparison bug): %s", sql)
 			}
 		})
@@ -1249,17 +1250,4 @@ func TestDurationDirectComparisonE2E(t *testing.T) {
 			}
 		})
 	}
-}
-
-// containsString is a helper used by the duration comparison SQL tests.
-func containsString(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
-		func() bool {
-			for i := 0; i <= len(s)-len(substr); i++ {
-				if s[i:i+len(substr)] == substr {
-					return true
-				}
-			}
-			return false
-		}())
 }

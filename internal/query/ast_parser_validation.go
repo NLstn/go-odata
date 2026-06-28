@@ -211,6 +211,9 @@ func convertComparisonExprWithContext(n *ComparisonExpr, ctx *conversionContext)
 		// We'll use a special marker in the property name to indicate this is a function comparison
 		filterExpr.Property = fmt.Sprintf("_func_%s_%s_%s", funcExpr.Operator, funcExpr.Property, n.Operator)
 		filterExpr.Operator = FilterOperator(n.Operator)
+		if lit, ok := n.Right.(*LiteralExpr); ok {
+			filterExpr.ValueType = lit.Type
+		}
 
 		// Store the original function info in Left for SQL generation
 		filterExpr.Left = funcExpr
@@ -236,6 +239,9 @@ func convertComparisonExprWithContext(n *ComparisonExpr, ctx *conversionContext)
 		expr.Property = arithExpr.Property
 		expr.Operator = FilterOperator(n.Operator)
 		expr.Value = value
+		if lit, ok := n.Right.(*LiteralExpr); ok {
+			expr.ValueType = lit.Type
+		}
 		expr.Left = arithExpr
 		return expr, nil
 	}

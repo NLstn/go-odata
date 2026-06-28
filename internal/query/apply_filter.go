@@ -736,7 +736,9 @@ func buildComparisonConditionWithDB(db *gorm.DB, dialect string, filter *FilterE
 			rhsSeconds := parseDurationToSeconds(durStr)
 			var colSQL string
 			if dialect == "postgres" {
-				colSQL = fmt.Sprintf("EXTRACT(EPOCH FROM CAST(NULLIF(CAST(%s AS TEXT), '') AS INTERVAL))", columnName)
+				// Guard non-P values (empty, negative like "-P1D") before casting to INTERVAL,
+				// since PostgreSQL rejects "-P1D" with a SQL error rather than returning NULL.
+				colSQL = fmt.Sprintf("CASE WHEN %[1]s IS NULL THEN NULL WHEN %[1]s NOT LIKE 'P%%' THEN NULL ELSE EXTRACT(EPOCH FROM CAST(%[1]s AS INTERVAL)) END", columnName)
 			} else {
 				colSQL = iso8601DurationToSecondsSQL(columnName, dialect)
 			}
@@ -744,6 +746,9 @@ func buildComparisonConditionWithDB(db *gorm.DB, dialect string, filter *FilterE
 			if compSQL != "" {
 				return compSQL, []interface{}{rhsSeconds}
 			}
+			// Operator not supported for duration comparison; skip to avoid falling
+			// through to string-based comparison which gives wrong results.
+			return "", nil
 		}
 	}
 
@@ -1136,8 +1141,12 @@ func iso8601DurationToSecondsSQL(c, dialect string) string {
 	// Seconds: digits before 'S', starting after the last of 'M'/'H'/'T'.
 	secStart := "CASE WHEN " + mRel + ">0 THEN " + mAbs + "+1 WHEN " + h + ">" + t + " THEN " + h + "+1 ELSE " + t + "+1 END"
 	secLen := s + "-CASE WHEN " + mRel + ">0 THEN " + mAbs + " WHEN " + h + ">" + t + " THEN " + h + " ELSE " + t + " END-1"
+	// Use '0' (string) not 0 (int) in the ELSE branch: SQL Server resolves CASE result
+	// type by precedence — mixing nvarchar (SUBSTRING) with int (0) picks int, which
+	// then fails to convert '1.5' to int for fractional seconds. Both branches as
+	// nvarchar lets the outer castReal convert correctly.
 	seconds := castReal("CASE WHEN " + t + ">0 AND " + s + ">" + t +
-		" THEN " + substr3(c, secStart, secLen) + " ELSE 0 END")
+		" THEN " + substr3(c, secStart, secLen) + " ELSE '0' END")
 
 	return "CASE WHEN " + c + " IS NULL THEN NULL WHEN " + c + " NOT LIKE 'P%' THEN NULL ELSE (" +
 		days + "+" + hours + "+" + minutes + "+" + seconds + ") END"
