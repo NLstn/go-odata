@@ -336,6 +336,11 @@ func convertComparisonExprWithContext(n *ComparisonExpr, ctx *conversionContext)
 	expr.Property = property
 	expr.Operator = FilterOperator(n.Operator)
 	expr.Value = value
+	// Preserve the OData type of the right-hand literal so that apply_filter can
+	// generate semantically-correct SQL (e.g. numeric seconds comparison for durations).
+	if lit, ok := n.Right.(*LiteralExpr); ok {
+		expr.ValueType = lit.Type
+	}
 	return expr, nil
 }
 

@@ -728,6 +728,25 @@ func buildComparisonConditionWithDB(db *gorm.DB, dialect string, filter *FilterE
 		return "", nil
 	}
 
+	// Duration comparison: convert both sides to seconds so that ordering is numeric
+	// rather than lexicographic. "P1D" > "PT1H" is false lexicographically but
+	// true numerically (86400 > 3600), so we must compare as numbers.
+	if filter.ValueType == "duration" {
+		if durStr, ok := filter.Value.(string); ok {
+			rhsSeconds := parseDurationToSeconds(durStr)
+			var colSQL string
+			if dialect == "postgres" {
+				colSQL = fmt.Sprintf("EXTRACT(EPOCH FROM CAST(NULLIF(CAST(%s AS TEXT), '') AS INTERVAL))", columnName)
+			} else {
+				colSQL = iso8601DurationToSecondsSQL(columnName, dialect)
+			}
+			compSQL := buildComparisonSQL(filter.Operator, colSQL)
+			if compSQL != "" {
+				return compSQL, []interface{}{rhsSeconds}
+			}
+		}
+	}
+
 	// Try to build a comparison with a function on the right side (e.g., Name eq tolower('JOHN'))
 	if sql, args, ok := tryBuildRightSideFunctionComparison(dialect, columnName, filter.Operator, filter.Value, entityMetadata); ok {
 		return sql, args

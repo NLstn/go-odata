@@ -205,6 +205,7 @@ type FilterExpression struct {
 	Property        string
 	Operator        FilterOperator
 	Value           interface{}
+	ValueType       string // Type hint for the value (e.g. "duration"); empty for untyped values
 	Left            *FilterExpression
 	Right           *FilterExpression
 	Logical         LogicalOperator
