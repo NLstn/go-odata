@@ -166,6 +166,15 @@ func ApplySelect(results interface{}, selectedProperties []string, entityMetadat
 				if fieldValue.IsValid() && fieldValue.CanInterface() {
 					fieldVal := fieldValue.Interface()
 
+					if prop.IsEnum && len(prop.EnumMembers) > 0 {
+						switch fieldValue.Kind() {
+						case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+							fieldVal = metadata.EnumValueToString(fieldValue.Int(), prop.EnumMembers, prop.IsFlags)
+						case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+							fieldVal = metadata.EnumValueToString(int64(fieldValue.Uint()), prop.EnumMembers, prop.IsFlags)
+						}
+					}
+
 					if prop.IsNavigationProp && (isExpanded || hasNavSelect) {
 						var expandOpt *ExpandOption
 						if expandedPropMap[prop.Name] != nil {
@@ -260,6 +269,15 @@ func ApplySelectToEntity(entity interface{}, selectedProperties []string, entity
 			fieldValue := entityValue.FieldByName(prop.Name)
 			if fieldValue.IsValid() && fieldValue.CanInterface() {
 				fieldVal := fieldValue.Interface()
+
+				if prop.IsEnum && len(prop.EnumMembers) > 0 {
+					switch fieldValue.Kind() {
+					case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+						fieldVal = metadata.EnumValueToString(fieldValue.Int(), prop.EnumMembers, prop.IsFlags)
+					case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+						fieldVal = metadata.EnumValueToString(int64(fieldValue.Uint()), prop.EnumMembers, prop.IsFlags)
+					}
+				}
 
 				if prop.IsNavigationProp && (isExpanded || hasNavSelect) {
 					var expandOpt *ExpandOption
