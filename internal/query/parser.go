@@ -37,6 +37,7 @@ type ParserConfig struct {
 // ExpandOption represents a single $expand clause
 type ExpandOption struct {
 	NavigationProperty string
+	IsRef              bool                   // true when the path ends with /$ref (return entity references only)
 	Select             []string               // Nested $select
 	Expand             []ExpandOption         // Nested $expand
 	Filter             *FilterExpression      // Nested $filter

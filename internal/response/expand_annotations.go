@@ -1,6 +1,7 @@
 package response
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 
@@ -12,6 +13,11 @@ import (
 func ApplyExpandOptionToValue(value interface{}, expandOpt *query.ExpandOption, targetMetadata *metadata.EntityMetadata) (interface{}, *int) {
 	if expandOpt == nil {
 		return value, nil
+	}
+
+	// Per OData spec §5.1.3, $expand=Nav/$ref returns only entity references.
+	if expandOpt.IsRef {
+		return toEntityReferences(value, targetMetadata), nil
 	}
 
 	updatedValue := value
@@ -54,6 +60,171 @@ func ApplyExpandOptionToValue(value interface{}, expandOpt *query.ExpandOption, 
 	}
 
 	return updatedValue, count
+}
+
+// toEntityReferences converts an entity or slice of entities to the minimal entity-reference
+// representation required by OData spec §5.1.3 when $expand uses the /$ref suffix.
+// Each reference is a map containing only @odata.id built from the entity set name and key.
+func toEntityReferences(value interface{}, md *metadata.EntityMetadata) interface{} {
+	if value == nil || md == nil {
+		return nil
+	}
+
+	val := reflect.ValueOf(value)
+	for val.Kind() == reflect.Ptr {
+		if val.IsNil() {
+			return nil
+		}
+		val = val.Elem()
+	}
+
+	switch val.Kind() {
+	case reflect.Slice, reflect.Array:
+		refs := make([]interface{}, val.Len())
+		for i := 0; i < val.Len(); i++ {
+			refs[i] = entityToReference(val.Index(i), md)
+		}
+		return refs
+	default:
+		return entityToReference(val, md)
+	}
+}
+
+// entityToReference builds a single {"@odata.id": "EntitySet(key)"} map for one entity.
+func entityToReference(val reflect.Value, md *metadata.EntityMetadata) map[string]interface{} {
+	for val.Kind() == reflect.Ptr {
+		if val.IsNil() {
+			return nil
+		}
+		val = val.Elem()
+	}
+
+	keySegment := buildKeySegmentForRef(val, md)
+	if keySegment == "" || md.EntitySetName == "" {
+		return map[string]interface{}{}
+	}
+	return map[string]interface{}{
+		"@odata.id": md.EntitySetName + "(" + keySegment + ")",
+	}
+}
+
+// buildKeySegmentForRef extracts the key segment string from an entity value using metadata.
+func buildKeySegmentForRef(val reflect.Value, md *metadata.EntityMetadata) string {
+	if len(md.KeyProperties) == 0 {
+		return ""
+	}
+
+	if val.Kind() == reflect.Map {
+		return buildKeySegmentForRefFromMap(val, md)
+	}
+
+	if val.Kind() != reflect.Struct {
+		return ""
+	}
+
+	if len(md.KeyProperties) == 1 {
+		kp := md.KeyProperties[0]
+		fv := findFieldByName(val, kp.FieldName, kp.Name)
+		if !fv.IsValid() {
+			return ""
+		}
+		return formatRefKeyValue(fv)
+	}
+
+	var b strings.Builder
+	for i, kp := range md.KeyProperties {
+		fv := findFieldByName(val, kp.FieldName, kp.Name)
+		if !fv.IsValid() {
+			continue
+		}
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		b.WriteString(kp.JsonName)
+		b.WriteByte('=')
+		if fv.Kind() == reflect.String {
+			b.WriteByte('\'')
+			b.WriteString(fv.String())
+			b.WriteByte('\'')
+		} else {
+			b.WriteString(formatRefKeyValue(fv))
+		}
+	}
+	return b.String()
+}
+
+func buildKeySegmentForRefFromMap(val reflect.Value, md *metadata.EntityMetadata) string {
+	if len(md.KeyProperties) == 1 {
+		kp := md.KeyProperties[0]
+		v := val.MapIndex(reflect.ValueOf(kp.JsonName))
+		if !v.IsValid() {
+			v = val.MapIndex(reflect.ValueOf(kp.Name))
+		}
+		if !v.IsValid() {
+			return ""
+		}
+		elem := v.Elem()
+		if elem.Kind() == reflect.String {
+			return "'" + elem.String() + "'"
+		}
+		return fmt.Sprintf("%v", elem.Interface())
+	}
+
+	var b strings.Builder
+	for i, kp := range md.KeyProperties {
+		v := val.MapIndex(reflect.ValueOf(kp.JsonName))
+		if !v.IsValid() {
+			v = val.MapIndex(reflect.ValueOf(kp.Name))
+		}
+		if !v.IsValid() {
+			continue
+		}
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		elem := v.Elem()
+		b.WriteString(kp.JsonName)
+		b.WriteByte('=')
+		if elem.Kind() == reflect.String {
+			b.WriteByte('\'')
+			b.WriteString(elem.String())
+			b.WriteByte('\'')
+		} else {
+			b.WriteString(fmt.Sprintf("%v", elem.Interface()))
+		}
+	}
+	return b.String()
+}
+
+// findFieldByName locates a struct field by its Go field name or JSON name.
+func findFieldByName(val reflect.Value, fieldName, fallbackName string) reflect.Value {
+	t := val.Type()
+	for i := 0; i < t.NumField(); i++ {
+		f := t.Field(i)
+		if f.Name == fieldName || f.Name == fallbackName {
+			return val.Field(i)
+		}
+		if tag := f.Tag.Get("json"); tag != "" {
+			parts := strings.SplitN(tag, ",", 2)
+			if parts[0] == fieldName || parts[0] == fallbackName {
+				return val.Field(i)
+			}
+		}
+	}
+	return reflect.Value{}
+}
+
+func formatRefKeyValue(v reflect.Value) string {
+	switch v.Kind() {
+	case reflect.String:
+		return "'" + v.String() + "'"
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return fmt.Sprintf("%d", v.Int())
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return fmt.Sprintf("%d", v.Uint())
+	default:
+		return fmt.Sprintf("%v", v.Interface())
+	}
 }
 
 // ApplyExpandAnnotationsToMap applies expand annotations to a map-based entity representation.
