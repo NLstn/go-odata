@@ -90,7 +90,7 @@ func (h *EntityHandler) handleGetSingleton(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Apply $select if specified
-	var result interface{} = entityInstance
+	result := entityInstance
 	if len(queryOptions.Select) > 0 {
 		result = query.ApplySelectToEntity(entityInstance, queryOptions.Select, h.metadata, queryOptions.Expand)
 	}
