@@ -736,9 +736,14 @@ func buildComparisonConditionWithDB(db *gorm.DB, dialect string, filter *FilterE
 			rhsSeconds := parseDurationToSeconds(durStr)
 			var colSQL string
 			if dialect == "postgres" {
-				// Guard non-P values (empty, negative like "-P1D") before casting to INTERVAL,
-				// since PostgreSQL rejects "-P1D" with a SQL error rather than returning NULL.
-				colSQL = fmt.Sprintf("CASE WHEN %[1]s IS NULL THEN NULL WHEN %[1]s NOT LIKE 'P%%' THEN NULL ELSE EXTRACT(EPOCH FROM CAST(%[1]s AS INTERVAL)) END", columnName)
+				// PostgreSQL rejects "-P1D" with a SQL error rather than returning NULL.
+				// Strip the leading '-' and negate manually so negative durations work.
+				colSQL = fmt.Sprintf(
+					"CASE WHEN %[1]s IS NULL THEN NULL "+
+						"WHEN %[1]s LIKE 'P%%' THEN EXTRACT(EPOCH FROM CAST(%[1]s AS INTERVAL)) "+
+						"WHEN %[1]s LIKE '-P%%' THEN -1.0*EXTRACT(EPOCH FROM CAST(SUBSTR(%[1]s,2) AS INTERVAL)) "+
+						"ELSE NULL END",
+					columnName)
 			} else {
 				colSQL = iso8601DurationToSecondsSQL(columnName, dialect)
 			}
@@ -1096,6 +1101,7 @@ func iso8601DurationToSecondsSQL(c, dialect string) string {
 	var substr2 func(s, start string) string
 	var castInt func(x string) string
 	var castReal func(x string) string
+	var stripLeadingChar func(expr string) string
 
 	switch dialect {
 	case "mysql", "mariadb":
@@ -1104,6 +1110,7 @@ func iso8601DurationToSecondsSQL(c, dialect string) string {
 		substr2 = func(s, start string) string { return "SUBSTRING(" + s + "," + start + ")" }
 		castInt = func(x string) string { return "CAST(" + x + " AS SIGNED)" }
 		castReal = func(x string) string { return "CAST(" + x + " AS DECIMAL(38,9))" }
+		stripLeadingChar = func(expr string) string { return "SUBSTRING(" + expr + ",2)" }
 	case "sqlserver", "mssql":
 		instr = func(hay, needle string) string { return "CHARINDEX(" + needle + "," + hay + ")" }
 		substr3 = func(s, start, length string) string { return "SUBSTRING(" + s + "," + start + "," + length + ")" }
@@ -1111,45 +1118,60 @@ func iso8601DurationToSecondsSQL(c, dialect string) string {
 		substr2 = func(s, start string) string { return "SUBSTRING(" + s + "," + start + ",8000)" }
 		castInt = func(x string) string { return "CAST(" + x + " AS INT)" }
 		castReal = func(x string) string { return "CAST(" + x + " AS FLOAT)" }
+		stripLeadingChar = func(expr string) string { return "SUBSTRING(" + expr + ",2,8000)" }
 	default: // sqlite
 		instr = func(hay, needle string) string { return "INSTR(" + hay + "," + needle + ")" }
 		substr3 = func(s, start, length string) string { return "SUBSTR(" + s + "," + start + "," + length + ")" }
 		substr2 = func(s, start string) string { return "SUBSTR(" + s + "," + start + ")" }
 		castInt = func(x string) string { return "CAST(" + x + " AS INTEGER)" }
 		castReal = func(x string) string { return "CAST(" + x + " AS REAL)" }
+		stripLeadingChar = func(expr string) string { return "SUBSTR(" + expr + ",2)" }
 	}
 
-	t := instr(c, "'T'")
-	d := instr(c, "'D'")
-	h := instr(c, "'H'")
-	s := instr(c, "'S'")
-	afterT := substr2(c, t+"+1")
-	mRel := instr(afterT, "'M'")
-	mAbs := t + "+" + mRel // absolute position of the minutes 'M' within c
+	// buildParseExpr returns a SQL arithmetic expression that converts the
+	// ISO-8601 duration in col (which must start with 'P') to total seconds.
+	buildParseExpr := func(col string) string {
+		t := instr(col, "'T'")
+		d := instr(col, "'D'")
+		h := instr(col, "'H'")
+		s := instr(col, "'S'")
+		afterT := substr2(col, t+"+1")
+		mRel := instr(afterT, "'M'")
+		mAbs := t + "+" + mRel
 
-	// Days: digits before the first 'D' when it precedes any 'T'.
-	days := castInt("CASE WHEN "+d+">0 AND ("+t+"=0 OR "+d+"<"+t+")"+
-		" THEN "+substr3(c, "2", d+"-2")+" ELSE 0 END") + "*86400"
-	// Hours: digits between 'T' and 'H'.
-	hours := castInt("CASE WHEN "+t+">0 AND "+h+">"+t+
-		" THEN "+substr3(c, t+"+1", h+"-"+t+"-1")+" ELSE 0 END") + "*3600"
-	// Minutes: digits before 'M' (after 'T'), starting after 'H' if present.
-	minStart := "CASE WHEN " + h + ">" + t + " THEN " + h + "+1 ELSE " + t + "+1 END"
-	minLen := mAbs + "-1-CASE WHEN " + h + ">" + t + " THEN " + h + " ELSE " + t + " END"
-	minutes := castInt("CASE WHEN "+t+">0 AND "+mRel+">0"+
-		" THEN "+substr3(c, minStart, minLen)+" ELSE 0 END") + "*60"
-	// Seconds: digits before 'S', starting after the last of 'M'/'H'/'T'.
-	secStart := "CASE WHEN " + mRel + ">0 THEN " + mAbs + "+1 WHEN " + h + ">" + t + " THEN " + h + "+1 ELSE " + t + "+1 END"
-	secLen := s + "-CASE WHEN " + mRel + ">0 THEN " + mAbs + " WHEN " + h + ">" + t + " THEN " + h + " ELSE " + t + " END-1"
-	// Use '0' (string) not 0 (int) in the ELSE branch: SQL Server resolves CASE result
-	// type by precedence — mixing nvarchar (SUBSTRING) with int (0) picks int, which
-	// then fails to convert '1.5' to int for fractional seconds. Both branches as
-	// nvarchar lets the outer castReal convert correctly.
-	seconds := castReal("CASE WHEN " + t + ">0 AND " + s + ">" + t +
-		" THEN " + substr3(c, secStart, secLen) + " ELSE '0' END")
+		// Days: digits before the first 'D' when it precedes any 'T'.
+		days := castInt("CASE WHEN "+d+">0 AND ("+t+"=0 OR "+d+"<"+t+")"+
+			" THEN "+substr3(col, "2", d+"-2")+" ELSE 0 END") + "*86400"
+		// Hours: digits between 'T' and 'H'.
+		hours := castInt("CASE WHEN "+t+">0 AND "+h+">"+t+
+			" THEN "+substr3(col, t+"+1", h+"-"+t+"-1")+" ELSE 0 END") + "*3600"
+		// Minutes: digits before 'M' (after 'T'), starting after 'H' if present.
+		minStart := "CASE WHEN " + h + ">" + t + " THEN " + h + "+1 ELSE " + t + "+1 END"
+		minLen := mAbs + "-1-CASE WHEN " + h + ">" + t + " THEN " + h + " ELSE " + t + " END"
+		minutes := castInt("CASE WHEN "+t+">0 AND "+mRel+">0"+
+			" THEN "+substr3(col, minStart, minLen)+" ELSE 0 END") + "*60"
+		// Seconds: digits before 'S', starting after the last of 'M'/'H'/'T'.
+		secStart := "CASE WHEN " + mRel + ">0 THEN " + mAbs + "+1 WHEN " + h + ">" + t + " THEN " + h + "+1 ELSE " + t + "+1 END"
+		secLen := s + "-CASE WHEN " + mRel + ">0 THEN " + mAbs + " WHEN " + h + ">" + t + " THEN " + h + " ELSE " + t + " END-1"
+		// Use '0' (string) not 0 (int) in the ELSE branch: SQL Server resolves CASE result
+		// type by precedence — mixing nvarchar (SUBSTRING) with int (0) picks int, which
+		// then fails to convert '1.5' to int for fractional seconds. Both branches as
+		// nvarchar lets the outer castReal convert correctly.
+		seconds := castReal("CASE WHEN " + t + ">0 AND " + s + ">" + t +
+			" THEN " + substr3(col, secStart, secLen) + " ELSE '0' END")
 
-	return "CASE WHEN " + c + " IS NULL THEN NULL WHEN " + c + " NOT LIKE 'P%' THEN NULL ELSE (" +
-		days + "+" + hours + "+" + minutes + "+" + seconds + ") END"
+		return days + "+" + hours + "+" + minutes + "+" + seconds
+	}
+
+	posExpr := buildParseExpr(c)
+	// For negative durations (e.g. "-P1D"), strip the leading '-' so that the
+	// P-prefixed remainder can be parsed with the same logic, then negate.
+	negExpr := buildParseExpr(stripLeadingChar(c))
+
+	return "CASE WHEN " + c + " IS NULL THEN NULL " +
+		"WHEN " + c + " LIKE 'P%' THEN (" + posExpr + ") " +
+		"WHEN " + c + " LIKE '-P%' THEN -1.0*(" + negExpr + ") " +
+		"ELSE NULL END"
 }
 
 // buildFunctionSQL generates SQL for a function expression
@@ -1432,31 +1454,8 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 			return iso8601DurationToSecondsSQL(columnName, "mysql"), nil
 		case "sqlserver", "mssql":
 			return iso8601DurationToSecondsSQL(columnName, "sqlserver"), nil
-		default: // sqlite - parse ISO 8601 duration strings (e.g. P1D, PT2H, P1DT2H30M) into total seconds
-			c := columnName
-			return "CASE WHEN " + c + " IS NULL THEN NULL WHEN " + c + " NOT LIKE 'P%' THEN NULL ELSE (" +
-				// Days: digits before first 'D' when 'D' precedes any 'T' (or no 'T')
-				"CAST(CASE WHEN INSTR(" + c + ",'D')>0 AND (INSTR(" + c + ",'T')=0 OR INSTR(" + c + ",'D')<INSTR(" + c + ",'T'))" +
-				" THEN SUBSTR(" + c + ",2,INSTR(" + c + ",'D')-2) ELSE 0 END AS INTEGER)*86400" +
-				// Hours: digits between 'T' and 'H'
-				"+CAST(CASE WHEN INSTR(" + c + ",'T')>0 AND INSTR(" + c + ",'H')>INSTR(" + c + ",'T')" +
-				" THEN SUBSTR(" + c + ",INSTR(" + c + ",'T')+1,INSTR(" + c + ",'H')-INSTR(" + c + ",'T')-1) ELSE 0 END AS INTEGER)*3600" +
-				// Minutes: 'M' after 'T' — digits after the last of ('T','H') before that 'M'
-				"+CAST(CASE WHEN INSTR(" + c + ",'T')>0 AND INSTR(SUBSTR(" + c + ",INSTR(" + c + ",'T')+1),'M')>0" +
-				" THEN SUBSTR(" + c + "," +
-				"CASE WHEN INSTR(" + c + ",'H')>INSTR(" + c + ",'T') THEN INSTR(" + c + ",'H')+1 ELSE INSTR(" + c + ",'T')+1 END," +
-				"INSTR(" + c + ",'T')+INSTR(SUBSTR(" + c + ",INSTR(" + c + ",'T')+1),'M')-1" +
-				"-CASE WHEN INSTR(" + c + ",'H')>INSTR(" + c + ",'T') THEN INSTR(" + c + ",'H') ELSE INSTR(" + c + ",'T') END)" +
-				" ELSE 0 END AS INTEGER)*60" +
-				// Seconds: digits after the last of ('T','H','M') before 'S'
-				"+CAST(CASE WHEN INSTR(" + c + ",'T')>0 AND INSTR(" + c + ",'S')>INSTR(" + c + ",'T')" +
-				" THEN SUBSTR(" + c + "," +
-				"CASE WHEN INSTR(SUBSTR(" + c + ",INSTR(" + c + ",'T')+1),'M')>0 THEN INSTR(" + c + ",'T')+INSTR(SUBSTR(" + c + ",INSTR(" + c + ",'T')+1),'M')+1" +
-				" WHEN INSTR(" + c + ",'H')>INSTR(" + c + ",'T') THEN INSTR(" + c + ",'H')+1 ELSE INSTR(" + c + ",'T')+1 END," +
-				"INSTR(" + c + ",'S')" +
-				"-CASE WHEN INSTR(SUBSTR(" + c + ",INSTR(" + c + ",'T')+1),'M')>0 THEN INSTR(" + c + ",'T')+INSTR(SUBSTR(" + c + ",INSTR(" + c + ",'T')+1),'M')" +
-				" WHEN INSTR(" + c + ",'H')>INSTR(" + c + ",'T') THEN INSTR(" + c + ",'H') ELSE INSTR(" + c + ",'T') END-1)" +
-				" ELSE 0 END AS REAL)) END", nil
+		default: // sqlite
+			return iso8601DurationToSecondsSQL(columnName, dialect), nil
 		}
 	case OpMinDatetime:
 		switch dialect {
