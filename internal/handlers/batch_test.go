@@ -1939,12 +1939,62 @@ Accept: application/json
 		t.Errorf("Outer batch status = %v, want %v", w.Code, http.StatusOK)
 	}
 
-	// The inner response for the GET inside a changeset must be 400.
+	// The inner response for the plain GET inside a changeset must be 400.
 	body2 := w.Body.String()
 	if !strings.Contains(body2, "400") {
 		t.Errorf("Expected inner 400 response for GET inside changeset, got body: %s", body2)
 	}
 	if !strings.Contains(body2, "not allowed in a changeset") {
 		t.Errorf("Expected rejection message, got body: %s", body2)
+	}
+}
+
+func TestBatchHandler_GetContentIDRefInChangesetAllowed(t *testing.T) {
+	// A GET using a Content-ID reference ($1/...) inside a changeset must be allowed
+	// per OData spec §11.4.9.3, even though plain GETs are rejected (§11.4.9.2).
+	handler, _, _ := setupBatchTestHandler(t)
+
+	batchBoundary := "batch_outer"
+	changesetBoundary := "changeset_1"
+	body := fmt.Sprintf(`--%s
+Content-Type: multipart/mixed; boundary=%s
+
+--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+Content-ID: 1
+
+POST /BatchTestProducts HTTP/1.1
+Content-Type: application/json
+
+{"Name":"Widget","Price":9.99,"Category":"Gizmos"}
+
+--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+GET /$1 HTTP/1.1
+Accept: application/json
+
+
+--%s--
+
+--%s--
+`, batchBoundary, changesetBoundary, changesetBoundary, changesetBoundary, changesetBoundary, batchBoundary)
+
+	req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+	req.Header.Set("Content-Type", fmt.Sprintf("multipart/mixed; boundary=%s", batchBoundary))
+	w := httptest.NewRecorder()
+
+	handler.HandleBatch(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Outer batch status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	// The GET via Content-ID reference must not be rejected (no 400 "not allowed in a changeset").
+	responseBody := w.Body.String()
+	if strings.Contains(responseBody, "not allowed in a changeset") {
+		t.Errorf("Content-ID GET should be allowed inside changeset, got: %s", responseBody)
 	}
 }

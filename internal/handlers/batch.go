@@ -348,8 +348,13 @@ func (h *BatchHandler) processChangeset(r io.Reader, boundary string, remainingC
 		req.ContentID = contentID
 
 		// Per OData v4 spec §11.4.9.2, only modification requests (POST, PUT, PATCH, DELETE)
-		// are allowed inside a changeset. Reject GET and any other retrieval methods.
-		if req.Method != http.MethodPost && req.Method != http.MethodPut &&
+		// are allowed inside a changeset, except when the request URL is a Content-ID reference
+		// (§11.4.9.3). A Content-ID reference (e.g. "$1/Descriptions") retrieves a navigation
+		// property on an entity created earlier in the same changeset and is permitted by the
+		// spec as a read within the atomic unit.
+		isContentIDRef := strings.HasPrefix(strings.TrimPrefix(req.URL, "/"), "$")
+		if !isContentIDRef &&
+			req.Method != http.MethodPost && req.Method != http.MethodPut &&
 			req.Method != http.MethodPatch && req.Method != http.MethodDelete {
 			hasError = true
 			errResp := h.createErrorResponse(http.StatusBadRequest,
