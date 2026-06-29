@@ -328,6 +328,23 @@ func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.Qu
 		return results, nil
 	}
 
+	// When $top is set without an explicit $orderby, implicitly order by the primary key so
+	// that the keyset cursor used in $skiptoken is consistent with the result ordering on
+	// every page — including the first. Without this, the database may return rows in
+	// insertion order, causing the cursor to skip entities whose key sorts below the cursor
+	// value but that appeared on a previous page. Only applies to entity-result queries
+	// (not $apply / $compute which project arbitrary columns).
+	//
+	// The ORDER BY is applied directly on db (not through modifiedOptions.OrderBy) using the
+	// table-qualified column name so that it remains unambiguous when FTS or other JOINs are
+	// added later by ApplyQueryOptionsWithFTS.
+	if modifiedOptions.Top != nil && len(modifiedOptions.OrderBy) == 0 &&
+		!query.ShouldUseMapResults(queryOptions) && len(h.metadata.KeyProperties) > 0 {
+		for _, kp := range h.metadata.KeyProperties {
+			db = db.Order(h.metadata.TableName + "." + kp.ColumnName)
+		}
+	}
+
 	// Apply query options with FTS support
 	db = query.ApplyQueryOptionsWithFTS(db, &modifiedOptions, h.metadata, fts, tableName, h.logger)
 
