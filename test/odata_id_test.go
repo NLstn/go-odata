@@ -258,7 +258,7 @@ func TestODataIDFieldWithCompositeKeys(t *testing.T) {
 	}{
 		{
 			name:              "Full metadata - composite key should have @odata.id",
-			url:               "/ProductTranslations",
+			url:               "/ProductTranslations?$orderby=languageKey%20desc",
 			acceptHeader:      "application/json;odata.metadata=full",
 			shouldHaveODataID: true,
 			expectedODataID:   "http://localhost:8080/ProductTranslations(productId=1,languageKey='EN')",
@@ -266,7 +266,7 @@ func TestODataIDFieldWithCompositeKeys(t *testing.T) {
 		},
 		{
 			name:              "Minimal metadata with $select (keys omitted from request but auto-included) - should have @odata.id",
-			url:               "/ProductTranslations?$select=description",
+			url:               "/ProductTranslations?$orderby=languageKey%20desc&$select=description",
 			acceptHeader:      "application/json;odata.metadata=minimal",
 			shouldHaveODataID: true,
 			expectedODataID:   "http://localhost:8080/ProductTranslations(productId=1,languageKey='EN')",
@@ -274,7 +274,7 @@ func TestODataIDFieldWithCompositeKeys(t *testing.T) {
 		},
 		{
 			name:              "Minimal metadata with $select (one key omitted from request but auto-included) - should have @odata.id",
-			url:               "/ProductTranslations?$select=productId,description",
+			url:               "/ProductTranslations?$orderby=languageKey%20desc&$select=productId,description",
 			acceptHeader:      "application/json;odata.metadata=minimal",
 			shouldHaveODataID: true,
 			expectedODataID:   "http://localhost:8080/ProductTranslations(productId=1,languageKey='EN')",
@@ -282,7 +282,7 @@ func TestODataIDFieldWithCompositeKeys(t *testing.T) {
 		},
 		{
 			name:              "Minimal metadata with $select (all keys included) - should have @odata.id",
-			url:               "/ProductTranslations?$select=productId,languageKey,description",
+			url:               "/ProductTranslations?$orderby=languageKey%20desc&$select=productId,languageKey,description",
 			acceptHeader:      "application/json;odata.metadata=minimal",
 			shouldHaveODataID: true,
 			expectedODataID:   "http://localhost:8080/ProductTranslations(productId=1,languageKey='EN')",
