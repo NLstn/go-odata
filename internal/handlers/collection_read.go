@@ -328,23 +328,31 @@ func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.Qu
 		return results, nil
 	}
 
-	// When $top is set without an explicit $orderby, implicitly order by the primary key so
-	// that the keyset cursor used in $skiptoken is consistent with the result ordering on
-	// every page — including the first. Without this, the database may return rows in
-	// insertion order, causing the cursor to skip entities whose key sorts below the cursor
-	// value but that appeared on a previous page. Only applies to entity-result queries
-	// (not $apply / $compute which project arbitrary columns).
+	// When no explicit $orderby is provided, implicitly order by the primary key to give
+	// clients a stable, deterministic result set on every request. Without this:
+	//   - $skip-based pagination is inconsistent between the baseline fetch (no $top) and
+	//     the offset fetch (with $top), because $top triggers server-driven paging with a
+	//     different sort than natural DB order on SQLite and PostgreSQL.
+	//   - $skiptoken cursor pagination can silently skip entities when the DB returns pages
+	//     in non-deterministic order (e.g. heap order on PostgreSQL).
 	//
-	// Use clause.OrderByColumn with a structured clause.Column so GORM applies the correct
-	// dialect quoting (e.g. "Products"."id" in PostgreSQL, `Products`.`id` in MySQL). A raw
-	// "Table.Column" string would be folded to lowercase by PostgreSQL when unquoted, which
-	// breaks queries against tables created with mixed-case names like "Products".
-	if modifiedOptions.Top != nil && len(modifiedOptions.OrderBy) == 0 &&
+	// Only applies to entity-result queries; $apply/$compute projections are excluded via
+	// ShouldUseMapResults. Use clause.OrderByColumn with a structured clause.Column so GORM
+	// applies dialect-correct quoting ("Products"."id" in PostgreSQL, `Products`.`id` in
+	// MySQL). A raw "Table.Column" string is folded to lowercase by PostgreSQL for unquoted
+	// identifiers, which fails when the table was created with a mixed-case name.
+	//
+	// Use the GORM-canonical table name (via the entity's TableName() method or GORM's own
+	// NamingStrategy) to guarantee it matches the FROM clause that GORM will generate.
+	// h.metadata.TableName uses a simpler pluralization that can diverge from GORM's
+	// jinzhu/inflection for types without an explicit TableName() method.
+	if len(modifiedOptions.OrderBy) == 0 &&
 		!query.ShouldUseMapResults(queryOptions) && len(h.metadata.KeyProperties) > 0 {
+		gormTableName := gormCanonicalTableName(db, h.metadata)
 		for _, kp := range h.metadata.KeyProperties {
 			db = db.Order(clause.OrderByColumn{
 				Column: clause.Column{
-					Table: h.metadata.TableName,
+					Table: gormTableName,
 					Name:  kp.ColumnName,
 				},
 			})
@@ -1815,6 +1823,24 @@ func (h *EntityHandler) getTotalCount(ctx context.Context, queryOptions *query.Q
 // serialize as JSON numbers. Values that are already numeric, or strings that do
 // not parse as numbers (e.g. a min()/max() over a text column), are left
 // unchanged (converted=false).
+// gormCanonicalTableName returns the table name that GORM will use in the FROM clause
+// for the given entity metadata. It honours the entity's TableName() method first, and
+// falls back to db.NamingStrategy (GORM's own jinzhu/inflection-based pluralization).
+// This avoids mismatches with h.metadata.TableName which uses a simpler pluralization
+// that can diverge from GORM's for types without an explicit TableName() method.
+func gormCanonicalTableName(db *gorm.DB, meta *metadata.EntityMetadata) string {
+	if meta.EntityType != nil {
+		instance := reflect.New(meta.EntityType).Interface()
+		if tabler, ok := instance.(interface{ TableName() string }); ok {
+			return tabler.TableName()
+		}
+		if db.NamingStrategy != nil {
+			return db.NamingStrategy.TableName(meta.EntityType.Name())
+		}
+	}
+	return meta.TableName
+}
+
 func coerceNumericAggregate(v interface{}) (float64, bool) {
 	switch n := v.(type) {
 	case string:
