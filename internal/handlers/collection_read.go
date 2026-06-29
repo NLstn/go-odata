@@ -335,13 +335,19 @@ func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.Qu
 	// value but that appeared on a previous page. Only applies to entity-result queries
 	// (not $apply / $compute which project arbitrary columns).
 	//
-	// The ORDER BY is applied directly on db (not through modifiedOptions.OrderBy) using the
-	// table-qualified column name so that it remains unambiguous when FTS or other JOINs are
-	// added later by ApplyQueryOptionsWithFTS.
+	// Use clause.OrderByColumn with a structured clause.Column so GORM applies the correct
+	// dialect quoting (e.g. "Products"."id" in PostgreSQL, `Products`.`id` in MySQL). A raw
+	// "Table.Column" string would be folded to lowercase by PostgreSQL when unquoted, which
+	// breaks queries against tables created with mixed-case names like "Products".
 	if modifiedOptions.Top != nil && len(modifiedOptions.OrderBy) == 0 &&
 		!query.ShouldUseMapResults(queryOptions) && len(h.metadata.KeyProperties) > 0 {
 		for _, kp := range h.metadata.KeyProperties {
-			db = db.Order(h.metadata.TableName + "." + kp.ColumnName)
+			db = db.Order(clause.OrderByColumn{
+				Column: clause.Column{
+					Table: h.metadata.TableName,
+					Name:  kp.ColumnName,
+				},
+			})
 		}
 	}
 
