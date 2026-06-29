@@ -887,3 +887,94 @@ func TestSkipTokenPreservesQueryOptions(t *testing.T) {
 		t.Errorf("Expected nextLink to preserve $top, got: %s", nextLink)
 	}
 }
+
+// TestSkipTokenFullTraversalWithoutOrderBy verifies that following all @odata.nextLink pages
+// without $orderby enumerates every entity exactly once (OData §11.2.5.7).
+// The implicit primary-key ORDER BY must be added so the keyset cursor is consistent.
+func TestSkipTokenFullTraversalWithoutOrderBy(t *testing.T) {
+	handler, db := setupProductHandler(t)
+
+	const total = 7
+	const pageSize = 2
+
+	// Insert products with IDs in a non-sequential order so that the database
+	// insertion order may differ from primary-key order on engines that don't
+	// use a B-tree for the primary key. On SQLite with INTEGER PRIMARY KEY the
+	// B-tree incidentally gives key-ordered SELECTs, but the fix is still
+	// required for other engines tested by CI (PostgreSQL, MySQL, MSSQL).
+	insertOrder := []int{4, 7, 2, 5, 1, 6, 3}
+	for _, id := range insertOrder {
+		db.Create(&Product{
+			ID:       id,
+			Name:     fmt.Sprintf("Product %d", id),
+			Price:    float64(id * 10),
+			Category: "Test",
+		})
+	}
+
+	seen := make(map[int]bool)
+	url := fmt.Sprintf("/Products?$top=%d", pageSize)
+
+	for page := 0; ; page++ {
+		req := httptest.NewRequest(http.MethodGet, url, nil)
+		w := httptest.NewRecorder()
+		handler.HandleCollection(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("page %d: status = %v, body: %s", page, w.Code, w.Body.String())
+		}
+
+		var resp map[string]interface{}
+		if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+			t.Fatalf("page %d: decode error: %v", page, err)
+		}
+
+		items, ok := resp["value"].([]interface{})
+		if !ok {
+			t.Fatalf("page %d: value is not an array", page)
+		}
+
+		for _, item := range items {
+			m, ok := item.(map[string]interface{})
+			if !ok {
+				t.Fatalf("page %d: item is not a map", page)
+			}
+			id := int(m["ID"].(float64))
+			if seen[id] {
+				t.Errorf("page %d: entity ID=%d returned twice", page, id)
+			}
+			seen[id] = true
+		}
+
+		next, hasNext := resp["@odata.nextLink"].(string)
+		if !hasNext {
+			break
+		}
+
+		// Strip the base URL prefix to get just the path+query.
+		u, _ := parseTestURL(next)
+		url = u
+	}
+
+	if len(seen) != total {
+		missing := []int{}
+		for id := 1; id <= total; id++ {
+			if !seen[id] {
+				missing = append(missing, id)
+			}
+		}
+		t.Errorf("traversal returned %d/%d entities; missing IDs: %v", len(seen), total, missing)
+	}
+}
+
+// parseTestURL strips the scheme+host from an absolute URL returned by the test server
+// so it can be used as a relative path for the next httptest request.
+func parseTestURL(raw string) (string, error) {
+	// Find the path portion (everything from the first '/' after the host).
+	for i, c := range raw {
+		if c == '/' && i > 0 && raw[i-1] != '/' {
+			return raw[i:], nil
+		}
+	}
+	return raw, nil
+}
