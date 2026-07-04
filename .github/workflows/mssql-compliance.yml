@@ -49,6 +49,16 @@ jobs:
       with:
         go-version: '1.25'
 
+    - name: Cache Go modules
+      uses: actions/cache@v6
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-1.25-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-1.25-
+
     - name: Create test database
       run: |
         docker exec "${{ job.services.mssql.id }}" /opt/mssql-tools18/bin/sqlcmd \
