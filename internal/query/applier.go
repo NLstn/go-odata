@@ -62,7 +62,21 @@ func ApplyQueryOptionsWithFTS(db *gorm.DB, options *QueryOptions, entityMetadata
 
 	// Apply transformations (if present, they take precedence over other query options)
 	if len(options.Apply) > 0 {
-		db = applyTransformations(db, options.Apply, entityMetadata)
+		var hasGrouping bool
+		db, hasGrouping = applyTransformations(db, options.Apply, entityMetadata)
+
+		// Per the OData Data Aggregation extension, system query options besides $apply
+		// (here $filter, $orderby, $skip, $top) apply to the transformed result set, not
+		// the original collection. $filter must be able to reference properties introduced
+		// by the transformation (e.g. an aggregate alias), so when the pipeline ends in a
+		// grouped/aggregated state it is applied as HAVING; otherwise as a plain WHERE.
+		if options.Filter != nil {
+			if hasGrouping {
+				db = applyHavingFilter(db, options.Filter, entityMetadata)
+			} else {
+				db = applyFilter(db, options.Filter, entityMetadata)
+			}
+		}
 
 		// After applying transformations, still apply orderby, top, and skip
 		// These are standalone query options that work with $apply

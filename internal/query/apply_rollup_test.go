@@ -192,7 +192,7 @@ func TestApplyGroupByRollup_SQL(t *testing.T) {
 			t.Fatalf("parseApply(%q) failed: %v", applyStr, err)
 		}
 
-		resultDB := applyTransformations(db.Session(&gorm.Session{}), transformations, meta)
+		resultDB, _ := applyTransformations(db.Session(&gorm.Session{}), transformations, meta)
 
 		// Fetch raw rows (no GROUP BY because rollup uses in-memory path)
 		var rawResults []map[string]interface{}
@@ -327,7 +327,7 @@ func TestApplyGroupByRollup_SkipsStreamMarkerColumns(t *testing.T) {
 		t.Fatalf("parseApply failed: %v", err)
 	}
 
-	resultDB := applyTransformations(db.Session(&gorm.Session{}), transformations, meta)
+	resultDB, _ := applyTransformations(db.Session(&gorm.Session{}), transformations, meta)
 
 	var rawResults []map[string]interface{}
 	if err := resultDB.Find(&rawResults).Error; err != nil {

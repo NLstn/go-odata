@@ -265,6 +265,62 @@ func TestApply_MultipleAggregations(t *testing.T) {
 	}
 }
 
+// TestApply_TopLevelFilter_AfterGroupByAggregate reproduces #774: a top-level $filter
+// combined with $apply=groupby(...)/aggregate(...) must filter the transformed
+// (aggregated) result set, referencing properties introduced by the transformation
+// (e.g. an aggregate alias), per the OData Data Aggregation extension §6.4 ordering of
+// system query options after $apply. This differs from filter() *inside* $apply, which
+// already worked correctly.
+func TestApply_TopLevelFilter_AfterGroupByAggregate(t *testing.T) {
+	db := setupHavingTestDB(t)
+
+	products := []HavingProduct{
+		{ID: 1, Name: "Product 1", Price: 40.0, Category: "Cat1"},  // Cat1 total: 40 (<=100)
+		{ID: 2, Name: "Product 2", Price: 200.0, Category: "Cat2"}, // Cat2 total: 200 (>100)
+		{ID: 3, Name: "Product 3", Price: 60.0, Category: "Cat3"},  // Cat3 total: 150 (>100)
+		{ID: 4, Name: "Product 4", Price: 90.0, Category: "Cat3"},
+	}
+	for _, product := range products {
+		if err := db.Create(&product).Error; err != nil {
+			t.Fatalf("Failed to create product: %v", err)
+		}
+	}
+
+	service := setupHavingTestService(t, db)
+
+	req := httptest.NewRequest("GET",
+		"/HavingProducts?$apply=groupby((Category),aggregate(Price%20with%20sum%20as%20Total))&$filter=Total%20gt%20100", nil)
+	w := httptest.NewRecorder()
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected status 200, got %d. Body: %s", w.Code, w.Body.String())
+	}
+
+	var response map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	value, ok := response["value"].([]interface{})
+	if !ok {
+		t.Fatal("value is not an array")
+	}
+
+	// Only Cat2 (200) and Cat3 (150) have Total > 100; Cat1 (40) must be filtered out.
+	if len(value) != 2 {
+		t.Fatalf("Expected 2 groups with Total > 100, got %d: %+v", len(value), value)
+	}
+
+	for _, item := range value {
+		group := item.(map[string]interface{})
+		total, ok := group["Total"].(float64)
+		if !ok || total <= 100 {
+			t.Errorf("Expected every returned group to have Total > 100, got %v", group)
+		}
+	}
+}
+
 func setupHavingTestDB(t *testing.T) *gorm.DB {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
