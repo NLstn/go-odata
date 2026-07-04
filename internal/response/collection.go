@@ -30,20 +30,23 @@ func WriteODataCollectionWithDelta(w http.ResponseWriter, r *http.Request, entit
 
 // WriteODataCollectionWithNavigation writes an OData collection response with navigation links.
 func WriteODataCollectionWithNavigation(w http.ResponseWriter, r *http.Request, entitySetName string, data interface{}, count *int64, nextLink *string, metadata EntityMetadataProvider, expandOptions []query.ExpandOption, selectedNavProps []string, fullMetadata *metadata.EntityMetadata) error {
-	return writeODataCollectionWithNavigationResponse(w, r, entitySetName, data, count, nextLink, nil, metadata, expandOptions, selectedNavProps, fullMetadata, nil)
+	return writeODataCollectionWithNavigationResponse(w, r, entitySetName, data, count, nextLink, nil, metadata, expandOptions, selectedNavProps, fullMetadata, nil, 0)
 }
 
 // WriteODataCollectionWithNavigationAndDelta writes an OData collection response with navigation links and a delta link.
 func WriteODataCollectionWithNavigationAndDelta(w http.ResponseWriter, r *http.Request, entitySetName string, data interface{}, count *int64, nextLink, deltaLink *string, metadata EntityMetadataProvider, expandOptions []query.ExpandOption, selectedNavProps []string, fullMetadata *metadata.EntityMetadata) error {
-	return writeODataCollectionWithNavigationResponse(w, r, entitySetName, data, count, nextLink, deltaLink, metadata, expandOptions, selectedNavProps, fullMetadata, nil)
+	return writeODataCollectionWithNavigationResponse(w, r, entitySetName, data, count, nextLink, deltaLink, metadata, expandOptions, selectedNavProps, fullMetadata, nil, 0)
 }
 
 // WriteODataCollectionWithNavigationAndSelect writes an OData collection response with navigation links
 // and a pre-computed list of selected/output properties used to build the @odata.context URL.
 // selectedProps should contain the $select properties (or $apply output properties) so that the
 // context URL is shaped as #EntitySet(prop1,prop2) per the OData spec.
-func WriteODataCollectionWithNavigationAndSelect(w http.ResponseWriter, r *http.Request, entitySetName string, data interface{}, count *int64, nextLink, deltaLink *string, md EntityMetadataProvider, expandOptions []query.ExpandOption, selectedNavProps []string, fullMetadata *metadata.EntityMetadata, selectedProps []string) error {
-	return writeODataCollectionWithNavigationResponse(w, r, entitySetName, data, count, nextLink, deltaLink, md, expandOptions, selectedNavProps, fullMetadata, selectedProps)
+// skip is the $skip offset applied to the underlying query, used so that @odata.index annotations
+// (when $index is requested) reflect the item's absolute position in the full collection rather
+// than its position within the current page.
+func WriteODataCollectionWithNavigationAndSelect(w http.ResponseWriter, r *http.Request, entitySetName string, data interface{}, count *int64, nextLink, deltaLink *string, md EntityMetadataProvider, expandOptions []query.ExpandOption, selectedNavProps []string, fullMetadata *metadata.EntityMetadata, selectedProps []string, skip int) error {
+	return writeODataCollectionWithNavigationResponse(w, r, entitySetName, data, count, nextLink, deltaLink, md, expandOptions, selectedNavProps, fullMetadata, selectedProps, skip)
 }
 
 func writeODataCollectionResponse(w http.ResponseWriter, r *http.Request, entitySetName string, data interface{}, count *int64, nextLink, deltaLink *string, selectedProps []string) error {
@@ -102,7 +105,7 @@ func writeODataCollectionResponse(w http.ResponseWriter, r *http.Request, entity
 	return encoder.Encode(response)
 }
 
-func writeODataCollectionWithNavigationResponse(w http.ResponseWriter, r *http.Request, entitySetName string, data interface{}, count *int64, nextLink, deltaLink *string, metadata EntityMetadataProvider, expandOptions []query.ExpandOption, selectedNavProps []string, fullMetadata *metadata.EntityMetadata, selectedProps []string) error {
+func writeODataCollectionWithNavigationResponse(w http.ResponseWriter, r *http.Request, entitySetName string, data interface{}, count *int64, nextLink, deltaLink *string, metadata EntityMetadataProvider, expandOptions []query.ExpandOption, selectedNavProps []string, fullMetadata *metadata.EntityMetadata, selectedProps []string, skip int) error {
 	if !IsAcceptableFormat(r) {
 		return WriteError(w, r, http.StatusNotAcceptable, "Not Acceptable",
 			"The requested format is not supported. Only application/json and application/atom+xml are supported for data responses.")
@@ -134,7 +137,7 @@ func writeODataCollectionWithNavigationResponse(w http.ResponseWriter, r *http.R
 
 	// Add @odata.index annotations if $index query parameter is present
 	if shouldAddIndexAnnotations(r) {
-		transformedData = addIndexAnnotations(transformedData)
+		transformedData = addIndexAnnotations(transformedData, skip)
 	}
 
 	// Build the envelope as an OrderedMap to avoid reflection-based map encoding.
@@ -244,15 +247,17 @@ func shouldAddIndexAnnotations(r *http.Request) bool {
 	return normalizedExists
 }
 
-// addIndexAnnotations adds @odata.index annotations to collection items
-// The index represents the zero-based ordinal position of each item in the collection
-func addIndexAnnotations(data []interface{}) []interface{} {
+// addIndexAnnotations adds @odata.index annotations to collection items.
+// The index represents the zero-based ordinal position of each item in the total collection,
+// so skip (the $skip offset of the current page) is added to the item's position within the page.
+func addIndexAnnotations(data []interface{}, skip int) []interface{} {
 	for i, item := range data {
+		index := skip + i
 		switch value := item.(type) {
 		case map[string]interface{}:
-			value["@odata.index"] = i
+			value["@odata.index"] = index
 		case *OrderedMap:
-			value.Set("@odata.index", i)
+			value.Set("@odata.index", index)
 		}
 	}
 	return data
