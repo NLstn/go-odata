@@ -746,11 +746,9 @@ func TestParseApply_GroupByNestedSequence(t *testing.T) {
 func TestParseQueryOptions_ApplyCaseAndDollarPrefixVersionBehavior(t *testing.T) {
 	meta := getApplyTestMetadata(t)
 
-	t.Run("4.01 accepts mixed-case and no-dollar apply", func(t *testing.T) {
+	t.Run("4.01 accepts lowercase dollar and no-dollar apply", func(t *testing.T) {
 		for _, rawQuery := range []string{
 			"$apply=filter(Price gt 10)",
-			"$APPLY=filter(Price gt 10)",
-			"Apply=filter(Price gt 10)",
 			"apply=filter(Price gt 10)",
 		} {
 			params, _ := url.ParseQuery(rawQuery)
@@ -761,6 +759,22 @@ func TestParseQueryOptions_ApplyCaseAndDollarPrefixVersionBehavior(t *testing.T)
 			if len(opts.Apply) != 1 || opts.Apply[0].Type != ApplyTypeFilter {
 				t.Fatalf("expected parsed apply filter for %q, got %+v", rawQuery, opts.Apply)
 			}
+		}
+	})
+
+	t.Run("4.01 rejects mixed-case dollar apply and ignores mixed-case no-dollar apply", func(t *testing.T) {
+		mixedCaseDollarParams, _ := url.ParseQuery("$APPLY=filter(Price gt 10)")
+		if _, err := ParseQueryOptionsWithConfigAndCaseSensitivity(mixedCaseDollarParams, meta, nil, true); err == nil {
+			t.Fatal("expected 4.01 parser to reject mixed-case $APPLY (option names remain case-sensitive)")
+		}
+
+		mixedCaseNoDollarParams, _ := url.ParseQuery("Apply=filter(Price gt 10)")
+		opts, err := ParseQueryOptionsWithConfigAndCaseSensitivity(mixedCaseNoDollarParams, meta, nil, true)
+		if err != nil {
+			t.Fatalf("expected 4.01 parser to treat mixed-case no-dollar apply as custom parameter, got error: %v", err)
+		}
+		if len(opts.Apply) != 0 {
+			t.Fatalf("expected no apply transformations for mixed-case no-dollar apply, got %+v", opts.Apply)
 		}
 	})
 

@@ -216,9 +216,10 @@ t.Error("Expected '@odata.count' in response when count=true")
 }
 }
 
-// TestOptionalDollarPrefix_V401_MixedCaseDollarPrefix tests that mixed-case $-prefixed options
-// work in OData v4.01.
-func TestOptionalDollarPrefix_V401_MixedCaseDollarPrefix(t *testing.T) {
+// TestOptionalDollarPrefix_V401_MixedCaseDollarPrefixRejected tests that mixed-case
+// $-prefixed options are rejected in OData v4.01, since system query option names
+// remain case-sensitive even though the '$' prefix is optional (OData URL Conventions §2.1).
+func TestOptionalDollarPrefix_V401_MixedCaseDollarPrefixRejected(t *testing.T) {
 service, db := setupTestService(t)
 db.Create(&TestProduct{ID: 1, Name: "Laptop", Price: 999.99})
 db.Create(&TestProduct{ID: 2, Name: "Mouse", Price: 29.99})
@@ -229,21 +230,8 @@ w := httptest.NewRecorder()
 
 service.ServeHTTP(w, req)
 
-if w.Code != http.StatusOK {
-t.Fatalf("Expected 200 OK, got %d: %s", w.Code, w.Body.String())
-}
-
-var result map[string]interface{}
-if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
-t.Fatalf("Failed to parse response: %v", err)
-}
-
-value, ok := result["value"].([]interface{})
-if !ok {
-t.Fatal("Expected 'value' array in response")
-}
-if len(value) != 1 {
-t.Errorf("Expected 1 product ($TOP=1), got %d", len(value))
+if w.Code != http.StatusBadRequest {
+t.Errorf("Expected 400 Bad Request for mixed-case $TOP in v4.01, got %d: %s", w.Code, w.Body.String())
 }
 }
 
@@ -392,6 +380,25 @@ service.ServeHTTP(w, req)
 
 if w.Code != http.StatusBadRequest {
 t.Errorf("Expected 400 Bad Request for mixed-case $TOP in v4.0, got %d: %s", w.Code, w.Body.String())
+}
+}
+
+// TestOptionalDollarPrefix_DefaultVersion_UppercaseFilterRejected reproduces the reported
+// gap in OData URL Conventions §2.1 compliance: $FILTER must not be treated as $filter,
+// even under the default negotiated version (4.01), since system query option names are
+// case-sensitive lowercase regardless of whether the '$' prefix is required.
+func TestOptionalDollarPrefix_DefaultVersion_UppercaseFilterRejected(t *testing.T) {
+service, db := setupTestService(t)
+db.Create(&TestProduct{ID: 1, Name: "Laptop", Price: 999.99})
+db.Create(&TestProduct{ID: 2, Name: "Mouse", Price: 29.99})
+
+req := httptest.NewRequest(http.MethodGet, "/TestProducts?$FILTER="+url.QueryEscape("Price gt 100"), nil)
+w := httptest.NewRecorder()
+
+service.ServeHTTP(w, req)
+
+if w.Code != http.StatusBadRequest {
+t.Errorf("Expected 400 Bad Request for uppercase $FILTER, got %d: %s", w.Code, w.Body.String())
 }
 }
 

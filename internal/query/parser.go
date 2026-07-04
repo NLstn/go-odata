@@ -302,45 +302,36 @@ var validQueryOptions = map[string]bool{
 	"$skiptoken":     true,
 }
 
-// normalizeQueryOptionKey normalizes a query option key to lowercase with $ prefix
-// per OData v4.01 spec: system query option names are case-insensitive and may be provided without the $ prefix
-// Returns the normalized key if it's a valid OData system query option, otherwise returns the original key
+// normalizeQueryOptionKey adds a missing '$' prefix to a bare system query option name.
+// Per OData v4.01 URL Conventions §2.1, system query option names may be provided
+// without the leading '$', but remain case-sensitive lowercase names — "FILTER" or
+// "$FILTER" are not equivalent to "$filter" and must not be folded to it.
+// Returns the normalized key if it's a recognized bare option name, otherwise the
+// original key unchanged (so unrecognized or wrongly-cased options surface as
+// "unknown query option" errors instead of being silently accepted).
 func normalizeQueryOptionKey(key string) string {
-	// Try with $ prefix
-	withDollar := "$" + strings.ToLower(key)
+	if strings.HasPrefix(key, "$") {
+		return key
+	}
+
+	withDollar := "$" + key
 	if validQueryOptions[withDollar] {
 		return withDollar
 	}
 
-	// Already has $ prefix, lowercase it and check validity
-	if strings.HasPrefix(key, "$") {
-		lowercase := strings.ToLower(key)
-		if validQueryOptions[lowercase] {
-			return lowercase
-		}
-		// Unknown $ option - preserve original casing for error messages
-		return key
-	}
-
-	// Check if without modification (lowercase) it's a valid option
-	lowercase := strings.ToLower(key)
-	if validQueryOptions[lowercase] {
-		return lowercase
-	}
-
-	// Not a known OData system query option, return original
+	// Not a recognized bare OData system query option name, return original
 	return key
 }
 
-// normalizeQueryParams normalizes all query parameters to have lowercase $ prefix
-// This allows case-insensitive query options and options without $ prefix
-// Non-OData parameters are left unchanged
+// normalizeQueryParams adds a missing '$' prefix to bare system query option names.
+// This allows options without the $ prefix per OData 4.01, without relaxing case sensitivity.
+// Non-OData parameters are left unchanged.
 func normalizeQueryParams(queryParams url.Values) url.Values {
 	return NormalizeQueryParams(queryParams)
 }
 
-// NormalizeQueryParams normalizes all query parameters to have lowercase $ prefix.
-// This allows case-insensitive query options and options without $ prefix per OData 4.01.
+// NormalizeQueryParams adds a missing '$' prefix to bare system query option names.
+// This allows options without the $ prefix per OData 4.01, without relaxing case sensitivity.
 // Non-OData parameters are left unchanged.
 func NormalizeQueryParams(queryParams url.Values) url.Values {
 	normalized := make(url.Values)

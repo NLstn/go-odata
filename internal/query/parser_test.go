@@ -535,14 +535,14 @@ func TestNormalizeQueryParams(t *testing.T) {
 			wantKeys: []string{"$filter"},
 		},
 		{
-			name:     "dollar-prefixed uppercase key is lowercased",
+			name:     "dollar-prefixed uppercase key is left unchanged (not folded to $filter)",
 			input:    url.Values{"$FILTER": {"Price gt 10"}},
-			wantKeys: []string{"$filter"},
+			wantKeys: []string{"$FILTER"},
 		},
 		{
-			name:     "dollar-prefixed mixed-case key is lowercased",
+			name:     "dollar-prefixed mixed-case key is left unchanged (not folded)",
 			input:    url.Values{"$Filter": {"Price gt 10"}, "$TOP": {"5"}},
-			wantKeys: []string{"$filter", "$top"},
+			wantKeys: []string{"$Filter", "$TOP"},
 		},
 		{
 			name:     "non-dollar known option gets dollar prefix",
@@ -550,9 +550,9 @@ func TestNormalizeQueryParams(t *testing.T) {
 			wantKeys: []string{"$filter"},
 		},
 		{
-			name:     "non-dollar known option (uppercase) gets dollar prefix",
+			name:     "non-dollar known option (uppercase) is left unchanged (not folded)",
 			input:    url.Values{"FILTER": {"Price gt 10"}},
-			wantKeys: []string{"$filter"},
+			wantKeys: []string{"FILTER"},
 		},
 		{
 			name:     "multiple non-dollar known options get dollar prefix",
@@ -696,15 +696,10 @@ func TestParseQueryOptionsWithConfigAndCaseSensitivity_NoDollarPrefix(t *testing
 			},
 		},
 		{
-			name:            "v4.01: mixed-case dollar prefix",
+			name:            "v4.01: mixed-case dollar prefix is rejected (option names remain case-sensitive)",
 			queryString:     "$TOP=10",
 			caseInsensitive: true,
-			expectError:     false,
-			validate: func(t *testing.T, opts *QueryOptions) {
-				if opts.Top == nil || *opts.Top != 10 {
-					t.Errorf("Expected top=10, got %v", opts.Top)
-				}
-			},
+			expectError:     true,
 		},
 		{
 			name:            "v4.01: count without dollar prefix",
