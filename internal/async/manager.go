@@ -428,6 +428,7 @@ type jobSnapshot struct {
 	retryAfter *time.Duration
 	response   *StoredResponse
 	err        string
+	monitorURL string
 }
 
 // ServeMonitor handles HTTP requests for job status monitoring.
@@ -492,6 +493,11 @@ func (m *Manager) ServeMonitor(w http.ResponseWriter, r *http.Request) {
 
 	switch snapshot.status {
 	case JobPending, JobRunning:
+		location := snapshot.monitorURL
+		if location == "" {
+			location = id
+		}
+		w.Header().Set("Location", location)
 		w.Header().Set("Preference-Applied", "respond-async")
 		if snapshot.retryAfter != nil {
 			w.Header().Set("Retry-After", formatRetryAfter(*snapshot.retryAfter))
@@ -670,9 +676,10 @@ func recordToSnapshot(record *JobRecord) (jobSnapshot, error) {
 		return jobSnapshot{}, err
 	}
 	snapshot := jobSnapshot{
-		status:   record.Status,
-		response: resp,
-		err:      record.ErrorText,
+		status:     record.Status,
+		response:   resp,
+		err:        record.ErrorText,
+		monitorURL: record.MonitorURL,
 	}
 	if retry != nil {
 		snapshot.retryAfter = retry

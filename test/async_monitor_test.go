@@ -64,6 +64,44 @@ func TestAsyncMonitorGetMatchesSynchronousResponse(t *testing.T) {
 	}
 }
 
+func TestAsyncMonitorInProgressResponseHasLocationHeader(t *testing.T) {
+	service, db := setupPreferTestService(t)
+	enableAsyncProcessing(t, service, 2*time.Second)
+
+	existing := []PreferTestProduct{
+		{Name: "Pending One", Price: 10},
+		{Name: "Pending Two", Price: 20},
+	}
+	if err := db.Create(&existing).Error; err != nil {
+		t.Fatalf("failed to seed products: %v", err)
+	}
+
+	asyncReq := httptest.NewRequest(http.MethodGet, "/PreferTestProducts?$orderby=Name", nil)
+	asyncReq.Header.Set("Prefer", "respond-async")
+	asyncRec := httptest.NewRecorder()
+	service.ServeHTTP(asyncRec, asyncReq)
+
+	if asyncRec.Code != http.StatusAccepted {
+		t.Fatalf("expected async acknowledgement, got %d", asyncRec.Code)
+	}
+
+	location := asyncRec.Header().Get("Location")
+	if location == "" {
+		t.Fatal("missing monitor Location header")
+	}
+
+	pollRec := issueMonitorRequest(t, service, http.MethodGet, location)
+	if pollRec.Code != http.StatusAccepted {
+		t.Fatalf("expected job still in progress (202), got %d", pollRec.Code)
+	}
+
+	if got := pollRec.Header().Get("Location"); got == "" {
+		t.Fatal("in-progress 202 response from status monitor missing Location header (OData §13.1)")
+	}
+
+	waitForMonitorCompletion(t, service, location)
+}
+
 func TestAsyncMonitorDeleteRemovesCompletedJob(t *testing.T) {
 	service, _ := setupPreferTestService(t)
 	enableAsyncProcessing(t, service, time.Second)
