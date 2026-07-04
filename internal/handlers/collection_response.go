@@ -82,8 +82,13 @@ func (h *EntityHandler) collectionResponseWriter(w http.ResponseWriter, r *http.
 			contextProps = queryOptions.Select
 		}
 
+		skip := 0
+		if queryOptions.Skip != nil {
+			skip = *queryOptions.Skip
+		}
+
 		metadataProvider := h.getMetadataAdapter()
-		if err := response.WriteODataCollectionWithNavigationAndSelect(w, r, h.metadata.EntitySetName, results, totalCount, nextLink, deltaLink, metadataProvider, queryOptions.Expand, selectedNavProps, h.metadata, contextProps); err != nil {
+		if err := response.WriteODataCollectionWithNavigationAndSelect(w, r, h.metadata.EntitySetName, results, totalCount, nextLink, deltaLink, metadataProvider, queryOptions.Expand, selectedNavProps, h.metadata, contextProps, skip); err != nil {
 			h.logger.Error("Error writing OData response", "error", err)
 		}
 

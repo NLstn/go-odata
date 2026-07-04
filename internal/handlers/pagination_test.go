@@ -292,6 +292,63 @@ func TestEntityHandlerCollectionWithTopAndSkip(t *testing.T) {
 	}
 }
 
+func TestEntityHandlerCollectionWithIndexAndSkip(t *testing.T) {
+	handler, db := setupProductHandler(t)
+
+	products := make([]Product, 10)
+	for i := 0; i < 10; i++ {
+		products[i] = Product{
+			ID:          i + 1,
+			Name:        "Product " + string(rune('A'+(i%26))),
+			Description: "Description",
+			Price:       float64(i+1) * 10.0,
+			Category:    "Electronics",
+		}
+		db.Create(&products[i])
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/Products", nil)
+	q := req.URL.Query()
+	q.Add("$top", "2")
+	q.Add("$skip", "2")
+	q.Add("$index", "")
+	req.URL.RawQuery = q.Encode()
+	w := httptest.NewRecorder()
+
+	handler.HandleCollection(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Status = %v, want %v", w.Code, http.StatusOK)
+	}
+
+	var response map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	value, ok := response["value"].([]interface{})
+	if !ok || len(value) != 2 {
+		t.Fatalf("Expected 2 results, got %v", response["value"])
+	}
+
+	// @odata.index must reflect the absolute position in the total collection
+	// (i.e. offset by $skip), not the position within the returned page.
+	expectedIndexes := []int{2, 3}
+	for i, item := range value {
+		itemMap, ok := item.(map[string]interface{})
+		if !ok {
+			t.Fatalf("item %d is not a map", i)
+		}
+		index, ok := itemMap["@odata.index"].(float64)
+		if !ok {
+			t.Fatalf("item %d missing @odata.index, got %v", i, itemMap["@odata.index"])
+		}
+		if int(index) != expectedIndexes[i] {
+			t.Errorf("item %d @odata.index = %d, want %d", i, int(index), expectedIndexes[i])
+		}
+	}
+}
+
 func TestEntityHandlerCollectionWithCount(t *testing.T) {
 	handler, db := setupProductHandler(t)
 

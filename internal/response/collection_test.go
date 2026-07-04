@@ -15,7 +15,7 @@ func TestAddIndexAnnotationsAddsIndexesToMaps(t *testing.T) {
 		map[string]interface{}{"ID": 2},
 	}
 
-	annotated := addIndexAnnotations(data)
+	annotated := addIndexAnnotations(data, 0)
 
 	for i, item := range annotated {
 		itemMap, ok := item.(map[string]interface{})
@@ -33,13 +33,33 @@ func TestAddIndexAnnotationsAddsIndexesToMaps(t *testing.T) {
 	}
 }
 
+func TestAddIndexAnnotationsUsesSkipAsAbsoluteOffset(t *testing.T) {
+	data := []interface{}{
+		map[string]interface{}{"ID": 1},
+		map[string]interface{}{"ID": 2},
+	}
+
+	annotated := addIndexAnnotations(data, 2)
+
+	for i, item := range annotated {
+		itemMap := item.(map[string]interface{})
+		index, ok := itemMap["@odata.index"].(int)
+		if !ok {
+			t.Fatalf("item %d missing integer @odata.index, got %T", i, itemMap["@odata.index"])
+		}
+		if want := 2 + i; index != want {
+			t.Fatalf("item %d index = %d, want %d", i, index, want)
+		}
+	}
+}
+
 func TestAddIndexAnnotationsAddsIndexesToOrderedMaps(t *testing.T) {
 	first := NewOrderedMap()
 	first.Set("ID", 1)
 	second := NewOrderedMap()
 	second.Set("ID", 2)
 
-	annotated := addIndexAnnotations([]interface{}{first, second})
+	annotated := addIndexAnnotations([]interface{}{first, second}, 0)
 
 	for i, item := range annotated {
 		ordered, ok := item.(*OrderedMap)
