@@ -786,3 +786,126 @@ func TestPrefer_IncludeAnnotations_PreferenceApplied_AlwaysSetWhenRequested(t *t
 		t.Errorf("Preference-Applied should be set whenever include-annotations is requested, got %q", applied)
 	}
 }
+
+// OmitValuesProduct has a nullable field for testing Prefer: omit-values=nulls.
+type OmitValuesProduct struct {
+	ID          uint    `json:"ID" gorm:"primaryKey;autoIncrement" odata:"key"`
+	Name        string  `json:"Name"`
+	Description *string `json:"Description"`
+}
+
+func setupOmitValuesService(t *testing.T) (*odata.Service, *gorm.DB) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("Failed to connect to database: %v", err)
+	}
+	if err := db.AutoMigrate(&OmitValuesProduct{}); err != nil {
+		t.Fatalf("Failed to migrate: %v", err)
+	}
+	service, err := odata.NewService(db)
+	if err != nil {
+		t.Fatalf("Failed to create service: %v", err)
+	}
+	if err := service.RegisterEntity(&OmitValuesProduct{}); err != nil {
+		t.Fatalf("Failed to register entity: %v", err)
+	}
+	return service, db
+}
+
+// TestPrefer_OmitValuesNulls_EntityRead verifies that Prefer: omit-values=nulls removes
+// null-valued properties from a single entity response, per OData v4.01 §11.2.8.6.
+func TestPrefer_OmitValuesNulls_EntityRead(t *testing.T) {
+	service, db := setupOmitValuesService(t)
+	db.Create(&OmitValuesProduct{Name: "Widget", Description: nil})
+
+	req := httptest.NewRequest(http.MethodGet, "/OmitValuesProducts(1)", nil)
+	req.Header.Set("Prefer", "omit-values=nulls")
+	w := httptest.NewRecorder()
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	if applied := w.Header().Get("Preference-Applied"); applied != "omit-values=nulls" {
+		t.Errorf("Preference-Applied = %q, want \"omit-values=nulls\"", applied)
+	}
+
+	var resp map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if _, ok := resp["Description"]; ok {
+		t.Errorf("Description should be omitted entirely, got response: %v", resp)
+	}
+	if resp["Name"] != "Widget" {
+		t.Errorf("expected Name=Widget to still be present, got %v", resp["Name"])
+	}
+}
+
+// TestPrefer_OmitValuesNulls_CollectionRead verifies null-property omission on collection reads.
+func TestPrefer_OmitValuesNulls_CollectionRead(t *testing.T) {
+	service, db := setupOmitValuesService(t)
+	desc := "Has a description"
+	db.Create(&OmitValuesProduct{Name: "WithDesc", Description: &desc})
+	db.Create(&OmitValuesProduct{Name: "WithoutDesc", Description: nil})
+
+	req := httptest.NewRequest(http.MethodGet, "/OmitValuesProducts?$top=3", nil)
+	req.Header.Set("Prefer", "omit-values=nulls")
+	w := httptest.NewRecorder()
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	if applied := w.Header().Get("Preference-Applied"); applied != "omit-values=nulls" {
+		t.Errorf("Preference-Applied = %q, want \"omit-values=nulls\"", applied)
+	}
+
+	var resp map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	values, ok := resp["value"].([]interface{})
+	if !ok || len(values) != 2 {
+		t.Fatalf("expected 2 items, got %v", resp["value"])
+	}
+
+	withDesc := values[0].(map[string]interface{})
+	if withDesc["Description"] != "Has a description" {
+		t.Errorf("expected Description to be present for first item, got %v", withDesc)
+	}
+
+	withoutDesc := values[1].(map[string]interface{})
+	if _, ok := withoutDesc["Description"]; ok {
+		t.Errorf("Description should be omitted for second item, got %v", withoutDesc)
+	}
+}
+
+// TestPrefer_OmitValuesNulls_NotAppliedWithoutPreference verifies that null properties
+// are still present when the omit-values preference is not requested.
+func TestPrefer_OmitValuesNulls_NotAppliedWithoutPreference(t *testing.T) {
+	service, db := setupOmitValuesService(t)
+	db.Create(&OmitValuesProduct{Name: "Widget", Description: nil})
+
+	req := httptest.NewRequest(http.MethodGet, "/OmitValuesProducts(1)", nil)
+	w := httptest.NewRecorder()
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	descValue, ok := resp["Description"]
+	if !ok {
+		t.Fatal("Description key should be present (as null) when preference is not requested")
+	}
+	if descValue != nil {
+		t.Errorf("expected Description to be null, got %v", descValue)
+	}
+}

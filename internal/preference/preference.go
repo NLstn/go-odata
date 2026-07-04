@@ -209,6 +209,21 @@ func (p *Preference) ApplyOmitValues(allowUnprefixed bool) {
 	}
 }
 
+// OmitsNulls reports whether the omit-values=nulls preference was applied, meaning
+// properties with a null value should be removed from the response body
+// (OData v4.01 §11.2.8.6).
+func (p *Preference) OmitsNulls() bool {
+	if !p.omitValuesApplied || p.OmitValues == nil {
+		return false
+	}
+	for _, token := range strings.Split(*p.OmitValues, ",") {
+		if strings.EqualFold(strings.TrimSpace(token), "nulls") {
+			return true
+		}
+	}
+	return false
+}
+
 // MatchesAnnotationFilter reports whether the given qualified annotation term name
 // should be included according to the odata.include-annotations filter value.
 //
