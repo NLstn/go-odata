@@ -611,9 +611,9 @@ func TestPostEntity_DuplicateCompositeKey(t *testing.T) {
 
 	service.ServeHTTP(w, req)
 
-	// Should return 500 Internal Server Error (database constraint violation)
-	if w.Code != http.StatusInternalServerError {
-		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusInternalServerError, w.Body.String())
+	// Should return 409 Conflict (OData JSON Format §5.1.2: the entity already exists)
+	if w.Code != http.StatusConflict {
+		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusConflict, w.Body.String())
 	}
 }
 

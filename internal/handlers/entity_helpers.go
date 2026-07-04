@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"strings"
 
 	"github.com/nlstn/go-odata/internal/etag"
 	"github.com/nlstn/go-odata/internal/odataerrors"
@@ -288,4 +289,46 @@ func (h *EntityHandler) writeDatabaseError(w http.ResponseWriter, r *http.Reques
 	if writeErr := response.WriteError(w, r, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error()); writeErr != nil {
 		h.logger.Error("Error writing error response", "error", writeErr)
 	}
+}
+
+// isUniqueConstraintViolation reports whether err represents a unique or primary
+// key constraint violation raised by the underlying database driver. GORM only
+// translates these into the driver-agnostic gorm.ErrDuplicatedKey when the
+// consuming application opens its *gorm.DB with Config.TranslateError enabled,
+// which this library does not control, so raw driver error text is matched too.
+func isUniqueConstraintViolation(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, gorm.ErrDuplicatedKey) {
+		return true
+	}
+
+	msg := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(msg, "unique constraint"): // SQLite, PostgreSQL
+		return true
+	case strings.Contains(msg, "duplicate entry"): // MySQL, MariaDB
+		return true
+	case strings.Contains(msg, "duplicate key"): // PostgreSQL (alternate wording)
+		return true
+	case strings.Contains(msg, "violation of unique key constraint"),
+		strings.Contains(msg, "violation of primary key constraint"): // SQL Server
+		return true
+	}
+	return false
+}
+
+// writeCreateDatabaseError writes an error response for a failed entity creation,
+// mapping unique/primary key constraint violations to 409 Conflict (OData JSON
+// Format §5.1.2 requires a Conflict response when the entity already exists)
+// instead of the generic 500 used for other database errors.
+func (h *EntityHandler) writeCreateDatabaseError(w http.ResponseWriter, r *http.Request, err error) {
+	if isUniqueConstraintViolation(err) {
+		if writeErr := response.WriteError(w, r, http.StatusConflict, ErrMsgConflict, ErrDetailDuplicateKey); writeErr != nil {
+			h.logger.Error("Error writing error response", "error", writeErr)
+		}
+		return
+	}
+	h.writeDatabaseError(w, r, err)
 }
