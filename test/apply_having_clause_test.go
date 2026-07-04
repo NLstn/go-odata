@@ -321,6 +321,99 @@ func TestApply_TopLevelFilter_AfterGroupByAggregate(t *testing.T) {
 	}
 }
 
+// TestApply_Count_ReflectsFilterTransformation reproduces #771's underlying defect:
+// $count / @odata.count must reflect $apply's transformed result set (here, a
+// filter() transformation), not the original collection's total row count. A client
+// relying on $apply=filter() semantics would otherwise silently receive an incorrect
+// count even though the `value` array itself is correctly filtered.
+func TestApply_Count_ReflectsFilterTransformation(t *testing.T) {
+	db := setupHavingTestDB(t)
+
+	products := []HavingProduct{
+		{ID: 1, Name: "Product 1", Price: 40.0, Category: "Cat1"},
+		{ID: 2, Name: "Product 2", Price: 200.0, Category: "Cat2"},
+		{ID: 3, Name: "Product 3", Price: 60.0, Category: "Cat3"},
+		{ID: 4, Name: "Product 4", Price: 90.0, Category: "Cat3"},
+	}
+	for _, product := range products {
+		if err := db.Create(&product).Error; err != nil {
+			t.Fatalf("Failed to create product: %v", err)
+		}
+	}
+
+	service := setupHavingTestService(t, db)
+
+	// Only Product 2, 3, 4 have Price > 50 (3 of 4).
+	req := httptest.NewRequest("GET", "/HavingProducts?$apply=filter(Price%20gt%2050)&$count=true", nil)
+	w := httptest.NewRecorder()
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected status 200, got %d. Body: %s", w.Code, w.Body.String())
+	}
+
+	var response map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	value, ok := response["value"].([]interface{})
+	if !ok {
+		t.Fatal("value is not an array")
+	}
+	if len(value) != 3 {
+		t.Fatalf("Expected 3 filtered products in value, got %d", len(value))
+	}
+
+	count, ok := response["@odata.count"].(float64)
+	if !ok || count != 3 {
+		t.Fatalf("Expected @odata.count to be 3 (matching the filtered result set), got %v", response["@odata.count"])
+	}
+
+	// The bare /$count endpoint must agree.
+	bareReq := httptest.NewRequest("GET", "/HavingProducts/$count?$apply=filter(Price%20gt%2050)", nil)
+	bareW := httptest.NewRecorder()
+	service.ServeHTTP(bareW, bareReq)
+
+	if bareW.Code != http.StatusOK {
+		t.Fatalf("Expected status 200 for bare $count, got %d. Body: %s", bareW.Code, bareW.Body.String())
+	}
+	if got := bareW.Body.String(); got != "3" {
+		t.Errorf("Expected bare /$count to return 3, got %q", got)
+	}
+}
+
+// TestApply_Count_ReflectsGroupByTransformation verifies $count reflects the number of
+// groups produced by $apply=groupby(...), not the number of underlying rows.
+func TestApply_Count_ReflectsGroupByTransformation(t *testing.T) {
+	db := setupHavingTestDB(t)
+
+	products := []HavingProduct{
+		{ID: 1, Name: "Product 1", Price: 100.0, Category: "Cat1"},
+		{ID: 2, Name: "Product 2", Price: 200.0, Category: "Cat1"},
+		{ID: 3, Name: "Product 3", Price: 50.0, Category: "Cat2"},
+		{ID: 4, Name: "Product 4", Price: 300.0, Category: "Cat3"},
+	}
+	for _, product := range products {
+		if err := db.Create(&product).Error; err != nil {
+			t.Fatalf("Failed to create product: %v", err)
+		}
+	}
+
+	service := setupHavingTestService(t, db)
+
+	req := httptest.NewRequest("GET", "/HavingProducts/$count?$apply=groupby((Category))", nil)
+	w := httptest.NewRecorder()
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected status 200, got %d. Body: %s", w.Code, w.Body.String())
+	}
+	if got := w.Body.String(); got != "3" {
+		t.Errorf("Expected /$count to return 3 (groups: Cat1, Cat2, Cat3), got %q", got)
+	}
+}
+
 func setupHavingTestDB(t *testing.T) *gorm.DB {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
