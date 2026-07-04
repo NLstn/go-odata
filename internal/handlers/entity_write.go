@@ -243,6 +243,13 @@ func (h *EntityHandler) handlePatchEntity(w http.ResponseWriter, r *http.Request
 			return newTransactionHandledError(err)
 		}
 
+		if err := h.validateMaxLength(updateData); err != nil {
+			if writeErr := response.WriteError(w, r, http.StatusBadRequest, "Invalid property value", err.Error()); writeErr != nil {
+				h.logger.Error("Error writing error response", "error", writeErr)
+			}
+			return newTransactionHandledError(err)
+		}
+
 		if err := h.callBeforeUpdate(entity, hookReq); err != nil {
 			h.writeHookError(w, r, err, http.StatusForbidden, "Authorization failed")
 			return newTransactionHandledError(err)

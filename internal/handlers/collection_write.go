@@ -114,6 +114,11 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 			return newTransactionHandledError(err)
 		}
 
+		if err := h.validateMaxLength(requestData); err != nil {
+			WriteError(w, r, http.StatusBadRequest, "Invalid property value", err.Error())
+			return newTransactionHandledError(err)
+		}
+
 		if err := h.validateReferentialConstraints(ctx, tx, requestData); err != nil {
 			WriteError(w, r, http.StatusBadRequest, "Invalid reference", err.Error())
 			return newTransactionHandledError(err)
