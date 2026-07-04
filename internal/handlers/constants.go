@@ -33,6 +33,8 @@ const (
 	ErrDetailVersionNotSupported = "This service only supports OData version 4.0 and above. The maximum version specified in the OData-MaxVersion header is below 4.0."
 	ErrMsgValidationFailed       = "Validation failed"
 	ErrMsgNotImplemented         = "Not implemented"
+	ErrMsgConflict               = "Conflict"
+	ErrDetailDuplicateKey        = "An entity with the same key already exists."
 )
 
 // Error detail format constants

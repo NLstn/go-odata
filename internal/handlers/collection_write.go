@@ -120,7 +120,7 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 		}
 
 		if err := tx.Create(entity).Error; err != nil {
-			WriteError(w, r, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error())
+			h.writeCreateDatabaseError(w, r, err)
 			return newTransactionHandledError(err)
 		}
 
@@ -219,9 +219,7 @@ func (h *EntityHandler) handlePostMediaEntity(w http.ResponseWriter, r *http.Req
 		}
 
 		if err := tx.Create(entity).Error; err != nil {
-			if writeErr := response.WriteError(w, r, http.StatusInternalServerError, ErrMsgDatabaseError, err.Error()); writeErr != nil {
-				h.logger.Error("Error writing error response", "error", writeErr)
-			}
+			h.writeCreateDatabaseError(w, r, err)
 			return newTransactionHandledError(err)
 		}
 
