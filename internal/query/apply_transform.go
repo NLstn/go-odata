@@ -36,8 +36,11 @@ func GetRollupGroupByFromDB(db *gorm.DB) (*GroupByTransformation, bool) {
 	return nil, false
 }
 
-// applyTransformations applies apply transformations to the GORM query
-func applyTransformations(db *gorm.DB, transformations []ApplyTransformation, entityMetadata *metadata.EntityMetadata) *gorm.DB {
+// applyTransformations applies apply transformations to the GORM query. It returns
+// whether the transformation pipeline ends in a grouped/aggregated state, so callers
+// know whether a subsequent top-level $filter must be applied as a HAVING clause
+// (referencing transformed properties like aggregate aliases) or a plain WHERE clause.
+func applyTransformations(db *gorm.DB, transformations []ApplyTransformation, entityMetadata *metadata.EntityMetadata) (*gorm.DB, bool) {
 	if db.Statement != nil && db.Statement.Dest == nil {
 		modelInstance := reflect.New(entityMetadata.EntityType).Interface()
 		db = db.Model(modelInstance)
@@ -133,7 +136,7 @@ func applyTransformations(db *gorm.DB, transformations []ApplyTransformation, en
 			// SQL-builder layer. Leave the current set unchanged.
 		}
 	}
-	return db
+	return db, hasGrouping
 }
 
 func applySearchTransformation(db *gorm.DB, search *string, entityMetadata *metadata.EntityMetadata) *gorm.DB {

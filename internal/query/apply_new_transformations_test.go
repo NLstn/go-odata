@@ -131,7 +131,7 @@ func TestApplyGroupByAll_SQL(t *testing.T) {
 		t.Fatalf("parseApply failed: %v", err)
 	}
 
-	resultDB := applyTransformations(db.Session(&gorm.Session{}), transformations, meta)
+	resultDB, _ := applyTransformations(db.Session(&gorm.Session{}), transformations, meta)
 
 	var results []map[string]interface{}
 	if err := resultDB.Find(&results).Error; err != nil {
@@ -188,7 +188,7 @@ func TestApplyGroupByAll_NoTransform_CountAll(t *testing.T) {
 		t.Fatalf("parseApply failed: %v", err)
 	}
 
-	resultDB := applyTransformations(db.Session(&gorm.Session{}), transformations, meta)
+	resultDB, _ := applyTransformations(db.Session(&gorm.Session{}), transformations, meta)
 
 	var results []map[string]interface{}
 	if err := resultDB.Find(&results).Error; err != nil {
@@ -416,7 +416,7 @@ func TestApplyNest_Passthrough(t *testing.T) {
 		t.Fatalf("parseApply failed: %v", err)
 	}
 
-	resultDB := applyTransformations(db.Session(&gorm.Session{}), transformations, meta)
+	resultDB, _ := applyTransformations(db.Session(&gorm.Session{}), transformations, meta)
 	var results []ApplyTestEntity
 	if err := resultDB.Find(&results).Error; err != nil {
 		t.Fatalf("query failed: %v", err)
@@ -458,7 +458,7 @@ func TestApplyFrom_Passthrough(t *testing.T) {
 		t.Fatalf("parseApply failed: %v", err)
 	}
 
-	resultDB := applyTransformations(db.Session(&gorm.Session{}), transformations, meta)
+	resultDB, _ := applyTransformations(db.Session(&gorm.Session{}), transformations, meta)
 	var results []ApplyTestEntity
 	if err := resultDB.Find(&results).Error; err != nil {
 		t.Fatalf("query failed: %v", err)
