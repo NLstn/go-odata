@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/response"
 	"go.opentelemetry.io/otel/trace"
+	"gorm.io/gorm"
 )
 
 // validateDataTypes validates that all values in updateData match the expected types
@@ -122,6 +124,59 @@ func (h *EntityHandler) validateRequiredFieldsNotNull(updateData map[string]inte
 
 	if len(nullRequiredFields) > 0 {
 		return fmt.Errorf("required properties cannot be set to null: %s", strings.Join(nullRequiredFields, ", "))
+	}
+
+	return nil
+}
+
+// validateReferentialConstraints checks that scalar foreign-key values supplied in
+// requestData reference an existing row in the target entity set, for every
+// single-valued navigation property with GORM-derived referential constraints.
+// Properties the client did not supply, or explicitly set to null, are skipped -
+// nullability/requiredness of the FK itself is enforced elsewhere.
+func (h *EntityHandler) validateReferentialConstraints(ctx context.Context, tx *gorm.DB, requestData map[string]interface{}) error {
+	for i := range h.metadata.Properties {
+		navProp := &h.metadata.Properties[i]
+		if !navProp.IsNavigationProp || navProp.NavigationIsArray || len(navProp.ReferentialConstraints) == 0 {
+			continue
+		}
+
+		targetMetadata, err := h.metadata.ResolveNavigationTarget(navProp.Name)
+		if err != nil {
+			// Target entity set isn't registered (e.g. navigation to an unmounted
+			// entity) - nothing we can validate against.
+			continue
+		}
+
+		for dependentProp, principalProp := range navProp.ReferentialConstraints {
+			dependentMeta := h.metadata.FindProperty(dependentProp)
+			if dependentMeta == nil {
+				continue
+			}
+
+			value, provided := requestData[dependentMeta.JsonName]
+			if !provided {
+				value, provided = requestData[dependentMeta.Name]
+			}
+			if !provided || value == nil {
+				continue
+			}
+
+			principalMeta := targetMetadata.FindProperty(principalProp)
+			if principalMeta == nil {
+				continue
+			}
+
+			var count int64
+			if err := tx.WithContext(ctx).Table(targetMetadata.TableName).
+				Where(fmt.Sprintf("%s = ?", principalMeta.ColumnName), value).
+				Limit(1).Count(&count).Error; err != nil {
+				return fmt.Errorf("failed to validate reference '%s': %w", navProp.Name, err)
+			}
+			if count == 0 {
+				return fmt.Errorf("referenced entity for navigation property '%s' not found (%s = %v)", navProp.Name, dependentMeta.JsonName, value)
+			}
+		}
 	}
 
 	return nil

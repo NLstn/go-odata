@@ -1,6 +1,7 @@
 package odata_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -237,6 +238,42 @@ func TestNavigationCompositeKey_AllDescriptions(t *testing.T) {
 	// Product 1 should have 3 descriptions (EN, FR, DE)
 	if len(values) != 3 {
 		t.Errorf("Expected 3 descriptions, got %d", len(values))
+	}
+}
+
+// TestNavigationCompositeKey_CreateWithNonexistentForeignKeyRejected tests that POSTing an
+// entity whose foreign key references a nonexistent parent is rejected instead of silently
+// creating a row with a dangling reference (OData Protocol §11.4.2: services SHOULD enforce
+// referential constraints defined in the data model).
+func TestNavigationCompositeKey_CreateWithNonexistentForeignKeyRejected(t *testing.T) {
+	service := setupCompositeKeyTest(t)
+
+	body := []byte(`{"ProductID": 999, "LanguageKey": "EN", "Description": "Orphaned description"}`)
+	req := httptest.NewRequest(http.MethodPost, "/ProductDescriptionCompositeKeys", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status 400 for nonexistent ProductID, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// TestNavigationCompositeKey_CreateWithExistingForeignKeyAllowed tests that POSTing an entity
+// whose foreign key references an existing parent still succeeds.
+func TestNavigationCompositeKey_CreateWithExistingForeignKeyAllowed(t *testing.T) {
+	service := setupCompositeKeyTest(t)
+
+	body := []byte(`{"ProductID": 1, "LanguageKey": "ES", "Description": "Un ordenador portatil"}`)
+	req := httptest.NewRequest(http.MethodPost, "/ProductDescriptionCompositeKeys", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Errorf("Expected status 201 for existing ProductID, got %d: %s", w.Code, w.Body.String())
 	}
 }
 
