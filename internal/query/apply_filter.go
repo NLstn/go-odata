@@ -926,6 +926,15 @@ func buildFilterConditionForLambda(dialect string, filter *FilterExpression, nav
 		return buildLogicalConditionForLambda(dialect, filter, navTargetMetadata)
 	}
 
+	// Handle nested lambda operators (any/all within any/all), e.g.
+	// CollectionA/any(a: a/CollectionB/any(b: b/Property eq 'value')). navTargetMetadata
+	// is the entity the outer lambda's range variable ranges over, which is exactly the
+	// "current" entity metadata that buildLambdaCondition needs to resolve the nested
+	// navigation property and recurse into a nested EXISTS subquery.
+	if filter.Operator == OpAny || filter.Operator == OpAll {
+		return buildLambdaCondition(dialect, filter, navTargetMetadata)
+	}
+
 	if filter.Left != nil && filter.Left.Operator != "" {
 		return buildFunctionComparisonForLambda(dialect, filter, navTargetMetadata)
 	}
