@@ -129,6 +129,35 @@ func (h *EntityHandler) validateRequiredFieldsNotNull(updateData map[string]inte
 	return nil
 }
 
+// validateMaxLength validates that string property values do not exceed their
+// declared MaxLength facet (OData CSDL §6.2.3). A property with no MaxLength
+// declared (metadata.MaxLength <= 0) is unconstrained.
+func (h *EntityHandler) validateMaxLength(data map[string]interface{}) error {
+	var violations []string
+
+	for propName, propValue := range data {
+		strValue, ok := propValue.(string)
+		if !ok {
+			continue
+		}
+
+		propMeta := h.metadata.FindProperty(propName)
+		if propMeta == nil || propMeta.MaxLength <= 0 {
+			continue
+		}
+
+		if len(strValue) > propMeta.MaxLength {
+			violations = append(violations, fmt.Sprintf("%s (length %d exceeds MaxLength %d)", propMeta.JsonName, len(strValue), propMeta.MaxLength))
+		}
+	}
+
+	if len(violations) > 0 {
+		return fmt.Errorf("value exceeds declared MaxLength: %s", strings.Join(violations, ", "))
+	}
+
+	return nil
+}
+
 // validateReferentialConstraints checks that scalar foreign-key values supplied in
 // requestData reference an existing row in the target entity set, for every
 // single-valued navigation property with GORM-derived referential constraints.
