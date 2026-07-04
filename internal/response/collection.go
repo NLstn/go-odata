@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/nlstn/go-odata/internal/metadata"
+	"github.com/nlstn/go-odata/internal/preference"
 	"github.com/nlstn/go-odata/internal/query"
 	"github.com/nlstn/go-odata/internal/version"
 )
@@ -130,6 +131,16 @@ func writeODataCollectionWithNavigationResponse(w http.ResponseWriter, r *http.R
 	transformedData := addNavigationLinks(data, metadata, expandOptions, selectedNavProps, r, entitySetName, metadataLevel, fullMetadata)
 	if transformedData == nil {
 		transformedData = []interface{}{}
+	}
+
+	// Honor Prefer: omit-values=nulls by removing null-valued properties from each item.
+	if pref := preference.ParsePrefer(r); pref.OmitValues != nil {
+		pref.ApplyOmitValues(version.GetVersion(r.Context()).Supports("unprefixed-preferences"))
+		if pref.OmitsNulls() {
+			for _, item := range transformedData {
+				OmitNullValues(item)
+			}
+		}
 	}
 
 	// Add @odata.index annotations if $index query parameter is present

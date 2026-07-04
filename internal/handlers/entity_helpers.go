@@ -223,6 +223,10 @@ func (h *EntityHandler) writeEntityResponseWithETag(w http.ResponseWriter, r *ht
 
 	odataResponse := h.buildOrderedEntityResponseWithMetadata(result, contextURL, metadataLevel, r, etagValue, expandOptions)
 
+	if pref.OmitsNulls() {
+		response.OmitNullValues(odataResponse)
+	}
+
 	if etagValue != "" {
 		w.Header().Set(HeaderETag, etagValue)
 	}
