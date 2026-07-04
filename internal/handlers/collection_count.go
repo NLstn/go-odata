@@ -30,6 +30,13 @@ func (h *EntityHandler) countEntities(ctx context.Context, queryOptions *query.Q
 		return count, nil
 	}
 
+	// $apply transforms the collection (groupby/aggregate/filter/etc.) before any other
+	// system query option is evaluated, so the count must reflect the transformed result
+	// set rather than the original collection's row count.
+	if len(queryOptions.Apply) > 0 {
+		return h.countTransformedEntities(ctx, queryOptions, baseDB)
+	}
+
 	filter := queryOptions.Filter
 	search := queryOptions.Search
 
@@ -79,6 +86,33 @@ func (h *EntityHandler) countEntities(ctx context.Context, queryOptions *query.Q
 	count := int64(reflect.ValueOf(filtered).Len())
 
 	return count, nil
+}
+
+// countTransformedEntities returns the number of rows produced by a $apply pipeline
+// (honoring groupby/aggregate/filter transformations and any top-level $filter applied
+// against the transformed result), ignoring $top/$skip since a count reflects the total
+// matching set rather than a single page.
+func (h *EntityHandler) countTransformedEntities(ctx context.Context, queryOptions *query.QueryOptions, baseDB *gorm.DB) (int64, error) {
+	countOptions := &query.QueryOptions{
+		Apply:  queryOptions.Apply,
+		Filter: queryOptions.Filter,
+	}
+	countDB := query.ApplyQueryOptionsWithFTS(baseDB.WithContext(ctx), countOptions, h.metadata, nil, "", h.logger)
+
+	var results []map[string]interface{}
+	if err := countDB.Find(&results).Error; err != nil {
+		return 0, err
+	}
+
+	if rollupGroupBy, ok := query.GetRollupGroupByFromDB(countDB); ok {
+		rolled, err := applyMapGroupByRollup(results, rollupGroupBy)
+		if err != nil {
+			return 0, err
+		}
+		return int64(len(rolled)), nil
+	}
+
+	return int64(len(results)), nil
 }
 
 func searchAppliedAtDB(db *gorm.DB) bool {
