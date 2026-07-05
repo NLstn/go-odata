@@ -535,7 +535,7 @@ func TestLambdaOrPredicateSQL(t *testing.T) {
 		},
 	}
 
-	sql, _ := buildFilterConditionForLambda("sqlite", predicate, nil)
+	sql, _ := buildFilterConditionForLambda("sqlite", predicate, nil, "")
 
 	// The OR predicate itself must be produced correctly.
 	if !strings.Contains(sql, " OR ") {

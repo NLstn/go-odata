@@ -1237,3 +1237,47 @@ func TestIsNotAbstract(t *testing.T) {
 		t.Error("IsAbstract should be false for entities without IsAbstract() method")
 	}
 }
+
+// Widget is a self-referential many-to-many entity used to verify that
+// IsManyToMany navigation properties resolve their bridge/join table name and columns
+// via GORM's own schema parser (see resolveManyToManyJoinInfo), rather than the naive
+// "<property>_id" convention used for direct foreign keys, which does not apply to
+// many-to-many relationships (see #783).
+type Widget struct {
+	ID             uint `gorm:"primaryKey"`
+	Name           string
+	RelatedWidgets []Widget `gorm:"many2many:widget_relations;"`
+}
+
+func TestAnalyzeEntity_ManyToManySelfReferential(t *testing.T) {
+	meta, err := AnalyzeEntity(&Widget{})
+	if err != nil {
+		t.Fatalf("AnalyzeEntity() error = %v", err)
+	}
+
+	var prop *PropertyMetadata
+	for i := range meta.Properties {
+		if meta.Properties[i].Name == "RelatedWidgets" {
+			prop = &meta.Properties[i]
+		}
+	}
+	if prop == nil {
+		t.Fatal("RelatedWidgets property not found")
+	}
+
+	if !prop.IsManyToMany {
+		t.Error("expected IsManyToMany=true for a many2many navigation property")
+	}
+	if !prop.IsNavigationProp {
+		t.Error("expected IsNavigationProp=true for a many2many navigation property")
+	}
+	if prop.JoinTableName != "widget_relations" {
+		t.Errorf("expected JoinTableName %q, got %q", "widget_relations", prop.JoinTableName)
+	}
+	if prop.JoinTableForeignKey != "widget_id" {
+		t.Errorf("expected JoinTableForeignKey %q, got %q", "widget_id", prop.JoinTableForeignKey)
+	}
+	if prop.JoinTableReferencesColumn != "related_widget_id" {
+		t.Errorf("expected JoinTableReferencesColumn %q, got %q", "related_widget_id", prop.JoinTableReferencesColumn)
+	}
+}

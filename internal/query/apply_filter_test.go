@@ -161,7 +161,7 @@ func TestBuildLambdaConditionLogsForeignKeyMismatch(t *testing.T) {
 	})
 	os.Stdout = stdoutWriter
 
-	_, _ = buildLambdaCondition("sqlite", filterExpr, parentMeta)
+	_, _ = buildLambdaCondition("sqlite", filterExpr, parentMeta, "")
 
 	if err := stdoutWriter.Close(); err != nil {
 		t.Fatalf("Failed to close stdout writer: %v", err)
