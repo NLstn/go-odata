@@ -1,7 +1,6 @@
 package query
 
 import (
-	"encoding/base64"
 	"fmt"
 	"math"
 	"strconv"
@@ -257,7 +256,7 @@ func (p *ASTParser) parseIdentifierOrFunctionCall(token *Token) (ASTNode, error)
 
 		switch lowerIdent {
 		case "binary":
-			decoded, err := base64.StdEncoding.DecodeString(literalValue)
+			decoded, err := decodeBase64Lenient(literalValue)
 			if err != nil {
 				return nil, fmt.Errorf("invalid binary literal: %w", err)
 			}
