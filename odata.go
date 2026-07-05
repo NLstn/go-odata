@@ -564,6 +564,7 @@ func NewServiceWithConfig(db *gorm.DB, cfg ServiceConfig) (*Service, error) {
 		logger,
 	)
 	s.router.SetAsyncMonitor(s.asyncMonitorPrefix, s.asyncManager)
+	s.router.SetNamespace(s.namespace)
 	s.runtime = servruntime.New(s.router, logger)
 
 	if err := s.RegisterKeyGenerator("uuid", func(context.Context) (interface{}, error) {
@@ -1698,6 +1699,7 @@ func (s *Service) SetNamespace(namespace string) error {
 	s.namespace = trimmed
 	s.metadataHandler.SetNamespace(trimmed)
 	s.operationsHandler.SetNamespace(trimmed)
+	s.router.SetNamespace(trimmed)
 	for _, handler := range s.handlers {
 		handler.SetNamespace(trimmed)
 	}
