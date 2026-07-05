@@ -48,6 +48,15 @@ func applyTransformations(db *gorm.DB, transformations []ApplyTransformation, en
 
 	dialect := getDatabaseDialect(db)
 
+	// Apply a default SELECT that aliases every scalar column to its JSON property
+	// name. $apply always produces map results ([]map[string]interface{}), so without
+	// an explicit alias GORM's "SELECT *" returns raw snake_case DB column names (e.g.
+	// "category_id") instead of the OData property name ("CategoryID"). Transformations
+	// that need a different projection (groupby, aggregate, compute) overwrite this
+	// with their own db.Select call further down, since GORM's Select replaces rather
+	// than appends to the prior selection.
+	db = applyDefaultMapResultSelect(db, dialect, entityMetadata)
+
 	hasGrouping := false
 	// Initialize alias expressions map in GORM context for this query
 	db = setAliasExprsInDB(db, make(map[string]string))
@@ -137,6 +146,33 @@ func applyTransformations(db *gorm.DB, transformations []ApplyTransformation, en
 		}
 	}
 	return db, hasGrouping
+}
+
+// applyDefaultMapResultSelect builds a SELECT clause that aliases every scalar
+// (non-navigation, non-computed, non-complex-type, non-stream) property column with
+// its JSON name, so that map-result rows are keyed by OData property names rather
+// than raw database column names. Mirrors the aliasing done by applyGroupByWithRollup
+// and applyCompute for the same reason.
+func applyDefaultMapResultSelect(db *gorm.DB, dialect string, entityMetadata *metadata.EntityMetadata) *gorm.DB {
+	if entityMetadata == nil {
+		return db
+	}
+
+	tableName := entityMetadata.TableName
+	selectColumns := make([]string, 0, len(entityMetadata.Properties))
+	for _, prop := range entityMetadata.Properties {
+		if prop.IsNavigationProp || prop.IsComputed || prop.IsComplexType || prop.IsStream {
+			continue
+		}
+		qualified := quoteTableName(dialect, tableName) + "." + quoteIdent(dialect, prop.ColumnName)
+		selectColumns = append(selectColumns, fmt.Sprintf("%s as %s", qualified, quoteIdent(dialect, prop.JsonName)))
+	}
+
+	if len(selectColumns) > 0 {
+		db = db.Select(strings.Join(selectColumns, ", "))
+	}
+
+	return db
 }
 
 func applySearchTransformation(db *gorm.DB, search *string, entityMetadata *metadata.EntityMetadata) *gorm.DB {

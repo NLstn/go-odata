@@ -511,6 +511,78 @@ func TestIntegrationApplyFilter(t *testing.T) {
 	}
 }
 
+// TestIntegrationApplyFilterOnly reproduces #784: a bare $apply=filter(expr), with no
+// groupby/aggregate/compute in the pipeline, must return the same entities as the
+// equivalent $filter=expr, keyed by their OData JSON property names (e.g. "Price"),
+// not the raw snake_case database column names (e.g. "price"). Only groupby/aggregate/
+// compute transformations built an explicit JSON-aliased SELECT; a plain filter()
+// pipeline fell through to GORM's default "SELECT *", which uses raw DB column names
+// when scanning into map results.
+func TestIntegrationApplyFilterOnly(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("Failed to open database: %v", err)
+	}
+
+	if err := db.AutoMigrate(&ApplyTestProduct{}); err != nil {
+		t.Fatalf("Failed to migrate: %v", err)
+	}
+
+	products := []ApplyTestProduct{
+		{ID: 1, Name: "Laptop", Price: 999.99, Category: "Electronics", Quantity: 10},
+		{ID: 2, Name: "Mouse", Price: 29.99, Category: "Electronics", Quantity: 50},
+		{ID: 3, Name: "Keyboard", Price: 149.99, Category: "Electronics", Quantity: 30},
+	}
+	for _, product := range products {
+		if err := db.Create(&product).Error; err != nil {
+			t.Fatalf("Failed to create product: %v", err)
+		}
+	}
+
+	service, err := odata.NewService(db)
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
+	_ = service.RegisterEntity(&ApplyTestProduct{})
+
+	req := httptest.NewRequest("GET", "/ApplyTestProducts?$apply=filter(Price%20gt%2050)", nil)
+	w := httptest.NewRecorder()
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected status 200, got %d. Body: %s", w.Code, w.Body.String())
+	}
+
+	body, _ := io.ReadAll(w.Body)
+	var response map[string]interface{}
+	if err := json.Unmarshal(body, &response); err != nil {
+		t.Fatalf("Failed to parse JSON: %v", err)
+	}
+
+	value, ok := response["value"].([]interface{})
+	if !ok {
+		t.Fatal("value is not an array")
+	}
+	if len(value) != 2 {
+		t.Fatalf("Expected 2 entities (Laptop, Keyboard), got %d: %v", len(value), value)
+	}
+
+	row, ok := value[0].(map[string]interface{})
+	if !ok {
+		t.Fatal("row is not an object")
+	}
+	for _, jsonName := range []string{"ID", "Name", "Price", "Category", "Quantity"} {
+		if _, ok := row[jsonName]; !ok {
+			t.Errorf("Expected row to have JSON property %q, got keys: %v", jsonName, row)
+		}
+	}
+	for _, snakeName := range []string{"id", "name", "price", "category", "quantity"} {
+		if _, ok := row[snakeName]; ok {
+			t.Errorf("Row unexpectedly has raw DB column name %q instead of its JSON name", snakeName)
+		}
+	}
+}
+
 func TestIntegrationApplyConcat_StrictSemantics(t *testing.T) {
 	// Initialize database
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
