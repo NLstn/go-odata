@@ -247,6 +247,13 @@ func TestASTParser_LiteralTyping(t *testing.T) {
 			skipConvert:  true,
 		},
 		{
+			name:         "Binary prefixed literal unpadded base64url (spec-mandated form)",
+			filter:       "Price eq binary'dGVzdA'",
+			expectErr:    false,
+			expectedType: "binary",
+			skipConvert:  true,
+		},
+		{
 			name:         "Boolean literal true",
 			filter:       "Name eq true",
 			expectErr:    false,
