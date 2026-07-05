@@ -61,6 +61,14 @@ type Router struct {
 	asyncMu            sync.RWMutex
 	asyncManager       *async.Manager
 	asyncMonitorPrefix string
+
+	// namespace is the schema namespace advertised in $metadata. It is used to
+	// resolve namespace-qualified action/function path segments (e.g.
+	// "ComplianceService.GetTotalPrice") to the unqualified name under which
+	// the operation is registered. Protected by namespaceMu since it can be
+	// updated concurrently with request handling via Service.SetNamespace.
+	namespaceMu sync.RWMutex
+	namespace   string
 }
 
 // NewRouter creates a new Router instance.
@@ -95,6 +103,20 @@ func (r *Router) SetLogger(logger *slog.Logger) {
 		logger = slog.Default()
 	}
 	r.logger = logger
+}
+
+// SetNamespace updates the schema namespace used to resolve namespace-qualified
+// action/function invocations (OData v4 Part 2 §4.5).
+func (r *Router) SetNamespace(namespace string) {
+	r.namespaceMu.Lock()
+	r.namespace = namespace
+	r.namespaceMu.Unlock()
+}
+
+func (r *Router) getNamespace() string {
+	r.namespaceMu.RLock()
+	defer r.namespaceMu.RUnlock()
+	return r.namespace
 }
 
 // ServeHTTP implements http.Handler interface.
@@ -155,19 +177,21 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	switch req.Method {
 	case http.MethodGet, http.MethodHead:
 		if !strings.Contains(path, "(") && !strings.Contains(path, ")") {
-			if _, exists := r.functions[path]; exists {
-				supportsNoParens := negotiatedVersion.Major > 4 || (negotiatedVersion.Major == 4 && negotiatedVersion.Minor >= 1)
-				if !supportsNoParens {
-					if writeErr := response.WriteError(w, req, http.StatusBadRequest, "Invalid function invocation",
-						"Function invocations without parentheses require OData 4.01 negotiation; use parentheses syntax (FunctionName())"); writeErr != nil {
-						r.logger.Error("Error writing error response", "error", writeErr)
+			if resolved, ok := r.resolveBoundName(path); ok {
+				if _, exists := r.functions[resolved]; exists {
+					supportsNoParens := negotiatedVersion.Major > 4 || (negotiatedVersion.Major == 4 && negotiatedVersion.Minor >= 1)
+					if !supportsNoParens {
+						if writeErr := response.WriteError(w, req, http.StatusBadRequest, "Invalid function invocation",
+							"Function invocations without parentheses require OData 4.01 negotiation; use parentheses syntax (FunctionName())"); writeErr != nil {
+							r.logger.Error("Error writing error response", "error", writeErr)
+						}
+						return
 					}
-					return
-				}
 
-				if r.hasUnboundParameterlessFunction(path) && !hasNonSystemQueryParams(req.URL.Query()) {
-					r.actionInvoker(w, req, path, "", false, "")
-					return
+					if r.hasUnboundParameterlessFunction(resolved) && !hasNonSystemQueryParams(req.URL.Query()) {
+						r.actionInvoker(w, req, resolved, "", false, "")
+						return
+					}
 				}
 			}
 		}
@@ -177,14 +201,14 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			if idx := strings.Index(path, "("); idx != -1 {
 				pathWithoutParams = path[:idx]
 			}
-			if r.isActionOrFunction(pathWithoutParams) {
-				r.actionInvoker(w, req, pathWithoutParams, "", false, "")
+			if resolved, ok := r.resolveBoundName(pathWithoutParams); ok && r.isActionOrFunction(resolved) {
+				r.actionInvoker(w, req, resolved, "", false, "")
 				return
 			}
 		}
 	case http.MethodPost:
-		if r.isActionOrFunction(path) {
-			r.actionInvoker(w, req, path, "", false, "")
+		if resolved, ok := r.resolveBoundName(path); ok && r.isActionOrFunction(resolved) {
+			r.actionInvoker(w, req, resolved, "", false, "")
 			return
 		}
 	case http.MethodPut, http.MethodPatch, http.MethodDelete:
@@ -192,14 +216,14 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		if idx := strings.Index(path, "("); idx != -1 {
 			pathWithoutParams = path[:idx]
 		}
-		if r.isActionOrFunction(pathWithoutParams) {
+		if r.isBoundOperationSegment(pathWithoutParams) {
 			if writeErr := response.WriteMethodNotAllowed(w, req, "GET, HEAD, POST, OPTIONS", "Method not allowed",
 				fmt.Sprintf("Method %s is not allowed for actions or functions", req.Method)); writeErr != nil {
 				r.logger.Error("Error writing error response", "error", writeErr)
 			}
 			return
 		}
-		if r.isActionOrFunction(path) {
+		if r.isBoundOperationSegment(path) {
 			if writeErr := response.WriteMethodNotAllowed(w, req, "GET, HEAD, POST, OPTIONS", "Method not allowed",
 				fmt.Sprintf("Method %s is not allowed for actions or functions", req.Method)); writeErr != nil {
 				r.logger.Error("Error writing error response", "error", writeErr)
@@ -223,6 +247,27 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			r.logger.Error("Error writing error response", "error", writeErr)
 		}
 		return
+	}
+
+	// A namespace-qualified action/function segment without parentheses (e.g.
+	// "ComplianceService.ApplyDiscount") is syntactically indistinguishable
+	// from a derived-type cast segment (e.g. "ComplianceService.Manager") and
+	// so gets parsed as components.TypeCast above. Reinterpret it as an
+	// operation invocation when it actually resolves to a registered bound or
+	// unbound action/function; otherwise leave the type-cast parsing as-is.
+	if components.TypeCast != "" && components.NavigationProperty == "" {
+		if resolved, ok := r.resolveBoundName(components.TypeCast); ok && r.isActionOrFunction(resolved) {
+			components.NavigationProperty = resolved
+			components.PropertySegments = []string{resolved}
+			components.PropertyPath = resolved
+			components.TypeCast = ""
+		} else if r.isUnresolvableQualifiedOperation(components.TypeCast) {
+			if writeErr := response.WriteError(w, req, http.StatusNotFound, "Action or function not found",
+				fmt.Sprintf("'%s' does not match the service namespace", components.TypeCast)); writeErr != nil {
+				r.logger.Error("Error writing error response", "error", writeErr)
+			}
+			return
+		}
 	}
 
 	if components.TypeCast != "" {
@@ -364,7 +409,7 @@ func (r *Router) routeRequest(w http.ResponseWriter, req *http.Request, handler 
 				!handler.IsStructuralProperty(potentialKey) &&
 				!handler.IsStreamProperty(potentialKey) &&
 				!handler.IsComplexTypeProperty(potentialKey) &&
-				!r.isActionOrFunction(operationName) {
+				!r.isBoundOperationSegment(operationName) {
 				components = resolveKeyAsSegment(components)
 				hasKey = true
 			}
@@ -411,8 +456,8 @@ func (r *Router) routeRequest(w http.ResponseWriter, req *http.Request, handler 
 			if idx := strings.Index(operationName, "("); idx != -1 {
 				operationName = operationName[:idx]
 			}
-			if r.isActionOrFunction(operationName) {
-				r.actionInvoker(w, req, operationName, "", true, components.EntitySet)
+			if resolved, ok := r.resolveBoundName(operationName); ok && r.isActionOrFunction(resolved) {
+				r.actionInvoker(w, req, resolved, "", true, components.EntitySet)
 				return
 			}
 		}
@@ -445,8 +490,8 @@ func (r *Router) handlePropertyRequest(w http.ResponseWriter, req *http.Request,
 		operationName = operationName[:idx]
 	}
 
-	if r.isActionOrFunction(operationName) {
-		r.actionInvoker(w, req, operationName, keyString, true, components.EntitySet)
+	if resolved, ok := r.resolveBoundName(operationName); ok && r.isActionOrFunction(resolved) {
+		r.actionInvoker(w, req, resolved, keyString, true, components.EntitySet)
 		return
 	}
 
@@ -465,6 +510,9 @@ func (r *Router) handlePropertyRequest(w http.ResponseWriter, req *http.Request,
 		lastOperationName := lastSegment
 		if idx := strings.Index(lastSegment, "("); idx != -1 {
 			lastOperationName = lastSegment[:idx]
+		}
+		if resolved, ok := r.resolveBoundName(lastOperationName); ok {
+			lastOperationName = resolved
 		}
 
 		// Check if first segment is a navigation property and last segment is an operation
@@ -622,6 +670,69 @@ func (r *Router) isActionOrFunction(name string) bool {
 		return true
 	}
 	return false
+}
+
+// splitLastDot splits name at its last '.' character, returning the portion
+// before ("prefix") and after ("suffix") the dot. ok is false when name
+// contains no dot, in which case suffix equals name unchanged.
+func splitLastDot(name string) (prefix, suffix string, ok bool) {
+	idx := strings.LastIndex(name, ".")
+	if idx == -1 {
+		return "", name, false
+	}
+	return name[:idx], name[idx+1:], true
+}
+
+// resolveBoundName resolves a possibly namespace- or alias-qualified action or
+// function segment to its unqualified registered name.
+//
+// Per OData v4.0 Part 2 §4.5 ("Invoking Actions") and the equivalent function
+// invocation rules, a bound (or unbound) action or function MUST be invocable
+// using its namespace-qualified name (e.g. "ComplianceService.GetTotalPrice"),
+// in addition to the short/unqualified name where that is unambiguous.
+//
+// If name contains no '.', it is not qualified and is returned unchanged. If
+// it is qualified, the namespace portion must exactly match the service's
+// configured schema namespace; otherwise resolution fails so that operations
+// cannot be invoked under an arbitrary or incorrect namespace.
+func (r *Router) resolveBoundName(name string) (string, bool) {
+	ns, local, hasNamespace := splitLastDot(name)
+	if !hasNamespace {
+		return name, true
+	}
+	if local == "" {
+		return "", false
+	}
+	serviceNamespace := r.getNamespace()
+	if serviceNamespace == "" || ns != serviceNamespace {
+		return "", false
+	}
+	return local, true
+}
+
+// isBoundOperationSegment reports whether name (which may be namespace-
+// qualified) resolves to a registered action or function.
+func (r *Router) isBoundOperationSegment(name string) bool {
+	resolved, ok := r.resolveBoundName(name)
+	return ok && r.isActionOrFunction(resolved)
+}
+
+// isUnresolvableQualifiedOperation reports whether name looks like an attempt
+// to invoke a registered action or function using a namespace qualifier that
+// does not match the service's schema namespace (e.g.
+// "WrongNamespace.ApplyDiscount" when the real action is "ApplyDiscount").
+// This lets callers distinguish "unknown namespace for a real operation"
+// (which should 404) from an unrelated segment such as a genuine derived-type
+// cast (e.g. "ComplianceService.SpecialProduct").
+func (r *Router) isUnresolvableQualifiedOperation(name string) bool {
+	_, local, hasNamespace := splitLastDot(name)
+	if !hasNamespace {
+		return false
+	}
+	if _, ok := r.resolveBoundName(name); ok {
+		return false
+	}
+	return r.isActionOrFunction(local)
 }
 
 // getNavigationTargetEntitySet returns the target entity set name for a navigation property

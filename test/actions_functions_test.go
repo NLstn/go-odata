@@ -950,3 +950,176 @@ func TestFunctionParameterTypeValidation(t *testing.T) {
 		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusBadRequest, w.Body.String())
 	}
 }
+
+// TestBoundFunctionNamespaceQualifiedName verifies that a bound function can
+// be invoked using its namespace-qualified name (OData v4.0 Part 2 §4.5), in
+// addition to the short/unqualified name. See issue #787.
+func TestBoundFunctionNamespaceQualifiedName(t *testing.T) {
+	service, db := setupActionFunctionTestService(t)
+
+	if err := service.SetNamespace("ContosoService"); err != nil {
+		t.Fatalf("SetNamespace() error: %v", err)
+	}
+
+	err := service.RegisterFunction(odata.FunctionDefinition{
+		Name:      "GetDiscountedPrice",
+		IsBound:   true,
+		EntitySet: "ActionTestProducts",
+		Parameters: []odata.ParameterDefinition{
+			{Name: "discount", Type: reflect.TypeOf(float64(0)), Required: true},
+		},
+		ReturnType: reflect.TypeOf(float64(0)),
+		Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) (interface{}, error) {
+			discount := params["discount"].(float64)
+
+			var product ActionTestProduct
+			if err := db.First(&product, 1).Error; err != nil {
+				return nil, err
+			}
+
+			return product.Price * (1 - discount/100), nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("Failed to register function: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/ActionTestProducts(1)/ContosoService.GetDiscountedPrice(discount=10)", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var response map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	value, ok := response["value"].(float64)
+	if !ok {
+		t.Fatalf("Response missing numeric value: %v", response)
+	}
+	if value != 900.0 {
+		t.Errorf("value = %v, want %v", value, 900.0)
+	}
+}
+
+// TestBoundActionNamespaceQualifiedName verifies that a bound action can be
+// invoked using its namespace-qualified name (OData v4.0 Part 2 §4.5), in
+// addition to the short/unqualified name. See issue #787.
+func TestBoundActionNamespaceQualifiedName(t *testing.T) {
+	service, db := setupActionFunctionTestService(t)
+
+	if err := service.SetNamespace("ContosoService"); err != nil {
+		t.Fatalf("SetNamespace() error: %v", err)
+	}
+
+	err := service.RegisterAction(odata.ActionDefinition{
+		Name:      "UpdatePrice",
+		IsBound:   true,
+		EntitySet: "ActionTestProducts",
+		Parameters: []odata.ParameterDefinition{
+			{Name: "newPrice", Type: reflect.TypeOf(float64(0)), Required: true},
+		},
+		ReturnType: nil,
+		Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) error {
+			newPrice := params["newPrice"].(float64)
+
+			if err := db.Model(&ActionTestProduct{}).Where("id = ?", 1).Update("price", newPrice).Error; err != nil {
+				return err
+			}
+
+			w.WriteHeader(http.StatusNoContent)
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("Failed to register action: %v", err)
+	}
+
+	body := []byte(`{"newPrice": 500.0}`)
+	req := httptest.NewRequest(http.MethodPost, "/ActionTestProducts(1)/ContosoService.UpdatePrice", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("Status = %v, want %v. Body: %s", w.Code, http.StatusNoContent, w.Body.String())
+	}
+
+	var product ActionTestProduct
+	if err := db.First(&product, 1).Error; err != nil {
+		t.Fatalf("Failed to fetch product: %v", err)
+	}
+	if product.Price != 500.0 {
+		t.Errorf("Product price = %v, want 500.0", product.Price)
+	}
+}
+
+// TestBoundOperationUnknownNamespaceReturns404 verifies that qualifying a
+// bound function or action with a namespace that does not match the
+// service's configured schema namespace is rejected with 404, rather than
+// silently matching the operation under any namespace. See issue #787.
+func TestBoundOperationUnknownNamespaceReturns404(t *testing.T) {
+	service, _ := setupActionFunctionTestService(t)
+
+	if err := service.SetNamespace("ContosoService"); err != nil {
+		t.Fatalf("SetNamespace() error: %v", err)
+	}
+
+	err := service.RegisterFunction(odata.FunctionDefinition{
+		Name:      "GetDiscountedPrice",
+		IsBound:   true,
+		EntitySet: "ActionTestProducts",
+		Parameters: []odata.ParameterDefinition{
+			{Name: "discount", Type: reflect.TypeOf(float64(0)), Required: true},
+		},
+		ReturnType: reflect.TypeOf(float64(0)),
+		Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) (interface{}, error) {
+			return 0.0, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("Failed to register function: %v", err)
+	}
+
+	err = service.RegisterAction(odata.ActionDefinition{
+		Name:      "UpdatePrice",
+		IsBound:   true,
+		EntitySet: "ActionTestProducts",
+		Parameters: []odata.ParameterDefinition{
+			{Name: "newPrice", Type: reflect.TypeOf(float64(0)), Required: true},
+		},
+		ReturnType: nil,
+		Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) error {
+			t.Error("action handler should not be invoked for an unknown-namespace-qualified request")
+			w.WriteHeader(http.StatusNoContent)
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("Failed to register action: %v", err)
+	}
+
+	// Wrong namespace on a function call (has parentheses).
+	funcReq := httptest.NewRequest(http.MethodGet, "/ActionTestProducts(1)/WrongNamespace.GetDiscountedPrice(discount=10)", nil)
+	funcW := httptest.NewRecorder()
+	service.ServeHTTP(funcW, funcReq)
+	if funcW.Code != http.StatusNotFound {
+		t.Errorf("function: Status = %v, want %v. Body: %s", funcW.Code, http.StatusNotFound, funcW.Body.String())
+	}
+
+	// Wrong namespace on an action call (no parentheses).
+	actionBody := []byte(`{"newPrice": 1.0}`)
+	actionReq := httptest.NewRequest(http.MethodPost, "/ActionTestProducts(1)/WrongNamespace.UpdatePrice", bytes.NewReader(actionBody))
+	actionReq.Header.Set("Content-Type", "application/json")
+	actionW := httptest.NewRecorder()
+	service.ServeHTTP(actionW, actionReq)
+	if actionW.Code != http.StatusNotFound {
+		t.Errorf("action: Status = %v, want %v. Body: %s", actionW.Code, http.StatusNotFound, actionW.Body.String())
+	}
+}
