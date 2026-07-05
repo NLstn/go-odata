@@ -26,6 +26,15 @@ func (h *EntityHandler) IsNavigationProperty(propertyName string) bool {
 	return h.findNavigationProperty(navPropName) != nil
 }
 
+// IsCollectionNavigationProperty checks if a property name is a collection-valued (to-many)
+// navigation property. Used by the router to distinguish a raw key-as-segments key segment from a
+// chained navigation property name when a segment immediately follows a navigation property.
+func (h *EntityHandler) IsCollectionNavigationProperty(propertyName string) bool {
+	navPropName, _ := h.parseNavigationPropertyWithKey(propertyName)
+	navProp := h.findNavigationProperty(navPropName)
+	return navProp != nil && navProp.NavigationIsArray
+}
+
 // IsStructuralProperty checks if a property name is a structural property
 func (h *EntityHandler) IsStructuralProperty(propertyName string) bool {
 	return h.findStructuralProperty(propertyName) != nil

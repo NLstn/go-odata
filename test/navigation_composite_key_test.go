@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	odata "github.com/nlstn/go-odata"
@@ -78,24 +79,24 @@ func TestNavigationCompositeKey_SingleItem(t *testing.T) {
 		return
 	}
 
-	var response map[string]interface{}
-	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+	var desc map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &desc); err != nil {
 		t.Fatalf("Failed to parse response: %v", err)
 	}
 
-	// Should have a value array with exactly one item
-	values, ok := response["value"].([]interface{})
-	if !ok {
-		t.Fatal("Expected value array in response")
+	// A key predicate on a collection-valued navigation property addresses a single entity
+	// (OData v4.0 Part 2 §4.11): the response must be a single entity object, not a
+	// collection wrapped in "value": [...].
+	if _, ok := desc["value"]; ok {
+		t.Fatal("Expected a single-entity object, not a collection wrapped in \"value\"")
 	}
 
-	if len(values) != 1 {
-		t.Errorf("Expected 1 description, got %d", len(values))
-		return
+	contextURL, _ := desc["@odata.context"].(string)
+	if !strings.HasSuffix(contextURL, "/$entity") {
+		t.Errorf("Expected @odata.context to end with '/$entity', got %q", contextURL)
 	}
 
 	// Verify the correct description was returned
-	desc := values[0].(map[string]interface{})
 	if desc["ProductID"] != float64(1) {
 		t.Errorf("Expected ProductID 1, got %v", desc["ProductID"])
 	}
@@ -122,22 +123,15 @@ func TestNavigationCompositeKey_DifferentLanguage(t *testing.T) {
 		return
 	}
 
-	var response map[string]interface{}
-	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+	var desc map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &desc); err != nil {
 		t.Fatalf("Failed to parse response: %v", err)
 	}
 
-	values, ok := response["value"].([]interface{})
-	if !ok {
-		t.Fatal("Expected value array in response")
+	if _, ok := desc["value"]; ok {
+		t.Fatal("Expected a single-entity object, not a collection wrapped in \"value\"")
 	}
 
-	if len(values) != 1 {
-		t.Errorf("Expected 1 description, got %d", len(values))
-		return
-	}
-
-	desc := values[0].(map[string]interface{})
 	if desc["LanguageKey"] != "FR" {
 		t.Errorf("Expected LanguageKey FR, got %v", desc["LanguageKey"])
 	}

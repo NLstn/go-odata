@@ -112,6 +112,10 @@ func (h *mockEntityHandler) IsNavigationProperty(_ string) bool {
 	return false
 }
 
+func (h *mockEntityHandler) IsCollectionNavigationProperty(_ string) bool {
+	return false
+}
+
 func (h *mockEntityHandler) IsStreamProperty(_ string) bool {
 	return false
 }

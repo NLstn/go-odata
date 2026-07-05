@@ -31,23 +31,25 @@ func newTestAsyncManager(t *testing.T) *async.Manager {
 }
 
 type stubEntityHandler struct {
-	isSingleton         bool
-	navigationProps     map[string]bool
-	navigationTargets   map[string]string
-	streamProps         map[string]bool
-	structuralProps     map[string]bool
-	complexProps        map[string]bool
-	calls               []string
-	fetchNavEntityKeyFn func(entityKey, navPropName string) (string, error)
+	isSingleton               bool
+	navigationProps           map[string]bool
+	collectionNavigationProps map[string]bool
+	navigationTargets         map[string]string
+	streamProps               map[string]bool
+	structuralProps           map[string]bool
+	complexProps              map[string]bool
+	calls                     []string
+	fetchNavEntityKeyFn       func(entityKey, navPropName string) (string, error)
 }
 
 func newStubEntityHandler() *stubEntityHandler {
 	return &stubEntityHandler{
-		navigationProps:   make(map[string]bool),
-		navigationTargets: make(map[string]string),
-		streamProps:       make(map[string]bool),
-		structuralProps:   make(map[string]bool),
-		complexProps:      make(map[string]bool),
+		navigationProps:           make(map[string]bool),
+		collectionNavigationProps: make(map[string]bool),
+		navigationTargets:         make(map[string]string),
+		streamProps:               make(map[string]bool),
+		structuralProps:           make(map[string]bool),
+		complexProps:              make(map[string]bool),
 	}
 }
 
@@ -107,6 +109,10 @@ func (h *stubEntityHandler) HandleMediaEntityValue(_ http.ResponseWriter, _ *htt
 
 func (h *stubEntityHandler) IsNavigationProperty(name string) bool {
 	return h.navigationProps[name]
+}
+
+func (h *stubEntityHandler) IsCollectionNavigationProperty(name string) bool {
+	return h.collectionNavigationProps[name]
 }
 
 func (h *stubEntityHandler) IsStreamProperty(name string) bool {

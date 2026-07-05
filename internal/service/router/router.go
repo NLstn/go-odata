@@ -31,6 +31,7 @@ type EntityHandler interface {
 	HandleComplexTypeProperty(http.ResponseWriter, *http.Request, string, []string, bool)
 	HandleMediaEntityValue(http.ResponseWriter, *http.Request, string)
 	IsNavigationProperty(string) bool
+	IsCollectionNavigationProperty(string) bool
 	IsStreamProperty(string) bool
 	IsStructuralProperty(string) bool
 	IsComplexTypeProperty(string) bool
@@ -460,6 +461,36 @@ func (r *Router) handlePropertyRequest(w http.ResponseWriter, req *http.Request,
 	if len(propertySegments) > 1 {
 		firstSegment := propertySegments[0]
 		lastSegment := propertySegments[len(propertySegments)-1]
+
+		// OData 4.01 key-as-segments: a raw key segment immediately following a collection-valued
+		// navigation property addresses a single entity within that collection (e.g.
+		// Categories/1/Products/2 addresses Products(2) within Categories(1)'s Products collection,
+		// per OData v4.0 Part 2 §4.11). This must resolve the same way as the equivalent parenthetical
+		// form Categories(1)/Products(2), not as chained navigation into another navigation property.
+		if len(propertySegments) == 2 && handler.IsNavigationProperty(firstSegment) && handler.IsCollectionNavigationProperty(firstSegment) {
+			if ver := version.GetVersion(req.Context()); ver.Supports("key-as-segments") {
+				candidateOperationName := lastSegment
+				if idx := strings.Index(candidateOperationName, "("); idx != -1 {
+					candidateOperationName = candidateOperationName[:idx]
+				}
+				if !handler.IsNavigationProperty(lastSegment) &&
+					!handler.IsStructuralProperty(lastSegment) &&
+					!handler.IsStreamProperty(lastSegment) &&
+					!handler.IsComplexTypeProperty(lastSegment) &&
+					!r.isActionOrFunction(candidateOperationName) {
+					if components.IsValue {
+						if writeErr := response.WriteError(w, req, http.StatusBadRequest, "Invalid request",
+							"$value is not supported on navigation properties"); writeErr != nil {
+							r.logger.Error("Error writing error response", "error", writeErr)
+						}
+						return
+					}
+					navPropWithKey := firstSegment + "(" + lastSegment + ")"
+					handler.HandleNavigationProperty(w, req, keyString, navPropWithKey, components.IsRef)
+					return
+				}
+			}
+		}
 
 		// Extract operation name from last segment (remove parameters)
 		lastOperationName := lastSegment

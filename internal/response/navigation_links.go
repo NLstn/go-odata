@@ -151,12 +151,19 @@ func processMapEntity(entity reflect.Value, metadata EntityMetadataProvider, exp
 }
 
 func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataProvider, expandOptions []query.ExpandOption, selectedNavProps []string, baseURL, entitySetName string, metadataLevel string, fullMetadata *internalMetadata.EntityMetadata, annotationFilter *string) *OrderedMap {
-	fieldInfos := getFieldInfos(entity.Type())
-
 	// Pre-calculate capacity: fields + potential metadata annotations (etag, id, type)
 	capacity := entity.NumField() + 3
 	// Use pooled OrderedMap for better performance
 	entityMap := AcquireOrderedMapWithCapacity(capacity)
+	processStructEntityOrderedInto(entityMap, entity, metadata, expandOptions, selectedNavProps, baseURL, entitySetName, metadataLevel, fullMetadata, annotationFilter)
+	return entityMap
+}
+
+// processStructEntityOrderedInto populates entityMap with the ordered representation of entity.
+// entityMap must already be acquired by the caller, and may be pre-seeded with entries (such as
+// "@odata.context") that need to appear before the metadata/property entries added here.
+func processStructEntityOrderedInto(entityMap *OrderedMap, entity reflect.Value, metadata EntityMetadataProvider, expandOptions []query.ExpandOption, selectedNavProps []string, baseURL, entitySetName string, metadataLevel string, fullMetadata *internalMetadata.EntityMetadata, annotationFilter *string) {
+	fieldInfos := getFieldInfos(entity.Type())
 
 	// Pre-compute key segment and entity ID if needed (reuse across annotations)
 	var keySegment string
@@ -298,8 +305,66 @@ func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataPro
 			}
 		}
 	}
+}
 
-	return entityMap
+// WriteODataEntityFromNavigationPath writes a single-entity JSON response for an entity reached via a
+// navigation path — for example, addressing a single member of a collection-valued navigation
+// property by key (e.g. Categories(1)/Products(2)). Per OData v4.0 Part 2 §4.11, applying a key
+// predicate to a collection-valued navigation property addresses a single entity within that
+// collection, so the response must be a single-entity object (not a collection wrapped in
+// "value": [...]), with @odata.context ending in "/$entity".
+//
+// contextPath is the URL path segment(s) preceding "/$entity" in the resulting @odata.context (e.g.
+// "Categories(1)/Products(2)"). entitySetName, md, and fullMetadata describe the entity actually being
+// written, which may belong to a different entity set than the one the request path started from.
+func WriteODataEntityFromNavigationPath(w http.ResponseWriter, r *http.Request, contextPath string, entitySetName string, entity interface{}, md EntityMetadataProvider, fullMetadata *internalMetadata.EntityMetadata) error {
+	if !IsAcceptableFormat(r) {
+		return WriteError(w, r, http.StatusNotAcceptable, "Not Acceptable",
+			"The requested format is not supported. Only application/json and application/atom+xml are supported for data responses.")
+	}
+
+	metadataLevel := GetODataMetadataLevel(r)
+	baseURL := buildBaseURL(r)
+
+	entityValue := reflect.ValueOf(entity)
+	for entityValue.Kind() == reflect.Ptr {
+		entityValue = entityValue.Elem()
+	}
+
+	var annotationFilter *string
+	if pref := preference.ParsePrefer(r); pref.IncludeAnnotations != nil {
+		annotationFilter = pref.IncludeAnnotations
+	}
+
+	capacity := entityValue.NumField() + 4
+	entityMap := AcquireOrderedMapWithCapacity(capacity)
+	if metadataLevel != "none" {
+		entityMap.Set("@odata.context", baseURL+"/$metadata#"+contextPath+"/$entity")
+	}
+	processStructEntityOrderedInto(entityMap, entityValue, md, nil, nil, baseURL, entitySetName, metadataLevel, fullMetadata, annotationFilter)
+
+	w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
+
+	if r.Method == http.MethodHead {
+		jsonBytes, err := entityMap.MarshalJSON()
+		entityMap.Release()
+		if err != nil {
+			return err
+		}
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(jsonBytes)))
+		w.WriteHeader(http.StatusOK)
+		return nil
+	}
+
+	responseBytes, err := entityMap.MarshalJSON()
+	entityMap.Release()
+	if err != nil {
+		return err
+	}
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(responseBytes)))
+	w.WriteHeader(http.StatusOK)
+	_, writeErr := w.Write(responseBytes)
+	return writeErr
 }
 
 func isPropertyExpanded(prop PropertyMetadata, expandOptions []query.ExpandOption) bool {
