@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -1121,5 +1122,156 @@ func TestBoundOperationUnknownNamespaceReturns404(t *testing.T) {
 	service.ServeHTTP(actionW, actionReq)
 	if actionW.Code != http.StatusNotFound {
 		t.Errorf("action: Status = %v, want %v. Body: %s", actionW.Code, http.StatusNotFound, actionW.Body.String())
+	}
+}
+
+// TestBoundFunctionCollectionComposedWithCount verifies that a bound function
+// returning a collection is composable: appending /$count after the
+// function-call segment returns the count of the function's result
+// collection, matching the size of the "value" array returned by the direct,
+// non-composed call. Regression test for issue #758/#788: functions
+// returning a collection must support the $count composition per OData v4.0
+// Part 1 §12.1.
+func TestBoundFunctionCollectionComposedWithCount(t *testing.T) {
+	service, db := setupActionFunctionTestService(t)
+
+	err := service.RegisterFunction(odata.FunctionDefinition{
+		Name:       "GetRelatedProducts",
+		IsBound:    true,
+		EntitySet:  "ActionTestProducts",
+		Parameters: []odata.ParameterDefinition{},
+		ReturnType: reflect.TypeOf([]ActionTestProduct{}),
+		Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) (interface{}, error) {
+			var products []ActionTestProduct
+			if err := db.Find(&products).Error; err != nil {
+				return nil, err
+			}
+			return products, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("Failed to register function: %v", err)
+	}
+
+	// Direct, non-composed call: establishes the expected collection size.
+	directReq := httptest.NewRequest(http.MethodGet, "/ActionTestProducts(1)/GetRelatedProducts()", nil)
+	directW := httptest.NewRecorder()
+	service.ServeHTTP(directW, directReq)
+
+	if directW.Code != http.StatusOK {
+		t.Fatalf("direct call status = %v, want %v. Body: %s", directW.Code, http.StatusOK, directW.Body.String())
+	}
+
+	var directResponse struct {
+		Value []map[string]interface{} `json:"value"`
+	}
+	if err := json.NewDecoder(directW.Body).Decode(&directResponse); err != nil {
+		t.Fatalf("Failed to decode direct response: %v", err)
+	}
+	expectedCount := len(directResponse.Value)
+	if expectedCount == 0 {
+		t.Fatal("expected direct call to return a non-empty collection")
+	}
+
+	// Composed call: /$count appended after the function-call segment.
+	countReq := httptest.NewRequest(http.MethodGet, "/ActionTestProducts(1)/GetRelatedProducts()/$count", nil)
+	countW := httptest.NewRecorder()
+	service.ServeHTTP(countW, countReq)
+
+	if countW.Code != http.StatusOK {
+		t.Fatalf("$count call status = %v, want %v. Body: %s", countW.Code, http.StatusOK, countW.Body.String())
+	}
+
+	if contentType := countW.Header().Get("Content-Type"); !strings.HasPrefix(contentType, "text/plain") {
+		t.Errorf("Content-Type = %q, want prefix %q", contentType, "text/plain")
+	}
+
+	gotCount, err := strconv.Atoi(strings.TrimSpace(countW.Body.String()))
+	if err != nil {
+		t.Fatalf("Failed to parse count response %q: %v", countW.Body.String(), err)
+	}
+	if gotCount != expectedCount {
+		t.Errorf("$count = %d, want %d (size of direct call's value array)", gotCount, expectedCount)
+	}
+}
+
+// TestBoundFunctionScalarRejectsCount verifies that a bound function which
+// does not return a collection is not composable: appending /$count after
+// its call segment must be rejected rather than silently succeeding, since
+// $count only makes sense against a collection result.
+func TestBoundFunctionScalarRejectsCount(t *testing.T) {
+	service, _ := setupActionFunctionTestService(t)
+
+	err := service.RegisterFunction(odata.FunctionDefinition{
+		Name:       "GetScalarPrice",
+		IsBound:    true,
+		EntitySet:  "ActionTestProducts",
+		Parameters: []odata.ParameterDefinition{},
+		ReturnType: reflect.TypeOf(float64(0)),
+		Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) (interface{}, error) {
+			return 42.0, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("Failed to register function: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/ActionTestProducts(1)/GetScalarPrice()/$count", nil)
+	w := httptest.NewRecorder()
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+}
+
+// TestBoundActionRejectsCount verifies that actions - which are never
+// composable per OData v4.0 Part 1 §12.1 regardless of return type - reject a
+// trailing /$count segment rather than being misinterpreted as a valid
+// composition.
+func TestBoundActionRejectsCount(t *testing.T) {
+	service, db := setupActionFunctionTestService(t)
+
+	err := service.RegisterAction(odata.ActionDefinition{
+		Name:      "RaisePricesForCount",
+		IsBound:   true,
+		EntitySet: "ActionTestProducts",
+		Parameters: []odata.ParameterDefinition{
+			{Name: "amount", Type: reflect.TypeOf(float64(0)), Required: true},
+		},
+		ReturnType: nil,
+		Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) error {
+			amount := params["amount"].(float64)
+			if err := db.Model(&ActionTestProduct{}).Where("1 = 1").
+				Update("price", gorm.Expr("price + ?", amount)).Error; err != nil {
+				return err
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("Failed to register action: %v", err)
+	}
+
+	// POST is the correct invocation method for actions; appending /$count
+	// must still be rejected since actions are never composable.
+	req := httptest.NewRequest(http.MethodPost, "/ActionTestProducts(1)/RaisePricesForCount/$count", bytes.NewReader([]byte(`{"amount": 10}`)))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	service.ServeHTTP(w, req)
+
+	if w.Code < 400 {
+		t.Errorf("Status = %v, want a 4xx rejection. Body: %s", w.Code, w.Body.String())
+	}
+
+	// GET is not a valid invocation method for actions either, with or
+	// without a composed $count segment.
+	getReq := httptest.NewRequest(http.MethodGet, "/ActionTestProducts(1)/RaisePricesForCount/$count", nil)
+	getW := httptest.NewRecorder()
+	service.ServeHTTP(getW, getReq)
+
+	if getW.Code < 400 {
+		t.Errorf("GET status = %v, want a 4xx rejection. Body: %s", getW.Code, getW.Body.String())
 	}
 }

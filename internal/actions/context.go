@@ -84,3 +84,31 @@ func NavigationBindingContextFromRequest(r *http.Request) *NavigationBindingCont
 	}
 	return navCtx
 }
+
+// countRequestedContextKey is the unexported key type used to mark a request
+// as a composed $count invocation appended to a function-call segment.
+type countRequestedContextKey struct{}
+
+// WithCountRequested returns a shallow copy of r whose context signals that
+// the caller appended a $count segment after a function-call segment, e.g.
+// Products(1)/GetRelatedProducts()/$count. Per OData v4.0 Part 1 §12.1,
+// functions that return a collection are composable and may be followed by
+// further path segments such as $count. The stored flag can later be read
+// with CountRequested so the function-invocation handler can return the
+// result collection's count instead of the full result.
+func WithCountRequested(r *http.Request) *http.Request {
+	return r.WithContext(context.WithValue(r.Context(), countRequestedContextKey{}, true))
+}
+
+// CountRequested reports whether the request was dispatched as a composed
+// $count invocation appended to a function-call segment.
+func CountRequested(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	requested, ok := r.Context().Value(countRequestedContextKey{}).(bool)
+	if !ok {
+		return false
+	}
+	return requested
+}
