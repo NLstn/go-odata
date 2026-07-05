@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strings"
 
 	"github.com/nlstn/go-odata/internal/actions"
@@ -96,6 +97,17 @@ func (h *Handler) HandleActionOrFunction(w http.ResponseWriter, r *http.Request,
 	}
 	r = actions.WithQueryOptions(r, queryOpts)
 
+	// Actions are never composable per OData v4.0 Part 1 §12.1: a $count (or
+	// any other) segment can never legally follow an action invocation.
+	if actions.CountRequested(r) && r.Method == http.MethodPost {
+		h.writeError(w, r, &invocationError{
+			status:  http.StatusBadRequest,
+			message: "Invalid request",
+			detail:  fmt.Sprintf("$count is not supported after invoking action '%s'; actions are not composable", name),
+		})
+		return
+	}
+
 	switch r.Method {
 	case http.MethodPost:
 		actionDef, params, invErr := resolveInvocation(r, name, "Action", h.actions, actions.ResolveActionOverload, isBound, entitySet)
@@ -131,6 +143,16 @@ func (h *Handler) HandleActionOrFunction(w http.ResponseWriter, r *http.Request,
 			return
 		}
 
+		countRequested := actions.CountRequested(r)
+		if countRequested && !isCollectionReturnType(functionDef.ReturnType) {
+			h.writeError(w, r, &invocationError{
+				status:  http.StatusBadRequest,
+				message: "Invalid request",
+				detail:  fmt.Sprintf("$count is not supported after function '%s' because it does not return a collection", name),
+			})
+			return
+		}
+
 		// Check authorization before executing function
 		resource := h.buildResourceDescriptor(entitySet, name, isBound)
 		if !h.authorizeRequest(w, r, resource, auth.OperationFunction) {
@@ -150,6 +172,15 @@ func (h *Handler) HandleActionOrFunction(w http.ResponseWriter, r *http.Request,
 		result, err := functionDef.Handler(w, r, ctx, params)
 		if err != nil {
 			h.writeHandlerError(w, r, err, "Function failed")
+			return
+		}
+
+		// A $count segment appended after a composable function-call segment
+		// (e.g. Products(1)/GetRelatedProducts()/$count) resolves against the
+		// function's result collection per OData v4.0 Part 1 §12.1, returning
+		// a plain-text integer rather than the full collection payload.
+		if countRequested {
+			h.writeCollectionCount(w, r, result)
 			return
 		}
 
@@ -199,6 +230,51 @@ func (h *Handler) HandleActionOrFunction(w http.ResponseWriter, r *http.Request,
 			fmt.Sprintf("Method %s is not allowed for actions or functions", r.Method)); writeErr != nil {
 			h.logError("Error writing error response", writeErr)
 		}
+	}
+}
+
+// isCollectionReturnType reports whether t represents a function return type
+// that produces a collection (a slice or array, excluding byte slices/arrays
+// which map to Edm.Binary rather than a composable collection).
+func isCollectionReturnType(t reflect.Type) bool {
+	if t == nil {
+		return false
+	}
+	if t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+	switch t.Kind() {
+	case reflect.Slice, reflect.Array:
+		return t.Elem().Kind() != reflect.Uint8
+	default:
+		return false
+	}
+}
+
+// writeCollectionCount writes the size of a function's result collection as a
+// plain-text integer, per the OData v4 $count response format (§11.2.9 /
+// §11.5.3).
+func (h *Handler) writeCollectionCount(w http.ResponseWriter, r *http.Request, result interface{}) {
+	count := 0
+	if result != nil {
+		v := reflect.ValueOf(result)
+		if v.Kind() == reflect.Ptr {
+			v = v.Elem()
+		}
+		if v.IsValid() && (v.Kind() == reflect.Slice || v.Kind() == reflect.Array) {
+			count = v.Len()
+		}
+	}
+
+	w.Header().Set(handlers.HeaderContentType, "text/plain")
+	w.WriteHeader(http.StatusOK)
+
+	if r.Method == http.MethodHead {
+		return
+	}
+
+	if _, err := fmt.Fprintf(w, "%d", count); err != nil {
+		h.logError("Error writing count response", err)
 	}
 }
 

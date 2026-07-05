@@ -419,6 +419,23 @@ func (r *Router) routeRequest(w http.ResponseWriter, req *http.Request, handler 
 	if components.IsCount {
 		if hasKey && components.NavigationProperty != "" {
 			keyString := r.getKeyString(components)
+
+			// A trailing $count segment can also follow a bound function-call
+			// segment, e.g. Products(1)/GetRelatedProducts()/$count. Per OData
+			// v4.0 Part 1 §12.1, functions returning a collection are
+			// composable, so $count must resolve against the function's
+			// result collection rather than being treated as an (invalid)
+			// navigation property named "GetRelatedProducts()".
+			operationName := components.NavigationProperty
+			if idx := strings.Index(operationName, "("); idx != -1 {
+				operationName = operationName[:idx]
+			}
+			if r.isActionOrFunction(operationName) {
+				req = actions.WithCountRequested(req)
+				r.actionInvoker(w, req, operationName, keyString, true, components.EntitySet)
+				return
+			}
+
 			handler.HandleNavigationPropertyCount(w, req, keyString, components.NavigationProperty)
 		} else if !hasKey && components.NavigationProperty == "" {
 			handler.HandleCount(w, req)
