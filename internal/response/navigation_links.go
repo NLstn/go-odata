@@ -53,6 +53,12 @@ func processMapEntity(entity reflect.Value, metadata EntityMetadataProvider, exp
 		return nil
 	}
 
+	// Encode Edm.Binary ([]byte) property values as base64url strings per the
+	// OData JSON Format spec before any further processing serializes them.
+	for k, v := range entityMap {
+		entityMap[k] = EncodeEdmBinary(v)
+	}
+
 	// Add ETag if present and metadata level is not "none"
 	if fullMetadata != nil && fullMetadata.ETagProperty != nil && metadataLevel != "none" {
 		etagValue := etag.Generate(entityMap, fullMetadata)
@@ -277,7 +283,7 @@ func processStructEntityOrdered(entity reflect.Value, metadata EntityMetadataPro
 			}
 			// Then add the property value
 			fieldValue := entity.Field(j)
-			entityMap.Set(info.JsonName, enumOrRaw(fieldValue, fullPropMetaByName, info.Name))
+			entityMap.Set(info.JsonName, EncodeEdmBinary(enumOrRaw(fieldValue, fullPropMetaByName, info.Name)))
 		}
 	}
 

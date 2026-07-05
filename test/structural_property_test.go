@@ -6,6 +6,7 @@ import (
 	odata "github.com/nlstn/go-odata"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"gorm.io/driver/sqlite"
@@ -585,12 +586,15 @@ func TestStructuralPropertyRead_Binary(t *testing.T) {
 		t.Error("Response missing @odata.context")
 	}
 
-	// Check the value is base64 encoded (Go's json.Marshal automatically encodes []byte as base64)
+	// Per OData JSON Format spec §7.1 (RFC 4648 §5), binary values must be
+	// base64url encoded (using '-'/'_' instead of '+'/'/') without padding.
 	if valueStr, ok := response["value"].(string); ok {
-		// Decode base64 and verify it matches original data
-		decoded, err := base64.StdEncoding.DecodeString(valueStr)
+		if strings.ContainsAny(valueStr, "+/=") {
+			t.Errorf("value %q uses standard base64 alphabet/padding, want base64url without padding", valueStr)
+		}
+		decoded, err := base64.RawURLEncoding.DecodeString(valueStr)
 		if err != nil {
-			t.Errorf("Failed to decode base64 value: %v", err)
+			t.Errorf("Failed to decode base64url value: %v", err)
 		}
 		if string(decoded) != string(binaryData) {
 			t.Errorf("Decoded binary data = %v, want %v", decoded, binaryData)

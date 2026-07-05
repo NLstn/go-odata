@@ -130,7 +130,7 @@ func (h *EntityHandler) writePropertyResponse(w http.ResponseWriter, r *http.Req
 	metadataLevel := response.GetODataMetadataLevel(r)
 
 	odataResponse := map[string]interface{}{
-		"value": fieldValue.Interface(),
+		"value": response.EncodeEdmBinary(fieldValue.Interface()),
 	}
 
 	// Only include @odata.context for minimal and full metadata (not for none)

@@ -72,6 +72,11 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	if err := h.decodeBinaryPropertiesInPlace(requestData); err != nil {
+		WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidRequestBody, err.Error())
+		return
+	}
+
 	if err := h.validatePropertiesExistForCreate(requestData, w, r); err != nil {
 		return
 	}
@@ -569,6 +574,11 @@ func (h *EntityHandler) handlePostEntityOverwrite(w http.ResponseWriter, r *http
 	if err := json.NewDecoder(r.Body).Decode(&requestData); err != nil {
 		WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidRequestBody,
 			fmt.Sprintf(ErrDetailFailedToParseJSON, err.Error()))
+		return
+	}
+
+	if err := h.decodeBinaryPropertiesInPlace(requestData); err != nil {
+		WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidRequestBody, err.Error())
 		return
 	}
 
