@@ -616,12 +616,16 @@ func (h *EntityHandler) handleNavigationCollectionItem(w http.ResponseWriter, r 
 		if err := response.WriteEntityReference(w, r, entityPath); err != nil {
 			h.logger.Error("Error writing entity reference", "error", err)
 		}
-	} else {
-		// Write the full entity
-		navigationPath := fmt.Sprintf("%s(%s)/%s(%s)", h.metadata.EntitySetName, entityKey, navProp.JsonName, targetKey)
-		if err := response.WriteODataCollection(w, r, navigationPath, []interface{}{targetEntity}, nil, nil); err != nil {
-			h.logger.Error("Error writing navigation property entity", "error", err)
-		}
+		return
+	}
+
+	// A key predicate applied to a collection-valued navigation property addresses a single entity
+	// within that collection (OData v4.0 Part 2 §4.11), so the response must be a single-entity
+	// object rather than a collection wrapped in "value": [...].
+	navigationPath := fmt.Sprintf("%s(%s)/%s(%s)", h.metadata.EntitySetName, entityKey, navProp.JsonName, targetKey)
+	targetAdapter := newMetadataAdapter(targetMetadata, h.namespaceOrDefault())
+	if err := response.WriteODataEntityFromNavigationPath(w, r, navigationPath, targetMetadata.EntitySetName, targetEntity, targetAdapter, targetMetadata); err != nil {
+		h.logger.Error("Error writing navigation property entity", "error", err)
 	}
 }
 
