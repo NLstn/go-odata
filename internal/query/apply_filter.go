@@ -706,7 +706,7 @@ func buildComplexTypeNullComparison(dialect string, op FilterOperator, complexPr
 func buildComparisonConditionWithDB(db *gorm.DB, dialect string, filter *FilterExpression, entityMetadata *metadata.EntityMetadata) (string, []interface{}) {
 	// Handle lambda operators (any, all)
 	if filter.Operator == OpAny || filter.Operator == OpAll {
-		return buildLambdaCondition(dialect, filter, entityMetadata)
+		return buildLambdaCondition(dialect, filter, entityMetadata, "")
 	}
 
 	// Handle function comparisons (e.g., tolower(Name) eq 'john')
@@ -790,8 +790,17 @@ func buildEntityTypeFilter(dialect string, typeName string, entityMetadata *meta
 	return fmt.Sprintf("%s = ?", quotedColumn), []interface{}{simpleTypeName}
 }
 
-// buildLambdaCondition builds SQL for lambda operators (any/all) using EXISTS subquery
-func buildLambdaCondition(dialect string, filter *FilterExpression, entityMetadata *metadata.EntityMetadata) (string, []interface{}) {
+// buildLambdaCondition builds SQL for lambda operators (any/all) using EXISTS subquery.
+// parentAlias, when non-empty, is the table alias that refers to "the current row" of
+// entityMetadata in the enclosing SQL scope, and is used instead of
+// entityMetadata.TableName to correlate this EXISTS subquery back to it. This matters
+// for a lambda nested inside another lambda's predicate: if the outer lambda reached
+// its "current" entity through a many-to-many join, that entity is referenced via an
+// alias (see buildManyToManyLambdaCondition), not its bare table name — using the bare
+// table name here would silently (and incorrectly) correlate against the outermost
+// query's table instead of the actual enclosing row. Pass "" at the top level, where
+// entityMetadata.TableName unambiguously refers to the row being filtered.
+func buildLambdaCondition(dialect string, filter *FilterExpression, entityMetadata *metadata.EntityMetadata, parentAlias string) (string, []interface{}) {
 	navProp := findNavigationProperty(filter.Property, entityMetadata)
 	if navProp == nil {
 		return "", nil
@@ -799,11 +808,24 @@ func buildLambdaCondition(dialect string, filter *FilterExpression, entityMetada
 
 	navTargetMetadata := getNavigationTargetMetadata(entityMetadata, navProp)
 
+	// Many-to-many navigation properties join through a bridge/join table rather than
+	// a direct foreign key column on the related table, so they need a different EXISTS
+	// shape (join table + related table, correlated back to the parent through the join
+	// table's own-side column).
+	if navProp.IsManyToMany {
+		return buildManyToManyLambdaCondition(dialect, filter, entityMetadata, navProp, navTargetMetadata, parentAlias)
+	}
+
 	// Use cached table name from metadata (computed once during entity registration)
 	relatedTableName := navProp.NavigationTargetTableName
 
-	// Use cached table name from parent entity metadata
+	// Use cached table name from parent entity metadata, unless the caller supplied an
+	// alias that actually refers to the current row in the enclosing scope (see doc
+	// comment above).
 	parentTableName := entityMetadata.TableName
+	if parentAlias != "" {
+		parentTableName = parentAlias
+	}
 
 	// Use cached foreign key column name from metadata
 	// This was computed once during entity registration and respects GORM foreignKey: tags
@@ -886,7 +908,7 @@ func buildLambdaCondition(dialect string, filter *FilterExpression, entityMetada
 		return "", nil
 	}
 
-	predicateSQL, predicateArgs := buildFilterConditionForLambda(dialect, predicate, navTargetMetadata)
+	predicateSQL, predicateArgs := buildFilterConditionForLambda(dialect, predicate, navTargetMetadata, "")
 	if predicateSQL == "" {
 		return "", nil
 	}
@@ -898,6 +920,98 @@ func buildLambdaCondition(dialect string, filter *FilterExpression, entityMetada
 	} else {
 		sql = fmt.Sprintf("NOT EXISTS (SELECT 1 FROM %s WHERE %s AND NOT (%s))",
 			quoteIdent(dialect, relatedTableName), joinCondition, predicateSQL)
+	}
+
+	return sql, predicateArgs
+}
+
+// buildManyToManyLambdaCondition builds SQL for a lambda operator (any/all) over a
+// many-to-many navigation property. Unlike a direct foreign key relationship, the
+// related rows are reached through a join/bridge table, so the EXISTS subquery joins
+// the bridge table to the related table and correlates the bridge table's own-side
+// column back to the parent (outer) table. The related table is aliased because for
+// self-referential many-to-many relationships (e.g. Product.RelatedProducts), the
+// related table and the parent table are the same table, and an unaliased join would
+// make predicate columns and the parent correlation ambiguous.
+func buildManyToManyLambdaCondition(dialect string, filter *FilterExpression, entityMetadata *metadata.EntityMetadata, navProp *metadata.PropertyMetadata, navTargetMetadata *metadata.EntityMetadata, parentAlias string) (string, []interface{}) {
+	if navProp.JoinTableName == "" || navProp.JoinTableForeignKey == "" || navProp.JoinTableReferencesColumn == "" {
+		// Join info could not be resolved (e.g. a hand-rolled many2many tag GORM itself
+		// would reject). There is no safe convention to fall back to here.
+		return "", nil
+	}
+	if entityMetadata == nil || navTargetMetadata == nil || len(entityMetadata.KeyProperties) == 0 || len(navTargetMetadata.KeyProperties) == 0 {
+		return "", nil
+	}
+
+	ownColumns := strings.Split(navProp.JoinTableForeignKey, ",")
+	refColumns := strings.Split(navProp.JoinTableReferencesColumn, ",")
+	if len(ownColumns) != len(entityMetadata.KeyProperties) || len(refColumns) != len(navTargetMetadata.KeyProperties) {
+		return "", nil
+	}
+
+	// The parent table reference used to correlate the join table back to the
+	// enclosing row defaults to entityMetadata's own table, unless the caller supplied
+	// an alias that already refers to that row (see buildLambdaCondition's doc comment).
+	parentTableRef := entityMetadata.TableName
+	if parentAlias != "" {
+		parentTableRef = parentAlias
+	}
+
+	quotedJoinTable := quoteIdent(dialect, navProp.JoinTableName)
+	quotedParentTable := quoteIdent(dialect, parentTableRef)
+	quotedRelatedTable := quoteIdent(dialect, navProp.NavigationTargetTableName)
+	// Derive the related-table alias from parentAlias (when present) so that a lambda
+	// nested inside another many-to-many lambda on the same relation (e.g.
+	// RelatedProducts/any(r: r/RelatedProducts/any(r2: ...))) gets a distinct alias per
+	// nesting level rather than colliding with the alias the outer level already
+	// introduced in the same (lexically nested, and therefore visible) SQL scope.
+	relatedAlias := navProp.NavigationTargetTableName + "_m2m"
+	if parentAlias != "" {
+		relatedAlias = parentAlias + "_" + relatedAlias
+	}
+	quotedRelatedAlias := quoteIdent(dialect, relatedAlias)
+
+	joinToRelatedConditions := make([]string, 0, len(refColumns))
+	for i, refCol := range refColumns {
+		joinToRelatedConditions = append(joinToRelatedConditions,
+			fmt.Sprintf("%s.%s = %s.%s", quotedJoinTable, quoteIdent(dialect, strings.TrimSpace(refCol)),
+				quotedRelatedAlias, quoteIdent(dialect, navTargetMetadata.KeyProperties[i].ColumnName)))
+	}
+
+	correlateToParentConditions := make([]string, 0, len(ownColumns))
+	for i, ownCol := range ownColumns {
+		correlateToParentConditions = append(correlateToParentConditions,
+			fmt.Sprintf("%s.%s = %s.%s", quotedJoinTable, quoteIdent(dialect, strings.TrimSpace(ownCol)),
+				quotedParentTable, quoteIdent(dialect, entityMetadata.KeyProperties[i].ColumnName)))
+	}
+
+	fromClause := fmt.Sprintf("%s JOIN %s AS %s ON %s",
+		quotedJoinTable, quotedRelatedTable, quotedRelatedAlias, strings.Join(joinToRelatedConditions, " AND "))
+	correlateCondition := strings.Join(correlateToParentConditions, " AND ")
+
+	if filter.Value == nil || filter.Left == nil {
+		if filter.Operator == OpAny {
+			return fmt.Sprintf("EXISTS (SELECT 1 FROM %s WHERE %s)", fromClause, correlateCondition), []interface{}{}
+		}
+		return fmt.Sprintf("NOT EXISTS (SELECT 1 FROM %s WHERE %s) OR EXISTS (SELECT 1 FROM %s WHERE %s)",
+			fromClause, correlateCondition, fromClause, correlateCondition), []interface{}{}
+	}
+
+	predicate := filter.Left
+	if predicate == nil {
+		return "", nil
+	}
+
+	predicateSQL, predicateArgs := buildFilterConditionForLambda(dialect, predicate, navTargetMetadata, relatedAlias)
+	if predicateSQL == "" {
+		return "", nil
+	}
+
+	var sql string
+	if filter.Operator == OpAny {
+		sql = fmt.Sprintf("EXISTS (SELECT 1 FROM %s WHERE %s AND (%s))", fromClause, correlateCondition, predicateSQL)
+	} else {
+		sql = fmt.Sprintf("NOT EXISTS (SELECT 1 FROM %s WHERE %s AND NOT (%s))", fromClause, correlateCondition, predicateSQL)
 	}
 
 	return sql, predicateArgs
@@ -916,31 +1030,47 @@ func getNavigationTargetMetadata(entityMetadata *metadata.EntityMetadata, navPro
 	return targetMeta
 }
 
-// buildFilterConditionForLambda builds a filter condition for lambda subquery predicates
-func buildFilterConditionForLambda(dialect string, filter *FilterExpression, navTargetMetadata *metadata.EntityMetadata) (string, []interface{}) {
+// buildFilterConditionForLambda builds a filter condition for lambda subquery predicates.
+// tableQualifier, when non-empty, qualifies plain property column references with an
+// explicit table/alias prefix (e.g. "products_m2m"."price"). This is required for
+// many-to-many lambda predicates, where the EXISTS subquery's FROM clause joins two
+// tables (the bridge table and the aliased related table) so an unqualified column
+// name would otherwise be ambiguous or could shadow the outer parent table reference
+// for self-referential relationships. It is passed through empty ("") for the direct
+// foreign-key case, where the subquery only ever has one table in scope and the
+// generated SQL must stay unqualified to match existing behavior/tests.
+func buildFilterConditionForLambda(dialect string, filter *FilterExpression, navTargetMetadata *metadata.EntityMetadata, tableQualifier string) (string, []interface{}) {
 	if filter == nil {
 		return "", nil
 	}
 
 	if filter.Logical != "" {
-		return buildLogicalConditionForLambda(dialect, filter, navTargetMetadata)
+		return buildLogicalConditionForLambda(dialect, filter, navTargetMetadata, tableQualifier)
 	}
 
 	// Handle nested lambda operators (any/all within any/all), e.g.
 	// CollectionA/any(a: a/CollectionB/any(b: b/Property eq 'value')). navTargetMetadata
 	// is the entity the outer lambda's range variable ranges over, which is exactly the
 	// "current" entity metadata that buildLambdaCondition needs to resolve the nested
-	// navigation property and recurse into a nested EXISTS subquery.
+	// navigation property and recurse into a nested EXISTS subquery. tableQualifier is
+	// passed through as the nested call's parentAlias: if the outer lambda's "current"
+	// row is only reachable via an alias (e.g. the aliased related table of a
+	// many-to-many join), the nested EXISTS must correlate against that same alias
+	// rather than navTargetMetadata's bare table name, which could refer to a different
+	// row (or even the outermost query's row, for a self-referential relationship).
 	if filter.Operator == OpAny || filter.Operator == OpAll {
-		return buildLambdaCondition(dialect, filter, navTargetMetadata)
+		return buildLambdaCondition(dialect, filter, navTargetMetadata, tableQualifier)
 	}
 
 	if filter.Left != nil && filter.Left.Operator != "" {
-		return buildFunctionComparisonForLambda(dialect, filter, navTargetMetadata)
+		return buildFunctionComparisonForLambda(dialect, filter, navTargetMetadata, tableQualifier)
 	}
 
 	// Quote the column name for proper database compatibility
 	columnName := quoteIdent(dialect, GetColumnName(filter.Property, navTargetMetadata))
+	if tableQualifier != "" {
+		columnName = quoteIdent(dialect, tableQualifier) + "." + columnName
+	}
 
 	switch filter.Operator {
 	case OpEqual:
@@ -975,9 +1105,9 @@ func buildFilterConditionForLambda(dialect string, filter *FilterExpression, nav
 }
 
 // buildLogicalConditionForLambda builds a logical condition for lambda predicates
-func buildLogicalConditionForLambda(dialect string, filter *FilterExpression, navTargetMetadata *metadata.EntityMetadata) (string, []interface{}) {
-	leftQuery, leftArgs := buildFilterConditionForLambda(dialect, filter.Left, navTargetMetadata)
-	rightQuery, rightArgs := buildFilterConditionForLambda(dialect, filter.Right, navTargetMetadata)
+func buildLogicalConditionForLambda(dialect string, filter *FilterExpression, navTargetMetadata *metadata.EntityMetadata, tableQualifier string) (string, []interface{}) {
+	leftQuery, leftArgs := buildFilterConditionForLambda(dialect, filter.Left, navTargetMetadata, tableQualifier)
+	rightQuery, rightArgs := buildFilterConditionForLambda(dialect, filter.Right, navTargetMetadata, tableQualifier)
 
 	var query string
 	switch filter.Logical {
@@ -994,7 +1124,7 @@ func buildLogicalConditionForLambda(dialect string, filter *FilterExpression, na
 }
 
 // buildFunctionComparisonForLambda builds a function comparison for lambda predicates
-func buildFunctionComparisonForLambda(dialect string, filter *FilterExpression, navTargetMetadata *metadata.EntityMetadata) (string, []interface{}) {
+func buildFunctionComparisonForLambda(dialect string, filter *FilterExpression, navTargetMetadata *metadata.EntityMetadata, tableQualifier string) (string, []interface{}) {
 	funcExpr := filter.Left
 	var funcSQL string
 	var funcArgs []interface{}
@@ -1006,6 +1136,9 @@ func buildFunctionComparisonForLambda(dialect string, filter *FilterExpression, 
 	} else {
 		// Quote the column name for proper database compatibility
 		columnName := quoteIdent(dialect, GetColumnName(funcExpr.Property, navTargetMetadata))
+		if tableQualifier != "" {
+			columnName = quoteIdent(dialect, tableQualifier) + "." + columnName
+		}
 		funcSQL, funcArgs = buildFunctionSQL(dialect, funcExpr.Operator, columnName, funcExpr.Value)
 		if funcSQL == "" {
 			return "", nil

@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"sync"
+
+	gormschema "gorm.io/gorm/schema"
 )
 
 // EntityMetadata holds metadata information about an OData entity
@@ -88,7 +91,16 @@ type PropertyMetadata struct {
 	NavigationTarget          string // Entity type name for navigation properties
 	NavigationTargetTableName string // Database table name for navigation target (computed once)
 	ForeignKeyColumnName      string // Foreign key column name for navigation properties (computed once)
-	NavigationIsArray         bool   // True for collection navigation properties
+	IsManyToMany              bool   // True if this is a many-to-many navigation property (GORM many2many tag)
+	JoinTableName             string // Join/bridge table name for many-to-many relationships (computed once)
+	// JoinTableForeignKey is the join table column (or comma-separated columns for
+	// composite keys) referencing this entity's own key. JoinTableReferencesColumn is
+	// the join table column(s) referencing the related entity's key. Both are empty
+	// unless IsManyToMany is true and the join could be resolved via GORM's schema
+	// parser (see resolveManyToManyJoinInfo).
+	JoinTableForeignKey       string
+	JoinTableReferencesColumn string
+	NavigationIsArray         bool // True for collection navigation properties
 	NavigationContainsTarget  bool   // True if this is a containment navigation property (ContainsTarget="true")
 	IsETag                    bool   // True if this property should be used for ETag generation
 	IsComplexType             bool   // True if this property is a complex type (embedded struct)
@@ -436,7 +448,7 @@ func analyzeField(field reflect.StructField, metadata *EntityMetadata) (Property
 	}
 
 	// Check if this is a navigation property
-	analyzeNavigationProperty(&property, field)
+	analyzeNavigationProperty(&property, field, metadata.EntityType)
 
 	// Compute and cache the column name (respects GORM column: tags)
 	property.ColumnName = getColumnNameFromProperty(&property)
@@ -503,7 +515,7 @@ func analyzeField(field reflect.StructField, metadata *EntityMetadata) (Property
 }
 
 // analyzeNavigationProperty determines if a field is a navigation property or complex type
-func analyzeNavigationProperty(property *PropertyMetadata, field reflect.StructField) {
+func analyzeNavigationProperty(property *PropertyMetadata, field reflect.StructField, ownerType reflect.Type) {
 	fieldType := field.Type
 	isSlice := fieldType.Kind() == reflect.Slice
 	if isSlice {
@@ -518,17 +530,28 @@ func analyzeNavigationProperty(property *PropertyMetadata, field reflect.StructF
 	// If it's a struct type, determine if it's navigation property or complex type
 	if fieldType.Kind() == reflect.Struct {
 		gormTag := field.Tag.Get("gorm")
+		isManyToMany := strings.Contains(gormTag, "many2many")
 
 		// Check if it's a navigation property (has foreign key, references, or many2many)
-		if strings.Contains(gormTag, "foreignKey") || strings.Contains(gormTag, "references") || strings.Contains(gormTag, "many2many") {
+		if strings.Contains(gormTag, "foreignKey") || strings.Contains(gormTag, "references") || isManyToMany {
 			property.IsNavigationProp = true
 			property.NavigationTarget = fieldType.Name()
 			// Use fieldType (already dereferenced) to get the table name for the target entity
 			property.NavigationTargetTableName = getTableNameFromReflectType(fieldType)
 			property.NavigationIsArray = isSlice
 
-			// Compute and cache the foreign key column name (respects GORM foreignKey: tags)
-			property.ForeignKeyColumnName = getForeignKeyColumnName(property)
+			if isManyToMany {
+				// Many-to-many relationships join through a bridge/join table rather than a
+				// direct foreign key column on the related table, so ForeignKeyColumnName's
+				// naive "<property>_id" convention does not apply here. Resolve the actual
+				// join table name and columns via GORM's own schema parser instead of
+				// re-implementing its (self-referential-aware) naming heuristic.
+				property.IsManyToMany = true
+				resolveManyToManyJoinInfo(property, ownerType)
+			} else {
+				// Compute and cache the foreign key column name (respects GORM foreignKey: tags)
+				property.ForeignKeyColumnName = getForeignKeyColumnName(property)
+			}
 
 			// Extract referential constraints from GORM tags (only for foreignKey/references)
 			if strings.Contains(gormTag, "foreignKey") || strings.Contains(gormTag, "references") {
@@ -573,7 +596,7 @@ func analyzeComplexTypeFields(property *PropertyMetadata, fieldType reflect.Type
 			GormTag:   field.Tag.Get("gorm"),
 		}
 
-		analyzeNavigationProperty(&nestedProp, field)
+		analyzeNavigationProperty(&nestedProp, field, nil)
 
 		// Compute and cache the column name for complex type fields
 		nestedProp.ColumnName = getColumnNameFromProperty(&nestedProp)
@@ -1613,6 +1636,58 @@ func getColumnNameFromProperty(prop *PropertyMetadata) string {
 
 // getForeignKeyColumnName computes the foreign key column name for a navigation property
 // This respects GORM foreignKey: tags and falls back to <navigation_property_name>_id convention
+// resolveManyToManyJoinInfo resolves the join/bridge table name and its foreign key
+// columns for a many-to-many navigation property by parsing the owning entity's
+// struct with GORM's own schema parser. This mirrors exactly what GORM itself does
+// when it builds the join query for Preload (used by $expand), including its
+// self-referential naming rules (e.g. a self-join field like
+// "RelatedProducts []Product `gorm:"many2many:product_relations;"`" on Product
+// produces join columns "product_id" and "related_product_id", not the naive
+// "related_products_id" convention used for direct foreign keys). Re-implementing
+// that heuristic ourselves would be fragile across GORM versions, so we ask GORM
+// directly instead. If parsing fails or no matching relationship is found (e.g. an
+// unusual tag GORM itself would reject), the join fields are left empty and callers
+// must treat that as "join info unavailable".
+func resolveManyToManyJoinInfo(property *PropertyMetadata, ownerType reflect.Type) {
+	if property == nil || ownerType == nil {
+		return
+	}
+	for ownerType.Kind() == reflect.Ptr {
+		ownerType = ownerType.Elem()
+	}
+	if ownerType.Kind() != reflect.Struct {
+		return
+	}
+
+	sch, err := gormschema.Parse(reflect.New(ownerType).Interface(), &sync.Map{}, gormschema.NamingStrategy{})
+	if err != nil || sch == nil {
+		return
+	}
+
+	for _, rel := range sch.Relationships.Many2Many {
+		if rel == nil || rel.Field == nil || rel.Field.Name != property.FieldName || rel.JoinTable == nil {
+			continue
+		}
+
+		property.JoinTableName = rel.JoinTable.Table
+
+		var ownColumns, refColumns []string
+		for _, ref := range rel.References {
+			if ref == nil || ref.ForeignKey == nil {
+				continue
+			}
+			if ref.OwnPrimaryKey {
+				ownColumns = append(ownColumns, ref.ForeignKey.DBName)
+			} else {
+				refColumns = append(refColumns, ref.ForeignKey.DBName)
+			}
+		}
+		property.JoinTableForeignKey = strings.Join(ownColumns, ",")
+		property.JoinTableReferencesColumn = strings.Join(refColumns, ",")
+		return
+	}
+}
+
 func getForeignKeyColumnName(prop *PropertyMetadata) string {
 	if prop == nil || !prop.IsNavigationProp {
 		return ""
