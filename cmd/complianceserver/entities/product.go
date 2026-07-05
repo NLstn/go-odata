@@ -10,8 +10,49 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	odata "github.com/nlstn/go-odata"
 	"gorm.io/gorm"
 )
+
+// ReleaseDateValue is a string-backed named type declared as Edm.Date via an
+// explicit UnderlyingType override (Go has no distinct native type for Edm.Date).
+// Holds ISO-8601 date strings, e.g. "2024-01-15".
+type ReleaseDateValue string
+
+// TimeOfDayValue is a string-backed named type declared as Edm.TimeOfDay via an
+// explicit UnderlyingType override. Holds ISO-8601 time-of-day strings, e.g. "09:30:00".
+type TimeOfDayValue string
+
+// DurationValue is a string-backed named type declared as Edm.Duration via an
+// explicit UnderlyingType override. Holds ISO-8601 duration strings, e.g. "P1D", "PT45S".
+type DurationValue string
+
+func init() {
+	if err := odata.RegisterTypeDefinition(ReleaseDateValue(""), "ReleaseDateValue", odata.TypeDefinitionFacets{UnderlyingType: "Edm.Date"}); err != nil {
+		panic("failed to register ReleaseDateValue TypeDefinition: " + err.Error())
+	}
+	if err := odata.RegisterTypeDefinition(TimeOfDayValue(""), "TimeOfDayValue", odata.TypeDefinitionFacets{UnderlyingType: "Edm.TimeOfDay"}); err != nil {
+		panic("failed to register TimeOfDayValue TypeDefinition: " + err.Error())
+	}
+	if err := odata.RegisterTypeDefinition(DurationValue(""), "DurationValue", odata.TypeDefinitionFacets{UnderlyingType: "Edm.Duration"}); err != nil {
+		panic("failed to register DurationValue TypeDefinition: " + err.Error())
+	}
+}
+
+func releaseDatePtr(s string) *ReleaseDateValue {
+	v := ReleaseDateValue(s)
+	return &v
+}
+
+func timeOfDayPtr(s string) *TimeOfDayValue {
+	v := TimeOfDayValue(s)
+	return &v
+}
+
+func durationPtr(s string) *DurationValue {
+	v := DurationValue(s)
+	return &v
+}
 
 // ProductStatus represents product status as a flags enum
 type ProductStatus int32
@@ -229,28 +270,28 @@ func (ProductStatus) EnumMembers() map[string]int {
 
 // Product represents a product entity for the compliance server
 type Product struct {
-	ID              uuid.UUID        `json:"ID" gorm:"type:char(36);primaryKey" odata:"key,generate=uuid"`
-	Name            string           `json:"Name" gorm:"not null" odata:"required,maxlength=100,searchable,annotation:Core.Description=Product display name"`
-	Description     *string          `json:"Description" odata:"nullable,maxlength=500,annotation:Core.Description=Detailed product description"` // Nullable description field
-	Price           float64          `json:"Price" gorm:"not null" odata:"required,precision=10,scale=2"`
-	Rating          RatingValue      `json:"Rating" odata:""`
-	Temperature     TemperatureValue `json:"Temperature" odata:""`
-	Quantity        QuantityValue    `json:"Quantity" odata:""`
-	Weight          float32          `json:"Weight" odata:""`
-	Data            []byte           `json:"Data,omitempty" odata:"nullable"`
-	ReleaseDate     *string          `json:"ReleaseDate,omitempty" odata:"nullable"`
-	OpenTime        *string          `json:"OpenTime,omitempty" odata:"nullable"`
-	ShippingTime    *string          `json:"ShippingTime,omitempty" odata:"nullable"`
-	ProcessingTime  *string          `json:"ProcessingTime,omitempty" odata:"nullable"`
-	Offset          *string          `json:"Offset,omitempty" odata:"nullable"`
-	CategoryID      *uuid.UUID       `json:"CategoryID" gorm:"type:char(36)" odata:"nullable"` // Foreign key for Category navigation property
-	Status          ProductStatus    `json:"Status" gorm:"not null" odata:"enum=ProductStatus,flags"`
-	Version         int              `json:"Version" gorm:"default:1" odata:"etag"` // Version field used for optimistic concurrency control via ETag
-	CreatedAt       time.Time        `json:"CreatedAt" gorm:"not null" odata:"annotation:Core.Computed"`
-	SerialNumber    *string          `json:"SerialNumber,omitempty" gorm:"type:varchar(50)" odata:"nullable,maxlength=50,annotation:Core.Immutable,annotation:Core.Description=Unique serial number assigned at creation"`
-	ProductType     string           `json:"ProductType,omitempty" gorm:"default:'Product'" odata:"maxlength=50"` // Discriminator for type inheritance
-	SpecialProperty *string          `json:"SpecialProperty,omitempty" odata:"nullable,maxlength=200"`            // Property for SpecialProduct derived type
-	SpecialFeature  *string          `json:"SpecialFeature,omitempty" odata:"nullable,maxlength=100"`             // Property for SpecialProduct derived type
+	ID              uuid.UUID         `json:"ID" gorm:"type:char(36);primaryKey" odata:"key,generate=uuid"`
+	Name            string            `json:"Name" gorm:"not null" odata:"required,maxlength=100,searchable,annotation:Core.Description=Product display name"`
+	Description     *string           `json:"Description" odata:"nullable,maxlength=500,annotation:Core.Description=Detailed product description"` // Nullable description field
+	Price           float64           `json:"Price" gorm:"not null" odata:"required,precision=10,scale=2"`
+	Rating          RatingValue       `json:"Rating" odata:""`
+	Temperature     TemperatureValue  `json:"Temperature" odata:""`
+	Quantity        QuantityValue     `json:"Quantity" odata:""`
+	Weight          float32           `json:"Weight" odata:""`
+	Data            []byte            `json:"Data,omitempty" odata:"nullable"`
+	ReleaseDate     *ReleaseDateValue `json:"ReleaseDate,omitempty" odata:"nullable"`
+	OpenTime        *TimeOfDayValue   `json:"OpenTime,omitempty" odata:"nullable"`
+	ShippingTime    *DurationValue    `json:"ShippingTime,omitempty" odata:"nullable"`
+	ProcessingTime  *DurationValue    `json:"ProcessingTime,omitempty" odata:"nullable"`
+	Offset          *DurationValue    `json:"Offset,omitempty" odata:"nullable"`
+	CategoryID      *uuid.UUID        `json:"CategoryID" gorm:"type:char(36)" odata:"nullable"` // Foreign key for Category navigation property
+	Status          ProductStatus     `json:"Status" gorm:"not null" odata:"enum=ProductStatus,flags"`
+	Version         int               `json:"Version" gorm:"default:1" odata:"etag"` // Version field used for optimistic concurrency control via ETag
+	CreatedAt       time.Time         `json:"CreatedAt" gorm:"not null" odata:"annotation:Core.Computed"`
+	SerialNumber    *string           `json:"SerialNumber,omitempty" gorm:"type:varchar(50)" odata:"nullable,maxlength=50,annotation:Core.Immutable,annotation:Core.Description=Unique serial number assigned at creation"`
+	ProductType     string            `json:"ProductType,omitempty" gorm:"default:'Product'" odata:"maxlength=50"` // Discriminator for type inheritance
+	SpecialProperty *string           `json:"SpecialProperty,omitempty" odata:"nullable,maxlength=200"`            // Property for SpecialProduct derived type
+	SpecialFeature  *string           `json:"SpecialFeature,omitempty" odata:"nullable,maxlength=100"`             // Property for SpecialProduct derived type
 	// Complex type properties
 	ShippingAddress *Address    `json:"ShippingAddress,omitempty" gorm:"embedded;embeddedPrefix:shipping_" odata:"nullable"`
 	Dimensions      *Dimensions `json:"Dimensions,omitempty" gorm:"embedded;embeddedPrefix:dim_" odata:"nullable"`
@@ -312,11 +353,11 @@ func GetSampleProducts() []Product {
 			Quantity:        1200,
 			Weight:          3.14,
 			Data:            []byte("test"),
-			ReleaseDate:     stringPtr("2024-01-15"),
-			OpenTime:        stringPtr("09:30:00"),
-			ShippingTime:    stringPtr("P1D"),
-			ProcessingTime:  stringPtr("PT45S"),
-			Offset:          stringPtr("P0D"),
+			ReleaseDate:     releaseDatePtr("2024-01-15"),
+			OpenTime:        timeOfDayPtr("09:30:00"),
+			ShippingTime:    durationPtr("P1D"),
+			ProcessingTime:  durationPtr("PT45S"),
+			Offset:          durationPtr("P0D"),
 			CategoryID:      nil, // Will be set during seeding after categories are created
 			Status:          ProductStatusInStock | ProductStatusFeatured,
 			Version:         1,
@@ -349,11 +390,11 @@ func GetSampleProducts() []Product {
 			Quantity:       300,
 			Weight:         0.09,
 			Data:           []byte{0x01, 0x02, 0x03},
-			ReleaseDate:    stringPtr("2024-01-20"),
-			OpenTime:       stringPtr("08:15:00"),
-			ShippingTime:   stringPtr("PT2H"),
-			ProcessingTime: stringPtr("PT1.5S"),
-			Offset:         stringPtr("-P1D"),
+			ReleaseDate:    releaseDatePtr("2024-01-20"),
+			OpenTime:       timeOfDayPtr("08:15:00"),
+			ShippingTime:   durationPtr("PT2H"),
+			ProcessingTime: durationPtr("PT1.5S"),
+			Offset:         durationPtr("-P1D"),
 			CategoryID:     nil,                                        // Will be set during seeding
 			Status:         ProductStatusInStock | ProductStatusOnSale, // In stock and on sale
 			Version:        1,
@@ -384,11 +425,11 @@ func GetSampleProducts() []Product {
 			Quantity:       -200,
 			Weight:         0.0,
 			Data:           []byte{},
-			ReleaseDate:    stringPtr("2024-01-01"),
-			OpenTime:       stringPtr("00:00:00"),
-			ShippingTime:   stringPtr("P2D"),
-			ProcessingTime: stringPtr("PT30M"),
-			Offset:         stringPtr("P0D"),
+			ReleaseDate:    releaseDatePtr("2024-01-01"),
+			OpenTime:       timeOfDayPtr("00:00:00"),
+			ShippingTime:   durationPtr("P2D"),
+			ProcessingTime: durationPtr("PT30M"),
+			Offset:         durationPtr("P0D"),
 			CategoryID:     nil,                  // Will be set during seeding
 			Status:         ProductStatusInStock, // Only in stock
 			Version:        1,
@@ -418,11 +459,11 @@ func GetSampleProducts() []Product {
 			Temperature:    127,
 			Quantity:       32767,
 			Weight:         150.0,
-			ReleaseDate:    stringPtr("2024-12-31"),
-			OpenTime:       stringPtr("23:59:59"),
-			ShippingTime:   stringPtr("P1DT2H30M"),
-			ProcessingTime: stringPtr("PT45S"),
-			Offset:         stringPtr("P0D"),
+			ReleaseDate:    releaseDatePtr("2024-12-31"),
+			OpenTime:       timeOfDayPtr("23:59:59"),
+			ShippingTime:   durationPtr("P1DT2H30M"),
+			ProcessingTime: durationPtr("PT45S"),
+			Offset:         durationPtr("P0D"),
 			CategoryID:     nil,                       // Will be set during seeding
 			Status:         ProductStatusDiscontinued, // Discontinued
 			Version:        1,

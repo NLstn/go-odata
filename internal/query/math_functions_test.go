@@ -271,7 +271,7 @@ func TestMathFunctions_Combined(t *testing.T) {
 		},
 		{
 			name:      "nested with date functions",
-			filter:    "round(Price) gt 50 and year(ID) eq 2024",
+			filter:    "round(Price) gt 50 and year(CreatedAt) eq 2024",
 			expectErr: false,
 		},
 		{

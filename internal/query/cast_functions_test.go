@@ -466,7 +466,7 @@ func TestCastFunction_WithOtherFunctions(t *testing.T) {
 		},
 		{
 			name:      "cast with year",
-			filter:    "year(Name) eq 2023 and cast(Price, 'Edm.Int32') gt 50",
+			filter:    "year(CreatedAt) eq 2023 and cast(Price, 'Edm.Int32') gt 50",
 			expectErr: false,
 		},
 	}
