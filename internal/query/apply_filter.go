@@ -1145,6 +1145,21 @@ func buildFunctionComparisonForLambda(dialect string, filter *FilterExpression, 
 		}
 	}
 
+	// contains()/startswith()/endswith() wrapping a nested function call as their
+	// first argument, e.g. any(n: contains(tolower(n/Name),'laptop')). See the
+	// matching branch in buildFunctionComparison for details.
+	switch filter.Operator {
+	case OpContains:
+		likeSQL, likeArgs := buildLikeComparison(dialect, funcSQL, filter.Value, true, true)
+		return likeSQL, append(funcArgs, likeArgs...)
+	case OpStartsWith:
+		likeSQL, likeArgs := buildLikeComparison(dialect, funcSQL, filter.Value, false, true)
+		return likeSQL, append(funcArgs, likeArgs...)
+	case OpEndsWith:
+		likeSQL, likeArgs := buildLikeComparison(dialect, funcSQL, filter.Value, true, false)
+		return likeSQL, append(funcArgs, likeArgs...)
+	}
+
 	compSQL := buildComparisonSQL(filter.Operator, funcSQL)
 	if compSQL == "" {
 		return "", nil
@@ -1179,6 +1194,24 @@ func buildFunctionComparison(dialect string, filter *FilterExpression, entityMet
 		if funcSQL == "" {
 			return "", nil
 		}
+	}
+
+	// contains()/startswith()/endswith() wrapping a nested function call as their
+	// first argument, e.g. contains(tolower(Name),'laptop'). funcSQL above is the
+	// SQL expression that evaluates that first argument (e.g. "LOWER(name)" or
+	// "CONCAT(name, ?)"); build the same ordinal (case-sensitive) LIKE comparison
+	// against it that buildStandardComparison builds for a bare property reference,
+	// preserving any bind arguments funcSQL itself required.
+	switch filter.Operator {
+	case OpContains:
+		likeSQL, likeArgs := buildLikeComparison(dialect, funcSQL, filter.Value, true, true)
+		return likeSQL, append(funcArgs, likeArgs...)
+	case OpStartsWith:
+		likeSQL, likeArgs := buildLikeComparison(dialect, funcSQL, filter.Value, false, true)
+		return likeSQL, append(funcArgs, likeArgs...)
+	case OpEndsWith:
+		likeSQL, likeArgs := buildLikeComparison(dialect, funcSQL, filter.Value, true, false)
+		return likeSQL, append(funcArgs, likeArgs...)
 	}
 
 	// Check if right side is a FilterExpression (converted from FunctionCallExpr)

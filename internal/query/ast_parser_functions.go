@@ -180,15 +180,43 @@ func convertSingleArgFunctionWithContext(n *FunctionCallExpr, functionName strin
 	return expr, nil
 }
 
+// isLikeMatchFunction reports whether functionName is one of contains, startswith,
+// or endswith - the OData string-matching functions whose first argument must be
+// evaluated as an arbitrary expression (e.g. tolower(Name), concat(Name,'x')),
+// rather than assumed to always be a bare property reference.
+func isLikeMatchFunction(name string) bool {
+	return name == "contains" || name == "startswith" || name == "endswith"
+}
+
 // convertTwoArgFunctionWithContext converts two-argument functions using the provided context
 func convertTwoArgFunctionWithContext(n *FunctionCallExpr, functionName string, entityMetadata *metadata.EntityMetadata, ctx *conversionContext) (*FilterExpression, error) {
 	if len(n.Args) != 2 {
 		return nil, fmt.Errorf("function %s requires 2 arguments", functionName)
 	}
 
-	property, err := extractPropertyFromFunctionArgWithContext(n.Args[0], functionName, entityMetadata, ctx)
-	if err != nil {
-		return nil, err
+	var property string
+	var leftExpr *FilterExpression
+
+	if funcCall, ok := n.Args[0].(*FunctionCallExpr); ok && isLikeMatchFunction(functionName) {
+		// contains()/startswith()/endswith() must recursively evaluate their first
+		// argument as a general SQL expression when it is itself a function call
+		// (e.g. tolower(Name), concat(Name,'x')). Keep the fully converted inner
+		// expression via Left, mirroring the convention already used for
+		// "tolower(Name) eq 'x'" style comparisons (see
+		// convertComparisonExprWithContext), instead of collapsing it down to the
+		// inner property name, which previously discarded the outer function call
+		// entirely.
+		innerExpr, err := convertFunctionCallExprWithContext(funcCall, entityMetadata, ctx)
+		if err != nil {
+			return nil, err
+		}
+		leftExpr = innerExpr
+	} else {
+		p, err := extractPropertyFromFunctionArgWithContext(n.Args[0], functionName, entityMetadata, ctx)
+		if err != nil {
+			return nil, err
+		}
+		property = p
 	}
 
 	// Second argument can be a literal, property, or function call
@@ -209,6 +237,7 @@ func convertTwoArgFunctionWithContext(n *FunctionCallExpr, functionName string, 
 
 	expr := acquireFilterExpression()
 	expr.Property = property
+	expr.Left = leftExpr
 	expr.Operator = FilterOperator(functionName)
 	expr.Value = value
 	return expr, nil
