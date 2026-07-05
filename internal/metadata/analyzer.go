@@ -128,6 +128,12 @@ type PropertyMetadata struct {
 	// TypeDefinition properties
 	IsTypeDefinition   bool   // True if this property uses a registered TypeDefinition
 	TypeDefinitionName string // OData name of the TypeDefinition (for metadata generation)
+	// EdmType is the resolved EDM primitive type (e.g. "Edm.String", "Edm.Date",
+	// "Edm.Duration") for this property, honoring a registered TypeDefinition's
+	// UnderlyingType where present. Used by $filter to type-check literals and
+	// function arguments against the property's declared type rather than just
+	// its Go reflect.Kind. Empty for navigation properties and complex types.
+	EdmType string
 	// Binary properties
 	ContentType string // MIME type for binary properties (e.g., "image/svg+xml"), used when serving /$value
 	// Stream properties
@@ -495,15 +501,31 @@ func analyzeField(field reflect.StructField, metadata *EntityMetadata) (Property
 
 	// Auto-detect TypeDefinition: if the field type (or its element after deref) is registered
 	// as a TypeDefinition and the property is not already an enum, mark it accordingly.
+	fieldType := field.Type
+	for fieldType.Kind() == reflect.Ptr {
+		fieldType = fieldType.Elem()
+	}
+	var typeDefInfo *TypeDefinitionInfo
 	if !property.IsEnum && !property.IsTypeDefinition {
-		fieldType := field.Type
-		for fieldType.Kind() == reflect.Ptr {
-			fieldType = fieldType.Elem()
-		}
 		if tdInfo, ok := GetTypeDefinition(fieldType); ok {
 			property.IsTypeDefinition = true
 			if property.TypeDefinitionName == "" {
 				property.TypeDefinitionName = tdInfo.Name
+			}
+			typeDefInfo = tdInfo
+		}
+	}
+
+	// Resolve the property's EDM primitive type. A registered TypeDefinition's
+	// UnderlyingType takes precedence over the type inferred from the Go field
+	// type, so a string-backed field can be declared e.g. Edm.Date instead of
+	// defaulting to Edm.String.
+	if !property.IsNavigationProp && !property.IsComplexType && !property.IsUntyped {
+		if typeDefInfo != nil {
+			property.EdmType = typeDefInfo.UnderlyingType
+		} else if !property.IsEnum {
+			if edmType, err := inferUnderlyingEdmType(fieldType); err == nil {
+				property.EdmType = edmType
 			}
 		}
 	}

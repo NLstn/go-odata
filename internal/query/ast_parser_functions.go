@@ -173,11 +173,55 @@ func convertSingleArgFunctionWithContext(n *FunctionCallExpr, functionName strin
 		return nil, err
 	}
 
+	if entityMetadata != nil {
+		if err := validateDateTimeFunctionArgType(functionName, property, entityMetadata); err != nil {
+			return nil, err
+		}
+	}
+
 	expr := acquireFilterExpression()
 	expr.Property = property
 	expr.Operator = FilterOperator(functionName)
 	expr.Value = nil
 	return expr, nil
+}
+
+// dateTimeFunctionCompatibleEdmTypes maps each date/time-extraction function to the
+// set of EDM primitive types its argument may be declared as. Per OData Protocol
+// §11.2.5.1, these functions only apply to Edm.Date/Edm.TimeOfDay/Edm.DateTimeOffset/
+// Edm.Duration values - applying them to e.g. an Edm.String property is a type error.
+var dateTimeFunctionCompatibleEdmTypes = map[string]map[string]bool{
+	"year":               {"Edm.Date": true, "Edm.DateTimeOffset": true},
+	"month":              {"Edm.Date": true, "Edm.DateTimeOffset": true},
+	"day":                {"Edm.Date": true, "Edm.DateTimeOffset": true},
+	"hour":               {"Edm.TimeOfDay": true, "Edm.DateTimeOffset": true},
+	"minute":             {"Edm.TimeOfDay": true, "Edm.DateTimeOffset": true},
+	"second":             {"Edm.TimeOfDay": true, "Edm.DateTimeOffset": true},
+	"fractionalseconds":  {"Edm.TimeOfDay": true, "Edm.DateTimeOffset": true},
+	"date":               {"Edm.Date": true, "Edm.DateTimeOffset": true},
+	"time":               {"Edm.TimeOfDay": true, "Edm.DateTimeOffset": true},
+	"totaloffsetminutes": {"Edm.DateTimeOffset": true},
+	"totalseconds":       {"Edm.Duration": true},
+}
+
+// validateDateTimeFunctionArgType rejects date/time-extraction functions applied to a
+// property whose declared EDM type (honoring a registered TypeDefinition's
+// UnderlyingType, see metadata.PropertyMetadata.EdmType) isn't a compatible temporal
+// type. Properties without a resolvable EDM type (computed aliases, complex types,
+// navigation paths) are left unvalidated.
+func validateDateTimeFunctionArgType(functionName, property string, entityMetadata *metadata.EntityMetadata) error {
+	compatible, ok := dateTimeFunctionCompatibleEdmTypes[functionName]
+	if !ok {
+		return nil
+	}
+	prop := entityMetadata.FindProperty(property)
+	if prop == nil || prop.EdmType == "" {
+		return nil
+	}
+	if !compatible[prop.EdmType] {
+		return fmt.Errorf("type mismatch: function %s cannot be applied to property '%s' of type %s", functionName, property, prop.EdmType)
+	}
+	return nil
 }
 
 // isLikeMatchFunction reports whether functionName is one of contains, startswith,

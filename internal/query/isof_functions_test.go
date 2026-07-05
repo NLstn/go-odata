@@ -383,7 +383,7 @@ func TestIsOfFunction_WithOtherFunctions(t *testing.T) {
 		},
 		{
 			name:      "isof with year",
-			filter:    "year(Name) eq 2023 and isof(Price, 'Edm.Int32') eq true",
+			filter:    "year(CreatedAt) eq 2023 and isof(Price, 'Edm.Int32') eq true",
 			expectErr: false,
 		},
 		{

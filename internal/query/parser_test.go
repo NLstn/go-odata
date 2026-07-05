@@ -3,16 +3,18 @@ package query
 import (
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/nlstn/go-odata/internal/metadata"
 )
 
 type TestEntity struct {
-	ID          int     `json:"ID" odata:"key"`
-	Name        string  `json:"Name"`
-	Description string  `json:"Description"`
-	Price       float64 `json:"Price"`
-	Category    string  `json:"Category"`
+	ID          int       `json:"ID" odata:"key"`
+	Name        string    `json:"Name"`
+	Description string    `json:"Description"`
+	Price       float64   `json:"Price"`
+	Category    string    `json:"Category"`
+	CreatedAt   time.Time `json:"CreatedAt"`
 }
 
 func getTestMetadata(t *testing.T) *metadata.EntityMetadata {

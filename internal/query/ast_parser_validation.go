@@ -293,7 +293,11 @@ func convertComparisonExprWithContext(n *ComparisonExpr, ctx *conversionContext)
 		// Validate that all values in the IN collection match the property type (OData v4 spec compliance)
 		if entityMetadata != nil {
 			for i, val := range values {
-				if err := validateValueAgainstPropertyType(property, val, entityMetadata); err != nil {
+				var literalType string
+				if lit, ok := collExpr.Values[i].(*LiteralExpr); ok {
+					literalType = lit.Type
+				}
+				if err := validateValueAgainstPropertyType(property, val, literalType, entityMetadata); err != nil {
 					return nil, fmt.Errorf("IN clause value at index %d: %w", i, err)
 				}
 			}
@@ -333,7 +337,11 @@ func convertComparisonExprWithContext(n *ComparisonExpr, ctx *conversionContext)
 	// Check for Int64 overflow
 	// Per OData v4 spec, numeric literals that overflow the target integer type should be rejected
 	if entityMetadata != nil {
-		if err := validateValueAgainstPropertyType(property, value, entityMetadata); err != nil {
+		var literalType string
+		if lit, ok := n.Right.(*LiteralExpr); ok {
+			literalType = lit.Type
+		}
+		if err := validateValueAgainstPropertyType(property, value, literalType, entityMetadata); err != nil {
 			return nil, err
 		}
 	}
@@ -378,15 +386,35 @@ func resolveEnumMemberName(enumLiteral string, property string, entityMetadata *
 	return 0, fmt.Errorf("enum member %q not found for property %q", memberName, property)
 }
 
+// dateTimeLiteralCompatibleEdmTypes maps each OData literal type parsed from a
+// dedicated ABNF production (date, time, datetime, duration, guid - as opposed to
+// the generic "string"/"number" literal types) to the set of EDM primitive types
+// it may be compared against. Unlike the Go-reflect-based checks below, these
+// literal types are unambiguous at parse time, so a mismatch here is a genuine
+// client error per OData Protocol §11.2.5.1.
+var dateTimeLiteralCompatibleEdmTypes = map[string]map[string]bool{
+	"date":     {"Edm.Date": true, "Edm.DateTimeOffset": true},
+	"time":     {"Edm.TimeOfDay": true},
+	"datetime": {"Edm.DateTimeOffset": true},
+	"duration": {"Edm.Duration": true},
+	"guid":     {"Edm.Guid": true},
+}
+
 // validateValueAgainstPropertyType validates that a filter value is appropriate for the target property type.
 // Returns an error if the value would overflow or is incompatible with the property type.
 // Note: If the value is a property name (for property-to-property comparisons), validation is skipped.
-func validateValueAgainstPropertyType(property string, value interface{}, entityMetadata *metadata.EntityMetadata) error {
+func validateValueAgainstPropertyType(property string, value interface{}, literalType string, entityMetadata *metadata.EntityMetadata) error {
 	// Get property metadata
 	prop := entityMetadata.FindProperty(property)
 	if prop == nil {
 		// Property might be a navigation path or computed property - skip validation
 		return nil
+	}
+
+	if compatible, ok := dateTimeLiteralCompatibleEdmTypes[literalType]; ok && prop.EdmType != "" {
+		if !compatible[prop.EdmType] {
+			return fmt.Errorf("type mismatch: %s literal cannot be compared to property '%s' of type %s", literalType, property, prop.EdmType)
+		}
 	}
 
 	// Get the property's Go type (handling pointers)

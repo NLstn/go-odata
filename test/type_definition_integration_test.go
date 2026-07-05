@@ -238,3 +238,120 @@ func TestTypeDefinitionQueryWorks(t *testing.T) {
 		t.Errorf("Expected 2 packages, got %d", len(values))
 	}
 }
+
+// ShipDate is a string-backed named type declared as Edm.Date via an explicit
+// UnderlyingType override, since Go has no distinct native type for Edm.Date.
+type ShipDate string
+
+// Shipment is an entity with both a ShipDate (declared Edm.Date) and a genuine
+// Edm.String property (Carrier), used to verify that $filter type-checking
+// distinguishes between the two instead of treating both as interchangeable
+// strings (issue #800).
+type Shipment struct {
+	ID       string   `json:"ID" gorm:"primaryKey" odata:"key"`
+	Carrier  string   `json:"Carrier"`
+	ShipDate ShipDate `json:"ShipDate"`
+}
+
+func init() {
+	if err := odata.RegisterTypeDefinition(ShipDate(""), "ShipDate", odata.TypeDefinitionFacets{UnderlyingType: "Edm.Date"}); err != nil {
+		panic("failed to register ShipDate TypeDefinition: " + err.Error())
+	}
+}
+
+func setupShipmentTestService(t *testing.T) *odata.Service {
+	t.Helper()
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("Failed to connect to database: %v", err)
+	}
+	if err := db.AutoMigrate(&Shipment{}); err != nil {
+		t.Fatalf("Failed to migrate database: %v", err)
+	}
+	shipments := []Shipment{
+		{ID: "ship-1", Carrier: "UPS", ShipDate: "2024-01-15"},
+		{ID: "ship-2", Carrier: "FedEx", ShipDate: "2024-06-01"},
+	}
+	if err := db.Create(&shipments).Error; err != nil {
+		t.Fatalf("Failed to seed shipments: %v", err)
+	}
+
+	service, err := odata.NewService(db)
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
+	if err := service.RegisterEntity(&Shipment{}); err != nil {
+		t.Fatalf("Failed to register Shipment entity: %v", err)
+	}
+	return service
+}
+
+// TestTypeDefinitionUnderlyingTypeOverride verifies that a string-backed
+// TypeDefinition with an explicit UnderlyingType override is reported as that
+// type (not Edm.String) in $metadata.
+func TestTypeDefinitionUnderlyingTypeOverride(t *testing.T) {
+	service := setupShipmentTestService(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/$metadata", nil)
+	w := httptest.NewRecorder()
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200 OK, got %d", w.Code)
+	}
+
+	body := w.Body.String()
+	if !strings.Contains(body, `<TypeDefinition Name="ShipDate" UnderlyingType="Edm.Date"`) {
+		t.Errorf("Expected ShipDate TypeDefinition with UnderlyingType=Edm.Date, got:\n%s", body)
+	}
+	if !strings.Contains(body, `Type="ODataService.ShipDate"`) {
+		t.Errorf("Expected ShipDate property to reference ODataService.ShipDate type, got:\n%s", body)
+	}
+}
+
+// TestTypeDefinitionUnderlyingTypeFilterChecking is a regression test for issue
+// #800: $filter must type-check date functions/literals against the property's
+// declared EDM type, honoring a TypeDefinition's UnderlyingType override, rather
+// than treating every string-backed property as interchangeably Edm.String.
+func TestTypeDefinitionUnderlyingTypeFilterChecking(t *testing.T) {
+	service := setupShipmentTestService(t)
+
+	tests := []struct {
+		name       string
+		filter     string
+		wantStatus int
+	}{
+		{
+			name:       "unquoted date literal against Edm.Date property succeeds",
+			filter:     "ShipDate eq 2024-01-15",
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:       "year() against Edm.Date property succeeds",
+			filter:     "year(ShipDate) eq 2024",
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:       "unquoted date literal against Edm.String property is rejected",
+			filter:     "Carrier eq 2024-01-15",
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "year() against Edm.String property is rejected",
+			filter:     "year(Carrier) eq 2024",
+			wantStatus: http.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/Shipments?$filter="+strings.ReplaceAll(tt.filter, " ", "%20"), nil)
+			w := httptest.NewRecorder()
+			service.ServeHTTP(w, req)
+
+			if w.Code != tt.wantStatus {
+				t.Errorf("filter %q: expected status %d, got %d: %s", tt.filter, tt.wantStatus, w.Code, w.Body.String())
+			}
+		})
+	}
+}

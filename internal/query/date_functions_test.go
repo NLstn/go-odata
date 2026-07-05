@@ -1,6 +1,7 @@
 package query
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -10,11 +11,27 @@ import (
 	"gorm.io/gorm"
 )
 
+// ISO8601Duration is a string alias registered as an OData TypeDefinition with
+// underlying type Edm.Duration, so $filter type-checking recognizes properties
+// backed by ISO-8601 duration strings (e.g. "P1D", "PT2H") as genuinely
+// Edm.Duration rather than Edm.String.
+type ISO8601Duration string
+
+func init() {
+	if err := metadata.RegisterTypeDefinition(reflect.TypeOf(ISO8601Duration("")), metadata.TypeDefinitionInfo{
+		Name:           "ISO8601Duration",
+		UnderlyingType: "Edm.Duration",
+	}); err != nil {
+		panic(err)
+	}
+}
+
 // TestEntity with date field for date function tests
 type TestEntityWithDate struct {
-	ID        int       `json:"ID" odata:"key"`
-	Name      string    `json:"Name"`
-	CreatedAt time.Time `json:"CreatedAt"`
+	ID               int             `json:"ID" odata:"key"`
+	Name             string          `json:"Name"`
+	CreatedAt        time.Time       `json:"CreatedAt"`
+	ShippingDuration ISO8601Duration `json:"ShippingDuration"`
 }
 
 func getTestMetadataWithDate(t *testing.T) *metadata.EntityMetadata {
@@ -53,6 +70,13 @@ func TestDateFunctions_Year(t *testing.T) {
 			filter:    "year(CreatedAt, 2024) eq 2024",
 			expectErr: true,
 		},
+		{
+			// Regression test for issue #800: year() must be rejected against a
+			// genuinely Edm.String property instead of silently matching nothing.
+			name:      "year against Edm.String property is rejected",
+			filter:    "year(Name) eq 2024",
+			expectErr: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -86,6 +110,31 @@ func TestDateFunctions_Year(t *testing.T) {
 				t.Error("Expected non-nil FilterExpression")
 			}
 		})
+	}
+}
+
+// TestDateLiteralAgainstStringProperty is a regression test for issue #800: an
+// unquoted date-shaped literal (parsed via the dedicated ABNF date production, as
+// opposed to a quoted string literal) must be rejected when compared to a property
+// genuinely declared Edm.String, instead of silently matching nothing.
+func TestDateLiteralAgainstStringProperty(t *testing.T) {
+	meta := getTestMetadataWithDate(t)
+
+	tokenizer := NewTokenizer("Name eq 2024-01-15")
+	tokens, err := tokenizer.TokenizeAll()
+	if err != nil {
+		t.Fatalf("Tokenization failed: %v", err)
+	}
+
+	parser := NewASTParser(tokens)
+	ast, err := parser.Parse()
+	if err != nil {
+		t.Fatalf("Parsing failed: %v", err)
+	}
+	defer ReleaseASTNode(ast)
+
+	if _, err := ASTToFilterExpression(ast, meta); err == nil {
+		t.Error("expected type mismatch error comparing a date literal to an Edm.String property, got nil")
 	}
 }
 
@@ -652,47 +701,47 @@ func TestDateFunctions_SQLGeneration(t *testing.T) {
 		},
 		{
 			name:      "totalseconds SQL",
-			filter:    "totalseconds(CreatedAt) gt 3600",
+			filter:    "totalseconds(ShippingDuration) gt 3600",
 			expectErr: false,
 			// The SQLite expression parses ISO 8601 duration strings into total seconds.
 			// 3-branch CASE: NULL, positive 'P%', negative '-P%'.
-			expectedSQL: "CASE WHEN \"created_at\" IS NULL THEN NULL WHEN \"created_at\" LIKE 'P%' THEN (" +
-				"CAST(CASE WHEN INSTR(\"created_at\",'D')>0 AND (INSTR(\"created_at\",'T')=0 OR INSTR(\"created_at\",'D')<INSTR(\"created_at\",'T'))" +
-				" THEN SUBSTR(\"created_at\",2,INSTR(\"created_at\",'D')-2) ELSE 0 END AS INTEGER)*86400" +
-				"+CAST(CASE WHEN INSTR(\"created_at\",'T')>0 AND INSTR(\"created_at\",'H')>INSTR(\"created_at\",'T')" +
-				" THEN SUBSTR(\"created_at\",INSTR(\"created_at\",'T')+1,INSTR(\"created_at\",'H')-INSTR(\"created_at\",'T')-1) ELSE 0 END AS INTEGER)*3600" +
-				"+CAST(CASE WHEN INSTR(\"created_at\",'T')>0 AND INSTR(SUBSTR(\"created_at\",INSTR(\"created_at\",'T')+1),'M')>0" +
-				" THEN SUBSTR(\"created_at\"," +
-				"CASE WHEN INSTR(\"created_at\",'H')>INSTR(\"created_at\",'T') THEN INSTR(\"created_at\",'H')+1 ELSE INSTR(\"created_at\",'T')+1 END," +
-				"INSTR(\"created_at\",'T')+INSTR(SUBSTR(\"created_at\",INSTR(\"created_at\",'T')+1),'M')-1" +
-				"-CASE WHEN INSTR(\"created_at\",'H')>INSTR(\"created_at\",'T') THEN INSTR(\"created_at\",'H') ELSE INSTR(\"created_at\",'T') END)" +
+			expectedSQL: "CASE WHEN \"shipping_duration\" IS NULL THEN NULL WHEN \"shipping_duration\" LIKE 'P%' THEN (" +
+				"CAST(CASE WHEN INSTR(\"shipping_duration\",'D')>0 AND (INSTR(\"shipping_duration\",'T')=0 OR INSTR(\"shipping_duration\",'D')<INSTR(\"shipping_duration\",'T'))" +
+				" THEN SUBSTR(\"shipping_duration\",2,INSTR(\"shipping_duration\",'D')-2) ELSE 0 END AS INTEGER)*86400" +
+				"+CAST(CASE WHEN INSTR(\"shipping_duration\",'T')>0 AND INSTR(\"shipping_duration\",'H')>INSTR(\"shipping_duration\",'T')" +
+				" THEN SUBSTR(\"shipping_duration\",INSTR(\"shipping_duration\",'T')+1,INSTR(\"shipping_duration\",'H')-INSTR(\"shipping_duration\",'T')-1) ELSE 0 END AS INTEGER)*3600" +
+				"+CAST(CASE WHEN INSTR(\"shipping_duration\",'T')>0 AND INSTR(SUBSTR(\"shipping_duration\",INSTR(\"shipping_duration\",'T')+1),'M')>0" +
+				" THEN SUBSTR(\"shipping_duration\"," +
+				"CASE WHEN INSTR(\"shipping_duration\",'H')>INSTR(\"shipping_duration\",'T') THEN INSTR(\"shipping_duration\",'H')+1 ELSE INSTR(\"shipping_duration\",'T')+1 END," +
+				"INSTR(\"shipping_duration\",'T')+INSTR(SUBSTR(\"shipping_duration\",INSTR(\"shipping_duration\",'T')+1),'M')-1" +
+				"-CASE WHEN INSTR(\"shipping_duration\",'H')>INSTR(\"shipping_duration\",'T') THEN INSTR(\"shipping_duration\",'H') ELSE INSTR(\"shipping_duration\",'T') END)" +
 				" ELSE 0 END AS INTEGER)*60" +
-				"+CAST(CASE WHEN INSTR(\"created_at\",'T')>0 AND INSTR(\"created_at\",'S')>INSTR(\"created_at\",'T')" +
-				" THEN SUBSTR(\"created_at\"," +
-				"CASE WHEN INSTR(SUBSTR(\"created_at\",INSTR(\"created_at\",'T')+1),'M')>0 THEN INSTR(\"created_at\",'T')+INSTR(SUBSTR(\"created_at\",INSTR(\"created_at\",'T')+1),'M')+1" +
-				" WHEN INSTR(\"created_at\",'H')>INSTR(\"created_at\",'T') THEN INSTR(\"created_at\",'H')+1 ELSE INSTR(\"created_at\",'T')+1 END," +
-				"INSTR(\"created_at\",'S')" +
-				"-CASE WHEN INSTR(SUBSTR(\"created_at\",INSTR(\"created_at\",'T')+1),'M')>0 THEN INSTR(\"created_at\",'T')+INSTR(SUBSTR(\"created_at\",INSTR(\"created_at\",'T')+1),'M')" +
-				" WHEN INSTR(\"created_at\",'H')>INSTR(\"created_at\",'T') THEN INSTR(\"created_at\",'H') ELSE INSTR(\"created_at\",'T') END-1)" +
+				"+CAST(CASE WHEN INSTR(\"shipping_duration\",'T')>0 AND INSTR(\"shipping_duration\",'S')>INSTR(\"shipping_duration\",'T')" +
+				" THEN SUBSTR(\"shipping_duration\"," +
+				"CASE WHEN INSTR(SUBSTR(\"shipping_duration\",INSTR(\"shipping_duration\",'T')+1),'M')>0 THEN INSTR(\"shipping_duration\",'T')+INSTR(SUBSTR(\"shipping_duration\",INSTR(\"shipping_duration\",'T')+1),'M')+1" +
+				" WHEN INSTR(\"shipping_duration\",'H')>INSTR(\"shipping_duration\",'T') THEN INSTR(\"shipping_duration\",'H')+1 ELSE INSTR(\"shipping_duration\",'T')+1 END," +
+				"INSTR(\"shipping_duration\",'S')" +
+				"-CASE WHEN INSTR(SUBSTR(\"shipping_duration\",INSTR(\"shipping_duration\",'T')+1),'M')>0 THEN INSTR(\"shipping_duration\",'T')+INSTR(SUBSTR(\"shipping_duration\",INSTR(\"shipping_duration\",'T')+1),'M')" +
+				" WHEN INSTR(\"shipping_duration\",'H')>INSTR(\"shipping_duration\",'T') THEN INSTR(\"shipping_duration\",'H') ELSE INSTR(\"shipping_duration\",'T') END-1)" +
 				" ELSE '0' END AS REAL))" +
-				" WHEN \"created_at\" LIKE '-P%' THEN -1.0*(" +
-				"CAST(CASE WHEN INSTR(SUBSTR(\"created_at\",2),'D')>0 AND (INSTR(SUBSTR(\"created_at\",2),'T')=0 OR INSTR(SUBSTR(\"created_at\",2),'D')<INSTR(SUBSTR(\"created_at\",2),'T'))" +
-				" THEN SUBSTR(SUBSTR(\"created_at\",2),2,INSTR(SUBSTR(\"created_at\",2),'D')-2) ELSE 0 END AS INTEGER)*86400" +
-				"+CAST(CASE WHEN INSTR(SUBSTR(\"created_at\",2),'T')>0 AND INSTR(SUBSTR(\"created_at\",2),'H')>INSTR(SUBSTR(\"created_at\",2),'T')" +
-				" THEN SUBSTR(SUBSTR(\"created_at\",2),INSTR(SUBSTR(\"created_at\",2),'T')+1,INSTR(SUBSTR(\"created_at\",2),'H')-INSTR(SUBSTR(\"created_at\",2),'T')-1) ELSE 0 END AS INTEGER)*3600" +
-				"+CAST(CASE WHEN INSTR(SUBSTR(\"created_at\",2),'T')>0 AND INSTR(SUBSTR(SUBSTR(\"created_at\",2),INSTR(SUBSTR(\"created_at\",2),'T')+1),'M')>0" +
-				" THEN SUBSTR(SUBSTR(\"created_at\",2)," +
-				"CASE WHEN INSTR(SUBSTR(\"created_at\",2),'H')>INSTR(SUBSTR(\"created_at\",2),'T') THEN INSTR(SUBSTR(\"created_at\",2),'H')+1 ELSE INSTR(SUBSTR(\"created_at\",2),'T')+1 END," +
-				"INSTR(SUBSTR(\"created_at\",2),'T')+INSTR(SUBSTR(SUBSTR(\"created_at\",2),INSTR(SUBSTR(\"created_at\",2),'T')+1),'M')-1" +
-				"-CASE WHEN INSTR(SUBSTR(\"created_at\",2),'H')>INSTR(SUBSTR(\"created_at\",2),'T') THEN INSTR(SUBSTR(\"created_at\",2),'H') ELSE INSTR(SUBSTR(\"created_at\",2),'T') END)" +
+				" WHEN \"shipping_duration\" LIKE '-P%' THEN -1.0*(" +
+				"CAST(CASE WHEN INSTR(SUBSTR(\"shipping_duration\",2),'D')>0 AND (INSTR(SUBSTR(\"shipping_duration\",2),'T')=0 OR INSTR(SUBSTR(\"shipping_duration\",2),'D')<INSTR(SUBSTR(\"shipping_duration\",2),'T'))" +
+				" THEN SUBSTR(SUBSTR(\"shipping_duration\",2),2,INSTR(SUBSTR(\"shipping_duration\",2),'D')-2) ELSE 0 END AS INTEGER)*86400" +
+				"+CAST(CASE WHEN INSTR(SUBSTR(\"shipping_duration\",2),'T')>0 AND INSTR(SUBSTR(\"shipping_duration\",2),'H')>INSTR(SUBSTR(\"shipping_duration\",2),'T')" +
+				" THEN SUBSTR(SUBSTR(\"shipping_duration\",2),INSTR(SUBSTR(\"shipping_duration\",2),'T')+1,INSTR(SUBSTR(\"shipping_duration\",2),'H')-INSTR(SUBSTR(\"shipping_duration\",2),'T')-1) ELSE 0 END AS INTEGER)*3600" +
+				"+CAST(CASE WHEN INSTR(SUBSTR(\"shipping_duration\",2),'T')>0 AND INSTR(SUBSTR(SUBSTR(\"shipping_duration\",2),INSTR(SUBSTR(\"shipping_duration\",2),'T')+1),'M')>0" +
+				" THEN SUBSTR(SUBSTR(\"shipping_duration\",2)," +
+				"CASE WHEN INSTR(SUBSTR(\"shipping_duration\",2),'H')>INSTR(SUBSTR(\"shipping_duration\",2),'T') THEN INSTR(SUBSTR(\"shipping_duration\",2),'H')+1 ELSE INSTR(SUBSTR(\"shipping_duration\",2),'T')+1 END," +
+				"INSTR(SUBSTR(\"shipping_duration\",2),'T')+INSTR(SUBSTR(SUBSTR(\"shipping_duration\",2),INSTR(SUBSTR(\"shipping_duration\",2),'T')+1),'M')-1" +
+				"-CASE WHEN INSTR(SUBSTR(\"shipping_duration\",2),'H')>INSTR(SUBSTR(\"shipping_duration\",2),'T') THEN INSTR(SUBSTR(\"shipping_duration\",2),'H') ELSE INSTR(SUBSTR(\"shipping_duration\",2),'T') END)" +
 				" ELSE 0 END AS INTEGER)*60" +
-				"+CAST(CASE WHEN INSTR(SUBSTR(\"created_at\",2),'T')>0 AND INSTR(SUBSTR(\"created_at\",2),'S')>INSTR(SUBSTR(\"created_at\",2),'T')" +
-				" THEN SUBSTR(SUBSTR(\"created_at\",2)," +
-				"CASE WHEN INSTR(SUBSTR(SUBSTR(\"created_at\",2),INSTR(SUBSTR(\"created_at\",2),'T')+1),'M')>0 THEN INSTR(SUBSTR(\"created_at\",2),'T')+INSTR(SUBSTR(SUBSTR(\"created_at\",2),INSTR(SUBSTR(\"created_at\",2),'T')+1),'M')+1" +
-				" WHEN INSTR(SUBSTR(\"created_at\",2),'H')>INSTR(SUBSTR(\"created_at\",2),'T') THEN INSTR(SUBSTR(\"created_at\",2),'H')+1 ELSE INSTR(SUBSTR(\"created_at\",2),'T')+1 END," +
-				"INSTR(SUBSTR(\"created_at\",2),'S')" +
-				"-CASE WHEN INSTR(SUBSTR(SUBSTR(\"created_at\",2),INSTR(SUBSTR(\"created_at\",2),'T')+1),'M')>0 THEN INSTR(SUBSTR(\"created_at\",2),'T')+INSTR(SUBSTR(SUBSTR(\"created_at\",2),INSTR(SUBSTR(\"created_at\",2),'T')+1),'M')" +
-				" WHEN INSTR(SUBSTR(\"created_at\",2),'H')>INSTR(SUBSTR(\"created_at\",2),'T') THEN INSTR(SUBSTR(\"created_at\",2),'H') ELSE INSTR(SUBSTR(\"created_at\",2),'T') END-1)" +
+				"+CAST(CASE WHEN INSTR(SUBSTR(\"shipping_duration\",2),'T')>0 AND INSTR(SUBSTR(\"shipping_duration\",2),'S')>INSTR(SUBSTR(\"shipping_duration\",2),'T')" +
+				" THEN SUBSTR(SUBSTR(\"shipping_duration\",2)," +
+				"CASE WHEN INSTR(SUBSTR(SUBSTR(\"shipping_duration\",2),INSTR(SUBSTR(\"shipping_duration\",2),'T')+1),'M')>0 THEN INSTR(SUBSTR(\"shipping_duration\",2),'T')+INSTR(SUBSTR(SUBSTR(\"shipping_duration\",2),INSTR(SUBSTR(\"shipping_duration\",2),'T')+1),'M')+1" +
+				" WHEN INSTR(SUBSTR(\"shipping_duration\",2),'H')>INSTR(SUBSTR(\"shipping_duration\",2),'T') THEN INSTR(SUBSTR(\"shipping_duration\",2),'H')+1 ELSE INSTR(SUBSTR(\"shipping_duration\",2),'T')+1 END," +
+				"INSTR(SUBSTR(\"shipping_duration\",2),'S')" +
+				"-CASE WHEN INSTR(SUBSTR(SUBSTR(\"shipping_duration\",2),INSTR(SUBSTR(\"shipping_duration\",2),'T')+1),'M')>0 THEN INSTR(SUBSTR(\"shipping_duration\",2),'T')+INSTR(SUBSTR(SUBSTR(\"shipping_duration\",2),INSTR(SUBSTR(\"shipping_duration\",2),'T')+1),'M')" +
+				" WHEN INSTR(SUBSTR(\"shipping_duration\",2),'H')>INSTR(SUBSTR(\"shipping_duration\",2),'T') THEN INSTR(SUBSTR(\"shipping_duration\",2),'H') ELSE INSTR(SUBSTR(\"shipping_duration\",2),'T') END-1)" +
 				" ELSE '0' END AS REAL)) ELSE NULL END > ?",
 			expectedArgsNo: 1,
 		},
@@ -772,10 +821,10 @@ func TestDateFunctions_SQLGenerationSQLServer(t *testing.T) {
 		},
 		{
 			name:   "totalseconds SQL Server",
-			filter: "totalseconds(CreatedAt) gt 3600",
+			filter: "totalseconds(ShippingDuration) gt 3600",
 			// Edm.Duration is an ISO-8601 string; SQL Server parses it with CHARINDEX/SUBSTRING.
 			// 3-branch CASE: NULL, positive 'P%', negative '-P%'.
-			expectedSQL:    "CASE WHEN [created_at] IS NULL THEN NULL WHEN [created_at] LIKE 'P%' THEN (CAST(CASE WHEN CHARINDEX('D',[created_at])>0 AND (CHARINDEX('T',[created_at])=0 OR CHARINDEX('D',[created_at])<CHARINDEX('T',[created_at])) THEN SUBSTRING([created_at],2,CHARINDEX('D',[created_at])-2) ELSE 0 END AS INT)*86400+CAST(CASE WHEN CHARINDEX('T',[created_at])>0 AND CHARINDEX('H',[created_at])>CHARINDEX('T',[created_at]) THEN SUBSTRING([created_at],CHARINDEX('T',[created_at])+1,CHARINDEX('H',[created_at])-CHARINDEX('T',[created_at])-1) ELSE 0 END AS INT)*3600+CAST(CASE WHEN CHARINDEX('T',[created_at])>0 AND CHARINDEX('M',SUBSTRING([created_at],CHARINDEX('T',[created_at])+1,8000))>0 THEN SUBSTRING([created_at],CASE WHEN CHARINDEX('H',[created_at])>CHARINDEX('T',[created_at]) THEN CHARINDEX('H',[created_at])+1 ELSE CHARINDEX('T',[created_at])+1 END,CHARINDEX('T',[created_at])+CHARINDEX('M',SUBSTRING([created_at],CHARINDEX('T',[created_at])+1,8000))-1-CASE WHEN CHARINDEX('H',[created_at])>CHARINDEX('T',[created_at]) THEN CHARINDEX('H',[created_at]) ELSE CHARINDEX('T',[created_at]) END) ELSE 0 END AS INT)*60+CAST(CASE WHEN CHARINDEX('T',[created_at])>0 AND CHARINDEX('S',[created_at])>CHARINDEX('T',[created_at]) THEN SUBSTRING([created_at],CASE WHEN CHARINDEX('M',SUBSTRING([created_at],CHARINDEX('T',[created_at])+1,8000))>0 THEN CHARINDEX('T',[created_at])+CHARINDEX('M',SUBSTRING([created_at],CHARINDEX('T',[created_at])+1,8000))+1 WHEN CHARINDEX('H',[created_at])>CHARINDEX('T',[created_at]) THEN CHARINDEX('H',[created_at])+1 ELSE CHARINDEX('T',[created_at])+1 END,CHARINDEX('S',[created_at])-CASE WHEN CHARINDEX('M',SUBSTRING([created_at],CHARINDEX('T',[created_at])+1,8000))>0 THEN CHARINDEX('T',[created_at])+CHARINDEX('M',SUBSTRING([created_at],CHARINDEX('T',[created_at])+1,8000)) WHEN CHARINDEX('H',[created_at])>CHARINDEX('T',[created_at]) THEN CHARINDEX('H',[created_at]) ELSE CHARINDEX('T',[created_at]) END-1) ELSE '0' END AS FLOAT)) WHEN [created_at] LIKE '-P%' THEN -1.0*(CAST(CASE WHEN CHARINDEX('D',SUBSTRING([created_at],2,8000))>0 AND (CHARINDEX('T',SUBSTRING([created_at],2,8000))=0 OR CHARINDEX('D',SUBSTRING([created_at],2,8000))<CHARINDEX('T',SUBSTRING([created_at],2,8000))) THEN SUBSTRING(SUBSTRING([created_at],2,8000),2,CHARINDEX('D',SUBSTRING([created_at],2,8000))-2) ELSE 0 END AS INT)*86400+CAST(CASE WHEN CHARINDEX('T',SUBSTRING([created_at],2,8000))>0 AND CHARINDEX('H',SUBSTRING([created_at],2,8000))>CHARINDEX('T',SUBSTRING([created_at],2,8000)) THEN SUBSTRING(SUBSTRING([created_at],2,8000),CHARINDEX('T',SUBSTRING([created_at],2,8000))+1,CHARINDEX('H',SUBSTRING([created_at],2,8000))-CHARINDEX('T',SUBSTRING([created_at],2,8000))-1) ELSE 0 END AS INT)*3600+CAST(CASE WHEN CHARINDEX('T',SUBSTRING([created_at],2,8000))>0 AND CHARINDEX('M',SUBSTRING(SUBSTRING([created_at],2,8000),CHARINDEX('T',SUBSTRING([created_at],2,8000))+1,8000))>0 THEN SUBSTRING(SUBSTRING([created_at],2,8000),CASE WHEN CHARINDEX('H',SUBSTRING([created_at],2,8000))>CHARINDEX('T',SUBSTRING([created_at],2,8000)) THEN CHARINDEX('H',SUBSTRING([created_at],2,8000))+1 ELSE CHARINDEX('T',SUBSTRING([created_at],2,8000))+1 END,CHARINDEX('T',SUBSTRING([created_at],2,8000))+CHARINDEX('M',SUBSTRING(SUBSTRING([created_at],2,8000),CHARINDEX('T',SUBSTRING([created_at],2,8000))+1,8000))-1-CASE WHEN CHARINDEX('H',SUBSTRING([created_at],2,8000))>CHARINDEX('T',SUBSTRING([created_at],2,8000)) THEN CHARINDEX('H',SUBSTRING([created_at],2,8000)) ELSE CHARINDEX('T',SUBSTRING([created_at],2,8000)) END) ELSE 0 END AS INT)*60+CAST(CASE WHEN CHARINDEX('T',SUBSTRING([created_at],2,8000))>0 AND CHARINDEX('S',SUBSTRING([created_at],2,8000))>CHARINDEX('T',SUBSTRING([created_at],2,8000)) THEN SUBSTRING(SUBSTRING([created_at],2,8000),CASE WHEN CHARINDEX('M',SUBSTRING(SUBSTRING([created_at],2,8000),CHARINDEX('T',SUBSTRING([created_at],2,8000))+1,8000))>0 THEN CHARINDEX('T',SUBSTRING([created_at],2,8000))+CHARINDEX('M',SUBSTRING(SUBSTRING([created_at],2,8000),CHARINDEX('T',SUBSTRING([created_at],2,8000))+1,8000))+1 WHEN CHARINDEX('H',SUBSTRING([created_at],2,8000))>CHARINDEX('T',SUBSTRING([created_at],2,8000)) THEN CHARINDEX('H',SUBSTRING([created_at],2,8000))+1 ELSE CHARINDEX('T',SUBSTRING([created_at],2,8000))+1 END,CHARINDEX('S',SUBSTRING([created_at],2,8000))-CASE WHEN CHARINDEX('M',SUBSTRING(SUBSTRING([created_at],2,8000),CHARINDEX('T',SUBSTRING([created_at],2,8000))+1,8000))>0 THEN CHARINDEX('T',SUBSTRING([created_at],2,8000))+CHARINDEX('M',SUBSTRING(SUBSTRING([created_at],2,8000),CHARINDEX('T',SUBSTRING([created_at],2,8000))+1,8000)) WHEN CHARINDEX('H',SUBSTRING([created_at],2,8000))>CHARINDEX('T',SUBSTRING([created_at],2,8000)) THEN CHARINDEX('H',SUBSTRING([created_at],2,8000)) ELSE CHARINDEX('T',SUBSTRING([created_at],2,8000)) END-1) ELSE '0' END AS FLOAT)) ELSE NULL END > ?",
+			expectedSQL:    "CASE WHEN [shipping_duration] IS NULL THEN NULL WHEN [shipping_duration] LIKE 'P%' THEN (CAST(CASE WHEN CHARINDEX('D',[shipping_duration])>0 AND (CHARINDEX('T',[shipping_duration])=0 OR CHARINDEX('D',[shipping_duration])<CHARINDEX('T',[shipping_duration])) THEN SUBSTRING([shipping_duration],2,CHARINDEX('D',[shipping_duration])-2) ELSE 0 END AS INT)*86400+CAST(CASE WHEN CHARINDEX('T',[shipping_duration])>0 AND CHARINDEX('H',[shipping_duration])>CHARINDEX('T',[shipping_duration]) THEN SUBSTRING([shipping_duration],CHARINDEX('T',[shipping_duration])+1,CHARINDEX('H',[shipping_duration])-CHARINDEX('T',[shipping_duration])-1) ELSE 0 END AS INT)*3600+CAST(CASE WHEN CHARINDEX('T',[shipping_duration])>0 AND CHARINDEX('M',SUBSTRING([shipping_duration],CHARINDEX('T',[shipping_duration])+1,8000))>0 THEN SUBSTRING([shipping_duration],CASE WHEN CHARINDEX('H',[shipping_duration])>CHARINDEX('T',[shipping_duration]) THEN CHARINDEX('H',[shipping_duration])+1 ELSE CHARINDEX('T',[shipping_duration])+1 END,CHARINDEX('T',[shipping_duration])+CHARINDEX('M',SUBSTRING([shipping_duration],CHARINDEX('T',[shipping_duration])+1,8000))-1-CASE WHEN CHARINDEX('H',[shipping_duration])>CHARINDEX('T',[shipping_duration]) THEN CHARINDEX('H',[shipping_duration]) ELSE CHARINDEX('T',[shipping_duration]) END) ELSE 0 END AS INT)*60+CAST(CASE WHEN CHARINDEX('T',[shipping_duration])>0 AND CHARINDEX('S',[shipping_duration])>CHARINDEX('T',[shipping_duration]) THEN SUBSTRING([shipping_duration],CASE WHEN CHARINDEX('M',SUBSTRING([shipping_duration],CHARINDEX('T',[shipping_duration])+1,8000))>0 THEN CHARINDEX('T',[shipping_duration])+CHARINDEX('M',SUBSTRING([shipping_duration],CHARINDEX('T',[shipping_duration])+1,8000))+1 WHEN CHARINDEX('H',[shipping_duration])>CHARINDEX('T',[shipping_duration]) THEN CHARINDEX('H',[shipping_duration])+1 ELSE CHARINDEX('T',[shipping_duration])+1 END,CHARINDEX('S',[shipping_duration])-CASE WHEN CHARINDEX('M',SUBSTRING([shipping_duration],CHARINDEX('T',[shipping_duration])+1,8000))>0 THEN CHARINDEX('T',[shipping_duration])+CHARINDEX('M',SUBSTRING([shipping_duration],CHARINDEX('T',[shipping_duration])+1,8000)) WHEN CHARINDEX('H',[shipping_duration])>CHARINDEX('T',[shipping_duration]) THEN CHARINDEX('H',[shipping_duration]) ELSE CHARINDEX('T',[shipping_duration]) END-1) ELSE '0' END AS FLOAT)) WHEN [shipping_duration] LIKE '-P%' THEN -1.0*(CAST(CASE WHEN CHARINDEX('D',SUBSTRING([shipping_duration],2,8000))>0 AND (CHARINDEX('T',SUBSTRING([shipping_duration],2,8000))=0 OR CHARINDEX('D',SUBSTRING([shipping_duration],2,8000))<CHARINDEX('T',SUBSTRING([shipping_duration],2,8000))) THEN SUBSTRING(SUBSTRING([shipping_duration],2,8000),2,CHARINDEX('D',SUBSTRING([shipping_duration],2,8000))-2) ELSE 0 END AS INT)*86400+CAST(CASE WHEN CHARINDEX('T',SUBSTRING([shipping_duration],2,8000))>0 AND CHARINDEX('H',SUBSTRING([shipping_duration],2,8000))>CHARINDEX('T',SUBSTRING([shipping_duration],2,8000)) THEN SUBSTRING(SUBSTRING([shipping_duration],2,8000),CHARINDEX('T',SUBSTRING([shipping_duration],2,8000))+1,CHARINDEX('H',SUBSTRING([shipping_duration],2,8000))-CHARINDEX('T',SUBSTRING([shipping_duration],2,8000))-1) ELSE 0 END AS INT)*3600+CAST(CASE WHEN CHARINDEX('T',SUBSTRING([shipping_duration],2,8000))>0 AND CHARINDEX('M',SUBSTRING(SUBSTRING([shipping_duration],2,8000),CHARINDEX('T',SUBSTRING([shipping_duration],2,8000))+1,8000))>0 THEN SUBSTRING(SUBSTRING([shipping_duration],2,8000),CASE WHEN CHARINDEX('H',SUBSTRING([shipping_duration],2,8000))>CHARINDEX('T',SUBSTRING([shipping_duration],2,8000)) THEN CHARINDEX('H',SUBSTRING([shipping_duration],2,8000))+1 ELSE CHARINDEX('T',SUBSTRING([shipping_duration],2,8000))+1 END,CHARINDEX('T',SUBSTRING([shipping_duration],2,8000))+CHARINDEX('M',SUBSTRING(SUBSTRING([shipping_duration],2,8000),CHARINDEX('T',SUBSTRING([shipping_duration],2,8000))+1,8000))-1-CASE WHEN CHARINDEX('H',SUBSTRING([shipping_duration],2,8000))>CHARINDEX('T',SUBSTRING([shipping_duration],2,8000)) THEN CHARINDEX('H',SUBSTRING([shipping_duration],2,8000)) ELSE CHARINDEX('T',SUBSTRING([shipping_duration],2,8000)) END) ELSE 0 END AS INT)*60+CAST(CASE WHEN CHARINDEX('T',SUBSTRING([shipping_duration],2,8000))>0 AND CHARINDEX('S',SUBSTRING([shipping_duration],2,8000))>CHARINDEX('T',SUBSTRING([shipping_duration],2,8000)) THEN SUBSTRING(SUBSTRING([shipping_duration],2,8000),CASE WHEN CHARINDEX('M',SUBSTRING(SUBSTRING([shipping_duration],2,8000),CHARINDEX('T',SUBSTRING([shipping_duration],2,8000))+1,8000))>0 THEN CHARINDEX('T',SUBSTRING([shipping_duration],2,8000))+CHARINDEX('M',SUBSTRING(SUBSTRING([shipping_duration],2,8000),CHARINDEX('T',SUBSTRING([shipping_duration],2,8000))+1,8000))+1 WHEN CHARINDEX('H',SUBSTRING([shipping_duration],2,8000))>CHARINDEX('T',SUBSTRING([shipping_duration],2,8000)) THEN CHARINDEX('H',SUBSTRING([shipping_duration],2,8000))+1 ELSE CHARINDEX('T',SUBSTRING([shipping_duration],2,8000))+1 END,CHARINDEX('S',SUBSTRING([shipping_duration],2,8000))-CASE WHEN CHARINDEX('M',SUBSTRING(SUBSTRING([shipping_duration],2,8000),CHARINDEX('T',SUBSTRING([shipping_duration],2,8000))+1,8000))>0 THEN CHARINDEX('T',SUBSTRING([shipping_duration],2,8000))+CHARINDEX('M',SUBSTRING(SUBSTRING([shipping_duration],2,8000),CHARINDEX('T',SUBSTRING([shipping_duration],2,8000))+1,8000)) WHEN CHARINDEX('H',SUBSTRING([shipping_duration],2,8000))>CHARINDEX('T',SUBSTRING([shipping_duration],2,8000)) THEN CHARINDEX('H',SUBSTRING([shipping_duration],2,8000)) ELSE CHARINDEX('T',SUBSTRING([shipping_duration],2,8000)) END-1) ELSE '0' END AS FLOAT)) ELSE NULL END > ?",
 			expectedArgsNo: 1,
 		},
 	}
@@ -931,9 +980,9 @@ func TestDateFunctions_TotalOffsetMinutes(t *testing.T) {
 }
 
 func TestDateFunctions_TotalSeconds(t *testing.T) {
-	// Note: totalseconds() per OData spec operates on Edm.Duration values.
-	// The test entity uses a time.Time (datetime) field for parsing validation;
-	// metadata type checking for argument types is not enforced at the query layer.
+	// totalseconds() per OData spec operates on Edm.Duration values, so the test
+	// uses the ShippingDuration field (declared Edm.Duration via a registered
+	// TypeDefinition, see ISO8601Duration above).
 	meta := getTestMetadataWithDate(t)
 
 	tests := []struct {
@@ -943,17 +992,17 @@ func TestDateFunctions_TotalSeconds(t *testing.T) {
 	}{
 		{
 			name:      "totalseconds simple",
-			filter:    "totalseconds(CreatedAt) gt 3600",
+			filter:    "totalseconds(ShippingDuration) gt 3600",
 			expectErr: false,
 		},
 		{
 			name:      "totalseconds eq zero",
-			filter:    "totalseconds(CreatedAt) eq 0",
+			filter:    "totalseconds(ShippingDuration) eq 0",
 			expectErr: false,
 		},
 		{
 			name:      "totalseconds wrong argument count",
-			filter:    "totalseconds(CreatedAt, 2024) gt 0",
+			filter:    "totalseconds(ShippingDuration, 2024) gt 0",
 			expectErr: true,
 		},
 	}
@@ -1091,8 +1140,8 @@ func TestDateFunctions_MinMaxDatetimeSQL(t *testing.T) {
 // duration strings stored as text in SQLite (e.g. "P1D", "PT2H", "P1DT2H30M").
 func TestTotalSecondsISO8601SQLite(t *testing.T) {
 	type DurationRow struct {
-		ID           int    `gorm:"primaryKey"`
-		ShippingTime string `gorm:"column:shipping_time"`
+		ID           int             `gorm:"primaryKey"`
+		ShippingTime ISO8601Duration `gorm:"column:shipping_time"`
 	}
 
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
@@ -1155,8 +1204,8 @@ func TestTotalSecondsISO8601SQLite(t *testing.T) {
 // rather than a raw string comparison (issue #736).
 func TestDurationDirectComparisonSQL(t *testing.T) {
 	type DurationRow struct {
-		ID           int    `gorm:"primaryKey"`
-		ShippingTime string `gorm:"column:shipping_time"`
+		ID           int             `gorm:"primaryKey"`
+		ShippingTime ISO8601Duration `gorm:"column:shipping_time"`
 	}
 
 	meta, err := metadata.AnalyzeEntity(DurationRow{})
@@ -1212,8 +1261,8 @@ func TestDurationDirectComparisonSQL(t *testing.T) {
 // This is the regression test for issue #736.
 func TestDurationDirectComparisonE2E(t *testing.T) {
 	type DurationRow struct {
-		ID           int    `gorm:"primaryKey"`
-		ShippingTime string `gorm:"column:shipping_time"`
+		ID           int             `gorm:"primaryKey"`
+		ShippingTime ISO8601Duration `gorm:"column:shipping_time"`
 	}
 
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})

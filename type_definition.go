@@ -16,6 +16,14 @@ type TypeDefinitionFacets struct {
 	Scale int
 	// MaxLength is the maximum length facet, valid for Edm.String and Edm.Binary.
 	MaxLength int
+	// UnderlyingType optionally overrides the EDM primitive type this TypeDefinition
+	// aliases (e.g. "Edm.Date"). When empty, it's inferred from the Go type's kind
+	// (e.g. a string field infers Edm.String). Set this to declare a string-backed
+	// field as Edm.Date, Edm.TimeOfDay, or Edm.Duration, none of which have a
+	// distinct Go representation in this library - without it, $filter cannot
+	// distinguish such a property from a genuine Edm.String and won't type-check
+	// date/time functions or literals applied to it.
+	UnderlyingType string
 }
 
 // RegisterTypeDefinition registers a Go named type as an OData TypeDefinition.
@@ -41,9 +49,10 @@ func RegisterTypeDefinition(goValue interface{}, name string, facets TypeDefinit
 	}
 
 	return metadata.RegisterTypeDefinition(goType, metadata.TypeDefinitionInfo{
-		Name:      name,
-		Precision: facets.Precision,
-		Scale:     facets.Scale,
-		MaxLength: facets.MaxLength,
+		Name:           name,
+		UnderlyingType: facets.UnderlyingType,
+		Precision:      facets.Precision,
+		Scale:          facets.Scale,
+		MaxLength:      facets.MaxLength,
 	})
 }
