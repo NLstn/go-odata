@@ -1022,11 +1022,13 @@ func evaluateFilterComparison(left interface{}, op query.FilterOperator, right i
 	case query.OpLessThanOrEqual:
 		return compareMapValue(left, right) <= 0
 	case query.OpContains:
-		return strings.Contains(strings.ToLower(fmt.Sprintf("%v", left)), strings.ToLower(fmt.Sprintf("%v", right)))
+		// contains()/startswith()/endswith() use ordinal (case-sensitive) string
+		// comparison per the OData v4.0 URL Conventions spec (Part 2, Sec. 5.1.1.7).
+		return strings.Contains(fmt.Sprintf("%v", left), fmt.Sprintf("%v", right))
 	case query.OpStartsWith:
-		return strings.HasPrefix(strings.ToLower(fmt.Sprintf("%v", left)), strings.ToLower(fmt.Sprintf("%v", right)))
+		return strings.HasPrefix(fmt.Sprintf("%v", left), fmt.Sprintf("%v", right))
 	case query.OpEndsWith:
-		return strings.HasSuffix(strings.ToLower(fmt.Sprintf("%v", left)), strings.ToLower(fmt.Sprintf("%v", right)))
+		return strings.HasSuffix(fmt.Sprintf("%v", left), fmt.Sprintf("%v", right))
 	default:
 		return false
 	}

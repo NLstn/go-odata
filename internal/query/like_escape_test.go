@@ -64,7 +64,7 @@ func TestBuildFilterCondition_LikeEscapes_MySQL(t *testing.T) {
 	}
 
 	sql, args := buildFilterCondition("mysql", filterExpr, meta)
-	expectedSQL := "name LIKE ? ESCAPE '\\\\'"
+	expectedSQL := "BINARY name LIKE ? ESCAPE '\\\\'"
 	if !sqlEquivalent(expectedSQL, sql) {
 		t.Fatalf("expected SQL %q, got %q", expectedSQL, sql)
 	}
@@ -98,7 +98,58 @@ func TestBuildLikeComparison_SQLite(t *testing.T) {
 
 func TestBuildLikeComparison_MySQL(t *testing.T) {
 	sql, args := buildLikeComparison("mysql", "title", "%_", false, true)
-	expectedSQL := "title LIKE ? ESCAPE '\\\\'"
+	expectedSQL := "BINARY title LIKE ? ESCAPE '\\\\'"
+	if sql != expectedSQL {
+		t.Fatalf("expected SQL %q, got %q", expectedSQL, sql)
+	}
+
+	if len(args) != 1 {
+		t.Fatalf("expected 1 arg, got %d", len(args))
+	}
+
+	expectedArg := "\\%\\_%"
+	if args[0] != expectedArg {
+		t.Fatalf("expected arg %q, got %q", expectedArg, args[0])
+	}
+}
+
+func TestBuildLikeComparison_MariaDB(t *testing.T) {
+	sql, args := buildLikeComparison("mariadb", "title", "%_", false, true)
+	expectedSQL := "BINARY title LIKE ? ESCAPE '\\'"
+	if sql != expectedSQL {
+		t.Fatalf("expected SQL %q, got %q", expectedSQL, sql)
+	}
+
+	if len(args) != 1 {
+		t.Fatalf("expected 1 arg, got %d", len(args))
+	}
+
+	expectedArg := "\\%\\_%"
+	if args[0] != expectedArg {
+		t.Fatalf("expected arg %q, got %q", expectedArg, args[0])
+	}
+}
+
+func TestBuildLikeComparison_SQLServer(t *testing.T) {
+	sql, args := buildLikeComparison("sqlserver", "title", "%_", false, true)
+	expectedSQL := "title COLLATE Latin1_General_BIN2 LIKE ? ESCAPE '\\'"
+	if sql != expectedSQL {
+		t.Fatalf("expected SQL %q, got %q", expectedSQL, sql)
+	}
+
+	if len(args) != 1 {
+		t.Fatalf("expected 1 arg, got %d", len(args))
+	}
+
+	expectedArg := "\\%\\_%"
+	if args[0] != expectedArg {
+		t.Fatalf("expected arg %q, got %q", expectedArg, args[0])
+	}
+}
+
+func TestBuildLikeComparison_Postgres(t *testing.T) {
+	sql, args := buildLikeComparison("postgres", "title", "%_", false, true)
+	expectedSQL := "title LIKE ? ESCAPE '\\'"
 	if sql != expectedSQL {
 		t.Fatalf("expected SQL %q, got %q", expectedSQL, sql)
 	}

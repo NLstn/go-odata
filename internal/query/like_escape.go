@@ -27,6 +27,21 @@ func escapeLikePattern(value string) string {
 	return replacer.Replace(value)
 }
 
+// buildLikeComparison builds a SQL LIKE-based comparison for the OData
+// contains()/startswith()/endswith() filter functions.
+//
+// Per the OData v4.0 URL Conventions spec (Part 2, Sec. 5.1.1.7), these
+// functions use ordinal (case-sensitive) string comparison. Plain SQL LIKE
+// does not guarantee that on its own - its case sensitivity depends on the
+// database engine's default collation (e.g. MySQL/MariaDB and SQL Server
+// commonly default to case-insensitive collations, while PostgreSQL's LIKE
+// is always case-sensitive). Each dialect branch below therefore forces an
+// explicit, deterministic byte-wise comparison rather than relying on
+// whatever collation happens to be configured. SQLite is handled separately:
+// its LIKE operator is case-insensitive for ASCII by default and can only be
+// made case-sensitive via the connection-wide "case_sensitive_like" pragma,
+// which is enabled in ensureSQLiteRegexp (sqlite.go) for every connection
+// this library opens.
 func buildLikeComparison(dialect string, columnName string, value interface{}, prefixWildcard bool, suffixWildcard bool) (string, []interface{}) {
 	pattern := escapeLikePattern(fmt.Sprint(value))
 	if prefixWildcard {
@@ -37,7 +52,25 @@ func buildLikeComparison(dialect string, columnName string, value interface{}, p
 	}
 
 	escapeClause := getLikeEscapeClause(dialect)
-	return fmt.Sprintf("%s LIKE ? %s", columnName, escapeClause), []interface{}{pattern}
+
+	switch dialect {
+	case "mysql", "mariadb":
+		// MySQL/MariaDB's default collation is usually case-insensitive
+		// (e.g. *_ci). Casting the column to BINARY forces a byte-wise
+		// comparison regardless of the column's configured collation/charset.
+		return fmt.Sprintf("BINARY %s LIKE ? %s", columnName, escapeClause), []interface{}{pattern}
+
+	case "sqlserver", "mssql":
+		// SQL Server's default collation is usually case-insensitive
+		// (e.g. *_CI_AS). Applying an explicit binary collation forces an
+		// ordinal, case-sensitive comparison regardless of database/column defaults.
+		return fmt.Sprintf("%s COLLATE Latin1_General_BIN2 LIKE ? %s", columnName, escapeClause), []interface{}{pattern}
+
+	default:
+		// PostgreSQL and SQLite (with case_sensitive_like enabled) already
+		// perform byte-wise, case-sensitive LIKE matching.
+		return fmt.Sprintf("%s LIKE ? %s", columnName, escapeClause), []interface{}{pattern}
+	}
 }
 
 // buildRegexComparison builds a SQL regex comparison for the OData v4.01 matchesPattern function.

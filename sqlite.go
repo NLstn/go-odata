@@ -24,9 +24,11 @@ func init() {
 	})
 }
 
-// ensureSQLiteRegexp ensures the REGEXP function is registered on SQLite connections.
-// This function is called automatically when creating a service with SQLite,
-// so users don't need to do anything special - just use sqlite.Open() normally.
+// ensureSQLiteRegexp ensures every SQLite connection this library opens has the
+// REGEXP function available and performs ordinal (case-sensitive) string
+// comparisons for LIKE. This function is called automatically when creating a
+// service with SQLite, so users don't need to do anything special - just use
+// sqlite.Open() normally.
 //
 // Because mattn/go-sqlite3 registers user-defined functions per-connection (not
 // globally), we must make sure that every connection the OData service uses has
@@ -37,6 +39,15 @@ func init() {
 // that single connection. Single-connection SQLite pools are also the common
 // recommendation for SQLite because writes are serialized and in-memory
 // databases are not shared between connections.
+//
+// The same pinned connection is used to enable the "case_sensitive_like"
+// pragma. SQLite's LIKE operator is case-insensitive for ASCII characters by
+// default, which is at odds with the OData v4.0 URL Conventions spec (Part 2,
+// Sec. 5.1.1.7) requirement that contains()/startswith()/endswith() perform
+// ordinal (case-sensitive) string comparison. Unlike other dialects, SQLite
+// has no per-query syntax (e.g. an explicit COLLATE clause) to force LIKE to
+// be case-sensitive - the pragma is the only mechanism, hence it is set here
+// alongside the REGEXP registration rather than in the SQL-generation layer.
 func ensureSQLiteRegexp(db *gorm.DB) error {
 	if db.Name() != "sqlite" {
 		return nil
@@ -49,9 +60,11 @@ func ensureSQLiteRegexp(db *gorm.DB) error {
 	}
 
 	// Pin the pool to a single connection so the REGEXP function we register
-	// below is available for every query. Without this, new connections
-	// created by database/sql would not have the function and any
-	// matchesPattern() filter would fail with "no such function: REGEXP".
+	// below, and the case_sensitive_like pragma, are available/in effect for
+	// every query. Without this, new connections created by database/sql
+	// would not have the function and any matchesPattern() filter would fail
+	// with "no such function: REGEXP", and LIKE-based filters could silently
+	// fall back to case-insensitive matching.
 	sqlDB.SetMaxOpenConns(1)
 	sqlDB.SetMaxIdleConns(1)
 	sqlDB.SetConnMaxIdleTime(0)
@@ -66,6 +79,14 @@ func ensureSQLiteRegexp(db *gorm.DB) error {
 		return err
 	}
 	defer conn.Close() //nolint:errcheck
+
+	// Force ordinal (case-sensitive) matching for LIKE, which backs the
+	// contains()/startswith()/endswith() filter functions. See the doc
+	// comment above for why this must be a connection-level pragma rather
+	// than SQL generated per-query.
+	if _, err := conn.ExecContext(ctx, "PRAGMA case_sensitive_like = ON"); err != nil {
+		return err
+	}
 
 	return conn.Raw(func(driverConn interface{}) error {
 		sqliteConn, ok := driverConn.(*sqlite3.SQLiteConn)
