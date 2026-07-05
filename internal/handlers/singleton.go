@@ -149,6 +149,13 @@ func (h *EntityHandler) handlePatchSingleton(w http.ResponseWriter, r *http.Requ
 	// These are not actual entity properties and should not be passed to the database
 	h.removeODataAnnotations(updateData)
 
+	if err := h.decodeBinaryPropertiesInPlace(updateData); err != nil {
+		if writeErr := response.WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidRequestBody, err.Error()); writeErr != nil {
+			h.logger.Error("Error writing error response", "error", writeErr)
+		}
+		return
+	}
+
 	// Apply updates to the entity
 	if err := h.db.Model(entityInstance).Updates(updateData).Error; err != nil {
 		h.writeDatabaseError(w, r, err)
@@ -202,9 +209,35 @@ func (h *EntityHandler) handlePutSingleton(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	// Parse the new entity data from request body
+	// Parse the new entity data from request body via an intermediate map so
+	// that Edm.Binary properties can be normalized (see
+	// decodeBinaryPropertiesInPlace) before being unmarshaled into the
+	// strongly-typed entity struct.
+	var newEntityData map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&newEntityData); err != nil {
+		if writeErr := response.WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidRequestBody,
+			fmt.Sprintf(ErrDetailFailedToParseJSON, err.Error())); writeErr != nil {
+			h.logger.Error("Error writing error response", "error", writeErr)
+		}
+		return
+	}
+
+	if err := h.decodeBinaryPropertiesInPlace(newEntityData); err != nil {
+		if writeErr := response.WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidRequestBody, err.Error()); writeErr != nil {
+			h.logger.Error("Error writing error response", "error", writeErr)
+		}
+		return
+	}
+
 	newEntity := reflect.New(h.metadata.EntityType).Interface()
-	if err := json.NewDecoder(r.Body).Decode(newEntity); err != nil {
+	newEntityJSON, err := json.Marshal(newEntityData)
+	if err != nil {
+		if writeErr := response.WriteError(w, r, http.StatusInternalServerError, ErrMsgInternalError, err.Error()); writeErr != nil {
+			h.logger.Error("Error writing error response", "error", writeErr)
+		}
+		return
+	}
+	if err := json.Unmarshal(newEntityJSON, newEntity); err != nil {
 		if writeErr := response.WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidRequestBody,
 			fmt.Sprintf(ErrDetailFailedToParseJSON, err.Error())); writeErr != nil {
 			h.logger.Error("Error writing error response", "error", writeErr)

@@ -331,7 +331,7 @@ func applyNestedExpandAnnotationsToStruct(entityVal reflect.Value, expandOptions
 			}
 		}
 
-		result[jsonName] = fieldVal.Interface()
+		result[jsonName] = EncodeEdmBinary(fieldVal.Interface())
 	}
 
 	return result
@@ -484,7 +484,7 @@ func filterEntityFieldsWithMetadata(entityVal reflect.Value, selectedPropMap map
 
 			fieldValue := entityVal.Field(j)
 			if fieldValue.IsValid() && fieldValue.CanInterface() {
-				filteredEntity[jsonName] = fieldValue.Interface()
+				filteredEntity[jsonName] = EncodeEdmBinary(fieldValue.Interface())
 			}
 		}
 	} else if entityVal.Kind() == reflect.Map {
@@ -493,7 +493,7 @@ func filterEntityFieldsWithMetadata(entityVal reflect.Value, selectedPropMap map
 		if entityMap, ok := entityMapVal.(map[string]interface{}); ok {
 			for key, val := range entityMap {
 				if selectedPropMap[key] || keyPropMap[key] || strings.HasPrefix(key, "@") {
-					filteredEntity[key] = val
+					filteredEntity[key] = EncodeEdmBinary(val)
 				}
 			}
 		}

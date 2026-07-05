@@ -230,11 +230,11 @@ func (h *EntityHandler) writeComplexValueResponse(w http.ResponseWriter, r *http
 		for iter.Next() {
 			key := iter.Key()
 			if key.Kind() == reflect.String {
-				responseMap[key.String()] = iter.Value().Interface()
+				responseMap[key.String()] = response.EncodeEdmBinary(iter.Value().Interface())
 			}
 		}
 	default:
-		responseMap["value"] = value.Interface()
+		responseMap["value"] = response.EncodeEdmBinary(value.Interface())
 	}
 
 	if err := json.NewEncoder(w).Encode(responseMap); err != nil {
@@ -259,10 +259,10 @@ func (h *EntityHandler) writePrimitiveComplexPropertyResponse(w http.ResponseWri
 		if value.IsNil() {
 			valueInterface = nil
 		} else {
-			valueInterface = value.Elem().Interface()
+			valueInterface = response.EncodeEdmBinary(value.Elem().Interface())
 		}
 	} else {
-		valueInterface = value.Interface()
+		valueInterface = response.EncodeEdmBinary(value.Interface())
 	}
 
 	responseBody := map[string]interface{}{
@@ -451,7 +451,7 @@ func structValueToMap(value reflect.Value) map[string]interface{} {
 			jsonName = field.Name
 		}
 
-		result[jsonName] = value.Field(i).Interface()
+		result[jsonName] = response.EncodeEdmBinary(value.Field(i).Interface())
 	}
 	return result
 }

@@ -197,6 +197,13 @@ func (h *EntityHandler) handlePatchEntity(w http.ResponseWriter, r *http.Request
 			return newTransactionHandledError(err)
 		}
 
+		if err := h.decodeBinaryPropertiesInPlace(updateData); err != nil {
+			if writeErr := response.WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidRequestBody, err.Error()); writeErr != nil {
+				h.logger.Error("Error writing error response", "error", writeErr)
+			}
+			return newTransactionHandledError(err)
+		}
+
 		if err := h.validateKeyPropertiesNotUpdated(updateData, w, r); err != nil {
 			return newTransactionHandledError(err)
 		}
@@ -407,9 +414,35 @@ func (h *EntityHandler) handlePutEntity(w http.ResponseWriter, r *http.Request, 
 		}
 
 		// Entity exists - perform full replacement
-		// Parse the replacement entity from the request body
+		// Parse the replacement entity from the request body via an intermediate
+		// map so that Edm.Binary properties can be normalized (see
+		// decodeBinaryPropertiesInPlace) before being unmarshaled into the
+		// strongly-typed entity struct.
+		var replacementData map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&replacementData); err != nil {
+			if writeErr := response.WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidRequestBody,
+				fmt.Sprintf(ErrDetailFailedToParseJSON, err.Error())); writeErr != nil {
+				h.logger.Error("Error writing error response", "error", writeErr)
+			}
+			return newTransactionHandledError(err)
+		}
+
+		if err := h.decodeBinaryPropertiesInPlace(replacementData); err != nil {
+			if writeErr := response.WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidRequestBody, err.Error()); writeErr != nil {
+				h.logger.Error("Error writing error response", "error", writeErr)
+			}
+			return newTransactionHandledError(err)
+		}
+
 		replacementEntity := reflect.New(h.metadata.EntityType).Interface()
-		if err := json.NewDecoder(r.Body).Decode(replacementEntity); err != nil {
+		replacementJSON, err := json.Marshal(replacementData)
+		if err != nil {
+			if writeErr := response.WriteError(w, r, http.StatusInternalServerError, ErrMsgInternalError, err.Error()); writeErr != nil {
+				h.logger.Error("Error writing error response", "error", writeErr)
+			}
+			return newTransactionHandledError(err)
+		}
+		if err := json.Unmarshal(replacementJSON, replacementEntity); err != nil {
 			if writeErr := response.WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidRequestBody,
 				fmt.Sprintf(ErrDetailFailedToParseJSON, err.Error())); writeErr != nil {
 				h.logger.Error("Error writing error response", "error", writeErr)
@@ -476,7 +509,6 @@ func (h *EntityHandler) handlePutEntity(w http.ResponseWriter, r *http.Request, 
 			changeEvents = append(changeEvents, changeEvent{entity: entity, changeType: trackchanges.ChangeTypeUpdated})
 		}
 
-
 		return nil
 	}); err != nil {
 		if isTransactionHandled(err) {
@@ -500,6 +532,7 @@ func (h *EntityHandler) handlePutEntity(w http.ResponseWriter, r *http.Request, 
 
 	h.writeUpdateResponse(w, r, pref, db)
 }
+
 // preserveKeyProperties copies key property values from source to destination
 func (h *EntityHandler) preserveKeyProperties(source, destination interface{}) error {
 	sourceVal := reflect.ValueOf(source).Elem()
@@ -757,6 +790,11 @@ func (h *EntityHandler) handleUpdateEntityOverwrite(w http.ResponseWriter, r *ht
 	if err := json.NewDecoder(r.Body).Decode(&updateData); err != nil {
 		WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidRequestBody,
 			fmt.Sprintf(ErrDetailFailedToParseJSON, err.Error()))
+		return
+	}
+
+	if err := h.decodeBinaryPropertiesInPlace(updateData); err != nil {
+		WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidRequestBody, err.Error())
 		return
 	}
 

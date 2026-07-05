@@ -575,7 +575,7 @@ func (h *EntityHandler) buildEntityResponseWithMetadata(navValue reflect.Value, 
 			if propMeta != nil {
 				jsonName = propMeta.JsonName
 			}
-			odataResponse.Set(jsonName, fieldValue.Interface())
+			odataResponse.Set(jsonName, response.EncodeEdmBinary(fieldValue.Interface()))
 		}
 	}
 
@@ -699,7 +699,7 @@ func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{
 					}
 				}
 
-				odataResponse.Set(keyStr, normalizeDecimalForJSON(enumMapValue(value, mapPropMeta), ieee754Compatible))
+				odataResponse.Set(keyStr, response.EncodeEdmBinary(normalizeDecimalForJSON(enumMapValue(value, mapPropMeta), ieee754Compatible)))
 			}
 		}
 
@@ -843,7 +843,7 @@ func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{
 				}
 			}
 			// Then include the property value (enum fields are serialized as strings)
-			odataResponse.Set(jsonName, normalizeDecimalForJSON(enumFieldValue(fieldValue, propMeta), ieee754Compatible))
+			odataResponse.Set(jsonName, response.EncodeEdmBinary(normalizeDecimalForJSON(enumFieldValue(fieldValue, propMeta), ieee754Compatible)))
 		}
 	}
 
