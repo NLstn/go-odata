@@ -37,6 +37,7 @@ func setupCaseSensitivityTestDB(t *testing.T) *gorm.DB {
 	products := []CaseSensitivityProduct{
 		{ID: 1, Name: "Laptop"},
 		{ID: 2, Name: "Premium Laptop Pro"},
+		{ID: 3, Name: "Wireless Mouse"},
 	}
 	if err := db.Create(&products).Error; err != nil {
 		t.Fatalf("Failed to seed products: %v", err)
@@ -144,6 +145,63 @@ func TestFilterEndsWithIsCaseSensitive(t *testing.T) {
 		results := queryCaseSensitivityProducts(t, service, "endswith(Name,'Pro')")
 		if len(results) != 1 {
 			t.Errorf("Expected 1 result for endswith(Name,'Pro'), got %d: %v", len(results), results)
+		}
+	})
+}
+
+// TestFilterLikeFunctionsRecurseIntoNestedFirstArgument is a regression test for
+// https://github.com/NLstn/go-odata/issues/797: the ordinal case-sensitivity fix
+// for contains()/startswith()/endswith() (issue #790) stopped evaluating a nested
+// function call passed as the first argument (e.g. contains(tolower(Name),'x')),
+// silently collapsing it down to a bare property reference and discarding the
+// outer function entirely. These functions must recurse into evaluating their
+// first argument as a general SQL expression - the standard OData idiom for
+// case-insensitive search is tolower(Name)/toupper(Name) wrapped in contains()/
+// startswith()/endswith() - while still performing ordinal (case-sensitive)
+// matching against the *result* of that expression.
+func TestFilterLikeFunctionsRecurseIntoNestedFirstArgument(t *testing.T) {
+	db := setupCaseSensitivityTestDB(t)
+	service := newCaseSensitivityService(t, db)
+
+	t.Run("contains(tolower(Name),...) matches regardless of source casing", func(t *testing.T) {
+		results := queryCaseSensitivityProducts(t, service, "contains(tolower(Name),'laptop')")
+		if len(results) != 2 {
+			t.Errorf("Expected 2 results for contains(tolower(Name),'laptop'), got %d: %v", len(results), results)
+		}
+	})
+
+	t.Run("contains(tolower(Name),...) is still ordinal against the lowered value", func(t *testing.T) {
+		results := queryCaseSensitivityProducts(t, service, "contains(tolower(Name),'LAPTOP')")
+		if len(results) != 0 {
+			t.Errorf("Expected 0 results for contains(tolower(Name),'LAPTOP') since tolower() always produces lowercase, got %d: %v", len(results), results)
+		}
+	})
+
+	t.Run("startswith(tolower(Name),...) matches regardless of source casing", func(t *testing.T) {
+		results := queryCaseSensitivityProducts(t, service, "startswith(tolower(Name),'laptop')")
+		if len(results) != 1 {
+			t.Errorf("Expected 1 result for startswith(tolower(Name),'laptop'), got %d: %v", len(results), results)
+		}
+	})
+
+	t.Run("endswith(tolower(Name),...) matches regardless of source casing", func(t *testing.T) {
+		results := queryCaseSensitivityProducts(t, service, "endswith(tolower(Name),'mouse')")
+		if len(results) != 1 {
+			t.Errorf("Expected 1 result for endswith(tolower(Name),'mouse'), got %d: %v", len(results), results)
+		}
+	})
+
+	t.Run("contains(toupper(Name),...) matches regardless of source casing", func(t *testing.T) {
+		results := queryCaseSensitivityProducts(t, service, "contains(toupper(Name),'LAPTOP')")
+		if len(results) != 2 {
+			t.Errorf("Expected 2 results for contains(toupper(Name),'LAPTOP'), got %d: %v", len(results), results)
+		}
+	})
+
+	t.Run("contains(concat(Name,'x'),...) evaluates the nested concat expression", func(t *testing.T) {
+		results := queryCaseSensitivityProducts(t, service, "contains(concat(Name,'x'),'Laptopx')")
+		if len(results) != 1 {
+			t.Errorf("Expected 1 result for contains(concat(Name,'x'),'Laptopx'), got %d: %v", len(results), results)
 		}
 	})
 }
