@@ -1275,3 +1275,149 @@ func TestBoundActionRejectsCount(t *testing.T) {
 		t.Errorf("GET status = %v, want a 4xx rejection. Body: %s", getW.Code, getW.Body.String())
 	}
 }
+
+// TestUnboundFunctionCollectionComposedWithCount verifies that an unbound
+// function at the service root returning a collection is composable:
+// appending /$count after the function-call segment returns the count of the
+// function's result collection, matching the size of the "value" array
+// returned by the direct, non-composed call. Regression test for issue #796:
+// the router's top-level unbound-function short-circuit previously invoked
+// the function and returned its full body unmodified, silently discarding
+// the /$count segment, rather than resolving it against the result
+// collection per OData v4.0 Part 1 §12.1 (mirroring the bound-function fix
+// from #788/PR #792).
+func TestUnboundFunctionCollectionComposedWithCount(t *testing.T) {
+	service, db := setupActionFunctionTestService(t)
+
+	err := service.RegisterFunction(odata.FunctionDefinition{
+		Name:       "GetAllProductsStats",
+		IsBound:    false,
+		Parameters: []odata.ParameterDefinition{},
+		ReturnType: reflect.TypeOf([]ActionTestProduct{}),
+		Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) (interface{}, error) {
+			var products []ActionTestProduct
+			if err := db.Find(&products).Error; err != nil {
+				return nil, err
+			}
+			return products, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("Failed to register function: %v", err)
+	}
+
+	// Direct, non-composed call: establishes the expected collection size.
+	directReq := httptest.NewRequest(http.MethodGet, "/GetAllProductsStats()", nil)
+	directW := httptest.NewRecorder()
+	service.ServeHTTP(directW, directReq)
+
+	if directW.Code != http.StatusOK {
+		t.Fatalf("direct call status = %v, want %v. Body: %s", directW.Code, http.StatusOK, directW.Body.String())
+	}
+
+	var directResponse struct {
+		Value []map[string]interface{} `json:"value"`
+	}
+	if err := json.NewDecoder(directW.Body).Decode(&directResponse); err != nil {
+		t.Fatalf("Failed to decode direct response: %v", err)
+	}
+	expectedCount := len(directResponse.Value)
+	if expectedCount == 0 {
+		t.Fatal("expected direct call to return a non-empty collection")
+	}
+
+	// Composed call: /$count appended after the function-call segment.
+	countReq := httptest.NewRequest(http.MethodGet, "/GetAllProductsStats()/$count", nil)
+	countW := httptest.NewRecorder()
+	service.ServeHTTP(countW, countReq)
+
+	if countW.Code != http.StatusOK {
+		t.Fatalf("$count call status = %v, want %v. Body: %s", countW.Code, http.StatusOK, countW.Body.String())
+	}
+
+	if contentType := countW.Header().Get("Content-Type"); !strings.HasPrefix(contentType, "text/plain") {
+		t.Errorf("Content-Type = %q, want prefix %q", contentType, "text/plain")
+	}
+
+	gotCount, err := strconv.Atoi(strings.TrimSpace(countW.Body.String()))
+	if err != nil {
+		t.Fatalf("Failed to parse count response %q: %v", countW.Body.String(), err)
+	}
+	if gotCount != expectedCount {
+		t.Errorf("$count = %d, want %d (size of direct call's value array)", gotCount, expectedCount)
+	}
+}
+
+// TestUnboundFunctionScalarRejectsCount verifies that an unbound function
+// which does not return a collection is not composable: appending /$count
+// after its call segment must be rejected rather than silently succeeding or
+// being ignored, since $count only makes sense against a collection result.
+func TestUnboundFunctionScalarRejectsCount(t *testing.T) {
+	service, _ := setupActionFunctionTestService(t)
+
+	err := service.RegisterFunction(odata.FunctionDefinition{
+		Name:       "GetTotalProductCount",
+		IsBound:    false,
+		Parameters: []odata.ParameterDefinition{},
+		ReturnType: reflect.TypeOf(int64(0)),
+		Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) (interface{}, error) {
+			return int64(3), nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("Failed to register function: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/GetTotalProductCount()/$count", nil)
+	w := httptest.NewRecorder()
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+}
+
+// TestUnboundActionRejectsCount verifies that unbound actions - which are
+// never composable per OData v4.0 Part 1 §12.1 regardless of return type -
+// reject a trailing /$count segment rather than being misinterpreted as a
+// valid composition.
+func TestUnboundActionRejectsCount(t *testing.T) {
+	service, db := setupActionFunctionTestService(t)
+
+	err := service.RegisterAction(odata.ActionDefinition{
+		Name:       "ResetPricesForCount",
+		IsBound:    false,
+		Parameters: []odata.ParameterDefinition{},
+		ReturnType: nil,
+		Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) error {
+			if err := db.Model(&ActionTestProduct{}).Where("1 = 1").Update("price", 100.0).Error; err != nil {
+				return err
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("Failed to register action: %v", err)
+	}
+
+	// POST is the correct invocation method for actions; appending /$count
+	// must still be rejected since actions are never composable.
+	req := httptest.NewRequest(http.MethodPost, "/ResetPricesForCount/$count", nil)
+	w := httptest.NewRecorder()
+	service.ServeHTTP(w, req)
+
+	if w.Code < 400 {
+		t.Errorf("Status = %v, want a 4xx rejection. Body: %s", w.Code, w.Body.String())
+	}
+
+	// GET is not a valid invocation method for actions either, with or
+	// without a composed $count segment.
+	getReq := httptest.NewRequest(http.MethodGet, "/ResetPricesForCount/$count", nil)
+	getW := httptest.NewRecorder()
+	service.ServeHTTP(getW, getReq)
+
+	if getW.Code < 400 {
+		t.Errorf("GET status = %v, want a 4xx rejection. Body: %s", getW.Code, getW.Body.String())
+	}
+}

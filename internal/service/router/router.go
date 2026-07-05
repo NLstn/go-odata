@@ -202,7 +202,26 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			if idx := strings.Index(path, "("); idx != -1 {
 				pathWithoutParams = path[:idx]
 			}
+
+			// A trailing $count segment can follow an unbound function-call
+			// segment at the service root, e.g. GetProductStats()/$count. Per
+			// OData v4.0 Part 1 §12.1, functions returning a collection are
+			// composable, so $count must resolve against the function's
+			// result collection instead of the function-call segment being
+			// invoked and its full result returned unmodified. Only treat the
+			// suffix as a composed $count when what precedes it is actually
+			// the closing of the function-call segment (i.e. ends in ")"),
+			// so that unrelated trailing segments are left for the generic
+			// URL parsing below.
+			countRequested := false
+			if trimmed := strings.TrimSuffix(path, "/$count"); trimmed != path && strings.HasSuffix(trimmed, ")") {
+				countRequested = true
+			}
+
 			if resolved, ok := r.resolveBoundName(pathWithoutParams); ok && r.isActionOrFunction(resolved) {
+				if countRequested {
+					req = actions.WithCountRequested(req)
+				}
 				r.actionInvoker(w, req, resolved, "", false, "")
 				return
 			}
