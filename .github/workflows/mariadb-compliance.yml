@@ -72,7 +72,7 @@ jobs:
         echo "Started complianceserver (pid $!)"
 
     - name: Run compliance suite
-      uses: NLstn/odata-compliance-suite@755c9b07924f1803f25dc86c30c1fc680c19d7b9 # PR #53
+      uses: NLstn/odata-compliance-suite@9b28c9c52d9faac56346bcbbed159db362bdd6cf # PR #53
       with:
         server: http://localhost:9090
         timeout: 60

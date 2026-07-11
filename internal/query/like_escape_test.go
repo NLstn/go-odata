@@ -163,3 +163,24 @@ func TestBuildLikeComparison_Postgres(t *testing.T) {
 		t.Fatalf("expected arg %q, got %q", expectedArg, args[0])
 	}
 }
+
+func TestBuildRegexComparison_SQLServerEREQuantifier(t *testing.T) {
+	sql, args := buildRegexComparison("sqlserver", "name", "e+")
+	if sql != "name LIKE ? ESCAPE '\\'" {
+		t.Fatalf("unexpected SQL: %q", sql)
+	}
+	if len(args) != 1 || args[0] != "%e%" {
+		t.Fatalf("unexpected args: %#v", args)
+	}
+}
+
+func TestBuildRegexComparison_SQLServerEREAlternation(t *testing.T) {
+	sql, args := buildRegexComparison("sqlserver", "name", "Laptop|Coffee")
+	expectedSQL := "(name LIKE ? ESCAPE '\\' OR name LIKE ? ESCAPE '\\')"
+	if sql != expectedSQL {
+		t.Fatalf("expected SQL %q, got %q", expectedSQL, sql)
+	}
+	if len(args) != 2 || args[0] != "%Laptop%" || args[1] != "%Coffee%" {
+		t.Fatalf("unexpected args: %#v", args)
+	}
+}
