@@ -110,7 +110,7 @@ func TestKeyAsSegments_ActiveUnder40(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("under OData-MaxVersion 4.0: expected 200, got %d: %s", w.Code, w.Body.String())
 	}
-	if got := w.Header()["OData-Version"]; len(got) != 1 || got[0] != "4.0" {
+	if got := exactHeaderValues(w.Header(), "OData-Version"); len(got) != 1 || got[0] != "4.0" {
 		t.Fatalf("OData-Version = %q, want 4.0", got)
 	}
 }
