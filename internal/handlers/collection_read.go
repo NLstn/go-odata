@@ -376,6 +376,12 @@ func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.Qu
 			return nil, err
 		}
 
+		// Drivers do not agree on the concrete Go types used for computed SQL
+		// expressions. Normalize only the projected compute aliases: MySQL-family
+		// drivers may return text as []byte, while PostgreSQL returns DECIMAL
+		// arithmetic as strings.
+		normalizeComputedResultValues(results, queryOptions)
+
 		// Some database drivers (notably PostgreSQL) return NUMERIC/DECIMAL columns
 		// — the result type of SUM/AVG and of MIN/MAX over a decimal column — as
 		// strings or []byte. Normalize aggregate columns to numbers so they
@@ -1855,4 +1861,85 @@ func coerceNumericAggregate(v interface{}) (float64, bool) {
 		}
 	}
 	return 0, false
+}
+
+func normalizeComputedResultValues(results []map[string]interface{}, options *query.QueryOptions) {
+	if options == nil {
+		return
+	}
+	allAliases := make(map[string]bool)
+	numericAliases := make(map[string]bool)
+	collect := func(compute *query.ComputeTransformation) {
+		if compute == nil {
+			return
+		}
+		for _, expression := range compute.Expressions {
+			if expression.Alias == "" {
+				continue
+			}
+			allAliases[expression.Alias] = true
+			if isNumericComputeExpression(expression.Expression) {
+				numericAliases[expression.Alias] = true
+			}
+		}
+	}
+	collect(options.Compute)
+	var walkApply func([]query.ApplyTransformation)
+	walkApply = func(transformations []query.ApplyTransformation) {
+		for _, transformation := range transformations {
+			collect(transformation.Compute)
+			if transformation.GroupBy != nil {
+				walkApply(transformation.GroupBy.Transform)
+			}
+			if transformation.Concat != nil {
+				for _, sequence := range transformation.Concat.Sequences {
+					walkApply(sequence)
+				}
+			}
+			if transformation.Join != nil {
+				walkApply(transformation.Join.Transform)
+			}
+			if transformation.Nest != nil {
+				walkApply(transformation.Nest.Apply)
+			}
+			if transformation.From != nil {
+				walkApply(transformation.From.Transform)
+			}
+		}
+	}
+	walkApply(options.Apply)
+
+	for _, row := range results {
+		for alias := range allAliases {
+			value, ok := row[alias]
+			if !ok {
+				continue
+			}
+			if bytes, ok := value.([]byte); ok {
+				value = string(bytes)
+				row[alias] = value
+			}
+			if numericAliases[alias] {
+				if number, converted := coerceNumericAggregate(value); converted {
+					row[alias] = number
+				}
+			}
+		}
+	}
+}
+
+func isNumericComputeExpression(expression *query.FilterExpression) bool {
+	if expression == nil {
+		return false
+	}
+	switch expression.Operator {
+	case query.OpAdd, query.OpSub, query.OpMul, query.OpDiv, query.OpDivBy, query.OpMod,
+		query.OpLength, query.OpIndexOf, query.OpCeiling, query.OpFloor, query.OpRound,
+		query.OpYear, query.OpMonth, query.OpDay, query.OpHour, query.OpMinute, query.OpSecond,
+		query.OpFractionalSeconds, query.OpTotalOffsetMinutes, query.OpTotalSeconds,
+		query.OpGeoDistance, query.OpGeoLength:
+		return true
+	default:
+		return false
+	}
 }

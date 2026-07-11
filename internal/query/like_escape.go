@@ -88,7 +88,17 @@ func buildRegexComparison(dialect string, columnName string, value interface{}) 
 	case "sqlserver", "mssql":
 		// SQL Server has no native regex operator; use a LIKE approximation for the
 		// subset of patterns exercised by the compliance suite.
-		return fmt.Sprintf("%s LIKE ? %s", columnName, getLikeEscapeClause(dialect)), []interface{}{regexToLikePattern(pattern)}
+		alternatives := strings.Split(pattern, "|")
+		clauses := make([]string, 0, len(alternatives))
+		args := make([]interface{}, 0, len(alternatives))
+		for _, alternative := range alternatives {
+			clauses = append(clauses, fmt.Sprintf("%s LIKE ? %s", columnName, getLikeEscapeClause(dialect)))
+			args = append(args, regexToLikePattern(alternative))
+		}
+		if len(clauses) == 1 {
+			return clauses[0], args
+		}
+		return "(" + strings.Join(clauses, " OR ") + ")", args
 	default:
 		// SQLite, MySQL, MariaDB all support the REGEXP operator
 		return fmt.Sprintf("%s REGEXP ?", columnName), []interface{}{pattern}
@@ -100,7 +110,6 @@ func regexToLikePattern(pattern string) string {
 	// This intentionally handles only the subset used by the compliance suite.
 	var b strings.Builder
 	b.Grow(len(pattern))
-	sawWildcard := false
 
 	escaped := false
 	previousSupportsQuantifier := false
@@ -135,7 +144,6 @@ func regexToLikePattern(pattern string) string {
 			if j < len(pattern) && pattern[j] == ']' {
 				b.WriteString(pattern[i : j+1])
 				i = j
-				sawWildcard = true
 				previousSupportsQuantifier = true
 				continue
 			}
@@ -145,12 +153,10 @@ func regexToLikePattern(pattern string) string {
 		case '.':
 			if i+1 < len(pattern) && pattern[i+1] == '*' {
 				b.WriteByte('%')
-				sawWildcard = true
 				i++
 				previousSupportsQuantifier = false
 			} else {
 				b.WriteByte('_')
-				sawWildcard = true
 				previousSupportsQuantifier = true
 			}
 		case '*', '+':
@@ -160,12 +166,10 @@ func regexToLikePattern(pattern string) string {
 			// LIKE can't encode minimum cardinality, so both become '%' after the token.
 			if previousSupportsQuantifier {
 				b.WriteByte('%')
-				sawWildcard = true
 			}
 			previousSupportsQuantifier = false
 		case '?', '|', '(', ')', ']', '{', '}':
 			// Unsupported regex operators are dropped from the approximation.
-			sawWildcard = true
 			previousSupportsQuantifier = false
 		default:
 			if ch == '%' || ch == '_' {
@@ -180,12 +184,14 @@ func regexToLikePattern(pattern string) string {
 		b.WriteByte('\\')
 	}
 
-	if strings.HasPrefix(pattern, "^") && !strings.HasSuffix(pattern, "$") {
-		current := b.String()
-		if !sawWildcard || !strings.HasSuffix(current, "%") {
-			b.WriteByte('%')
-		}
+	anchoredStart := strings.HasPrefix(pattern, "^")
+	anchoredEnd := strings.HasSuffix(pattern, "$")
+	result := b.String()
+	if !anchoredStart && !strings.HasPrefix(result, "%") {
+		result = "%" + result
 	}
-
-	return b.String()
+	if !anchoredEnd && !strings.HasSuffix(result, "%") {
+		result += "%"
+	}
+	return result
 }

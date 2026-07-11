@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"testing"
+
+	"github.com/nlstn/go-odata/internal/query"
 )
 
 func TestHandleCollectionAppliesFilter(t *testing.T) {
@@ -122,5 +124,30 @@ func TestHandleCollectionDeltaTokenWithoutChangeTracking(t *testing.T) {
 
 	if w.Code != http.StatusNotImplemented {
 		t.Fatalf("expected 501 when track changes are disabled, got %d", w.Code)
+	}
+}
+
+func TestNormalizeComputedResultValues(t *testing.T) {
+	results := []map[string]interface{}{{
+		"Name":        "Laptop",
+		"UpperName":   []byte("LAPTOP"),
+		"DoublePrice": "39.98",
+		"Code":        "123",
+	}}
+	options := &query.QueryOptions{Compute: &query.ComputeTransformation{Expressions: []query.ComputeExpression{
+		{Alias: "UpperName", Expression: &query.FilterExpression{Operator: query.OpToUpper}},
+		{Alias: "DoublePrice", Expression: &query.FilterExpression{Operator: query.OpMul}},
+	}}}
+
+	normalizeComputedResultValues(results, options)
+
+	if got := results[0]["UpperName"]; got != "LAPTOP" {
+		t.Fatalf("UpperName = %#v, want LAPTOP", got)
+	}
+	if got := results[0]["DoublePrice"]; got != float64(39.98) {
+		t.Fatalf("DoublePrice = %#v, want numeric 39.98", got)
+	}
+	if got := results[0]["Code"]; got != "123" {
+		t.Fatalf("unrelated numeric-looking string changed to %#v", got)
 	}
 }
