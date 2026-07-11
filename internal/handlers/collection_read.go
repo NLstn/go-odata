@@ -380,7 +380,7 @@ func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.Qu
 		// expressions. Normalize only the projected compute aliases: MySQL-family
 		// drivers may return text as []byte, while PostgreSQL returns DECIMAL
 		// arithmetic as strings.
-		normalizeComputedResultValues(results, queryOptions)
+		normalizeComputedResultValues(results, queryOptions, h.metadata)
 
 		// Some database drivers (notably PostgreSQL) return NUMERIC/DECIMAL columns
 		// — the result type of SUM/AVG and of MIN/MAX over a decimal column — as
@@ -1863,7 +1863,7 @@ func coerceNumericAggregate(v interface{}) (float64, bool) {
 	return 0, false
 }
 
-func normalizeComputedResultValues(results []map[string]interface{}, options *query.QueryOptions) {
+func normalizeComputedResultValues(results []map[string]interface{}, options *query.QueryOptions, entityMetadata *metadata.EntityMetadata) {
 	if options == nil {
 		return
 	}
@@ -1909,17 +1909,40 @@ func normalizeComputedResultValues(results []map[string]interface{}, options *qu
 	}
 	walkApply(options.Apply)
 
+	declaredProperties := make(map[string]bool)
+	if entityMetadata != nil {
+		for _, property := range entityMetadata.Properties {
+			declaredProperties[strings.ToLower(property.JsonName)] = true
+			declaredProperties[strings.ToLower(property.ColumnName)] = true
+			declaredProperties[strings.ToLower(property.FieldName)] = true
+		}
+	}
+
 	for _, row := range results {
-		for alias := range allAliases {
-			value, ok := row[alias]
-			if !ok {
+		for alias, value := range row {
+			_, explicitlyComputed := allAliases[alias]
+			_, numericComputed := numericAliases[alias]
+			// PostgreSQL can fold an unquoted alias, while dynamically projected
+			// aliases are not part of the declared entity metadata. Treat either
+			// form as a computed result column.
+			if !explicitlyComputed {
+				for knownAlias := range allAliases {
+					if strings.EqualFold(knownAlias, alias) {
+						explicitlyComputed = true
+						numericComputed = numericAliases[knownAlias]
+						break
+					}
+				}
+			}
+			if !explicitlyComputed && declaredProperties[strings.ToLower(alias)] {
 				continue
 			}
+
 			if bytes, ok := value.([]byte); ok {
 				value = string(bytes)
 				row[alias] = value
 			}
-			if numericAliases[alias] {
+			if numericComputed || !declaredProperties[strings.ToLower(alias)] {
 				if number, converted := coerceNumericAggregate(value); converted {
 					row[alias] = number
 				}

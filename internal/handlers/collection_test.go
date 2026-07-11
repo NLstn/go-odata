@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/query"
 )
 
@@ -139,7 +140,7 @@ func TestNormalizeComputedResultValues(t *testing.T) {
 		{Alias: "DoublePrice", Expression: &query.FilterExpression{Operator: query.OpMul}},
 	}}}
 
-	normalizeComputedResultValues(results, options)
+	normalizeComputedResultValues(results, options, &metadata.EntityMetadata{Properties: []metadata.PropertyMetadata{{JsonName: "Code"}}})
 
 	if got := results[0]["UpperName"]; got != "LAPTOP" {
 		t.Fatalf("UpperName = %#v, want LAPTOP", got)
