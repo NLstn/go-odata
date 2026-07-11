@@ -19,6 +19,15 @@ type HeaderCapTestProduct struct {
 	Price float64 `json:"price"`
 }
 
+func exactHeaderValues(headers http.Header, name string) []string {
+	for key, values := range headers {
+		if key == name {
+			return values
+		}
+	}
+	return nil
+}
+
 func setupHeaderCapTestService(t *testing.T) (*odata.Service, *gorm.DB) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {

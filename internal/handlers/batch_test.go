@@ -1449,6 +1449,35 @@ func TestJSONBatch_DuplicateID(t *testing.T) {
 	}
 }
 
+func TestJSONBatch_InvalidEnvelopeStructure(t *testing.T) {
+	handler, _, _ := setupBatchTestHandler(t)
+
+	tests := []struct {
+		name string
+		body string
+	}{
+		{name: "missing requests", body: `{}`},
+		{name: "forward dependency", body: `{"requests":[{"id":"r1","method":"GET","url":"/BatchTestProducts","dependsOn":["r2"]},{"id":"r2","method":"GET","url":"/BatchTestProducts"}]}`},
+		{name: "unknown dependency", body: `{"requests":[{"id":"r1","method":"GET","url":"/BatchTestProducts","dependsOn":["missing"]}]}`},
+		{name: "non-adjacent group", body: `{"requests":[{"id":"r1","method":"GET","url":"/BatchTestProducts","atomicityGroup":"g1"},{"id":"r2","method":"GET","url":"/BatchTestProducts"},{"id":"r3","method":"GET","url":"/BatchTestProducts","atomicityGroup":"g1"}]}`},
+		{name: "request and group id collision", body: `{"requests":[{"id":"g1","method":"GET","url":"/BatchTestProducts"},{"id":"r2","method":"GET","url":"/BatchTestProducts","atomicityGroup":"g1"}]}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+
+			handler.HandleBatch(w, req)
+
+			if w.Code != http.StatusBadRequest {
+				t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusBadRequest, w.Body.String())
+			}
+		})
+	}
+}
+
 func TestJSONBatch_EmptyRequests(t *testing.T) {
 	handler, _, _ := setupBatchTestHandler(t)
 
@@ -1720,12 +1749,12 @@ func TestJSONBatch_ContinueOnError(t *testing.T) {
 	}
 }
 
-func TestJSONBatch_StopOnError_Default(t *testing.T) {
+func TestJSONBatch_ContinueOnError_Default(t *testing.T) {
 	handler, db, _ := setupBatchTestHandler(t)
 
 	db.Create(&BatchTestProduct{ID: 40, Name: "StopProduct", Price: 1.0})
 
-	// r1 fails; r2 has no dependsOn, so without continue-on-error processing stops.
+	// r1 fails; r2 has no dependsOn, so processing continues by default.
 	body := `{"requests":[
 {"id":"r1","method":"GET","url":"/BatchTestProducts(99999)"},
 {"id":"r2","method":"GET","url":"/BatchTestProducts(40)"}
@@ -1746,15 +1775,38 @@ func TestJSONBatch_StopOnError_Default(t *testing.T) {
 	}
 
 	responses := result["responses"].([]interface{})
-	// Per OData JSON Format v4.01 §19.5, the service MUST return a response for every
-	// request. Without continue-on-error, r2 is not executed but still gets 424.
 	if len(responses) != 2 {
-		t.Fatalf("Expected 2 responses (r1 failed, r2 gets 424), got %d: %v", len(responses), result)
+		t.Fatalf("Expected 2 responses, got %d: %v", len(responses), result)
 	}
 
 	r2 := responses[1].(map[string]interface{})
-	if r2["status"] != float64(424) {
-		t.Errorf("Expected r2 status 424 (not executed due to fatal error), got %v", r2["status"])
+	if r2["status"] != float64(200) {
+		t.Errorf("Expected r2 status 200 with default continue-on-error behavior, got %v", r2["status"])
+	}
+}
+
+func TestJSONBatch_ContinueOnErrorExplicitFalse(t *testing.T) {
+	handler, db, _ := setupBatchTestHandler(t)
+	db.Create(&BatchTestProduct{ID: 41, Name: "StopProduct", Price: 1.0})
+
+	body := `{"requests":[
+{"id":"r1","method":"GET","url":"/BatchTestProducts(99999)"},
+{"id":"r2","method":"GET","url":"/BatchTestProducts(41)"}
+]}`
+	req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Prefer", "continue-on-error=false")
+	w := httptest.NewRecorder()
+
+	handler.HandleBatch(w, req)
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("Failed to decode: %v", err)
+	}
+	responses := result["responses"].([]interface{})
+	if got := responses[1].(map[string]interface{})["status"]; got != float64(424) {
+		t.Errorf("Expected r2 status 424 when continue-on-error=false, got %v", got)
 	}
 }
 
@@ -1795,6 +1847,14 @@ func TestJSONBatch_AtomicityGroup_AllSucceed(t *testing.T) {
 		r := resp.(map[string]interface{})
 		if r["status"] != float64(201) {
 			t.Errorf("Expected status 201, got %v for id=%v", r["status"], r["id"])
+		}
+		if r["atomicityGroup"] != "g1" {
+			t.Errorf("Expected atomicityGroup=g1, got %v for id=%v", r["atomicityGroup"], r["id"])
+		}
+		for headerName := range r["headers"].(map[string]interface{}) {
+			if headerName != strings.ToLower(headerName) {
+				t.Errorf("Expected lowercase response header name, got %q", headerName)
+			}
 		}
 	}
 }

@@ -224,7 +224,7 @@ func parseNestedExpandOptionsCoreWithConfig(expand *ExpandOption, optionsStr str
 				if targetMetadata == nil {
 					return errNavMetadataMissingForSelect
 				}
-				if err := validateExpandSelect(expand.Select, targetMetadata, computedAliases, caseInsensitive); err != nil {
+				if err := validateExpandSelect(expand.Select, targetMetadata, computedAliases); err != nil {
 					return err
 				}
 			}
@@ -422,7 +422,7 @@ func splitExpandOptionsParts(optionsStr string) ([]string, error) {
 	return result, nil
 }
 
-func validateExpandSelect(selectedProps []string, entityMetadata *metadata.EntityMetadata, computedAliases map[string]bool, caseInsensitive bool) error {
+func validateExpandSelect(selectedProps []string, entityMetadata *metadata.EntityMetadata, computedAliases map[string]bool) error {
 	if entityMetadata == nil {
 		return errEntityMetadataIsNil
 	}

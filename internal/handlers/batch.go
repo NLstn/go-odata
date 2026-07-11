@@ -119,10 +119,11 @@ type jsonBatchEnvelope struct {
 // jsonBatchResponseItem represents a single response object in a JSON batch response.
 // Defined in OData JSON Format v4.01 §19.5.
 type jsonBatchResponseItem struct {
-	ID      string            `json:"id"`
-	Status  int               `json:"status"`
-	Headers map[string]string `json:"headers,omitempty"`
-	Body    json.RawMessage   `json:"body,omitempty"`
+	ID             string            `json:"id"`
+	Status         int               `json:"status"`
+	Headers        map[string]string `json:"headers,omitempty"`
+	Body           json.RawMessage   `json:"body,omitempty"`
+	AtomicityGroup string            `json:"atomicityGroup,omitempty"`
 }
 
 // jsonBatchResponseEnvelope is the top-level structure of a JSON batch response body.
@@ -926,8 +927,8 @@ func (h *BatchHandler) writeBatchResponse(w http.ResponseWriter, responses []bat
 //   - atomicityGroup – all requests sharing a group name run in a single database
 //     transaction; if any individual request fails the transaction is rolled back and all
 //     responses for that group (including ones already written) are changed to 424.
-//   - Prefer: continue-on-error – when absent the handler stops at the first failure of a
-//     standalone (non-group) request; when present it continues processing.
+//   - Prefer: continue-on-error – processing continues by default and stops after the first
+//     standalone failure only when the preference is explicitly set to false.
 func (h *BatchHandler) handleJSONBatch(w http.ResponseWriter, r *http.Request) {
 	// JSON batch is an OData 4.01-only feature.  Reject requests when the
 	// negotiated version is 4.0 (i.e. the client sent OData-MaxVersion: 4.0).
@@ -950,6 +951,23 @@ func (h *BatchHandler) handleJSONBatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var rawEnvelope map[string]json.RawMessage
+	if err := json.Unmarshal(body, &rawEnvelope); err != nil {
+		if writeErr := response.WriteError(w, r, http.StatusBadRequest, "Invalid JSON batch request",
+			fmt.Sprintf("Failed to parse JSON batch envelope: %v", err)); writeErr != nil {
+			h.logger.Error("Error writing error response", "error", writeErr)
+		}
+		return
+	}
+	requestsJSON, requestsPresent := rawEnvelope["requests"]
+	if !requestsPresent || bytes.Equal(bytes.TrimSpace(requestsJSON), []byte("null")) {
+		if writeErr := response.WriteError(w, r, http.StatusBadRequest, "Invalid JSON batch request",
+			"JSON batch requests must contain a top-level 'requests' array"); writeErr != nil {
+			h.logger.Error("Error writing error response", "error", writeErr)
+		}
+		return
+	}
+
 	var envelope jsonBatchEnvelope
 	if err := json.Unmarshal(body, &envelope); err != nil {
 		if writeErr := response.WriteError(w, r, http.StatusBadRequest, "Invalid JSON batch request",
@@ -959,7 +977,7 @@ func (h *BatchHandler) handleJSONBatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate: check for duplicate IDs
+	// Validate identifiers and structural ordering constraints before executing anything.
 	allIDs := make(map[string]bool, len(envelope.Requests))
 	for _, item := range envelope.Requests {
 		if item.ID == "" {
@@ -978,6 +996,55 @@ func (h *BatchHandler) handleJSONBatch(w http.ResponseWriter, r *http.Request) {
 		}
 		allIDs[item.ID] = true
 	}
+	groupLastIdx := make(map[string]int)
+	groupIDs := make(map[string]bool)
+	for i, item := range envelope.Requests {
+		if item.AtomicityGroup != "" {
+			groupIDs[item.AtomicityGroup] = true
+			groupLastIdx[item.AtomicityGroup] = i
+		}
+	}
+	for groupID := range groupIDs {
+		if allIDs[groupID] {
+			if writeErr := response.WriteError(w, r, http.StatusBadRequest, "Invalid batch request",
+				fmt.Sprintf("Atomicity group id %q conflicts with a request id", groupID)); writeErr != nil {
+				h.logger.Error("Error writing error response", "error", writeErr)
+			}
+			return
+		}
+	}
+	closedGroups := make(map[string]bool)
+	previousGroup := ""
+	for i, item := range envelope.Requests {
+		if previousGroup != "" && item.AtomicityGroup != previousGroup {
+			closedGroups[previousGroup] = true
+		}
+		if item.AtomicityGroup != "" && closedGroups[item.AtomicityGroup] {
+			if writeErr := response.WriteError(w, r, http.StatusBadRequest, "Invalid batch request",
+				fmt.Sprintf("Requests in atomicity group %q must be adjacent", item.AtomicityGroup)); writeErr != nil {
+				h.logger.Error("Error writing error response", "error", writeErr)
+			}
+			return
+		}
+		previousGroup = item.AtomicityGroup
+		for _, dep := range item.DependsOn {
+			depIsEarlierRequest := false
+			for j := 0; j < i; j++ {
+				if envelope.Requests[j].ID == dep {
+					depIsEarlierRequest = true
+					break
+				}
+			}
+			depIsEarlierGroup := groupIDs[dep] && groupLastIdx[dep] < i
+			if !depIsEarlierRequest && !depIsEarlierGroup {
+				if writeErr := response.WriteError(w, r, http.StatusBadRequest, "Invalid batch request",
+					fmt.Sprintf("Request %q depends on %q, which is not a preceding request or atomicity group", item.ID, dep)); writeErr != nil {
+					h.logger.Error("Error writing error response", "error", writeErr)
+				}
+				return
+			}
+		}
+	}
 
 	// Enforce batch size limit
 	if len(envelope.Requests) > h.maxBatchSize {
@@ -988,18 +1055,7 @@ func (h *BatchHandler) handleJSONBatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check Prefer: continue-on-error
-	prefer := r.Header.Get("Prefer")
-	continueOnError := strings.Contains(prefer, "continue-on-error")
-
-	// Pre-scan: record the last array index for each atomicityGroup so we know
-	// when to commit the group transaction.
-	groupLastIdx := make(map[string]int)
-	for i, item := range envelope.Requests {
-		if item.AtomicityGroup != "" {
-			groupLastIdx[item.AtomicityGroup] = i
-		}
-	}
+	continueOnError := jsonBatchContinueOnError(r.Header.Values("Prefer"))
 
 	// Processing state
 	failedIDs := make(map[string]bool)
@@ -1021,7 +1077,10 @@ func (h *BatchHandler) handleJSONBatch(w http.ResponseWriter, r *http.Request) {
 
 		if depFailed || groupAlreadyFailed {
 			failedIDs[item.ID] = true
-			resp := h.makeJSONFailedDependencyResponse(item.ID)
+			if item.AtomicityGroup != "" {
+				failedIDs[item.AtomicityGroup] = true
+			}
+			resp := h.makeJSONFailedDependencyResponse(item.ID, item.AtomicityGroup)
 			if item.AtomicityGroup != "" {
 				if gs == nil {
 					gs = &jsonGroupState{contentIDLocations: map[string]string{}}
@@ -1037,10 +1096,14 @@ func (h *BatchHandler) handleJSONBatch(w http.ResponseWriter, r *http.Request) {
 		req, buildErr := h.jsonItemToBatchRequest(item)
 		if buildErr != nil {
 			failedIDs[item.ID] = true
+			if item.AtomicityGroup != "" {
+				failedIDs[item.AtomicityGroup] = true
+			}
 			errResp := jsonBatchResponseItem{
-				ID:     item.ID,
-				Status: http.StatusBadRequest,
-				Body:   jsonRawError(http.StatusBadRequest, buildErr.Error()),
+				ID:             item.ID,
+				Status:         http.StatusBadRequest,
+				Body:           jsonRawError(http.StatusBadRequest, buildErr.Error()),
+				AtomicityGroup: item.AtomicityGroup,
 			}
 			if item.AtomicityGroup != "" {
 				gs = h.getOrCreateJSONGroupState(groups, item.AtomicityGroup)
@@ -1050,7 +1113,7 @@ func (h *BatchHandler) handleJSONBatch(w http.ResponseWriter, r *http.Request) {
 				gs.failed = true
 				for _, idx := range gs.responseIndices {
 					id := responses[idx].ID
-					responses[idx] = h.makeJSONFailedDependencyResponse(id)
+					responses[idx] = h.makeJSONFailedDependencyResponse(id, item.AtomicityGroup)
 				}
 				gs.responseIndices = append(gs.responseIndices, len(responses))
 			}
@@ -1073,10 +1136,12 @@ func (h *BatchHandler) handleJSONBatch(w http.ResponseWriter, r *http.Request) {
 				if beginErr != nil {
 					gs.failed = true
 					failedIDs[item.ID] = true
+					failedIDs[item.AtomicityGroup] = true
 					errResp := jsonBatchResponseItem{
-						ID:     item.ID,
-						Status: http.StatusInternalServerError,
-						Body:   jsonRawError(http.StatusInternalServerError, "Failed to start transaction"),
+						ID:             item.ID,
+						Status:         http.StatusInternalServerError,
+						Body:           jsonRawError(http.StatusInternalServerError, "Failed to start transaction"),
+						AtomicityGroup: item.AtomicityGroup,
 					}
 					gs.responseIndices = append(gs.responseIndices, len(responses))
 					responses = append(responses, errResp)
@@ -1098,14 +1163,15 @@ func (h *BatchHandler) handleJSONBatch(w http.ResponseWriter, r *http.Request) {
 				gs.tx.Rollback()
 				gs.failed = true
 				failedIDs[item.ID] = true
+				failedIDs[item.AtomicityGroup] = true
 
 				// Retroactively mark all earlier group responses as 424.
 				for _, idx := range gs.responseIndices {
 					id := responses[idx].ID
-					responses[idx] = h.makeJSONFailedDependencyResponse(id)
+					responses[idx] = h.makeJSONFailedDependencyResponse(id, item.AtomicityGroup)
 				}
 				gs.responseIndices = append(gs.responseIndices, len(responses))
-				responses = append(responses, h.batchResponseToJSONItem(item.ID, resp))
+				responses = append(responses, h.batchResponseToJSONItem(item.ID, item.AtomicityGroup, resp))
 			} else {
 				// Record content-ID location for later $<id> URL references.
 				if item.ID != "" {
@@ -1115,7 +1181,7 @@ func (h *BatchHandler) handleJSONBatch(w http.ResponseWriter, r *http.Request) {
 				}
 
 				gs.responseIndices = append(gs.responseIndices, len(responses))
-				responses = append(responses, h.batchResponseToJSONItem(item.ID, resp))
+				responses = append(responses, h.batchResponseToJSONItem(item.ID, item.AtomicityGroup, resp))
 
 				// Commit when we reach the last request in the group.
 				if i == groupLastIdx[item.AtomicityGroup] {
@@ -1123,10 +1189,11 @@ func (h *BatchHandler) handleJSONBatch(w http.ResponseWriter, r *http.Request) {
 						gs.tx.Rollback()
 						gs.failed = true
 						failedIDs[item.ID] = true
+						failedIDs[item.AtomicityGroup] = true
 						// Retroactively mark all group responses as 424.
 						for _, idx := range gs.responseIndices {
 							id := responses[idx].ID
-							responses[idx] = h.makeJSONFailedDependencyResponse(id)
+							responses[idx] = h.makeJSONFailedDependencyResponse(id, item.AtomicityGroup)
 						}
 					} else {
 						gs.committed = true
@@ -1137,7 +1204,7 @@ func (h *BatchHandler) handleJSONBatch(w http.ResponseWriter, r *http.Request) {
 		} else {
 			// Standalone (non-group) request.
 			resp = h.executeRequest(req, r)
-			responses = append(responses, h.batchResponseToJSONItem(item.ID, resp))
+			responses = append(responses, h.batchResponseToJSONItem(item.ID, "", resp))
 
 			if resp.StatusCode >= 400 {
 				failedIDs[item.ID] = true
@@ -1152,7 +1219,7 @@ func (h *BatchHandler) handleJSONBatch(w http.ResponseWriter, r *http.Request) {
 							remGS := h.getOrCreateJSONGroupState(groups, rem.AtomicityGroup)
 							remGS.responseIndices = append(remGS.responseIndices, len(responses))
 						}
-						responses = append(responses, h.makeJSONFailedDependencyResponse(rem.ID))
+						responses = append(responses, h.makeJSONFailedDependencyResponse(rem.ID, rem.AtomicityGroup))
 					}
 					break
 				}
@@ -1223,11 +1290,11 @@ func (h *BatchHandler) jsonItemToBatchRequest(item jsonBatchRequestItem) (*batch
 }
 
 // batchResponseToJSONItem converts an internal batchResponse into a jsonBatchResponseItem.
-func (h *BatchHandler) batchResponseToJSONItem(id string, resp batchResponse) jsonBatchResponseItem {
+func (h *BatchHandler) batchResponseToJSONItem(id, atomicityGroup string, resp batchResponse) jsonBatchResponseItem {
 	headers := make(map[string]string, len(resp.Headers))
 	for k, vals := range resp.Headers {
 		if len(vals) > 0 {
-			headers[k] = vals[0]
+			headers[strings.ToLower(k)] = vals[0]
 		}
 	}
 	if len(headers) == 0 {
@@ -1241,20 +1308,36 @@ func (h *BatchHandler) batchResponseToJSONItem(id string, resp batchResponse) js
 	}
 
 	return jsonBatchResponseItem{
-		ID:      id,
-		Status:  resp.StatusCode,
-		Headers: headers,
-		Body:    bodyMsg,
+		ID:             id,
+		Status:         resp.StatusCode,
+		Headers:        headers,
+		Body:           bodyMsg,
+		AtomicityGroup: atomicityGroup,
 	}
 }
 
 // makeJSONFailedDependencyResponse returns a 424 Failed Dependency response item.
-func (h *BatchHandler) makeJSONFailedDependencyResponse(id string) jsonBatchResponseItem {
+func (h *BatchHandler) makeJSONFailedDependencyResponse(id, atomicityGroup string) jsonBatchResponseItem {
 	return jsonBatchResponseItem{
-		ID:     id,
-		Status: http.StatusFailedDependency,
-		Body:   jsonRawError(http.StatusFailedDependency, "Failed Dependency"),
+		ID:             id,
+		Status:         http.StatusFailedDependency,
+		Body:           jsonRawError(http.StatusFailedDependency, "Failed Dependency"),
+		AtomicityGroup: atomicityGroup,
 	}
+}
+
+func jsonBatchContinueOnError(preferHeaders []string) bool {
+	for _, header := range preferHeaders {
+		for _, preference := range strings.Split(header, ",") {
+			parts := strings.SplitN(strings.TrimSpace(preference), ";", 2)
+			nameValue := strings.SplitN(strings.TrimSpace(parts[0]), "=", 2)
+			if !strings.EqualFold(strings.TrimSpace(nameValue[0]), "continue-on-error") {
+				continue
+			}
+			return len(nameValue) == 1 || !strings.EqualFold(strings.Trim(strings.TrimSpace(nameValue[1]), `"`), "false")
+		}
+	}
+	return true
 }
 
 // writeJSONBatchResponse serialises the responses slice as a JSON batch response envelope.

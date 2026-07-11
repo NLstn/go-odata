@@ -143,7 +143,7 @@ func TestNavigationCollectionKeyPredicate_KeyAsSegmentsActiveUnder40(t *testing.
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200 with OData-MaxVersion 4.0, got %d: %s", w.Code, w.Body.String())
 	}
-	if got := w.Header()["OData-Version"]; len(got) != 1 || got[0] != "4.0" {
+	if got := exactHeaderValues(w.Header(), "OData-Version"); len(got) != 1 || got[0] != "4.0" {
 		t.Fatalf("OData-Version = %q, want 4.0", got)
 	}
 }
