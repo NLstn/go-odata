@@ -9,7 +9,6 @@ import (
 
 	"github.com/nlstn/go-odata/internal/metadata"
 	oquery "github.com/nlstn/go-odata/internal/query"
-	"github.com/nlstn/go-odata/internal/version"
 )
 
 // Valid OData metadata levels per OData v4 specification
@@ -168,20 +167,10 @@ func BuildJSONContentType(r *http.Request) string {
 func getFormatParameter(r *http.Request) string {
 	queryParams := oquery.ParseRawQuery(r.URL.RawQuery)
 
-	v := version.GetVersion(r.Context())
-	caseInsensitive := v.Major > 4 || (v.Major == 4 && v.Minor >= 1)
-	if caseInsensitive {
-		queryParams = oquery.NormalizeQueryParams(queryParams)
-	}
+	queryParams = oquery.NormalizeQueryParams(queryParams)
 
 	if format := queryParams.Get("$format"); format != "" {
 		return format
-	}
-	if caseInsensitive {
-		// Preserve support for unprefixed 4.01-style system query options.
-		if format := queryParams.Get("format"); format != "" {
-			return format
-		}
 	}
 	return ""
 }

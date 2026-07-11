@@ -7,7 +7,7 @@ import (
 	"github.com/nlstn/go-odata/internal/version"
 )
 
-func TestValidateQueryOptionsForNegotiatedVersion_Rejects401FeaturesIn40(t *testing.T) {
+func TestValidateQueryOptionsForNegotiatedVersion_AllowsImplementedFeaturesIn40(t *testing.T) {
 	tests := []struct {
 		name    string
 		options *query.QueryOptions
@@ -41,14 +41,14 @@ func TestValidateQueryOptionsForNegotiatedVersion_Rejects401FeaturesIn40(t *test
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := validateQueryOptionsForNegotiatedVersion(tt.options, version.Version{Major: 4, Minor: 0})
-			if err == nil {
-				t.Fatalf("expected feature %s to be rejected for OData 4.0", tt.name)
+			if err != nil {
+				t.Fatalf("expected implemented feature %s to be accepted with OData-MaxVersion 4.0: %v", tt.name, err)
 			}
 		})
 	}
 }
 
-func TestValidateQueryOptionsForNegotiatedVersion_RejectsNestedDivByIn40(t *testing.T) {
+func TestValidateQueryOptionsForNegotiatedVersion_AllowsNestedDivByIn40(t *testing.T) {
 	opts := &query.QueryOptions{
 		Expand: []query.ExpandOption{
 			{
@@ -61,12 +61,12 @@ func TestValidateQueryOptionsForNegotiatedVersion_RejectsNestedDivByIn40(t *test
 	}
 
 	err := validateQueryOptionsForNegotiatedVersion(opts, version.Version{Major: 4, Minor: 0})
-	if err == nil {
-		t.Fatalf("expected nested divby to be rejected for OData 4.0")
+	if err != nil {
+		t.Fatalf("expected nested divby to be accepted with OData-MaxVersion 4.0: %v", err)
 	}
 }
 
-func TestValidateQueryOptionsForNegotiatedVersion_RejectsNestedMatchesPatternIn40(t *testing.T) {
+func TestValidateQueryOptionsForNegotiatedVersion_AllowsNestedMatchesPatternIn40(t *testing.T) {
 	opts := &query.QueryOptions{
 		Apply: []query.ApplyTransformation{
 			{
@@ -79,8 +79,8 @@ func TestValidateQueryOptionsForNegotiatedVersion_RejectsNestedMatchesPatternIn4
 	}
 
 	err := validateQueryOptionsForNegotiatedVersion(opts, version.Version{Major: 4, Minor: 0})
-	if err == nil {
-		t.Fatalf("expected nested matchesPattern to be rejected for OData 4.0")
+	if err != nil {
+		t.Fatalf("expected nested matchesPattern to be accepted with OData-MaxVersion 4.0: %v", err)
 	}
 }
 

@@ -100,6 +100,9 @@ func WriteODataError(w http.ResponseWriter, r *http.Request, httpStatusCode int,
 	}
 
 	w.Header().Set("Content-Type", "application/json;odata.metadata=minimal")
+	// Built-in error messages are currently written in English. OData JSON
+	// error responses must identify the language used for error.message.
+	w.Header().Set("Content-Language", "en")
 	SetODataVersionHeaderFromRequest(w, r)
 	w.WriteHeader(httpStatusCode)
 

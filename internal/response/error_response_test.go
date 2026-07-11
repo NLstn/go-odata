@@ -31,6 +31,9 @@ func TestWriteError_BasicError(t *testing.T) {
 	if contentType != "application/json;odata.metadata=minimal" {
 		t.Errorf("Content-Type = %v, want application/json;odata.metadata=minimal", contentType)
 	}
+	if contentLanguage := w.Header().Get("Content-Language"); contentLanguage != "en" {
+		t.Errorf("Content-Language = %q, want en", contentLanguage)
+	}
 
 	// Verify OData-Version header
 	odataVersion := w.Header().Get("OData-Version")
@@ -166,6 +169,9 @@ func TestWriteODataError_FullStructure(t *testing.T) {
 	err := WriteODataError(w, req, http.StatusBadRequest, odataErr)
 	if err != nil {
 		t.Fatalf("WriteODataError failed: %v", err)
+	}
+	if contentLanguage := w.Header().Get("Content-Language"); contentLanguage != "en" {
+		t.Errorf("Content-Language = %q, want en", contentLanguage)
 	}
 
 	var response map[string]interface{}

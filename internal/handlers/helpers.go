@@ -120,8 +120,10 @@ func SetODataHeader(w http.ResponseWriter, key, value string) {
 }
 
 func isCaseInsensitiveSystemQueryParsingEnabled(r *http.Request) bool {
-	v := version.GetVersion(r.Context())
-	return v.Major > 4 || (v.Major == 4 && v.Minor >= 1)
+	// This service implements OData 4.01 request syntax. OData-MaxVersion
+	// negotiates the response representation; it does not restrict which URL
+	// forms a 4.01 service accepts.
+	return true
 }
 
 func usesInOperator(filter *query.FilterExpression) bool {
@@ -254,36 +256,11 @@ func applyHasInOperator(apply []query.ApplyTransformation) bool {
 }
 
 func validateQueryOptionsForNegotiatedVersion(queryOptions *query.QueryOptions, negotiated version.Version) error {
-	if negotiated.Supports("in-operator") {
-		return nil
-	}
-
-	if usesInOperator(queryOptions.Filter) || expandHasInOperator(queryOptions.Expand) || applyHasInOperator(queryOptions.Apply) {
-		return fmt.Errorf("invalid $filter: 'in' operator is not supported in OData %s", negotiated.String())
-	}
-
-	if usesDivByOperator(queryOptions.Filter) || expandHasDivByOperator(queryOptions.Expand) || applyHasDivByOperator(queryOptions.Apply) {
-		return fmt.Errorf("invalid $filter: 'divby' operator is not supported in OData %s", negotiated.String())
-	}
-
-	if !negotiated.Supports("matchespattern") {
-		if usesMatchesPattern(queryOptions.Filter) || expandHasMatchesPattern(queryOptions.Expand) || applyHasMatchesPattern(queryOptions.Apply) {
-			return fmt.Errorf("invalid $filter: matchesPattern() is not supported in OData %s", negotiated.String())
-		}
-	}
-
-	if queryOptions.Compute != nil || expandHasCompute(queryOptions.Expand) || applyHasCompute(queryOptions.Apply) {
-		return fmt.Errorf("invalid $compute: $compute is not supported in OData %s", negotiated.String())
-	}
-
-	if queryOptions.Index {
-		return fmt.Errorf("invalid $index: $index is not supported in OData %s", negotiated.String())
-	}
-
-	if queryOptions.SchemaVersion != nil {
-		return fmt.Errorf("invalid $schemaversion: $schemaversion is not supported in OData %s", negotiated.String())
-	}
-
+	// A negotiated version controls response headers and payload shape only.
+	// This 4.01 service accepts every request feature it implements regardless
+	// of the client's OData-MaxVersion value.
+	_ = queryOptions
+	_ = negotiated
 	return nil
 }
 
@@ -316,12 +293,11 @@ func (h *EntityHandler) parseQueryOptionsByNegotiatedVersion(r *http.Request, en
 		return nil, err
 	}
 
-	negotiated := version.GetVersion(r.Context())
-	if err := validateQueryOptionsForNegotiatedVersion(queryOptions, negotiated); err != nil {
+	if err := validateQueryOptionsForNegotiatedVersion(queryOptions, version.GetVersion(r.Context())); err != nil {
 		return nil, err
 	}
 
-	if queryOptions.SchemaVersion != nil && negotiated.Supports("schemaversion") {
+	if queryOptions.SchemaVersion != nil {
 		if err := h.validateSchemaVersionBinding(*queryOptions.SchemaVersion); err != nil {
 			return nil, err
 		}

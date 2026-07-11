@@ -576,16 +576,6 @@ func parseSelectOption(queryParams url.Values, entityMetadata *metadata.EntityMe
 			options.Expand = mergeExpandOptions(options.Expand, selectedExpands)
 		}
 
-		// Wildcard '*' is only valid in OData v4.01 (caseInsensitive=true).
-		// Check this before the early metadata-nil return so it is always enforced.
-		if !caseInsensitive {
-			for _, propName := range selectedProps {
-				if propName == "*" {
-					return fmt.Errorf("invalid $select: wildcard '*' is only supported in OData v4.01")
-				}
-			}
-		}
-
 		// If $compute or $apply with compute is present, we need to extract computed property aliases
 		// to avoid validation errors for properties that will be computed
 		computedAliases := make(map[string]bool)
@@ -613,8 +603,7 @@ func parseSelectOption(queryParams url.Values, entityMetadata *metadata.EntityMe
 
 		// Validate that all selected properties exist (either as entity properties or computed properties).
 		for _, propName := range selectedProps {
-			// Wildcard '*' selects all declared structural properties (OData v4.01 section 5.1.3).
-			// The version check is already done above; skip property validation for '*'.
+			// Wildcard '*' selects all declared structural properties.
 			if propName == "*" {
 				continue
 			}

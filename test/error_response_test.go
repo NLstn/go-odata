@@ -64,6 +64,9 @@ func TestErrorResponse_EntityNotFound(t *testing.T) {
 	if contentType := w.Header().Get("Content-Type"); contentType != "application/json;odata.metadata=minimal" {
 		t.Errorf("Content-Type = %v, want application/json;odata.metadata=minimal", contentType)
 	}
+	if contentLanguage := w.Header().Get("Content-Language"); contentLanguage != "en" {
+		t.Errorf("Content-Language = %q, want en", contentLanguage)
+	}
 
 	// Parse and validate error structure
 	var response map[string]interface{}

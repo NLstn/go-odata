@@ -8,7 +8,6 @@ import (
 	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/preference"
 	"github.com/nlstn/go-odata/internal/query"
-	"github.com/nlstn/go-odata/internal/version"
 )
 
 // WriteODataCollection writes an OData collection response.
@@ -138,7 +137,7 @@ func writeODataCollectionWithNavigationResponse(w http.ResponseWriter, r *http.R
 
 	// Honor Prefer: omit-values=nulls by removing null-valued properties from each item.
 	if pref := preference.ParsePrefer(r); pref.OmitValues != nil {
-		pref.ApplyOmitValues(version.GetVersion(r.Context()).Supports("unprefixed-preferences"))
+		pref.ApplyOmitValues(true)
 		if pref.OmitsNulls() {
 			for _, item := range transformedData {
 				OmitNullValues(item)
@@ -245,12 +244,6 @@ func shouldAddIndexAnnotations(r *http.Request) bool {
 	_, prefixedExists := queryParams["$index"]
 	if prefixedExists {
 		return true
-	}
-
-	v := version.GetVersion(r.Context())
-	caseInsensitive := v.Major > 4 || (v.Major == 4 && v.Minor >= 1)
-	if !caseInsensitive {
-		return false
 	}
 
 	queryParams = query.NormalizeQueryParams(queryParams)

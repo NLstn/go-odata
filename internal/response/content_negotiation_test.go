@@ -162,7 +162,7 @@ func TestIsAcceptableFormat(t *testing.T) {
 	}
 }
 
-func TestIsAcceptableFormat_UnprefixedFormat_401Only(t *testing.T) {
+func TestIsAcceptableFormat_UnprefixedFormatAcceptedRegardlessOfResponseVersion(t *testing.T) {
 	t.Run("odata 4.01 accepts unprefixed format", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/test?format=atom", nil)
 		req = req.WithContext(version.WithVersion(req.Context(), version.Version{Major: 4, Minor: 1}))
@@ -171,11 +171,11 @@ func TestIsAcceptableFormat_UnprefixedFormat_401Only(t *testing.T) {
 		}
 	})
 
-	t.Run("odata 4.0 ignores unprefixed format", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/test?format=xml", nil)
+	t.Run("odata 4.0 response accepts unprefixed format", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/test?format=atom", nil)
 		req = req.WithContext(version.WithVersion(req.Context(), version.Version{Major: 4, Minor: 0}))
 		if !IsAcceptableFormat(req) {
-			t.Fatalf("expected unprefixed format to be ignored for OData 4.0")
+			t.Fatalf("expected unprefixed format to remain active for an OData 4.0 response")
 		}
 	})
 }

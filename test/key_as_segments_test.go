@@ -96,9 +96,9 @@ func TestKeyAsSegments_NotFoundEntity(t *testing.T) {
 	}
 }
 
-// TestKeyAsSegments_NotActiveUnder40 verifies that key-as-segments does NOT apply
-// when the client negotiates OData 4.0.
-func TestKeyAsSegments_NotActiveUnder40(t *testing.T) {
+// TestKeyAsSegments_ActiveUnder40 verifies that OData-MaxVersion constrains the
+// response version but does not disable supported request URL conventions.
+func TestKeyAsSegments_ActiveUnder40(t *testing.T) {
 	service, db := setupKeyAsSegmentsService(t)
 	db.Create(&KeyAsSegmentsProduct{ID: 1, Name: "Widget", Price: 100})
 
@@ -107,10 +107,11 @@ func TestKeyAsSegments_NotActiveUnder40(t *testing.T) {
 	w := httptest.NewRecorder()
 	service.ServeHTTP(w, req)
 
-	// Under OData 4.0, "1" is interpreted as a property/navigation segment, not a key.
-	// Since "1" is not a valid property, the service should return 404.
-	if w.Code != http.StatusNotFound {
-		t.Fatalf("under OData 4.0: expected 404 (key-as-segments not active), got %d", w.Code)
+	if w.Code != http.StatusOK {
+		t.Fatalf("under OData-MaxVersion 4.0: expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if got := w.Header()["OData-Version"]; len(got) != 1 || got[0] != "4.0" {
+		t.Fatalf("OData-Version = %q, want 4.0", got)
 	}
 }
 

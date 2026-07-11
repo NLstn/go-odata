@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"sync"
@@ -11,6 +12,7 @@ import (
 	"github.com/nlstn/go-odata/internal/actions"
 	"github.com/nlstn/go-odata/internal/async"
 	"github.com/nlstn/go-odata/internal/handlers"
+	"github.com/nlstn/go-odata/internal/query"
 	"github.com/nlstn/go-odata/internal/response"
 	"github.com/nlstn/go-odata/internal/version"
 )
@@ -175,20 +177,16 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	if path == "$entity" {
+		r.handleEntityDereference(w, req)
+		return
+	}
+
 	switch req.Method {
 	case http.MethodGet, http.MethodHead:
 		if !strings.Contains(path, "(") && !strings.Contains(path, ")") {
 			if resolved, ok := r.resolveBoundName(path); ok {
 				if _, exists := r.functions[resolved]; exists {
-					supportsNoParens := negotiatedVersion.Major > 4 || (negotiatedVersion.Major == 4 && negotiatedVersion.Minor >= 1)
-					if !supportsNoParens {
-						if writeErr := response.WriteError(w, req, http.StatusBadRequest, "Invalid function invocation",
-							"Function invocations without parentheses require OData 4.01 negotiation; use parentheses syntax (FunctionName())"); writeErr != nil {
-							r.logger.Error("Error writing error response", "error", writeErr)
-						}
-						return
-					}
-
 					if r.hasUnboundParameterlessFunction(resolved) && !hasNonSystemQueryParams(req.URL.Query()) {
 						r.actionInvoker(w, req, resolved, "", false, "")
 						return
@@ -328,12 +326,69 @@ func (r *Router) hasUnboundParameterlessFunction(name string) bool {
 }
 
 func hasNonSystemQueryParams(values map[string][]string) bool {
-	for key := range values {
+	for key := range responseQueryParams(values) {
 		if !strings.HasPrefix(key, "$") {
 			return true
 		}
 	}
 	return false
+}
+
+// handleEntityDereference resolves the OData service-root $entity resource.
+// The required $id query option identifies a canonical URL in this service.
+func (r *Router) handleEntityDereference(w http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodGet && req.Method != http.MethodHead {
+		if err := response.WriteMethodNotAllowed(w, req, "GET, HEAD, OPTIONS", "Method not allowed",
+			"$entity supports only GET and HEAD requests"); err != nil {
+			r.logger.Error("Error writing error response", "error", err)
+		}
+		return
+	}
+
+	id := req.URL.Query().Get("$id")
+	if id == "" {
+		if err := response.WriteError(w, req, http.StatusBadRequest, "Invalid $entity request",
+			"The $entity resource requires the $id query option."); err != nil {
+			r.logger.Error("Error writing error response", "error", err)
+		}
+		return
+	}
+
+	target, err := url.Parse(id)
+	if err != nil || target.Path == "" {
+		details := "The $id query option must contain a valid canonical entity URL."
+		if err != nil {
+			details = err.Error()
+		}
+		if writeErr := response.WriteError(w, req, http.StatusBadRequest, "Invalid $entity request", details); writeErr != nil {
+			r.logger.Error("Error writing error response", "error", writeErr)
+		}
+		return
+	}
+
+	targetPath := target.Path
+	if !strings.HasPrefix(targetPath, "/") {
+		targetPath = "/" + targetPath
+	}
+	if basePath, ok := req.Context().Value(response.BasePathContextKey).(string); ok && basePath != "" {
+		if targetPath == basePath {
+			targetPath = "/"
+		} else if strings.HasPrefix(targetPath, basePath+"/") {
+			targetPath = strings.TrimPrefix(targetPath, basePath)
+		}
+	}
+
+	targetReq := req.Clone(req.Context())
+	targetURL := *req.URL
+	targetURL.Path = targetPath
+	targetURL.RawPath = ""
+	targetURL.RawQuery = target.RawQuery
+	targetReq.URL = &targetURL
+	r.ServeHTTP(w, targetReq)
+}
+
+func responseQueryParams(values map[string][]string) map[string][]string {
+	return query.NormalizeQueryParams(values)
 }
 
 // SetAsyncMonitor configures the router to delegate monitor requests to the async manager.
@@ -414,12 +469,11 @@ func (r *Router) routeRequest(w http.ResponseWriter, req *http.Request, handler 
 	hasKey := components.EntityKey != "" || len(components.EntityKeyMap) > 0
 	isSingleton := handler.IsSingleton()
 
-	// OData 4.01 key-as-segments convention: if no parenthetical key was parsed
+	// Key-as-segments convention: if no parenthetical key was parsed
 	// but there is a segment after the entity set that is not a known property,
 	// treat it as the entity key (e.g., /Products/1 → key "1").
 	if !hasKey && !isSingleton && components.NavigationProperty != "" {
-		ver := version.GetVersion(req.Context())
-		if ver.Supports("key-as-segments") {
+		{
 			potentialKey := components.NavigationProperty
 			operationName := potentialKey
 			if idx := strings.Index(operationName, "("); idx != -1 {
@@ -549,7 +603,7 @@ func (r *Router) handlePropertyRequest(w http.ResponseWriter, req *http.Request,
 		// per OData v4.0 Part 2 §4.11). This must resolve the same way as the equivalent parenthetical
 		// form Categories(1)/Products(2), not as chained navigation into another navigation property.
 		if len(propertySegments) == 2 && handler.IsNavigationProperty(firstSegment) && handler.IsCollectionNavigationProperty(firstSegment) {
-			if ver := version.GetVersion(req.Context()); ver.Supports("key-as-segments") {
+			{
 				candidateOperationName := lastSegment
 				if idx := strings.Index(candidateOperationName, "("); idx != -1 {
 					candidateOperationName = candidateOperationName[:idx]

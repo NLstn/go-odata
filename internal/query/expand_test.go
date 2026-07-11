@@ -1655,13 +1655,16 @@ func TestParseExpandWildcard(t *testing.T) {
 		}
 	})
 
-	t.Run("$expand=* is rejected in OData 4.0 mode", func(t *testing.T) {
+	t.Run("$expand=* is accepted in OData 4.0 mode", func(t *testing.T) {
 		params := url.Values{}
 		params.Set("$expand", "*")
 
-		_, err := ParseQueryOptionsWithConfigAndCaseSensitivity(params, authorMeta, nil, false)
-		if err == nil {
-			t.Fatal("expected error for $expand=* in OData 4.0 mode, got nil")
+		opts, err := ParseQueryOptionsWithConfigAndCaseSensitivity(params, authorMeta, nil, false)
+		if err != nil {
+			t.Fatalf("unexpected error for $expand=* in OData 4.0 mode: %v", err)
+		}
+		if len(opts.Expand) != 1 || opts.Expand[0].NavigationProperty != "Books" {
+			t.Errorf("expected Expand=[Books], got %v", opts.Expand)
 		}
 	})
 
@@ -1727,13 +1730,16 @@ func TestParseExpandWildcardInNestedSelect(t *testing.T) {
 		}
 	})
 
-	t.Run("$select=* in nested expand is rejected in OData 4.0 mode", func(t *testing.T) {
+	t.Run("$select=* in nested expand is accepted in OData 4.0 mode", func(t *testing.T) {
 		params := url.Values{}
 		params.Set("$expand", "Books($select=*)")
 
-		_, err := ParseQueryOptionsWithConfigAndCaseSensitivity(params, authorMeta, nil, false)
-		if err == nil {
-			t.Fatal("expected error for $select=* in nested expand in OData 4.0 mode, got nil")
+		opts, err := ParseQueryOptionsWithConfigAndCaseSensitivity(params, authorMeta, nil, false)
+		if err != nil {
+			t.Fatalf("unexpected error for nested $select=* in OData 4.0 mode: %v", err)
+		}
+		if len(opts.Expand) != 1 || len(opts.Expand[0].Select) != 1 || opts.Expand[0].Select[0] != "*" {
+			t.Errorf("expected nested Select=[*], got %v", opts.Expand)
 		}
 	})
 }
