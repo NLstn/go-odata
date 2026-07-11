@@ -163,7 +163,7 @@ func TestRouter_GetUnboundParameterlessFunction_NoParens_401Invokes(t *testing.T
 	}
 }
 
-func TestRouter_GetUnboundParameterlessFunction_NoParens_40Rejected(t *testing.T) {
+func TestRouter_GetUnboundParameterlessFunction_NoParens_40Accepted(t *testing.T) {
 	invoked := false
 	r := newTestRouter(nil, nil, map[string][]*actions.FunctionDefinition{
 		"TopProducts": []*actions.FunctionDefinition{
@@ -178,14 +178,8 @@ func TestRouter_GetUnboundParameterlessFunction_NoParens_40Rejected(t *testing.T
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, rec.Code)
-	}
-	if invoked {
-		t.Fatal("expected action invoker not to be called for OData 4.0 shorthand function call")
-	}
-	if !strings.Contains(strings.ToLower(rec.Body.String()), "parentheses") {
-		t.Fatalf("expected error response to mention parentheses, got %q", rec.Body.String())
+	if !invoked {
+		t.Fatal("expected action invoker to be called for an OData 4.0 response shorthand function call")
 	}
 }
 
@@ -287,9 +281,9 @@ func TestRouter_KeyAsSegments_Ref(t *testing.T) {
 	}
 }
 
-// TestRouter_KeyAsSegments_NotActive40 verifies that /Products/1 with OData-MaxVersion: 4.0
-// does NOT apply key-as-segments and instead returns 404 (since "1" is not a property).
-func TestRouter_KeyAsSegments_NotActive40(t *testing.T) {
+// TestRouter_KeyAsSegments_Active40 verifies that /Products/1 remains valid
+// request syntax when OData-MaxVersion negotiates a 4.0 response.
+func TestRouter_KeyAsSegments_Active40(t *testing.T) {
 	handler := newStubEntityHandler()
 	r := newTestRouter(handler, nil, nil, func(http.ResponseWriter, *http.Request, string, string, bool, string) {})
 
@@ -298,9 +292,8 @@ func TestRouter_KeyAsSegments_NotActive40(t *testing.T) {
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 
-	// "1" is not a known property for OData 4.0, so should return 404
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("expected status %d under OData 4.0 (key-as-segments not active), got %d", http.StatusNotFound, rec.Code)
+	if len(handler.calls) != 1 || handler.calls[0] != "entity:1" {
+		t.Fatalf("expected entity:1 call under OData 4.0 response negotiation, got %v", handler.calls)
 	}
 }
 

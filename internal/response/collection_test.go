@@ -156,7 +156,7 @@ func TestWriteODataDeltaResponse(t *testing.T) {
 	}
 }
 
-func TestShouldAddIndexAnnotations_401Normalization(t *testing.T) {
+func TestShouldAddIndexAnnotations_UnprefixedIndexAcceptedRegardlessOfResponseVersion(t *testing.T) {
 	t.Run("odata 4.01 accepts unprefixed index", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "http://example.com/Products?index=true", nil)
 		req = req.WithContext(version.WithVersion(req.Context(), version.Version{Major: 4, Minor: 1}))
@@ -165,11 +165,11 @@ func TestShouldAddIndexAnnotations_401Normalization(t *testing.T) {
 		}
 	})
 
-	t.Run("odata 4.0 requires prefixed index", func(t *testing.T) {
+	t.Run("odata 4.0 response accepts unprefixed index", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "http://example.com/Products?index=true", nil)
 		req = req.WithContext(version.WithVersion(req.Context(), version.Version{Major: 4, Minor: 0}))
-		if shouldAddIndexAnnotations(req) {
-			t.Fatalf("expected unprefixed index to be ignored in OData 4.0")
+		if !shouldAddIndexAnnotations(req) {
+			t.Fatalf("expected unprefixed index to remain active for an OData 4.0 response")
 		}
 	})
 }

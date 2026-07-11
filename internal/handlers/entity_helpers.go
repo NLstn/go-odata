@@ -14,7 +14,6 @@ import (
 	"github.com/nlstn/go-odata/internal/preference"
 	"github.com/nlstn/go-odata/internal/query"
 	"github.com/nlstn/go-odata/internal/response"
-	"github.com/nlstn/go-odata/internal/version"
 	"gorm.io/gorm"
 )
 
@@ -197,7 +196,7 @@ func (h *EntityHandler) writeEntityResponseWithETag(w http.ResponseWriter, r *ht
 		pref.ApplyAllowEntityReferences()
 	}
 	if pref.OmitValues != nil {
-		pref.ApplyOmitValues(version.GetVersion(r.Context()).Supports("unprefixed-preferences"))
+		pref.ApplyOmitValues(true)
 	}
 	if applied := pref.GetPreferenceApplied(); applied != "" {
 		w.Header().Set(HeaderPreferenceApplied, applied)

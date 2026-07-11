@@ -130,10 +130,9 @@ func TestNavigationCollectionKeyPredicate_KeyAsSegments(t *testing.T) {
 	}
 }
 
-// TestNavigationCollectionKeyPredicate_KeyAsSegmentsNotActiveUnder40 verifies that the
-// key-as-segments form of collection-nav-plus-key addressing is only active when the client
-// negotiates OData 4.01, per this repo's convention of gating 4.01-only behavior.
-func TestNavigationCollectionKeyPredicate_KeyAsSegmentsNotActiveUnder40(t *testing.T) {
+// TestNavigationCollectionKeyPredicate_KeyAsSegmentsActiveUnder40 verifies that
+// response negotiation does not disable the key-as-segments request convention.
+func TestNavigationCollectionKeyPredicate_KeyAsSegmentsActiveUnder40(t *testing.T) {
 	service, _ := setupNavKeyPredicateService(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/NavKeyPredicateCategories/1/Products/1", nil)
@@ -141,14 +140,11 @@ func TestNavigationCollectionKeyPredicate_KeyAsSegmentsNotActiveUnder40(t *testi
 	w := httptest.NewRecorder()
 	service.ServeHTTP(w, req)
 
-	// Under OData 4.0, "1" right after "Categories" is not resolved as a key-as-segments key,
-	// so this path is invalid. It must not be interpreted as collection-nav-plus-key addressing,
-	// and it must never crash with a 500.
-	if w.Code == http.StatusOK {
-		t.Fatalf("expected key-as-segments form to be inactive under OData 4.0, got 200: %s", w.Body.String())
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 with OData-MaxVersion 4.0, got %d: %s", w.Code, w.Body.String())
 	}
-	if w.Code == http.StatusInternalServerError {
-		t.Fatalf("expected a client error, got 500 (crash): %s", w.Body.String())
+	if got := w.Header()["OData-Version"]; len(got) != 1 || got[0] != "4.0" {
+		t.Fatalf("OData-Version = %q, want 4.0", got)
 	}
 }
 
