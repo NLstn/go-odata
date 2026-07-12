@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -67,45 +66,41 @@ func setupAutoFieldsTestService(t *testing.T) (*odata.Service, *gorm.DB) {
 	return service, db
 }
 
-func TestAutoFields_POST_RejectClientProvidedValues(t *testing.T) {
-	service, _ := setupAutoFieldsTestService(t)
+func TestAutoFields_POST_IgnoresClientProvidedValues(t *testing.T) {
+	service, db := setupAutoFieldsTestService(t)
 
 	tests := []struct {
 		name           string
 		requestBody    map[string]interface{}
 		expectedStatus int
-		errorContains  string
 	}{
 		{
-			name: "Reject created_at field",
+			name: "Ignore created_at field",
 			requestBody: map[string]interface{}{
 				"id":         "club1",
 				"name":       "Test Club",
 				"created_at": "2024-01-01T00:00:00Z",
 			},
-			expectedStatus: http.StatusBadRequest,
-			errorContains:  "created_at",
+			expectedStatus: http.StatusCreated,
 		},
 		{
-			name: "Reject created_by field",
+			name: "Ignore created_by field",
 			requestBody: map[string]interface{}{
 				"id":         "club2",
 				"name":       "Test Club",
 				"created_by": "hacker",
 			},
-			expectedStatus: http.StatusBadRequest,
-			errorContains:  "created_by",
+			expectedStatus: http.StatusCreated,
 		},
 		{
-			name: "Reject multiple auto fields",
+			name: "Ignore multiple auto fields",
 			requestBody: map[string]interface{}{
 				"id":         "club3",
 				"name":       "Test Club",
 				"created_at": "2024-01-01T00:00:00Z",
 				"updated_by": "hacker",
 			},
-			expectedStatus: http.StatusBadRequest,
-			errorContains:  "auto",
+			expectedStatus: http.StatusCreated,
 		},
 		{
 			name: "Accept request without auto fields",
@@ -130,8 +125,18 @@ func TestAutoFields_POST_RejectClientProvidedValues(t *testing.T) {
 				t.Errorf("Expected status %d, got %d. Body: %s", tt.expectedStatus, w.Code, w.Body.String())
 			}
 
-			if tt.errorContains != "" && !strings.Contains(w.Body.String(), tt.errorContains) {
-				t.Errorf("Expected error to contain %q, got: %s", tt.errorContains, w.Body.String())
+			var stored Club
+			if err := db.First(&stored, "id = ?", tt.requestBody["id"]).Error; err != nil {
+				t.Fatalf("Failed to load created club: %v", err)
+			}
+			if stored.CreatedBy != "test-user" || stored.UpdatedBy != "test-user" {
+				t.Errorf("Server-controlled users = (%q, %q), want test-user", stored.CreatedBy, stored.UpdatedBy)
+			}
+			if stored.CreatedAt.IsZero() || stored.UpdatedAt.IsZero() {
+				t.Error("Server-controlled timestamps were not set")
+			}
+			if stored.CreatedAt.Equal(time.Date(2024, time.January, 1, 0, 0, 0, 0, time.UTC)) {
+				t.Error("Client-supplied created_at value was persisted")
 			}
 		})
 	}

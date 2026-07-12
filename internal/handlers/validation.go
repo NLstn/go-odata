@@ -264,7 +264,8 @@ func validateContentType(w http.ResponseWriter, r *http.Request) error {
 
 // validatePropertiesExist validates that all properties in the provided data map are valid entity properties.
 // It allows instance annotations (starting with @) and property-level annotations (property@annotation format),
-// but rejects unknown property names. When checkAutoProperties is true, it also rejects auto properties.
+// but rejects unknown property names. When checkAutoProperties is true, it ignores computed properties
+// and rejects other auto properties.
 // When checkImmutableProperties is true, it also rejects immutable properties (used for updates, not creates).
 func (h *EntityHandler) validatePropertiesExist(data map[string]interface{}, w http.ResponseWriter, r *http.Request, checkAutoProperties bool, checkImmutableProperties bool) error {
 	// Build a map of valid property names (both JSON names and struct field names)
@@ -342,19 +343,16 @@ func (h *EntityHandler) validatePropertiesExist(data map[string]interface{}, w h
 			return err
 		}
 
-		// Reject attempts to update auto properties if checkAutoProperties is true
-		if checkAutoProperties && autoProperties[propName] {
-			err := fmt.Errorf("property '%s' is automatically set server-side and cannot be modified by clients", propName)
-			span := trace.SpanFromContext(r.Context())
-			span.RecordError(err)
-			if writeErr := response.WriteError(w, r, http.StatusBadRequest, "Invalid property modification", err.Error()); writeErr != nil {
-				h.logger.Error("Error writing error response", "error", writeErr)
-			}
-			return err
+		// Computed properties are read-only. OData requires services to ignore client-supplied
+		// values for them on both create and update requests.
+		if checkAutoProperties && computedProperties[propName] {
+			delete(data, propName)
+			continue
 		}
 
-		if checkAutoProperties && computedProperties[propName] {
-			err := fmt.Errorf("property '%s' is computed by the service and cannot be modified by clients", propName)
+		// Reject attempts to update non-computed auto properties if checkAutoProperties is true.
+		if checkAutoProperties && autoProperties[propName] {
+			err := fmt.Errorf("property '%s' is automatically set server-side and cannot be modified by clients", propName)
 			span := trace.SpanFromContext(r.Context())
 			span.RecordError(err)
 			if writeErr := response.WriteError(w, r, http.StatusBadRequest, "Invalid property modification", err.Error()); writeErr != nil {
