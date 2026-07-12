@@ -230,25 +230,25 @@ func TestComputedFields_OrderBy_ReturnsError(t *testing.T) {
 	}
 }
 
-func TestComputedFields_POST_RejectClientProvidedValues(t *testing.T) {
-	service, _ := setupComputedFieldsTestService(t)
+func TestComputedFields_POST_IgnoresClientProvidedValues(t *testing.T) {
+	service, db := setupComputedFieldsTestService(t)
 
 	tests := []struct {
 		name           string
 		requestBody    map[string]interface{}
 		expectedStatus int
-		errorContains  string
+		expectedName   string
 	}{
 		{
-			name: "Reject computed field in POST",
+			name: "Ignore computed field in POST",
 			requestBody: map[string]interface{}{
 				"id":          100,
 				"name":        "New Product",
 				"price":       99.99,
 				"displayName": "Hacker Product",
 			},
-			expectedStatus: http.StatusBadRequest,
-			errorContains:  "displayName",
+			expectedStatus: http.StatusCreated,
+			expectedName:   "New Product",
 		},
 		{
 			name: "Accept request without computed field",
@@ -258,6 +258,7 @@ func TestComputedFields_POST_RejectClientProvidedValues(t *testing.T) {
 				"price": 49.99,
 			},
 			expectedStatus: http.StatusCreated,
+			expectedName:   "Valid Product",
 		},
 	}
 
@@ -274,29 +275,37 @@ func TestComputedFields_POST_RejectClientProvidedValues(t *testing.T) {
 				t.Errorf("Expected status %d, got %d. Body: %s", tt.expectedStatus, w.Code, w.Body.String())
 			}
 
-			if tt.errorContains != "" && !strings.Contains(w.Body.String(), tt.errorContains) {
-				t.Errorf("Expected error to contain %q, got: %s", tt.errorContains, w.Body.String())
+			var stored ProductWithComputed
+			if err := db.First(&stored, "id = ?", tt.requestBody["id"]).Error; err != nil {
+				t.Fatalf("Failed to load created product: %v", err)
+			}
+			if stored.Name != tt.expectedName {
+				t.Errorf("Stored name = %q, want %q", stored.Name, tt.expectedName)
+			}
+			if stored.DisplayName != "" {
+				t.Errorf("Stored computed value = %q, want ignored value", stored.DisplayName)
 			}
 		})
 	}
 }
 
-func TestComputedFields_PATCH_RejectClientProvidedValues(t *testing.T) {
-	service, _ := setupComputedFieldsTestService(t)
+func TestComputedFields_PATCH_IgnoresClientProvidedValues(t *testing.T) {
+	service, db := setupComputedFieldsTestService(t)
 
 	tests := []struct {
 		name           string
 		requestBody    map[string]interface{}
 		expectedStatus int
-		errorContains  string
+		expectedPrice  float64
 	}{
 		{
-			name: "Reject computed field in PATCH",
+			name: "Ignore computed field and apply valid changes in PATCH",
 			requestBody: map[string]interface{}{
 				"displayName": "Hacker Display",
+				"price":       29.95,
 			},
-			expectedStatus: http.StatusBadRequest,
-			errorContains:  "displayName",
+			expectedStatus: http.StatusNoContent,
+			expectedPrice:  29.95,
 		},
 		{
 			name: "Accept PATCH without computed field",
@@ -304,6 +313,7 @@ func TestComputedFields_PATCH_RejectClientProvidedValues(t *testing.T) {
 				"price": 39.99,
 			},
 			expectedStatus: http.StatusNoContent,
+			expectedPrice:  39.99,
 		},
 	}
 
@@ -320,8 +330,15 @@ func TestComputedFields_PATCH_RejectClientProvidedValues(t *testing.T) {
 				t.Errorf("Expected status %d, got %d. Body: %s", tt.expectedStatus, w.Code, w.Body.String())
 			}
 
-			if tt.errorContains != "" && !strings.Contains(w.Body.String(), tt.errorContains) {
-				t.Errorf("Expected error to contain %q, got: %s", tt.errorContains, w.Body.String())
+			var stored ProductWithComputed
+			if err := db.First(&stored, 1).Error; err != nil {
+				t.Fatalf("Failed to load updated product: %v", err)
+			}
+			if stored.Price != tt.expectedPrice {
+				t.Errorf("Stored price = %v, want %v", stored.Price, tt.expectedPrice)
+			}
+			if stored.DisplayName != "" {
+				t.Errorf("Stored computed value = %q, want ignored value", stored.DisplayName)
 			}
 		})
 	}
