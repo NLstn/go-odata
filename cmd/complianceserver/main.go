@@ -220,7 +220,7 @@ func main() {
 	fmt.Println("  Status monitors available at /$async/jobs/{jobID}")
 	fmt.Println()
 
-	if err := http.ListenAndServe(":"+*port, service); err != nil {
+	if err := http.ListenAndServe(":"+*port, newReseedGate(service)); err != nil {
 		log.Fatal("Server failed:", err)
 	}
 }
