@@ -1,6 +1,7 @@
 package metadata
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -1406,16 +1407,35 @@ func (metadata *EntityMetadata) FindComplexTypeProperty(name string) *PropertyMe
 	return nil
 }
 
+// errMetadataIsNil and errPropertyPathEmpty cover the message-insensitive error cases in
+// ResolvePropertyPath. Callers only ever check err != nil, so sharing sentinels avoids an
+// fmt.Errorf allocation on every call for these edge cases.
+var (
+	errMetadataIsNil       = errors.New("entity metadata is nil")
+	errPropertyPathEmpty   = errors.New("property path cannot be empty")
+	errNotMultiSegmentPath = errors.New("navigation path is not a multi-segment path")
+)
+
 // ResolvePropertyPath resolves a property path (e.g., "ShippingAddress/City") to the corresponding metadata and embedded prefix.
 // It returns the metadata for the final segment and the concatenated embedded prefix used for database columns.
 func (metadata *EntityMetadata) ResolvePropertyPath(path string) (*PropertyMetadata, string, error) {
 	if metadata == nil {
-		return nil, "", fmt.Errorf("entity metadata is nil")
+		return nil, "", errMetadataIsNil
 	}
 
 	trimmedPath := strings.TrimSpace(path)
 	if trimmedPath == "" {
-		return nil, "", fmt.Errorf("property path cannot be empty")
+		return nil, "", errPropertyPathEmpty
+	}
+
+	// Fast path: the overwhelming majority of property references are single-segment
+	// (no nested complex type), so skip the strings.Split allocation and builder for those.
+	if !strings.Contains(trimmedPath, "/") {
+		prop := metadata.FindProperty(trimmedPath)
+		if prop == nil {
+			return nil, "", fmt.Errorf("property '%s' not found in path '%s'", trimmedPath, trimmedPath)
+		}
+		return prop, "", nil
 	}
 
 	segments := strings.Split(trimmedPath, "/")
@@ -1469,12 +1489,15 @@ func (property *PropertyMetadata) FindComplexField(name string) *PropertyMetadat
 // For example, "Team/Club/Name" returns the Club entity metadata, ["Team", "Club"], and "Name".
 func (metadata *EntityMetadata) ResolveSingleEntityNavigationPath(path string) (*EntityMetadata, []string, string, error) {
 	if metadata == nil {
-		return nil, nil, "", fmt.Errorf("entity metadata is nil")
+		return nil, nil, "", errMetadataIsNil
 	}
 
 	trimmedPath := strings.TrimSpace(path)
 	if trimmedPath == "" || !strings.Contains(trimmedPath, "/") {
-		return nil, nil, "", fmt.Errorf("navigation path '%s' is not a multi-segment path", path)
+		// Hot path: most property references (e.g. plain "Name") are not navigation
+		// paths at all. Callers only check err != nil, so use a shared sentinel instead
+		// of fmt.Errorf to avoid an allocation on essentially every property lookup.
+		return nil, nil, "", errNotMultiSegmentPath
 	}
 
 	segments := strings.Split(trimmedPath, "/")
