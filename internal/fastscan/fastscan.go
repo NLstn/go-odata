@@ -108,11 +108,9 @@ func Find(db *gorm.DB, dest interface{}) error {
 	if err != nil {
 		return err
 	}
-	defer func() {
-		_ = rows.Close()
-	}()
 
 	result, err := scanRows(tx.Statement.Context, rows, p, sliceVal, elemType)
+	closeErr := rows.Close()
 	if err != nil {
 		if scanErr, ok := err.(*rowScanError); ok {
 			// A row failed to scan. If the context is gone this is just
@@ -124,11 +122,13 @@ func Find(db *gorm.DB, dest interface{}) error {
 			if ctxErr := contextErr(tx.Statement.Context); ctxErr != nil {
 				return scanErr.err
 			}
-			_ = rows.Close()
 			p.disabled.Store(true)
 			return tx.Find(dest).Error
 		}
 		return err
+	}
+	if closeErr != nil {
+		return closeErr
 	}
 
 	sliceVal.Set(result)
@@ -140,14 +140,18 @@ func Find(db *gorm.DB, dest interface{}) error {
 // ineligible for fast scanning.
 func planFor(sch *schema.Schema) *plan {
 	if cached, ok := planCache.Load(sch); ok {
-		p, _ := cached.(*plan)
+		if p, ok := cached.(*plan); ok {
+			return p
+		}
+		return nil
+	}
+	built := buildPlan(sch)
+	// Concurrent builds produce equivalent plans; whichever lands first wins.
+	actual, _ := planCache.LoadOrStore(sch, built)
+	if p, ok := actual.(*plan); ok {
 		return p
 	}
-	p := buildPlan(sch)
-	// Concurrent builds produce equivalent plans; whichever lands first wins.
-	actual, _ := planCache.LoadOrStore(sch, p)
-	stored, _ := actual.(*plan)
-	return stored
+	return nil
 }
 
 func buildPlan(sch *schema.Schema) *plan {
@@ -256,10 +260,17 @@ type directBinding struct {
 	field  *schema.Field
 }
 
+// bufferedBinding scans a column into a reusable sql.Null* buffer and copies
+// the value into the struct field afterwards. Exactly one buffer, matching
+// the mode, is non-nil.
 type bufferedBinding struct {
-	field *schema.Field
-	mode  scanMode
-	buf   interface{}
+	field     *schema.Field
+	mode      scanMode
+	intBuf    *sql.NullInt64
+	floatBuf  *sql.NullFloat64
+	boolBuf   *sql.NullBool
+	stringBuf *sql.NullString
+	timeBuf   *sql.NullTime
 }
 
 func scanRows(ctx context.Context, rows *sql.Rows, p *plan, slice reflect.Value, elemType reflect.Type) (reflect.Value, error) {
@@ -291,23 +302,23 @@ func scanRows(ctx context.Context, rows *sql.Rows, p *plan, slice reflect.Value,
 		case scanInt, scanUint:
 			buf := new(sql.NullInt64)
 			dests[i] = buf
-			buffered = append(buffered, bufferedBinding{field: fp.field, mode: fp.mode, buf: buf})
+			buffered = append(buffered, bufferedBinding{field: fp.field, mode: fp.mode, intBuf: buf})
 		case scanFloat:
 			buf := new(sql.NullFloat64)
 			dests[i] = buf
-			buffered = append(buffered, bufferedBinding{field: fp.field, mode: fp.mode, buf: buf})
+			buffered = append(buffered, bufferedBinding{field: fp.field, mode: fp.mode, floatBuf: buf})
 		case scanBool:
 			buf := new(sql.NullBool)
 			dests[i] = buf
-			buffered = append(buffered, bufferedBinding{field: fp.field, mode: fp.mode, buf: buf})
+			buffered = append(buffered, bufferedBinding{field: fp.field, mode: fp.mode, boolBuf: buf})
 		case scanString:
 			buf := new(sql.NullString)
 			dests[i] = buf
-			buffered = append(buffered, bufferedBinding{field: fp.field, mode: fp.mode, buf: buf})
+			buffered = append(buffered, bufferedBinding{field: fp.field, mode: fp.mode, stringBuf: buf})
 		case scanTime:
 			buf := new(sql.NullTime)
 			dests[i] = buf
-			buffered = append(buffered, bufferedBinding{field: fp.field, mode: fp.mode, buf: buf})
+			buffered = append(buffered, bufferedBinding{field: fp.field, mode: fp.mode, timeBuf: buf})
 		}
 	}
 
@@ -335,28 +346,28 @@ func scanRows(ctx context.Context, rows *sql.Rows, p *plan, slice reflect.Value,
 			// A NULL column leaves the field at its zero value, like GORM.
 			switch b.mode {
 			case scanInt:
-				if buf := b.buf.(*sql.NullInt64); buf.Valid {
-					b.field.ReflectValueOf(ctx, elem).SetInt(buf.Int64)
+				if b.intBuf.Valid {
+					b.field.ReflectValueOf(ctx, elem).SetInt(b.intBuf.Int64)
 				}
 			case scanUint:
-				if buf := b.buf.(*sql.NullInt64); buf.Valid {
-					b.field.ReflectValueOf(ctx, elem).SetUint(uint64(buf.Int64))
+				if b.intBuf.Valid {
+					b.field.ReflectValueOf(ctx, elem).SetUint(uint64(b.intBuf.Int64))
 				}
 			case scanFloat:
-				if buf := b.buf.(*sql.NullFloat64); buf.Valid {
-					b.field.ReflectValueOf(ctx, elem).SetFloat(buf.Float64)
+				if b.floatBuf.Valid {
+					b.field.ReflectValueOf(ctx, elem).SetFloat(b.floatBuf.Float64)
 				}
 			case scanBool:
-				if buf := b.buf.(*sql.NullBool); buf.Valid {
-					b.field.ReflectValueOf(ctx, elem).SetBool(buf.Bool)
+				if b.boolBuf.Valid {
+					b.field.ReflectValueOf(ctx, elem).SetBool(b.boolBuf.Bool)
 				}
 			case scanString:
-				if buf := b.buf.(*sql.NullString); buf.Valid {
-					b.field.ReflectValueOf(ctx, elem).SetString(buf.String)
+				if b.stringBuf.Valid {
+					b.field.ReflectValueOf(ctx, elem).SetString(b.stringBuf.String)
 				}
 			case scanTime:
-				if buf := b.buf.(*sql.NullTime); buf.Valid {
-					b.field.ReflectValueOf(ctx, elem).Set(reflect.ValueOf(buf.Time))
+				if b.timeBuf.Valid {
+					b.field.ReflectValueOf(ctx, elem).Set(reflect.ValueOf(b.timeBuf.Time))
 				}
 			}
 		}
