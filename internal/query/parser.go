@@ -306,14 +306,14 @@ var validQueryOptions = map[string]bool{
 // per OData v4.01 spec: system query option names are case-insensitive and may be provided without the $ prefix
 // Returns the normalized key if it's a valid OData system query option, otherwise returns the original key
 func normalizeQueryOptionKey(key string) string {
-	// Try with $ prefix
-	withDollar := "$" + strings.ToLower(key)
-	if validQueryOptions[withDollar] {
-		return withDollar
-	}
-
-	// Already has $ prefix, lowercase it and check validity
+	// Fast path: real OData requests almost always send already-lowercase, $-prefixed
+	// keys ($filter, $select, ...). Check validity directly first so that common case
+	// costs zero allocations, instead of always building a "$"+lower(key) candidate
+	// that's only useful for the far rarer no-prefix form.
 	if strings.HasPrefix(key, "$") {
+		if validQueryOptions[key] {
+			return key
+		}
 		lowercase := strings.ToLower(key)
 		if validQueryOptions[lowercase] {
 			return lowercase
@@ -322,10 +322,10 @@ func normalizeQueryOptionKey(key string) string {
 		return key
 	}
 
-	// Check if without modification (lowercase) it's a valid option
-	lowercase := strings.ToLower(key)
-	if validQueryOptions[lowercase] {
-		return lowercase
+	// No $ prefix: OData 4.01 allows system options to be supplied without it.
+	withDollar := "$" + strings.ToLower(key)
+	if validQueryOptions[withDollar] {
+		return withDollar
 	}
 
 	// Not a known OData system query option, return original
