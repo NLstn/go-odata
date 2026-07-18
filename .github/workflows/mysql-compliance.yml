@@ -9,14 +9,12 @@ on:
       - 'go.sum'
       - 'cmd/complianceserver/**'
       - '.github/workflows/mysql-compliance.yml'
+  # No paths filter here: this is a required status check on every PR to main
+  # (see the repo's branch ruleset), so it must run regardless of which files
+  # changed - a path filter here can leave a PR permanently unable to merge if
+  # it happens not to touch a matched path.
   pull_request:
     branches: [ main ]
-    paths:
-      - '**.go'
-      - 'go.mod'
-      - 'go.sum'
-      - 'cmd/complianceserver/**'
-      - '.github/workflows/mysql-compliance.yml'
 
 permissions:
   contents: read
