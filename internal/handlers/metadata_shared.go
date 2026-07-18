@@ -113,6 +113,11 @@ func (h *MetadataHandler) propertyEdmType(model metadataModel, prop *metadata.Pr
 	if prop.IsTypeDefinition && prop.TypeDefinitionName != "" {
 		return model.qualifiedTypeName(prop.TypeDefinitionName)
 	}
+	if prop.IsComplexType {
+		if name := complexTypeGoName(prop); name != "" {
+			return model.qualifiedTypeName(name)
+		}
+	}
 	return getEdmType(prop.Type)
 }
 

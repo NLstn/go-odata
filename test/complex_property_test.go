@@ -234,3 +234,83 @@ func TestComplexPropertyNull(t *testing.T) {
 		t.Fatalf("expected status 204, got %d", w.Code)
 	}
 }
+
+// TestComplexPropertyMetadataDeclaresComplexType ensures a struct field mapped
+// via gorm's "embedded" tag is declared in $metadata as the actual ComplexType
+// it embeds, not as Edm.String (a client trusting $metadata must be able to
+// deserialize the property correctly).
+func TestComplexPropertyMetadataDeclaresComplexType(t *testing.T) {
+	service, _ := setupComplexPropertyService(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/$metadata", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	body := w.Body.String()
+
+	if strings.Contains(body, `Name="shippingAddress" Type="Edm.String"`) {
+		t.Fatalf("shippingAddress must not be declared as Edm.String\nBody:\n%s", body)
+	}
+
+	want := `Name="shippingAddress" Type="ODataService.ComplexPropertyAddress"`
+	if !strings.Contains(body, want) {
+		t.Fatalf("expected metadata to contain %q\nBody:\n%s", want, body)
+	}
+}
+
+// TestComplexPropertySelect ensures $select explicitly naming a complex-type
+// property returns it in the response instead of silently dropping it.
+func TestComplexPropertySelect(t *testing.T) {
+	service, db := setupComplexPropertyService(t)
+
+	product := ComplexPropertyProduct{
+		ID:   1,
+		Name: "Widget",
+		ShippingAddress: &ComplexPropertyAddress{
+			Street: "123 Main St",
+			City:   "Metropolis",
+		},
+	}
+	if err := db.Create(&product).Error; err != nil {
+		t.Fatalf("failed to insert product: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/ComplexPropertyProducts?$top=1&$select=shippingAddress", nil)
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var body struct {
+		Value []map[string]interface{} `json:"value"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if len(body.Value) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(body.Value))
+	}
+
+	shippingAddress, ok := body.Value[0]["shippingAddress"]
+	if !ok {
+		t.Fatalf("expected shippingAddress to be present in $select result, got %v", body.Value[0])
+	}
+	addr, ok := shippingAddress.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected shippingAddress to be an object, got %T: %v", shippingAddress, shippingAddress)
+	}
+	if addr["street"] != "123 Main St" {
+		t.Fatalf("expected street to be '123 Main St', got %v", addr["street"])
+	}
+	if addr["city"] != "Metropolis" {
+		t.Fatalf("expected city to be 'Metropolis', got %v", addr["city"])
+	}
+}

@@ -48,13 +48,32 @@ func applySelect(db *gorm.DB, selectedProperties []string, expandOptions []Expan
 		columns = append(columns, qualifiedColumn)
 	}
 
+	addComplexTypeColumns := func(complexProp *metadata.PropertyMetadata) {
+		prefix := complexProp.EmbeddedPrefix
+		seen := make(map[string]bool)
+		for _, field := range complexProp.ComplexTypeFields {
+			if field.IsNavigationProp || field.IsComplexType || field.ColumnName == "" {
+				continue
+			}
+			if seen[field.Name] {
+				continue
+			}
+			seen[field.Name] = true
+			addColumn(prefix + field.ColumnName)
+		}
+	}
+
 	for _, propName := range selectedProperties {
 		propName = strings.TrimSpace(propName)
 		for _, prop := range entityMetadata.Properties {
-			if (prop.JsonName == propName || prop.Name == propName) && !prop.IsNavigationProp && !prop.IsComplexType && !prop.IsStream && !prop.IsComputed {
-				// Use GetColumnName for proper column name resolution (handles GORM tags and metadata)
-				columnName := GetColumnName(prop.Name, entityMetadata)
-				addColumn(columnName)
+			if (prop.JsonName == propName || prop.Name == propName) && !prop.IsNavigationProp && !prop.IsStream && !prop.IsComputed {
+				if prop.IsComplexType {
+					addComplexTypeColumns(&prop)
+				} else {
+					// Use GetColumnName for proper column name resolution (handles GORM tags and metadata)
+					columnName := GetColumnName(prop.Name, entityMetadata)
+					addColumn(columnName)
+				}
 				selectedPropMap[prop.Name] = true
 				break
 			}
@@ -152,10 +171,6 @@ func ApplySelect(results interface{}, selectedProperties []string, entityMetadat
 		filteredItem := make(map[string]interface{})
 
 		for _, prop := range entityMetadata.Properties {
-			if prop.IsComplexType {
-				continue
-			}
-
 			isSelected := selectedPropMap[prop.JsonName] || selectedPropMap[prop.Name]
 			isKey := keyPropMap[prop.Name]
 			isExpanded := prop.IsNavigationProp && (expandedPropMap[prop.Name] != nil || expandedPropMap[prop.JsonName] != nil)
@@ -256,10 +271,6 @@ func ApplySelectToEntity(entity interface{}, selectedProperties []string, entity
 	}
 
 	for _, prop := range entityMetadata.Properties {
-		if prop.IsComplexType {
-			continue
-		}
-
 		isSelected := selectedPropMap[prop.JsonName] || selectedPropMap[prop.Name]
 		isKey := keyPropMap[prop.Name]
 		isExpanded := prop.IsNavigationProp && (expandedPropMap[prop.Name] != nil || expandedPropMap[prop.JsonName] != nil)
