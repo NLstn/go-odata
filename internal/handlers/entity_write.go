@@ -22,6 +22,27 @@ import (
 var errETagMismatch = errors.New("etag mismatch")
 var errAuthorizationDenied = errors.New("authorization denied")
 
+// enforceIfNoneMatch implements the RFC 7232 §3.2 If-None-Match precondition for
+// mutating requests: if the header is "*" or lists the current ETag, the request
+// must fail with 412 rather than be applied. Writes the 412 response itself and
+// returns false when the precondition fails; returns true when the request may proceed.
+func (h *EntityHandler) enforceIfNoneMatch(w http.ResponseWriter, r *http.Request, currentETag string) bool {
+	ifNoneMatch := r.Header.Get(HeaderIfNoneMatch)
+	if ifNoneMatch == "" {
+		return true
+	}
+
+	if etag.NoneMatch(ifNoneMatch, currentETag) {
+		return true
+	}
+
+	if writeErr := response.WriteError(w, r, http.StatusPreconditionFailed, ErrMsgPreconditionFailed,
+		ErrDetailPreconditionFailed); writeErr != nil {
+		h.logger.Error("Error writing error response", "error", writeErr)
+	}
+	return false
+}
+
 // handleDeleteEntity handles DELETE requests for individual entities
 func (h *EntityHandler) handleDeleteEntity(w http.ResponseWriter, r *http.Request, entityKey string) {
 	ctx := r.Context()
@@ -79,6 +100,10 @@ func (h *EntityHandler) handleDeleteEntity(w http.ResponseWriter, r *http.Reques
 					ErrDetailPreconditionFailed); writeErr != nil {
 					h.logger.Error("Error writing error response", "error", writeErr)
 				}
+				return newTransactionHandledError(errETagMismatch)
+			}
+
+			if !h.enforceIfNoneMatch(w, r, currentETag) {
 				return newTransactionHandledError(errETagMismatch)
 			}
 		}
@@ -188,6 +213,10 @@ func (h *EntityHandler) handlePatchEntity(w http.ResponseWriter, r *http.Request
 					ErrDetailPreconditionFailed); writeErr != nil {
 					h.logger.Error("Error writing error response", "error", writeErr)
 				}
+				return newTransactionHandledError(errETagMismatch)
+			}
+
+			if !h.enforceIfNoneMatch(w, r, currentETag) {
 				return newTransactionHandledError(errETagMismatch)
 			}
 		}
@@ -464,6 +493,10 @@ func (h *EntityHandler) handlePutEntity(w http.ResponseWriter, r *http.Request, 
 					ErrDetailPreconditionFailed); writeErr != nil {
 					h.logger.Error("Error writing error response", "error", writeErr)
 				}
+				return newTransactionHandledError(errETagMismatch)
+			}
+
+			if !h.enforceIfNoneMatch(w, r, currentETag) {
 				return newTransactionHandledError(errETagMismatch)
 			}
 		}

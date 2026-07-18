@@ -278,6 +278,46 @@ func TestPatchEntity_WithWildcardIfMatch(t *testing.T) {
 	}
 }
 
+// Test PATCH with If-None-Match: * against an existing entity (RFC 7232 §3.2:
+// must fail with 412 and leave the entity unmodified)
+func TestPatchEntity_WithWildcardIfNoneMatch(t *testing.T) {
+	service, db := setupETagTestService(t)
+
+	// Create a test product
+	product := ETagProduct{
+		ID:          1,
+		Name:        "Laptop",
+		Price:       999.99,
+		Version:     1,
+		LastUpdated: time.Now(),
+	}
+	db.Create(&product)
+
+	update := map[string]interface{}{
+		"price": 899.99,
+	}
+	body, _ := json.Marshal(update)
+
+	req := httptest.NewRequest(http.MethodPatch, "/ETagProducts(1)", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("If-None-Match", "*")
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusPreconditionFailed {
+		t.Errorf("Status = %v, want %v", w.Code, http.StatusPreconditionFailed)
+	}
+
+	var reloaded ETagProduct
+	if err := db.First(&reloaded, 1).Error; err != nil {
+		t.Fatalf("failed to reload product: %v", err)
+	}
+	if reloaded.Price != 999.99 {
+		t.Errorf("Price = %v, want unchanged 999.99 (update should have been rejected)", reloaded.Price)
+	}
+}
+
 // Test PUT with matching If-Match header
 func TestPutEntity_WithMatchingETag(t *testing.T) {
 	service, db := setupETagTestService(t)
@@ -352,6 +392,48 @@ func TestPutEntity_WithNonMatchingETag(t *testing.T) {
 	}
 }
 
+// Test PUT with If-None-Match: * against an existing entity (RFC 7232 §3.2:
+// must fail with 412 and leave the entity unmodified)
+func TestPutEntity_WithWildcardIfNoneMatch(t *testing.T) {
+	service, db := setupETagTestService(t)
+
+	// Create a test product
+	product := ETagProduct{
+		ID:          1,
+		Name:        "Laptop",
+		Price:       999.99,
+		Version:     1,
+		LastUpdated: time.Now(),
+	}
+	db.Create(&product)
+
+	replacement := map[string]interface{}{
+		"name":    "Gaming Laptop",
+		"price":   1299.99,
+		"version": 1,
+	}
+	body, _ := json.Marshal(replacement)
+
+	req := httptest.NewRequest(http.MethodPut, "/ETagProducts(1)", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("If-None-Match", "*")
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusPreconditionFailed {
+		t.Errorf("Status = %v, want %v", w.Code, http.StatusPreconditionFailed)
+	}
+
+	var reloaded ETagProduct
+	if err := db.First(&reloaded, 1).Error; err != nil {
+		t.Fatalf("failed to reload product: %v", err)
+	}
+	if reloaded.Name != "Laptop" {
+		t.Errorf("Name = %v, want unchanged %q (update should have been rejected)", reloaded.Name, "Laptop")
+	}
+}
+
 // Test DELETE with matching If-Match header
 func TestDeleteEntity_WithMatchingETag(t *testing.T) {
 	service, db := setupETagTestService(t)
@@ -407,6 +489,37 @@ func TestDeleteEntity_WithNonMatchingETag(t *testing.T) {
 
 	if w.Code != http.StatusPreconditionFailed {
 		t.Errorf("Status = %v, want %v", w.Code, http.StatusPreconditionFailed)
+	}
+}
+
+// Test DELETE with If-None-Match: * against an existing entity (RFC 7232 §3.2:
+// must fail with 412 and leave the entity in place)
+func TestDeleteEntity_WithWildcardIfNoneMatch(t *testing.T) {
+	service, db := setupETagTestService(t)
+
+	// Create a test product
+	product := ETagProduct{
+		ID:          1,
+		Name:        "Laptop",
+		Price:       999.99,
+		Version:     1,
+		LastUpdated: time.Now(),
+	}
+	db.Create(&product)
+
+	req := httptest.NewRequest(http.MethodDelete, "/ETagProducts(1)", nil)
+	req.Header.Set("If-None-Match", "*")
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusPreconditionFailed {
+		t.Errorf("Status = %v, want %v", w.Code, http.StatusPreconditionFailed)
+	}
+
+	var reloaded ETagProduct
+	if err := db.First(&reloaded, 1).Error; err != nil {
+		t.Errorf("expected entity to still exist after rejected delete, got error: %v", err)
 	}
 }
 
