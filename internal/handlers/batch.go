@@ -314,6 +314,11 @@ func (h *BatchHandler) processChangeset(r io.Reader, boundary string, remainingC
 	// refer to the entity created by the request bearing that Content-ID.
 	contentIDLocations := make(map[string]string)
 
+	// seenContentIDs tracks every non-empty Content-ID encountered so far in this changeset.
+	// Per OData v4 §11.7.4, Content-ID values must be unique within a changeset; reusing one
+	// makes $<contentID> URL references (§11.4.9.3) ambiguous, so a duplicate is rejected.
+	seenContentIDs := make(map[string]bool)
+
 	var hasError bool
 	var sizeExceeded bool
 	for {
@@ -336,6 +341,19 @@ func (h *BatchHandler) processChangeset(r io.Reader, boundary string, remainingC
 
 		// Capture Content-ID from MIME part envelope headers (per OData v4 spec, must be echoed in response)
 		contentID := part.Header.Get("Content-ID")
+
+		// Reject a Content-ID reused within the same changeset (OData v4 §11.7.4): two
+		// requests sharing an id would make $<contentID> references (§11.4.9.3) ambiguous.
+		if contentID != "" && seenContentIDs[contentID] {
+			hasError = true
+			errResp := h.createErrorResponse(http.StatusBadRequest, fmt.Sprintf("Duplicate Content-ID: %q", contentID))
+			errResp.ContentID = contentID
+			responses = append(responses, errResp)
+			break
+		}
+		if contentID != "" {
+			seenContentIDs[contentID] = true
+		}
 
 		req, err := h.parseHTTPRequest(part)
 		if err != nil {

@@ -775,3 +775,71 @@ DELETE /$1 HTTP/1.1
 		t.Errorf("expected entity to be deleted, but %d record(s) remain", count)
 	}
 }
+
+// TestBatchChangeset_DuplicateContentID_Rejected verifies that two sub-requests in the same
+// changeset sharing a Content-ID are rejected with a 400-level error rather than both being
+// processed successfully (which would make "$<contentID>" references ambiguous per OData v4
+// §11.4.9.3), and that the changeset is rolled back so neither entity is persisted.
+func TestBatchChangeset_DuplicateContentID_Rejected(t *testing.T) {
+	handler, db := setupContentIDTestHandler(t)
+
+	batchBoundary := "batch_dup"
+	changesetBoundary := "changeset_dup"
+	body := fmt.Sprintf(`--%s
+Content-Type: multipart/mixed; boundary=%s
+
+--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+Content-ID: 1
+
+POST /ContentIDRefProducts HTTP/1.1
+Content-Type: application/json
+
+{"Name":"Dup A","Price":1.0,"Category":"A"}
+
+--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+Content-ID: 1
+
+POST /ContentIDRefProducts HTTP/1.1
+Content-Type: application/json
+
+{"Name":"Dup B","Price":1.0,"Category":"A"}
+
+--%s--
+
+--%s--
+`, batchBoundary, changesetBoundary,
+		changesetBoundary, changesetBoundary, changesetBoundary,
+		batchBoundary)
+
+	req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+	req.Header.Set("Content-Type", fmt.Sprintf("multipart/mixed; boundary=%s", batchBoundary))
+	w := httptest.NewRecorder()
+
+	handler.HandleBatch(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Status = %v, want 200 (batch envelope always 200; failures are per-part). Body: %s", w.Code, w.Body.String())
+	}
+
+	respBody := w.Body.String()
+	if strings.Count(respBody, "HTTP/1.1 201") == 2 {
+		t.Errorf("expected the duplicate Content-ID request not to also succeed with 201; body:\n%s", respBody)
+	}
+	if !strings.Contains(respBody, "HTTP/1.1 400") {
+		t.Errorf("expected a 400 response identifying the duplicate Content-ID; body:\n%s", respBody)
+	}
+	if !strings.Contains(respBody, "Duplicate Content-ID") {
+		t.Errorf("expected the 400 response to identify the duplicate Content-ID; body:\n%s", respBody)
+	}
+
+	// The changeset must have been rolled back entirely - no product should be persisted.
+	var count int64
+	db.Model(&ContentIDRefProduct{}).Count(&count)
+	if count != 0 {
+		t.Errorf("expected 0 products after rejected changeset, got %d", count)
+	}
+}
