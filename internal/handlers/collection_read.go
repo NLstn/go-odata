@@ -425,7 +425,17 @@ func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.Qu
 	}
 
 	sliceType := reflect.SliceOf(h.metadata.EntityType)
-	results := reflect.New(sliceType).Interface()
+	resultsPtr := reflect.New(sliceType)
+	// GORM's Scan only reuses an externally-provided destination slice when its capacity is
+	// non-zero (see gorm.io/gorm/scan.go); otherwise it allocates its own with a hardcoded
+	// cap of 20 and grows it by doubling as rows are read. Since the LIMIT (queryOptions.Top,
+	// already bumped by one above to detect a next page) bounds the row count we're about to
+	// fetch, pre-sizing the slice to that capacity lets GORM append directly into it instead
+	// of reallocating and copying the backing array on every doubling step.
+	if modifiedOptions.Top != nil && *modifiedOptions.Top > 0 {
+		resultsPtr.Elem().Set(reflect.MakeSlice(sliceType, 0, *modifiedOptions.Top))
+	}
+	results := resultsPtr.Interface()
 
 	if err := db.Find(results).Error; err != nil {
 		return nil, err
