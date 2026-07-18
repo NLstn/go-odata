@@ -151,29 +151,49 @@ func (om *OrderedMap) ToMap() map[string]interface{} {
 
 // MarshalJSON implements json.Marshaler to maintain field order.
 func (om *OrderedMap) MarshalJSON() ([]byte, error) {
-	if len(om.keys) == 0 {
-		return []byte("{}"), nil
-	}
-
-	buf := bufferPool.Get().(*bytes.Buffer) //nolint:errcheck // sync.Pool.Get() doesn't return error
-	buf.Reset()
-	defer func() {
-		// Pool buffers up to 512KB. With marshalTo writing the full collection
-		// JSON into one buffer, responses for top=100-500 can reach 100-500KB.
-		if buf.Cap() < 512*1024 {
-			bufferPool.Put(buf)
-		}
-	}()
-
-	buf.Grow(len(om.keys) * 100)
-
-	if err := om.marshalTo(buf); err != nil {
+	buf, err := om.marshalToPooledBuffer()
+	if err != nil {
 		return nil, err
 	}
+	defer releasePooledBuffer(buf)
 
 	result := make([]byte, buf.Len())
 	copy(result, buf.Bytes())
 	return result, nil
+}
+
+// marshalToPooledBuffer serializes the ordered map into a buffer obtained from bufferPool.
+// Callers that only need to write the bytes out (e.g. to an http.ResponseWriter) can use
+// buf.Bytes() directly and avoid the copy-out allocation that MarshalJSON performs solely
+// to satisfy the json.Marshaler interface contract of returning an owned []byte. The
+// returned buffer must be released via releasePooledBuffer once its bytes are no longer
+// needed.
+func (om *OrderedMap) marshalToPooledBuffer() (*bytes.Buffer, error) {
+	buf := bufferPool.Get().(*bytes.Buffer) //nolint:errcheck // sync.Pool.Get() doesn't return error
+	buf.Reset()
+
+	if len(om.keys) == 0 {
+		buf.WriteString("{}")
+		return buf, nil
+	}
+
+	buf.Grow(len(om.keys) * 100)
+
+	if err := om.marshalTo(buf); err != nil {
+		releasePooledBuffer(buf)
+		return nil, err
+	}
+
+	return buf, nil
+}
+
+// releasePooledBuffer returns buf to bufferPool. Buffers that grew past 512KB are dropped
+// instead of pooled, matching the size cap marshalToPooledBuffer's callers rely on to avoid
+// bloating the pool with oversized buffers from unusually large responses.
+func releasePooledBuffer(buf *bytes.Buffer) {
+	if buf.Cap() < 512*1024 {
+		bufferPool.Put(buf)
+	}
 }
 
 // marshalTo writes the JSON representation directly to buf.

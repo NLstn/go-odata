@@ -352,24 +352,29 @@ func WriteODataEntityFromNavigationPath(w http.ResponseWriter, r *http.Request, 
 	w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
 
 	if r.Method == http.MethodHead {
-		jsonBytes, err := entityMap.MarshalJSON()
+		buf, err := entityMap.marshalToPooledBuffer()
 		entityMap.Release()
 		if err != nil {
 			return err
 		}
-		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(jsonBytes)))
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", buf.Len()))
 		w.WriteHeader(http.StatusOK)
+		releasePooledBuffer(buf)
 		return nil
 	}
 
-	responseBytes, err := entityMap.MarshalJSON()
+	// Marshal into a pooled buffer and write its bytes directly, avoiding the copy-out
+	// allocation that entityMap.MarshalJSON() would otherwise need to satisfy the
+	// json.Marshaler contract of returning an owned []byte.
+	buf, err := entityMap.marshalToPooledBuffer()
 	entityMap.Release()
 	if err != nil {
 		return err
 	}
-	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(responseBytes)))
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", buf.Len()))
 	w.WriteHeader(http.StatusOK)
-	_, writeErr := w.Write(responseBytes)
+	_, writeErr := w.Write(buf.Bytes())
+	releasePooledBuffer(buf)
 	return writeErr
 }
 
