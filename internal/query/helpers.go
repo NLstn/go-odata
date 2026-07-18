@@ -104,6 +104,13 @@ func (c *parserCache) resolveSingleEntityNavPathWithCache(path string, entityMet
 		return entityMetadata.ResolveSingleEntityNavigationPath(path)
 	}
 
+	// Most property references aren't navigation paths at all (no "/"). The underlying
+	// resolve call is cheap for those, so skip the cache-key allocation and lock round
+	// trip entirely rather than caching a value that's no more expensive to recompute.
+	if !strings.Contains(path, "/") {
+		return entityMetadata.ResolveSingleEntityNavigationPath(path)
+	}
+
 	// Create cache key combining entity name and path
 	cacheKey := entityMetadata.EntityName + ":" + path
 
