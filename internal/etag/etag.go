@@ -15,6 +15,9 @@ import (
 // hexTable for fast hex encoding without allocation
 const hexTable = "0123456789abcdef"
 
+// timeType caches the reflect.Type for time.Time to avoid recomputing it on every call.
+var timeType = reflect.TypeOf(time.Time{})
+
 // globalFieldIndexCache uses sync.Map for lock-free reads under high concurrency
 // Keys are reflect.Type, values are map[string]int (field name to index)
 var globalFieldIndexCache sync.Map
@@ -119,8 +122,16 @@ func Generate(entity interface{}, meta *metadata.EntityMetadata) string {
 		etagSource = strconv.FormatUint(fieldValue.Uint(), 10)
 	case reflect.Struct:
 		// Handle time.Time specially
-		if t, ok := fieldValue.Interface().(time.Time); ok {
-			etagSource = strconv.FormatInt(t.Unix(), 10)
+		if fieldValue.Type() == timeType {
+			// Boxing a 24-byte time.Time value into an interface{} via fieldValue.Interface()
+			// heap-allocates. Take its address instead (fields of a dereferenced pointer are
+			// addressable) and box the pointer, which fits directly in the interface with no
+			// extra allocation.
+			if fieldValue.CanAddr() {
+				etagSource = strconv.FormatInt(fieldValue.Addr().Interface().(*time.Time).Unix(), 10)
+			} else {
+				etagSource = strconv.FormatInt(fieldValue.Interface().(time.Time).Unix(), 10)
+			}
 		} else {
 			etagSource = fmt.Sprintf("%v", fieldValue.Interface())
 		}
