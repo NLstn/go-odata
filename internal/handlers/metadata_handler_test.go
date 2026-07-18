@@ -368,4 +368,11 @@ func TestMetadataHandler_Caching(t *testing.T) {
 			t.Errorf("Request %d: Status = %v, want %v", i, w.Code, http.StatusOK)
 		}
 	}
+
+	handler.cachedXML.Range(func(_, value any) bool {
+		if _, ok := value.([]byte); !ok {
+			t.Errorf("XML cache value has type %T, want []byte", value)
+		}
+		return true
+	})
 }
