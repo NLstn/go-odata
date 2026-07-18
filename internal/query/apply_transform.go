@@ -1200,8 +1200,9 @@ func applyOrderBy(db *gorm.DB, orderBy []OrderByItem, entityMetadata *metadata.E
 		var orderExprs []clause.OrderByColumn
 		for _, item := range orderBy {
 			var columnName string
+			isNavigationPath := entityMetadata != nil && entityMetadata.IsSingleEntityNavigationPath(item.Property)
 			if propertyExists(item.Property, entityMetadata) {
-				if entityMetadata.IsSingleEntityNavigationPath(item.Property) {
+				if isNavigationPath {
 					columnName = getQuotedColumnName(dialect, item.Property, entityMetadata)
 				} else {
 					col := GetColumnName(item.Property, entityMetadata)
@@ -1220,10 +1221,36 @@ func applyOrderBy(db *gorm.DB, orderBy []OrderByItem, entityMetadata *metadata.E
 				columnName = quoteIdent(dialect, sanitizedAlias)
 			}
 
-			// Build the ORDER BY expression with NULL handling
-			direction := " ASC NULLS FIRST"
+			// Build the ORDER BY expression. Per OData v4.0, ascending order sorts NULLs
+			// before non-NULL values and descending order sorts NULLs after non-NULL values;
+			// PostgreSQL's own defaults are the reverse (NULLS LAST for ASC, NULLS FIRST for
+			// DESC), so an explicit NULLS clause is normally required for spec compliance.
+			//
+			// That explicit clause has a real cost: it doesn't match the sort order a plain
+			// b-tree index on the column produces, so PostgreSQL falls back to a sequential
+			// scan plus an explicit sort instead of an index (or index-backward) scan, even
+			// when the column is indexed. When the column is statically known to never be
+			// NULL (non-nullable Go type, or GORM "not null"), the two orderings are
+			// equivalent - there are no NULLs to place - so the clause can be safely omitted,
+			// letting the planner use the index. Navigation paths and unresolved
+			// aliases keep the explicit clause since their nullability isn't known here.
+			needsNullsClause := true
+			if !isNavigationPath && entityMetadata != nil {
+				if prop := entityMetadata.FindProperty(item.Property); prop != nil && prop.Nullable != nil && !*prop.Nullable {
+					needsNullsClause = false
+				}
+			}
+
+			direction := " ASC"
 			if item.Descending {
-				direction = " DESC NULLS LAST"
+				direction = " DESC"
+			}
+			if needsNullsClause {
+				if item.Descending {
+					direction += " NULLS LAST"
+				} else {
+					direction += " NULLS FIRST"
+				}
 			}
 
 			orderExprs = append(orderExprs, clause.OrderByColumn{
