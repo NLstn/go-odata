@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/nlstn/go-odata/internal/auth"
+	"github.com/nlstn/go-odata/internal/fastscan"
 	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/query"
 	"github.com/nlstn/go-odata/internal/response"
@@ -431,7 +432,7 @@ func (h *EntityHandler) createNavFetchFunc(relatedDB *gorm.DB, targetMetadata *m
 		}
 
 		resultsSlice := reflect.New(reflect.SliceOf(targetMetadata.EntityType)).Interface()
-		if err := db.Find(resultsSlice).Error; err != nil {
+		if err := fastscan.Find(db, resultsSlice); err != nil {
 			return nil, err
 		}
 

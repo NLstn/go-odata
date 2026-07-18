@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/nlstn/go-odata/internal/fastscan"
 	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/preference"
 	"github.com/nlstn/go-odata/internal/query"
@@ -437,7 +438,7 @@ func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.Qu
 	}
 	results := resultsPtr.Interface()
 
-	if err := db.Find(results).Error; err != nil {
+	if err := fastscan.Find(db, results); err != nil {
 		return nil, err
 	}
 
