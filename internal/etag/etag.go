@@ -128,9 +128,11 @@ func Generate(entity interface{}, meta *metadata.EntityMetadata) string {
 			// addressable) and box the pointer, which fits directly in the interface with no
 			// extra allocation.
 			if fieldValue.CanAddr() {
-				etagSource = strconv.FormatInt(fieldValue.Addr().Interface().(*time.Time).Unix(), 10)
+				t := fieldValue.Addr().Interface().(*time.Time) //nolint:errcheck // type guaranteed by the timeType check above
+				etagSource = strconv.FormatInt(t.Unix(), 10)
 			} else {
-				etagSource = strconv.FormatInt(fieldValue.Interface().(time.Time).Unix(), 10)
+				t := fieldValue.Interface().(time.Time) //nolint:errcheck // type guaranteed by the timeType check above
+				etagSource = strconv.FormatInt(t.Unix(), 10)
 			}
 		} else {
 			etagSource = fmt.Sprintf("%v", fieldValue.Interface())
