@@ -24,6 +24,7 @@ DB_TYPE="sqlite"           # sqlite | postgres
 DB_DSN=""                  # Optional; for postgres defaults if empty
 EXTERNAL_SERVER=0          # Don't start/stop server automatically
 ENABLE_CPU_PROFILE=0       # Enable CPU profiling
+ENABLE_MEMORY_PROFILE=0    # Enable heap and allocation profiling
 ENABLE_SQL_TRACE=0         # Enable SQL query tracing
 FEATURE_FLAG_SPEEDUP_THRESHOLD="1.50"  # Cached must be at least this many times faster
 
@@ -95,6 +96,18 @@ cleanup() {
             else
                 echo -e "${YELLOW}⚠ CPU profile file not found at /tmp/perfserver-cpu.prof${NC}"
             fi
+        fi
+
+        if [ $ENABLE_MEMORY_PROFILE -eq 1 ]; then
+            for profile_name in heap alloc; do
+                profile_path="/tmp/perfserver-${profile_name}.prof"
+                if [ -s "$profile_path" ]; then
+                    cp "$profile_path" "$OUTPUT_DIR/${profile_name}.prof"
+                    echo -e "${GREEN}✓ ${profile_name} profile saved to: $OUTPUT_DIR/${profile_name}.prof${NC}"
+                else
+                    echo -e "${YELLOW}⚠ ${profile_name} profile file not found or empty at $profile_path${NC}"
+                fi
+            done
         fi
         
         if [ $ENABLE_SQL_TRACE -eq 1 ]; then
@@ -286,6 +299,12 @@ start_server() {
         echo "📊 CPU profiling: ENABLED"
     fi
 
+    if [ $ENABLE_MEMORY_PROFILE -eq 1 ]; then
+        SERVER_ARGS+=( -heapprofile /tmp/perfserver-heap.prof )
+        SERVER_ARGS+=( -allocprofile /tmp/perfserver-alloc.prof )
+        echo "🧠 Memory profiling: ENABLED"
+    fi
+
     if [ $ENABLE_SQL_TRACE -eq 1 ]; then
         SERVER_ARGS+=( -trace-sql -trace-sql-file /tmp/perfserver-sql-trace.txt )
         echo "🔍 SQL tracing: ENABLED"
@@ -473,6 +492,7 @@ OPTIONS:
     --dsn DSN              Database DSN/connection string (required for postgres)
     --external-server      Use an external server (don't start/stop the perfserver)
     --cpu-profile          Enable CPU profiling (saves to OUTPUT_DIR/cpu.prof)
+    --memory-profile       Enable heap and allocation profiles (saves to OUTPUT_DIR/heap.prof and alloc.prof)
     --sql-trace            Enable SQL query tracing (saves to OUTPUT_DIR/sql-trace.txt)
     --feature-flag-threshold NUM
                            Minimum cached/uncached speedup ratio for validation (default: 1.50)
@@ -490,8 +510,8 @@ EXAMPLES:
     # Run with custom parameters
     $0 -d 60s -t 12 -C 200
     
-    # Enable CPU profiling and SQL tracing
-    $0 --cpu-profile --sql-trace
+    # Enable CPU, memory, and SQL profiling
+    $0 --cpu-profile --memory-profile --sql-trace
 
     # Custom server URL and output directory (external server)
     $0 --external-server -u http://localhost:8080 -o ./my-results
@@ -555,6 +575,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --cpu-profile)
             ENABLE_CPU_PROFILE=1
+            shift
+            ;;
+        --memory-profile)
+            ENABLE_MEMORY_PROFILE=1
             shift
             ;;
         --sql-trace)
