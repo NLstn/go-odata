@@ -536,17 +536,28 @@ func convertBinaryArithmeticExprWithContext(binExpr *BinaryExpr, ctx *conversion
 		return nil, fmt.Errorf("unsupported arithmetic operator: %s", binExpr.Operator)
 	}
 
+	// Unwrap a parenthesized sub-expression on either side, e.g. "(Price div 3) mul 3",
+	// so nested arithmetic isn't silently dropped just because it was grouped.
+	leftNode := binExpr.Left
+	if leftGroup, ok := leftNode.(*GroupExpr); ok {
+		leftNode = leftGroup.Expr
+	}
+	rightNode := binExpr.Right
+	if rightGroup, ok := rightNode.(*GroupExpr); ok {
+		rightNode = rightGroup.Expr
+	}
+
 	// Extract property from left side
 	var property string
 	var leftExpr *FilterExpression
-	if leftIdent, ok := binExpr.Left.(*IdentifierExpr); ok {
+	if leftIdent, ok := leftNode.(*IdentifierExpr); ok {
 		property = leftIdent.Name
 		// Validate property exists (either in entity metadata or as a computed alias)
 		hasComputedAlias := ctx != nil && ctx.hasComputedAlias(property)
 		if ctx != nil && !propertyAllowedInFilter(ctx, property) && !hasComputedAlias {
 			return nil, fmt.Errorf("property '%s' does not exist", property)
 		}
-	} else if leftBinExpr, ok := binExpr.Left.(*BinaryExpr); ok {
+	} else if leftBinExpr, ok := leftNode.(*BinaryExpr); ok {
 		// Nested arithmetic expression - recursively convert it
 		leftFilterExpr, err := convertBinaryArithmeticExprWithContext(leftBinExpr, ctx)
 		if err != nil {
@@ -562,11 +573,11 @@ func convertBinaryArithmeticExprWithContext(binExpr *BinaryExpr, ctx *conversion
 	// Extract value from right side
 	var value interface{}
 	var rightExpr *FilterExpression
-	if rightLit, ok := binExpr.Right.(*LiteralExpr); ok {
+	if rightLit, ok := rightNode.(*LiteralExpr); ok {
 		value = rightLit.Value
-	} else if rightIdent, ok := binExpr.Right.(*IdentifierExpr); ok {
+	} else if rightIdent, ok := rightNode.(*IdentifierExpr); ok {
 		value = rightIdent.Name
-	} else if rightBinExpr, ok := binExpr.Right.(*BinaryExpr); ok {
+	} else if rightBinExpr, ok := rightNode.(*BinaryExpr); ok {
 		// Nested arithmetic expression on right side - recursively convert it
 		// This handles cases like "Price add (10 mul 2)"
 		rightFilterExpr, err := convertBinaryArithmeticExprWithContext(rightBinExpr, ctx)

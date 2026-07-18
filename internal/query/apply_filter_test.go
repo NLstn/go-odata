@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/nlstn/go-odata/internal/metadata"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
 type navigationFilterAuthor struct {
@@ -130,6 +132,52 @@ func TestNavigationFilterUsesMultiHopNavigationPath(t *testing.T) {
 
 	if len(args) != 1 || args[0] != "Acme" {
 		t.Fatalf("expected args [Acme], got %#v", args)
+	}
+}
+
+// TestFilterNestedArithmeticGroupedOnLeft is a regression test for a bug where
+// "(Price div 3) mul 3 eq 15.5" silently dropped the parenthesized "Price div 3"
+// sub-expression: the outer "mul" node's Left operand was a *GroupExpr, which
+// convertBinaryArithmeticExprWithContext didn't unwrap, so it fell into the
+// "no property" placeholder branch and the filter degenerated into comparing the
+// bare literal 3 against 15.5 (i.e., it matched no rows regardless of Price).
+func TestFilterNestedArithmeticGroupedOnLeft(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("Failed to open database: %v", err)
+	}
+
+	if err := db.AutoMigrate(&TestEntity{}); err != nil {
+		t.Fatalf("Failed to migrate: %v", err)
+	}
+
+	rows := []TestEntity{
+		{ID: 1, Name: "Coffee Mug", Price: 15.5}, // (15.5 div 3) mul 3 == 15.5
+		{ID: 2, Name: "Notebook", Price: 10.0},   // (10 div 3) mul 3 == 9.0 != 10.0
+	}
+	if err := db.Create(&rows).Error; err != nil {
+		t.Fatalf("Failed to seed rows: %v", err)
+	}
+
+	meta := getTestMetadata(t)
+
+	filterExpr, err := parseFilter("(Price div 3) mul 3 eq 15.5", meta, nil, 0)
+	if err != nil {
+		t.Fatalf("Failed to parse filter: %v", err)
+	}
+
+	if filterExpr.Left == nil || filterExpr.Left.Left == nil {
+		t.Fatalf("expected nested arithmetic expression to be preserved, got %+v", filterExpr.Left)
+	}
+
+	var matched []TestEntity
+	query := applyFilter(db.Model(&TestEntity{}), filterExpr, meta)
+	if err := query.Find(&matched).Error; err != nil {
+		t.Fatalf("Failed to execute query: %v", err)
+	}
+
+	if len(matched) != 1 || matched[0].ID != 1 {
+		t.Fatalf("expected exactly [Coffee Mug] (ID 1) to match, got %+v", matched)
 	}
 }
 
