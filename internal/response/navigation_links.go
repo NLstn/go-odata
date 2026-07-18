@@ -267,30 +267,31 @@ func processStructEntityOrderedInto(entityMap *OrderedMap, entity reflect.Value,
 			expandOpt := query.FindExpandOption(expandOptions, propMeta.Name, propMeta.JsonName)
 			processNavigationPropertyOrderedWithMetadata(entityMap, entity, propMeta, fieldValue, info.JsonName, expandOpt, selectedNavProps, baseURL, entitySetName, metadata, metadataLevel, keySegment, fullMetadata)
 		} else {
-			// Skip stream properties — they are emitted as annotations below, not as inline values
+			// Resolve the full property metadata once per field and reuse it below,
+			// instead of re-hashing fullPropMetaByName for the stream check, the
+			// annotations lookup, and enum formatting separately.
+			var fullProp *internalMetadata.PropertyMetadata
 			if fullPropMetaByName != nil {
-				if fullProp := fullPropMetaByName[info.Name]; fullProp != nil && fullProp.IsStream {
-					continue
-				}
+				fullProp = fullPropMetaByName[info.Name]
+			}
+
+			// Skip stream properties — they are emitted as annotations below, not as inline values
+			if fullProp != nil && fullProp.IsStream {
+				continue
 			}
 			// Add property-level annotations first (for full metadata)
-			if metadataLevel == "full" && fullPropMetaByName != nil {
-				// O(1) lookup using pre-built map
-				if fullProp := fullPropMetaByName[info.Name]; fullProp != nil {
-					if fullProp.Annotations != nil && fullProp.Annotations.Len() > 0 {
-						for _, annotation := range fullProp.Annotations.Get() {
-							if annotationFilter != nil && !preference.MatchesAnnotationFilter(annotation.QualifiedTerm(), *annotationFilter) {
-								continue
-							}
-							annotationKey := info.JsonName + "@" + annotation.QualifiedTerm()
-							entityMap.Set(annotationKey, annotation.Value)
-						}
+			if metadataLevel == "full" && fullProp != nil && fullProp.Annotations != nil && fullProp.Annotations.Len() > 0 {
+				for _, annotation := range fullProp.Annotations.Get() {
+					if annotationFilter != nil && !preference.MatchesAnnotationFilter(annotation.QualifiedTerm(), *annotationFilter) {
+						continue
 					}
+					annotationKey := info.JsonName + "@" + annotation.QualifiedTerm()
+					entityMap.Set(annotationKey, annotation.Value)
 				}
 			}
 			// Then add the property value
 			fieldValue := entity.Field(j)
-			entityMap.Set(info.JsonName, EncodeEdmBinary(enumOrRaw(fieldValue, fullPropMetaByName, info.Name)))
+			entityMap.Set(info.JsonName, EncodeEdmBinary(enumOrRaw(fieldValue, fullProp)))
 		}
 	}
 
@@ -455,15 +456,15 @@ func BuildExpandedCollectionNextLink(baseURL, entitySetName, keySegment, jsonNam
 }
 
 // enumOrRaw returns the OData string representation for enum fields, or the raw value otherwise.
-func enumOrRaw(v reflect.Value, fullPropMetaByName map[string]*internalMetadata.PropertyMetadata, fieldName string) interface{} {
-	if fullPropMetaByName != nil {
-		if prop := fullPropMetaByName[fieldName]; prop != nil && prop.IsEnum && len(prop.EnumMembers) > 0 {
-			switch v.Kind() {
-			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-				return internalMetadata.EnumValueToString(v.Int(), prop.EnumMembers, prop.IsFlags)
-			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-				return internalMetadata.EnumValueToString(int64(v.Uint()), prop.EnumMembers, prop.IsFlags)
-			}
+// prop is the field's already-resolved full property metadata (nil if unavailable), so callers
+// that already looked it up don't pay for a second map lookup here.
+func enumOrRaw(v reflect.Value, prop *internalMetadata.PropertyMetadata) interface{} {
+	if prop != nil && prop.IsEnum && len(prop.EnumMembers) > 0 {
+		switch v.Kind() {
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			return internalMetadata.EnumValueToString(v.Int(), prop.EnumMembers, prop.IsFlags)
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			return internalMetadata.EnumValueToString(int64(v.Uint()), prop.EnumMembers, prop.IsFlags)
 		}
 	}
 	return v.Interface()
