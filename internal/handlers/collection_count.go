@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"sort"
 
+	"github.com/nlstn/go-odata/internal/fastscan"
 	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/query"
 	"gorm.io/gorm"
@@ -77,7 +78,7 @@ func (h *EntityHandler) countEntities(ctx context.Context, queryOptions *query.Q
 	sliceType := reflect.SliceOf(h.metadata.EntityType)
 	results := reflect.New(sliceType).Interface()
 
-	if err := countDB.Find(results).Error; err != nil {
+	if err := fastscan.Find(countDB, results); err != nil {
 		return 0, err
 	}
 

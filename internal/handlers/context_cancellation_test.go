@@ -24,13 +24,17 @@ func TestHandleGetCollectionHonorsContextCancellation(t *testing.T) {
 		t.Fatalf("failed to migrate database: %v", err)
 	}
 
-	db.Callback().Query().Before("gorm:query").Register("test_wait_for_cancel", func(db *gorm.DB) {
+	// Collection reads execute through the Row processor (fast scan path) and
+	// other reads through the Query processor; block both until cancellation.
+	waitForCancel := func(db *gorm.DB) {
 		if db.Statement == nil || db.Statement.Context == nil {
 			return
 		}
 		<-db.Statement.Context.Done()
 		db.Error = db.Statement.Context.Err()
-	})
+	}
+	db.Callback().Query().Before("gorm:query").Register("test_wait_for_cancel", waitForCancel)
+	db.Callback().Row().Before("gorm:row").Register("test_wait_for_cancel_row", waitForCancel)
 
 	entityMeta, err := metadata.AnalyzeEntity(Product{})
 	if err != nil {

@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/nlstn/go-odata/internal/fastscan"
 	"github.com/nlstn/go-odata/internal/metadata"
 	"gorm.io/gorm"
 )
@@ -328,7 +329,7 @@ func fetchChildrenByParentKeys(db *gorm.DB, expandOpt ExpandOption, targetMetada
 		childDB = applyParentKeyFilter(childDB, constraints, batch)
 		childDB = ApplyExpandOption(childDB, expandOpt, targetMetadata)
 
-		if err := childDB.Find(childResults.Interface()).Error; err != nil {
+		if err := fastscan.Find(childDB, childResults.Interface()); err != nil {
 			return reflect.Value{}, err
 		}
 
