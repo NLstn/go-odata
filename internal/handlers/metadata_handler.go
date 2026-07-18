@@ -50,7 +50,7 @@ type MetadataHandler struct {
 	actions   map[string][]*actions.ActionDefinition
 	functions map[string][]*actions.FunctionDefinition
 	// Lock-free cached metadata documents by version (key: version string)
-	cachedXML            sync.Map     // map[string]string
+	cachedXML            sync.Map     // map[string][]byte
 	cachedJSON           sync.Map     // map[string][]byte
 	cacheSizeXML         atomic.Int64 // Tracks XML cache entries for eviction
 	cacheSizeJSON        atomic.Int64 // Tracks JSON cache entries for eviction

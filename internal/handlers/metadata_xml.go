@@ -20,7 +20,7 @@ func (h *MetadataHandler) handleMetadataXML(w http.ResponseWriter, r *http.Reque
 
 	// Lock-free cache lookup (fast path - common case)
 	if cached, ok := h.cachedXML.Load(versionKey); ok {
-		cachedStr, ok := cached.(string)
+		cachedBytes, ok := cached.([]byte)
 		if !ok {
 			// Cache corruption - rebuild
 			h.cachedXML.Delete(versionKey)
@@ -30,13 +30,13 @@ func (h *MetadataHandler) handleMetadataXML(w http.ResponseWriter, r *http.Reque
 			w.Header().Set("Content-Type", "application/xml")
 
 			if r.Method == http.MethodHead {
-				w.Header().Set("Content-Length", fmt.Sprintf("%d", len(cachedStr)))
+				w.Header().Set("Content-Length", fmt.Sprintf("%d", len(cachedBytes)))
 				w.WriteHeader(http.StatusOK)
 				return
 			}
 
 			w.WriteHeader(http.StatusOK)
-			if _, err := w.Write([]byte(cachedStr)); err != nil {
+			if _, err := w.Write(cachedBytes); err != nil {
 				h.logger.Error("Error writing metadata response", "error", err)
 			}
 			return
@@ -45,7 +45,7 @@ func (h *MetadataHandler) handleMetadataXML(w http.ResponseWriter, r *http.Reque
 
 	// Cache miss - build metadata (slow path)
 	model := h.newMetadataModel()
-	cached := h.buildMetadataDocument(model, ver)
+	cached := []byte(h.buildMetadataDocument(model, ver))
 
 	// Store in cache using LoadOrStore for thread safety
 	// (another goroutine might have built it while we were building)
@@ -59,7 +59,7 @@ func (h *MetadataHandler) handleMetadataXML(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Use the actual cached value (ours or the one that was stored by another goroutine)
-	cachedStr, ok := actual.(string)
+	cachedBytes, ok := actual.([]byte)
 	if !ok {
 		// Should never happen, but handle gracefully
 		h.logger.Error("Invalid cache entry type", "version", versionKey)
@@ -69,13 +69,13 @@ func (h *MetadataHandler) handleMetadataXML(w http.ResponseWriter, r *http.Reque
 	w.Header().Set("Content-Type", "application/xml")
 
 	if r.Method == http.MethodHead {
-		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(cachedStr)))
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(cachedBytes)))
 		w.WriteHeader(http.StatusOK)
 		return
 	}
 
 	w.WriteHeader(http.StatusOK)
-	if _, err := w.Write([]byte(cachedStr)); err != nil {
+	if _, err := w.Write(cachedBytes); err != nil {
 		h.logger.Error("Error writing metadata response", "error", err)
 	}
 }
