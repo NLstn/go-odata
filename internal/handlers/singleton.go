@@ -133,6 +133,10 @@ func (h *EntityHandler) handlePatchSingleton(w http.ResponseWriter, r *http.Requ
 			}
 			return
 		}
+
+		if !h.enforceIfNoneMatch(w, r, currentETag) {
+			return
+		}
 	}
 
 	// Parse the update data from request body
@@ -205,6 +209,10 @@ func (h *EntityHandler) handlePutSingleton(w http.ResponseWriter, r *http.Reques
 				ErrDetailPreconditionFailed); writeErr != nil {
 				h.logger.Error("Error writing error response", "error", writeErr)
 			}
+			return
+		}
+
+		if !h.enforceIfNoneMatch(w, r, currentETag) {
 			return
 		}
 	}
