@@ -40,7 +40,6 @@ func ApplyQueryOptionsWithFTS(db *gorm.DB, options *QueryOptions, entityMetadata
 		return db
 	}
 
-	db = setLoggerInDB(db, logger)
 	dialect := getDatabaseDialect(db)
 
 	// Try to apply search at database level using FTS if available
@@ -142,7 +141,6 @@ func ApplyFilterOnly(db *gorm.DB, filter *FilterExpression, entityMetadata *meta
 	if filter == nil {
 		return db
 	}
-	db = setLoggerInDB(db, logger)
 	return applyFilter(db, filter, entityMetadata)
 }
 
@@ -152,6 +150,5 @@ func ApplyExpandOnly(db *gorm.DB, expand []ExpandOption, entityMetadata *metadat
 	if len(expand) == 0 {
 		return db
 	}
-	db = setLoggerInDB(db, logger)
 	return applyExpand(db, expand, entityMetadata)
 }
