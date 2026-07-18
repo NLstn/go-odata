@@ -6,6 +6,7 @@ This is the performance testing server for the go-odata library. It provides ext
 
 - **Extensive Data Seeding**: Generates 10,000 products, 100 categories, and 30,000 product descriptions by default
 - **CPU Profiling**: Built-in CPU profiling support for performance analysis
+- **Memory Profiling**: Heap and cumulative allocation profiles captured on shutdown
 - **SQL Query Tracing**: Detailed SQL query tracking with optimization recommendations
 - **Database Support**: Works with both SQLite and PostgreSQL
 
@@ -55,7 +56,18 @@ This will:
 
 ### Combined Profiling
 ```bash
-go run . -cpuprofile cpu.prof -trace-sql -trace-sql-file sql-trace.txt
+go run . -cpuprofile cpu.prof -heapprofile heap.prof -allocprofile alloc.prof -trace-sql -trace-sql-file sql-trace.txt
+```
+
+### Memory Profiling
+```bash
+go run . -heapprofile heap.prof -allocprofile alloc.prof
+```
+
+Stop the server gracefully to write the profiles. Inspect retained heap and cumulative allocation pressure with:
+```bash
+go tool pprof -top -sample_index=inuse_space heap.prof
+go tool pprof -top -sample_index=alloc_space alloc.prof
 ```
 
 ## Seeding Options
@@ -131,6 +143,9 @@ Use the included load testing script to run comprehensive performance tests:
 
 # With CPU profiling
 ./run_load_tests.sh --cpu-profile
+
+# With heap and allocation profiling
+./run_load_tests.sh --memory-profile
 
 # With SQL tracing
 ./run_load_tests.sh --sql-trace
@@ -222,4 +237,3 @@ For detailed instructions on analyzing performance bottlenecks, see:
 - SQL query optimization
 - Common bottlenecks and solutions
 - Performance testing best practices
-

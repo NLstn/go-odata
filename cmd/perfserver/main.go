@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
 	"runtime/pprof"
 	"syscall"
 	"time"
@@ -27,6 +28,8 @@ func main() {
 	dbDSN := flag.String("dsn", "", "Database DSN (connection string). For postgres, use postgresql://... format. For sqlite, use file path")
 	port := flag.String("port", "9091", "Port to listen on")
 	cpuProfile := flag.String("cpuprofile", "", "Write CPU profile to file")
+	heapProfile := flag.String("heapprofile", "", "Write live heap profile on shutdown")
+	allocProfile := flag.String("allocprofile", "", "Write cumulative allocation profile on shutdown")
 	traceSQL := flag.Bool("trace-sql", false, "Enable SQL query tracing and optimization analysis")
 	traceSQLFile := flag.String("trace-sql-file", "", "Write SQL trace analysis to file (requires --trace-sql)")
 	extensive := flag.Bool("extensive", true, "Use extensive seeding with large datasets for performance testing")
@@ -74,6 +77,10 @@ func main() {
 				log.Printf("Error closing CPU profile file: %v", err)
 			}
 			fmt.Println("✅ CPU profile written to:", *cpuProfile)
+		}
+
+		if err := writeMemoryProfiles(*heapProfile, *allocProfile); err != nil {
+			log.Printf("Error writing memory profile: %v", err)
 		}
 
 		// Print SQL trace summary if enabled
@@ -254,6 +261,17 @@ func main() {
 		fmt.Println()
 	}
 
+	if *heapProfile != "" || *allocProfile != "" {
+		fmt.Println("🧠 Memory Profiling: ENABLED")
+		if *heapProfile != "" {
+			fmt.Printf("  Live heap profile: %s\n", *heapProfile)
+		}
+		if *allocProfile != "" {
+			fmt.Printf("  Cumulative allocation profile: %s\n", *allocProfile)
+		}
+		fmt.Println()
+	}
+
 	if *extensive {
 		fmt.Println("📈 Extensive seeding mode: ENABLED")
 		fmt.Println("  10,000 products, 100 categories, 30,000 descriptions")
@@ -284,4 +302,41 @@ func main() {
 			}
 		}
 	}
+}
+
+func writeMemoryProfiles(heapProfile, allocProfile string) error {
+	if heapProfile == "" && allocProfile == "" {
+		return nil
+	}
+
+	if heapProfile != "" {
+		runtime.GC()
+		if err := writeProfile(heapProfile, pprof.Lookup("heap")); err != nil {
+			return err
+		}
+		fmt.Println("✅ Heap profile written to:", heapProfile)
+	}
+
+	if allocProfile != "" {
+		if err := writeProfile(allocProfile, pprof.Lookup("allocs")); err != nil {
+			return err
+		}
+		fmt.Println("✅ Allocation profile written to:", allocProfile)
+	}
+
+	return nil
+}
+
+func writeProfile(path string, profile *pprof.Profile) error {
+	if profile == nil {
+		return fmt.Errorf("profile is unavailable")
+	}
+
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	return profile.WriteTo(f, 0)
 }

@@ -33,10 +33,10 @@ This provides:
 ### Load Test with CPU Profiling
 
 ```bash
-./run_load_tests.sh --wrk -d 30s --cpu-profile
+./run_load_tests.sh -d 30s --cpu-profile --memory-profile
 ```
 
-This generates `load-test-results/cpu.prof` showing:
+This generates `load-test-results/cpu.prof`, `heap.prof`, and `alloc.prof` showing:
 - Where CPU time is spent
 - Hot functions and call paths
 - Memory allocation patterns
@@ -61,7 +61,7 @@ This generates `load-test-results/sql-trace.txt` showing:
 ### Full Profiling (CPU + SQL)
 
 ```bash
-./run_load_tests.sh --wrk -d 30s --cpu-profile --sql-trace
+./run_load_tests.sh -d 30s --cpu-profile --memory-profile --sql-trace
 ```
 
 **Use when:** You want comprehensive performance insights.
