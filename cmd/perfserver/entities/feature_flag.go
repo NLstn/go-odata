@@ -22,9 +22,9 @@ type UncachedFeatureFlag struct {
 	ID                uint      `json:"ID" gorm:"primaryKey" odata:"key"`
 	Key               string    `json:"Key" gorm:"not null;uniqueIndex:idx_uncached_feature_flags_key" odata:"required,maxlength=200"`
 	Description       string    `json:"Description" odata:"maxlength=500"`
-	Environment       string    `json:"Environment" gorm:"not null" odata:"required,maxlength=20"`
-	Enabled           bool      `json:"Enabled" gorm:"not null"`
-	RolloutPercentage int       `json:"RolloutPercentage" gorm:"not null" odata:"required"`
+	Environment       string    `json:"Environment" gorm:"not null;index:idx_uncached_feature_flags_env_enabled_rollout,priority:1" odata:"required,maxlength=20"`
+	Enabled           bool      `json:"Enabled" gorm:"not null;index:idx_uncached_feature_flags_env_enabled_rollout,priority:2"`
+	RolloutPercentage int       `json:"RolloutPercentage" gorm:"not null;index:idx_uncached_feature_flags_env_enabled_rollout,priority:3,sort:desc" odata:"required"`
 	Owner             string    `json:"Owner" odata:"maxlength=120"`
 	UpdatedAt         time.Time `json:"UpdatedAt"`
 }
