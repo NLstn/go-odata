@@ -168,31 +168,34 @@ func writeODataCollectionWithNavigationResponse(w http.ResponseWriter, r *http.R
 	envelope.Set("value", transformedData)
 
 	if r.Method == http.MethodHead {
-		jsonBytes, err := json.Marshal(envelope)
+		buf, err := envelope.marshalToPooledBuffer()
 		envelope.Release()
 		if err != nil {
 			releaseOrderedMaps(transformedData)
 			return WriteError(w, r, http.StatusInternalServerError, "Internal Server Error", "Failed to serialize response to JSON.")
 		}
 		w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
-		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(jsonBytes)))
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", buf.Len()))
 		w.WriteHeader(http.StatusOK)
+		releasePooledBuffer(buf)
 		releaseOrderedMaps(transformedData)
 		return nil
 	}
 
-	// Marshal to bytes first so we can set Content-Length and avoid the outer appendCompact
-	// re-scan that json.Encoder.Encode performs after calling MarshalJSON.
-	responseBytes, marshalErr := envelope.MarshalJSON()
+	// Marshal into a pooled buffer and write its bytes directly, avoiding the copy-out
+	// allocation that envelope.MarshalJSON() would otherwise need to satisfy the
+	// json.Marshaler contract of returning an owned []byte.
+	buf, marshalErr := envelope.marshalToPooledBuffer()
 	envelope.Release()
 	releaseOrderedMaps(transformedData)
 	if marshalErr != nil {
 		return marshalErr
 	}
 	w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
-	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(responseBytes)))
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", buf.Len()))
 	w.WriteHeader(http.StatusOK)
-	_, err := w.Write(responseBytes)
+	_, err := w.Write(buf.Bytes())
+	releasePooledBuffer(buf)
 	return err
 }
 
