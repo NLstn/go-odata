@@ -513,14 +513,11 @@ func tryBuildRightSideFunctionComparison(dialect string, leftColumn string, oper
 // Note: IN clause size validation is enforced during AST parsing, not here.
 func buildStandardComparison(dialect string, operator FilterOperator, columnName string, value interface{}, entityMetadata *metadata.EntityMetadata) (string, []interface{}) {
 	if (dialect == "sqlserver" || dialect == "mssql") && isNonFiniteNumber(value) {
-		// SQL Server drivers reject binding NaN/Inf values as query parameters.
-		// Return deterministic non-crashing comparisons for these literals.
-		switch operator {
-		case OpNotEqual:
-			return "1 = 1", []interface{}{}
-		case OpEqual, OpGreaterThan, OpGreaterThanOrEqual, OpLessThan, OpLessThanOrEqual:
-			return "1 = 0", []interface{}{}
-		}
+		// SQL Server's float type cannot represent or bind NaN/±Infinity, and its
+		// columns therefore only ever hold finite values. Fold the comparison to
+		// its IEEE 754 truth value for a finite, non-NULL column rather than
+		// binding an unsupported parameter (which the driver rejects).
+		return foldNonFiniteComparison(operator, columnName, value)
 	}
 
 	// Check if this is a property-to-property comparison
@@ -649,6 +646,57 @@ func isNonFiniteNumber(value interface{}) bool {
 	default:
 		return false
 	}
+}
+
+func nonFiniteFloat(value interface{}) float64 {
+	switch v := value.(type) {
+	case float64:
+		return v
+	case float32:
+		return float64(v)
+	default:
+		return 0
+	}
+}
+
+// foldNonFiniteComparison returns SQL for comparing a finite, non-NULL numeric
+// column against an IEEE 754 non-finite literal (NaN, +Inf, -Inf). A column that
+// holds only finite values compares against these literals with a constant truth
+// value, so no parameter needs to be bound:
+//   - every ordered/equality comparison with NaN is false, except != which is true;
+//   - finite < +Inf, finite <= +Inf and finite != +Inf are true (>, >=, = are false);
+//   - finite > -Inf, finite >= -Inf and finite != -Inf are true (<, <=, = are false).
+//
+// The "true" branch is expressed as `column IS NOT NULL` so that NULL rows are
+// excluded, matching SQL's three-valued logic (NULL compared to anything is
+// unknown, not a match).
+func foldNonFiniteComparison(operator FilterOperator, columnName string, value interface{}) (string, []interface{}) {
+	alwaysTrue := fmt.Sprintf("%s IS NOT NULL", columnName)
+	const alwaysFalse = "1 = 0"
+
+	f := nonFiniteFloat(value)
+	switch {
+	case math.IsNaN(f):
+		if operator == OpNotEqual {
+			return alwaysTrue, []interface{}{}
+		}
+		return alwaysFalse, []interface{}{}
+	case math.IsInf(f, 1): // +Inf
+		switch operator {
+		case OpLessThan, OpLessThanOrEqual, OpNotEqual:
+			return alwaysTrue, []interface{}{}
+		default: // =, >, >=
+			return alwaysFalse, []interface{}{}
+		}
+	case math.IsInf(f, -1): // -Inf
+		switch operator {
+		case OpGreaterThan, OpGreaterThanOrEqual, OpNotEqual:
+			return alwaysTrue, []interface{}{}
+		default: // =, <, <=
+			return alwaysFalse, []interface{}{}
+		}
+	}
+	return alwaysFalse, []interface{}{}
 }
 
 // buildComparisonCondition builds a comparison condition
