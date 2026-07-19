@@ -9,6 +9,8 @@ import (
 	"time"
 
 	odata "github.com/nlstn/go-odata"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
 // TestCacheSnapshot_FallbackForUnsupportedFilter verifies that a query using a
@@ -135,6 +137,122 @@ func TestCacheSnapshot_CountFromCache(t *testing.T) {
 	}
 	if n, _ := count.(float64); n != 2 {
 		t.Fatalf("expected count 2, got %v", count)
+	}
+}
+
+// TestCacheSnapshot_AndOrFilterFromCache verifies a nested AND/OR filter is
+// evaluated correctly from the in-memory snapshot's prepared filter tree.
+func TestCacheSnapshot_AndOrFilterFromCache(t *testing.T) {
+	_, service := setupCacheTestService(t, odata.EntityCacheConfig{
+		Level: odata.CacheLevelFull,
+		TTL:   time.Minute,
+	})
+
+	// (ID eq 1 or ID eq 3) and Name ne 'Clothing' -> only Electronics (ID 1).
+	req := httptest.NewRequest(http.MethodGet, "/CachedCategories?$filter=(ID%20eq%201%20or%20ID%20eq%203)%20and%20Name%20ne%20'Clothing'", nil)
+	w := httptest.NewRecorder()
+	service.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	values := decodeValues(t, w)
+	if len(values) != 1 {
+		t.Fatalf("expected 1 entity, got %d: %v", len(values), values)
+	}
+	if name, _ := values[0].(map[string]interface{})["Name"].(string); name != "Electronics" {
+		t.Fatalf("expected Electronics, got %q", name)
+	}
+}
+
+// TestCacheSnapshot_NotFilterFromCache verifies a negated leaf comparison is
+// evaluated correctly from the in-memory snapshot's prepared filter tree.
+func TestCacheSnapshot_NotFilterFromCache(t *testing.T) {
+	_, service := setupCacheTestService(t, odata.EntityCacheConfig{
+		Level: odata.CacheLevelFull,
+		TTL:   time.Minute,
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/CachedCategories?$filter=not%20(Name%20eq%20'Books')&$orderby=Name", nil)
+	w := httptest.NewRecorder()
+	service.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	values := decodeValues(t, w)
+	if len(values) != 2 {
+		t.Fatalf("expected 2 entities, got %d: %v", len(values), values)
+	}
+	got := make([]string, len(values))
+	for i, v := range values {
+		got[i], _ = v.(map[string]interface{})["Name"].(string)
+	}
+	want := []string{"Clothing", "Electronics"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("not filter: expected %v, got %v", want, got)
+		}
+	}
+}
+
+// CachedRanking has a deliberately duplicated Group value so multi-key
+// $orderby exercises the tie-breaking second key (see sortMatches).
+type CachedRanking struct {
+	ID    uint   `json:"ID" gorm:"primaryKey" odata:"key"`
+	Group string `json:"Group"`
+	Score int    `json:"Score"`
+}
+
+// TestCacheSnapshot_MultiKeyOrderByTieBreak verifies that $orderby with more
+// than one property breaks ties using the later keys, from the in-memory
+// snapshot's precomputed, prepared orderby.
+func TestCacheSnapshot_MultiKeyOrderByTieBreak(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("failed to connect database: %v", err)
+	}
+	if err := db.AutoMigrate(&CachedRanking{}); err != nil {
+		t.Fatalf("failed to migrate database: %v", err)
+	}
+	rankings := []CachedRanking{
+		{ID: 1, Group: "A", Score: 10},
+		{ID: 2, Group: "A", Score: 30},
+		{ID: 3, Group: "B", Score: 20},
+	}
+	if err := db.Create(&rankings).Error; err != nil {
+		t.Fatalf("failed to seed data: %v", err)
+	}
+
+	service, err := odata.NewService(db)
+	if err != nil {
+		t.Fatalf("failed to create service: %v", err)
+	}
+	if err := service.RegisterEntity(&CachedRanking{}, odata.EntityCacheConfig{
+		Level: odata.CacheLevelFull,
+		TTL:   time.Minute,
+	}); err != nil {
+		t.Fatalf("failed to register entity: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/CachedRankings?$orderby=Group%20asc,Score%20desc", nil)
+	w := httptest.NewRecorder()
+	service.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	values := decodeValues(t, w)
+	if len(values) != 3 {
+		t.Fatalf("expected 3 entities, got %d: %v", len(values), values)
+	}
+	gotIDs := make([]float64, len(values))
+	for i, v := range values {
+		gotIDs[i], _ = v.(map[string]interface{})["ID"].(float64)
+	}
+	// Group A first (asc), Score 30 before 10 within group A (desc), then Group B.
+	want := []float64{2, 1, 3}
+	for i := range want {
+		if gotIDs[i] != want[i] {
+			t.Fatalf("multi-key orderby: expected IDs %v, got %v", want, gotIDs)
+		}
 	}
 }
 
