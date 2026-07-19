@@ -42,6 +42,12 @@ type entityFieldEntry struct {
 	// true only for []byte fields (Edm.Binary), which serialize as base64url.
 	isEnum   bool
 	isBinary bool
+	// quotedKey is the pre-rendered JSON object key including quotes and the colon,
+	// e.g. `"Name":`. The direct writer emits it with a single buf.Write instead of
+	// re-quoting and re-scanning the (static) key for escapes on every row. It is
+	// nil when the JSON name would need escaping, in which case the writer falls
+	// back to writeJSONKey; escaping is checked once here, at plan-build time.
+	quotedKey []byte
 }
 
 type entityPlanKey struct {
@@ -89,6 +95,12 @@ func getEntityFieldPlan(md *internalMetadata.EntityMetadata, t reflect.Type) *en
 		// EncodeEdmBinary, exactly as the OrderedMap path does.
 		if ft := t.Field(j).Type; ft.Kind() == reflect.Slice && ft.Elem().Kind() == reflect.Uint8 {
 			e.isBinary = true
+		}
+		// Pre-render the JSON key (`"name":`) once, skipping the per-row re-quote and
+		// escape scan. Left nil when the name would need escaping (rare for struct
+		// tags), so the writer falls back to writeJSONKey for exact output.
+		if !needsEscaping(info.JsonName) {
+			e.quotedKey = append(append(append(make([]byte, 0, len(info.JsonName)+3), '"'), info.JsonName...), '"', ':')
 		}
 		entries[j] = e
 	}

@@ -216,27 +216,33 @@ func writeFastEntity(buf *bytes.Buffer, entity reflect.Value, ctx *fastEntityCon
 
 	buf.WriteByte('{')
 	first := true
-	writeKey := func(key string) {
+	comma := func() {
 		if !first {
 			buf.WriteByte(',')
 		}
 		first = false
+	}
+	writeKey := func(key string) {
+		comma()
 		writeJSONKey(buf, key)
 		buf.WriteByte(':')
 	}
 
 	// @odata.etag — present when the entity has an ETag property and metadata is
 	// not "none". Under $select the ETag mirrors the map path: it is emitted only
-	// when the ETag property itself survives projection (generateFromMap returns
-	// "" when the field is absent from the projected map).
+	// when the ETag property itself survives projection (AppendJSON reports false
+	// when the field is absent from the projected map). AppendJSON writes the
+	// escaped value straight into the buffer, avoiding a per-entity string
+	// allocation and JSON-escaping pass; if there is no ETag we roll back the key.
 	if ctx.fullMetadata.ETagProperty != nil && metadataLevel != MetadataNone {
 		if !selecting || ctx.isSelected(ctx.fullMetadata.ETagProperty.FieldName, ctx.fullMetadata.ETagProperty.JsonName) {
-			entityInterface := addressableInterface(entity)
-			if etagValue := etag.Generate(entityInterface, ctx.fullMetadata); etagValue != "" {
-				writeKey("@odata.etag")
-				if err := writeJSONString(buf, etagValue, enc); err != nil {
-					return err
-				}
+			mark, wasFirst := buf.Len(), first
+			writeKey("@odata.etag")
+			if out, ok := etag.AppendJSON(buf.AvailableBuffer(), addressableInterface(entity), ctx.fullMetadata); ok {
+				buf.Write(out)
+			} else {
+				buf.Truncate(mark)
+				first = wasFirst
 			}
 		}
 	}
@@ -341,7 +347,14 @@ func writeFastEntity(buf *bytes.Buffer, entity reflect.Value, ctx *fastEntityCon
 			}
 		}
 
-		writeKey(info.JsonName)
+		// Emit the pre-rendered key when available (the common case), else fall back
+		// to the escaping-aware writer for names that need escaping.
+		if e.quotedKey != nil {
+			comma()
+			buf.Write(e.quotedKey)
+		} else {
+			writeKey(info.JsonName)
+		}
 		if err := writeFastFieldValue(buf, entity.Field(j), e, enc); err != nil {
 			return err
 		}
