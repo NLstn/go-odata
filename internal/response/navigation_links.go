@@ -234,15 +234,27 @@ func processStructEntityOrderedInto(entityMap *OrderedMap, entity reflect.Value,
 		}
 	}
 
-	// Process entity fields - optimized to reduce reflection calls
-	// Cache property metadata lookups per entity type
-	propMetaMap := getCachedPropertyMetadataMap(metadata)
-
-	// Get the dual-keyed (Name + JsonName) property metadata map for annotation/enum lookups.
-	// Cached per *EntityMetadata pointer — never rebuilt per entity.
-	var fullPropMetaByName map[string]*internalMetadata.PropertyMetadata
+	// Process entity fields. When full metadata is available, a cached
+	// per-(type, *EntityMetadata) plan pre-resolves the navigation and full
+	// property metadata for every field, replacing two per-field hash lookups
+	// (propMetaMap[name], fullPropMetaByName[name]) with a slice index. The plan
+	// carries identical values to those lookups. Without full metadata we fall
+	// back to the map-lookup path.
+	var plan *entityFieldPlan
 	if fullMetadata != nil {
-		fullPropMetaByName = getFullPropMetaByName(fullMetadata)
+		plan = getEntityFieldPlan(fullMetadata, entity.Type())
+		if len(plan.entries) != len(fieldInfos) {
+			plan = nil // defensive: never happens (same type), but never index out of range
+		}
+	}
+
+	var propMetaMap map[string]*PropertyMetadata
+	var fullPropMetaByName map[string]*internalMetadata.PropertyMetadata
+	if plan == nil {
+		propMetaMap = getCachedPropertyMetadataMap(metadata)
+		if fullMetadata != nil {
+			fullPropMetaByName = getFullPropMetaByName(fullMetadata)
+		}
 	}
 
 	for j := 0; j < entity.NumField(); j++ {
@@ -254,7 +266,18 @@ func processStructEntityOrderedInto(entityMap *OrderedMap, entity reflect.Value,
 			continue
 		}
 
-		propMeta := propMetaMap[info.Name]
+		var propMeta *PropertyMetadata
+		var fullProp *internalMetadata.PropertyMetadata
+		if plan != nil {
+			e := &plan.entries[j]
+			propMeta = e.navProp // nil for non-navigation fields
+			fullProp = e.fullProp
+		} else {
+			propMeta = propMetaMap[info.Name]
+			if fullPropMetaByName != nil {
+				fullProp = fullPropMetaByName[info.Name]
+			}
+		}
 
 		if propMeta != nil && propMeta.IsNavigationProp {
 			// For minimal metadata, skip navigation properties unless they're expanded
@@ -267,14 +290,7 @@ func processStructEntityOrderedInto(entityMap *OrderedMap, entity reflect.Value,
 			expandOpt := query.FindExpandOption(expandOptions, propMeta.Name, propMeta.JsonName)
 			processNavigationPropertyOrderedWithMetadata(entityMap, entity, propMeta, fieldValue, info.JsonName, expandOpt, selectedNavProps, baseURL, entitySetName, metadata, metadataLevel, keySegment, fullMetadata)
 		} else {
-			// Resolve the full property metadata once per field and reuse it below,
-			// instead of re-hashing fullPropMetaByName for the stream check, the
-			// annotations lookup, and enum formatting separately.
-			var fullProp *internalMetadata.PropertyMetadata
-			if fullPropMetaByName != nil {
-				fullProp = fullPropMetaByName[info.Name]
-			}
-
+			// fullProp was resolved above (from the plan or the fallback map).
 			// Skip stream properties — they are emitted as annotations below, not as inline values
 			if fullProp != nil && fullProp.IsStream {
 				continue
