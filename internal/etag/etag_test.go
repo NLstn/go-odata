@@ -1,6 +1,7 @@
 package etag
 
 import (
+	"encoding/json"
 	"reflect"
 	"testing"
 	"time"
@@ -543,6 +544,83 @@ func TestNoneMatch_List(t *testing.T) {
 			if got != tt.want {
 				t.Errorf("NoneMatch(%q, %q) = %v, want %v\nDescription: %s",
 					tt.ifNoneMatch, tt.currentETag, got, tt.want, tt.description)
+			}
+		})
+	}
+}
+
+// TestAppendJSONMatchesGenerate locks AppendJSON to the JSON string encoding of
+// Generate: for any entity with an ETag, AppendJSON must emit exactly what
+// encoding/json would produce for Generate's string, and it must report false
+// (writing nothing) exactly when Generate returns "".
+func TestAppendJSONMatchesGenerate(t *testing.T) {
+	cases := []struct {
+		name   string
+		entity interface{}
+		meta   *metadata.EntityMetadata
+	}{
+		{
+			name:   "int etag",
+			entity: TestEntity{ID: 1, Version: 5},
+			meta:   &metadata.EntityMetadata{ETagProperty: &metadata.PropertyMetadata{FieldName: "Version", IsETag: true}},
+		},
+		{
+			name:   "string etag",
+			entity: TestEntity{Name: "Test"},
+			meta:   &metadata.EntityMetadata{ETagProperty: &metadata.PropertyMetadata{FieldName: "Name", IsETag: true}},
+		},
+		{
+			name:   "time etag",
+			entity: TestEntity{LastModified: time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC)},
+			meta:   &metadata.EntityMetadata{ETagProperty: &metadata.PropertyMetadata{FieldName: "LastModified", IsETag: true}},
+		},
+		{
+			name:   "no etag property",
+			entity: TestEntity{ID: 1},
+			meta:   &metadata.EntityMetadata{},
+		},
+		{
+			name:   "etag field missing",
+			entity: TestEntity{ID: 1},
+			meta:   &metadata.EntityMetadata{ETagProperty: &metadata.PropertyMetadata{FieldName: "Nonexistent", IsETag: true}},
+		},
+		{
+			name:   "map etag present",
+			entity: map[string]interface{}{"Version": 5},
+			meta:   &metadata.EntityMetadata{ETagProperty: &metadata.PropertyMetadata{FieldName: "Version", JsonName: "Version", IsETag: true}},
+		},
+		{
+			name:   "map etag absent",
+			entity: map[string]interface{}{"ID": 1},
+			meta:   &metadata.EntityMetadata{ETagProperty: &metadata.PropertyMetadata{FieldName: "Version", JsonName: "Version", IsETag: true}},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			want := Generate(tc.entity, tc.meta)
+			got, ok := AppendJSON(nil, tc.entity, tc.meta)
+
+			if want == "" {
+				if ok {
+					t.Fatalf("AppendJSON reported ok=true but Generate returned empty; got %q", got)
+				}
+				if len(got) != 0 {
+					t.Fatalf("AppendJSON wrote %q when Generate returned empty", got)
+				}
+				return
+			}
+
+			if !ok {
+				t.Fatalf("AppendJSON reported ok=false but Generate returned %q", want)
+			}
+			// AppendJSON must equal the JSON string encoding of the Generate value.
+			wantJSON, err := json.Marshal(want)
+			if err != nil {
+				t.Fatalf("marshal want: %v", err)
+			}
+			if string(got) != string(wantJSON) {
+				t.Errorf("AppendJSON = %s, want %s", got, wantJSON)
 			}
 		})
 	}

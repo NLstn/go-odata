@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"sync"
 	"time"
-	"unicode/utf8"
 )
 
 // bufferPool is a sync.Pool for reusing bytes.Buffer instances
@@ -459,10 +458,12 @@ func writeUint(buf *bytes.Buffer, v uint64) {
 	buf.Write(b[i:])
 }
 
-// writeFloat writes a float64 to the buffer
+// writeFloat writes a float64 to the buffer using the same formatting as
+// strconv.FormatFloat(v, 'f', -1, 64), but appends into a stack buffer instead of
+// allocating an intermediate string per call.
 func writeFloat(buf *bytes.Buffer, v float64) {
-	// Use strconv for proper float formatting
-	buf.WriteString(strconv.FormatFloat(v, 'f', -1, 64))
+	var tmp [32]byte
+	buf.Write(strconv.AppendFloat(tmp[:0], v, 'f', -1, 64))
 }
 
 // writeJSONKey writes a JSON object key (quoted string) to buf, escaping only
@@ -493,21 +494,16 @@ func writeJSONString(buf *bytes.Buffer, s string, enc **json.Encoder) error {
 	return nil
 }
 
-// needsEscaping checks if a string needs JSON escaping
-// Returns true if the string contains characters that need escaping
+// needsEscaping reports whether a string needs JSON escaping — i.e. contains a
+// control character (< 0x20), a double quote, or a backslash. A plain byte scan
+// suffices: every byte of a multi-byte UTF-8 sequence is >= 0x80, so none can
+// equal a character that requires escaping, and such bytes are valid as-is inside
+// a JSON string. This avoids decoding runes just to skip them.
 func needsEscaping(s string) bool {
-	for i := 0; i < len(s); {
-		c := s[i]
-		if c < 0x20 || c == '"' || c == '\\' {
+	for i := 0; i < len(s); i++ {
+		if c := s[i]; c < 0x20 || c == '"' || c == '\\' {
 			return true
 		}
-		if c < utf8.RuneSelf {
-			i++
-			continue
-		}
-		// Multi-byte UTF-8 characters are safe
-		_, size := utf8.DecodeRuneInString(s[i:])
-		i += size
 	}
 	return false
 }

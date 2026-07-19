@@ -81,12 +81,68 @@ func encodeHex16(dst []byte, v uint64) {
 	dst[18] = hexTable[v&0xf]
 }
 
+// appendHex16 appends v as 16 lowercase hex characters to dst.
+func appendHex16(dst []byte, v uint64) []byte {
+	return append(dst,
+		hexTable[(v>>60)&0xf], hexTable[(v>>56)&0xf], hexTable[(v>>52)&0xf], hexTable[(v>>48)&0xf],
+		hexTable[(v>>44)&0xf], hexTable[(v>>40)&0xf], hexTable[(v>>36)&0xf], hexTable[(v>>32)&0xf],
+		hexTable[(v>>28)&0xf], hexTable[(v>>24)&0xf], hexTable[(v>>20)&0xf], hexTable[(v>>16)&0xf],
+		hexTable[(v>>12)&0xf], hexTable[(v>>8)&0xf], hexTable[(v>>4)&0xf], hexTable[v&0xf],
+	)
+}
+
 // Generate creates an ETag value for an entity based on its ETag property
 // Returns an empty string if no ETag property is defined
 // Uses xxhash64 for fast non-cryptographic hashing (ETag doesn't need cryptographic strength)
 func Generate(entity interface{}, meta *metadata.EntityMetadata) string {
-	if meta.ETagProperty == nil {
+	hash, ok := etagHash(entity, meta)
+	if !ok {
 		return ""
+	}
+
+	// Get pre-allocated buffer from pool (pre-filled with W/"..." framing)
+	bufPtr := etagBufferPool.Get().(*[]byte) //nolint:errcheck // sync.Pool.Get() doesn't return error
+	buf := *bufPtr
+
+	// Encode hash directly into buffer (zero allocation hex encoding)
+	encodeHex16(buf, hash)
+
+	// Create result string (single allocation)
+	result := string(buf)
+
+	// Return buffer to pool
+	etagBufferPool.Put(bufPtr)
+
+	return result
+}
+
+// AppendJSON appends the JSON-encoded ETag string (e.g. `"W/\"0123456789abcdef\""`)
+// to dst and returns the extended slice with true. It returns (dst, false),
+// writing nothing, when the entity has no resolvable ETag — matching Generate
+// returning "". Emitting the pre-escaped JSON form directly lets response
+// serializers write the ETag straight into their output buffer, avoiding both
+// Generate's per-entity result string allocation and a second JSON-escaping pass
+// (the ETag value always contains quotes, so it would otherwise route through the
+// reflection encoder).
+func AppendJSON(dst []byte, entity interface{}, meta *metadata.EntityMetadata) ([]byte, bool) {
+	hash, ok := etagHash(entity, meta)
+	if !ok {
+		return dst, false
+	}
+	// JSON encoding of the ETag value W/"<hex>": the inner double quotes are
+	// backslash-escaped, matching encoding/json's output for that string.
+	dst = append(dst, '"', 'W', '/', '\\', '"')
+	dst = appendHex16(dst, hash)
+	dst = append(dst, '\\', '"', '"')
+	return dst, true
+}
+
+// etagHash resolves the entity's ETag property value and returns its xxhash64,
+// or (0, false) when no ETag property is defined or the field cannot be resolved.
+// It is the shared core of Generate and AppendJSON.
+func etagHash(entity interface{}, meta *metadata.EntityMetadata) (uint64, bool) {
+	if meta.ETagProperty == nil {
+		return 0, false
 	}
 
 	// Get the entity value
@@ -97,18 +153,18 @@ func Generate(entity interface{}, meta *metadata.EntityMetadata) string {
 
 	// Handle map entities (from $select operations)
 	if entityValue.Kind() == reflect.Map {
-		return generateFromMap(entity, meta)
+		return etagHashFromMap(entity, meta)
 	}
 
 	// Use cached field index instead of FieldByName
 	idx, found := getFieldIndex(entityValue.Type(), meta.ETagProperty.FieldName)
 	if !found {
-		return ""
+		return 0, false
 	}
 
 	fieldValue := entityValue.Field(idx)
 	if !fieldValue.IsValid() {
-		return ""
+		return 0, false
 	}
 
 	// Convert the field value to a string for hashing
@@ -141,31 +197,15 @@ func Generate(entity interface{}, meta *metadata.EntityMetadata) string {
 		etagSource = fmt.Sprintf("%v", fieldValue.Interface())
 	}
 
-	// Generate xxhash64 of the ETag source (much faster than SHA256)
-	hash := xxhash.Sum64String(etagSource)
-
-	// Get pre-allocated buffer from pool
-	bufPtr := etagBufferPool.Get().(*[]byte) //nolint:errcheck // sync.Pool.Get() doesn't return error
-	buf := *bufPtr
-
-	// Encode hash directly into buffer (zero allocation hex encoding)
-	encodeHex16(buf, hash)
-
-	// Create result string (single allocation)
-	result := string(buf)
-
-	// Return buffer to pool
-	etagBufferPool.Put(bufPtr)
-
-	return result
+	return xxhash.Sum64String(etagSource), true
 }
 
-// generateFromMap generates an ETag from a map entity (from $select operations)
-// Uses xxhash64 for fast hashing with zero-allocation hex encoding
-func generateFromMap(entity interface{}, meta *metadata.EntityMetadata) string {
+// etagHashFromMap resolves the ETag property from a map entity (from $select
+// operations) and returns its xxhash64, or (0, false) when it cannot be resolved.
+func etagHashFromMap(entity interface{}, meta *metadata.EntityMetadata) (uint64, bool) {
 	entityMap, ok := entity.(map[string]interface{})
 	if !ok {
-		return ""
+		return 0, false
 	}
 
 	// Try to get the ETag field value using JsonName first, then FieldName
@@ -183,7 +223,7 @@ func generateFromMap(entity interface{}, meta *metadata.EntityMetadata) string {
 	}
 
 	if !found || fieldValue == nil {
-		return ""
+		return 0, false
 	}
 
 	// Convert the field value to a string for hashing
@@ -221,23 +261,7 @@ func generateFromMap(entity interface{}, meta *metadata.EntityMetadata) string {
 		etagSource = fmt.Sprintf("%v", v)
 	}
 
-	// Generate xxhash64 of the ETag source (much faster than SHA256)
-	hash := xxhash.Sum64String(etagSource)
-
-	// Get pre-allocated buffer from pool
-	bufPtr := etagBufferPool.Get().(*[]byte) //nolint:errcheck // sync.Pool.Get() doesn't return error
-	buf := *bufPtr
-
-	// Encode hash directly into buffer (zero allocation hex encoding)
-	encodeHex16(buf, hash)
-
-	// Create result string (single allocation)
-	result := string(buf)
-
-	// Return buffer to pool
-	etagBufferPool.Put(bufPtr)
-
-	return result
+	return xxhash.Sum64String(etagSource), true
 }
 
 // Parse extracts the ETag value from a quoted ETag string
