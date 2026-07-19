@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -12,10 +13,22 @@ import (
 	"gorm.io/gorm"
 )
 
+// seedMu serializes seedDatabase so its destructive drop/migrate/seed sequence
+// can never run concurrently with itself. The compliance suite runs suites in
+// parallel and each triggers a Reseed at setup; two overlapping reseeds
+// otherwise deadlock on PostgreSQL (one dropping "Products" while the other
+// inserts/re-adds its foreign key) and produce FK/duplicate-key errors. The
+// HTTP reseedGate also guards this at the request layer, but this mutex makes
+// the invariant hold regardless of how the reseed is invoked.
+var seedMu sync.Mutex
+
 // seedDatabase initializes the database with sample data
 // This function drops and recreates all tables to ensure a clean state
 // It handles both initial setup and reseeding operations
 func seedDatabase(db *gorm.DB) error {
+	seedMu.Lock()
+	defer seedMu.Unlock()
+
 	// Get the database dialect name to determine the database type
 	dialectName := db.Name()
 
