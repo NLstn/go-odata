@@ -142,7 +142,10 @@ func (h *EntityHandler) fetchEntityByKey(ctx context.Context, entityKey string, 
 	if len(scopes) > 0 {
 		db = db.Scopes(scopes...)
 	}
-	baseDB := db
+	// Keep a pristine session for the post-read expand queries. GORM mutates the
+	// statement used by First (including its key predicate), so sharing it would
+	// incorrectly apply the parent key filter to child lookups.
+	baseDB := db.Session(&gorm.Session{NewDB: true})
 	if usingCache {
 		// Expand queries may require related tables that are not present in the cache DB.
 		// Run per-parent expand lookups against the primary database.
