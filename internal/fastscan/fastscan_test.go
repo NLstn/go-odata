@@ -527,21 +527,38 @@ func TestFirstNonStructDestFallsBack(t *testing.T) {
 	}
 }
 
-func TestScanErrorPoisonsPlanAndFallsBack(t *testing.T) {
+// gadgetPlan runs a fresh Find against the gadgets table (created by the
+// caller) so the schema gets parsed and its plan built, then returns the plan.
+func gadgetPlan(t *testing.T, db *gorm.DB) *plan {
+	t.Helper()
+	stmt := db.Session(&gorm.Session{}).Model(&Gadget{}).Statement
+	if parseErr := stmt.Parse(&Gadget{}); parseErr != nil {
+		t.Fatalf("parse: %v", parseErr)
+	}
+	p := planFor(stmt.Schema)
+	if p == nil {
+		t.Fatal("expected an eligible plan for Gadget")
+	}
+	return p
+}
+
+type Gadget struct {
+	ID     uint `gorm:"primaryKey"`
+	Amount int
+	Name   string
+}
+
+func TestScanErrorPoisonsColumnAndFallsBack(t *testing.T) {
 	db := openDB(t)
-	if err := db.Exec("CREATE TABLE gadgets (id integer primary key, amount integer)").Error; err != nil {
+	if err := db.Exec("CREATE TABLE gadgets (id integer primary key, amount integer, name text)").Error; err != nil {
 		t.Fatalf("create table: %v", err)
 	}
 	// SQLite's flexible typing lets TEXT live in an INTEGER column. The fast
 	// path's sql.NullInt64 rejects it; GORM Find reports its own conversion
-	// error. Either way the caller sees an error, and the plan is disabled.
-	if err := db.Exec("INSERT INTO gadgets (id, amount) VALUES (1, 'not-a-number')").Error; err != nil {
+	// error. Either way the caller sees an error, and only the offending
+	// column ("amount") is poisoned.
+	if err := db.Exec("INSERT INTO gadgets (id, amount, name) VALUES (1, 'not-a-number', 'widget')").Error; err != nil {
 		t.Fatalf("insert: %v", err)
-	}
-
-	type Gadget struct {
-		ID     uint `gorm:"primaryKey"`
-		Amount int
 	}
 
 	var results []Gadget
@@ -553,16 +570,102 @@ func TestScanErrorPoisonsPlanAndFallsBack(t *testing.T) {
 		t.Logf("conversion error: %v", err)
 	}
 
+	p := gadgetPlan(t, db)
+	if !p.isPoisoned("amount") {
+		t.Error("amount column was not poisoned after a scan error")
+	}
+	if p.isPoisoned("id") || p.isPoisoned("name") {
+		t.Error("poisoning a scan error should not affect unrelated columns")
+	}
+
+	// A query that doesn't touch the poisoned column should still take the
+	// fast path and succeed.
+	var partial []Gadget
+	if err := Find(db.Table("gadgets").Model(&Gadget{}).Select("id", "name"), &partial); err != nil {
+		t.Fatalf("Find selecting only healthy columns: %v", err)
+	}
+	if len(partial) != 1 || partial[0].Name != "widget" {
+		t.Fatalf("unexpected result for healthy-column select: %+v", partial)
+	}
+
+	// A query that doesn't restrict columns still includes the poisoned one.
+	// It should skip straight to the GORM fallback (not attempt — and fail —
+	// the fast scan again) and surface GORM's own equivalent conversion error.
+	var full []Gadget
+	if err := Find(db.Table("gadgets").Model(&Gadget{}), &full); err == nil {
+		t.Fatal("expected the fallback to surface GORM's own conversion error for the still-poisoned column")
+	}
+}
+
+func TestPoisonExpiresAfterRetryWindow(t *testing.T) {
+	original := poisonRetryWindow
+	poisonRetryWindow = 10 * time.Millisecond
+	defer func() { poisonRetryWindow = original }()
+
+	db := openDB(t)
+	if err := db.Exec("CREATE TABLE gadgets (id integer primary key, amount integer, name text)").Error; err != nil {
+		t.Fatalf("create table: %v", err)
+	}
+
+	p := gadgetPlan(t, db)
+	p.poisonColumn("amount")
+	if !p.isPoisoned("amount") {
+		t.Fatal("expected amount to be poisoned immediately after poisoning")
+	}
+	if p.poisonCount.Load() != 1 {
+		t.Fatalf("poisonCount = %d, want 1", p.poisonCount.Load())
+	}
+
+	time.Sleep(2 * poisonRetryWindow)
+	if p.isPoisoned("amount") {
+		t.Error("expected amount to no longer be poisoned after the retry window elapsed")
+	}
+	if p.poisonCount.Load() != 0 {
+		t.Errorf("poisonCount = %d, want 0 after expiry", p.poisonCount.Load())
+	}
+}
+
+func TestRecordScanFailureFallsBackToPoisonAllForUnrecognizedError(t *testing.T) {
+	db := openDB(t)
+	if err := db.Exec("CREATE TABLE gadgets (id integer primary key, amount integer, name text)").Error; err != nil {
+		t.Fatalf("create table: %v", err)
+	}
+	p := gadgetPlan(t, db)
+
+	p.recordScanFailure(errors.New("some unrelated driver failure"), []string{"id", "amount", "name"})
+
+	for _, col := range []string{"id", "amount", "name"} {
+		if !p.isPoisoned(col) {
+			t.Errorf("expected column %q to be poisoned when the error can't be attributed to one column", col)
+		}
+	}
+}
+
+func TestLikelyTouchesPoisoned(t *testing.T) {
+	db := openDB(t)
+	if err := db.Exec("CREATE TABLE gadgets (id integer primary key, amount integer, name text)").Error; err != nil {
+		t.Fatalf("create table: %v", err)
+	}
+	p := gadgetPlan(t, db)
+	p.poisonColumn("amount")
+
 	stmt := db.Session(&gorm.Session{}).Model(&Gadget{}).Statement
 	if parseErr := stmt.Parse(&Gadget{}); parseErr != nil {
 		t.Fatalf("parse: %v", parseErr)
 	}
-	p := planFor(stmt.Schema)
-	if p == nil {
-		t.Fatal("expected an eligible plan for Gadget")
+
+	if !p.likelyTouchesPoisoned(stmt, stmt.Schema) {
+		t.Error("a query with no explicit Select should be treated as touching the poisoned column")
 	}
-	if !p.disabled.Load() {
-		t.Error("plan was not disabled after a scan error")
+
+	stmt.Selects = []string{"ID", "Name"}
+	if p.likelyTouchesPoisoned(stmt, stmt.Schema) {
+		t.Error("an explicit select excluding the poisoned column should not be flagged")
+	}
+
+	stmt.Selects = []string{"ID", "Amount"}
+	if !p.likelyTouchesPoisoned(stmt, stmt.Schema) {
+		t.Error("an explicit select including the poisoned column should be flagged")
 	}
 }
 
