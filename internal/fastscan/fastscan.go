@@ -51,6 +51,10 @@ type fieldPlan struct {
 // the schema is ineligible and callers must use the GORM fallback.
 type plan struct {
 	fields map[string]fieldPlan // keyed by DB column name
+	// bindings owns complete per-query scan binding sets. A set contains the
+	// destinations slice and every sql.Null* buffer, so concurrent queries
+	// never share mutable scan state.
+	bindings sync.Pool
 	// disabled is set when a scan produced an error that GORM's richer value
 	// conversion might have handled; every later query for this schema then
 	// uses the fallback instead of failing the same way again.
@@ -171,7 +175,9 @@ func buildPlan(sch *schema.Schema) *plan {
 		}
 		fields[name] = fieldPlan{field: field, mode: mode}
 	}
-	return &plan{fields: fields}
+	p := &plan{fields: fields}
+	p.bindings.New = func() interface{} { return &bindingSet{} }
+	return p
 }
 
 // fieldScanMode decides how a field of the given type is scanned, or reports
@@ -273,6 +279,112 @@ type bufferedBinding struct {
 	timeBuf   *sql.NullTime
 }
 
+// bindingSet is all mutable state needed to scan one query result. It is
+// acquired from a plan-local pool and returned only after rows are fully
+// consumed, which makes the plan safe for concurrent readers.
+type bindingSet struct {
+	dests    []interface{}
+	direct   []directBinding
+	buffered []bufferedBinding
+	discard  interface{}
+}
+
+func (p *plan) acquireBindingSet(columns []string) *bindingSet {
+	b, ok := p.bindings.Get().(*bindingSet)
+	if !ok || b == nil {
+		b = &bindingSet{}
+	}
+	if cap(b.dests) < len(columns) {
+		b.dests = make([]interface{}, len(columns))
+	} else {
+		b.dests = b.dests[:len(columns)]
+		clear(b.dests)
+	}
+	b.direct = b.direct[:0]
+	b.buffered = b.buffered[:0]
+
+	for i, column := range columns {
+		fp, ok := p.fields[column]
+		if !ok {
+			b.dests[i] = &b.discard
+			continue
+		}
+		switch fp.mode {
+		case scanDirect:
+			b.direct = append(b.direct, directBinding{colIdx: i, field: fp.field})
+		case scanInt, scanUint, scanFloat, scanBool, scanString, scanTime:
+			index := len(b.buffered)
+			if index == cap(b.buffered) {
+				b.buffered = append(b.buffered, bufferedBinding{})
+			} else {
+				b.buffered = b.buffered[:index+1]
+			}
+			binding := &b.buffered[index]
+			binding.field = fp.field
+			binding.mode = fp.mode
+			// Restoring the slice length above preserves every buffer allocation
+			// associated with this binding slot across equivalent queries.
+			switch fp.mode {
+			case scanInt, scanUint:
+				if binding.intBuf == nil {
+					binding.intBuf = new(sql.NullInt64)
+				}
+				b.dests[i] = binding.intBuf
+			case scanFloat:
+				if binding.floatBuf == nil {
+					binding.floatBuf = new(sql.NullFloat64)
+				}
+				b.dests[i] = binding.floatBuf
+			case scanBool:
+				if binding.boolBuf == nil {
+					binding.boolBuf = new(sql.NullBool)
+				}
+				b.dests[i] = binding.boolBuf
+			case scanString:
+				if binding.stringBuf == nil {
+					binding.stringBuf = new(sql.NullString)
+				}
+				b.dests[i] = binding.stringBuf
+			case scanTime:
+				if binding.timeBuf == nil {
+					binding.timeBuf = new(sql.NullTime)
+				}
+				b.dests[i] = binding.timeBuf
+			}
+		}
+	}
+	return b
+}
+
+func (p *plan) releaseBindingSet(b *bindingSet) {
+	// Do not retain pointers to the result slice's fields or discarded driver
+	// values after a request has completed. Keep only the reusable buffers.
+	clear(b.dests)
+	b.discard = nil
+	for i := range b.buffered {
+		binding := &b.buffered[i]
+		binding.field = nil
+		if binding.intBuf != nil {
+			*binding.intBuf = sql.NullInt64{}
+		}
+		if binding.floatBuf != nil {
+			*binding.floatBuf = sql.NullFloat64{}
+		}
+		if binding.boolBuf != nil {
+			*binding.boolBuf = sql.NullBool{}
+		}
+		if binding.stringBuf != nil {
+			*binding.stringBuf = sql.NullString{}
+		}
+		if binding.timeBuf != nil {
+			*binding.timeBuf = sql.NullTime{}
+		}
+	}
+	b.direct = b.direct[:0]
+	b.buffered = b.buffered[:0]
+	p.bindings.Put(b)
+}
+
 func scanRows(ctx context.Context, rows *sql.Rows, p *plan, slice reflect.Value, elemType reflect.Type) (reflect.Value, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -282,45 +394,8 @@ func scanRows(ctx context.Context, rows *sql.Rows, p *plan, slice reflect.Value,
 		return reflect.Value{}, err
 	}
 
-	// Bind each result column once per query. Buffered columns get a stable
-	// sql.Null* destination reused across rows; direct columns are re-pointed
-	// at the current element's fields each row; unknown columns (which GORM
-	// would also discard for struct destinations) are scanned into a sink.
-	dests := make([]interface{}, len(columns))
-	var direct []directBinding
-	var buffered []bufferedBinding
-	var discard interface{}
-	for i, column := range columns {
-		fp, ok := p.fields[column]
-		if !ok {
-			dests[i] = &discard
-			continue
-		}
-		switch fp.mode {
-		case scanDirect:
-			direct = append(direct, directBinding{colIdx: i, field: fp.field})
-		case scanInt, scanUint:
-			buf := new(sql.NullInt64)
-			dests[i] = buf
-			buffered = append(buffered, bufferedBinding{field: fp.field, mode: fp.mode, intBuf: buf})
-		case scanFloat:
-			buf := new(sql.NullFloat64)
-			dests[i] = buf
-			buffered = append(buffered, bufferedBinding{field: fp.field, mode: fp.mode, floatBuf: buf})
-		case scanBool:
-			buf := new(sql.NullBool)
-			dests[i] = buf
-			buffered = append(buffered, bufferedBinding{field: fp.field, mode: fp.mode, boolBuf: buf})
-		case scanString:
-			buf := new(sql.NullString)
-			dests[i] = buf
-			buffered = append(buffered, bufferedBinding{field: fp.field, mode: fp.mode, stringBuf: buf})
-		case scanTime:
-			buf := new(sql.NullTime)
-			dests[i] = buf
-			buffered = append(buffered, bufferedBinding{field: fp.field, mode: fp.mode, timeBuf: buf})
-		}
-	}
+	bindings := p.acquireBindingSet(columns)
+	defer p.releaseBindingSet(bindings)
 
 	// Reuse the caller's backing array when it has capacity (GORM does the
 	// same), and hand back a non-nil slice even for an empty result so it
@@ -336,13 +411,13 @@ func scanRows(ctx context.Context, rows *sql.Rows, p *plan, slice reflect.Value,
 	for rows.Next() {
 		result = reflect.Append(result, zero)
 		elem := result.Index(result.Len() - 1)
-		for _, d := range direct {
-			dests[d.colIdx] = d.field.ReflectValueOf(ctx, elem).Addr().Interface()
+		for _, d := range bindings.direct {
+			bindings.dests[d.colIdx] = d.field.ReflectValueOf(ctx, elem).Addr().Interface()
 		}
-		if err := rows.Scan(dests...); err != nil {
+		if err := rows.Scan(bindings.dests...); err != nil {
 			return reflect.Value{}, &rowScanError{err: err}
 		}
-		for _, b := range buffered {
+		for _, b := range bindings.buffered {
 			// A NULL column leaves the field at its zero value, like GORM.
 			switch b.mode {
 			case scanInt:

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -245,6 +246,51 @@ func TestFindReusesPresizedSlice(t *testing.T) {
 	}
 	if cap(results) != 16 {
 		t.Errorf("pre-sized backing array not reused: cap = %d", cap(results))
+	}
+}
+
+func TestFindConcurrentUsesIndependentBindingSets(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:fastscan_concurrent?mode=memory&cache=shared"), &gorm.Config{Logger: logger.Discard})
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("database handle: %v", err)
+	}
+	sqlDB.SetMaxOpenConns(16)
+	seedWidgets(t, db)
+
+	const (
+		goroutines = 16
+		queries    = 25
+	)
+	start := make(chan struct{})
+	errs := make(chan error, goroutines)
+	var wg sync.WaitGroup
+	for range goroutines {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			for range queries {
+				var results []Widget
+				if err := Find(db.Order("id"), &results); err != nil {
+					errs <- err
+					return
+				}
+				if len(results) != 2 || results[0].Name != "full" || results[1].Name != "nulls" {
+					errs <- fmt.Errorf("unexpected concurrent result: %+v", results)
+					return
+				}
+			}
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Error(err)
 	}
 }
 
