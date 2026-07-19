@@ -114,7 +114,7 @@ func (h *EntityHandler) handleDeleteEntity(w http.ResponseWriter, r *http.Reques
 		}
 
 		if err := tx.Delete(entity).Error; err != nil {
-			h.writeDatabaseError(w, r, err)
+			h.writeDeleteDatabaseError(w, r, err)
 			return newTransactionHandledError(err)
 		}
 

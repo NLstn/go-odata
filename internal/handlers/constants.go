@@ -35,6 +35,7 @@ const (
 	ErrMsgNotImplemented         = "Not implemented"
 	ErrMsgConflict               = "Conflict"
 	ErrDetailDuplicateKey        = "An entity with the same key already exists."
+	ErrDetailForeignKeyViolation = "The entity cannot be deleted because it is still referenced by related entities."
 )
 
 // Error detail format constants
