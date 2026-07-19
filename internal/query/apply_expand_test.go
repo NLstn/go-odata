@@ -48,60 +48,52 @@ func TestNeedsPerParentExpand(t *testing.T) {
 	meta := getExpandTestMetadata(t)
 
 	t.Run("nil nav prop returns false", func(t *testing.T) {
-		expandOpt := ExpandOption{}
-		result := needsPerParentExpand(expandOpt, nil)
+		result := needsPerParentExpand(nil)
 		if result {
 			t.Error("expected false for nil nav prop")
 		}
 	})
 
 	t.Run("non-navigation prop returns false", func(t *testing.T) {
-		expandOpt := ExpandOption{}
 		navProp := &metadata.PropertyMetadata{
 			Name:             "Name",
 			IsNavigationProp: false,
 		}
-		result := needsPerParentExpand(expandOpt, navProp)
+		result := needsPerParentExpand(navProp)
 		if result {
 			t.Error("expected false for non-navigation prop")
 		}
 	})
 
-	t.Run("single entity navigation returns false", func(t *testing.T) {
-		expandOpt := ExpandOption{}
+	t.Run("single entity navigation returns true", func(t *testing.T) {
 		navProp := meta.FindNavigationProperty("category")
-		result := needsPerParentExpand(expandOpt, navProp)
-		if result {
-			t.Error("expected false for single entity navigation")
+		result := needsPerParentExpand(navProp)
+		if !result {
+			t.Error("expected true for single entity navigation")
 		}
 	})
 
 	t.Run("array navigation with top returns true", func(t *testing.T) {
-		top := 5
-		expandOpt := ExpandOption{Top: &top}
 		navProp := meta.FindNavigationProperty("tags")
-		result := needsPerParentExpand(expandOpt, navProp)
+		result := needsPerParentExpand(navProp)
 		if !result {
 			t.Error("expected true for array navigation with top")
 		}
 	})
 
 	t.Run("array navigation with skip returns true", func(t *testing.T) {
-		skip := 5
-		expandOpt := ExpandOption{Skip: &skip}
 		navProp := meta.FindNavigationProperty("tags")
-		result := needsPerParentExpand(expandOpt, navProp)
+		result := needsPerParentExpand(navProp)
 		if !result {
 			t.Error("expected true for array navigation with skip")
 		}
 	})
 
-	t.Run("array navigation without top/skip returns false", func(t *testing.T) {
-		expandOpt := ExpandOption{}
+	t.Run("array navigation without top/skip returns true", func(t *testing.T) {
 		navProp := meta.FindNavigationProperty("tags")
-		result := needsPerParentExpand(expandOpt, navProp)
-		if result {
-			t.Error("expected false for array navigation without top/skip")
+		result := needsPerParentExpand(navProp)
+		if !result {
+			t.Error("expected true for array navigation without top/skip")
 		}
 	})
 }

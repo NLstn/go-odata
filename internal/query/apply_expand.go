@@ -8,7 +8,11 @@ import (
 	"gorm.io/gorm"
 )
 
-// applyExpand applies expand (preload) options to the GORM query
+// applyExpand applies expand options to the GORM query.
+//
+// Navigation values are populated after the parent query by
+// ApplyPerParentExpand. Keeping preloads off the parent query lets it use the
+// fast scanner and avoids GORM's preload callback path.
 func applyExpand(db *gorm.DB, expand []ExpandOption, entityMetadata *metadata.EntityMetadata) *gorm.DB {
 	if len(expand) == 0 {
 		return db
@@ -20,7 +24,7 @@ func applyExpand(db *gorm.DB, expand []ExpandOption, entityMetadata *metadata.En
 			continue
 		}
 
-		if needsPerParentExpand(expandOpt, navProp) {
+		if needsPerParentExpand(navProp) {
 			continue
 		}
 
@@ -43,11 +47,8 @@ func applyExpand(db *gorm.DB, expand []ExpandOption, entityMetadata *metadata.En
 	return db
 }
 
-func needsPerParentExpand(expandOpt ExpandOption, navProp *metadata.PropertyMetadata) bool {
-	if navProp == nil || !navProp.IsNavigationProp || !navProp.NavigationIsArray {
-		return false
-	}
-	return expandOpt.Top != nil || expandOpt.Skip != nil
+func needsPerParentExpand(navProp *metadata.PropertyMetadata) bool {
+	return navProp != nil && navProp.IsNavigationProp
 }
 
 // needsPreloadCallback checks if an expand option requires a preload callback

@@ -5,10 +5,12 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/nlstn/go-odata/internal/fastscan"
 	"github.com/nlstn/go-odata/internal/metadata"
 	"gorm.io/gorm"
+	gormschema "gorm.io/gorm/schema"
 )
 
 // ApplyPerParentExpand applies $expand options with $top/$skip for collection navigation properties per parent.
@@ -24,11 +26,17 @@ func ApplyPerParentExpand(db *gorm.DB, results interface{}, expandOptions []Expa
 
 	for _, expandOpt := range expandOptions {
 		navProp := findNavigationProperty(expandOpt.NavigationProperty, entityMetadata)
-		if !needsPerParentExpand(expandOpt, navProp) {
+		if navProp != nil && navProp.IsManyToMany {
+			if err := loadManyToManyExpand(db, parentValues, navProp, expandOpt, entityMetadata); err != nil {
+				return err
+			}
+			continue
+		}
+		if !needsPerParentExpand(navProp) {
 			// Even if this expand doesn't need per-parent processing itself, recurse into
 			// already-loaded children when the nested expands need per-parent processing.
 			if len(expandOpt.Expand) > 0 && navProp != nil && navProp.IsNavigationProp {
-				targetMetadata, err := entityMetadata.ResolveNavigationTarget(expandOpt.NavigationProperty)
+				targetMetadata, err := resolveExpandTarget(entityMetadata, navProp, expandOpt.NavigationProperty)
 				if err == nil {
 					if err := applyNestedPerParentExpand(db, parentValues, navProp, expandOpt.Expand, targetMetadata); err != nil {
 						return err
@@ -38,7 +46,7 @@ func ApplyPerParentExpand(db *gorm.DB, results interface{}, expandOptions []Expa
 			continue
 		}
 
-		targetMetadata, err := entityMetadata.ResolveNavigationTarget(expandOpt.NavigationProperty)
+		targetMetadata, err := resolveExpandTarget(entityMetadata, navProp, expandOpt.NavigationProperty)
 		if err != nil {
 			continue
 		}
@@ -90,6 +98,68 @@ func ApplyPerParentExpand(db *gorm.DB, results interface{}, expandOptions []Expa
 	}
 
 	return nil
+}
+
+// loadManyToManyExpand keeps the parent collection on the fast-scan path while
+// delegating the join-table-specific lookup to GORM. GORM's relationship parser
+// is authoritative for custom and self-referential join columns. This fallback
+// is deliberately isolated to the association lookup; direct relationships use
+// the batched fast-scan-friendly loader above.
+func loadManyToManyExpand(db *gorm.DB, parentValues []reflect.Value, navProp *metadata.PropertyMetadata, expandOpt ExpandOption, entityMetadata *metadata.EntityMetadata) error {
+	targetMetadata, err := resolveExpandTarget(entityMetadata, navProp, expandOpt.NavigationProperty)
+	if err != nil {
+		return err
+	}
+	for _, parentValue := range parentValues {
+		parent := dereferenceValue(parentValue)
+		if !parent.IsValid() || parent.Kind() != reflect.Struct || !parent.CanAddr() {
+			continue
+		}
+		parentPtr := parent.Addr().Interface()
+		preloadDB := db.Session(&gorm.Session{NewDB: true}).Preload(navProp.Name, func(childDB *gorm.DB) *gorm.DB {
+			return applyExpandCallback(childDB, stripNestedExpand(expandOpt), targetMetadata)
+		})
+		if err := preloadDB.First(parentPtr).Error; err != nil {
+			return err
+		}
+		if len(expandOpt.Expand) > 0 {
+			if err := applyNestedPerParentExpand(db, []reflect.Value{parentPtrValue(parentPtr)}, navProp, expandOpt.Expand, targetMetadata); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func parentPtrValue(parent interface{}) reflect.Value {
+	return reflect.ValueOf(parent)
+}
+
+func stripNestedExpand(expandOpt ExpandOption) ExpandOption {
+	expandOpt.Expand = nil
+	return expandOpt
+}
+
+// resolveExpandTarget normally uses the service metadata registry. Entity
+// handlers may be used standalone, however, in which case the registry only
+// contains the root type. The navigation field still gives us enough type
+// information to load a direct relationship, so use it as a safe fallback.
+func resolveExpandTarget(entityMetadata *metadata.EntityMetadata, navProp *metadata.PropertyMetadata, navigationProperty string) (*metadata.EntityMetadata, error) {
+	targetMetadata, err := entityMetadata.ResolveNavigationTarget(navigationProperty)
+	if err == nil {
+		return targetMetadata, nil
+	}
+	if navProp == nil {
+		return nil, err
+	}
+	targetType := navProp.Type
+	for targetType.Kind() == reflect.Ptr || targetType.Kind() == reflect.Slice || targetType.Kind() == reflect.Array {
+		targetType = targetType.Elem()
+	}
+	if targetType.Kind() != reflect.Struct {
+		return nil, err
+	}
+	return metadata.AnalyzeEntity(reflect.New(targetType).Interface())
 }
 
 func collectParentValues(results interface{}) ([]reflect.Value, error) {
@@ -157,7 +227,55 @@ func resolveParentReferenceProperty(navProp *metadata.PropertyMetadata, entityMe
 		return expandCompositeConstraints(navProp.ReferentialConstraints, entityMetadata, targetMetadata)
 	}
 
+	// GORM's relationship schema is the source of truth for relationship
+	// direction when tags do not describe enough information. Most navigation
+	// fields expose foreignKey/references, however, and resolving those against
+	// our already-built metadata avoids reparsing GORM schema on every request.
+	if constraints := gormRelationshipConstraints(navProp, entityMetadata); len(constraints) > 0 {
+		return constraints
+	}
+
 	return fallbackReferenceConstraints(navProp, entityMetadata, targetMetadata)
+}
+
+func gormRelationshipConstraints(navProp *metadata.PropertyMetadata, entityMetadata *metadata.EntityMetadata) []parentReferenceConstraint {
+	ownerType := entityMetadata.EntityType
+	for ownerType.Kind() == reflect.Ptr {
+		ownerType = ownerType.Elem()
+	}
+	if ownerType.Kind() != reflect.Struct || navProp.IsManyToMany {
+		return nil
+	}
+
+	sch, err := gormschema.Parse(reflect.New(ownerType).Interface(), &sync.Map{}, gormschema.NamingStrategy{})
+	if err != nil || sch == nil {
+		return nil
+	}
+	rel := sch.Relationships.Relations[navProp.FieldName]
+	if rel == nil {
+		return nil
+	}
+
+	constraints := make([]parentReferenceConstraint, 0, len(rel.References))
+	for _, ref := range rel.References {
+		if ref == nil || ref.PrimaryKey == nil || ref.ForeignKey == nil {
+			continue
+		}
+		constraint := parentReferenceConstraint{}
+		if ref.OwnPrimaryKey {
+			// has-one / has-many: target.ForeignKey = parent.PrimaryKey
+			constraint.dependentProperty = ref.ForeignKey.Name
+			constraint.dependentColumn = ref.ForeignKey.DBName
+			constraint.principalProperty = ref.PrimaryKey.Name
+		} else {
+			// belongs-to: target.PrimaryKey = parent.ForeignKey
+			constraint.dependentProperty = ref.PrimaryKey.Name
+			constraint.dependentColumn = ref.PrimaryKey.DBName
+			constraint.principalProperty = ref.ForeignKey.Name
+		}
+		constraints = append(constraints, constraint)
+	}
+	return constraints
 }
 
 func expandCompositeConstraints(constraints map[string]string, entityMetadata *metadata.EntityMetadata, targetMetadata *metadata.EntityMetadata) []parentReferenceConstraint {
@@ -176,6 +294,14 @@ func expandCompositeConstraints(constraints map[string]string, entityMetadata *m
 		for i := 0; i < count; i++ {
 			dependent := resolvePropertyName(dependents[i], targetMetadata)
 			principal := resolvePropertyName(principals[i], entityMetadata)
+			if targetMetadata.FindProperty(dependent) == nil &&
+				entityMetadata.FindProperty(dependents[i]) != nil &&
+				targetMetadata.FindProperty(principals[i]) != nil {
+				// belongs-to: the tag's foreign key is on the parent and the
+				// referenced key is on the target.
+				dependent = resolvePropertyName(principals[i], targetMetadata)
+				principal = resolvePropertyName(dependents[i], entityMetadata)
+			}
 			resolved = append(resolved, parentReferenceConstraint{
 				dependentProperty: dependent,
 				dependentColumn:   GetColumnName(dependent, targetMetadata),
@@ -446,7 +572,7 @@ func buildCompositeKey(values []interface{}) string {
 	var builder strings.Builder
 	for _, value := range values {
 		normalized := normalizeKeyValue(value)
-		builder.WriteString(fmt.Sprintf("%T:%v|", normalized, normalized))
+		_, _ = fmt.Fprintf(&builder, "%T:%v|", normalized, normalized)
 	}
 	return builder.String()
 }
@@ -579,17 +705,34 @@ func setNavigationValue(parentStruct reflect.Value, navProp *metadata.PropertyMe
 		return nil
 	}
 
-	if field.Kind() != reflect.Slice {
+	if field.Kind() == reflect.Slice {
+		if value.Type().AssignableTo(field.Type()) {
+			field.Set(value)
+			return nil
+		}
+		if value.Type().ConvertibleTo(field.Type()) {
+			field.Set(value.Convert(field.Type()))
+		}
 		return nil
 	}
 
-	if value.Type().AssignableTo(field.Type()) {
-		field.Set(value)
+	// A single-valued relationship uses the first matching target row. The
+	// zero value (or nil pointer) faithfully represents a missing relationship.
+	if value.Len() == 0 {
+		field.Set(reflect.Zero(field.Type()))
 		return nil
 	}
-	if value.Type().ConvertibleTo(field.Type()) {
-		field.Set(value.Convert(field.Type()))
+	child := value.Index(0)
+	if child.Type().AssignableTo(field.Type()) {
+		field.Set(child)
 		return nil
+	}
+	if field.Kind() == reflect.Ptr && child.Type().AssignableTo(field.Type().Elem()) && child.CanAddr() {
+		field.Set(child.Addr())
+		return nil
+	}
+	if child.Type().ConvertibleTo(field.Type()) {
+		field.Set(child.Convert(field.Type()))
 	}
 
 	return nil
