@@ -116,7 +116,10 @@ func seedDatabase(db *gorm.DB, extensive bool) error {
 
 	featureFlagCount := 100
 	if extensive {
-		featureFlagCount = 50000
+		// Feature flags are served from a fully-cached, in-memory collection, so the
+		// seeded set should stay small like a realistic flag inventory rather than
+		// mirroring the size of the bulk product catalog.
+		featureFlagCount = 2000
 	}
 
 	cachedFeatureFlags := entities.GenerateCachedFeatureFlags(featureFlagCount)
