@@ -462,7 +462,10 @@ func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.Qu
 		sliceValue = query.ApplyExpandComputeToResults(sliceValue, queryOptions.Expand)
 	}
 
-	if len(queryOptions.Select) > 0 {
+	if len(queryOptions.Select) > 0 && !query.CanDeferSelectProjection(queryOptions.Select, queryOptions.Expand, h.metadata) {
+		// When projection can be deferred, the struct results flow through unchanged
+		// and the response serializer emits only the selected fields directly from
+		// the structs — avoiding the per-row map materialization ApplySelect performs.
 		sliceValue = query.ApplySelect(sliceValue, queryOptions.Select, h.metadata, queryOptions.Expand)
 	}
 

@@ -34,6 +34,14 @@ type entityFieldEntry struct {
 	// copy of the same *EntityMetadata property — see metadataAdapter).
 	navProp  *PropertyMetadata
 	fullProp *internalMetadata.PropertyMetadata
+	// goName is the Go struct field name (used by the direct struct writer to test
+	// $select membership against either the Go name or the JSON name).
+	goName string
+	// isEnum/isBinary pre-classify the field so the direct struct writer avoids a
+	// per-field metadata check. isEnum mirrors enumOrRaw's condition; isBinary is
+	// true only for []byte fields (Edm.Binary), which serialize as base64url.
+	isEnum   bool
+	isBinary bool
 }
 
 type entityPlanKey struct {
@@ -57,7 +65,7 @@ func getEntityFieldPlan(md *internalMetadata.EntityMetadata, t reflect.Type) *en
 	entries := make([]entityFieldEntry, len(infos))
 	for j := range infos {
 		info := infos[j]
-		e := entityFieldEntry{jsonName: info.JsonName}
+		e := entityFieldEntry{jsonName: info.JsonName, goName: info.Name}
 		if !info.IsExported || info.JsonName == "" {
 			e.skip = true
 			entries[j] = e
@@ -73,6 +81,14 @@ func getEntityFieldPlan(md *internalMetadata.EntityMetadata, t reflect.Type) *en
 				NavigationTarget:  fp.NavigationTarget,
 				NavigationIsArray: fp.NavigationIsArray,
 			}
+		}
+		if fp != nil && fp.IsEnum && len(fp.EnumMembers) > 0 {
+			e.isEnum = true
+		}
+		// A []byte field is Edm.Binary and serializes as a base64url string via
+		// EncodeEdmBinary, exactly as the OrderedMap path does.
+		if ft := t.Field(j).Type; ft.Kind() == reflect.Slice && ft.Elem().Kind() == reflect.Uint8 {
+			e.isBinary = true
 		}
 		entries[j] = e
 	}

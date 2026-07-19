@@ -8,6 +8,39 @@ import (
 	"gorm.io/gorm"
 )
 
+// CanDeferSelectProjection reports whether $select projection can be deferred to
+// the response serializer instead of materializing []map[string]interface{} up
+// front via ApplySelect. This is possible only for the flat case: no $expand, and
+// every selected token names a plain structural property (not a navigation
+// property, stream, computed value, or nested "nav/prop" path). In that case the
+// struct results can flow unchanged to the response layer, which projects the
+// selected fields directly while serializing — keeping $select on the struct fast
+// path (see internal/response entity writer). A wildcard '*' also qualifies: it
+// means "all structural properties", which the response layer emits as-is.
+//
+// Callers must still ensure the database-level column projection ran (it does, via
+// ApplyQueryOptions), so unselected columns are simply absent from the fetched
+// structs and never emitted.
+func CanDeferSelectProjection(selectedProperties []string, expandOptions []ExpandOption, entityMetadata *metadata.EntityMetadata) bool {
+	if len(selectedProperties) == 0 || len(expandOptions) > 0 || entityMetadata == nil {
+		return false
+	}
+	for _, propName := range selectedProperties {
+		propName = strings.TrimSpace(propName)
+		if propName == "" || propName == "*" {
+			continue
+		}
+		if strings.Contains(propName, "/") {
+			return false
+		}
+		prop := entityMetadata.FindProperty(propName)
+		if prop == nil || prop.IsNavigationProp || prop.IsStream || prop.IsComputed {
+			return false
+		}
+	}
+	return true
+}
+
 // selectContainsWildcard returns true if the selected properties list contains the wildcard '*'.
 // Per OData v4.01 section 5.1.3, '*' means all declared structural properties.
 func selectContainsWildcard(selectedProperties []string) bool {

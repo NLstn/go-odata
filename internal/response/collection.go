@@ -130,6 +130,32 @@ func writeODataCollectionWithNavigationResponse(w http.ResponseWriter, r *http.R
 		contextURL = buildContextURLWithSelect(r, entitySetName, selectedProps)
 	}
 
+	// Fast path: when the collection is a slice of entity structs with no $expand,
+	// serialize each entity straight into the response buffer from a cached field
+	// plan, skipping the per-entity OrderedMap/map intermediate. Requests that need
+	// per-item OrderedMap rewriting (Prefer: omit-values, $index) keep the slow path.
+	if fastSlice, ok := canFastWriteCollection(data, fullMetadata, expandOptions); ok {
+		pref := preference.ParsePrefer(r)
+		if pref.OmitValues == nil && !shouldAddIndexAnnotations(r) {
+			var annotationFilter *string
+			if pref.IncludeAnnotations != nil {
+				annotationFilter = pref.IncludeAnnotations
+			}
+			ctx := &fastEntityContext{
+				baseURL:          buildBaseURL(r),
+				entitySetName:    entitySetName,
+				metadataLevel:    metadataLevel,
+				metadata:         metadata,
+				fullMetadata:     fullMetadata,
+				selectedNavProps: selectedNavProps,
+				annotationFilter: annotationFilter,
+				selectedSet:      buildSelectedSet(selectedProps),
+				keySet:           buildKeySet(metadata),
+			}
+			return writeFastCollectionToResponse(w, r, fastSlice, ctx, contextURL, count, nextLink, deltaLink)
+		}
+	}
+
 	transformedData := addNavigationLinks(data, metadata, expandOptions, selectedNavProps, r, entitySetName, metadataLevel, fullMetadata)
 	if transformedData == nil {
 		transformedData = []interface{}{}
