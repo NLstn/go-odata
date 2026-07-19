@@ -463,7 +463,9 @@ func (h *EntityHandler) postProcessCachedCollection(ctx context.Context, results
 	if len(queryOptions.Expand) > 0 {
 		sliceValue = query.ApplyExpandComputeToResults(sliceValue, queryOptions.Expand)
 	}
-	if len(queryOptions.Select) > 0 {
+	if len(queryOptions.Select) > 0 && !query.CanDeferSelectProjection(queryOptions.Select, queryOptions.Expand, h.metadata) {
+		// See collection_read.go: flat $select projection is deferred to the response
+		// serializer, which emits only the selected fields directly from the structs.
 		sliceValue = query.ApplySelect(sliceValue, queryOptions.Select, h.metadata, queryOptions.Expand)
 	}
 
