@@ -1516,22 +1516,24 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 		}
 		return fmt.Sprintf("(%s * ?)", columnName), []interface{}{value}
 	case OpDiv:
-		return fmt.Sprintf("(%s / ?)", columnName), []interface{}{value}
+		// NULLIF guards against division by zero raising a database error on
+		// PostgreSQL/SQL Server; the row yields NULL and is excluded instead.
+		return fmt.Sprintf("(%s / NULLIF(?, 0))", columnName), []interface{}{value}
 	case OpDivBy:
 		// divby performs decimal (floating-point) division; cast to avoid integer truncation
 		switch dialect {
 		case "postgres":
-			return fmt.Sprintf("(CAST(%s AS FLOAT) / ?)", columnName), []interface{}{value}
+			return fmt.Sprintf("(CAST(%s AS FLOAT) / NULLIF(?, 0))", columnName), []interface{}{value}
 		case "mysql", "mariadb":
-			return fmt.Sprintf("(CAST(%s AS DOUBLE) / ?)", columnName), []interface{}{value}
+			return fmt.Sprintf("(CAST(%s AS DOUBLE) / NULLIF(?, 0))", columnName), []interface{}{value}
 		default:
-			return fmt.Sprintf("(CAST(%s AS REAL) / ?)", columnName), []interface{}{value}
+			return fmt.Sprintf("(CAST(%s AS REAL) / NULLIF(?, 0))", columnName), []interface{}{value}
 		}
 	case OpMod:
 		if dialect == "sqlserver" || dialect == "mssql" {
-			return fmt.Sprintf("(CAST(%s AS DECIMAL(38,10)) %% CAST(? AS DECIMAL(38,10)))", columnName), []interface{}{value}
+			return fmt.Sprintf("(CAST(%s AS DECIMAL(38,10)) %% CAST(NULLIF(?, 0) AS DECIMAL(38,10)))", columnName), []interface{}{value}
 		}
-		return fmt.Sprintf("(%s %% ?)", columnName), []interface{}{value}
+		return fmt.Sprintf("(%s %% NULLIF(?, 0))", columnName), []interface{}{value}
 	case OpYear:
 		switch dialect {
 		case "postgres":
