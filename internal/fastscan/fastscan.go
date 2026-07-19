@@ -14,6 +14,8 @@ import (
 	"context"
 	"database/sql"
 	"reflect"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -56,10 +58,92 @@ type plan struct {
 	// destinations slice and every sql.Null* buffer, so concurrent queries
 	// never share mutable scan state.
 	bindings sync.Pool
-	// disabled is set when a scan produced an error that GORM's richer value
-	// conversion might have handled; every later query for this schema then
-	// uses the fallback instead of failing the same way again.
-	disabled atomic.Bool
+	// poisoned tracks, per DB column name, the time a scan of that column
+	// last produced an error that GORM's richer value conversion might have
+	// handled. A query that touches a currently-poisoned column falls back
+	// to GORM instead of risking the same failure; other columns on the same
+	// schema keep using the fast path. Entries expire after poisonRetryWindow
+	// so a transient bad value (or a value that no longer occurs) doesn't
+	// poison the column forever.
+	poisoned sync.Map // db column name -> time.Time
+	// poisonCount is a best-effort (may lag a just-expired entry) count of
+	// entries in poisoned, used to skip the poison check entirely in the
+	// common case where nothing is poisoned.
+	poisonCount atomic.Int32
+}
+
+// poisonRetryWindow bounds how long a column stays poisoned before it is
+// given another chance. Keeping this short means a truly incompatible column
+// (e.g. legacy TEXT in an INTEGER column, or a driver without parseTime) is
+// quickly re-poisoned at negligible cost, while a transient bad value doesn't
+// forfeit the fast path for the life of the process. Variable (not const) so
+// tests can shrink it instead of sleeping tens of seconds.
+var poisonRetryWindow = 30 * time.Second
+
+// isPoisoned reports whether column is currently poisoned, lazily expiring
+// (and uncounting) the entry once poisonRetryWindow has elapsed.
+func (p *plan) isPoisoned(column string) bool {
+	v, ok := p.poisoned.Load(column)
+	if !ok {
+		return false
+	}
+	at, ok := v.(time.Time)
+	if !ok || time.Since(at) > poisonRetryWindow {
+		if p.poisoned.CompareAndDelete(column, v) {
+			p.poisonCount.Add(-1)
+		}
+		return false
+	}
+	return true
+}
+
+// anyPoisoned reports whether any of columns is currently poisoned.
+func (p *plan) anyPoisoned(columns []string) bool {
+	if p.poisonCount.Load() <= 0 {
+		return false
+	}
+	for _, c := range columns {
+		if p.isPoisoned(c) {
+			return true
+		}
+	}
+	return false
+}
+
+// poisonColumn marks column as poisoned as of now, extending its poisoned
+// window if it was already poisoned.
+func (p *plan) poisonColumn(column string) {
+	if _, loaded := p.poisoned.Swap(column, time.Now()); !loaded {
+		p.poisonCount.Add(1)
+	}
+}
+
+// poisonAll marks every column in the schema as poisoned. It is the
+// conservative fallback used when a scan error can't be attributed to a
+// specific column, matching the previous whole-plan-disable behavior.
+func (p *plan) poisonAll() {
+	for name := range p.fields {
+		p.poisonColumn(name)
+	}
+}
+
+// scanErrorColumnIndexRe matches the column index that database/sql's
+// (*Rows).Scan embeds in conversion errors, e.g. `sql: Scan error on column
+// index 1, name "amount": converting driver.Value type string ...`. This
+// format has been stable in the standard library for many Go releases; if it
+// ever changes, recordScanFailure falls back to poisoning every column.
+var scanErrorColumnIndexRe = regexp.MustCompile(`column index (\d+)`)
+
+// recordScanFailure poisons the column responsible for a scan error, or
+// every column in the schema if the offending one can't be identified.
+func (p *plan) recordScanFailure(err error, columns []string) {
+	if m := scanErrorColumnIndexRe.FindStringSubmatch(err.Error()); m != nil {
+		if idx, convErr := strconv.Atoi(m[1]); convErr == nil && idx >= 0 && idx < len(columns) {
+			p.poisonColumn(columns[idx])
+			return
+		}
+	}
+	p.poisonAll()
 }
 
 var (
@@ -105,7 +189,7 @@ func Find(db *gorm.DB, dest interface{}) error {
 		return tx.Find(dest).Error
 	}
 	p := planFor(sch)
-	if p == nil || p.disabled.Load() || !eligibleStatement(tx.Statement, sch) {
+	if p == nil || !eligibleStatement(tx.Statement, sch) || p.likelyTouchesPoisoned(tx.Statement, sch) {
 		return tx.Find(dest).Error
 	}
 
@@ -113,21 +197,39 @@ func Find(db *gorm.DB, dest interface{}) error {
 	if err != nil {
 		return err
 	}
+	columns, err := rows.Columns()
+	if err != nil {
+		if closeErr := rows.Close(); closeErr != nil {
+			return closeErr
+		}
+		return err
+	}
+	if p.anyPoisoned(columns) {
+		// A column this query touches failed to scan recently enough that it
+		// is still poisoned; don't waste a scan attempt repeating a failure
+		// we already know about. Execute resets the statement's SQL after
+		// Rows, so Find rebuilds it cleanly.
+		if closeErr := rows.Close(); closeErr != nil {
+			return closeErr
+		}
+		return tx.Find(dest).Error
+	}
 
-	result, err := scanRows(tx.Statement.Context, rows, p, sliceVal, elemType)
+	result, err := scanRows(tx.Statement.Context, rows, p, sliceVal, elemType, columns)
 	closeErr := rows.Close()
 	if err != nil {
 		if scanErr, ok := err.(*rowScanError); ok {
 			// A row failed to scan. If the context is gone this is just
 			// cancellation; otherwise the plan mis-handled a driver value that
-			// GORM's conversions might accept. Disable the plan for this
-			// schema and re-run the query through GORM, which either succeeds
-			// or reports its own (equivalent) error. Execute resets the
-			// statement's SQL after Rows, so Find rebuilds it cleanly.
+			// GORM's conversions might accept. Poison the offending column (or
+			// every column, if it can't be identified) and re-run the query
+			// through GORM, which either succeeds or reports its own
+			// (equivalent) error. Execute resets the statement's SQL after
+			// Rows, so Find rebuilds it cleanly.
 			if ctxErr := contextErr(tx.Statement.Context); ctxErr != nil {
 				return scanErr.err
 			}
-			p.disabled.Store(true)
+			p.recordScanFailure(scanErr.err, columns)
 			return tx.Find(dest).Error
 		}
 		return err
@@ -175,7 +277,7 @@ func First(db *gorm.DB, dest interface{}) error {
 		return tx.First(dest).Error
 	}
 	p := planFor(sch)
-	if p == nil || p.disabled.Load() || !eligibleStatement(tx.Statement, sch) {
+	if p == nil || !eligibleStatement(tx.Statement, sch) || p.likelyTouchesPoisoned(tx.Statement, sch) {
 		return tx.First(dest).Error
 	}
 
@@ -194,19 +296,37 @@ func First(db *gorm.DB, dest interface{}) error {
 	if err != nil {
 		return err
 	}
-	found, err := scanFirstRow(tx.Statement.Context, rows, p, destVal.Elem())
+	columns, err := rows.Columns()
+	if err != nil {
+		if closeErr := rows.Close(); closeErr != nil {
+			return closeErr
+		}
+		return err
+	}
+	if p.anyPoisoned(columns) {
+		// A column this query touches failed to scan recently enough that it
+		// is still poisoned; don't waste a scan attempt repeating a failure
+		// we already know about.
+		if closeErr := rows.Close(); closeErr != nil {
+			return closeErr
+		}
+		return tx.First(dest).Error
+	}
+
+	found, err := scanFirstRow(tx.Statement.Context, rows, p, destVal.Elem(), columns)
 	closeErr := rows.Close()
 	if err != nil {
 		if scanErr, ok := err.(*rowScanError); ok {
 			// A row failed to scan. If the context is gone this is just
 			// cancellation; otherwise the plan mis-handled a driver value that
-			// GORM's conversions might accept. Disable the plan for this schema
-			// and re-run through GORM, which either succeeds or reports its own
-			// (equivalent) error.
+			// GORM's conversions might accept. Poison the offending column (or
+			// every column, if it can't be identified) and re-run through
+			// GORM, which either succeeds or reports its own (equivalent)
+			// error.
 			if ctxErr := contextErr(tx.Statement.Context); ctxErr != nil {
 				return scanErr.err
 			}
-			p.disabled.Store(true)
+			p.recordScanFailure(scanErr.err, columns)
 			return tx.First(dest).Error
 		}
 		return err
@@ -237,6 +357,32 @@ func planFor(sch *schema.Schema) *plan {
 		return p
 	}
 	return nil
+}
+
+// likelyTouchesPoisoned reports whether executing stmt against sch could
+// touch a currently-poisoned column, without running the query. This lets
+// Find/First skip straight to the GORM fallback — as the old whole-plan
+// disable did — when nothing would survive the fast path anyway, instead of
+// paying for a query that anyPoisoned would just reject afterward.
+func (p *plan) likelyTouchesPoisoned(stmt *gorm.Statement, sch *schema.Schema) bool {
+	if p.poisonCount.Load() <= 0 {
+		return false
+	}
+	if len(stmt.Selects) == 0 {
+		// No explicit selection: GORM selects every schema column, so a
+		// poisoned column (there is at least one) is definitely included.
+		return true
+	}
+	for _, sel := range stmt.Selects {
+		dbName := sel
+		if field, ok := sch.FieldsByName[sel]; ok {
+			dbName = field.DBName
+		}
+		if p.isPoisoned(dbName) {
+			return true
+		}
+	}
+	return false
 }
 
 func buildPlan(sch *schema.Schema) *plan {
@@ -466,13 +612,9 @@ func (p *plan) releaseBindingSet(b *bindingSet) {
 	p.bindings.Put(b)
 }
 
-func scanRows(ctx context.Context, rows *sql.Rows, p *plan, slice reflect.Value, elemType reflect.Type) (reflect.Value, error) {
+func scanRows(ctx context.Context, rows *sql.Rows, p *plan, slice reflect.Value, elemType reflect.Type, columns []string) (reflect.Value, error) {
 	if ctx == nil {
 		ctx = context.Background()
-	}
-	columns, err := rows.Columns()
-	if err != nil {
-		return reflect.Value{}, err
 	}
 
 	bindings := p.acquireBindingSet(columns)
@@ -505,13 +647,9 @@ func scanRows(ctx context.Context, rows *sql.Rows, p *plan, slice reflect.Value,
 // scanFirstRow scans at most one row into elem (an addressable struct value),
 // reporting whether a row was present. It mirrors gorm.First: the query already
 // carries LIMIT 1, so only the leading row is consumed.
-func scanFirstRow(ctx context.Context, rows *sql.Rows, p *plan, elem reflect.Value) (bool, error) {
+func scanFirstRow(ctx context.Context, rows *sql.Rows, p *plan, elem reflect.Value, columns []string) (bool, error) {
 	if ctx == nil {
 		ctx = context.Background()
-	}
-	columns, err := rows.Columns()
-	if err != nil {
-		return false, err
 	}
 
 	bindings := p.acquireBindingSet(columns)
