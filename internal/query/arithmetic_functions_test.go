@@ -317,24 +317,26 @@ func TestArithmeticFunctions_SQLGeneration(t *testing.T) {
 			expectedArgsNo: 2,
 		},
 		{
-			name:           "div SQL",
-			filter:         "div(Price, 2) ge 25",
-			expectErr:      false,
-			expectedSQL:    "(price / ?) >= ?",
+			name:      "div SQL",
+			filter:    "div(Price, 2) ge 25",
+			expectErr: false,
+			// Price is Edm.Double, so div performs floating division (cast), and the
+			// divisor is NULLIF-guarded against division by zero.
+			expectedSQL:    "(CAST(price AS REAL) / NULLIF(?, 0)) >= ?",
 			expectedArgsNo: 2,
 		},
 		{
 			name:           "mod SQL with function syntax",
 			filter:         "mod(Price, 2) eq 1",
 			expectErr:      false,
-			expectedSQL:    "(price % ?) = ?",
+			expectedSQL:    "(price % NULLIF(?, 0)) = ?",
 			expectedArgsNo: 2,
 		},
 		{
 			name:           "mod SQL with infix syntax",
 			filter:         "Price mod 2 eq 1",
 			expectErr:      false,
-			expectedSQL:    "(price % ?) = ?",
+			expectedSQL:    "(price % NULLIF(?, 0)) = ?",
 			expectedArgsNo: 2,
 		},
 	}
@@ -428,14 +430,14 @@ func TestArithmeticFunctions_DivBy_SQLGeneration(t *testing.T) {
 			name:           "divby SQL uses CAST for decimal division",
 			filter:         "Price divby 1.5 gt 25",
 			expectErr:      false,
-			expectedSQL:    "(CAST(price AS REAL) / ?) > ?",
+			expectedSQL:    "(CAST(price AS REAL) / NULLIF(?, 0)) > ?",
 			expectedArgsNo: 2,
 		},
 		{
 			name:           "divby infix SQL uses CAST for decimal division",
 			filter:         "Price divby 2 eq 25",
 			expectErr:      false,
-			expectedSQL:    "(CAST(price AS REAL) / ?) = ?",
+			expectedSQL:    "(CAST(price AS REAL) / NULLIF(?, 0)) = ?",
 			expectedArgsNo: 2,
 		},
 	}
@@ -471,7 +473,7 @@ func TestArithmeticFunctions_Mod_SQLServerGeneration(t *testing.T) {
 	}
 
 	sql, args := buildFilterCondition("sqlserver", filterExpr, meta)
-	expectedSQL := "(CAST([price] AS DECIMAL(38, 10)) % CAST(? AS DECIMAL(38, 10))) = ?"
+	expectedSQL := "(CAST([price] AS DECIMAL(38, 10)) % CAST(NULLIF(?, 0) AS DECIMAL(38, 10))) = ?"
 	if sql != expectedSQL {
 		t.Fatalf("Expected SQL: %q, got: %q", expectedSQL, sql)
 	}
