@@ -13,9 +13,19 @@ import (
 
 // countEntities applies query scopes and filters to return the total number of matching entities.
 func (h *EntityHandler) countEntities(ctx context.Context, queryOptions *query.QueryOptions, scopes []func(*gorm.DB) *gorm.DB) (int64, error) {
-	// Use the cache database when available, otherwise the primary database.
-	db, usingCache, release := h.readDB(ctx)
-	defer release()
+	// Fast path: count directly from the in-memory snapshot cache when it is warm
+	// and the query is within the supported subset.
+	if len(scopes) == 0 && h.entityCache != nil && h.snapshotSupportsCount(queryOptions) {
+		if snap, ok := h.cacheSnapshot(ctx); ok {
+			var filter *query.FilterExpression
+			if queryOptions != nil {
+				filter = queryOptions.Filter
+			}
+			return h.countSnapshot(snap, filter), nil
+		}
+	}
+
+	db := h.db.WithContext(ctx)
 
 	baseDB := db.Model(reflect.New(h.metadata.EntityType).Interface())
 	if len(scopes) > 0 {
@@ -41,9 +51,7 @@ func (h *EntityHandler) countEntities(ctx context.Context, queryOptions *query.Q
 	filter := queryOptions.Filter
 	search := queryOptions.Search
 
-	// When serving from the cache database the primary FTS manager is not
-	// applicable; use the in-memory search path instead.
-	if search != "" && h.ftsManager != nil && !usingCache {
+	if search != "" && h.ftsManager != nil {
 		countOptions := &query.QueryOptions{Filter: filter, Search: search}
 		countDB := query.ApplyQueryOptionsWithFTS(baseDB, countOptions, h.metadata, h.ftsManager, h.metadata.TableName, h.logger)
 		if searchAppliedAtDB(countDB) {
