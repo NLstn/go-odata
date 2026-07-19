@@ -91,3 +91,87 @@ func BenchmarkFastscanFind(b *testing.B) {
 		}
 	}
 }
+
+// benchApplyQuery mirrors the $apply groupby/aggregate shape that reaches map
+// scanning: one grouping key plus one aggregate, producing one row per group.
+// With benchRows products spread over benchGroups categories the result is
+// benchGroups rows — the "usually few rows" case issue #836 flags.
+const benchGroups = 10
+
+func benchApplyQuery(db *gorm.DB) *gorm.DB {
+	return db.Model(&BenchProduct{}).
+		Select("category_id, AVG(price) AS avg_price").
+		Group("category_id").
+		Order("category_id")
+}
+
+func BenchmarkGormMapScan(b *testing.B) {
+	db := setupBenchDB(b)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var results []map[string]interface{}
+		if err := benchApplyQuery(db).Find(&results).Error; err != nil {
+			b.Fatal(err)
+		}
+		if len(results) != benchGroups {
+			b.Fatalf("got %d rows", len(results))
+		}
+	}
+}
+
+func BenchmarkFastscanMapScan(b *testing.B) {
+	db := setupBenchDB(b)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var results []map[string]interface{}
+		if err := FindMap(benchApplyQuery(db), &results); err != nil {
+			b.Fatal(err)
+		}
+		if len(results) != benchGroups {
+			b.Fatalf("got %d rows", len(results))
+		}
+	}
+}
+
+// benchComputeQuery mirrors the $compute shape: every entity column plus a
+// computed expression, returning one map per row (a full page), which is the
+// scan-bound many-row case for map results.
+func benchComputeQuery(db *gorm.DB) *gorm.DB {
+	return db.Model(&BenchProduct{}).
+		Select("*, price * 1.1 AS price_with_tax").
+		Where("price > ?", 10.0).
+		Order("id").
+		Limit(benchPage)
+}
+
+func BenchmarkGormMapScanCompute(b *testing.B) {
+	db := setupBenchDB(b)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var results []map[string]interface{}
+		if err := benchComputeQuery(db).Find(&results).Error; err != nil {
+			b.Fatal(err)
+		}
+		if len(results) != benchPage {
+			b.Fatalf("got %d rows", len(results))
+		}
+	}
+}
+
+func BenchmarkFastscanMapScanCompute(b *testing.B) {
+	db := setupBenchDB(b)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var results []map[string]interface{}
+		if err := FindMap(benchComputeQuery(db), &results); err != nil {
+			b.Fatal(err)
+		}
+		if len(results) != benchPage {
+			b.Fatalf("got %d rows", len(results))
+		}
+	}
+}

@@ -425,7 +425,7 @@ func (h *EntityHandler) createNavFetchFunc(relatedDB *gorm.DB, targetMetadata *m
 
 		if query.ShouldUseMapResults(queryOptions) {
 			var mapResults []map[string]interface{}
-			if err := db.Find(&mapResults).Error; err != nil {
+			if err := fastscan.FindMap(db, &mapResults); err != nil {
 				return nil, err
 			}
 			return mapResults, nil
