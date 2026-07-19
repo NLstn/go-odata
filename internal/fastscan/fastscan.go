@@ -215,7 +215,7 @@ func Find(db *gorm.DB, dest interface{}) error {
 		return tx.Find(dest).Error
 	}
 
-	result, err := scanRows(tx.Statement.Context, rows, p, sliceVal, elemType, columns)
+	result, err := scanRows(tx.Statement.Context, rows, p, sliceVal, columns)
 	closeErr := rows.Close()
 	if err != nil {
 		if scanErr, ok := err.(*rowScanError); ok {
@@ -612,7 +612,7 @@ func (p *plan) releaseBindingSet(b *bindingSet) {
 	p.bindings.Put(b)
 }
 
-func scanRows(ctx context.Context, rows *sql.Rows, p *plan, slice reflect.Value, elemType reflect.Type, columns []string) (reflect.Value, error) {
+func scanRows(ctx context.Context, rows *sql.Rows, p *plan, slice reflect.Value, columns []string) (reflect.Value, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -630,18 +630,34 @@ func scanRows(ctx context.Context, rows *sql.Rows, p *plan, slice reflect.Value,
 		result = result.Slice(0, 0)
 	}
 
-	zero := reflect.Zero(elemType)
+	// reflect.Append re-derives a new slice-header allocation on every call
+	// (see reflect.Value.extendSlice), even when the backing array already
+	// has room — a real per-row allocation when called once per row. Track
+	// length/capacity as plain ints instead and grow explicitly, in the rare
+	// case it's needed, so the common pre-sized-by-the-caller case (the
+	// collection handler always passes a slice capped to $top) never calls
+	// into reflect's slice-growth machinery at all.
+	full := result.Slice(0, result.Cap())
+	count := 0
 	for rows.Next() {
-		result = reflect.Append(result, zero)
-		elem := result.Index(result.Len() - 1)
-		if err := scanRowInto(ctx, rows, bindings, elem); err != nil {
+		if count == full.Len() {
+			newCap := full.Cap() * 2
+			if newCap == 0 {
+				newCap = 8
+			}
+			grown := reflect.MakeSlice(slice.Type(), newCap, newCap)
+			reflect.Copy(grown, full.Slice(0, count))
+			full = grown
+		}
+		if err := scanRowInto(ctx, rows, bindings, full.Index(count)); err != nil {
 			return reflect.Value{}, err
 		}
+		count++
 	}
 	if err := rows.Err(); err != nil {
 		return reflect.Value{}, err
 	}
-	return result, nil
+	return full.Slice(0, count), nil
 }
 
 // scanFirstRow scans at most one row into elem (an addressable struct value),
@@ -700,7 +716,13 @@ func scanRowInto(ctx context.Context, rows *sql.Rows, bindings *bindingSet, elem
 			}
 		case scanTime:
 			if b.timeBuf.Valid {
-				b.field.ReflectValueOf(ctx, elem).Set(reflect.ValueOf(b.timeBuf.Time))
+				// reflect.ValueOf(b.timeBuf.Time) would box the time.Time
+				// value itself, allocating a heap copy to satisfy the
+				// interface conversion. Boxing a *time.Time instead is
+				// allocation-free (a pointer fits directly in an interface
+				// value), and .Elem() gives Set an indirect Value backed by
+				// that same memory, which it copies out immediately.
+				b.field.ReflectValueOf(ctx, elem).Set(reflect.ValueOf(&b.timeBuf.Time).Elem())
 			}
 		}
 	}

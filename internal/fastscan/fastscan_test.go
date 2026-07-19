@@ -250,6 +250,41 @@ func TestFindReusesPresizedSlice(t *testing.T) {
 	}
 }
 
+// TestFindGrowsPastInitialCapacity seeds more rows than the destination
+// slice's initial capacity, forcing scanRows's manual grow path (doubling
+// the backing array) to run more than once, and checks every row still
+// lands in the right place afterward.
+func TestFindGrowsPastInitialCapacity(t *testing.T) {
+	db := openDB(t)
+	if err := db.AutoMigrate(&Widget{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	const n = 50
+	widgets := make([]Widget, 0, n)
+	for i := 0; i < n; i++ {
+		widgets = append(widgets, Widget{Name: fmt.Sprintf("widget-%d", i)})
+	}
+	if err := db.Create(&widgets).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	// A capacity of 1 forces several doublings (1 -> 2 -> 4 -> ... -> 64)
+	// before all n rows fit.
+	results := make([]Widget, 0, 1)
+	if err := Find(db.Order("id"), &results); err != nil {
+		t.Fatalf("fastscan.Find: %v", err)
+	}
+	if len(results) != n {
+		t.Fatalf("expected %d widgets, got %d", n, len(results))
+	}
+	for i, w := range results {
+		want := fmt.Sprintf("widget-%d", i)
+		if w.Name != want {
+			t.Fatalf("result[%d].Name = %q, want %q", i, w.Name, want)
+		}
+	}
+}
+
 func TestFindConcurrentUsesIndependentBindingSets(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:fastscan_concurrent?mode=memory&cache=shared"), &gorm.Config{Logger: logger.Discard})
 	if err != nil {
