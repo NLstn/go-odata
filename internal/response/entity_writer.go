@@ -42,6 +42,10 @@ type fastEntityContext struct {
 	fullMetadata  *internalMetadata.EntityMetadata
 	// selectedNavProps drives which navigation links appear under minimal metadata.
 	selectedNavProps []string
+	// expandOptions holds the $expand tree. Expanded navigation properties emit
+	// their (possibly nested-transformed) value plus @odata.count/@odata.nextLink;
+	// unexpanded ones fall back to navigation-link behavior.
+	expandOptions    []query.ExpandOption
 	annotationFilter *string
 	// selectedSet, when non-nil, restricts emitted structural properties to the
 	// named set (matching either the Go field name or the JSON name) plus key
@@ -53,11 +57,14 @@ type fastEntityContext struct {
 }
 
 // canFastWriteCollection reports whether data is a slice of structs the direct
-// writer can serialize, and returns the element reflect.Value accessor via the
-// returned reflect.Value (the slice itself). The second result is false when the
-// caller must use the OrderedMap fallback path.
-func canFastWriteCollection(data interface{}, fullMetadata *internalMetadata.EntityMetadata, expandOptions []query.ExpandOption) (reflect.Value, bool) {
-	if fullMetadata == nil || len(expandOptions) > 0 {
+// writer can serialize, and returns the slice reflect.Value. The second result is
+// false when the caller must use the OrderedMap fallback path. $expand is handled
+// by the fast path (expanded values are emitted via the shared JSON path), so
+// $expand requests whose results remain structs stay on the fast path; only when
+// an upstream stage converted the results to maps (e.g. $expand combined with a
+// projecting $select) does the element check below route them to the fallback.
+func canFastWriteCollection(data interface{}, fullMetadata *internalMetadata.EntityMetadata) (reflect.Value, bool) {
+	if fullMetadata == nil {
 		return reflect.Value{}, false
 	}
 	v := reflect.ValueOf(data)
@@ -287,10 +294,19 @@ func writeFastEntity(buf *bytes.Buffer, entity reflect.Value, ctx *fastEntityCon
 		info := &infos[j]
 
 		if e.navProp != nil && e.navProp.IsNavigationProp {
-			// No $expand in the fast path, so navigation properties only ever
-			// contribute a navigation link (full metadata, or minimal metadata
-			// when the property is selected for links) — mirroring the non-expand
-			// branch of processNavigationPropertyOrderedWithMetadata.
+			// Expanded navigation property: emit its value (with nested
+			// $select/$expand/$ref/$count already applied by ApplyExpandOptionToValue)
+			// plus @odata.count and @odata.nextLink, mirroring the expand branch of
+			// processNavigationPropertyOrderedWithMetadata.
+			if expandOpt := query.FindExpandOption(ctx.expandOptions, e.navProp.Name, e.navProp.JsonName); expandOpt != nil {
+				if err := ctx.writeExpandedNavigation(buf, entity.Field(j), e.navProp, info.JsonName, expandOpt, keySegment, writeKey, enc); err != nil {
+					return err
+				}
+				continue
+			}
+			// Unexpanded navigation property: a navigation link only (full metadata,
+			// or minimal metadata when the property is selected for links) — mirroring
+			// the non-expand branch of processNavigationPropertyOrderedWithMetadata.
 			emitLink := metadataLevel == MetadataFull ||
 				(metadataLevel == MetadataMinimal && isPropertySelectedForLinks(*e.navProp, ctx.selectedNavProps))
 			if emitLink && keySegment != "" {
@@ -357,6 +373,42 @@ func writeFastEntity(buf *bytes.Buffer, entity reflect.Value, ctx *fastEntityCon
 
 	buf.WriteByte('}')
 	return nil
+}
+
+// writeExpandedNavigation writes an expanded navigation property: its @odata.count
+// (when $count was requested), its @odata.nextLink (when a $top-limited collection
+// was truncated), and its value. It reproduces the expand branch of
+// processNavigationPropertyOrderedWithMetadata exactly, including the key order
+// (count, nextLink, value). The value — with nested $select/$expand/$ref/$count
+// already applied by ApplyExpandOptionToValue — is serialized through encodeFallback,
+// which yields the same bytes the OrderedMap path's marshalTo produces for it.
+func (ctx *fastEntityContext) writeExpandedNavigation(buf *bytes.Buffer, fieldValue reflect.Value, navProp *PropertyMetadata, jsonName string, expandOpt *query.ExpandOption, keySegment string, writeKey func(string), enc **json.Encoder) error {
+	truncated := false
+	if expandOpt.Top != nil && navProp.NavigationIsArray {
+		fieldValue, truncated = TruncateExpandedCollectionToTop(fieldValue, *expandOpt.Top)
+	}
+
+	updatedValue := fieldValue.Interface()
+	var count *int
+	if targetMetadata, err := ctx.fullMetadata.ResolveNavigationTarget(navProp.Name); err == nil {
+		updatedValue, count = ApplyExpandOptionToValue(updatedValue, expandOpt, targetMetadata)
+	}
+
+	if count != nil {
+		writeKey(jsonName + "@odata.count")
+		writeInt(buf, int64(*count))
+	}
+
+	if truncated && keySegment != "" {
+		writeKey(jsonName + "@odata.nextLink")
+		nextLink := BuildExpandedCollectionNextLink(ctx.baseURL, ctx.entitySetName, keySegment, jsonName, expandOpt)
+		if err := writeJSONString(buf, nextLink, enc); err != nil {
+			return err
+		}
+	}
+
+	writeKey(jsonName)
+	return encodeFallback(buf, enc, updatedValue)
 }
 
 // isSelected reports whether a property (by Go name or JSON name) survives $select
