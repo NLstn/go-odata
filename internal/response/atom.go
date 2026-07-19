@@ -22,13 +22,17 @@ const (
 // IsAtomFormat returns true if the request asks for Atom/XML format via
 // $format=atom, $format=application/atom+xml, or Accept: application/atom+xml.
 func IsAtomFormat(r *http.Request) bool {
-	format := getFormatParameter(r)
+	return getNegotiation(r).isAtom
+}
+
+// isAtomFrom resolves the Atom/JSON decision from the already parsed $format
+// value and Accept header.
+func isAtomFrom(format, accept string) bool {
 	if format != "" {
 		parts := strings.Split(format, ";")
 		baseFormat := strings.TrimSpace(parts[0])
 		return baseFormat == "atom" || baseFormat == "application/atom+xml"
 	}
-	accept := r.Header.Get("Accept")
 	if accept == "" {
 		return false
 	}

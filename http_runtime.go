@@ -30,6 +30,12 @@ func (s *Service) serveHTTP(w http.ResponseWriter, r *http.Request, allowAsync b
 		r = r.WithContext(ctx)
 	}
 
+	// Negotiate content format once per request and cache the result on the
+	// context. The $format query parameter and Accept header are immutable for
+	// the request, so the response layer reuses this decision instead of
+	// re-parsing the raw query string on every helper call.
+	r = r.WithContext(response.WithNegotiation(r.Context(), r))
+
 	// Strip base path from incoming request path
 	if basePath != "" && strings.HasPrefix(r.URL.Path, basePath) {
 		newPath := strings.TrimPrefix(r.URL.Path, basePath)
