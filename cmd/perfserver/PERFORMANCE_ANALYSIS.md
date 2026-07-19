@@ -19,7 +19,7 @@ This guide explains how to analyze performance bottlenecks in the go-odata libra
 
 ```bash
 cd cmd/perfserver
-./run_load_tests.sh --wrk -d 30s
+./run_load_tests.sh -d 30s
 ```
 
 This provides:
@@ -46,7 +46,7 @@ This generates `load-test-results/cpu.prof`, `heap.prof`, and `alloc.prof` showi
 ### Load Test with SQL Tracing
 
 ```bash
-./run_load_tests.sh --wrk -d 30s --sql-trace
+./run_load_tests.sh -d 30s --sql-trace
 ```
 
 This generates `load-test-results/sql-trace.txt` showing:
@@ -75,24 +75,23 @@ After running tests, examine the results in `load-test-results/`:
 ### Key Files
 
 - `summary.txt` - Test execution summary
-- `wrk_*.txt` - Individual test results
+- `bombardier_*.txt` - Individual test results
 
 ### Interpreting Results
 
 ```
-Running 30s test @ http://localhost:9091/Products
-  10 threads and 100 connections
-  Thread Stats   Avg      Stdev     Max   +/- Stdev
-    Latency     2.00ms    1.99ms  23.85ms   85.10%
-    Req/Sec     6.27k   767.00    41.01k    93.07%
+Bombarding http://localhost:9091/Products for 30s using 100 connections
+Statistics        Avg      Stdev        Max
+  Reqs/sec     62169.18   4213.00   71050.42   ← Throughput (average requests/sec)
+  Latency        1.61ms   1.02ms    23.85ms
   Latency Distribution
      50%    1.42ms    ← Half of requests complete in 1.42ms
      75%    2.97ms    ← 75% complete in under 2.97ms
      90%    4.75ms    ← 90% complete in under 4.75ms
      99%    8.59ms    ← 99% complete in under 8.59ms (tail latency)
-  1,871,303 requests in 30.10s, 488.98MB read
-Requests/sec: 62,169.18    ← Throughput
-Transfer/sec:     16.25MB
+  HTTP codes:
+    1xx - 0, 2xx - 1871303, 3xx - 0, 4xx - 0, 5xx - 0
+  Throughput:    16.25MB/s
 ```
 
 ### Performance Benchmarks
@@ -118,7 +117,7 @@ Compare throughput across different query types:
 
 ```bash
 # Extract requests/sec from all tests
-grep "Requests/sec:" load-test-results/wrk_*.txt | sort -t: -k2 -n
+grep "Reqs/sec" load-test-results/bombardier_*.txt
 ```
 
 **Look for:**
@@ -308,29 +307,29 @@ db.Preload("Category").Find(&products)
 
 1. **Run basic load test** - Identify slow endpoints
    ```bash
-   ./run_load_tests.sh --wrk -d 30s
+   ./run_load_tests.sh -d 30s
    ```
 
 2. **Check HTTP metrics** - Which queries are slow?
    ```bash
-   grep "Requests/sec:" load-test-results/wrk_*.txt | sort -t: -k2 -n
+   grep "Reqs/sec" load-test-results/bombardier_*.txt
    ```
 
 3. **Run with SQL tracing** - Is database the bottleneck?
    ```bash
-   ./run_load_tests.sh --wrk -d 30s --sql-trace
+   ./run_load_tests.sh -d 30s --sql-trace
    cat load-test-results/sql-trace.txt
    ```
 
 4. **If SQL is fast, run CPU profiling** - Where is CPU time spent?
    ```bash
-   ./run_load_tests.sh --wrk -d 30s --cpu-profile
+   ./run_load_tests.sh -d 30s --cpu-profile
    go tool pprof -http=:8080 load-test-results/cpu.prof
    ```
 
 5. **Optimize and re-test** - Verify improvements
    ```bash
-   ./run_load_tests.sh --wrk -d 30s
+   ./run_load_tests.sh -d 30s
    ```
 
 ### Example Investigation
@@ -453,7 +452,7 @@ Avg time: 0.8ms  ← SQL is fast!
 
 ### Metrics to Track
 
-1. **Throughput** - Requests/sec
+1. **Throughput** - Reqs/sec
 2. **Latency** - p50, p95, p99
 3. **Error rate** - Non-2xx responses
 4. **CPU usage** - System-wide and per-core
@@ -466,7 +465,7 @@ Avg time: 0.8ms  ← SQL is fast!
 
 ### Load Testing Tools
 
-- **wrk** - Fast, scriptable HTTP benchmarking (recommended)
+- **bombardier** - Fast, Go-native HTTP benchmarking (recommended; used by run_load_tests.sh)
 - **vegeta** - Constant rate load testing
 - **k6** - Programmable load testing
 
@@ -480,9 +479,8 @@ Avg time: 0.8ms  ← SQL is fast!
 ### Installation
 
 ```bash
-# wrk
-sudo apt-get install wrk  # Debian/Ubuntu
-brew install wrk          # macOS
+# bombardier
+go install github.com/codesenberg/bombardier@latest
 
 # graphviz (for pprof web view)
 sudo apt-get install graphviz

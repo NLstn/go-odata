@@ -138,7 +138,7 @@
             "command": "bash",
             "args": [
                 "-lc",
-                "./cmd/perfserver/run_load_tests.sh --db sqlite -d 30s -t 10 -C 100 -o ${workspaceFolder}/load-test-results"
+                "./cmd/perfserver/run_load_tests.sh --db sqlite -d 30s -C 100 -o ${workspaceFolder}/load-test-results"
             ],
             "options": {
                 "cwd": "${workspaceFolder}"
@@ -155,7 +155,7 @@
             "command": "bash",
             "args": [
                 "-lc",
-                "./cmd/perfserver/run_load_tests.sh --db postgres --dsn postgresql://odata:odata_dev@localhost:5432/odata_test?sslmode=disable -d 30s -t 10 -C 100 -o ${workspaceFolder}/load-test-results"
+                "./cmd/perfserver/run_load_tests.sh --db postgres --dsn postgresql://odata:odata_dev@localhost:5432/odata_test?sslmode=disable -d 30s -C 100 -o ${workspaceFolder}/load-test-results"
             ],
             "options": {
                 "cwd": "${workspaceFolder}"
@@ -172,7 +172,7 @@
             "command": "bash",
             "args": [
                 "-lc",
-                "./cmd/perfserver/run_load_tests.sh --db sqlite -d 30s -t 10 -C 100 --cpu-profile -o ${workspaceFolder}/load-test-results"
+                "./cmd/perfserver/run_load_tests.sh --db sqlite -d 30s -C 100 --cpu-profile -o ${workspaceFolder}/load-test-results"
             ],
             "options": {
                 "cwd": "${workspaceFolder}"
@@ -189,7 +189,7 @@
             "command": "bash",
             "args": [
                 "-lc",
-                "./cmd/perfserver/run_load_tests.sh --db sqlite -d 30s -t 10 -C 100 --sql-trace -o ${workspaceFolder}/load-test-results"
+                "./cmd/perfserver/run_load_tests.sh --db sqlite -d 30s -C 100 --sql-trace -o ${workspaceFolder}/load-test-results"
             ],
             "options": {
                 "cwd": "${workspaceFolder}"
@@ -206,7 +206,7 @@
             "command": "bash",
             "args": [
                 "-lc",
-                "./cmd/perfserver/run_load_tests.sh --db sqlite -d 30s -t 10 -C 100 --cpu-profile --sql-trace -o ${workspaceFolder}/load-test-results"
+                "./cmd/perfserver/run_load_tests.sh --db sqlite -d 30s -C 100 --cpu-profile --sql-trace -o ${workspaceFolder}/load-test-results"
             ],
             "options": {
                 "cwd": "${workspaceFolder}"
@@ -288,7 +288,7 @@
             "command": "bash",
             "args": [
                 "-lc",
-                "./cmd/perfserver/run_load_tests.sh --db mariadb --dsn odata:odata_dev@tcp\\(localhost:3306\\)/odata_test?parseTime=true -d 30s -t 10 -C 100 -o ${workspaceFolder}/load-test-results"
+                "./cmd/perfserver/run_load_tests.sh --db mariadb --dsn odata:odata_dev@tcp\\(localhost:3306\\)/odata_test?parseTime=true -d 30s -C 100 -o ${workspaceFolder}/load-test-results"
             ],
             "options": {
                 "cwd": "${workspaceFolder}"
@@ -305,7 +305,7 @@
             "command": "bash",
             "args": [
                 "-lc",
-                "./cmd/perfserver/run_load_tests.sh --db mariadb --dsn odata:odata_dev@tcp\\(localhost:3306\\)/odata_test?parseTime=true -d 30s -t 10 -C 100 --cpu-profile -o ${workspaceFolder}/load-test-results"
+                "./cmd/perfserver/run_load_tests.sh --db mariadb --dsn odata:odata_dev@tcp\\(localhost:3306\\)/odata_test?parseTime=true -d 30s -C 100 --cpu-profile -o ${workspaceFolder}/load-test-results"
             ],
             "options": {
                 "cwd": "${workspaceFolder}"
@@ -322,7 +322,7 @@
             "command": "bash",
             "args": [
                 "-lc",
-                "./cmd/perfserver/run_load_tests.sh --db mariadb --dsn odata:odata_dev@tcp\\(localhost:3306\\)/odata_test?parseTime=true -d 30s -t 10 -C 100 --sql-trace -o ${workspaceFolder}/load-test-results"
+                "./cmd/perfserver/run_load_tests.sh --db mariadb --dsn odata:odata_dev@tcp\\(localhost:3306\\)/odata_test?parseTime=true -d 30s -C 100 --sql-trace -o ${workspaceFolder}/load-test-results"
             ],
             "options": {
                 "cwd": "${workspaceFolder}"
@@ -339,7 +339,7 @@
             "command": "bash",
             "args": [
                 "-lc",
-                "./cmd/perfserver/run_load_tests.sh --db mariadb --dsn odata:odata_dev@tcp\\(localhost:3306\\)/odata_test?parseTime=true -d 30s -t 10 -C 100 --cpu-profile --sql-trace -o ${workspaceFolder}/load-test-results"
+                "./cmd/perfserver/run_load_tests.sh --db mariadb --dsn odata:odata_dev@tcp\\(localhost:3306\\)/odata_test?parseTime=true -d 30s -C 100 --cpu-profile --sql-trace -o ${workspaceFolder}/load-test-results"
             ],
             "options": {
                 "cwd": "${workspaceFolder}"
@@ -421,7 +421,7 @@
             "command": "bash",
             "args": [
                 "-lc",
-                "./cmd/perfserver/run_load_tests.sh --db mysql --dsn odata:odata_dev@tcp\\(localhost:3306\\)/odata_test?parseTime=true -d 30s -t 10 -C 100 -o ${workspaceFolder}/load-test-results"
+                "./cmd/perfserver/run_load_tests.sh --db mysql --dsn odata:odata_dev@tcp\\(localhost:3306\\)/odata_test?parseTime=true -d 30s -C 100 -o ${workspaceFolder}/load-test-results"
             ],
             "options": {
                 "cwd": "${workspaceFolder}"
@@ -438,7 +438,7 @@
             "command": "bash",
             "args": [
                 "-lc",
-                "./cmd/perfserver/run_load_tests.sh --db mysql --dsn odata:odata_dev@tcp\\(localhost:3306\\)/odata_test?parseTime=true -d 30s -t 10 -C 100 --cpu-profile -o ${workspaceFolder}/load-test-results"
+                "./cmd/perfserver/run_load_tests.sh --db mysql --dsn odata:odata_dev@tcp\\(localhost:3306\\)/odata_test?parseTime=true -d 30s -C 100 --cpu-profile -o ${workspaceFolder}/load-test-results"
             ],
             "options": {
                 "cwd": "${workspaceFolder}"
@@ -455,7 +455,7 @@
             "command": "bash",
             "args": [
                 "-lc",
-                "./cmd/perfserver/run_load_tests.sh --db mysql --dsn odata:odata_dev@tcp\\(localhost:3306\\)/odata_test?parseTime=true -d 30s -t 10 -C 100 --sql-trace -o ${workspaceFolder}/load-test-results"
+                "./cmd/perfserver/run_load_tests.sh --db mysql --dsn odata:odata_dev@tcp\\(localhost:3306\\)/odata_test?parseTime=true -d 30s -C 100 --sql-trace -o ${workspaceFolder}/load-test-results"
             ],
             "options": {
                 "cwd": "${workspaceFolder}"
@@ -472,7 +472,7 @@
             "command": "bash",
             "args": [
                 "-lc",
-                "./cmd/perfserver/run_load_tests.sh --db mysql --dsn odata:odata_dev@tcp\\(localhost:3306\\)/odata_test?parseTime=true -d 30s -t 10 -C 100 --cpu-profile --sql-trace -o ${workspaceFolder}/load-test-results"
+                "./cmd/perfserver/run_load_tests.sh --db mysql --dsn odata:odata_dev@tcp\\(localhost:3306\\)/odata_test?parseTime=true -d 30s -C 100 --cpu-profile --sql-trace -o ${workspaceFolder}/load-test-results"
             ],
             "options": {
                 "cwd": "${workspaceFolder}"
