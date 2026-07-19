@@ -130,11 +130,12 @@ func writeODataCollectionWithNavigationResponse(w http.ResponseWriter, r *http.R
 		contextURL = buildContextURLWithSelect(r, entitySetName, selectedProps)
 	}
 
-	// Fast path: when the collection is a slice of entity structs with no $expand,
-	// serialize each entity straight into the response buffer from a cached field
-	// plan, skipping the per-entity OrderedMap/map intermediate. Requests that need
-	// per-item OrderedMap rewriting (Prefer: omit-values, $index) keep the slow path.
-	if fastSlice, ok := canFastWriteCollection(data, fullMetadata, expandOptions); ok {
+	// Fast path: when the collection is a slice of entity structs, serialize each
+	// entity straight into the response buffer from a cached field plan, skipping
+	// the per-entity OrderedMap/map intermediate. Expanded navigation properties are
+	// handled inline. Requests that need per-item OrderedMap rewriting (Prefer:
+	// omit-values, $index) keep the slow path.
+	if fastSlice, ok := canFastWriteCollection(data, fullMetadata); ok {
 		pref := preference.ParsePrefer(r)
 		if pref.OmitValues == nil && !shouldAddIndexAnnotations(r) {
 			var annotationFilter *string
@@ -148,6 +149,7 @@ func writeODataCollectionWithNavigationResponse(w http.ResponseWriter, r *http.R
 				metadata:         metadata,
 				fullMetadata:     fullMetadata,
 				selectedNavProps: selectedNavProps,
+				expandOptions:    expandOptions,
 				annotationFilter: annotationFilter,
 				selectedSet:      buildSelectedSet(selectedProps),
 				keySet:           buildKeySet(metadata),

@@ -192,7 +192,7 @@ func TestFastWriterMatchesLegacyPath(t *testing.T) {
 			fastBody := rec.Body.String()
 
 			// Sanity: the fast path must actually have been taken (struct slice, no expand).
-			if _, ok := canFastWriteCollection(data, fullMD, nil); !ok {
+			if _, ok := canFastWriteCollection(data, fullMD); !ok {
 				t.Fatalf("expected fast path to be eligible")
 			}
 
@@ -222,6 +222,99 @@ func TestFastWriterMatchesLegacyPath(t *testing.T) {
 			// consistent ordering with plain GET.
 			if !jsonSemanticEqual(t, fastBody, legacyBody) {
 				t.Errorf("semantic mismatch for %s\n fast:   %s\n legacy: %s", tc.name, fastBody, legacyBody)
+			}
+		})
+	}
+}
+
+// TestFastWriterMatchesLegacyPathExpand locks the $expand fast path to byte-for-byte
+// identical output vs the legacy OrderedMap path. Both serialize expanded values in
+// declaration order (the legacy expand path also goes struct→OrderedMap), so the
+// output must match exactly — including @odata.count and @odata.nextLink placement.
+func TestFastWriterMatchesLegacyPathExpand(t *testing.T) {
+	fullMD, err := internalMetadata.AnalyzeEntity(&ewEntity{})
+	if err != nil {
+		t.Fatalf("AnalyzeEntity ewEntity: %v", err)
+	}
+	fullMD.EntitySetName = "EwEntities"
+	catMD, err := internalMetadata.AnalyzeEntity(&ewCat{})
+	if err != nil {
+		t.Fatalf("AnalyzeEntity ewCat: %v", err)
+	}
+	catMD.EntitySetName = "EwCats"
+	// Register the navigation target so ResolveNavigationTarget (and thus nested
+	// $select/$expand/$count) works, matching a real service.
+	fullMD.SetEntitiesRegistry(map[string]*internalMetadata.EntityMetadata{
+		fullMD.EntityName: fullMD,
+		catMD.EntityName:  catMD,
+	})
+	provider := newEwProvider(fullMD)
+
+	desc := "a description"
+	c1 := ewCat{ID: 7, Name: "Cat7"}
+	c2 := ewCat{ID: 8, Name: "Cat8"}
+	data := []ewEntity{
+		{
+			ID: 1, Name: "First", Description: &desc, Price: 9.99, Status: 1 | 4,
+			Version: 3, CreatedAt: time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC),
+			Category: &c1, CatID: uintPtr(7), Related: []ewCat{c1, c2},
+		},
+		{
+			ID: 2, Name: "Second", Price: 0, Status: 0, Version: 1,
+			CreatedAt: time.Date(2023, 12, 31, 23, 59, 59, 0, time.UTC),
+			Category:  nil, CatID: nil, Related: nil,
+		},
+	}
+
+	one := 1
+	cases := []struct {
+		name          string
+		metadataLevel string
+		expand        []query.ExpandOption
+	}{
+		{"minimal_expand_single", MetadataMinimal, []query.ExpandOption{{NavigationProperty: "Category"}}},
+		{"full_expand_single", MetadataFull, []query.ExpandOption{{NavigationProperty: "Category"}}},
+		{"minimal_expand_collection", MetadataMinimal, []query.ExpandOption{{NavigationProperty: "Related"}}},
+		{"minimal_expand_collection_count", MetadataMinimal, []query.ExpandOption{{NavigationProperty: "Related", Count: true}}},
+		{"minimal_expand_collection_top", MetadataMinimal, []query.ExpandOption{{NavigationProperty: "Related", Top: &one}}},
+		{"minimal_expand_nested_select", MetadataMinimal, []query.ExpandOption{{NavigationProperty: "Related", Select: []string{"Name"}}}},
+		{"full_expand_collection", MetadataFull, []query.ExpandOption{{NavigationProperty: "Related"}}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, ok := canFastWriteCollection(data, fullMD); !ok {
+				t.Fatalf("expected fast path to be eligible")
+			}
+
+			rec := httptest.NewRecorder()
+			r := httptest.NewRequest("GET", "http://example.com/EwEntities", nil)
+			if tc.metadataLevel != MetadataMinimal {
+				r.Header.Set("Accept", "application/json;odata.metadata="+tc.metadataLevel)
+			}
+			if err := WriteODataCollectionWithNavigationAndSelect(rec, r, "EwEntities", data, nil, nil, nil, provider, tc.expand, nil, fullMD, nil, 0); err != nil {
+				t.Fatalf("fast write: %v", err)
+			}
+			fastBody := rec.Body.String()
+
+			// LEGACY path with the same $expand options.
+			lr := httptest.NewRequest("GET", "http://example.com/EwEntities", nil)
+			transformed := addNavigationLinks(data, provider, tc.expand, nil, lr, "EwEntities", tc.metadataLevel, fullMD)
+			envelope := AcquireOrderedMapWithCapacity(2)
+			if tc.metadataLevel != MetadataNone {
+				envelope.Set("@odata.context", buildContextURLWithSelect(lr, "EwEntities", nil))
+			}
+			envelope.Set("value", transformed)
+			var buf bytes.Buffer
+			if err := envelope.marshalTo(&buf); err != nil {
+				t.Fatalf("legacy marshalTo: %v", err)
+			}
+			envelope.Release()
+			releaseOrderedMaps(transformed)
+			legacyBody := buf.String()
+
+			if fastBody != legacyBody {
+				t.Errorf("byte mismatch for %s\n fast:   %s\n legacy: %s", tc.name, fastBody, legacyBody)
 			}
 		})
 	}
