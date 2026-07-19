@@ -338,3 +338,43 @@ func (h *EntityHandler) writeCreateDatabaseError(w http.ResponseWriter, r *http.
 	}
 	h.writeDatabaseError(w, r, err)
 }
+
+// isForeignKeyConstraintViolation reports whether err represents a foreign key
+// constraint violation raised by the underlying database driver. As with
+// isUniqueConstraintViolation, gorm.ErrForeignKeyViolated is only produced when
+// the *gorm.DB was opened with Config.TranslateError enabled, which this library
+// does not control, so raw driver error text is matched too.
+func isForeignKeyConstraintViolation(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, gorm.ErrForeignKeyViolated) {
+		return true
+	}
+
+	msg := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(msg, "foreign key constraint"): // SQLite, PostgreSQL, MySQL, MariaDB
+		return true
+	case strings.Contains(msg, "violates foreign key"): // PostgreSQL (alternate wording)
+		return true
+	case strings.Contains(msg, "conflicted with the reference constraint"), // SQL Server
+		strings.Contains(msg, "reference constraint"):
+		return true
+	}
+	return false
+}
+
+// writeDeleteDatabaseError writes an error response for a failed entity deletion,
+// mapping foreign key constraint violations to 409 Conflict (the entity is still
+// referenced by related entities) instead of the generic 500 used for other
+// database errors.
+func (h *EntityHandler) writeDeleteDatabaseError(w http.ResponseWriter, r *http.Request, err error) {
+	if isForeignKeyConstraintViolation(err) {
+		if writeErr := response.WriteError(w, r, http.StatusConflict, ErrMsgConflict, ErrDetailForeignKeyViolation); writeErr != nil {
+			h.logger.Error("Error writing error response", "error", writeErr)
+		}
+		return
+	}
+	h.writeDatabaseError(w, r, err)
+}

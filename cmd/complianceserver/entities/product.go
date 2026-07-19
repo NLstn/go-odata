@@ -305,7 +305,7 @@ type Product struct {
 	PhotoContent     []byte   `json:"-"`                          // Photo stream content
 	// Navigation properties
 	Category        *Category            `json:"Category,omitempty" gorm:"foreignKey:CategoryID;references:ID"`
-	Descriptions    []ProductDescription `json:"Descriptions,omitempty" gorm:"foreignKey:ProductID;references:ID"`
+	Descriptions    []ProductDescription `json:"Descriptions,omitempty" gorm:"foreignKey:ProductID;references:ID;constraint:OnDelete:CASCADE"`
 	RelatedProducts []Product            `json:"RelatedProducts,omitempty" gorm:"many2many:product_relations;"`
 }
 
