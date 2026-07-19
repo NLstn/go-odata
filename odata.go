@@ -1072,6 +1072,9 @@ func (s *Service) RegisterEntity(entity interface{}, cacheConfigs ...EntityCache
 		return err
 	}
 
+	// The set of exposed entity sets changed; drop the cached service document.
+	s.serviceDocumentHandler.ClearCache()
+
 	s.logger.Debug("Registered entity",
 		"entity", entityMetadata.EntityName,
 		"entitySet", entityMetadata.EntitySetName)
@@ -1193,6 +1196,9 @@ func (s *Service) RegisterSingleton(entity interface{}, singletonName string) er
 	}
 	s.handlers[singletonName] = handler
 
+	// The set of exposed singletons changed; drop the cached service document.
+	s.serviceDocumentHandler.ClearCache()
+
 	s.logger.Debug("Registered singleton",
 		"entity", singletonMetadata.EntityName,
 		"singleton", singletonName)
@@ -1283,6 +1289,9 @@ func (s *Service) RegisterVirtualEntity(entity interface{}) error {
 		handler.SetSchemaVersion(s.schemaVersion)
 	}
 	s.handlers[entityMetadata.EntitySetName] = handler
+
+	// The set of exposed entity sets changed; drop the cached service document.
+	s.serviceDocumentHandler.ClearCache()
 
 	s.logger.Debug("Registered virtual entity",
 		"entity", entityMetadata.EntityName,

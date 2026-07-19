@@ -1,9 +1,11 @@
 package response
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/nlstn/go-odata/internal/version"
@@ -132,13 +134,20 @@ func WriteErrorWithTarget(w http.ResponseWriter, r *http.Request, code int, mess
 
 // WriteServiceDocument writes the OData service document.
 func WriteServiceDocument(w http.ResponseWriter, r *http.Request, entitySets []string, singletons []string) error {
-	if !IsAcceptableFormat(r) {
-		return WriteError(w, r, http.StatusNotAcceptable, "Not Acceptable",
-			"The requested format is not supported. Only application/json is supported for service documents.")
+	valueJSON, err := BuildServiceDocumentValueJSON(entitySets, singletons)
+	if err != nil {
+		return WriteError(w, r, http.StatusInternalServerError, "Internal Server Error", "Failed to marshal service document.")
 	}
+	return WriteServiceDocumentValue(w, r, valueJSON)
+}
 
-	baseURL := buildBaseURL(r)
-
+// BuildServiceDocumentValueJSON serializes the service document "value" array —
+// the list of entity sets and singletons — into JSON. Each entry uses a relative
+// url (the set/singleton name), so the result is independent of the request's
+// base URL and can be built once and reused across requests.
+//
+// An empty input produces "[]" (never "null").
+func BuildServiceDocumentValueJSON(entitySets []string, singletons []string) ([]byte, error) {
 	entities := make([]map[string]interface{}, 0, len(entitySets)+len(singletons))
 	for _, entitySet := range entitySets {
 		entities = append(entities, map[string]interface{}{
@@ -155,28 +164,60 @@ func WriteServiceDocument(w http.ResponseWriter, r *http.Request, entitySets []s
 		})
 	}
 
-	serviceDoc := map[string]interface{}{
-		"@odata.context": baseURL + "/$metadata",
-		"value":          entities,
+	var buf bytes.Buffer
+	encoder := json.NewEncoder(&buf)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(entities); err != nil {
+		return nil, err
+	}
+	// Encode appends a trailing newline; drop it so the bytes splice cleanly
+	// into the response envelope.
+	return bytes.TrimRight(buf.Bytes(), "\n"), nil
+}
+
+// WriteServiceDocumentValue writes an OData service document whose "value" array
+// has already been serialized (see BuildServiceDocumentValueJSON). Only the
+// @odata.context — which embeds the request base URL — is assembled per request,
+// avoiding a full re-marshal of the entity/singleton list on every call.
+func WriteServiceDocumentValue(w http.ResponseWriter, r *http.Request, valueJSON []byte) error {
+	if !IsAcceptableFormat(r) {
+		return WriteError(w, r, http.StatusNotAcceptable, "Not Acceptable",
+			"The requested format is not supported. Only application/json is supported for service documents.")
 	}
 
+	if len(valueJSON) == 0 {
+		valueJSON = []byte("[]")
+	}
+
+	// JSON-encode the context string so any characters in the base URL that
+	// require escaping are handled correctly.
+	contextJSON, err := json.Marshal(buildBaseURL(r) + "/$metadata")
+	if err != nil {
+		return WriteError(w, r, http.StatusInternalServerError, "Internal Server Error", "Failed to marshal service document.")
+	}
+
+	// OData JSON key order: @odata.context before value.
+	var buf bytes.Buffer
+	buf.Grow(len(contextJSON) + len(valueJSON) + 32)
+	buf.WriteString(`{"@odata.context":`)
+	buf.Write(contextJSON)
+	buf.WriteString(`,"value":`)
+	buf.Write(valueJSON)
+	buf.WriteByte('}')
+	body := buf.Bytes()
+
 	metadataLevel := GetODataMetadataLevel(r)
+	w.Header().Set("Content-Type", "application/json;odata.metadata="+metadataLevel)
+	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+
 	if r.Method == http.MethodHead {
-		jsonBytes, err := json.Marshal(serviceDoc)
-		if err != nil {
-			return WriteError(w, r, http.StatusInternalServerError, "Internal Server Error", "Failed to marshal service document.")
-		}
-		w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
-		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(jsonBytes)))
 		w.WriteHeader(http.StatusOK)
 		return nil
 	}
 
-	w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
 	w.WriteHeader(http.StatusOK)
-	encoder := json.NewEncoder(w)
-	encoder.SetEscapeHTML(false)
-	return encoder.Encode(serviceDoc)
+	_, err = w.Write(body)
+	return err
 }
 
 // ODataURLComponents represents the parsed components of an OData URL.
