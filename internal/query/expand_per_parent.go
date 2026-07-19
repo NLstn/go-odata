@@ -5,12 +5,10 @@ import (
 	"reflect"
 	"sort"
 	"strings"
-	"sync"
 
 	"github.com/nlstn/go-odata/internal/fastscan"
 	"github.com/nlstn/go-odata/internal/metadata"
 	"gorm.io/gorm"
-	gormschema "gorm.io/gorm/schema"
 )
 
 // ApplyPerParentExpand applies $expand options with $top/$skip for collection navigation properties per parent.
@@ -227,55 +225,24 @@ func resolveParentReferenceProperty(navProp *metadata.PropertyMetadata, entityMe
 		return expandCompositeConstraints(navProp.ReferentialConstraints, entityMetadata, targetMetadata)
 	}
 
-	// GORM's relationship schema is the source of truth for relationship
-	// direction when tags do not describe enough information. Most navigation
-	// fields expose foreignKey/references, however, and resolving those against
-	// our already-built metadata avoids reparsing GORM schema on every request.
-	if constraints := gormRelationshipConstraints(navProp, entityMetadata); len(constraints) > 0 {
+	// GormReferenceConstraints is resolved once, at metadata-analysis time,
+	// from GORM's own relationship schema for the case where the gorm tag
+	// doesn't fully describe the constraint (see
+	// metadata.resolveGormReferenceConstraints). Using it here means $expand
+	// never needs to parse the GORM schema itself.
+	if len(navProp.GormReferenceConstraints) > 0 {
+		constraints := make([]parentReferenceConstraint, 0, len(navProp.GormReferenceConstraints))
+		for _, c := range navProp.GormReferenceConstraints {
+			constraints = append(constraints, parentReferenceConstraint{
+				dependentProperty: c.DependentProperty,
+				dependentColumn:   c.DependentColumn,
+				principalProperty: c.PrincipalProperty,
+			})
+		}
 		return constraints
 	}
 
 	return fallbackReferenceConstraints(navProp, entityMetadata, targetMetadata)
-}
-
-func gormRelationshipConstraints(navProp *metadata.PropertyMetadata, entityMetadata *metadata.EntityMetadata) []parentReferenceConstraint {
-	ownerType := entityMetadata.EntityType
-	for ownerType.Kind() == reflect.Ptr {
-		ownerType = ownerType.Elem()
-	}
-	if ownerType.Kind() != reflect.Struct || navProp.IsManyToMany {
-		return nil
-	}
-
-	sch, err := gormschema.Parse(reflect.New(ownerType).Interface(), &sync.Map{}, gormschema.NamingStrategy{})
-	if err != nil || sch == nil {
-		return nil
-	}
-	rel := sch.Relationships.Relations[navProp.FieldName]
-	if rel == nil {
-		return nil
-	}
-
-	constraints := make([]parentReferenceConstraint, 0, len(rel.References))
-	for _, ref := range rel.References {
-		if ref == nil || ref.PrimaryKey == nil || ref.ForeignKey == nil {
-			continue
-		}
-		constraint := parentReferenceConstraint{}
-		if ref.OwnPrimaryKey {
-			// has-one / has-many: target.ForeignKey = parent.PrimaryKey
-			constraint.dependentProperty = ref.ForeignKey.Name
-			constraint.dependentColumn = ref.ForeignKey.DBName
-			constraint.principalProperty = ref.PrimaryKey.Name
-		} else {
-			// belongs-to: target.PrimaryKey = parent.ForeignKey
-			constraint.dependentProperty = ref.PrimaryKey.Name
-			constraint.dependentColumn = ref.PrimaryKey.DBName
-			constraint.principalProperty = ref.ForeignKey.Name
-		}
-		constraints = append(constraints, constraint)
-	}
-	return constraints
 }
 
 func expandCompositeConstraints(constraints map[string]string, entityMetadata *metadata.EntityMetadata, targetMetadata *metadata.EntityMetadata) []parentReferenceConstraint {

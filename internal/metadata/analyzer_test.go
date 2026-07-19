@@ -536,6 +536,67 @@ func TestNavigationPropertyWithReferentialConstraints(t *testing.T) {
 	}
 }
 
+// TestNavigationPropertyResolvesGormReferenceConstraintsOnceAtAnalysisTime
+// covers a gorm tag that names "references:" without "foreignKey:", so
+// extractReferentialConstraints (which requires foreignKey to be non-empty)
+// leaves ReferentialConstraints empty even though the field is a navigation
+// property. GORM itself still resolves the relationship (defaulting the
+// foreign key to the owner-type-name+ID convention), so
+// GormReferenceConstraints should be populated from GORM's own schema —
+// resolved here, once, at analysis time rather than by $expand per request.
+func TestNavigationPropertyResolvesGormReferenceConstraintsOnceAtAnalysisTime(t *testing.T) {
+	type User struct {
+		ID   int    `json:"id" odata:"key"`
+		Name string `json:"name"`
+	}
+
+	type Order struct {
+		ID         int   `json:"id" odata:"key"`
+		CustomerID int   `json:"customerId"`
+		Customer   *User `json:"customer" gorm:"references:ID"`
+	}
+
+	meta, err := AnalyzeEntity(Order{})
+	if err != nil {
+		t.Fatalf("AnalyzeEntity() error = %v", err)
+	}
+
+	var customerProp *PropertyMetadata
+	for i, prop := range meta.Properties {
+		if prop.Name == "Customer" {
+			customerProp = &meta.Properties[i]
+			break
+		}
+	}
+	if customerProp == nil {
+		t.Fatal("Customer navigation property not found")
+	}
+	if !customerProp.IsNavigationProp {
+		t.Fatal("Customer should be a navigation property")
+	}
+	if len(customerProp.ReferentialConstraints) != 0 {
+		t.Fatalf("expected tag-based ReferentialConstraints to stay empty (no foreignKey: in tag), got %v", customerProp.ReferentialConstraints)
+	}
+	if len(customerProp.GormReferenceConstraints) == 0 {
+		t.Fatal("expected GormReferenceConstraints to be resolved from GORM's own schema")
+	}
+
+	// Belongs-to: Order.CustomerID (principal, read off the parent Order row)
+	// references User.ID (dependent, matched against the target User table).
+	found := false
+	for _, c := range customerProp.GormReferenceConstraints {
+		if c.DependentProperty == "ID" && c.PrincipalProperty == "CustomerID" {
+			found = true
+			if c.DependentColumn != "id" {
+				t.Errorf("DependentColumn = %q, want %q", c.DependentColumn, "id")
+			}
+		}
+	}
+	if !found {
+		t.Errorf("expected an ID -> CustomerID constraint, got %+v", customerProp.GormReferenceConstraints)
+	}
+}
+
 func TestAutoDetectNullability(t *testing.T) {
 	type TestEntity struct {
 		ID                int     `json:"id" odata:"key"`
