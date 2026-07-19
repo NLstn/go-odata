@@ -3,6 +3,7 @@ package response
 import (
 	"bytes"
 	"encoding/json"
+	"reflect"
 	"strconv"
 	"sync"
 	"time"
@@ -303,14 +304,8 @@ func (om *OrderedMap) marshalTo(buf *bytes.Buffer) error {
 
 		switch v := value.(type) {
 		case string:
-			if needsEscaping(v) {
-				if err := encodeFallback(buf, &enc, v); err != nil {
-					return err
-				}
-			} else {
-				buf.WriteByte('"')
-				buf.WriteString(v)
-				buf.WriteByte('"')
+			if err := writeJSONString(buf, v, &enc); err != nil {
+				return err
 			}
 		case time.Time:
 			if !appendJSONTime(buf, v) {
@@ -376,7 +371,14 @@ func (om *OrderedMap) marshalTo(buf *bytes.Buffer) error {
 		case nil:
 			buf.WriteString("null")
 		default:
-			if err := encodeFallback(buf, &enc, value); err != nil {
+			// Complex-type (embedded struct) values are written directly from a
+			// cached field plan; only shapes the plan can't reproduce exactly fall
+			// through to the reflection-based encoding/json encoder.
+			if handled, err := writeComplexValue(buf, reflect.ValueOf(value), &enc); handled {
+				if err != nil {
+					return err
+				}
+			} else if err := encodeFallback(buf, &enc, value); err != nil {
 				return err
 			}
 		}
@@ -461,6 +463,34 @@ func writeUint(buf *bytes.Buffer, v uint64) {
 func writeFloat(buf *bytes.Buffer, v float64) {
 	// Use strconv for proper float formatting
 	buf.WriteString(strconv.FormatFloat(v, 'f', -1, 64))
+}
+
+// writeJSONKey writes a JSON object key (quoted string) to buf, escaping only
+// when necessary. Mirrors the key handling inlined in marshalTo.
+func writeJSONKey(buf *bytes.Buffer, key string) {
+	if needsEscaping(key) {
+		keyBytes, err := json.Marshal(key)
+		if err == nil {
+			buf.Write(keyBytes)
+			return
+		}
+	}
+	buf.WriteByte('"')
+	buf.WriteString(key)
+	buf.WriteByte('"')
+}
+
+// writeJSONString writes a JSON string value to buf. Strings that need escaping
+// are routed through the encoder (which handles escaping identically to the rest
+// of the response); the common no-escape case is written directly.
+func writeJSONString(buf *bytes.Buffer, s string, enc **json.Encoder) error {
+	if needsEscaping(s) {
+		return encodeFallback(buf, enc, s)
+	}
+	buf.WriteByte('"')
+	buf.WriteString(s)
+	buf.WriteByte('"')
+	return nil
 }
 
 // needsEscaping checks if a string needs JSON escaping
