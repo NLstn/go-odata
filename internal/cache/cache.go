@@ -29,11 +29,12 @@ import (
 //   - Manual: call Invalidate() after any write operation to force a refresh on
 //     the next read.
 type EntityCache struct {
-	refreshMu  sync.Mutex // serializes refreshes to prevent a thundering herd
-	snap       atomic.Pointer[Snapshot]
-	ttl        time.Duration
-	entityType reflect.Type
-	keyFn      KeyFunc
+	refreshMu   sync.Mutex // serializes refreshes to prevent a thundering herd
+	snap        atomic.Pointer[Snapshot]
+	ttl         time.Duration
+	entityType  reflect.Type
+	keyFn       KeyFunc
+	normalizeFn NormalizeFunc
 }
 
 // KeyFunc derives the canonical string key of an entity. The argument is a
@@ -42,18 +43,30 @@ type EntityCache struct {
 // that performs key lookups, so that Snapshot.Lookup can find the entity.
 type KeyFunc func(entity reflect.Value) string
 
+// NormalizeFunc precomputes comparison-ready values for one entity, e.g. one
+// slot per filterable/sortable property, indexed however the caller's own
+// property lookup agrees to. It runs once per entity when a snapshot is
+// built (Refresh), not on every comparison of every request, so callers that
+// otherwise re-derive and re-box the same values via reflection on each
+// filter/sort comparison can instead read them straight from the snapshot.
+type NormalizeFunc func(entity reflect.Value) []interface{}
+
 // Snapshot is an immutable view of the cached dataset. It is safe for concurrent
 // reads and is never modified after New/Refresh publishes it.
 type Snapshot struct {
-	entities  reflect.Value  // []T, treated as read-only after construction
-	byKey     map[string]int // canonical key -> index into entities
-	expiresAt time.Time
+	entities   reflect.Value   // []T, treated as read-only after construction
+	byKey      map[string]int  // canonical key -> index into entities
+	normalized [][]interface{} // parallel to entities; nil if no NormalizeFunc was configured
+	expiresAt  time.Time
 }
 
 // New creates a new EntityCache for the given entity type and TTL.
 // entityType should be the non-pointer struct type of the entity. keyFn derives
-// the canonical key used for O(1) key lookups and must not be nil.
-func New(entityType reflect.Type, ttl time.Duration, keyFn KeyFunc) (*EntityCache, error) {
+// the canonical key used for O(1) key lookups and must not be nil. normalizeFn
+// is optional (nil disables precomputed normalization); when set, its output
+// for every entity is precomputed once per Refresh and exposed via
+// Snapshot.Normalized.
+func New(entityType reflect.Type, ttl time.Duration, keyFn KeyFunc, normalizeFn NormalizeFunc) (*EntityCache, error) {
 	if entityType == nil {
 		return nil, fmt.Errorf("entityType must not be nil")
 	}
@@ -65,9 +78,10 @@ func New(entityType reflect.Type, ttl time.Duration, keyFn KeyFunc) (*EntityCach
 	}
 
 	return &EntityCache{
-		ttl:        ttl,
-		entityType: entityType,
-		keyFn:      keyFn,
+		ttl:         ttl,
+		entityType:  entityType,
+		keyFn:       keyFn,
+		normalizeFn: normalizeFn,
 	}, nil
 }
 
@@ -115,14 +129,23 @@ func (c *EntityCache) Refresh(sourceDB *gorm.DB) error {
 
 	entities := entitiesPtr.Elem()
 	byKey := make(map[string]int, entities.Len())
+	var normalized [][]interface{}
+	if c.normalizeFn != nil {
+		normalized = make([][]interface{}, entities.Len())
+	}
 	for i := 0; i < entities.Len(); i++ {
-		byKey[c.keyFn(entities.Index(i))] = i
+		entity := entities.Index(i)
+		byKey[c.keyFn(entity)] = i
+		if c.normalizeFn != nil {
+			normalized[i] = c.normalizeFn(entity)
+		}
 	}
 
 	c.snap.Store(&Snapshot{
-		entities:  entities,
-		byKey:     byKey,
-		expiresAt: time.Now().Add(c.ttl),
+		entities:   entities,
+		byKey:      byKey,
+		normalized: normalized,
+		expiresAt:  time.Now().Add(c.ttl),
 	})
 
 	return nil
@@ -148,4 +171,14 @@ func (s *Snapshot) Lookup(key string) (reflect.Value, bool) {
 		return reflect.Value{}, false
 	}
 	return s.entities.Index(i), true
+}
+
+// Normalized returns the precomputed comparison-ready values for the entity
+// at index i, as produced by the NormalizeFunc passed to New. It returns nil
+// if the cache was created without one.
+func (s *Snapshot) Normalized(i int) []interface{} {
+	if s.normalized == nil {
+		return nil
+	}
+	return s.normalized[i]
 }

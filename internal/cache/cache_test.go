@@ -47,7 +47,7 @@ func newSourceDB(t *testing.T, widgets ...widget) *gorm.DB {
 
 func newWidgetCache(t *testing.T, ttl time.Duration) *EntityCache {
 	t.Helper()
-	c, err := New(reflect.TypeOf(widget{}), ttl, widgetKey)
+	c, err := New(reflect.TypeOf(widget{}), ttl, widgetKey, nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -55,13 +55,13 @@ func newWidgetCache(t *testing.T, ttl time.Duration) *EntityCache {
 }
 
 func TestNewValidation(t *testing.T) {
-	if _, err := New(nil, time.Minute, widgetKey); err == nil {
+	if _, err := New(nil, time.Minute, widgetKey, nil); err == nil {
 		t.Error("expected error for nil entityType")
 	}
-	if _, err := New(reflect.TypeOf(widget{}), 0, widgetKey); err == nil {
+	if _, err := New(reflect.TypeOf(widget{}), 0, widgetKey, nil); err == nil {
 		t.Error("expected error for non-positive ttl")
 	}
-	if _, err := New(reflect.TypeOf(widget{}), time.Minute, nil); err == nil {
+	if _, err := New(reflect.TypeOf(widget{}), time.Minute, nil, nil); err == nil {
 		t.Error("expected error for nil keyFn")
 	}
 }
@@ -102,6 +102,62 @@ func TestRefreshAndLookup(t *testing.T) {
 
 	if _, found := snap.Lookup("99"); found {
 		t.Fatal("did not expect to find widget 99")
+	}
+}
+
+// widgetNormalize precomputes [ID as float64, Name] per widget, mirroring
+// how handlers.EntityCacheNormalizeFunc reduces scalar properties to
+// comparison-ready values once per entity at refresh time.
+func widgetNormalize(v reflect.Value) []interface{} {
+	for v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+	return []interface{}{float64(v.FieldByName("ID").Uint()), v.FieldByName("Name").String()}
+}
+
+func TestNormalizedIsPrecomputedPerEntity(t *testing.T) {
+	db := newSourceDB(t,
+		widget{ID: 1, Name: "a"},
+		widget{ID: 2, Name: "b"},
+	)
+	c, err := New(reflect.TypeOf(widget{}), time.Minute, widgetKey, widgetNormalize)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if err := c.Refresh(db); err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+	snap, ok := c.Current()
+	if !ok {
+		t.Fatal("expected a current snapshot")
+	}
+
+	for i := 0; i < snap.Len(); i++ {
+		entity := snap.At(i)
+		norm := snap.Normalized(i)
+		if norm == nil {
+			t.Fatalf("Normalized(%d) = nil, want precomputed values", i)
+		}
+		wantID := float64(entity.FieldByName("ID").Uint())
+		wantName := entity.FieldByName("Name").String()
+		if norm[0] != wantID || norm[1] != wantName {
+			t.Errorf("Normalized(%d) = %v, want [%v %v]", i, norm, wantID, wantName)
+		}
+	}
+}
+
+func TestNormalizedIsNilWithoutNormalizeFunc(t *testing.T) {
+	db := newSourceDB(t, widget{ID: 1, Name: "a"})
+	c := newWidgetCache(t, time.Minute)
+	if err := c.Refresh(db); err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+	snap, ok := c.Current()
+	if !ok {
+		t.Fatal("expected a current snapshot")
+	}
+	if got := snap.Normalized(0); got != nil {
+		t.Errorf("Normalized(0) = %v, want nil when no NormalizeFunc was configured", got)
 	}
 }
 

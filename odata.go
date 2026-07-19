@@ -1128,7 +1128,7 @@ func (s *Service) configureEntityCache(entityMeta *metadata.EntityMetadata, hand
 		ttl = 5 * time.Minute
 	}
 
-	entityCache, err := cache.New(entityMeta.EntityType, ttl, handlers.EntityCacheKeyFunc(entityMeta))
+	entityCache, err := cache.New(entityMeta.EntityType, ttl, handlers.EntityCacheKeyFunc(entityMeta), handlers.EntityCacheNormalizeFunc(entityMeta))
 	if err != nil {
 		return fmt.Errorf("failed to create entity cache for '%s': %w", entityMeta.EntitySetName, err)
 	}

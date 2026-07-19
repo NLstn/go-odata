@@ -41,6 +41,35 @@ func EntityCacheKeyFunc(entityMeta *metadata.EntityMetadata) cache.KeyFunc {
 	}
 }
 
+// EntityCacheNormalizeFunc returns a cache.NormalizeFunc that precomputes,
+// once per entity when a snapshot is built (or rebuilt on refresh), the
+// comparison-ready value of every scalar property the in-memory filter/sort
+// evaluator can compare (see isCacheComparableType). Each entity's result
+// slice is indexed by that property's position in entityMeta.Properties,
+// matching resolveScalarPropertyIndex, so a filter/sort comparison reads a
+// precomputed value directly out of the snapshot instead of re-deriving and
+// re-boxing it via reflection on every comparison of every request.
+func EntityCacheNormalizeFunc(entityMeta *metadata.EntityMetadata) cache.NormalizeFunc {
+	props := entityMeta.Properties
+	return func(entity reflect.Value) []interface{} {
+		for entity.Kind() == reflect.Ptr {
+			if entity.IsNil() {
+				return nil
+			}
+			entity = entity.Elem()
+		}
+		norm := make([]interface{}, len(props))
+		for i := range props {
+			p := &props[i]
+			if p.IsNavigationProp || p.IsComplexType || p.IsEnum || !isCacheComparableType(p.Type) {
+				continue
+			}
+			norm[i] = normalizeCacheScalar(entityFieldValue(entity, p))
+		}
+		return norm
+	}
+}
+
 // canonicalKeyFromValues builds the canonical key string from a parsed key-value
 // map (keyed by JSON/OData property name, as produced by parseEntityKeyValues).
 // It returns false when a key property is missing from the map.
@@ -118,8 +147,18 @@ func (h *EntityHandler) cacheSnapshot(ctx context.Context) (*cache.Snapshot, boo
 // faithfully. Navigation properties, complex types, enums, and non-scalar Go
 // kinds (time.Time, []byte, …) return false so the query falls back to SQL.
 func (h *EntityHandler) resolveScalarProperty(name string) (*metadata.PropertyMetadata, bool) {
+	_, prop, ok := h.resolveScalarPropertyIndex(name)
+	return prop, ok
+}
+
+// resolveScalarPropertyIndex is resolveScalarProperty's index-returning form.
+// The index is the property's position in h.metadata.Properties, which is
+// also how EntityCacheNormalizeFunc indexes its precomputed values — so
+// filter/sort preparation (done once per query) can resolve a property name
+// once and every subsequent per-entity comparison is a plain slice index.
+func (h *EntityHandler) resolveScalarPropertyIndex(name string) (int, *metadata.PropertyMetadata, bool) {
 	if name == "" || strings.Contains(name, "/") {
-		return nil, false
+		return 0, nil, false
 	}
 	for i := range h.metadata.Properties {
 		p := &h.metadata.Properties[i]
@@ -128,12 +167,12 @@ func (h *EntityHandler) resolveScalarProperty(name string) (*metadata.PropertyMe
 		}
 		if strings.EqualFold(p.JsonName, name) || strings.EqualFold(p.Name, name) {
 			if isCacheComparableType(p.Type) {
-				return p, true
+				return i, p, true
 			}
-			return nil, false
+			return 0, nil, false
 		}
 	}
-	return nil, false
+	return 0, nil, false
 }
 
 // isCacheComparableType reports whether values of t can be compared by the
@@ -157,7 +196,7 @@ func isCacheComparableType(t reflect.Type) bool {
 
 // entityFieldValue returns the value of prop on entity, dereferencing pointers.
 // A nil pointer field yields a nil interface.
-func (h *EntityHandler) entityFieldValue(entity reflect.Value, prop *metadata.PropertyMetadata) interface{} {
+func entityFieldValue(entity reflect.Value, prop *metadata.PropertyMetadata) interface{} {
 	for entity.Kind() == reflect.Ptr {
 		if entity.IsNil() {
 			return nil
@@ -258,57 +297,106 @@ func underlyingKind(t reflect.Type) reflect.Kind {
 	return t.Kind()
 }
 
-// evalEntityFilter evaluates a supported filter expression against a single
-// entity. It assumes filterSupported(expr) already returned true.
-func (h *EntityHandler) evalEntityFilter(entity reflect.Value, expr *query.FilterExpression) bool {
+// preparedFilterNode is a query.FilterExpression with its property lookup and
+// literal value(s) already resolved: the property name search
+// (resolveScalarPropertyIndex) and normalizeCacheScalar(expr.Value) both run
+// once here, in prepareFilter, rather than being repeated for every entity
+// evalPreparedFilter is asked to test. Evaluating an entity against a
+// prepared tree is then plain array indexing and comparisons — no
+// reflection or re-boxing.
+type preparedFilterNode struct {
+	left, right *preparedFilterNode
+	logical     query.LogicalOperator
+	isNot       bool
+
+	// Leaf fields (left == nil && right == nil):
+	propIndex int
+	operator  query.FilterOperator
+	value     interface{}   // normalizeCacheScalar(expr.Value), precomputed once
+	values    []interface{} // OpIn only: each element pre-normalized once
+}
+
+// prepareFilter resolves expr into a preparedFilterNode once per query. It
+// assumes filterSupported(expr) already returned true, so every property and
+// operator here is one evalPreparedFilter can evaluate.
+func (h *EntityHandler) prepareFilter(expr *query.FilterExpression) *preparedFilterNode {
 	if expr == nil {
-		return true
+		return nil
 	}
 
 	if expr.Left != nil && expr.Right != nil {
-		left := h.evalEntityFilter(entity, expr.Left)
-		right := h.evalEntityFilter(entity, expr.Right)
+		return &preparedFilterNode{
+			left:    h.prepareFilter(expr.Left),
+			right:   h.prepareFilter(expr.Right),
+			logical: expr.Logical,
+			isNot:   expr.IsNot,
+		}
+	}
+
+	idx, _, ok := h.resolveScalarPropertyIndex(expr.Property)
+	if !ok {
+		// filterSupported already guarantees this is resolvable; treat an
+		// unexpected miss as "matches nothing" rather than panicking.
+		return &preparedFilterNode{propIndex: -1, operator: expr.Operator, isNot: expr.IsNot}
+	}
+	node := &preparedFilterNode{propIndex: idx, operator: expr.Operator, isNot: expr.IsNot}
+	if expr.Operator == query.OpIn {
+		if values, ok := expr.Value.([]interface{}); ok {
+			node.values = make([]interface{}, len(values))
+			for i, v := range values {
+				node.values[i] = normalizeCacheScalar(v)
+			}
+		}
+		return node
+	}
+	node.value = normalizeCacheScalar(expr.Value)
+	return node
+}
+
+// evalPreparedFilter evaluates a prepared filter tree against one entity's
+// precomputed comparison values (see EntityCacheNormalizeFunc), with no
+// reflection or normalization on the hot path.
+func evalPreparedFilter(norm []interface{}, node *preparedFilterNode) bool {
+	if node == nil {
+		return true
+	}
+
+	if node.left != nil && node.right != nil {
+		left := evalPreparedFilter(norm, node.left)
+		right := evalPreparedFilter(norm, node.right)
 		var result bool
-		switch expr.Logical {
+		switch node.logical {
 		case query.LogicalAnd:
 			result = left && right
 		case query.LogicalOr:
 			result = left || right
 		}
-		if expr.IsNot {
+		if node.isNot {
 			return !result
 		}
 		return result
 	}
 
-	prop, ok := h.resolveScalarProperty(expr.Property)
-	if !ok {
+	if node.propIndex < 0 {
 		return false
 	}
-	left := h.entityFieldValue(entity, prop)
+	left := norm[node.propIndex]
 
-	result := h.evalLeafComparison(left, expr.Operator, expr.Value)
-	if expr.IsNot {
+	var result bool
+	if node.operator == query.OpIn {
+		for _, v := range node.values {
+			if evaluateFilterComparison(left, query.OpEqual, v) {
+				result = true
+				break
+			}
+		}
+	} else {
+		result = evaluateFilterComparison(left, node.operator, node.value)
+	}
+	if node.isNot {
 		return !result
 	}
 	return result
-}
-
-func (h *EntityHandler) evalLeafComparison(left interface{}, op query.FilterOperator, right interface{}) bool {
-	if op == query.OpIn {
-		values, ok := right.([]interface{})
-		if !ok {
-			return false
-		}
-		normLeft := normalizeCacheScalar(left)
-		for _, item := range values {
-			if evaluateFilterComparison(normLeft, query.OpEqual, normalizeCacheScalar(item)) {
-				return true
-			}
-		}
-		return false
-	}
-	return evaluateFilterComparison(normalizeCacheScalar(left), op, normalizeCacheScalar(right))
 }
 
 // snapshotSupportsCollection reports whether a collection query can be served
@@ -363,24 +451,53 @@ func (h *EntityHandler) defaultKeyOrderBy() []query.OrderByItem {
 	return items
 }
 
-// sortEntityValues sorts copies in place by the given $orderby items.
-func (h *EntityHandler) sortEntityValues(values []reflect.Value, orderBy []query.OrderByItem) {
-	if len(orderBy) == 0 || len(values) < 2 {
+// preparedOrderByItem is a query.OrderByItem with its property lookup already
+// resolved, once per query, instead of on every sort comparison.
+type preparedOrderByItem struct {
+	propIndex  int
+	descending bool
+}
+
+// prepareOrderBy resolves orderBy into preparedOrderByItems once per query.
+// Items whose property can't be resolved are skipped, matching
+// resolveScalarProperty's contract (snapshotSupportsCollection already
+// guarantees every item here is resolvable).
+func (h *EntityHandler) prepareOrderBy(orderBy []query.OrderByItem) []preparedOrderByItem {
+	prepared := make([]preparedOrderByItem, 0, len(orderBy))
+	for _, item := range orderBy {
+		idx, _, ok := h.resolveScalarPropertyIndex(item.Property)
+		if !ok {
+			continue
+		}
+		prepared = append(prepared, preparedOrderByItem{propIndex: idx, descending: item.Descending})
+	}
+	return prepared
+}
+
+// snapshotMatch pairs a mutable copy of one matching entity (mutable because
+// downstream $expand populates navigation fields on it) with its precomputed
+// comparison values, shared directly from the snapshot: sorting never needs
+// to re-derive or re-normalize anything from the entity itself.
+type snapshotMatch struct {
+	entity reflect.Value
+	norm   []interface{}
+}
+
+// sortMatches sorts matches in place by the given prepared $orderby items,
+// comparing precomputed values instead of re-deriving them from the entity.
+func sortMatches(matches []snapshotMatch, orderBy []preparedOrderByItem) {
+	if len(orderBy) == 0 || len(matches) < 2 {
 		return
 	}
-	sort.SliceStable(values, func(i, j int) bool {
+	sort.SliceStable(matches, func(i, j int) bool {
 		for _, item := range orderBy {
-			prop, ok := h.resolveScalarProperty(item.Property)
-			if !ok {
-				continue
-			}
-			lv := h.entityFieldValue(values[i], prop)
-			rv := h.entityFieldValue(values[j], prop)
-			cmp := compareMapValues(normalizeCacheScalar(lv), lv != nil, normalizeCacheScalar(rv), rv != nil)
+			lv := matches[i].norm[item.propIndex]
+			rv := matches[j].norm[item.propIndex]
+			cmp := compareMapValues(lv, lv != nil, rv, rv != nil)
 			if cmp == 0 {
 				continue
 			}
-			if item.Descending {
+			if item.descending {
 				return cmp > 0
 			}
 			return cmp < 0
@@ -393,18 +510,20 @@ func (h *EntityHandler) sortEntityValues(values []reflect.Value, orderBy []query
 // returning a *[]T (matching the pointer-to-slice shape the SQL path produces)
 // so downstream $expand/$select post-processing is identical.
 func (h *EntityHandler) queryCollectionSnapshot(snap *cache.Snapshot, queryOptions, modifiedOptions *query.QueryOptions) interface{} {
-	filter := queryOptions.Filter
+	prepared := h.prepareFilter(queryOptions.Filter)
 
-	matches := make([]reflect.Value, 0)
+	matches := make([]snapshotMatch, 0)
 	for i := 0; i < snap.Len(); i++ {
-		entity := snap.At(i)
-		if filter == nil || h.evalEntityFilter(entity, filter) {
+		norm := snap.Normalized(i)
+		if prepared == nil || evalPreparedFilter(norm, prepared) {
+			entity := snap.At(i)
 			// Copy the struct out of the snapshot's backing array so that
 			// downstream $expand (which populates navigation fields) never
-			// mutates the shared, immutable snapshot.
+			// mutates the shared, immutable snapshot. norm is read-only and
+			// safe to share as-is.
 			cp := reflect.New(h.metadata.EntityType).Elem()
 			cp.Set(entity)
-			matches = append(matches, cp)
+			matches = append(matches, snapshotMatch{entity: cp, norm: norm})
 		}
 	}
 
@@ -412,7 +531,7 @@ func (h *EntityHandler) queryCollectionSnapshot(snap *cache.Snapshot, queryOptio
 	if len(orderBy) == 0 {
 		orderBy = h.defaultKeyOrderBy()
 	}
-	h.sortEntityValues(matches, orderBy)
+	sortMatches(matches, h.prepareOrderBy(orderBy))
 
 	// Apply $skip then $top (modifiedOptions.Top is already top+1 so the caller
 	// can detect whether a next page exists).
@@ -439,8 +558,8 @@ func (h *EntityHandler) queryCollectionSnapshot(snap *cache.Snapshot, queryOptio
 
 	sliceType := reflect.SliceOf(h.metadata.EntityType)
 	out := reflect.MakeSlice(sliceType, len(matches), len(matches))
-	for i, e := range matches {
-		out.Index(i).Set(e)
+	for i, m := range matches {
+		out.Index(i).Set(m.entity)
 	}
 	resultsPtr := reflect.New(sliceType)
 	resultsPtr.Elem().Set(out)
@@ -477,9 +596,10 @@ func (h *EntityHandler) countSnapshot(snap *cache.Snapshot, filter *query.Filter
 	if filter == nil {
 		return int64(snap.Len())
 	}
+	prepared := h.prepareFilter(filter)
 	var count int64
 	for i := 0; i < snap.Len(); i++ {
-		if h.evalEntityFilter(snap.At(i), filter) {
+		if evalPreparedFilter(snap.Normalized(i), prepared) {
 			count++
 		}
 	}
