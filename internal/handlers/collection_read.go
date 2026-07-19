@@ -245,15 +245,27 @@ func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.Qu
 		modifiedOptions.Top = &topPlusOne
 	}
 
-	// Use the cache database when available, otherwise the primary database.
-	db, usingCache, release := h.readDB(ctx)
-	defer release()
+	// Fast path: serve the query entirely from the in-memory snapshot cache when
+	// it is warm and the query is within the supported subset. Custom read scopes
+	// (before-read hooks, type-cast filters) cannot be reproduced in memory, so
+	// their presence forces the SQL path.
+	if len(scopes) == 0 && h.entityCache != nil && h.snapshotSupportsCollection(queryOptions) {
+		if snap, ok := h.cacheSnapshot(ctx); ok {
+			resultsPtr, err := h.queryCollectionSnapshot(snap, queryOptions, &modifiedOptions)
+			if err == nil {
+				return h.postProcessCachedCollection(ctx, resultsPtr, queryOptions)
+			}
+			h.logger.Warn("In-memory cache query failed; falling back to primary database",
+				"entitySet", h.metadata.EntitySetName, "error", err)
+		}
+	}
+
+	db := h.db.WithContext(ctx)
 
 	if len(scopes) > 0 {
 		db = db.Scopes(scopes...)
 	}
-	// Expand queries may require related tables that are not present in the cache DB.
-	// Run per-parent expand lookups against the primary database.
+	// Expand queries are resolved with per-parent lookups against the primary database.
 	baseDB := h.db.WithContext(ctx)
 	if len(scopes) > 0 {
 		baseDB = baseDB.Scopes(scopes...)
@@ -278,13 +290,7 @@ func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.Qu
 	// Get the table name for FTS from metadata (respects custom TableName() methods)
 	tableName := h.metadata.TableName
 
-	// When serving from the cache DB, the primary DB's FTS manager is not
-	// applicable. Pass nil so that the query falls back to the built-in SQLite FTS or
-	// the in-memory search implementation that is applied further below.
 	fts := h.ftsManager
-	if usingCache {
-		fts = nil
-	}
 
 	if structuralIdx := findFirstStructuralTransformation(modifiedOptions.Apply); structuralIdx > 0 {
 		structural := modifiedOptions.Apply[structuralIdx]

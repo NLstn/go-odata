@@ -7,202 +7,145 @@ import (
 	"sync/atomic"
 	"time"
 
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 )
 
-// EntityCache provides a SQLite-backed in-memory cache for a single entity type.
-// It stores the full dataset from the primary database and serves read queries
-// against the local cache copy, avoiding repeated round-trips to the primary database.
+// EntityCache provides an in-memory snapshot cache for a single entity type.
+// It loads the full dataset from the primary database once per TTL window and
+// serves read queries directly from Go data structures, avoiding both repeated
+// round-trips to the primary database and the per-connection locking of an
+// embedded SQL engine.
+//
+// Concurrency model:
+//   - The active dataset is held in an immutable *Snapshot behind an atomic
+//     pointer. Readers load the pointer once and operate on the snapshot with no
+//     locking whatsoever, so an unbounded number of reads proceed in parallel.
+//   - A snapshot is never mutated after it is published. Refresh builds a brand
+//     new snapshot and swaps it in atomically; the old snapshot is reclaimed by
+//     the garbage collector once the last in-flight reader releases it.
 //
 // Cache invalidation:
-//   - Automatic: data expires after the configured TTL
-//   - Manual: call Invalidate() after any write operation to force a refresh
-//
-// The cache is safe for concurrent use. Only one goroutine refreshes the cache at a
-// time; concurrent refresh requests block until the first refresh completes, after
-// which they reuse the freshly populated cache rather than triggering another fetch.
+//   - Automatic: a snapshot expires after the configured TTL.
+//   - Manual: call Invalidate() after any write operation to force a refresh on
+//     the next read.
 type EntityCache struct {
-	mu         sync.Mutex
-	refreshMu  sync.Mutex // serializes refresh operations to prevent thundering herd
-	current    *cacheStore
-	stale      []*cacheStore
-	expiresAt  time.Time
+	refreshMu  sync.Mutex // serializes refreshes to prevent a thundering herd
+	snap       atomic.Pointer[Snapshot]
 	ttl        time.Duration
 	entityType reflect.Type
-	valid      bool // whether the cache has been populated at least once
+	keyFn      KeyFunc
 }
 
-type cacheStore struct {
-	db      *gorm.DB
-	readers int64
-}
+// KeyFunc derives the canonical string key of an entity. The argument is a
+// single element of the loaded []T slice (a struct value, not a pointer). The
+// returned string must match the one produced for the same key by the caller
+// that performs key lookups, so that Snapshot.Lookup can find the entity.
+type KeyFunc func(entity reflect.Value) string
 
-var cacheStoreCounter uint64
+// Snapshot is an immutable view of the cached dataset. It is safe for concurrent
+// reads and is never modified after New/Refresh publishes it.
+type Snapshot struct {
+	entities  reflect.Value  // []T, treated as read-only after construction
+	byKey     map[string]int // canonical key -> index into entities
+	expiresAt time.Time
+}
 
 // New creates a new EntityCache for the given entity type and TTL.
-// entityType should be the non-pointer struct type of the entity.
-func New(entityType reflect.Type, ttl time.Duration) (*EntityCache, error) {
+// entityType should be the non-pointer struct type of the entity. keyFn derives
+// the canonical key used for O(1) key lookups and must not be nil.
+func New(entityType reflect.Type, ttl time.Duration, keyFn KeyFunc) (*EntityCache, error) {
 	if entityType == nil {
 		return nil, fmt.Errorf("entityType must not be nil")
 	}
 	if ttl <= 0 {
 		return nil, fmt.Errorf("ttl must be positive")
 	}
-
-	cache := &EntityCache{
-		ttl:        ttl,
-		entityType: entityType,
+	if keyFn == nil {
+		return nil, fmt.Errorf("keyFn must not be nil")
 	}
 
-	return cache, nil
+	return &EntityCache{
+		ttl:        ttl,
+		entityType: entityType,
+		keyFn:      keyFn,
+	}, nil
+}
+
+// Current returns the active snapshot if it has been populated and has not
+// expired. The returned snapshot is immutable and safe to read concurrently.
+func (c *EntityCache) Current() (*Snapshot, bool) {
+	s := c.snap.Load()
+	if s == nil || !time.Now().Before(s.expiresAt) {
+		return nil, false
+	}
+	return s, true
 }
 
 // IsValid reports whether the cache contains fresh data that has not expired.
 func (c *EntityCache) IsValid() bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.valid && time.Now().Before(c.expiresAt)
+	_, ok := c.Current()
+	return ok
 }
 
-// Invalidate marks the cache as stale so that the next read triggers a refresh
+// Invalidate drops the current snapshot so that the next read triggers a refresh
 // from the primary database.
 func (c *EntityCache) Invalidate() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.valid = false
+	c.snap.Store(nil)
 }
 
-// AcquireDB returns the currently active cache database with a release function.
-// Callers must invoke release when done to allow safe cleanup of stale cache stores.
-func (c *EntityCache) AcquireDB() (*gorm.DB, func(), bool) {
-	c.mu.Lock()
-	store := c.current
-	if !c.valid || store == nil {
-		c.mu.Unlock()
-		return nil, func() {}, false
-	}
-	store.readers++
-	c.mu.Unlock()
-
-	release := func() {
-		c.mu.Lock()
-		store.readers--
-		c.cleanupStaleStoresLocked()
-		c.mu.Unlock()
-	}
-
-	return store.db, release, true
-}
-
-// Refresh reloads the entire dataset from the primary database into the cache.
-// It serialises concurrent refresh attempts so that only one fetch is performed
-// at a time; subsequent callers reuse the result of the first fetch.
-// It swaps in a freshly populated in-memory SQLite store atomically and resets the expiry timer.
+// Refresh reloads the entire dataset from the primary database into a fresh
+// snapshot and swaps it in atomically. It serialises concurrent refresh attempts
+// so that only one fetch runs at a time; callers that arrive while a refresh is
+// in flight reuse its result rather than issuing a redundant fetch.
 func (c *EntityCache) Refresh(sourceDB *gorm.DB) error {
 	c.refreshMu.Lock()
 	defer c.refreshMu.Unlock()
 
-	// Another goroutine may have already refreshed the cache while we were waiting
-	// for the refresh lock.  Reuse that result rather than doing an unnecessary fetch.
+	// Another goroutine may have refreshed the cache while we waited on the
+	// refresh lock. Reuse that result rather than doing an unnecessary fetch.
 	if c.IsValid() {
 		return nil
 	}
 
-	// Fetch all records from the primary database
 	sliceType := reflect.SliceOf(c.entityType)
-	entities := reflect.New(sliceType).Interface()
-	if err := sourceDB.Find(entities).Error; err != nil {
+	entitiesPtr := reflect.New(sliceType)
+	if err := sourceDB.Find(entitiesPtr.Interface()).Error; err != nil {
 		return fmt.Errorf("failed to load entities from primary database: %w", err)
 	}
 
-	newStore, err := c.createStore()
-	if err != nil {
-		return err
+	entities := entitiesPtr.Elem()
+	byKey := make(map[string]int, entities.Len())
+	for i := 0; i < entities.Len(); i++ {
+		byKey[c.keyFn(entities.Index(i))] = i
 	}
 
-	// Bulk-insert the fetched entities
-	sliceVal := reflect.ValueOf(entities).Elem().Interface()
-	if reflect.ValueOf(sliceVal).Len() > 0 {
-		const batchSize = 100
-		if err := newStore.db.CreateInBatches(sliceVal, batchSize).Error; err != nil {
-			cleanupStore(newStore)
-			return fmt.Errorf("failed to populate cache: %w", err)
-		}
-	}
-
-	c.mu.Lock()
-	if c.current != nil {
-		c.stale = append(c.stale, c.current)
-	}
-	c.current = newStore
-	c.expiresAt = time.Now().Add(c.ttl)
-	c.valid = true
-	c.cleanupStaleStoresLocked()
-	c.mu.Unlock()
+	c.snap.Store(&Snapshot{
+		entities:  entities,
+		byKey:     byKey,
+		expiresAt: time.Now().Add(c.ttl),
+	})
 
 	return nil
 }
 
-func (c *EntityCache) createStore() (*cacheStore, error) {
-	storeName := fmt.Sprintf("cache_%s_%d_%d", c.entityType.Name(), time.Now().UnixNano(), atomic.AddUint64(&cacheStoreCounter, 1))
-	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", storeName)
-
-	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Silent),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create cache database: %w", err)
-	}
-
-	sqlDB, err := db.DB()
-	if err == nil {
-		// Keep at least one idle connection so SQLite in-memory data remains alive.
-		sqlDB.SetMaxIdleConns(1)
-
-		// Use a small bounded pool to avoid serializing reads through one connection
-		// in highly concurrent workloads.
-		// Use a practical default for read-heavy cache workloads. This avoids
-		// under-provisioning when GOMAXPROCS is set low in containerized envs.
-		sqlDB.SetMaxOpenConns(25)
-	}
-
-	entityPtr := reflect.New(c.entityType).Interface()
-	if err := db.AutoMigrate(entityPtr); err != nil {
-		cleanupStore(&cacheStore{db: db})
-		return nil, fmt.Errorf("failed to migrate entity schema into cache: %w", err)
-	}
-
-	return &cacheStore{db: db}, nil
+// Len returns the number of entities in the snapshot.
+func (s *Snapshot) Len() int {
+	return s.entities.Len()
 }
 
-func (c *EntityCache) cleanupStaleStoresLocked() {
-	if len(c.stale) == 0 {
-		return
-	}
-
-	remaining := c.stale[:0]
-	for _, store := range c.stale {
-		if store.readers > 0 {
-			remaining = append(remaining, store)
-			continue
-		}
-		cleanupStore(store)
-	}
-	c.stale = remaining
+// At returns the entity at index i. The returned reflect.Value aliases the
+// snapshot's backing array and must not be mutated; callers that need a mutable
+// copy should copy the struct value out first.
+func (s *Snapshot) At(i int) reflect.Value {
+	return s.entities.Index(i)
 }
 
-func cleanupStore(store *cacheStore) {
-	if store == nil {
-		return
+// Lookup returns the entity with the given canonical key. The returned value
+// aliases the snapshot's backing array and must not be mutated.
+func (s *Snapshot) Lookup(key string) (reflect.Value, bool) {
+	i, ok := s.byKey[key]
+	if !ok {
+		return reflect.Value{}, false
 	}
-	if store.db != nil {
-		if sqlDB, err := store.db.DB(); err == nil {
-			if err := sqlDB.Close(); err != nil {
-				// Best-effort cleanup; nothing actionable for callers.
-				_ = err
-			}
-		}
-	}
+	return s.entities.Index(i), true
 }

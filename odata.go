@@ -326,11 +326,16 @@ const (
 	// primary database. This is the default.
 	CacheLevelNone CacheLevel = iota
 
-	// CacheLevelFull caches the entire dataset for the entity in a local in-memory SQLite store.
-	// When the cache is warm, all collection reads are served from the local cache
-	// store instead of the primary database. The cache is invalidated automatically
-	// after the configured TTL and immediately after any write operation (POST,
-	// PATCH, PUT, DELETE) so that reads always reflect current data.
+	// CacheLevelFull holds the entire dataset for the entity in an immutable
+	// in-memory snapshot. When the cache is warm, reads within the supported query
+	// subset — key lookups; collection $filter with eq/ne/gt/ge/lt/le, and/or/not,
+	// in, contains/startswith/endswith; $orderby/$top/$skip/$count/$select; and
+	// $expand (resolved against the primary database) — are served from the
+	// snapshot with fully concurrent, lock-free reads. Queries outside that subset
+	// (for example $apply, $compute, $search, or arithmetic/date/lambda/geo filter
+	// functions) transparently fall back to the primary database. The snapshot is
+	// refreshed automatically after the configured TTL and immediately after any
+	// write operation (POST, PATCH, PUT, DELETE) so that reads reflect current data.
 	//
 	// This level is well-suited for small, slowly-changing lookup tables (for
 	// example: categories, statuses, country codes) where database round-trips
@@ -1120,7 +1125,7 @@ func (s *Service) configureEntityCache(entityMeta *metadata.EntityMetadata, hand
 		ttl = 5 * time.Minute
 	}
 
-	entityCache, err := cache.New(entityMeta.EntityType, ttl)
+	entityCache, err := cache.New(entityMeta.EntityType, ttl, handlers.EntityCacheKeyFunc(entityMeta))
 	if err != nil {
 		return fmt.Errorf("failed to create entity cache for '%s': %w", entityMeta.EntitySetName, err)
 	}

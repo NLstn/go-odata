@@ -16,14 +16,20 @@ func parseFilter(filterStr string, entityMetadata *metadata.EntityMetadata, comp
 func parseFilterWithMode(filterStr string, entityMetadata *metadata.EntityMetadata, computedAliases map[string]bool, maxInClauseSize int, caseInsensitive bool) (*FilterExpression, error) {
 	filterStr = strings.TrimSpace(filterStr)
 
-	// Use pooled tokenizer and AST parser
+	// Use pooled tokenizer and AST parser.
+	//
+	// TokenizeAll returns []*Token whose elements point into the tokenizer's
+	// reusable tokenBuffer, and the AST parser reads those tokens directly.
+	// The tokenizer must therefore stay checked out of the pool until parsing
+	// (and the AST→FilterExpression conversion below) has fully consumed the
+	// tokens; releasing it earlier lets a concurrent AcquireTokenizer reuse the
+	// same buffer and overwrite tokens mid-parse (data race + corrupt results).
 	tokenizer := AcquireTokenizerWithMode(filterStr, caseInsensitive)
+	defer ReleaseTokenizer(tokenizer)
 	tokens, err := tokenizer.TokenizeAll()
 	if err != nil {
-		ReleaseTokenizer(tokenizer)
 		return nil, fmt.Errorf("tokenization failed: %w", err)
 	}
-	ReleaseTokenizer(tokenizer)
 
 	parser := NewASTParser(tokens)
 	ast, err := parser.Parse()
@@ -42,14 +48,15 @@ func parseFilterWithMode(filterStr string, entityMetadata *metadata.EntityMetada
 func ParseFilterWithoutMetadata(filterStr string) (*FilterExpression, error) {
 	filterStr = strings.TrimSpace(filterStr)
 
-	// Use pooled tokenizer and AST parser
+	// Use pooled tokenizer and AST parser. The tokenizer must stay checked out
+	// of the pool until parsing has consumed the tokens it returned, which point
+	// into its reusable buffer — see parseFilterWithMode for the full rationale.
 	tokenizer := AcquireTokenizerWithMode(filterStr, true)
+	defer ReleaseTokenizer(tokenizer)
 	tokens, err := tokenizer.TokenizeAll()
 	if err != nil {
-		ReleaseTokenizer(tokenizer)
 		return nil, fmt.Errorf("tokenization failed: %w", err)
 	}
-	ReleaseTokenizer(tokenizer)
 
 	parser := NewASTParser(tokens)
 	ast, err := parser.Parse()

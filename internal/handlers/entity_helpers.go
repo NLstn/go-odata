@@ -134,11 +134,22 @@ func (h *EntityHandler) parseSingleEntityQueryOptions(r *http.Request) (*query.Q
 
 // fetchEntityByKey fetches an entity by its key with optional expand
 func (h *EntityHandler) fetchEntityByKey(ctx context.Context, entityKey string, queryOptions *query.QueryOptions, scopes []func(*gorm.DB) *gorm.DB) (interface{}, error) {
+	// Fast path: serve the key read from the in-memory snapshot cache. When the
+	// snapshot is authoritative (no custom scopes) a miss is a genuine 404 rather
+	// than a reason to fall back to the primary database.
+	if resultIface, _, served, err := h.fetchEntityByKeyFromSnapshot(ctx, entityKey, queryOptions, scopes); served {
+		if err != nil {
+			return nil, err
+		}
+		if resultIface == nil {
+			return nil, gorm.ErrRecordNotFound
+		}
+		return resultIface, nil
+	}
+
 	result := reflect.New(h.metadata.EntityType).Interface()
 
-	// Use the cache database when available, otherwise the primary database.
-	db, usingCache, release := h.readDB(ctx)
-	defer release()
+	db := h.db.WithContext(ctx)
 
 	if len(scopes) > 0 {
 		db = db.Scopes(scopes...)
@@ -147,14 +158,6 @@ func (h *EntityHandler) fetchEntityByKey(ctx context.Context, entityKey string, 
 	// statement used by First (including its key predicate), so sharing it would
 	// incorrectly apply the parent key filter to child lookups.
 	baseDB := db.Session(&gorm.Session{NewDB: true})
-	if usingCache {
-		// Expand queries may require related tables that are not present in the cache DB.
-		// Run per-parent expand lookups against the primary database.
-		baseDB = h.db.WithContext(ctx)
-		if len(scopes) > 0 {
-			baseDB = baseDB.Scopes(scopes...)
-		}
-	}
 
 	db, err := h.buildKeyQuery(db, entityKey)
 	if err != nil {
@@ -162,7 +165,7 @@ func (h *EntityHandler) fetchEntityByKey(ctx context.Context, entityKey string, 
 	}
 
 	// Apply expand (preload navigation properties) if specified
-	if len(queryOptions.Expand) > 0 && !usingCache {
+	if len(queryOptions.Expand) > 0 {
 		db = query.ApplyExpandOnly(db, queryOptions.Expand, h.metadata, h.logger)
 	}
 
