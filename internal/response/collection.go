@@ -243,15 +243,7 @@ func WriteODataDeltaResponse(w http.ResponseWriter, r *http.Request, entitySetNa
 
 // shouldAddIndexAnnotations checks if the $index query parameter is present in the request
 func shouldAddIndexAnnotations(r *http.Request) bool {
-	queryParams := query.ParseRawQuery(r.URL.RawQuery)
-	_, prefixedExists := queryParams["$index"]
-	if prefixedExists {
-		return true
-	}
-
-	queryParams = query.NormalizeQueryParams(queryParams)
-	_, normalizedExists := queryParams["$index"]
-	return normalizedExists
+	return getNegotiation(r).hasIndex
 }
 
 // addIndexAnnotations adds @odata.index annotations to collection items.

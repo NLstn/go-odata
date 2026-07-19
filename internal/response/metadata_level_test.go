@@ -338,7 +338,8 @@ func TestBuildJSONContentType(t *testing.T) {
 	}
 }
 
-// TestGetFormatParameter tests the getFormatParameter helper function
+// TestGetFormatParameter tests the $format extraction performed by
+// parseQueryNegotiation.
 func TestGetFormatParameter(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -405,9 +406,9 @@ func TestGetFormatParameter(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/test?"+tt.rawQuery, nil)
-			got := getFormatParameter(req)
+			got, _ := parseQueryNegotiation(req.URL.RawQuery)
 			if got != tt.expected {
-				t.Errorf("getFormatParameter(%q) = %q, want %q",
+				t.Errorf("parseQueryNegotiation(%q) format = %q, want %q",
 					tt.rawQuery, got, tt.expected)
 			}
 		})

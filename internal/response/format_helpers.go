@@ -88,14 +88,18 @@ func validateMetadataValue(value string) error {
 // Returns an error if an invalid metadata value is specified.
 // Valid values are: "minimal", "full", "none"
 func ValidateODataMetadata(r *http.Request) error {
-	format := getFormatParameter(r)
+	return getNegotiation(r).metadataErr
+}
+
+// validateMetadataFrom validates the odata.metadata parameter using the already
+// parsed $format value and Accept header.
+func validateMetadataFrom(format, accept string) error {
 	if format != "" {
 		if err := validateMetadataInFormat(format); err != nil {
 			return err
 		}
 	}
 
-	accept := r.Header.Get("Accept")
 	if accept != "" {
 		if err := validateMetadataInAccept(accept); err != nil {
 			return err
@@ -108,12 +112,16 @@ func ValidateODataMetadata(r *http.Request) error {
 // GetODataMetadataLevel extracts the odata.metadata parameter value from the request
 // Returns "minimal" (default), "full", or "none" based on Accept header or $format parameter
 func GetODataMetadataLevel(r *http.Request) string {
-	format := getFormatParameter(r)
+	return getNegotiation(r).metadataLevel
+}
+
+// metadataLevelFrom resolves the metadata level from the already parsed $format
+// value and Accept header.
+func metadataLevelFrom(format, accept string) string {
 	if format != "" {
 		return extractMetadataFromFormat(format)
 	}
 
-	accept := r.Header.Get("Accept")
 	if accept != "" {
 		return extractMetadataFromAccept(accept)
 	}
@@ -124,14 +132,18 @@ func GetODataMetadataLevel(r *http.Request) string {
 // GetIEEE754Compatible extracts IEEE754Compatible format parameter value from
 // $format or Accept. Returns false when unspecified.
 func GetIEEE754Compatible(r *http.Request) bool {
-	format := getFormatParameter(r)
+	return getNegotiation(r).ieee754
+}
+
+// ieee754From resolves IEEE754Compatible from the already parsed $format value
+// and Accept header.
+func ieee754From(format, accept string) bool {
 	if format != "" {
 		if value, ok := extractIEEE754FromMediaType(format); ok {
 			return value
 		}
 	}
 
-	accept := r.Header.Get("Accept")
 	if accept != "" {
 		parts := strings.Split(accept, ",")
 		for _, part := range parts {
@@ -157,22 +169,11 @@ func GetIEEE754Compatible(r *http.Request) bool {
 
 // BuildJSONContentType builds the OData JSON Content-Type value from request format negotiation.
 func BuildJSONContentType(r *http.Request) string {
-	metadataLevel := GetODataMetadataLevel(r)
-	if GetIEEE754Compatible(r) {
-		return fmt.Sprintf("application/json;odata.metadata=%s;IEEE754Compatible=true", metadataLevel)
+	n := getNegotiation(r)
+	if n.ieee754 {
+		return fmt.Sprintf("application/json;odata.metadata=%s;IEEE754Compatible=true", n.metadataLevel)
 	}
-	return fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel)
-}
-
-func getFormatParameter(r *http.Request) string {
-	queryParams := oquery.ParseRawQuery(r.URL.RawQuery)
-
-	queryParams = oquery.NormalizeQueryParams(queryParams)
-
-	if format := queryParams.Get("$format"); format != "" {
-		return format
-	}
-	return ""
+	return fmt.Sprintf("application/json;odata.metadata=%s", n.metadataLevel)
 }
 
 func validateMetadataInFormat(format string) error {
@@ -298,7 +299,12 @@ func extractIEEE754FromParts(parts []string) (bool, bool) {
 // IsAcceptableFormat checks if the requested format via Accept header or $format is supported
 // Returns true if the format is acceptable (JSON, Atom/XML, or wildcard), false otherwise
 func IsAcceptableFormat(r *http.Request) bool {
-	format := getFormatParameter(r)
+	return getNegotiation(r).acceptable
+}
+
+// isAcceptableFrom resolves format acceptability from the already parsed $format
+// value and Accept header.
+func isAcceptableFrom(format, accept string) bool {
 	if format != "" {
 		parts := strings.Split(format, ";")
 		baseFormat := strings.TrimSpace(parts[0])
@@ -306,7 +312,6 @@ func IsAcceptableFormat(r *http.Request) bool {
 			baseFormat == "atom" || baseFormat == "application/atom+xml"
 	}
 
-	accept := r.Header.Get("Accept")
 	if accept == "" {
 		return true
 	}
