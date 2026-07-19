@@ -3,6 +3,7 @@ package cache
 import (
 	"fmt"
 	"reflect"
+	"runtime"
 	"strconv"
 	"sync/atomic"
 	"testing"
@@ -143,6 +144,8 @@ func BenchmarkFilterScan_NewSnapshot(b *testing.B) {
 					out = append(out, w)
 				}
 			}
+			// Consume the result so the compiler cannot elide the scan.
+			runtime.KeepAlive(out)
 		}
 	})
 }
