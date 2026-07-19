@@ -373,7 +373,7 @@ func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.Qu
 
 	if query.ShouldUseMapResults(queryOptions) {
 		var results []map[string]interface{}
-		if err := db.Find(&results).Error; err != nil {
+		if err := fastscan.FindMap(db, &results); err != nil {
 			return nil, err
 		}
 
