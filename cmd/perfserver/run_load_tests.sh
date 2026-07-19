@@ -17,9 +17,8 @@ NC='\033[0m' # No Color
 # Configuration
 SERVER_URL="${SERVER_URL:-http://localhost:9091}"
 OUTPUT_DIR="${OUTPUT_DIR:-./load-test-results}"
-WRK_DURATION="${WRK_DURATION:-30s}"
-WRK_THREADS="${WRK_THREADS:-10}"
-WRK_CONNECTIONS="${WRK_CONNECTIONS:-100}"
+LOAD_DURATION="${LOAD_DURATION:-30s}"
+LOAD_CONNECTIONS="${LOAD_CONNECTIONS:-100}"
 DB_TYPE="sqlite"           # sqlite | postgres
 DB_DSN=""                  # Optional; for postgres defaults if empty
 EXTERNAL_SERVER=0          # Don't start/stop server automatically
@@ -149,25 +148,27 @@ print_header() {
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
 }
 
-# Function to run wrk test
+# Function to run a bombardier test
 run_test() {
     local name="$1"
     local url="$2"
-    local output_file="$OUTPUT_DIR/wrk_${name}.txt"
-    
+    local output_file="$OUTPUT_DIR/bombardier_${name}.txt"
+
     echo -e "${YELLOW}Testing: ${name}${NC}"
     echo -e "URL: ${url}"
-    echo -e "Duration: ${WRK_DURATION}, Threads: ${WRK_THREADS}, Connections: ${WRK_CONNECTIONS}\n"
-    
-    if command -v wrk &> /dev/null; then
-        wrk -t"$WRK_THREADS" -c"$WRK_CONNECTIONS" -d"$WRK_DURATION" --latency "$url" > "$output_file" 2>&1
-        
+    echo -e "Duration: ${LOAD_DURATION}, Connections: ${LOAD_CONNECTIONS}\n"
+
+    if command -v bombardier &> /dev/null; then
+        # --print result suppresses the live progress bar so the captured file
+        # holds only the final statistics block; -l adds latency percentiles.
+        bombardier -c "$LOAD_CONNECTIONS" -d "$LOAD_DURATION" -l --print result "$url" > "$output_file" 2>&1
+
         # Display results
         echo -e "${GREEN}Results:${NC}"
         cat "$output_file"
         echo ""
     else
-        echo -e "${RED}wrk not found. Please install wrk to run load tests.${NC}\n"
+        echo -e "${RED}bombardier not found. Install it with: go install github.com/codesenberg/bombardier@latest${NC}\n"
         exit 1
     fi
 }
@@ -184,13 +185,14 @@ warm_cached_feature_flags() {
 }
 
 extract_requests_per_sec() {
-    local wrk_file="$1"
-    awk '/Requests\/sec:/ {print $2}' "$wrk_file" | tail -n 1
+    local result_file="$1"
+    # bombardier prints "  Reqs/sec   <avg> <stdev> <max>"; take the average column.
+    awk '/Reqs\/sec/ {print $2}' "$result_file" | tail -n 1
 }
 
 compare_feature_flag_results() {
-    local cached_file="$OUTPUT_DIR/wrk_feature_flags_cached.txt"
-    local uncached_file="$OUTPUT_DIR/wrk_feature_flags_uncached.txt"
+    local cached_file="$OUTPUT_DIR/bombardier_feature_flags_cached.txt"
+    local uncached_file="$OUTPUT_DIR/bombardier_feature_flags_uncached.txt"
 
     if [ ! -f "$cached_file" ] || [ ! -f "$uncached_file" ]; then
         echo -e "${YELLOW}⚠ Feature flag benchmark files missing, skipping comparison${NC}"
@@ -203,7 +205,7 @@ compare_feature_flag_results() {
     uncached_rps=$(extract_requests_per_sec "$uncached_file")
 
     if [ -z "$cached_rps" ] || [ -z "$uncached_rps" ]; then
-        echo -e "${YELLOW}⚠ Could not parse Requests/sec from wrk outputs${NC}"
+        echo -e "${YELLOW}⚠ Could not parse Reqs/sec from bombardier outputs${NC}"
         return 0
     fi
 
@@ -345,7 +347,7 @@ display_summary() {
     fi
     
     echo -e "\n${YELLOW}Analysis Tips:${NC}"
-    echo -e "  • Review wrk_*.txt files for detailed metrics"
+    echo -e "  • Review bombardier_*.txt files for detailed metrics"
     echo -e "  • Compare results across different query patterns"
     echo -e "  • Look for high latency or low throughput"
     echo -e "  • Monitor CPU/memory usage during tests\n"
@@ -358,9 +360,8 @@ main() {
     echo -e "Configuration:"
     echo -e "  Server URL: ${GREEN}${SERVER_URL}${NC}"
     echo -e "  Output Directory: ${GREEN}${OUTPUT_DIR}${NC}"
-    echo -e "  Duration: ${GREEN}${WRK_DURATION}${NC}"
-    echo -e "  Threads: ${GREEN}${WRK_THREADS}${NC}"
-    echo -e "  Connections: ${GREEN}${WRK_CONNECTIONS}${NC}"
+    echo -e "  Duration: ${GREEN}${LOAD_DURATION}${NC}"
+    echo -e "  Connections: ${GREEN}${LOAD_CONNECTIONS}${NC}"
     echo -e "  Database: ${GREEN}${DB_TYPE}${DB_DSN:+ (dsn provided)}${NC}"
     echo ""
     
@@ -479,15 +480,16 @@ show_help() {
     cat << EOF
 Usage: $0 [OPTIONS]
 
-Run load tests against the go-odata performance server using wrk.
+Run load tests against the go-odata performance server using bombardier.
 
 OPTIONS:
     -h, --help              Show this help message
     -u, --url URL           Server URL (default: http://localhost:9091)
     -o, --output DIR        Output directory for results (default: ./load-test-results)
-    -d, --duration TIME     Duration for wrk tests (default: 30s)
-    -t, --threads NUM       Number of threads for wrk (default: 10)
-    -C, --connections NUM   Number of connections for wrk (default: 100)
+    -d, --duration TIME     Duration for each test (default: 30s)
+    -C, --connections NUM   Number of concurrent connections (default: 100)
+    -t, --threads NUM       Accepted for backward compatibility; ignored
+                            (bombardier manages its own worker goroutines)
     --db TYPE               Database type to use: sqlite | postgres (default: sqlite)
     --dsn DSN              Database DSN/connection string (required for postgres)
     --external-server      Use an external server (don't start/stop the perfserver)
@@ -508,8 +510,8 @@ EXAMPLES:
     $0
 
     # Run with custom parameters
-    $0 -d 60s -t 12 -C 200
-    
+    $0 -d 60s -C 200
+
     # Enable CPU, memory, and SQL profiling
     $0 --cpu-profile --memory-profile --sql-trace
 
@@ -520,12 +522,11 @@ EXAMPLES:
     $0 --db postgres --dsn "postgresql://user:pass@localhost:5432/dbname" --cpu-profile
 
 PREREQUISITES:
-    - wrk must be installed
+    - bombardier must be installed
     - Go must be installed (to build the perfserver)
 
-    Install wrk:
-        sudo apt-get install wrk            # Debian/Ubuntu
-        brew install wrk                    # macOS
+    Install bombardier:
+        go install github.com/codesenberg/bombardier@latest
 
 NOTE:
     The script automatically starts and stops the performance server.
@@ -550,15 +551,15 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         -d|--duration)
-            WRK_DURATION="$2"
+            LOAD_DURATION="$2"
             shift 2
             ;;
         -t|--threads)
-            WRK_THREADS="$2"
+            # Accepted for backward compatibility; bombardier has no threads knob.
             shift 2
             ;;
         -C|--connections)
-            WRK_CONNECTIONS="$2"
+            LOAD_CONNECTIONS="$2"
             shift 2
             ;;
         --db)

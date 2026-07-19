@@ -15,7 +15,7 @@ This directory contains the MySQL-based development container configuration for 
   - golangci-lint for code linting
   - Go language server for enhanced IDE features
   - air for hot-reload development server
-  - wrk for HTTP load testing
+  - bombardier for HTTP load testing
   - MySQL client for database debugging
 - **Port Forwarding**: Port 8080 is automatically forwarded for the development server
 

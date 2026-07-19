@@ -117,8 +117,8 @@ Use the tasks defined in `.vscode/tasks.json`:
 - "Start Dev Server (PostgreSQL)" - Launch dev server with PostgreSQL database
 
 ### Load Testing Tasks
-- "Run load tests (SQLite)" - Automated load tests with wrk
-- "Run load tests (PostgreSQL)" - PostgreSQL load tests with wrk
+- "Run load tests (SQLite)" - Automated load tests with bombardier
+- "Run load tests (PostgreSQL)" - PostgreSQL load tests with bombardier
 - "Run load tests with CPU profiling (SQLite)" - With CPU profiling enabled
 - "Run load tests with SQL tracing (SQLite)" - With SQL query tracing
 - "Run load tests with full profiling (SQLite)" - With both CPU and SQL profiling
@@ -132,11 +132,11 @@ Use the tasks defined in `.vscode/tasks.json`:
 Use the included load testing script to run comprehensive performance tests:
 
 ```bash
-# Run all load tests with wrk (auto-starts perfserver)
+# Run all load tests with bombardier (auto-starts perfserver)
 ./run_load_tests.sh
 
 # Custom configuration
-./run_load_tests.sh -d 60s -t 12 -C 200 -o ./my-results
+./run_load_tests.sh -d 60s -C 200 -o ./my-results
 
 # Use PostgreSQL
 ./run_load_tests.sh --db postgres --dsn "postgresql://user:pass@localhost/dbname"
@@ -163,10 +163,9 @@ The script automatically:
 - Saves detailed results to `./load-test-results/`
 - Stops the server when complete
 
-**Prerequisites:** Install wrk:
+**Prerequisites:** Install bombardier:
 ```bash
-sudo apt-get install wrk  # Debian/Ubuntu
-brew install wrk          # macOS
+go install github.com/codesenberg/bombardier@latest
 ```
 
 ### Manual Query Performance Tests
@@ -187,13 +186,13 @@ curl "http://localhost:9091/Products?\$apply=groupby((CategoryID),aggregate(Pric
 
 ### Manual Load Testing
 
-Use wrk for load testing:
+Use bombardier for load testing:
 ```bash
 # Basic load test
-wrk -t10 -c100 -d30s http://localhost:9091/Products
+bombardier -c100 -d30s http://localhost:9091/Products
 
-# With more threads and connections
-wrk -t12 -c200 -d60s --latency http://localhost:9091/Products
+# More connections, with latency percentiles
+bombardier -c200 -d60s -l http://localhost:9091/Products
 ```
 
 ## Analyzing Results
