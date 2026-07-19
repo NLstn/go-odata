@@ -1462,7 +1462,9 @@ func buildFunctionSQL(dialect string, op FilterOperator, columnName string, valu
 				rightArgs = []interface{}{secondArg}
 			}
 
-			allArgs := append(leftArgs, rightArgs...)
+			allArgs := make([]interface{}, 0, len(leftArgs)+len(rightArgs))
+			allArgs = append(allArgs, leftArgs...)
+			allArgs = append(allArgs, rightArgs...)
 			if dialect == "postgres" {
 				return fmt.Sprintf("(%s || %s)", leftSQL, rightSQL), allArgs
 			}

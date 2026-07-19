@@ -87,9 +87,9 @@ func (h *MetadataHandler) buildMetadataDocument(model metadataModel, ver version
 	usedVocabularies := model.collectUsedVocabularies()
 	vocabularyAliases := metadata.VocabularyAliasMap()
 
-	builder.WriteString(fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+	fmt.Fprintf(&builder, `<?xml version="1.0" encoding="UTF-8"?>
 <edmx:Edmx xmlns:edmx="http://docs.oasis-open.org/odata/ns/edmx" Version="%s">
-`, ver.String()))
+`, ver.String())
 
 	// Add Reference elements for used vocabularies
 	for _, ns := range usedVocabularies {
@@ -100,15 +100,15 @@ func (h *MetadataHandler) buildMetadataDocument(model metadataModel, ver version
 			alias = parts[len(parts)-1]
 		}
 		uri := vocabularyURI(ns)
-		builder.WriteString(fmt.Sprintf(`  <edmx:Reference Uri="%s">
+		fmt.Fprintf(&builder, `  <edmx:Reference Uri="%s">
     <edmx:Include Namespace="%s" Alias="%s" />
   </edmx:Reference>
-`, uri, ns, alias))
+`, uri, ns, alias)
 	}
 
-	builder.WriteString(fmt.Sprintf(`  <edmx:DataServices>
+	fmt.Fprintf(&builder, `  <edmx:DataServices>
     <Schema xmlns="http://docs.oasis-open.org/odata/ns/edm" Namespace="%s">
-`, model.namespace))
+`, model.namespace)
 
 	builder.WriteString(h.buildEnumTypes(model))
 	builder.WriteString(h.buildTypeDefinitions(model))
