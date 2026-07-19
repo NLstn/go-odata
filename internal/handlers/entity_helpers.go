@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/nlstn/go-odata/internal/etag"
+	"github.com/nlstn/go-odata/internal/fastscan"
 	"github.com/nlstn/go-odata/internal/odataerrors"
 	"github.com/nlstn/go-odata/internal/preference"
 	"github.com/nlstn/go-odata/internal/query"
@@ -165,7 +166,10 @@ func (h *EntityHandler) fetchEntityByKey(ctx context.Context, entityKey string, 
 		db = query.ApplyExpandOnly(db, queryOptions.Expand, h.metadata, h.logger)
 	}
 
-	if err := db.First(result).Error; err != nil {
+	// fastscan.First scans the row with a compiled per-schema plan, falling back
+	// to db.First for anything it cannot faithfully reproduce (preloads,
+	// association joins, hooks). It preserves gorm.ErrRecordNotFound semantics.
+	if err := fastscan.First(db, result); err != nil {
 		return nil, err
 	}
 

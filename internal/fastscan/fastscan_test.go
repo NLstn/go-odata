@@ -3,6 +3,7 @@ package fastscan
 import (
 	"database/sql"
 	"database/sql/driver"
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -399,6 +400,130 @@ func TestFindNonSliceDestFallsBack(t *testing.T) {
 	}
 	if len(maps) != 2 {
 		t.Fatalf("map fallback returned %d rows", len(maps))
+	}
+}
+
+// firstBoth runs the same query through fastscan.First and GORM's First and
+// requires identical results.
+func firstBoth(t *testing.T, build func() *gorm.DB, makeDest func() interface{}) interface{} {
+	t.Helper()
+	fast := makeDest()
+	if err := First(build(), fast); err != nil {
+		t.Fatalf("fastscan.First: %v", err)
+	}
+	slow := makeDest()
+	if err := build().First(slow).Error; err != nil {
+		t.Fatalf("gorm First: %v", err)
+	}
+	fastVal := reflect.ValueOf(fast).Elem().Interface()
+	slowVal := reflect.ValueOf(slow).Elem().Interface()
+	if !reflect.DeepEqual(fastVal, slowVal) {
+		t.Fatalf("fastscan.First result differs from GORM:\nfast: %#v\ngorm: %#v", fastVal, slowVal)
+	}
+	return fast
+}
+
+func TestFirstMatchesGorm(t *testing.T) {
+	db := openDB(t)
+	widgets := seedWidgets(t, db)
+
+	full := firstBoth(t,
+		func() *gorm.DB { return db.Where("id = ?", widgets[0].ID) },
+		func() interface{} { return &Widget{} },
+	).(*Widget)
+	if full.Name != "full" || full.Description == nil || *full.Description != "a widget" {
+		t.Errorf("full widget scanned incorrectly: %+v", full)
+	}
+	if full.Payload.Raw != "payload" || full.Status != Status(3) || !full.Active {
+		t.Errorf("scanner/named/bool fields scanned incorrectly: %+v", full)
+	}
+
+	nulls := firstBoth(t,
+		func() *gorm.DB { return db.Where("id = ?", widgets[1].ID) },
+		func() interface{} { return &Widget{} },
+	).(*Widget)
+	if nulls.Description != nil || nulls.Quantity != nil || nulls.Data != nil {
+		t.Errorf("NULL columns must stay nil: %+v", nulls)
+	}
+}
+
+func TestFirstOrdersByPrimaryKey(t *testing.T) {
+	db := openDB(t)
+	seedWidgets(t, db)
+
+	// With no WHERE, First must return the lowest primary key, exactly like
+	// gorm.First's implicit ORDER BY primary key.
+	got := firstBoth(t,
+		func() *gorm.DB { return db.Model(&Widget{}) },
+		func() interface{} { return &Widget{} },
+	).(*Widget)
+	if got.Name != "full" {
+		t.Fatalf("First did not order by primary key: got %+v", got)
+	}
+}
+
+func TestFirstReturnsRecordNotFound(t *testing.T) {
+	db := openDB(t)
+	seedWidgets(t, db)
+
+	var w Widget
+	if err := First(db.Where("id = ?", 99999), &w); !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("expected gorm.ErrRecordNotFound, got %v", err)
+	}
+	// GORM agrees on the no-row error.
+	var g Widget
+	if err := db.Where("id = ?", 99999).First(&g).Error; !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("gorm baseline: expected ErrRecordNotFound, got %v", err)
+	}
+}
+
+func TestFirstFallsBackForAfterFindHook(t *testing.T) {
+	db := openDB(t)
+	if err := db.AutoMigrate(&Hooked{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	if err := db.Create(&Hooked{Name: "h"}).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	var h Hooked
+	if err := First(db.Model(&Hooked{}), &h); err != nil {
+		t.Fatalf("fastscan.First: %v", err)
+	}
+	if h.Count != 42 {
+		t.Fatalf("AfterFind hook did not run, so fallback was skipped: %+v", h)
+	}
+}
+
+func TestFirstFallsBackForPreload(t *testing.T) {
+	db := openDB(t)
+	if err := db.AutoMigrate(&Parent{}, &Child{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	parent := Parent{Name: "p", Children: []Child{{Name: "c1"}, {Name: "c2"}}}
+	if err := db.Create(&parent).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	var got Parent
+	if err := First(db.Preload("Children").Where("id = ?", parent.ID), &got); err != nil {
+		t.Fatalf("fastscan.First: %v", err)
+	}
+	if len(got.Children) != 2 {
+		t.Fatalf("preload did not populate children, so fallback was skipped: %+v", got)
+	}
+}
+
+func TestFirstNonStructDestFallsBack(t *testing.T) {
+	db := openDB(t)
+	seedWidgets(t, db)
+
+	m := map[string]interface{}{}
+	if err := First(db.Model(&Widget{}), &m); err != nil {
+		t.Fatalf("fastscan.First with map dest: %v", err)
+	}
+	if m["name"] == nil {
+		t.Fatalf("map fallback did not populate: %+v", m)
 	}
 }
 

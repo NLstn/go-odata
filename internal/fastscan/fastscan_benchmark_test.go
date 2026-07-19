@@ -92,6 +92,36 @@ func BenchmarkFastscanFind(b *testing.B) {
 	}
 }
 
+// firstQuery mirrors a single-entity read by primary key: WHERE id = ? with the
+// LIMIT 1 / ORDER BY primary key that First adds itself.
+func firstQuery(db *gorm.DB) *gorm.DB {
+	return db.Where("id = ?", benchRows/2)
+}
+
+func BenchmarkGormFirst(b *testing.B) {
+	db := setupBenchDB(b)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var product BenchProduct
+		if err := firstQuery(db).First(&product).Error; err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkFastscanFirst(b *testing.B) {
+	db := setupBenchDB(b)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var product BenchProduct
+		if err := First(firstQuery(db), &product); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 // benchApplyQuery mirrors the $apply groupby/aggregate shape that reaches map
 // scanning: one grouping key plus one aggregate, producing one row per group.
 // With benchRows products spread over benchGroups categories the result is
