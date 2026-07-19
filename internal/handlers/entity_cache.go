@@ -392,7 +392,7 @@ func (h *EntityHandler) sortEntityValues(values []reflect.Value, orderBy []query
 // queryCollectionSnapshot filters, orders, and pages the snapshot in memory,
 // returning a *[]T (matching the pointer-to-slice shape the SQL path produces)
 // so downstream $expand/$select post-processing is identical.
-func (h *EntityHandler) queryCollectionSnapshot(snap *cache.Snapshot, queryOptions, modifiedOptions *query.QueryOptions) (interface{}, error) {
+func (h *EntityHandler) queryCollectionSnapshot(snap *cache.Snapshot, queryOptions, modifiedOptions *query.QueryOptions) interface{} {
 	filter := queryOptions.Filter
 
 	matches := make([]reflect.Value, 0)
@@ -444,7 +444,7 @@ func (h *EntityHandler) queryCollectionSnapshot(snap *cache.Snapshot, queryOptio
 	}
 	resultsPtr := reflect.New(sliceType)
 	resultsPtr.Elem().Set(out)
-	return resultsPtr.Interface(), nil
+	return resultsPtr.Interface()
 }
 
 // postProcessCachedCollection applies the shared downstream steps ($expand and

@@ -251,12 +251,8 @@ func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.Qu
 	// their presence forces the SQL path.
 	if len(scopes) == 0 && h.entityCache != nil && h.snapshotSupportsCollection(queryOptions) {
 		if snap, ok := h.cacheSnapshot(ctx); ok {
-			resultsPtr, err := h.queryCollectionSnapshot(snap, queryOptions, &modifiedOptions)
-			if err == nil {
-				return h.postProcessCachedCollection(ctx, resultsPtr, queryOptions)
-			}
-			h.logger.Warn("In-memory cache query failed; falling back to primary database",
-				"entitySet", h.metadata.EntitySetName, "error", err)
+			resultsPtr := h.queryCollectionSnapshot(snap, queryOptions, &modifiedOptions)
+			return h.postProcessCachedCollection(ctx, resultsPtr, queryOptions)
 		}
 	}
 
