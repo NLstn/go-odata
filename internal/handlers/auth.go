@@ -192,7 +192,7 @@ func buildKeyValuesFromEntity(entityMetadata *metadata.EntityMetadata, entity in
 	}
 
 	value := reflect.ValueOf(entity)
-	if value.Kind() == reflect.Ptr {
+	if value.Kind() == reflect.Pointer {
 		if value.IsNil() {
 			return nil
 		}
@@ -208,7 +208,7 @@ func buildKeyValuesFromEntity(entityMetadata *metadata.EntityMetadata, entity in
 		if !field.IsValid() {
 			continue
 		}
-		if field.Kind() == reflect.Ptr && field.IsNil() {
+		if field.Kind() == reflect.Pointer && field.IsNil() {
 			keyValues[keyProp.JsonName] = nil
 			continue
 		}

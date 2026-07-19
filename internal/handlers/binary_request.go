@@ -43,7 +43,7 @@ func isBinaryFieldType(t reflect.Type) bool {
 	if t == nil {
 		return false
 	}
-	if t.Kind() == reflect.Ptr {
+	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 	return t.Kind() == reflect.Slice && t.Elem().Kind() == reflect.Uint8
