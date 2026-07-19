@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strconv"
 	"sync"
+	"time"
 	"unicode/utf8"
 )
 
@@ -200,9 +201,11 @@ func releasePooledBuffer(buf *bytes.Buffer) {
 // Nested *OrderedMap and []interface{} values write into the same buf, eliminating
 // the per-entity bufferPool round-trip and intermediate copy that MarshalJSON performs.
 func (om *OrderedMap) marshalTo(buf *bytes.Buffer) error {
-	// enc is lazily used only for complex types (time.Time, decimal, etc.)
-	enc := json.NewEncoder(buf)
-	enc.SetEscapeHTML(false)
+	// enc is created lazily, only when a value needs the reflection-based
+	// encoding/json fallback (decimal, UUID, arbitrary structs, ...). Entities
+	// composed entirely of scalars, time.Time, pointers-to-scalars and nested
+	// *OrderedMap values never allocate an encoder.
+	var enc *json.Encoder
 
 	buf.WriteByte('{')
 
@@ -226,17 +229,96 @@ func (om *OrderedMap) marshalTo(buf *bytes.Buffer) error {
 
 		value := om.values[key]
 
+		// Dereference the common nullable-scalar pointer types up front so the
+		// main switch below handles them without falling through to reflection.
+		// A nil pointer serializes as JSON null.
+		switch p := value.(type) {
+		case *string:
+			if p == nil {
+				buf.WriteString("null")
+				continue
+			}
+			value = *p
+		case *int:
+			if p == nil {
+				buf.WriteString("null")
+				continue
+			}
+			value = *p
+		case *int64:
+			if p == nil {
+				buf.WriteString("null")
+				continue
+			}
+			value = *p
+		case *int32:
+			if p == nil {
+				buf.WriteString("null")
+				continue
+			}
+			value = *p
+		case *uint:
+			if p == nil {
+				buf.WriteString("null")
+				continue
+			}
+			value = *p
+		case *uint64:
+			if p == nil {
+				buf.WriteString("null")
+				continue
+			}
+			value = *p
+		case *uint32:
+			if p == nil {
+				buf.WriteString("null")
+				continue
+			}
+			value = *p
+		case *float64:
+			if p == nil {
+				buf.WriteString("null")
+				continue
+			}
+			value = *p
+		case *float32:
+			if p == nil {
+				buf.WriteString("null")
+				continue
+			}
+			value = *p
+		case *bool:
+			if p == nil {
+				buf.WriteString("null")
+				continue
+			}
+			value = *p
+		case *time.Time:
+			if p == nil {
+				buf.WriteString("null")
+				continue
+			}
+			value = *p
+		}
+
 		switch v := value.(type) {
 		case string:
 			if needsEscaping(v) {
-				if err := enc.Encode(v); err != nil {
+				if err := encodeFallback(buf, &enc, v); err != nil {
 					return err
 				}
-				buf.Truncate(buf.Len() - 1)
 			} else {
 				buf.WriteByte('"')
 				buf.WriteString(v)
 				buf.WriteByte('"')
+			}
+		case time.Time:
+			if !appendJSONTime(buf, v) {
+				// Years outside [0,9999] can't be represented as strict RFC 3339;
+				// defer to encoding/json, which reports the same error stdlib does.
+				if err := encodeFallback(buf, &enc, v); err != nil {
+					return err
+				}
 			}
 		case *OrderedMap:
 			if v == nil {
@@ -263,10 +345,9 @@ func (om *OrderedMap) marshalTo(buf *bytes.Buffer) error {
 						}
 					}
 				} else {
-					if err := enc.Encode(item); err != nil {
+					if err := encodeFallback(buf, &enc, item); err != nil {
 						return err
 					}
-					buf.Truncate(buf.Len() - 1)
 				}
 			}
 			buf.WriteByte(']')
@@ -295,15 +376,49 @@ func (om *OrderedMap) marshalTo(buf *bytes.Buffer) error {
 		case nil:
 			buf.WriteString("null")
 		default:
-			if err := enc.Encode(value); err != nil {
+			if err := encodeFallback(buf, &enc, value); err != nil {
 				return err
 			}
-			buf.Truncate(buf.Len() - 1)
 		}
 	}
 
 	buf.WriteByte('}')
 	return nil
+}
+
+// encodeFallback serializes val through the reflection-based encoding/json encoder,
+// creating the encoder on first use so callers pay the allocation only when a
+// value actually needs the fallback. It strips the trailing newline that
+// (*json.Encoder).Encode appends so the output composes with surrounding JSON.
+func encodeFallback(buf *bytes.Buffer, enc **json.Encoder, val interface{}) error {
+	if *enc == nil {
+		e := json.NewEncoder(buf)
+		e.SetEscapeHTML(false)
+		*enc = e
+	}
+	if err := (*enc).Encode(val); err != nil {
+		return err
+	}
+	buf.Truncate(buf.Len() - 1)
+	return nil
+}
+
+// appendJSONTime writes t as a JSON string using the same strict RFC 3339 (nano)
+// representation that time.Time.MarshalJSON produces, directly into buf without
+// allocating. It returns false (writing nothing) when the year falls outside
+// [0,9999], which strict RFC 3339 cannot represent; callers then fall back to
+// encoding/json to reproduce stdlib's error behavior exactly.
+func appendJSONTime(buf *bytes.Buffer, t time.Time) bool {
+	if y := t.Year(); y < 0 || y > 9999 {
+		return false
+	}
+	var tmp [len(time.RFC3339Nano) + 2]byte
+	b := tmp[:0]
+	b = append(b, '"')
+	b = t.AppendFormat(b, time.RFC3339Nano)
+	b = append(b, '"')
+	buf.Write(b)
+	return true
 }
 
 // writeInt writes an int64 to the buffer without allocation
