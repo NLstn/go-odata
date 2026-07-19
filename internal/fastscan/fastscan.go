@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"gorm.io/gorm/schema"
 )
 
@@ -137,6 +138,86 @@ func Find(db *gorm.DB, dest interface{}) error {
 
 	sliceVal.Set(result)
 	tx.RowsAffected = int64(result.Len())
+	return nil
+}
+
+// First executes db as a single-row query with db.First semantics: it adds
+// LIMIT 1 and an ORDER BY primary key (matching gorm.First's clauses), scans
+// the row into dest — a pointer to a struct — with the compiled plan, and
+// returns gorm.ErrRecordNotFound when no row matches. Queries or destination
+// types the plan cannot faithfully reproduce fall back to db.First, so behavior
+// is always at least as correct as GORM's.
+func First(db *gorm.DB, dest interface{}) error {
+	destVal := reflect.ValueOf(dest)
+	if destVal.Kind() != reflect.Pointer || destVal.IsNil() || destVal.Elem().Kind() != reflect.Struct {
+		return db.First(dest).Error
+	}
+	elemType := destVal.Elem().Type()
+	// time.Time is a struct but a leaf scan target, not an entity to populate.
+	if elemType == timeType {
+		return db.First(dest).Error
+	}
+	if db.DryRun {
+		return db.First(dest).Error
+	}
+
+	// Mirror what First's Execute does: default the model to the destination,
+	// then parse it so the schema (and its cached scan plan) is available.
+	tx := db
+	if tx.Statement.Model == nil {
+		tx = tx.Model(dest)
+	}
+	if err := tx.Statement.Parse(tx.Statement.Model); err != nil {
+		return tx.First(dest).Error
+	}
+	sch := tx.Statement.Schema
+	if sch == nil || sch.ModelType != elemType {
+		return tx.First(dest).Error
+	}
+	p := planFor(sch)
+	if p == nil || p.disabled.Load() || !eligibleStatement(tx.Statement, sch) {
+		return tx.First(dest).Error
+	}
+
+	// Reproduce gorm.First's clauses so the SQL is identical: LIMIT 1 and an
+	// ORDER BY primary key (the clause builder expands clause.PrimaryKey from
+	// the parsed schema). A ByKey query already has a unique WHERE, but keeping
+	// the same SQL preserves dialect and plan-cache behavior.
+	tx = tx.Limit(1)
+	if len(sch.PrimaryFields) > 0 {
+		tx = tx.Order(clause.OrderByColumn{
+			Column: clause.Column{Table: clause.CurrentTable, Name: clause.PrimaryKey},
+		})
+	}
+
+	rows, err := tx.Rows()
+	if err != nil {
+		return err
+	}
+	found, err := scanFirstRow(tx.Statement.Context, rows, p, destVal.Elem())
+	closeErr := rows.Close()
+	if err != nil {
+		if scanErr, ok := err.(*rowScanError); ok {
+			// A row failed to scan. If the context is gone this is just
+			// cancellation; otherwise the plan mis-handled a driver value that
+			// GORM's conversions might accept. Disable the plan for this schema
+			// and re-run through GORM, which either succeeds or reports its own
+			// (equivalent) error.
+			if ctxErr := contextErr(tx.Statement.Context); ctxErr != nil {
+				return scanErr.err
+			}
+			p.disabled.Store(true)
+			return tx.First(dest).Error
+		}
+		return err
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	if !found {
+		return gorm.ErrRecordNotFound
+	}
+	tx.RowsAffected = 1
 	return nil
 }
 
@@ -411,44 +492,79 @@ func scanRows(ctx context.Context, rows *sql.Rows, p *plan, slice reflect.Value,
 	for rows.Next() {
 		result = reflect.Append(result, zero)
 		elem := result.Index(result.Len() - 1)
-		for _, d := range bindings.direct {
-			bindings.dests[d.colIdx] = d.field.ReflectValueOf(ctx, elem).Addr().Interface()
-		}
-		if err := rows.Scan(bindings.dests...); err != nil {
-			return reflect.Value{}, &rowScanError{err: err}
-		}
-		for _, b := range bindings.buffered {
-			// A NULL column leaves the field at its zero value, like GORM.
-			switch b.mode {
-			case scanInt:
-				if b.intBuf.Valid {
-					b.field.ReflectValueOf(ctx, elem).SetInt(b.intBuf.Int64)
-				}
-			case scanUint:
-				if b.intBuf.Valid {
-					b.field.ReflectValueOf(ctx, elem).SetUint(uint64(b.intBuf.Int64))
-				}
-			case scanFloat:
-				if b.floatBuf.Valid {
-					b.field.ReflectValueOf(ctx, elem).SetFloat(b.floatBuf.Float64)
-				}
-			case scanBool:
-				if b.boolBuf.Valid {
-					b.field.ReflectValueOf(ctx, elem).SetBool(b.boolBuf.Bool)
-				}
-			case scanString:
-				if b.stringBuf.Valid {
-					b.field.ReflectValueOf(ctx, elem).SetString(b.stringBuf.String)
-				}
-			case scanTime:
-				if b.timeBuf.Valid {
-					b.field.ReflectValueOf(ctx, elem).Set(reflect.ValueOf(b.timeBuf.Time))
-				}
-			}
+		if err := scanRowInto(ctx, rows, bindings, elem); err != nil {
+			return reflect.Value{}, err
 		}
 	}
 	if err := rows.Err(); err != nil {
 		return reflect.Value{}, err
 	}
 	return result, nil
+}
+
+// scanFirstRow scans at most one row into elem (an addressable struct value),
+// reporting whether a row was present. It mirrors gorm.First: the query already
+// carries LIMIT 1, so only the leading row is consumed.
+func scanFirstRow(ctx context.Context, rows *sql.Rows, p *plan, elem reflect.Value) (bool, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	columns, err := rows.Columns()
+	if err != nil {
+		return false, err
+	}
+
+	bindings := p.acquireBindingSet(columns)
+	defer p.releaseBindingSet(bindings)
+
+	if !rows.Next() {
+		return false, rows.Err()
+	}
+	if err := scanRowInto(ctx, rows, bindings, elem); err != nil {
+		return false, err
+	}
+	return true, rows.Err()
+}
+
+// scanRowInto scans the current row into elem (an addressable struct value)
+// using the prepared binding set: direct fields receive their addresses, then
+// buffered scalars are copied out with NULL leaving the field at its zero value,
+// exactly as GORM does.
+func scanRowInto(ctx context.Context, rows *sql.Rows, bindings *bindingSet, elem reflect.Value) error {
+	for _, d := range bindings.direct {
+		bindings.dests[d.colIdx] = d.field.ReflectValueOf(ctx, elem).Addr().Interface()
+	}
+	if err := rows.Scan(bindings.dests...); err != nil {
+		return &rowScanError{err: err}
+	}
+	for _, b := range bindings.buffered {
+		// A NULL column leaves the field at its zero value, like GORM.
+		switch b.mode {
+		case scanInt:
+			if b.intBuf.Valid {
+				b.field.ReflectValueOf(ctx, elem).SetInt(b.intBuf.Int64)
+			}
+		case scanUint:
+			if b.intBuf.Valid {
+				b.field.ReflectValueOf(ctx, elem).SetUint(uint64(b.intBuf.Int64))
+			}
+		case scanFloat:
+			if b.floatBuf.Valid {
+				b.field.ReflectValueOf(ctx, elem).SetFloat(b.floatBuf.Float64)
+			}
+		case scanBool:
+			if b.boolBuf.Valid {
+				b.field.ReflectValueOf(ctx, elem).SetBool(b.boolBuf.Bool)
+			}
+		case scanString:
+			if b.stringBuf.Valid {
+				b.field.ReflectValueOf(ctx, elem).SetString(b.stringBuf.String)
+			}
+		case scanTime:
+			if b.timeBuf.Valid {
+				b.field.ReflectValueOf(ctx, elem).Set(reflect.ValueOf(b.timeBuf.Time))
+			}
+		}
+	}
+	return nil
 }
