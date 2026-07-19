@@ -781,33 +781,15 @@ func buildComputeSQLWithDB(dialect string, computeExpr ComputeExpression, entity
 			return "", "", ""
 		}
 
-		rightSQL := buildComputeExpressionSQL(dialect, &FilterExpression{Value: expression.Value}, entityMetadata)
+		rightOperand := &FilterExpression{Value: expression.Value}
+		rightSQL := buildComputeExpressionSQL(dialect, rightOperand, entityMetadata)
 		if rightSQL == "" {
 			return "", "", ""
 		}
 
-		var exprSQL string
-		switch expression.Operator {
-		case OpAdd:
-			exprSQL = fmt.Sprintf("(%s + %s)", leftSQL, rightSQL)
-		case OpSub:
-			exprSQL = fmt.Sprintf("(%s - %s)", leftSQL, rightSQL)
-		case OpMul:
-			exprSQL = fmt.Sprintf("(%s * %s)", leftSQL, rightSQL)
-		case OpDiv:
-			exprSQL = fmt.Sprintf("(%s / %s)", leftSQL, rightSQL)
-		case OpDivBy:
-			switch dialect {
-			case "postgres":
-				exprSQL = fmt.Sprintf("(CAST(%s AS FLOAT) / %s)", leftSQL, rightSQL)
-			case "mysql", "mariadb":
-				exprSQL = fmt.Sprintf("(CAST(%s AS DOUBLE) / %s)", leftSQL, rightSQL)
-			default:
-				exprSQL = fmt.Sprintf("(CAST(%s AS REAL) / %s)", leftSQL, rightSQL)
-			}
-		case OpMod:
-			exprSQL = buildModuloSQL(dialect, leftSQL, rightSQL)
-		default:
+		exprSQL := buildArithmeticSQL(dialect, expression.Operator, leftSQL, rightSQL,
+			arithmeticOperandIsFloat(expression.Left, entityMetadata), arithmeticOperandIsFloat(rightOperand, entityMetadata))
+		if exprSQL == "" {
 			return "", "", ""
 		}
 
@@ -815,34 +797,17 @@ func buildComputeSQLWithDB(dialect string, computeExpr ComputeExpression, entity
 	}
 
 	if expression.Property != "" && expression.Value != nil && expression.Left == nil && expression.Right == nil && expression.Operator != "" {
-		leftSQL := buildComputeExpressionSQL(dialect, &FilterExpression{Property: expression.Property}, entityMetadata)
-		rightSQL := buildComputeExpressionSQL(dialect, &FilterExpression{Value: expression.Value}, entityMetadata)
+		leftOperand := &FilterExpression{Property: expression.Property}
+		rightOperand := &FilterExpression{Value: expression.Value}
+		leftSQL := buildComputeExpressionSQL(dialect, leftOperand, entityMetadata)
+		rightSQL := buildComputeExpressionSQL(dialect, rightOperand, entityMetadata)
 		if leftSQL == "" || rightSQL == "" {
 			return "", "", ""
 		}
 
-		var exprSQL string
-		switch expression.Operator {
-		case OpAdd:
-			exprSQL = fmt.Sprintf("(%s + %s)", leftSQL, rightSQL)
-		case OpSub:
-			exprSQL = fmt.Sprintf("(%s - %s)", leftSQL, rightSQL)
-		case OpMul:
-			exprSQL = fmt.Sprintf("(%s * %s)", leftSQL, rightSQL)
-		case OpDiv:
-			exprSQL = fmt.Sprintf("(%s / %s)", leftSQL, rightSQL)
-		case OpDivBy:
-			switch dialect {
-			case "postgres":
-				exprSQL = fmt.Sprintf("(CAST(%s AS FLOAT) / %s)", leftSQL, rightSQL)
-			case "mysql", "mariadb":
-				exprSQL = fmt.Sprintf("(CAST(%s AS DOUBLE) / %s)", leftSQL, rightSQL)
-			default:
-				exprSQL = fmt.Sprintf("(CAST(%s AS REAL) / %s)", leftSQL, rightSQL)
-			}
-		case OpMod:
-			exprSQL = buildModuloSQL(dialect, leftSQL, rightSQL)
-		default:
+		exprSQL := buildArithmeticSQL(dialect, expression.Operator, leftSQL, rightSQL,
+			arithmeticOperandIsFloat(leftOperand, entityMetadata), arithmeticOperandIsFloat(rightOperand, entityMetadata))
+		if exprSQL == "" {
 			return "", "", ""
 		}
 
@@ -860,28 +825,9 @@ func buildComputeSQLWithDB(dialect string, computeExpr ComputeExpression, entity
 			return "", "", ""
 		}
 
-		var exprSQL string
-		switch expression.Logical {
-		case "add":
-			exprSQL = fmt.Sprintf("(%s + %s)", leftSQL, rightSQL)
-		case "sub":
-			exprSQL = fmt.Sprintf("(%s - %s)", leftSQL, rightSQL)
-		case "mul":
-			exprSQL = fmt.Sprintf("(%s * %s)", leftSQL, rightSQL)
-		case "div":
-			exprSQL = fmt.Sprintf("(%s / %s)", leftSQL, rightSQL)
-		case "divby":
-			switch dialect {
-			case "postgres":
-				exprSQL = fmt.Sprintf("(CAST(%s AS FLOAT) / %s)", leftSQL, rightSQL)
-			case "mysql", "mariadb":
-				exprSQL = fmt.Sprintf("(CAST(%s AS DOUBLE) / %s)", leftSQL, rightSQL)
-			default:
-				exprSQL = fmt.Sprintf("(CAST(%s AS REAL) / %s)", leftSQL, rightSQL)
-			}
-		case "mod":
-			exprSQL = buildModuloSQL(dialect, leftSQL, rightSQL)
-		default:
+		exprSQL := buildArithmeticSQL(dialect, FilterOperator(expression.Logical), leftSQL, rightSQL,
+			arithmeticOperandIsFloat(expression.Left, entityMetadata), arithmeticOperandIsFloat(expression.Right, entityMetadata))
+		if exprSQL == "" {
 			return "", "", ""
 		}
 
@@ -928,21 +874,26 @@ func buildComputeExpressionSQL(dialect string, expr *FilterExpression, entityMet
 		expr.Right == nil &&
 		expr.Operator != "" &&
 		(expr.Operator != OpEqual || expr.Value != true) {
-		leftSQL := buildComputeExpressionSQL(dialect, &FilterExpression{Property: expr.Property}, entityMetadata)
-		rightSQL := buildComputeExpressionSQL(dialect, &FilterExpression{Value: expr.Value}, entityMetadata)
+		leftOperand := &FilterExpression{Property: expr.Property}
+		rightOperand := &FilterExpression{Value: expr.Value}
+		leftSQL := buildComputeExpressionSQL(dialect, leftOperand, entityMetadata)
+		rightSQL := buildComputeExpressionSQL(dialect, rightOperand, entityMetadata)
 		if leftSQL == "" || rightSQL == "" {
 			return ""
 		}
-		return buildArithmeticSQL(dialect, expr.Operator, leftSQL, rightSQL)
+		return buildArithmeticSQL(dialect, expr.Operator, leftSQL, rightSQL,
+			arithmeticOperandIsFloat(leftOperand, entityMetadata), arithmeticOperandIsFloat(rightOperand, entityMetadata))
 	}
 
 	if expr.Left != nil && expr.Value != nil && expr.Right == nil && expr.Operator != "" {
+		rightOperand := &FilterExpression{Value: expr.Value}
 		leftSQL := buildComputeExpressionSQL(dialect, expr.Left, entityMetadata)
-		rightSQL := buildComputeExpressionSQL(dialect, &FilterExpression{Value: expr.Value}, entityMetadata)
+		rightSQL := buildComputeExpressionSQL(dialect, rightOperand, entityMetadata)
 		if leftSQL == "" || rightSQL == "" {
 			return ""
 		}
-		return buildArithmeticSQL(dialect, expr.Operator, leftSQL, rightSQL)
+		return buildArithmeticSQL(dialect, expr.Operator, leftSQL, rightSQL,
+			arithmeticOperandIsFloat(expr.Left, entityMetadata), arithmeticOperandIsFloat(rightOperand, entityMetadata))
 	}
 
 	if expr.Left != nil && expr.Right != nil && expr.Operator != "" {
@@ -951,7 +902,8 @@ func buildComputeExpressionSQL(dialect string, expr *FilterExpression, entityMet
 		if leftSQL == "" || rightSQL == "" {
 			return ""
 		}
-		return buildArithmeticSQL(dialect, expr.Operator, leftSQL, rightSQL)
+		return buildArithmeticSQL(dialect, expr.Operator, leftSQL, rightSQL,
+			arithmeticOperandIsFloat(expr.Left, entityMetadata), arithmeticOperandIsFloat(expr.Right, entityMetadata))
 	}
 
 	if expr.Left != nil && expr.Right != nil && expr.Logical != "" {
@@ -962,13 +914,21 @@ func buildComputeExpressionSQL(dialect string, expr *FilterExpression, entityMet
 		}
 
 		op := FilterOperator(expr.Logical)
-		return buildArithmeticSQL(dialect, op, leftSQL, rightSQL)
+		return buildArithmeticSQL(dialect, op, leftSQL, rightSQL,
+			arithmeticOperandIsFloat(expr.Left, entityMetadata), arithmeticOperandIsFloat(expr.Right, entityMetadata))
 	}
 
 	return ""
 }
 
-func buildArithmeticSQL(dialect string, op FilterOperator, leftSQL string, rightSQL string) string {
+// buildArithmeticSQL renders an OData arithmetic operator to SQL. leftIsFloat and
+// rightIsFloat indicate whether the operands evaluate to a floating-point
+// (Edm.Double/Edm.Single) value, which controls whether `div` performs IEEE 754
+// floating division or integer division (OData §5.1.1.6.1: `div` is integer
+// division only when both operands are integers). Every divisor is wrapped in
+// NULLIF so that division or modulo by zero yields NULL on all dialects instead
+// of a database error (see nullIfZero).
+func buildArithmeticSQL(dialect string, op FilterOperator, leftSQL, rightSQL string, leftIsFloat, rightIsFloat bool) string {
 	switch op {
 	case OpAdd:
 		return fmt.Sprintf("(%s + %s)", leftSQL, rightSQL)
@@ -977,16 +937,17 @@ func buildArithmeticSQL(dialect string, op FilterOperator, leftSQL string, right
 	case OpMul:
 		return fmt.Sprintf("(%s * %s)", leftSQL, rightSQL)
 	case OpDiv:
-		return fmt.Sprintf("(%s / %s)", leftSQL, rightSQL)
-	case OpDivBy:
-		switch dialect {
-		case "postgres":
-			return fmt.Sprintf("(CAST(%s AS FLOAT) / %s)", leftSQL, rightSQL)
-		case "mysql", "mariadb":
-			return fmt.Sprintf("(CAST(%s AS DOUBLE) / %s)", leftSQL, rightSQL)
-		default:
-			return fmt.Sprintf("(CAST(%s AS REAL) / %s)", leftSQL, rightSQL)
+		// If either operand is a floating-point value the result is IEEE 754
+		// division; cast the dividend to a floating type so the division is
+		// performed in floating point even when the column is stored as an exact
+		// decimal/numeric type (e.g. PostgreSQL maps Go float64 to numeric).
+		if leftIsFloat || rightIsFloat {
+			return fmt.Sprintf("(%s / %s)", castToFloat(dialect, leftSQL), nullIfZero(rightSQL))
 		}
+		return fmt.Sprintf("(%s / %s)", leftSQL, nullIfZero(rightSQL))
+	case OpDivBy:
+		// divby is always fractional division.
+		return fmt.Sprintf("(%s / %s)", castToFloat(dialect, leftSQL), nullIfZero(rightSQL))
 	case OpMod:
 		return buildModuloSQL(dialect, leftSQL, rightSQL)
 	default:
@@ -995,10 +956,77 @@ func buildArithmeticSQL(dialect string, op FilterOperator, leftSQL string, right
 }
 
 func buildModuloSQL(dialect string, leftSQL string, rightSQL string) string {
-	if dialect == "sqlserver" {
-		return fmt.Sprintf("(CAST(%s AS DECIMAL(38, 10)) %% CAST(%s AS DECIMAL(38, 10)))", leftSQL, rightSQL)
+	if dialect == "sqlserver" || dialect == "mssql" {
+		return fmt.Sprintf("(CAST(%s AS DECIMAL(38, 10)) %% CAST(%s AS DECIMAL(38, 10)))", leftSQL, nullIfZero(rightSQL))
 	}
-	return fmt.Sprintf("(%s %% %s)", leftSQL, rightSQL)
+	return fmt.Sprintf("(%s %% %s)", leftSQL, nullIfZero(rightSQL))
+}
+
+// castToFloat casts an expression to the dialect's IEEE 754 double-precision
+// floating type. SQL Server FLOAT and PostgreSQL FLOAT are both 8-byte doubles;
+// SQLite REAL is an 8-byte float.
+func castToFloat(dialect, expr string) string {
+	switch dialect {
+	case "mysql", "mariadb":
+		return fmt.Sprintf("CAST(%s AS DOUBLE)", expr)
+	case "sqlite":
+		return fmt.Sprintf("CAST(%s AS REAL)", expr)
+	default: // postgres, sqlserver/mssql
+		return fmt.Sprintf("CAST(%s AS FLOAT)", expr)
+	}
+}
+
+// nullIfZero wraps a divisor expression so that division or modulo by zero yields
+// NULL on every dialect. PostgreSQL and SQL Server raise a "division by zero"
+// error otherwise; SQLite and MySQL already return NULL. OData arithmetic follows
+// IEEE 754 where x/0 is ±Infinity or NaN, so the affected rows are simply
+// excluded from comparisons rather than aborting the request with a 500.
+func nullIfZero(divisorSQL string) string {
+	return fmt.Sprintf("NULLIF(%s, 0)", divisorSQL)
+}
+
+// arithmeticOperandIsFloat reports whether an arithmetic operand evaluates to a
+// floating-point value, used to decide whether `div` is floating or integer
+// division. Nested arithmetic propagates float-ness (divby is always float).
+func arithmeticOperandIsFloat(expr *FilterExpression, entityMetadata *metadata.EntityMetadata) bool {
+	if expr == nil {
+		return false
+	}
+	if expr.Left != nil || expr.Right != nil {
+		op := expr.Operator
+		if op == "" && expr.Logical != "" {
+			op = FilterOperator(expr.Logical)
+		}
+		if op == OpDivBy {
+			return true
+		}
+		return arithmeticOperandIsFloat(expr.Left, entityMetadata) || arithmeticOperandIsFloat(expr.Right, entityMetadata)
+	}
+	if expr.Property != "" {
+		return isFloatingProperty(findProperty(expr.Property, entityMetadata))
+	}
+	switch expr.Value.(type) {
+	case float32, float64:
+		return true
+	}
+	return false
+}
+
+// isFloatingProperty reports whether a property is an Edm.Double or Edm.Single.
+func isFloatingProperty(prop *metadata.PropertyMetadata) bool {
+	if prop == nil {
+		return false
+	}
+	if prop.EdmType == "Edm.Double" || prop.EdmType == "Edm.Single" {
+		return true
+	}
+	if prop.Type != nil {
+		switch prop.Type.Kind() {
+		case reflect.Float32, reflect.Float64:
+			return true
+		}
+	}
+	return false
 }
 
 // buildComputeExpressionSQLWithArgs builds SQL for arithmetic expressions while keeping bind args.
@@ -1025,73 +1053,36 @@ func buildComputeExpressionSQLWithArgs(dialect string, expr *FilterExpression, e
 		expr.Right == nil &&
 		expr.Operator != "" &&
 		(expr.Operator != OpEqual || expr.Value != true) {
-		leftSQL, leftArgs := buildComputeExpressionSQLWithArgs(dialect, &FilterExpression{Property: expr.Property}, entityMetadata)
-		rightSQL, rightArgs := buildComputeExpressionSQLWithArgs(dialect, &FilterExpression{Value: expr.Value}, entityMetadata)
+		leftOperand := &FilterExpression{Property: expr.Property}
+		rightOperand := &FilterExpression{Value: expr.Value}
+		leftSQL, leftArgs := buildComputeExpressionSQLWithArgs(dialect, leftOperand, entityMetadata)
+		rightSQL, rightArgs := buildComputeExpressionSQLWithArgs(dialect, rightOperand, entityMetadata)
 		if leftSQL == "" || rightSQL == "" {
 			return "", nil
 		}
 
-		var sqlOp string
-		switch expr.Operator {
-		case OpAdd:
-			sqlOp = "+"
-		case OpSub:
-			sqlOp = "-"
-		case OpMul:
-			sqlOp = "*"
-		case OpDiv:
-			sqlOp = "/"
-		case OpDivBy:
-			switch dialect {
-			case "postgres":
-				return fmt.Sprintf("(CAST(%s AS FLOAT) / %s)", leftSQL, rightSQL), append(leftArgs, rightArgs...)
-			case "mysql", "mariadb":
-				return fmt.Sprintf("(CAST(%s AS DOUBLE) / %s)", leftSQL, rightSQL), append(leftArgs, rightArgs...)
-			default:
-				return fmt.Sprintf("(CAST(%s AS REAL) / %s)", leftSQL, rightSQL), append(leftArgs, rightArgs...)
-			}
-		case OpMod:
-			return buildModuloSQL(dialect, leftSQL, rightSQL), append(leftArgs, rightArgs...)
-		default:
+		sql := buildArithmeticSQL(dialect, expr.Operator, leftSQL, rightSQL,
+			arithmeticOperandIsFloat(leftOperand, entityMetadata), arithmeticOperandIsFloat(rightOperand, entityMetadata))
+		if sql == "" {
 			return "", nil
 		}
-
-		return fmt.Sprintf("(%s %s %s)", leftSQL, sqlOp, rightSQL), append(leftArgs, rightArgs...)
+		return sql, append(leftArgs, rightArgs...)
 	}
 
 	if expr.Left != nil && expr.Value != nil && expr.Right == nil && expr.Operator != "" {
+		rightOperand := &FilterExpression{Value: expr.Value}
 		leftSQL, leftArgs := buildComputeExpressionSQLWithArgs(dialect, expr.Left, entityMetadata)
-		rightSQL, rightArgs := buildComputeExpressionSQLWithArgs(dialect, &FilterExpression{Value: expr.Value}, entityMetadata)
+		rightSQL, rightArgs := buildComputeExpressionSQLWithArgs(dialect, rightOperand, entityMetadata)
 		if leftSQL == "" || rightSQL == "" {
 			return "", nil
 		}
 
-		var sqlOp string
-		switch expr.Operator {
-		case OpAdd:
-			sqlOp = "+"
-		case OpSub:
-			sqlOp = "-"
-		case OpMul:
-			sqlOp = "*"
-		case OpDiv:
-			sqlOp = "/"
-		case OpDivBy:
-			switch dialect {
-			case "postgres":
-				return fmt.Sprintf("(CAST(%s AS FLOAT) / %s)", leftSQL, rightSQL), append(leftArgs, rightArgs...)
-			case "mysql", "mariadb":
-				return fmt.Sprintf("(CAST(%s AS DOUBLE) / %s)", leftSQL, rightSQL), append(leftArgs, rightArgs...)
-			default:
-				return fmt.Sprintf("(CAST(%s AS REAL) / %s)", leftSQL, rightSQL), append(leftArgs, rightArgs...)
-			}
-		case OpMod:
-			return buildModuloSQL(dialect, leftSQL, rightSQL), append(leftArgs, rightArgs...)
-		default:
+		sql := buildArithmeticSQL(dialect, expr.Operator, leftSQL, rightSQL,
+			arithmeticOperandIsFloat(expr.Left, entityMetadata), arithmeticOperandIsFloat(rightOperand, entityMetadata))
+		if sql == "" {
 			return "", nil
 		}
-
-		return fmt.Sprintf("(%s %s %s)", leftSQL, sqlOp, rightSQL), append(leftArgs, rightArgs...)
+		return sql, append(leftArgs, rightArgs...)
 	}
 
 	if expr.Left != nil && expr.Right != nil && expr.Operator != "" {
@@ -1101,32 +1092,12 @@ func buildComputeExpressionSQLWithArgs(dialect string, expr *FilterExpression, e
 			return "", nil
 		}
 
-		var sqlOp string
-		switch expr.Operator {
-		case OpAdd:
-			sqlOp = "+"
-		case OpSub:
-			sqlOp = "-"
-		case OpMul:
-			sqlOp = "*"
-		case OpDiv:
-			sqlOp = "/"
-		case OpDivBy:
-			switch dialect {
-			case "postgres":
-				return fmt.Sprintf("(CAST(%s AS FLOAT) / %s)", leftSQL, rightSQL), append(leftArgs, rightArgs...)
-			case "mysql", "mariadb":
-				return fmt.Sprintf("(CAST(%s AS DOUBLE) / %s)", leftSQL, rightSQL), append(leftArgs, rightArgs...)
-			default:
-				return fmt.Sprintf("(CAST(%s AS REAL) / %s)", leftSQL, rightSQL), append(leftArgs, rightArgs...)
-			}
-		case OpMod:
-			return buildModuloSQL(dialect, leftSQL, rightSQL), append(leftArgs, rightArgs...)
-		default:
+		sql := buildArithmeticSQL(dialect, expr.Operator, leftSQL, rightSQL,
+			arithmeticOperandIsFloat(expr.Left, entityMetadata), arithmeticOperandIsFloat(expr.Right, entityMetadata))
+		if sql == "" {
 			return "", nil
 		}
-
-		return fmt.Sprintf("(%s %s %s)", leftSQL, sqlOp, rightSQL), append(leftArgs, rightArgs...)
+		return sql, append(leftArgs, rightArgs...)
 	}
 
 	if expr.Left != nil && expr.Right != nil && expr.Logical != "" {
@@ -1136,32 +1107,12 @@ func buildComputeExpressionSQLWithArgs(dialect string, expr *FilterExpression, e
 			return "", nil
 		}
 
-		var sqlOp string
-		switch expr.Logical {
-		case "add":
-			sqlOp = "+"
-		case "sub":
-			sqlOp = "-"
-		case "mul":
-			sqlOp = "*"
-		case "div":
-			sqlOp = "/"
-		case "divby":
-			switch dialect {
-			case "postgres":
-				return fmt.Sprintf("(CAST(%s AS FLOAT) / %s)", leftSQL, rightSQL), append(leftArgs, rightArgs...)
-			case "mysql", "mariadb":
-				return fmt.Sprintf("(CAST(%s AS DOUBLE) / %s)", leftSQL, rightSQL), append(leftArgs, rightArgs...)
-			default:
-				return fmt.Sprintf("(CAST(%s AS REAL) / %s)", leftSQL, rightSQL), append(leftArgs, rightArgs...)
-			}
-		case "mod":
-			return buildModuloSQL(dialect, leftSQL, rightSQL), append(leftArgs, rightArgs...)
-		default:
+		sql := buildArithmeticSQL(dialect, FilterOperator(expr.Logical), leftSQL, rightSQL,
+			arithmeticOperandIsFloat(expr.Left, entityMetadata), arithmeticOperandIsFloat(expr.Right, entityMetadata))
+		if sql == "" {
 			return "", nil
 		}
-
-		return fmt.Sprintf("(%s %s %s)", leftSQL, sqlOp, rightSQL), append(leftArgs, rightArgs...)
+		return sql, append(leftArgs, rightArgs...)
 	}
 
 	return "", nil
