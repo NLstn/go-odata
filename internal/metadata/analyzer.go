@@ -115,6 +115,13 @@ type PropertyMetadata struct {
 	Nullable     *bool  // Explicit nullable override (nil means use default behavior)
 	// Referential constraints for navigation properties
 	ReferentialConstraints map[string]string // Maps dependent property to principal property
+	// GormReferenceConstraints holds the belongs-to/has-one/has-many
+	// referential constraint(s) resolved from GORM's own relationship schema,
+	// for the common case where the gorm tag doesn't spell out
+	// foreignKey/references explicitly (so ReferentialConstraints is empty).
+	// Resolved once here, at metadata-analysis time, instead of re-parsing
+	// the GORM schema on every $expand request.
+	GormReferenceConstraints []GormReferenceConstraint
 	// Search properties
 	IsSearchable     bool    // True if this property should be considered in $search
 	SearchFuzziness  int     // Fuzziness level for search (default 1, meaning exact match)
@@ -579,6 +586,14 @@ func analyzeNavigationProperty(property *PropertyMetadata, field reflect.StructF
 			// Extract referential constraints from GORM tags (only for foreignKey/references)
 			if strings.Contains(gormTag, "foreignKey") || strings.Contains(gormTag, "references") {
 				property.ReferentialConstraints = extractReferentialConstraints(gormTag)
+			}
+
+			// The tag may not fully spell out the constraint (e.g. "references:"
+			// without "foreignKey:"), or may be absent for a convention-based
+			// relationship GORM itself still resolves by name. Ask GORM's own
+			// relationship schema once, here, so $expand doesn't need to.
+			if len(property.ReferentialConstraints) == 0 {
+				property.GormReferenceConstraints = resolveGormReferenceConstraints(property, ownerType)
 			}
 		} else if strings.Contains(gormTag, "embedded") {
 			// It's a complex type (embedded struct without foreign keys)
@@ -1679,6 +1694,78 @@ func getColumnNameFromProperty(prop *PropertyMetadata) string {
 	return toSnakeCase(prop.Name)
 }
 
+// gormSchemaCache backs GORM's own schema.Parse cache across every call in
+// this package, so a Go type's relationships are parsed once (the first time
+// any of its navigation properties needs them) rather than once per call.
+// GORM keys its cache by model type, so a single shared map is safe to reuse
+// across unrelated entities and self-referential relationships alike.
+var gormSchemaCache sync.Map
+
+// parsedGormSchema parses ownerType with GORM's own schema parser, reusing
+// gormSchemaCache instead of a throwaway cache store so repeated lookups for
+// the same type (e.g. multiple navigation properties on one entity) don't
+// reparse the schema.
+func parsedGormSchema(ownerType reflect.Type) (*gormschema.Schema, error) {
+	for ownerType.Kind() == reflect.Ptr {
+		ownerType = ownerType.Elem()
+	}
+	if ownerType.Kind() != reflect.Struct {
+		return nil, nil
+	}
+	return gormschema.Parse(reflect.New(ownerType).Interface(), &gormSchemaCache, gormschema.NamingStrategy{})
+}
+
+// GormReferenceConstraint is a single dependent/principal property pair
+// (with the dependent's resolved DB column) describing how a child row
+// references its parent, resolved from GORM's relationship schema.
+type GormReferenceConstraint struct {
+	DependentProperty string
+	DependentColumn   string
+	PrincipalProperty string
+}
+
+// resolveGormReferenceConstraints resolves a belongs-to/has-one/has-many
+// navigation property's referential constraint(s) from GORM's own
+// relationship schema — used when the gorm tag doesn't spell out
+// foreignKey/references explicitly, so extractReferentialConstraints found
+// nothing. This mirrors GORM's own relationship resolution (including its
+// naming conventions) rather than re-implementing it, and runs once here at
+// metadata-analysis time instead of on every $expand request.
+func resolveGormReferenceConstraints(property *PropertyMetadata, ownerType reflect.Type) []GormReferenceConstraint {
+	if property == nil || ownerType == nil || property.IsManyToMany {
+		return nil
+	}
+	sch, err := parsedGormSchema(ownerType)
+	if err != nil || sch == nil {
+		return nil
+	}
+	rel := sch.Relationships.Relations[property.FieldName]
+	if rel == nil {
+		return nil
+	}
+
+	constraints := make([]GormReferenceConstraint, 0, len(rel.References))
+	for _, ref := range rel.References {
+		if ref == nil || ref.PrimaryKey == nil || ref.ForeignKey == nil {
+			continue
+		}
+		constraint := GormReferenceConstraint{}
+		if ref.OwnPrimaryKey {
+			// has-one / has-many: target.ForeignKey = parent.PrimaryKey
+			constraint.DependentProperty = ref.ForeignKey.Name
+			constraint.DependentColumn = ref.ForeignKey.DBName
+			constraint.PrincipalProperty = ref.PrimaryKey.Name
+		} else {
+			// belongs-to: target.PrimaryKey = parent.ForeignKey
+			constraint.DependentProperty = ref.PrimaryKey.Name
+			constraint.DependentColumn = ref.PrimaryKey.DBName
+			constraint.PrincipalProperty = ref.ForeignKey.Name
+		}
+		constraints = append(constraints, constraint)
+	}
+	return constraints
+}
+
 // getForeignKeyColumnName computes the foreign key column name for a navigation property
 // This respects GORM foreignKey: tags and falls back to <navigation_property_name>_id convention
 // resolveManyToManyJoinInfo resolves the join/bridge table name and its foreign key
@@ -1697,14 +1784,8 @@ func resolveManyToManyJoinInfo(property *PropertyMetadata, ownerType reflect.Typ
 	if property == nil || ownerType == nil {
 		return
 	}
-	for ownerType.Kind() == reflect.Ptr {
-		ownerType = ownerType.Elem()
-	}
-	if ownerType.Kind() != reflect.Struct {
-		return
-	}
 
-	sch, err := gormschema.Parse(reflect.New(ownerType).Interface(), &sync.Map{}, gormschema.NamingStrategy{})
+	sch, err := parsedGormSchema(ownerType)
 	if err != nil || sch == nil {
 		return
 	}

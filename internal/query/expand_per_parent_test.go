@@ -23,6 +23,20 @@ type perParentTag struct {
 	ID uint `gorm:"primaryKey" odata:"key"`
 }
 
+type perParentCustomer struct {
+	ID uint `gorm:"primaryKey" odata:"key"`
+}
+
+// perParentOrder's Customer tag names "references:" without "foreignKey:", so
+// extractReferentialConstraints leaves ReferentialConstraints empty and
+// resolution falls to GormReferenceConstraints (see analyzer.go), resolved
+// from GORM's own relationship schema at metadata-analysis time.
+type perParentOrder struct {
+	ID         uint `gorm:"primaryKey" odata:"key"`
+	CustomerID uint
+	Customer   *perParentCustomer `gorm:"references:ID"`
+}
+
 type perParentProduct struct {
 	ID   uint           `gorm:"primaryKey" odata:"key"`
 	Tags []perParentTag `gorm:"many2many:per_parent_product_tags"`
@@ -111,5 +125,52 @@ func TestApplyPerParentExpandLoadsManyToManyRelationships(t *testing.T) {
 	}
 	if got := len(products[0].Tags); got != 2 {
 		t.Fatalf("Tags length = %d, want 2", got)
+	}
+}
+
+func TestApplyPerParentExpandUsesGormReferenceConstraintsWithoutForeignKeyTag(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&perParentOrder{}, &perParentCustomer{}); err != nil {
+		t.Fatal(err)
+	}
+	db.Create(&perParentCustomer{ID: 1})
+	db.Create(&perParentOrder{ID: 1, CustomerID: 1})
+
+	orderMeta, err := metadata.AnalyzeEntity(perParentOrder{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	customerMeta, err := metadata.AnalyzeEntity(perParentCustomer{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry := map[string]*metadata.EntityMetadata{
+		orderMeta.EntitySetName:    orderMeta,
+		customerMeta.EntitySetName: customerMeta,
+	}
+	orderMeta.SetEntitiesRegistry(registry)
+	customerMeta.SetEntitiesRegistry(registry)
+
+	customerProp := orderMeta.FindProperty("Customer")
+	if customerProp == nil {
+		t.Fatal("Customer navigation property not found")
+	}
+	if len(customerProp.ReferentialConstraints) != 0 {
+		t.Fatalf("expected tag-based ReferentialConstraints to stay empty, got %v", customerProp.ReferentialConstraints)
+	}
+	if len(customerProp.GormReferenceConstraints) == 0 {
+		t.Fatal("expected GormReferenceConstraints to be resolved from GORM's schema")
+	}
+
+	var orders []perParentOrder
+	db.Find(&orders)
+	if err := ApplyPerParentExpand(db, &orders, []ExpandOption{{NavigationProperty: "Customer"}}, orderMeta); err != nil {
+		t.Fatal(err)
+	}
+	if orders[0].Customer == nil || orders[0].Customer.ID != 1 {
+		t.Fatalf("Customer = %#v, want customer 1", orders[0].Customer)
 	}
 }
