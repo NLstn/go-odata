@@ -66,13 +66,12 @@ func TestSetODataVersionHeaderForRequest(t *testing.T) {
 			req = req.WithContext(version.WithVersion(req.Context(), negotiatedVersion))
 			response.SetODataVersionHeaderFromRequest(w, req)
 
-			// Check for the header - use Get() since Set() was used
-			value := w.Header().Get("OData-Version")
-			if value == "" {
+			value := w.Header()["OData-Version"]
+			if value[0] == "" {
 				t.Error("Expected OData-Version header to be set")
 				return
 			}
-			if value != tt.expectedVersion {
+			if value[0] != tt.expectedVersion {
 				t.Errorf("Expected OData-Version %s, got %s", tt.expectedVersion, value)
 			}
 		})
