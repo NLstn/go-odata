@@ -202,16 +202,16 @@ func TestToFTS34Query(t *testing.T) {
 
 func TestSearchExprNode_containsNot(t *testing.T) {
 	tests := []struct {
-		query    string
-		want     bool
+		query string
+		want  bool
 	}{
 		{"laptop", false},
 		{"laptop AND wireless", false},
 		{"laptop OR phone", false},
 		{"NOT laptop", true},
-		{"laptop NOT wireless", true},  // implicit AND with NOT right child
-		{"Mouse NOT Wireless", true},   // issue #732 case 1
-		{"NOT Laptop", true},           // issue #732 case 2
+		{"laptop NOT wireless", true}, // implicit AND with NOT right child
+		{"Mouse NOT Wireless", true},  // issue #732 case 1
+		{"NOT Laptop", true},          // issue #732 case 2
 	}
 	for _, tt := range tests {
 		t.Run(tt.query, func(t *testing.T) {
