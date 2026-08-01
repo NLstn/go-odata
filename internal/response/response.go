@@ -18,7 +18,7 @@ const (
 // SetODataVersionHeaderFromRequest sets the OData-Version header based on the negotiated version in the request context.
 func SetODataVersionHeaderFromRequest(w http.ResponseWriter, r *http.Request) {
 	ver := version.GetVersion(r.Context())
-	w.Header().Set(HeaderODataVersion, ver.String())
+	w.Header()[HeaderODataVersion] = []string{ver.String()} // see Handlers.SetODataHeader
 }
 
 // ODataResponse represents the structure of an OData JSON response.
