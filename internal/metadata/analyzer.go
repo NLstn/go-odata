@@ -102,9 +102,9 @@ type PropertyMetadata struct {
 	JoinTableForeignKey       string
 	JoinTableReferencesColumn string
 	NavigationIsArray         bool // True for collection navigation properties
-	NavigationContainsTarget  bool   // True if this is a containment navigation property (ContainsTarget="true")
-	IsETag                    bool   // True if this property should be used for ETag generation
-	IsComplexType             bool   // True if this property is a complex type (embedded struct)
+	NavigationContainsTarget  bool // True if this is a containment navigation property (ContainsTarget="true")
+	IsETag                    bool // True if this property should be used for ETag generation
+	IsComplexType             bool // True if this property is a complex type (embedded struct)
 	EmbeddedPrefix            string
 	ComplexTypeFields         map[string]*PropertyMetadata
 	// Facets

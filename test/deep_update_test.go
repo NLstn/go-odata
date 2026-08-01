@@ -23,10 +23,10 @@ type DeepUpdateSupplier struct {
 
 // DeepUpdateProduct has a BelongsTo relationship to DeepUpdateSupplier.
 type DeepUpdateProduct struct {
-	ID         int                  `json:"ID" gorm:"primaryKey;autoIncrement" odata:"key"`
-	Name       string               `json:"Name"`
-	SupplierID *int                 `json:"SupplierID,omitempty"`
-	Supplier   *DeepUpdateSupplier  `json:"Supplier,omitempty" gorm:"foreignKey:SupplierID"`
+	ID         int                 `json:"ID" gorm:"primaryKey;autoIncrement" odata:"key"`
+	Name       string              `json:"Name"`
+	SupplierID *int                `json:"SupplierID,omitempty"`
+	Supplier   *DeepUpdateSupplier `json:"Supplier,omitempty" gorm:"foreignKey:SupplierID"`
 }
 
 // DeepUpdateAddress has a HasOne relationship from DeepUpdateOrder (FK is on Address).

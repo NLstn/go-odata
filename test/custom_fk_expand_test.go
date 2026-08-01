@@ -20,9 +20,9 @@ import (
 // differs from the default convention (<EntityName><KeyName>).
 // Here the FK is "SuiteID" not "CustomFKSuiteID", which triggers Bug B if not fixed.
 type CustomFKSuite struct {
-	ID   string         `json:"ID" gorm:"primaryKey" odata:"key"`
-	Name string         `json:"Name"`
-	Runs []CustomFKRun  `json:"Runs,omitempty" gorm:"foreignKey:SuiteID;references:ID" odata:"nav"`
+	ID   string        `json:"ID" gorm:"primaryKey" odata:"key"`
+	Name string        `json:"Name"`
+	Runs []CustomFKRun `json:"Runs,omitempty" gorm:"foreignKey:SuiteID;references:ID" odata:"nav"`
 }
 
 // CustomFKRun is a child entity whose FK column is "suite_id" (from field SuiteID),

@@ -494,7 +494,7 @@ func TestPutEntity_DifferenceFromPatch(t *testing.T) {
 
 // TestPutUpsert_GetAfterCreate verifies that a GET request after an upsert returns the new entity.
 func TestPutUpsert_GetAfterCreate(t *testing.T) {
-		// Per OData v4 spec, PUT to non-existent entity returns 404 (not 201 create)
+	// Per OData v4 spec, PUT to non-existent entity returns 404 (not 201 create)
 	service, _ := setupPutTestService(t)
 
 	// PUT to non-existent key
@@ -524,10 +524,10 @@ func TestPutUpsert_GetAfterCreate(t *testing.T) {
 
 // TestPutUpsert_ThenUpdate verifies that upsert followed by PUT update works correctly.
 func TestPutUpsert_ThenUpdate(t *testing.T) {
-		// First PUT to non-existent entity returns 404 per OData v4 spec
+	// First PUT to non-existent entity returns 404 per OData v4 spec
 	service, db := setupPutTestService(t)
 
-	// First, create an entity so we can test UPDATE  
+	// First, create an entity so we can test UPDATE
 	initialProduct := PutTestProduct{
 		ID:    77,
 		Name:  "Initial",
@@ -571,7 +571,7 @@ func TestPutUpsert_ThenUpdate(t *testing.T) {
 
 // TestPutUpsert_CompositeKey verifies upsert with a composite key.
 func TestPutUpsert_CompositeKey(t *testing.T) {
-		// Per OData v4 spec, PUT to non-existent entity returns 404 (not 201 create)
+	// Per OData v4 spec, PUT to non-existent entity returns 404 (not 201 create)
 	service, db := setupPutCompositeKeyTestService(t)
 
 	body, _ := json.Marshal(map[string]interface{}{

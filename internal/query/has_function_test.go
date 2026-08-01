@@ -128,10 +128,10 @@ func TestHasEnumValueLiteral(t *testing.T) {
 	}
 
 	tests := []struct {
-		name          string
-		filter        string
-		wantValue     int64
-		wantErr       bool
+		name      string
+		filter    string
+		wantValue int64
+		wantErr   bool
 	}{
 		{
 			name:      "qualified enum literal with has infix",
@@ -197,10 +197,10 @@ func TestHasEnumValueLiteralSQL(t *testing.T) {
 	// Status values: InStock=1, OnSale=2, Discontinued=4, Featured=8
 	products := []Product{
 		{ID: 1, Name: "Normal", Status: 1},        // InStock
-		{ID: 2, Name: "Sale", Status: 3},           // InStock|OnSale
-		{ID: 3, Name: "Featured", Status: 9},       // InStock|Featured
-		{ID: 4, Name: "FeaturedSale", Status: 11},  // InStock|OnSale|Featured
-		{ID: 5, Name: "Discontinued", Status: 4},   // Discontinued
+		{ID: 2, Name: "Sale", Status: 3},          // InStock|OnSale
+		{ID: 3, Name: "Featured", Status: 9},      // InStock|Featured
+		{ID: 4, Name: "FeaturedSale", Status: 11}, // InStock|OnSale|Featured
+		{ID: 5, Name: "Discontinued", Status: 4},  // Discontinued
 	}
 	if err := db.Create(&products).Error; err != nil {
 		t.Fatalf("seed: %v", err)
