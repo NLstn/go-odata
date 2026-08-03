@@ -23,10 +23,12 @@ func TestSetODataHeader(t *testing.T) {
 
 	// Verify header was set - use direct map access since OData headers have non-canonical keys
 	// OData spec requires exact "OData-Version" capitalization which is non-canonical in Go
-	header := w.Header()
-	values := header["OData-Version"] //nolint:staticcheck // OData headers require non-canonical keys
-	if len(values) == 0 || values[0] != "4.01" {
-		t.Errorf("Expected OData-Version header to be 4.01, got %v", values)
+	value, err := GetODataHeader(w, "OData-Version")
+	if err != nil {
+		t.Error(err)
+	}
+	if value != "4.01" {
+		t.Errorf("Expected OData-Version header to be 4.01, got %v", value)
 	}
 }
 
@@ -66,12 +68,12 @@ func TestSetODataVersionHeaderForRequest(t *testing.T) {
 			req = req.WithContext(version.WithVersion(req.Context(), negotiatedVersion))
 			response.SetODataVersionHeaderFromRequest(w, req)
 
-			value := w.Header()["OData-Version"]
-			if value[0] == "" {
+			value, err := GetODataHeader(w, "OData-Version")
+			if err != nil {
 				t.Error("Expected OData-Version header to be set")
 				return
 			}
-			if value[0] != tt.expectedVersion {
+			if value != tt.expectedVersion {
 				t.Errorf("Expected OData-Version %s, got %s", tt.expectedVersion, value)
 			}
 		})

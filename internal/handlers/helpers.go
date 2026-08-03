@@ -119,6 +119,14 @@ func SetODataHeader(w http.ResponseWriter, key, value string) {
 	w.Header()[key] = []string{value}
 }
 
+func GetODataHeader(w http.ResponseWriter, key string) (string, error) {
+	val := w.Header()[key]
+	if len(val) == 0 {
+		return "", fmt.Errorf("key '%s' does not exist in headers", key)
+	}
+	return val[0], nil
+}
+
 func isCaseInsensitiveSystemQueryParsingEnabled(r *http.Request) bool {
 	// This service implements OData 4.01 request syntax. OData-MaxVersion
 	// negotiates the response representation; it does not restrict which URL
