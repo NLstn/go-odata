@@ -36,8 +36,11 @@ func TestWriteError_BasicError(t *testing.T) {
 	}
 
 	// Verify OData-Version header
-	odataVersion := w.Header()["OData-Version"]
-	if odataVersion[0] != "4.01" {
+	odataVersion, err := GetODataVersionHeaderFromRequest(w, "OData-Version")
+	if err != nil {
+		t.Error(err)
+	}
+	if odataVersion != "4.01" {
 		t.Errorf("OData-Version = %v, want 4.01", odataVersion)
 	}
 
@@ -429,8 +432,11 @@ func TestWriteError_RespectsVersionNegotiation_40(t *testing.T) {
 	}
 
 	// Verify OData-Version header matches negotiated version
-	odataVersion := w.Header()["OData-Version"]
-	if odataVersion[0] != "4.0" {
+	odataVersion, err := GetODataVersionHeaderFromRequest(w, "OData-Version")
+	if err != nil {
+		t.Error(err)
+	}
+	if odataVersion != "4.0" {
 		t.Errorf("OData-Version = %v, want 4.0", odataVersion)
 	}
 }
@@ -452,8 +458,11 @@ func TestWriteError_RespectsVersionNegotiation_401(t *testing.T) {
 	}
 
 	// Verify OData-Version header matches negotiated version
-	odataVersion := w.Header()["OData-Version"]
-	if odataVersion[0] != "4.01" {
+	odataVersion, err := GetODataVersionHeaderFromRequest(w, "OData-Version")
+	if err != nil {
+		t.Error(err)
+	}
+	if odataVersion != "4.01" {
 		t.Errorf("OData-Version = %v, want 4.01", odataVersion)
 	}
 }
@@ -480,8 +489,11 @@ func TestWriteODataError_RespectsVersionNegotiation(t *testing.T) {
 	}
 
 	// Verify OData-Version header matches negotiated version
-	odataVersion := w.Header()["OData-Version"]
-	if odataVersion[0] != "4.0" {
+	odataVersion, err := GetODataVersionHeaderFromRequest(w, "OData-Version")
+	if err != nil {
+		t.Error(err)
+	}
+	if odataVersion != "4.0" {
 		t.Errorf("OData-Version = %v, want 4.0", odataVersion)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	odata "github.com/nlstn/go-odata"
+	"github.com/nlstn/go-odata/internal/handlers"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -372,9 +373,12 @@ func TestErrorResponse_ODataVersion(t *testing.T) {
 			// Verify OData-Version header is present
 			// Access using direct map access since we use non-canonical capitalization
 			//nolint:staticcheck // SA1008: intentionally using non-canonical header key per OData spec
-			odataVersionValues := w.Header()["OData-Version"]
-			if len(odataVersionValues) == 0 || odataVersionValues[0] != "4.01" {
-				t.Errorf("OData-Version header = %v, want [4.01]", odataVersionValues)
+			value, err := handlers.GetODataHeader(w, "OData-Version")
+			if err != nil {
+				t.Error(err)
+			}
+			if value != "4.01" {
+				t.Errorf("OData-Version header = %v, want [4.01]", value)
 			}
 
 			// Verify Content-Type header

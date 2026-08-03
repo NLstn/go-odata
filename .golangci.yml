@@ -54,10 +54,4 @@ linters:
           - errcheck
         path: "internal/observability/(metrics|noop)\\.go"
         text: "meter\\.(Float64Histogram|Int64Counter|Int64Histogram)"
-      - linters:
-          - staticcheck
-        test: "SA1008"
-        path:
-          - internal/handlers/helpers_test.go
-          - internal/response/error_response_test.go
 

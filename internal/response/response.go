@@ -21,6 +21,14 @@ func SetODataVersionHeaderFromRequest(w http.ResponseWriter, r *http.Request) {
 	w.Header()[HeaderODataVersion] = []string{ver.String()} // see Handlers.SetODataHeader
 }
 
+func GetODataVersionHeaderFromRequest(w http.ResponseWriter, key string) (string, error) {
+	val := w.Header()[key]
+	if len(val) == 0 {
+		return "", fmt.Errorf("key '%s' does not exist in headers", key)
+	}
+	return val[0], nil
+}
+
 // ODataResponse represents the structure of an OData JSON response.
 type ODataResponse struct {
 	Context  string      `json:"@odata.context,omitempty"`
