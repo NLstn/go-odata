@@ -122,6 +122,24 @@ func (r *Router) getNamespace() string {
 	return r.namespace
 }
 
+func addVaryHeader(header http.Header, fieldName string) {
+	for name, values := range header {
+		if !strings.EqualFold(name, "Vary") {
+			continue
+		}
+		for _, value := range values {
+			for member := range strings.SplitSeq(value, ",") {
+				member = strings.TrimSpace(member)
+				if member == "*" || strings.EqualFold(member, fieldName) {
+					return
+				}
+			}
+		}
+	}
+
+	header.Add("Vary", fieldName)
+}
+
 // ServeHTTP implements http.Handler interface.
 func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	// Check if client's OData-MaxVersion is below 4.0 (reject old versions)
@@ -151,6 +169,9 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	// Store the negotiated version in the request context
 	ctx := version.WithVersion(req.Context(), negotiatedVersion)
 	req = req.WithContext(ctx)
+
+	// Responses vary by the version selected from OData-MaxVersion.
+	addVaryHeader(w.Header(), handlers.HeaderODataMaxVersion)
 
 	// Set the OData-Version header based on the negotiated version
 	// Use direct assignment to preserve exact casing per OData spec
