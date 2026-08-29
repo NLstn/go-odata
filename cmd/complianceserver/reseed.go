@@ -206,6 +206,12 @@ func registerReseedAction(service *odata.Service, db *gorm.DB) {
 		Parameters: []odata.ParameterDefinition{},
 		ReturnType: nil,
 		Handler: func(w http.ResponseWriter, r *http.Request, ctx interface{}, params map[string]interface{}) error {
+			// The HTTP gate blocks new requests while Reseed runs. Wait for jobs
+			// accepted by earlier requests before dropping tables beneath them.
+			if manager := service.AsyncManager(); manager != nil {
+				manager.WaitForActiveJobs()
+			}
+
 			// Reseed the database
 			if err := seedDatabase(db); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)

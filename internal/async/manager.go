@@ -234,6 +234,22 @@ func (m *Manager) GetJob(id string) (*Job, bool) {
 	return job, ok
 }
 
+// WaitForActiveJobs blocks until every job active at the time of the call has
+// reached a terminal state. Callers must prevent new jobs from being submitted
+// when they require the manager to remain idle after this method returns.
+func (m *Manager) WaitForActiveJobs() {
+	m.mu.Lock()
+	jobs := make([]*Job, 0, len(m.jobs))
+	for _, job := range m.jobs {
+		jobs = append(jobs, job)
+	}
+	m.mu.Unlock()
+
+	for _, job := range jobs {
+		job.Wait()
+	}
+}
+
 // CancelJob requests cancellation of the specified job.
 func (m *Manager) CancelJob(id string) bool {
 	m.mu.Lock()

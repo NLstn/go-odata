@@ -88,3 +88,22 @@ func TestReseedGateBlocksNewRequestsDuringReseed(t *testing.T) {
 		t.Fatalf("product requests after reseed = %d, want 1", got)
 	}
 }
+
+func TestReseedGateForcesSynchronousReseed(t *testing.T) {
+	var gotPrefer string
+	handler := newReseedGate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPrefer = r.Header.Get("Prefer")
+		w.WriteHeader(http.StatusOK)
+	}))
+	req := httptest.NewRequest(http.MethodPost, "/Reseed", nil)
+	req.Header.Set("Prefer", "respond-async")
+
+	handler.ServeHTTP(httptest.NewRecorder(), req)
+
+	if gotPrefer != "" {
+		t.Fatalf("Reseed Prefer header = %q, want empty", gotPrefer)
+	}
+	if got := req.Header.Get("Prefer"); got != "respond-async" {
+		t.Fatalf("original request Prefer header = %q, want respond-async", got)
+	}
+}

@@ -126,6 +126,40 @@ func TestManagerLifecycle(t *testing.T) {
 	}
 }
 
+func TestManagerWaitForActiveJobs(t *testing.T) {
+	mgr, _ := newTestManager(t, 0)
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	if _, err := mgr.StartJob(context.Background(), func(context.Context) (*StoredResponse, error) {
+		close(started)
+		<-release
+		return &StoredResponse{StatusCode: http.StatusNoContent}, nil
+	}); err != nil {
+		t.Fatalf("StartJob error: %v", err)
+	}
+	<-started
+
+	waitDone := make(chan struct{})
+	go func() {
+		mgr.WaitForActiveJobs()
+		close(waitDone)
+	}()
+
+	select {
+	case <-waitDone:
+		t.Fatal("WaitForActiveJobs returned while a job was active")
+	case <-time.After(20 * time.Millisecond):
+	}
+
+	close(release)
+	select {
+	case <-waitDone:
+	case <-time.After(time.Second):
+		t.Fatal("WaitForActiveJobs did not return after the job completed")
+	}
+}
+
 func TestManagerCancellation(t *testing.T) {
 	mgr, _ := newTestManager(t, 0)
 
