@@ -59,30 +59,27 @@ The compliance sample model includes primitive-focused fields on `Products` to e
 
 ## Testing
 
-The compliance server is used by the Go-based compliance test suite in `compliance-suite/`.
+The compliance suite lives in the external
+[NLstn/odata-compliance-suite](https://github.com/NLstn/odata-compliance-suite)
+repository. It is a black-box client and does not start this server.
 
-The test suite automatically builds, starts, and stops the compliance server:
+Start the server from the repository root:
 
 ```bash
-# Run all compliance tests (server auto-builds and starts)
-cd compliance-suite
-go run .
-
-# Run specific tests by pattern
-go run . -pattern service_document
-
-# Run with verbose output
-go run . -verbose
-
-# Use an external/manual server
-cd cmd/complianceserver
-go run .
-# In another terminal:
-cd compliance-suite
-go run . -external-server
+go run ./cmd/complianceserver -db sqlite
 ```
 
-**Note:** The test suite automatically builds and manages the compliance server for each test run, ensuring a clean environment every time.
+Then run the suite from another terminal:
+
+```bash
+go run github.com/nlstn/odata-compliance-suite@latest -server http://localhost:9090
+
+# Run a focused subset
+go run github.com/nlstn/odata-compliance-suite@latest \
+  -server http://localhost:9090 -pattern service_document
+```
+
+Use a dedicated database because compliance tests can create, update, delete, and reseed data.
 
 ## Differences from Development Server
 

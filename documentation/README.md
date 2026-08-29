@@ -81,7 +81,7 @@ Leverage powerful OData v4 features:
 Ensure your OData service works correctly:
 - Unit testing strategies
 - Integration tests with GORM
-- Running the OData v4 compliance test suite (85+ tests)
+- Running the external OData v4 compliance test suite
 - Performance profiling with CPU profiles
 - SQL query tracing to identify N+1 queries and bottlenecks
 

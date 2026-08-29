@@ -495,7 +495,7 @@ Features:
 
 **Use for:** Running compliance tests, validating OData v4 specification adherence
 
-**Note:** The Go-based compliance test suite automatically starts and stops the compliance server.
+**Note:** Start the compliance server first, then point the external black-box suite at `http://localhost:9090`. The suite does not manage the server process.
 
 See [cmd/complianceserver/README.md](../cmd/complianceserver/README.md) for more details.
 
@@ -574,6 +574,35 @@ db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
 ```
 
 ## Production Considerations
+
+### Schema Management
+
+Application entity migrations are the host application's responsibility. Use versioned,
+reviewable migrations in production rather than relying on `AutoMigrate` from the quick-start
+examples.
+
+Optional library features can create their own infrastructure tables:
+
+- `EnableAsyncProcessing` initializes the async job table.
+- `PersistentChangeTracking` initializes the change-tracking table.
+
+Decide whether the application is allowed to perform DDL at startup before enabling these
+features. Environments that prohibit runtime DDL should provision the required tables during
+deployment and verify startup behavior with the restricted production database role.
+
+### Request Hardening
+
+`ServiceConfig` limits IN-clause size, expand depth, and batch size. Configure these values for
+your workload and also enforce HTTP body-size limits, authentication, rate limits, and request
+deadlines in middleware around the service. The library provides authorization policy hooks but
+does not validate JWT or OIDC credentials itself.
+
+### Database-Specific Features
+
+Run integration and compliance tests against the production database. PostgreSQL and SQLite use
+database-native full-text search; MySQL, MariaDB, SQL Server, and other backends can fall back to
+in-memory `$search`, which should not be enabled for unbounded production datasets without load
+testing.
 
 ### Timeouts
 
