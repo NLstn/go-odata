@@ -131,6 +131,37 @@ func TestParseVersionString(t *testing.T) {
 	}
 }
 
+func TestParseRequestVersion(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		want    Version
+		wantErr bool
+	}{
+		{name: "4.0", input: "4.0", want: Version{4, 0}},
+		{name: "4.01", input: "4.01", want: Version{4, 1}},
+		{name: "surrounding whitespace", input: " 4.01\t", want: Version{4, 1}},
+		{name: "missing minor", input: "4", wantErr: true},
+		{name: "noncanonical minor", input: "4.1", wantErr: true},
+		{name: "unsupported minor", input: "4.02", wantErr: true},
+		{name: "unsupported major", input: "5.0", wantErr: true},
+		{name: "multiple values", input: "4.0, 4.01", wantErr: true},
+		{name: "invalid", input: "invalid", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ParseRequestVersion(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("ParseRequestVersion(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
+			}
+			if got != tt.want {
+				t.Errorf("ParseRequestVersion(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestNegotiateVersion(t *testing.T) {
 	tests := []struct {
 		name             string
@@ -174,5 +205,17 @@ func TestGetVersion_Default(t *testing.T) {
 
 	if retrieved != expected {
 		t.Errorf("GetVersion() without context value = %v, want %v", retrieved, expected)
+	}
+}
+
+func TestRequestAndResponseVersionsAreIndependent(t *testing.T) {
+	ctx := WithVersion(context.Background(), Version{4, 0})
+	ctx = WithRequestVersion(ctx, Version{4, 1})
+
+	if got := GetVersion(ctx); got != (Version{4, 0}) {
+		t.Errorf("GetVersion() = %v, want 4.0", got)
+	}
+	if got := GetRequestVersion(ctx); got != (Version{4, 1}) {
+		t.Errorf("GetRequestVersion() = %v, want 4.01", got)
 	}
 }

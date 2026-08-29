@@ -12,6 +12,7 @@ import (
 
 	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/observability"
+	"github.com/nlstn/go-odata/internal/version"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -109,6 +110,85 @@ func TestBatchHandler_InvalidContentType(t *testing.T) {
 				t.Errorf("Status = %v, want %v", w.Code, http.StatusBadRequest)
 			}
 		})
+	}
+}
+
+func TestInheritBatchVersionHeaders(t *testing.T) {
+	parentReq := httptest.NewRequest(http.MethodPost, "/$batch", nil)
+	parentReq.Header.Set(HeaderODataVersion, "4.0")
+	parentReq.Header.Set(HeaderODataMaxVersion, "4.01")
+	childHeaders := http.Header{HeaderODataVersion: []string{"4.01"}}
+
+	inheritBatchVersionHeaders(childHeaders, parentReq)
+
+	if got := version.HeaderValues(childHeaders, HeaderODataVersion); len(got) != 1 || got[0] != "4.01" {
+		t.Errorf("explicit child OData-Version = %v, want [4.01]", got)
+	}
+	if got := version.HeaderValues(childHeaders, HeaderODataMaxVersion); len(got) != 1 || got[0] != "4.01" {
+		t.Errorf("inherited child OData-MaxVersion = %v, want [4.01]", got)
+	}
+}
+
+func TestBatchTransactionRejectsInvalidRequestVersionBeforeHook(t *testing.T) {
+	handler, db, _ := setupBatchTestHandler(t)
+	hookCalled := false
+	handler.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
+		hookCalled = true
+		return r.Context(), nil
+	})
+	tx := db.Begin()
+	t.Cleanup(func() { tx.Rollback() })
+	pendingEvents := make([]pendingChangeEvent, 0)
+	req := &batchRequest{
+		Method:     http.MethodPost,
+		URL:        "/BatchTestProducts",
+		Headers:    http.Header{"Content-Type": []string{"application/json"}, HeaderODataVersion: []string{"4.1"}},
+		Body:       []byte(`{"Name":"Invalid version"}`),
+		HasPayload: true,
+	}
+
+	resp := handler.executeRequestInTransaction(req, tx, &pendingEvents, httptest.NewRequest(http.MethodPost, "/$batch", nil))
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body: %s", resp.StatusCode, http.StatusBadRequest, resp.Body)
+	}
+	if hookCalled {
+		t.Fatal("pre-request hook was called for an invalid payload version")
+	}
+}
+
+func TestBatchTransactionProvidesInheritedVersionContextToHook(t *testing.T) {
+	handler, db, _ := setupBatchTestHandler(t)
+	var gotRequestVersion, gotResponseVersion version.Version
+	handler.SetPreRequestHook(func(r *http.Request) (context.Context, error) {
+		gotRequestVersion = version.GetRequestVersion(r.Context())
+		gotResponseVersion = version.GetVersion(r.Context())
+		return r.Context(), fmt.Errorf("stop after context capture")
+	})
+	tx := db.Begin()
+	t.Cleanup(func() { tx.Rollback() })
+	pendingEvents := make([]pendingChangeEvent, 0)
+	parentReq := httptest.NewRequest(http.MethodPost, "/$batch", nil)
+	parentReq.Header.Set(HeaderODataVersion, "4.01")
+	parentReq.Header.Set(HeaderODataMaxVersion, "4.0")
+	req := &batchRequest{
+		Method:     http.MethodPost,
+		URL:        "/BatchTestProducts",
+		Headers:    http.Header{"Content-Type": []string{"application/json"}},
+		Body:       []byte(`{"Name":"Version context"}`),
+		HasPayload: true,
+	}
+
+	resp := handler.executeRequestInTransaction(req, tx, &pendingEvents, parentReq)
+
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+	}
+	if gotRequestVersion != (version.Version{Major: 4, Minor: 1}) {
+		t.Errorf("request version = %v, want 4.01", gotRequestVersion)
+	}
+	if gotResponseVersion != (version.Version{Major: 4, Minor: 0}) {
+		t.Errorf("response version = %v, want 4.0", gotResponseVersion)
 	}
 }
 

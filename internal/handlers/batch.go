@@ -84,11 +84,12 @@ func (h *BatchHandler) SetPreRequestHook(hook func(r *http.Request) (context.Con
 
 // batchRequest represents a single request within a batch
 type batchRequest struct {
-	Method    string
-	URL       string
-	Headers   http.Header
-	Body      []byte
-	ContentID string // Content-ID from the MIME part envelope (to be echoed in response)
+	Method     string
+	URL        string
+	Headers    http.Header
+	Body       []byte
+	HasPayload bool
+	ContentID  string // Content-ID from the MIME part envelope (to be echoed in response)
 }
 
 // batchResponse represents a single response within a batch
@@ -474,13 +475,29 @@ func (h *BatchHandler) parseHTTPRequest(r io.Reader) (*batchRequest, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read body: %w", err)
 	}
+	hasPayload := len(body) > 0
+	if contentLength, parseErr := strconv.ParseInt(headers.Get("Content-Length"), 10, 64); parseErr == nil && contentLength > 0 {
+		hasPayload = true
+	}
 
 	return &batchRequest{
-		Method:  method,
-		URL:     reqURL,
-		Headers: headers,
-		Body:    bytes.TrimSpace(body),
+		Method:     method,
+		URL:        reqURL,
+		Headers:    headers,
+		Body:       bytes.TrimSpace(body),
+		HasPayload: hasPayload,
 	}, nil
+}
+
+func inheritBatchVersionHeaders(headers http.Header, parentReq *http.Request) {
+	for _, name := range []string{HeaderODataVersion, HeaderODataMaxVersion} {
+		if len(version.HeaderValues(headers, name)) != 0 {
+			continue
+		}
+		for _, value := range version.HeaderValues(parentReq.Header, name) {
+			headers.Add(name, value)
+		}
+	}
 }
 
 // executeRequest executes a single batch request.
@@ -488,6 +505,8 @@ func (h *BatchHandler) parseHTTPRequest(r io.Reader) (*batchRequest, error) {
 // Sub-requests are routed through the service handler which invokes the PreRequestHook.
 // Cookies from the parent batch request are forwarded to enable cookie-based authentication.
 func (h *BatchHandler) executeRequest(req *batchRequest, parentReq *http.Request) batchResponse {
+	inheritBatchVersionHeaders(req.Headers, parentReq)
+
 	// Ensure URL has a leading slash to avoid httptest.NewRequest panic
 	url := req.URL
 	if !strings.HasPrefix(url, "/") {
@@ -503,6 +522,9 @@ func (h *BatchHandler) executeRequest(req *batchRequest, parentReq *http.Request
 
 	// Create an HTTP request
 	httpReq := httptest.NewRequest(req.Method, url, bytes.NewReader(req.Body))
+	if req.HasPayload && httpReq.ContentLength == 0 {
+		httpReq.ContentLength = -1
+	}
 	for key, values := range req.Headers {
 		for _, value := range values {
 			httpReq.Header.Add(key, value)
@@ -528,6 +550,8 @@ func (h *BatchHandler) executeRequest(req *batchRequest, parentReq *http.Request
 
 // executeRequestInTransaction executes a request within a transaction
 func (h *BatchHandler) executeRequestInTransaction(req *batchRequest, tx *gorm.DB, pendingEvents *[]pendingChangeEvent, parentReq *http.Request) batchResponse {
+	inheritBatchVersionHeaders(req.Headers, parentReq)
+
 	// Create temporary handlers that use the transaction
 	txHandlers := make(map[string]*EntityHandler)
 	for name, handler := range h.handlers {
@@ -803,6 +827,9 @@ func (h *BatchHandler) executeRequestInTransaction(req *batchRequest, tx *gorm.D
 
 	// Create an HTTP request
 	httpReq := httptest.NewRequest(req.Method, url, bytes.NewReader(req.Body))
+	if req.HasPayload && httpReq.ContentLength == 0 {
+		httpReq.ContentLength = -1
+	}
 	for key, values := range req.Headers {
 		for _, value := range values {
 			httpReq.Header.Add(key, value)
@@ -814,8 +841,20 @@ func (h *BatchHandler) executeRequestInTransaction(req *batchRequest, tx *gorm.D
 		httpReq.AddCookie(cookie)
 	}
 
+	requestVersion, responseVersion, requestVersionErr := version.ResolveRequestVersions(httpReq.Header, req.HasPayload)
+	ctx := version.WithVersion(httpReq.Context(), responseVersion)
+	if requestVersionErr != nil {
+		recorder := httptest.NewRecorder()
+		httpReq = httpReq.WithContext(ctx)
+		if err := response.WriteError(recorder, httpReq, http.StatusBadRequest, ErrMsgVersionNotSupported, ErrDetailRequestVersion); err != nil {
+			return h.createErrorResponse(http.StatusInternalServerError, err.Error())
+		}
+		return batchResponse{StatusCode: recorder.Code, Headers: recorder.Header(), Body: recorder.Body.Bytes()}
+	}
+	ctx = version.WithRequestVersion(ctx, requestVersion)
+	httpReq = httpReq.WithContext(ctx)
+
 	// Call the pre-request hook if configured (for changeset sub-requests)
-	ctx := httpReq.Context()
 	if h.preRequestHook != nil {
 		hookCtx, err := h.preRequestHook(httpReq)
 		if err != nil {
@@ -1299,11 +1338,12 @@ func (h *BatchHandler) jsonItemToBatchRequest(item jsonBatchRequestItem) (*batch
 	}
 
 	return &batchRequest{
-		Method:    item.Method,
-		URL:       reqURL,
-		Headers:   headers,
-		Body:      bodyBytes,
-		ContentID: item.ID,
+		Method:     item.Method,
+		URL:        reqURL,
+		Headers:    headers,
+		Body:       bodyBytes,
+		HasPayload: len(bodyBytes) > 0,
+		ContentID:  item.ID,
 	}, nil
 }
 
