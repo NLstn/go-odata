@@ -23,6 +23,11 @@ func (g *reseedGate) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost && strings.Trim(r.URL.Path, "/") == "Reseed" {
 		g.mu.Lock()
 		defer g.mu.Unlock()
+
+		// Reseed must remain synchronous because its handler waits for jobs
+		// accepted before the exclusive gate was acquired.
+		r = r.Clone(r.Context())
+		r.Header.Del("Prefer")
 	} else {
 		g.mu.RLock()
 		defer g.mu.RUnlock()
