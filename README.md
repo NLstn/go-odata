@@ -11,7 +11,7 @@ A Go library for building services that expose OData v4 APIs with automatic hand
 
 ### Key Features
 
-- ✅ **Full OData v4 support** - 100% compliant with OData v4 specification
+- **Broad OData v4 support** - CRUD, metadata, query options, batch requests, actions, functions, ETags, and change tracking
 - 🚀 **Simple API** - Define structs, register entities, and you're done
 - 🔍 **Rich querying** - Supports all OData query options ($filter, $select, $expand, etc.)
 - 🌍 **Geospatial functions** - Query geographic data with geo.distance, geo.length, and geo.intersects
@@ -21,7 +21,7 @@ A Go library for building services that expose OData v4 APIs with automatic hand
 - 🎯 **Custom operations** - Easy registration of actions and functions
 - 🔐 **HTTP method restrictions** - Easily disable HTTP methods (POST, DELETE, etc.) for specific entities
 - 📊 **Data aggregation** - Supports $apply transformations
-- 🧪 **Fully tested** - 85+ compliance tests ensuring OData v4 adherence
+- **Protocol-focused testing** - Unit and integration coverage plus an external black-box OData compliance suite
 - 🔑 **Server-side key generation** - Validate directives during metadata analysis and plug in custom generators
 - 🌐 **Virtual entities** - Expose data from external APIs without database backing
 - 🛣️ **Custom base paths** - Mount your OData service at any path (e.g., `/api/odata`) with automatic URL generation
@@ -29,7 +29,7 @@ A Go library for building services that expose OData v4 APIs with automatic hand
 
 ### OData v4 Specification
 
-This library implements the [OData v4.01 specification](https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html).
+This library targets the [OData v4.01 specification](https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html). See the supported endpoints and query options below, and run the external compliance suite against your selected database before relying on a specific protocol feature.
 
 ## Installation
 
@@ -191,7 +191,7 @@ Once your service is running, it automatically provides OData v4 endpoints:
 - `DELETE /Products(1)` - Delete product
 
 **Query Options:**
-All standard OData v4 query options are supported:
+Supported OData v4 query options include:
 - `$filter` - Filter results with complex expressions
 - `$select` - Choose specific properties
 - `$expand` - Include related entities
@@ -261,14 +261,13 @@ See the [OData v4 specification](https://docs.oasis-open.org/odata/odata/v4.01/o
 ## Versioning
 
 This project follows [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html).
-Patch releases deliver backward-compatible fixes, minor releases add new
-backward-compatible functionality, and major releases are reserved for breaking
-changes. Planned release tags will start with `v0.1.0` and continue with the
-`vMAJOR.MINOR.PATCH` pattern.
+The current `v0.x` releases are pre-1.0, so the public API can still evolve between
+minor releases. Pin the library version used by production applications and review
+release notes before upgrading.
 
 ## Requirements
 
-- Go 1.24 or later
+- Go 1.25 or later
 - GORM-compatible database driver
 
 ## Supported Databases
