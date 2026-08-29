@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strconv"
 	"strings"
 )
@@ -12,6 +13,7 @@ import (
 type contextKey string
 
 const negotiatedVersionKey contextKey = "odata.negotiated.version"
+const requestVersionKey contextKey = "odata.request.version"
 
 // Version represents an OData protocol version
 type Version struct {
@@ -111,6 +113,51 @@ func ParseVersionString(versionStr string) Version {
 	return Version{Major: major, Minor: minor}
 }
 
+// ParseRequestVersion validates an OData-Version request header value against
+// the payload versions supported by the service.
+func ParseRequestVersion(versionStr string) (Version, error) {
+	switch strings.TrimSpace(versionStr) {
+	case "4.0":
+		return Version{Major: 4, Minor: 0}, nil
+	case "4.01":
+		return Version{Major: 4, Minor: 1}, nil
+	default:
+		return Version{}, fmt.Errorf("unsupported OData-Version %q: expected 4.0 or 4.01", versionStr)
+	}
+}
+
+// HeaderValues returns all values for a header field regardless of how its key
+// is capitalized in the raw map.
+func HeaderValues(header http.Header, name string) []string {
+	var values []string
+	for key, keyValues := range header {
+		if strings.EqualFold(key, name) {
+			values = append(values, keyValues...)
+		}
+	}
+	return values
+}
+
+// ResolveRequestVersions returns the versions used to interpret the request
+// payload and generate the response.
+func ResolveRequestVersions(header http.Header, hasPayload bool) (Version, Version, error) {
+	responseVersion := NegotiateVersion(header.Get("OData-MaxVersion"))
+	requestVersion := responseVersion
+	requestVersionValues := HeaderValues(header, "OData-Version")
+	if !hasPayload || len(requestVersionValues) == 0 {
+		return requestVersion, responseVersion, nil
+	}
+	if len(requestVersionValues) != 1 {
+		return Version{}, responseVersion, fmt.Errorf("multiple OData-Version header values")
+	}
+
+	requestVersion, err := ParseRequestVersion(requestVersionValues[0])
+	if err != nil {
+		return Version{}, responseVersion, err
+	}
+	return requestVersion, responseVersion, nil
+}
+
 // NegotiateVersion determines the OData version to use in the response
 // based on the client's OData-MaxVersion header.
 // It returns the highest version supported by the service that is less than
@@ -155,5 +202,19 @@ func GetVersion(ctx context.Context) Version {
 		return v
 	}
 	// Default to the highest supported version
+	return Version{Major: 4, Minor: 1}
+}
+
+// WithRequestVersion stores the version used to interpret the request payload.
+func WithRequestVersion(ctx context.Context, version Version) context.Context {
+	return context.WithValue(ctx, requestVersionKey, version)
+}
+
+// GetRequestVersion retrieves the request payload version from the context.
+// If no version is stored, it returns the highest supported version.
+func GetRequestVersion(ctx context.Context) Version {
+	if v, ok := ctx.Value(requestVersionKey).(Version); ok {
+		return v
+	}
 	return Version{Major: 4, Minor: 1}
 }

@@ -5,7 +5,9 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/nlstn/go-odata/internal/handlers"
 	"github.com/nlstn/go-odata/internal/response"
+	"github.com/nlstn/go-odata/internal/version"
 )
 
 // ServeHTTP implements http.Handler by delegating to the runtime.
@@ -29,6 +31,16 @@ func (s *Service) serveHTTP(w http.ResponseWriter, r *http.Request, allowAsync b
 		ctx := context.WithValue(r.Context(), response.BasePathContextKey, basePath)
 		r = r.WithContext(ctx)
 	}
+
+	requestVersion, responseVersion, requestVersionErr := version.ResolveRequestVersions(r.Header, r.ContentLength != 0)
+	r = r.WithContext(version.WithVersion(r.Context(), responseVersion))
+	if requestVersionErr != nil {
+		if writeErr := response.WriteError(w, r, http.StatusBadRequest, handlers.ErrMsgVersionNotSupported, handlers.ErrDetailRequestVersion); writeErr != nil {
+			http.Error(w, writeErr.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+	r = r.WithContext(version.WithRequestVersion(r.Context(), requestVersion))
 
 	// Negotiate content format once per request and cache the result on the
 	// context. The $format query parameter and Accept header are immutable for

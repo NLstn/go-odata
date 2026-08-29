@@ -333,6 +333,67 @@ func TestODataMaxVersion_WithPOSTRequest(t *testing.T) {
 	}
 }
 
+func TestODataRequestVersion_WithPayload(t *testing.T) {
+	tests := []struct {
+		name        string
+		values      []string
+		maxVersion  string
+		wantStatus  int
+		wantVersion string
+	}{
+		{name: "4.0", values: []string{"4.0"}, wantStatus: http.StatusCreated, wantVersion: "4.01"},
+		{name: "4.01", values: []string{"4.01"}, wantStatus: http.StatusCreated, wantVersion: "4.01"},
+		{name: "request and response versions are independent", values: []string{"4.01"}, maxVersion: "4.0", wantStatus: http.StatusCreated, wantVersion: "4.0"},
+		{name: "malformed", values: []string{"4.1"}, wantStatus: http.StatusBadRequest, wantVersion: "4.01"},
+		{name: "unsupported", values: []string{"5.0"}, wantStatus: http.StatusBadRequest, wantVersion: "4.01"},
+		{name: "multiple", values: []string{"4.0", "4.01"}, wantStatus: http.StatusBadRequest, wantVersion: "4.01"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			service := setupVersionTestService(t)
+			req := httptest.NewRequest(http.MethodPost, "/VersionTestProducts", strings.NewReader(`{"name":"Keyboard","price":79.99}`))
+			req.Header.Set("Content-Type", "application/json")
+			for _, value := range tt.values {
+				req.Header.Add("OData-Version", value)
+			}
+			if tt.maxVersion != "" {
+				req.Header.Set("OData-MaxVersion", tt.maxVersion)
+			}
+			w := httptest.NewRecorder()
+
+			service.ServeHTTP(w, req)
+
+			if w.Code != tt.wantStatus {
+				t.Fatalf("status = %d, want %d; body: %s", w.Code, tt.wantStatus, w.Body.String())
+			}
+			if got := exactHeaderValues(w.Header(), "OData-Version"); len(got) != 1 || got[0] != tt.wantVersion {
+				t.Errorf("OData-Version = %v, want [%s]", got, tt.wantVersion)
+			}
+		})
+	}
+}
+
+func TestODataRequestVersion_ValidatedOnlyWithPayload(t *testing.T) {
+	service := setupVersionTestService(t)
+
+	bodylessReq := httptest.NewRequest(http.MethodGet, "/VersionTestProducts", nil)
+	bodylessReq.Header.Set("OData-Version", "invalid")
+	bodylessRec := httptest.NewRecorder()
+	service.ServeHTTP(bodylessRec, bodylessReq)
+	if bodylessRec.Code != http.StatusOK {
+		t.Fatalf("bodyless request status = %d, want %d", bodylessRec.Code, http.StatusOK)
+	}
+
+	payloadReq := httptest.NewRequest(http.MethodGet, "/VersionTestProducts", strings.NewReader("{}"))
+	payloadReq.Header.Set("OData-Version", "invalid")
+	payloadRec := httptest.NewRecorder()
+	service.ServeHTTP(payloadRec, payloadReq)
+	if payloadRec.Code != http.StatusBadRequest {
+		t.Fatalf("payload request status = %d, want %d", payloadRec.Code, http.StatusBadRequest)
+	}
+}
+
 // TestODataMaxVersion_WithDELETERequest tests version validation with DELETE requests
 func TestODataMaxVersion_WithDELETERequest(t *testing.T) {
 	service := setupVersionTestService(t)

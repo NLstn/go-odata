@@ -31,6 +31,7 @@ const (
 	ErrDetailPreconditionFailed  = "The entity has been modified. Please refresh and try again."
 	ErrMsgVersionNotSupported    = "OData version not supported"
 	ErrDetailVersionNotSupported = "This service only supports OData version 4.0 and above. The maximum version specified in the OData-MaxVersion header is below 4.0."
+	ErrDetailRequestVersion      = "The OData-Version header must specify a request payload version supported by this service: 4.0 or 4.01."
 	ErrMsgValidationFailed       = "Validation failed"
 	ErrMsgNotImplemented         = "Not implemented"
 	ErrMsgConflict               = "Conflict"
