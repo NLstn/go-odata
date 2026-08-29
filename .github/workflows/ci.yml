@@ -87,3 +87,19 @@ jobs:
       with:
         version: v2.5.0
         args: --timeout=5m
+
+  vulnerability-scan:
+    name: Vulnerability Scan
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v7
+
+    - name: Set up Go
+      uses: actions/setup-go@v7
+      with:
+        go-version: '1.25'
+
+    - name: Scan for reachable vulnerabilities
+      run: go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
