@@ -50,6 +50,68 @@ func TestRouter_ODataMaxVersionInvalidIgnored(t *testing.T) {
 	}
 }
 
+func TestRouter_ODataMaxVersionAddsVaryHeader(t *testing.T) {
+	tests := []struct {
+		name         string
+		existingVary []string
+		wantMembers  map[string]int
+	}{
+		{
+			name:        "no existing header",
+			wantMembers: map[string]int{"odata-maxversion": 1},
+		},
+		{
+			name:         "preserves existing member",
+			existingVary: []string{"Accept-Encoding"},
+			wantMembers:  map[string]int{"accept-encoding": 1, "odata-maxversion": 1},
+		},
+		{
+			name:         "does not duplicate case-insensitive member",
+			existingVary: []string{"Accept-Encoding, odata-maxversion"},
+			wantMembers:  map[string]int{"accept-encoding": 1, "odata-maxversion": 1},
+		},
+		{
+			name:         "preserves multiple header lines",
+			existingVary: []string{"Accept-Encoding", "Origin"},
+			wantMembers:  map[string]int{"accept-encoding": 1, "origin": 1, "odata-maxversion": 1},
+		},
+		{
+			name:         "respects wildcard",
+			existingVary: []string{"*"},
+			wantMembers:  map[string]int{"*": 1},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := newTestRouter(nil, nil, nil, func(http.ResponseWriter, *http.Request, string, string, bool, string) {})
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			req.Header.Set("OData-MaxVersion", "4.0")
+			rec := httptest.NewRecorder()
+			for _, value := range tt.existingVary {
+				rec.Header().Add("Vary", value)
+			}
+
+			r.ServeHTTP(rec, req)
+
+			gotMembers := make(map[string]int)
+			for _, value := range rec.Header().Values("Vary") {
+				for member := range strings.SplitSeq(value, ",") {
+					gotMembers[strings.ToLower(strings.TrimSpace(member))]++
+				}
+			}
+			if len(gotMembers) != len(tt.wantMembers) {
+				t.Fatalf("Vary members = %v, want %v", gotMembers, tt.wantMembers)
+			}
+			for member, wantCount := range tt.wantMembers {
+				if gotMembers[member] != wantCount {
+					t.Errorf("Vary member %q count = %d, want %d", member, gotMembers[member], wantCount)
+				}
+			}
+		})
+	}
+}
+
 func TestRouter_ActionOrFunctionMethodNotAllowed(t *testing.T) {
 	r := newTestRouter(nil, nil, map[string][]*actions.FunctionDefinition{
 		"TopProducts": nil,
