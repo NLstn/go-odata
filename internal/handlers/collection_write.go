@@ -534,11 +534,11 @@ func formatUUIDFromBytes(b [16]byte) string {
 
 func (h *EntityHandler) buildEntityLocation(r *http.Request, entity interface{}) string {
 	baseURL := response.BuildBaseURL(r)
-	keyValues := response.ExtractEntityKeys(entity, h.metadata.KeyProperties)
-	if len(keyValues) != len(h.metadata.KeyProperties) {
+	entityID := response.BuildEntityIDFromEntity(h.metadata.EntitySetName, entity, h.metadata.KeyProperties)
+	if entityID == "" {
 		return ""
 	}
-	return baseURL + "/" + response.BuildEntityID(h.metadata.EntitySetName, keyValues)
+	return baseURL + "/" + entityID
 }
 
 // handlePostEntityOverwrite handles POST entity requests using the overwrite handler

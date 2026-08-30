@@ -41,6 +41,25 @@ func BuildEntityID(entitySetName string, keyValues map[string]interface{}) strin
 	return fmt.Sprintf("%s(%s)", entitySetName, strings.Join(keyParts, ","))
 }
 
+// BuildEntityIDFromEntity constructs an entity ID using the key declaration order.
+// It returns an empty string when any key value cannot be read from the entity.
+func BuildEntityIDFromEntity(entitySetName string, entity interface{}, keyProperties []metadata.PropertyMetadata) string {
+	keyParts := make([]string, 0, len(keyProperties))
+	for _, keyProp := range keyProperties {
+		value, ok := metadata.ReadPropertyValue(entity, keyProp)
+		if !ok {
+			return ""
+		}
+
+		if len(keyProperties) == 1 {
+			return fmt.Sprintf("%s(%s)", entitySetName, formatKeyValueLiteral(value))
+		}
+		keyParts = append(keyParts, fmt.Sprintf("%s=%s", keyProp.JsonName, formatKeyValueLiteral(value)))
+	}
+
+	return fmt.Sprintf("%s(%s)", entitySetName, strings.Join(keyParts, ","))
+}
+
 func formatKeyValueLiteral(value interface{}) string {
 	switch v := value.(type) {
 	case string:

@@ -1015,9 +1015,9 @@ func (h *EntityHandler) buildEntityIDFromResult(result interface{}, r *http.Requ
 	if r == nil || h.metadata == nil || len(h.metadata.KeyProperties) == 0 {
 		return ""
 	}
-	keyValues := response.ExtractEntityKeys(result, h.metadata.KeyProperties)
-	if len(keyValues) != len(h.metadata.KeyProperties) {
+	entityID := response.BuildEntityIDFromEntity(h.metadata.EntitySetName, result, h.metadata.KeyProperties)
+	if entityID == "" {
 		return ""
 	}
-	return response.BuildBaseURL(r) + "/" + response.BuildEntityID(h.metadata.EntitySetName, keyValues)
+	return response.BuildBaseURL(r) + "/" + entityID
 }

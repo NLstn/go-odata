@@ -60,3 +60,31 @@ func TestBuildEntityIDFromResultRequiresAllKeys(t *testing.T) {
 		t.Fatalf("buildEntityIDFromResult() = %q, want empty ID", got)
 	}
 }
+
+func TestBuildEntityIDFromResultPreservesCompositeKeyOrder(t *testing.T) {
+	t.Parallel()
+
+	type entity struct {
+		ProductID   int
+		LanguageKey string
+	}
+
+	handler := &EntityHandler{metadata: &metadata.EntityMetadata{
+		EntitySetName: "ProductDescriptions",
+		KeyProperties: []metadata.PropertyMetadata{
+			{Name: "ProductID", FieldName: "ProductID", JsonName: "productID"},
+			{Name: "LanguageKey", FieldName: "LanguageKey", JsonName: "languageKey"},
+		},
+	}}
+	request := httptest.NewRequest("GET", "http://example.com/ProductDescriptions", nil)
+	want := "http://example.com/ProductDescriptions(productID=1,languageKey='EN')"
+
+	for _, result := range []interface{}{
+		entity{ProductID: 1, LanguageKey: "EN"},
+		map[string]interface{}{"languageKey": "EN", "productID": 1},
+	} {
+		if got := handler.buildEntityIDFromResult(result, request); got != want {
+			t.Fatalf("buildEntityIDFromResult() = %q, want %q", got, want)
+		}
+	}
+}
