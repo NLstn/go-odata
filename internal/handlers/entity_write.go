@@ -58,6 +58,12 @@ func (h *EntityHandler) handleDeleteEntity(w http.ResponseWriter, r *http.Reques
 
 	// Check if there's an overwrite handler
 	if h.overwrite.hasDelete() {
+		if !h.enforceDeleteRestrictions(w, r) {
+			return
+		}
+		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, entityKey, nil), auth.OperationDelete, h.logger) {
+			return
+		}
 		h.handleDeleteEntityOverwrite(w, r, entityKey)
 		return
 	}
@@ -155,6 +161,12 @@ func (h *EntityHandler) handlePatchEntity(w http.ResponseWriter, r *http.Request
 
 	// Check if there's an overwrite handler
 	if h.overwrite.hasUpdate() {
+		if !h.enforceUpdateRestrictions(w, r, "PATCH") {
+			return
+		}
+		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, entityKey, nil), auth.OperationUpdate, h.logger) {
+			return
+		}
 		h.handleUpdateEntityOverwrite(w, r, entityKey, false)
 		return
 	}
@@ -391,6 +403,12 @@ func (h *EntityHandler) returnUpdatedEntity(w http.ResponseWriter, r *http.Reque
 func (h *EntityHandler) handlePutEntity(w http.ResponseWriter, r *http.Request, entityKey string) {
 	// Check if there's an overwrite handler
 	if h.overwrite.hasUpdate() {
+		if !h.enforceUpdateRestrictions(w, r, "PUT") {
+			return
+		}
+		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, entityKey, nil), auth.OperationUpdate, h.logger) {
+			return
+		}
 		h.handleUpdateEntityOverwrite(w, r, entityKey, true)
 		return
 	}
@@ -828,6 +846,28 @@ func (h *EntityHandler) handleUpdateEntityOverwrite(w http.ResponseWriter, r *ht
 
 	if err := h.decodeBinaryPropertiesInPlace(updateData); err != nil {
 		WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidRequestBody, err.Error())
+		return
+	}
+	if !isFullReplace {
+		if err := h.validateKeyPropertiesNotUpdated(updateData, w, r); err != nil {
+			return
+		}
+	}
+	if err := h.validatePropertiesExistForUpdate(updateData, w, r); err != nil {
+		return
+	}
+	if isFullReplace {
+		if err := h.validateRequiredProperties(updateData); err != nil {
+			WriteError(w, r, http.StatusBadRequest, "Missing required properties", err.Error())
+			return
+		}
+	}
+	if err := h.validateRequiredFieldsNotNull(updateData); err != nil {
+		WriteError(w, r, http.StatusBadRequest, "Invalid null value", err.Error())
+		return
+	}
+	if err := h.validateMaxLength(updateData); err != nil {
+		WriteError(w, r, http.StatusBadRequest, "Invalid property value", err.Error())
 		return
 	}
 

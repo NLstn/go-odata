@@ -32,6 +32,12 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 
 	// Check if there's an overwrite handler
 	if h.overwrite.hasCreate() {
+		if !h.enforceInsertRestrictions(w, r) {
+			return
+		}
+		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, "", nil), auth.OperationCreate, h.logger) {
+			return
+		}
 		h.handlePostEntityOverwrite(w, r)
 		return
 	}
@@ -559,6 +565,22 @@ func (h *EntityHandler) handlePostEntityOverwrite(w http.ResponseWriter, r *http
 
 	if err := h.decodeBinaryPropertiesInPlace(requestData); err != nil {
 		WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidRequestBody, err.Error())
+		return
+	}
+	if err := h.validatePropertiesExistForCreate(requestData, w, r); err != nil {
+		return
+	}
+	h.filterInstanceAnnotations(requestData)
+	if err := h.validateRequiredProperties(requestData); err != nil {
+		WriteError(w, r, http.StatusBadRequest, "Missing required properties", err.Error())
+		return
+	}
+	if err := h.validateRequiredFieldsNotNull(requestData); err != nil {
+		WriteError(w, r, http.StatusBadRequest, "Invalid null value", err.Error())
+		return
+	}
+	if err := h.validateMaxLength(requestData); err != nil {
+		WriteError(w, r, http.StatusBadRequest, "Invalid property value", err.Error())
 		return
 	}
 
