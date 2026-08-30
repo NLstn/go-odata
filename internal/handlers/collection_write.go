@@ -534,31 +534,11 @@ func formatUUIDFromBytes(b [16]byte) string {
 
 func (h *EntityHandler) buildEntityLocation(r *http.Request, entity interface{}) string {
 	baseURL := response.BuildBaseURL(r)
-	entitySetName := h.metadata.EntitySetName
-
-	entityValue := reflect.ValueOf(entity)
-	if entityValue.Kind() == reflect.Ptr {
-		entityValue = entityValue.Elem()
+	keyValues := response.ExtractEntityKeys(entity, h.metadata.KeyProperties)
+	if len(keyValues) != len(h.metadata.KeyProperties) {
+		return ""
 	}
-
-	if len(h.metadata.KeyProperties) == 1 {
-		keyProp := h.metadata.KeyProperties[0]
-		keyValue := entityValue.FieldByName(keyProp.Name)
-		return fmt.Sprintf("%s/%s(%v)", baseURL, entitySetName, keyValue.Interface())
-	}
-
-	var keyParts []string
-	for _, keyProp := range h.metadata.KeyProperties {
-		keyValue := entityValue.FieldByName(keyProp.Name)
-		switch keyValue.Kind() {
-		case reflect.String:
-			keyParts = append(keyParts, fmt.Sprintf("%s='%v'", keyProp.JsonName, keyValue.Interface()))
-		default:
-			keyParts = append(keyParts, fmt.Sprintf("%s=%v", keyProp.JsonName, keyValue.Interface()))
-		}
-	}
-
-	return fmt.Sprintf("%s/%s(%s)", baseURL, entitySetName, strings.Join(keyParts, ","))
+	return baseURL + "/" + response.BuildEntityID(h.metadata.EntitySetName, keyValues)
 }
 
 // handlePostEntityOverwrite handles POST entity requests using the overwrite handler

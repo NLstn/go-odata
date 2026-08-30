@@ -474,17 +474,7 @@ func (h *EntityHandler) buildOrderedEntityResponseWithMetadata(result interface{
 	resultValue := reflect.ValueOf(result)
 
 	// Build the entity ID for @odata.id
-	var entityID string
-	switch resultValue.Kind() {
-	case reflect.Ptr:
-		entityID = h.buildEntityIDFromValue(resultValue.Elem(), r)
-	case reflect.Struct:
-		entityID = h.buildEntityIDFromValue(resultValue, r)
-	case reflect.Map:
-		if mapResult, ok := result.(map[string]interface{}); ok {
-			entityID = h.buildEntityIDFromMap(mapResult, r)
-		}
-	}
+	entityID := h.buildEntityIDFromResult(result, r)
 
 	// Add @odata.id based on metadata level
 	if entityID != "" {
@@ -1020,72 +1010,14 @@ func parseVersion(version string) (int, int) {
 	return major, minor
 }
 
-// buildEntityIDFromValue builds the @odata.id value from an entity value
-func (h *EntityHandler) buildEntityIDFromValue(entityValue reflect.Value, r *http.Request) string {
-	if r == nil {
-		return ""
-	}
-	baseURL := response.BuildBaseURL(r)
-	keySegment := h.buildKeySegmentFromEntity(entityValue)
-	if keySegment == "" {
-		return ""
-	}
-	return fmt.Sprintf("%s/%s(%s)", baseURL, h.metadata.EntitySetName, keySegment)
-}
-
-// buildEntityIDFromMap builds the @odata.id value from a map entity
-func (h *EntityHandler) buildEntityIDFromMap(entityMap map[string]interface{}, r *http.Request) string {
-	if r == nil {
-		return ""
-	}
-	baseURL := response.BuildBaseURL(r)
-
-	// Build key segment from map
-	keyProps := h.metadata.KeyProperties
-	if len(keyProps) == 0 {
-		return ""
-	}
-
-	// Single key
-	if len(keyProps) == 1 {
-		if keyValue, exists := entityMap[keyProps[0].JsonName]; exists && keyValue != nil {
-			return fmt.Sprintf("%s/%s(%v)", baseURL, h.metadata.EntitySetName, keyValue)
-		}
-		return ""
-	}
-
-	// Composite keys
-	var parts []string
-	for _, keyProp := range keyProps {
-		if keyValue, exists := entityMap[keyProp.JsonName]; exists && keyValue != nil {
-			// Quote string values
-			if strVal, ok := keyValue.(string); ok {
-				parts = append(parts, fmt.Sprintf("%s='%s'", keyProp.JsonName, strVal))
-			} else {
-				parts = append(parts, fmt.Sprintf("%s=%v", keyProp.JsonName, keyValue))
-			}
-		}
-	}
-
-	if len(parts) == 0 {
-		return ""
-	}
-
-	return fmt.Sprintf("%s/%s(%s)", baseURL, h.metadata.EntitySetName, strings.Join(parts, ","))
-}
-
 // buildEntityIDFromResult builds the @odata.id value from an entity result (any type).
 func (h *EntityHandler) buildEntityIDFromResult(result interface{}, r *http.Request) string {
-	resultValue := reflect.ValueOf(result)
-	switch resultValue.Kind() {
-	case reflect.Ptr:
-		return h.buildEntityIDFromValue(resultValue.Elem(), r)
-	case reflect.Struct:
-		return h.buildEntityIDFromValue(resultValue, r)
-	case reflect.Map:
-		if mapResult, ok := result.(map[string]interface{}); ok {
-			return h.buildEntityIDFromMap(mapResult, r)
-		}
+	if r == nil || h.metadata == nil || len(h.metadata.KeyProperties) == 0 {
+		return ""
 	}
-	return ""
+	keyValues := response.ExtractEntityKeys(result, h.metadata.KeyProperties)
+	if len(keyValues) != len(h.metadata.KeyProperties) {
+		return ""
+	}
+	return response.BuildBaseURL(r) + "/" + response.BuildEntityID(h.metadata.EntitySetName, keyValues)
 }

@@ -105,6 +105,19 @@ func TestExtractEntityKeysPointer(t *testing.T) {
 	}
 }
 
+func TestExtractEntityKeysMap(t *testing.T) {
+	entity := map[string]interface{}{"id": 456}
+	keyProperties := []metadata.PropertyMetadata{
+		{Name: "ID", FieldName: "ID", JsonName: "id"},
+	}
+
+	keyValues := ExtractEntityKeys(entity, keyProperties)
+
+	if keyValues["id"] != 456 {
+		t.Errorf("Expected ID=456, got %v", keyValues["id"])
+	}
+}
+
 func TestExtractEntityKeysComposite(t *testing.T) {
 	type TestEntity struct {
 		ProductID   int    `json:"productId"`
@@ -174,14 +187,10 @@ func TestExtractEntityKeysNilEntity(t *testing.T) {
 		{Name: "ID", JsonName: "id"},
 	}
 
-	// Test with nil value - should panic (expected behavior)
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("ExtractEntityKeys should panic with nil entity")
-		}
-	}()
-
-	ExtractEntityKeys(nil, keyProperties)
+	keyValues := ExtractEntityKeys(nil, keyProperties)
+	if len(keyValues) != 0 {
+		t.Errorf("Expected 0 key values, got %d", len(keyValues))
+	}
 }
 
 func TestExtractEntityKeysReflection(t *testing.T) {
