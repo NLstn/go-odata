@@ -110,9 +110,8 @@ func TestPostEntity_PreferReturnMinimal(t *testing.T) {
 
 	service.ServeHTTP(w, req)
 
-	// Per OData v4.01 spec, POST with return=minimal should return 201 Created with empty body
-	if w.Code != http.StatusCreated {
-		t.Errorf("Status = %v, want %v", w.Code, http.StatusCreated)
+	if w.Code != http.StatusNoContent {
+		t.Errorf("Status = %v, want %v", w.Code, http.StatusNoContent)
 	}
 
 	// Verify Preference-Applied header is present
@@ -397,9 +396,8 @@ func TestPreferHeader_CaseInsensitive(t *testing.T) {
 
 		service.ServeHTTP(w, req)
 
-		// Per OData v4.01 spec, POST with return=minimal should return 201 Created
-		if w.Code != http.StatusCreated {
-			t.Errorf("For Prefer header '%s', Status = %v, want %v", preferValue, w.Code, http.StatusCreated)
+		if w.Code != http.StatusNoContent {
+			t.Errorf("For Prefer header '%s', Status = %v, want %v", preferValue, w.Code, http.StatusNoContent)
 		}
 	}
 }
@@ -454,9 +452,8 @@ func TestPreferHeader_MultiplePreferences(t *testing.T) {
 
 	service.ServeHTTP(w, req)
 
-	// Per OData v4.01 spec, POST with return=minimal should return 201 Created
-	if w.Code != http.StatusCreated {
-		t.Errorf("Status = %v, want %v", w.Code, http.StatusCreated)
+	if w.Code != http.StatusNoContent {
+		t.Errorf("Status = %v, want %v", w.Code, http.StatusNoContent)
 	}
 
 	preferenceApplied := w.Header().Get("Preference-Applied")

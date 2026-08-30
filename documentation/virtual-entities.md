@@ -16,6 +16,56 @@ This design ensures that:
 2. No unexpected database operations occur
 3. The service clearly communicates which operations are supported
 
+## Registering an Entity Without a Go Struct
+
+Use `RegisterDynamicEntity` when the entity schema is known only at runtime. Dynamic entities are map-backed and support primitive EDM properties. Register them during service setup, before serving requests.
+
+```go
+required := false
+definition := odata.EntityDefinition{
+    Name:          "ExternalProduct",
+    EntitySetName: "ExternalProducts",
+    Properties: []odata.PropertyDefinition{
+        {Name: "ID", Type: odata.EdmInt64},
+        {Name: "Name", Type: odata.EdmString, Nullable: &required},
+        {Name: "Price", Type: odata.EdmDecimal},
+    },
+    Keys: []string{"ID"},
+    DisabledMethods: []string{
+        http.MethodPost,
+        http.MethodPatch,
+        http.MethodPut,
+        http.MethodDelete,
+    },
+}
+
+err := service.RegisterDynamicEntity(definition, &odata.EntityOverwrite{
+    GetCollection: func(ctx *odata.OverwriteContext) (*odata.CollectionResult, error) {
+        rows, total, err := externalAPI.Query(ctx.QueryOptions)
+        if err != nil {
+            return nil, err
+        }
+        return &odata.CollectionResult{Items: rows, Count: &total}, nil
+    },
+    GetEntity: func(ctx *odata.OverwriteContext) (interface{}, error) {
+        id := ctx.EntityKeyValues["ID"].(int64)
+        return externalAPI.Get(id)
+    },
+    GetCount: func(ctx *odata.OverwriteContext) (int64, error) {
+        return externalAPI.Count(ctx.QueryOptions)
+    },
+})
+if err != nil {
+    log.Fatal(err)
+}
+```
+
+Use the declared property names as keys in returned `map[string]interface{}` values. Collection handlers should return `[]map[string]interface{}`. Query options are parsed and validated by the service, but the callback is responsible for applying filtering, ordering, paging, selection, and search to its data source.
+
+Registration validates all enabled operations atomically. `GET` requires `GetCollection`, `GetEntity`, and `GetCount`; `POST` requires `Create`; `PATCH` and `PUT` require `Update`; and `DELETE` requires `Delete`. Add an operation to `DisabledMethods` when the dynamic entity does not support it.
+
+Runtime definitions currently support primitive structural properties and top-level CRUD. Navigation properties, streams, hooks, ETags, inheritance, caching, and change tracking require struct-backed entities.
+
 ## Registering a Virtual Entity
 
 To register a virtual entity, use the `RegisterVirtualEntity` method:

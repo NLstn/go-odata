@@ -181,9 +181,8 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 		SetODataHeader(w, HeaderODataEntityId, location)
 		h.writeEntityResponseWithETag(w, r, entity, "", http.StatusCreated, nil, nil)
 	} else {
-		// Per OData v4.01 spec, POST with return=minimal should return 201 Created with empty body
 		SetODataHeader(w, HeaderODataEntityId, location)
-		w.WriteHeader(http.StatusCreated)
+		w.WriteHeader(http.StatusNoContent)
 	}
 }
 
@@ -552,12 +551,21 @@ func (h *EntityHandler) handlePostEntityOverwrite(w http.ResponseWriter, r *http
 	if err := validateContentType(w, r); err != nil {
 		return
 	}
+	queryOptions, err := h.parseModificationQueryOptions(r)
+	if err != nil {
+		h.writeRequestError(w, r, err, http.StatusBadRequest, ErrMsgInvalidQueryOptions)
+		return
+	}
 
 	pref := preference.ParsePrefer(r)
 
 	// Parse the request body
 	var requestData map[string]interface{}
-	if err := json.NewDecoder(r.Body).Decode(&requestData); err != nil {
+	decoder := json.NewDecoder(r.Body)
+	if h.isDynamicEntity() {
+		decoder.UseNumber()
+	}
+	if err := decoder.Decode(&requestData); err != nil {
 		WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidRequestBody,
 			fmt.Sprintf(ErrDetailFailedToParseJSON, err.Error()))
 		return
@@ -565,6 +573,10 @@ func (h *EntityHandler) handlePostEntityOverwrite(w http.ResponseWriter, r *http
 
 	if err := h.decodeBinaryPropertiesInPlace(requestData); err != nil {
 		WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidRequestBody, err.Error())
+		return
+	}
+	if err := h.normalizeDynamicPropertyValues(requestData, r); err != nil {
+		WriteError(w, r, http.StatusBadRequest, "Invalid property value", err.Error())
 		return
 	}
 	if err := h.validatePropertiesExistForCreate(requestData, w, r); err != nil {
@@ -583,24 +595,31 @@ func (h *EntityHandler) handlePostEntityOverwrite(w http.ResponseWriter, r *http
 		WriteError(w, r, http.StatusBadRequest, "Invalid property value", err.Error())
 		return
 	}
-
-	// Convert to entity for type-safe handling
-	entity := reflect.New(h.metadata.EntityType).Interface()
-	jsonData, err := json.Marshal(requestData)
-	if err != nil {
-		WriteError(w, r, http.StatusInternalServerError, "Failed to process request data", err.Error())
+	if err := h.validateDataTypes(requestData); err != nil {
+		WriteError(w, r, http.StatusBadRequest, "Invalid property value", err.Error())
 		return
 	}
-	if err := json.Unmarshal(jsonData, entity); err != nil {
-		WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidRequestBody,
-			fmt.Sprintf(ErrDetailFailedToParseJSON, err.Error()))
-		return
+
+	entity := interface{}(requestData)
+	if h.metadata.EntityType != nil {
+		// Convert struct-backed entities for type-safe overwrite handlers.
+		entity = reflect.New(h.metadata.EntityType).Interface()
+		jsonData, err := json.Marshal(requestData)
+		if err != nil {
+			WriteError(w, r, http.StatusInternalServerError, "Failed to process request data", err.Error())
+			return
+		}
+		if err := json.Unmarshal(jsonData, entity); err != nil {
+			WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidRequestBody,
+				fmt.Sprintf(ErrDetailFailedToParseJSON, err.Error()))
+			return
+		}
 	}
 
 	// Create overwrite context with empty query options (CREATE doesn't use query options,
 	// but we provide a consistent context interface across all operations)
 	ctx := &OverwriteContext{
-		QueryOptions: &query.QueryOptions{},
+		QueryOptions: queryOptions,
 		Request:      r,
 	}
 
@@ -626,10 +645,12 @@ func (h *EntityHandler) handlePostEntityOverwrite(w http.ResponseWriter, r *http
 
 	if pref.ShouldReturnContent(true) {
 		SetODataHeader(w, HeaderODataEntityId, location)
-		h.writeEntityResponseWithETag(w, r, result, "", http.StatusCreated, nil, nil)
+		if len(queryOptions.Select) > 0 {
+			result = query.ApplySelectToEntity(result, queryOptions.Select, h.metadata, queryOptions.Expand)
+		}
+		h.writeEntityResponseWithETag(w, r, result, "", http.StatusCreated, queryOptions.Expand, queryOptions.Select)
 	} else {
-		// Per OData v4.01 spec, POST with return=minimal should return 201 Created with empty body
 		SetODataHeader(w, HeaderODataEntityId, location)
-		w.WriteHeader(http.StatusCreated)
+		w.WriteHeader(http.StatusNoContent)
 	}
 }

@@ -181,7 +181,7 @@ func TestHandleUpdateEntityOverwrite(t *testing.T) {
 			},
 		}
 
-		body := map[string]interface{}{"id": "123", "name": "Replaced"}
+		body := map[string]interface{}{"id": 123, "name": "Replaced"}
 		jsonBody, _ := json.Marshal(body)
 		req := httptest.NewRequest(http.MethodPut, "/Products(123)", bytes.NewReader(jsonBody))
 		req.Header.Set("Content-Type", "application/json")
@@ -288,6 +288,30 @@ func TestHandlePostEntityOverwrite(t *testing.T) {
 
 		if w.Code != http.StatusUnsupportedMediaType {
 			t.Errorf("Expected status 415, got %d", w.Code)
+		}
+	})
+
+	t.Run("map-backed entity", func(t *testing.T) {
+		handler := createTestHandlerWithMetadata()
+		handler.metadata.EntityType = nil
+		handler.overwrite = &entityOverwriteHandlers{
+			create: func(_ *OverwriteContext, entity interface{}) (interface{}, error) {
+				requestData, ok := entity.(map[string]interface{})
+				if !ok {
+					t.Fatalf("entity type = %T, want map[string]interface{}", entity)
+				}
+				return map[string]interface{}{"ID": 123, "Name": requestData["Name"]}, nil
+			},
+		}
+
+		req := httptest.NewRequest(http.MethodPost, "/Products", bytes.NewBufferString(`{"Name":"New Product"}`))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		handler.handlePostEntityOverwrite(w, req)
+
+		if w.Code != http.StatusCreated {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusCreated)
 		}
 	})
 }

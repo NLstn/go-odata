@@ -51,9 +51,8 @@ func TestHandleCollection_PostWithReturnMinimal(t *testing.T) {
 
 	handler.HandleCollection(w, req)
 
-	// Per OData v4.01 spec, POST with return=minimal should return 201 Created with empty body
-	if w.Code != http.StatusCreated {
-		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusCreated, w.Body.String())
+	if w.Code != http.StatusNoContent {
+		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusNoContent, w.Body.String())
 	}
 
 	// Should have Location header

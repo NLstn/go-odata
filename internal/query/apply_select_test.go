@@ -187,6 +187,26 @@ func TestApplySelectToEntity(t *testing.T) {
 		}
 	})
 
+	t.Run("Select specific properties on map entity", func(t *testing.T) {
+		entity := map[string]interface{}{
+			"ID":          1,
+			"name":        "Product1",
+			"price":       10.5,
+			"description": "Desc1",
+		}
+		result := ApplySelectToEntity(entity, []string{"name"}, meta, nil)
+		resultMap, ok := result.(map[string]interface{})
+		if !ok {
+			t.Fatal("expected result to be map[string]interface{}")
+		}
+		if resultMap["name"] != "Product1" || resultMap["ID"] != 1 {
+			t.Fatalf("selected map = %v, want name and key", resultMap)
+		}
+		if _, ok := resultMap["price"]; ok {
+			t.Fatal("expected 'price' to NOT be in result")
+		}
+	})
+
 	t.Run("Select with navigation property", func(t *testing.T) {
 		productWithNav := selectTestProduct{
 			ID:   1,

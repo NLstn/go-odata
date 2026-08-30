@@ -164,12 +164,17 @@ func (h *EntityHandler) handleGetEntityOverwrite(w http.ResponseWriter, r *http.
 		h.writeRequestError(w, r, err, http.StatusBadRequest, ErrMsgInvalidQueryOptions)
 		return
 	}
+	keyValues, err := h.parseOverwriteEntityKeyValues(entityKey)
+	if err != nil {
+		WriteError(w, r, http.StatusBadRequest, "Invalid entity key", err.Error())
+		return
+	}
 
 	// Create overwrite context
 	ctx := &OverwriteContext{
 		QueryOptions:    queryOptions,
 		EntityKey:       entityKey,
-		EntityKeyValues: parseEntityKeyValues(entityKey, h.metadata.KeyProperties),
+		EntityKeyValues: keyValues,
 		Request:         r,
 	}
 

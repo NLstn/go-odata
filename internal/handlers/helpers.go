@@ -6,9 +6,12 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 
 	"github.com/nlstn/go-odata/internal/metadata"
@@ -52,6 +55,113 @@ func parseEntityKeyValues(entityKey string, keyProperties []metadata.PropertyMet
 	}
 
 	return keyValues
+}
+
+func (h *EntityHandler) parseOverwriteEntityKeyValues(entityKey string) (map[string]interface{}, error) {
+	if !h.isDynamicEntity() {
+		return parseEntityKeyValues(entityKey, h.metadata.KeyProperties), nil
+	}
+	return parseDynamicEntityKeyValues(entityKey, h.metadata.KeyProperties)
+}
+
+func parseDynamicEntityKeyValues(entityKey string, keyProperties []metadata.PropertyMetadata) (map[string]interface{}, error) {
+	if entityKey == "" {
+		return nil, nil
+	}
+	if len(keyProperties) == 0 {
+		return nil, fmt.Errorf("entity has no key metadata")
+	}
+
+	rawValues := make(map[string]string)
+	components := &response.ODataURLComponents{EntityKeyMap: make(map[string]string)}
+	if err := parseCompositeKey(entityKey, components); err == nil && len(components.EntityKeyMap) > 0 {
+		rawValues = components.EntityKeyMap
+	} else if len(keyProperties) == 1 {
+		rawValues[keyProperties[0].JsonName] = entityKey
+	} else {
+		return nil, fmt.Errorf("invalid composite key %q", entityKey)
+	}
+	if len(rawValues) != len(keyProperties) {
+		return nil, fmt.Errorf("key contains %d properties, expected %d", len(rawValues), len(keyProperties))
+	}
+
+	values := make(map[string]interface{}, len(keyProperties))
+	for _, property := range keyProperties {
+		rawValue, ok := rawValues[property.JsonName]
+		if !ok {
+			rawValue, ok = rawValues[property.Name]
+		}
+		if !ok {
+			return nil, fmt.Errorf("key property %q is missing", property.JsonName)
+		}
+		value, err := parseDynamicKeyValue(rawValue, property)
+		if err != nil {
+			return nil, fmt.Errorf("invalid key property %q: %w", property.JsonName, err)
+		}
+		values[property.JsonName] = value
+	}
+	return values, nil
+}
+
+var durationKeyPattern = regexp.MustCompile(`^-?P(?:\d+D(?:T(?:\d+H)?(?:\d+M)?(?:\d+(?:\.\d+)?S)?)?|T(?:\d+H(?:\d+M)?(?:\d+(?:\.\d+)?S)?|\d+M(?:\d+(?:\.\d+)?S)?|\d+(?:\.\d+)?S))$`)
+
+func parseDynamicKeyValue(value string, property metadata.PropertyMetadata) (interface{}, error) {
+	primitiveType, ok := property.EffectivePrimitiveType()
+	if !ok {
+		return nil, fmt.Errorf("missing EDM type")
+	}
+	switch primitiveType {
+	case metadata.PrimitiveTypeString:
+		return value, nil
+	case metadata.PrimitiveTypeBoolean:
+		if value != "true" && value != "false" {
+			return nil, fmt.Errorf("invalid Boolean literal %q", value)
+		}
+		return value == "true", nil
+	case metadata.PrimitiveTypeByte:
+		parsed, err := strconv.ParseUint(value, 10, 8)
+		return int64(parsed), err
+	case metadata.PrimitiveTypeSByte:
+		return strconv.ParseInt(value, 10, 8)
+	case metadata.PrimitiveTypeInt16:
+		return strconv.ParseInt(value, 10, 16)
+	case metadata.PrimitiveTypeInt32:
+		return strconv.ParseInt(value, 10, 32)
+	case metadata.PrimitiveTypeInt64:
+		return strconv.ParseInt(value, 10, 64)
+	case metadata.PrimitiveTypeDecimal:
+		return decimal.NewFromString(value)
+	case metadata.PrimitiveTypeGuid:
+		if _, err := uuid.Parse(value); err != nil {
+			return nil, err
+		}
+		return value, nil
+	case metadata.PrimitiveTypeDate:
+		if _, err := time.Parse("2006-01-02", value); err != nil {
+			return nil, err
+		}
+		return value, nil
+	case metadata.PrimitiveTypeDateTimeOffset:
+		if _, err := time.Parse(time.RFC3339Nano, value); err != nil {
+			return nil, err
+		}
+		return value, nil
+	case metadata.PrimitiveTypeTimeOfDay:
+		if _, err := time.Parse("15:04:05.999999999", value); err != nil {
+			return nil, err
+		}
+		return value, nil
+	case metadata.PrimitiveTypeDuration:
+		if strings.HasPrefix(value, "duration'") && strings.HasSuffix(value, "'") {
+			value = strings.TrimSuffix(strings.TrimPrefix(value, "duration'"), "'")
+		}
+		if !durationKeyPattern.MatchString(value) {
+			return nil, fmt.Errorf("invalid duration %q", value)
+		}
+		return value, nil
+	default:
+		return nil, fmt.Errorf("unsupported key type %s", primitiveType)
+	}
 }
 
 // convertKeyValue attempts to convert a string key value to the appropriate type
