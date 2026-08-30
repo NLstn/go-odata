@@ -182,7 +182,7 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 		h.writeEntityResponseWithETag(w, r, entity, "", http.StatusCreated, nil, nil)
 	} else {
 		SetODataHeader(w, HeaderODataEntityId, location)
-		w.WriteHeader(http.StatusNoContent)
+		w.WriteHeader(http.StatusCreated)
 	}
 }
 
@@ -651,6 +651,6 @@ func (h *EntityHandler) handlePostEntityOverwrite(w http.ResponseWriter, r *http
 		h.writeEntityResponseWithETag(w, r, result, "", http.StatusCreated, queryOptions.Expand, queryOptions.Select)
 	} else {
 		SetODataHeader(w, HeaderODataEntityId, location)
-		w.WriteHeader(http.StatusNoContent)
+		w.WriteHeader(http.StatusCreated)
 	}
 }

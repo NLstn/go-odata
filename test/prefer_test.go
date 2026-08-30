@@ -110,8 +110,8 @@ func TestPostEntity_PreferReturnMinimal(t *testing.T) {
 
 	service.ServeHTTP(w, req)
 
-	if w.Code != http.StatusNoContent {
-		t.Errorf("Status = %v, want %v", w.Code, http.StatusNoContent)
+	if w.Code != http.StatusCreated {
+		t.Errorf("Status = %v, want %v", w.Code, http.StatusCreated)
 	}
 
 	// Verify Preference-Applied header is present
@@ -396,8 +396,8 @@ func TestPreferHeader_CaseInsensitive(t *testing.T) {
 
 		service.ServeHTTP(w, req)
 
-		if w.Code != http.StatusNoContent {
-			t.Errorf("For Prefer header '%s', Status = %v, want %v", preferValue, w.Code, http.StatusNoContent)
+		if w.Code != http.StatusCreated {
+			t.Errorf("For Prefer header '%s', Status = %v, want %v", preferValue, w.Code, http.StatusCreated)
 		}
 	}
 }
@@ -452,8 +452,8 @@ func TestPreferHeader_MultiplePreferences(t *testing.T) {
 
 	service.ServeHTTP(w, req)
 
-	if w.Code != http.StatusNoContent {
-		t.Errorf("Status = %v, want %v", w.Code, http.StatusNoContent)
+	if w.Code != http.StatusCreated {
+		t.Errorf("Status = %v, want %v", w.Code, http.StatusCreated)
 	}
 
 	preferenceApplied := w.Header().Get("Preference-Applied")

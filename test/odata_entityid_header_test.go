@@ -87,8 +87,8 @@ func TestODataEntityIdHeader_POST(t *testing.T) {
 
 	service.ServeHTTP(w, req)
 
-	if w.Code != http.StatusNoContent {
-		t.Errorf("Status = %v, want %v", w.Code, http.StatusNoContent)
+	if w.Code != http.StatusCreated {
+		t.Errorf("Status = %v, want %v", w.Code, http.StatusCreated)
 	}
 
 	// Check OData-EntityId header is present
@@ -131,8 +131,8 @@ func TestODataEntityIdHeader_POST_CompositeKey(t *testing.T) {
 
 	service.ServeHTTP(w, req)
 
-	if w.Code != http.StatusNoContent {
-		t.Errorf("Status = %v, want %v", w.Code, http.StatusNoContent)
+	if w.Code != http.StatusCreated {
+		t.Errorf("Status = %v, want %v", w.Code, http.StatusCreated)
 	}
 
 	// Check OData-EntityId header is present
