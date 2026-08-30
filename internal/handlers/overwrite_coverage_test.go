@@ -477,12 +477,14 @@ func createTestHandlerWithMetadata() *EntityHandler {
 				{
 					Name:      "ID",
 					FieldName: "ID",
+					JsonName:  "id",
 					Type:      reflect.TypeOf(0),
 					IsKey:     true,
 				},
 				{
 					Name:      "Name",
 					FieldName: "Name",
+					JsonName:  "name",
 					Type:      reflect.TypeOf(""),
 				},
 			},
