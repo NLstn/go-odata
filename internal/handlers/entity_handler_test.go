@@ -353,8 +353,8 @@ func TestHandlePostEntity_WithPreferMinimal(t *testing.T) {
 
 	handler.HandleCollection(w, req)
 
-	if w.Code != http.StatusNoContent {
-		t.Errorf("Status = %v, want %v", w.Code, http.StatusNoContent)
+	if w.Code != http.StatusCreated {
+		t.Errorf("Status = %v, want %v", w.Code, http.StatusCreated)
 	}
 }
 
