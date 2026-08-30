@@ -3,7 +3,6 @@ package response
 import (
 	"fmt"
 	"net/http"
-	"reflect"
 	"sort"
 	"strings"
 
@@ -55,16 +54,10 @@ func formatKeyValueLiteral(value interface{}) string {
 // ExtractEntityKeys extracts key values from an entity using metadata
 func ExtractEntityKeys(entity interface{}, keyProperties []metadata.PropertyMetadata) map[string]interface{} {
 	keyValues := make(map[string]interface{})
-	entityValue := reflect.ValueOf(entity)
-
-	if entityValue.Kind() == reflect.Ptr {
-		entityValue = entityValue.Elem()
-	}
 
 	for _, keyProp := range keyProperties {
-		fieldValue := entityValue.FieldByName(keyProp.Name)
-		if fieldValue.IsValid() {
-			keyValues[keyProp.JsonName] = fieldValue.Interface()
+		if value, ok := metadata.ReadPropertyValue(entity, keyProp); ok {
+			keyValues[keyProp.JsonName] = value
 		}
 	}
 
