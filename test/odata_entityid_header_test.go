@@ -87,9 +87,8 @@ func TestODataEntityIdHeader_POST(t *testing.T) {
 
 	service.ServeHTTP(w, req)
 
-	// Per OData v4.01 spec, POST with return=minimal should return 201 Created with empty body
-	if w.Code != http.StatusCreated {
-		t.Errorf("Status = %v, want %v", w.Code, http.StatusCreated)
+	if w.Code != http.StatusNoContent {
+		t.Errorf("Status = %v, want %v", w.Code, http.StatusNoContent)
 	}
 
 	// Check OData-EntityId header is present
@@ -132,9 +131,8 @@ func TestODataEntityIdHeader_POST_CompositeKey(t *testing.T) {
 
 	service.ServeHTTP(w, req)
 
-	// Per OData v4.01 spec, POST with return=minimal should return 201 Created with empty body
-	if w.Code != http.StatusCreated {
-		t.Errorf("Status = %v, want %v", w.Code, http.StatusCreated)
+	if w.Code != http.StatusNoContent {
+		t.Errorf("Status = %v, want %v", w.Code, http.StatusNoContent)
 	}
 
 	// Check OData-EntityId header is present

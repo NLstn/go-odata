@@ -1304,6 +1304,104 @@ func (s *Service) RegisterVirtualEntity(entity interface{}) error {
 	return nil
 }
 
+// RegisterDynamicEntity registers a primitive, map-backed entity type at runtime.
+// Registration is intended to happen during service setup, before requests are served.
+func (s *Service) RegisterDynamicEntity(definition EntityDefinition, overwrite *EntityOverwrite) error {
+	entityMetadata, err := metadata.AnalyzeEntityDefinition(definition)
+	if err != nil {
+		return fmt.Errorf("failed to analyze dynamic entity: %w", err)
+	}
+
+	if _, exists := s.entities[entityMetadata.EntitySetName]; exists {
+		return fmt.Errorf("entity set '%s' is already registered", entityMetadata.EntitySetName)
+	}
+	if _, exists := s.handlers[entityMetadata.EntitySetName]; exists {
+		return fmt.Errorf("entity handler for '%s' is already registered", entityMetadata.EntitySetName)
+	}
+	if err := validateDynamicEntityOverwrite(entityMetadata, overwrite); err != nil {
+		return err
+	}
+
+	handler := handlers.NewEntityHandlerWithStore(s.store, entityMetadata, s.logger)
+	handler.SetNamespace(s.namespace)
+	handler.SetEntitiesMetadata(s.entities)
+	handler.SetFTSManager(s.ftsManager)
+	handler.SetPolicy(s.policy)
+	handler.SetKeyGeneratorResolver(func(name string) (func(context.Context) (interface{}, error), bool) {
+		generator, ok := s.resolveKeyGenerator(name)
+		if !ok {
+			return nil, false
+		}
+		return generator, true
+	})
+	if s.defaultMaxTop != nil {
+		handler.SetDefaultMaxTop(s.defaultMaxTop)
+	}
+	if s.observability != nil {
+		handler.SetObservability(s.observability)
+	}
+	handler.SetGeospatialEnabled(atomic.LoadInt32(&s.geospatialEnabled) == 1)
+	handler.SetMaxInClauseSize(s.maxInClauseSize)
+	handler.SetMaxExpandDepth(s.maxExpandDepth)
+	if s.schemaVersion != "" {
+		handler.SetSchemaVersion(s.schemaVersion)
+	}
+	handler.SetOverwrite(overwrite)
+
+	s.entities[entityMetadata.EntitySetName] = entityMetadata
+	entityMetadata.SetEntitiesRegistry(s.entities)
+	for _, registeredMetadata := range s.entities {
+		if registeredMetadata != entityMetadata {
+			registeredMetadata.AddEntityToRegistry(entityMetadata)
+		}
+	}
+	s.handlers[entityMetadata.EntitySetName] = handler
+	s.metadataHandler.ClearCache()
+	s.serviceDocumentHandler.ClearCache()
+
+	s.logger.Debug("Registered dynamic entity",
+		"entity", entityMetadata.EntityName,
+		"entitySet", entityMetadata.EntitySetName)
+	return nil
+}
+
+func validateDynamicEntityOverwrite(entityMetadata *metadata.EntityMetadata, overwrite *EntityOverwrite) error {
+	if overwrite == nil {
+		return fmt.Errorf("dynamic entity '%s' requires overwrite handlers", entityMetadata.EntitySetName)
+	}
+
+	require := func(method, handlerName string, handlerPresent bool) error {
+		if entityMetadata.DisabledMethods[method] || handlerPresent {
+			return nil
+		}
+		return fmt.Errorf("dynamic entity '%s' requires %s when %s is enabled", entityMetadata.EntitySetName, handlerName, method)
+	}
+
+	if err := require(http.MethodGet, "GetCollection", overwrite.GetCollection != nil); err != nil {
+		return err
+	}
+	if err := require(http.MethodGet, "GetEntity", overwrite.GetEntity != nil); err != nil {
+		return err
+	}
+	if err := require(http.MethodGet, "GetCount", overwrite.GetCount != nil); err != nil {
+		return err
+	}
+	if err := require(http.MethodPost, "Create", overwrite.Create != nil); err != nil {
+		return err
+	}
+	if err := require(http.MethodPatch, "Update", overwrite.Update != nil); err != nil {
+		return err
+	}
+	if err := require(http.MethodPut, "Update", overwrite.Update != nil); err != nil {
+		return err
+	}
+	if err := require(http.MethodDelete, "Delete", overwrite.Delete != nil); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // Types for registering custom OData actions and functions.
 //
 // The following types are re-exported from internal/actions package to provide a public API

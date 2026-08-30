@@ -295,6 +295,19 @@ func ApplySelectToEntity(entity interface{}, selectedProperties []string, entity
 	if entityValue.Kind() == reflect.Ptr {
 		entityValue = entityValue.Elem()
 	}
+	if entityValue.IsValid() && entityValue.Kind() == reflect.Map {
+		filteredEntity := make(map[string]interface{})
+		for _, prop := range entityMetadata.Properties {
+			isSelected := selectedPropMap[prop.JsonName] || selectedPropMap[prop.Name]
+			if !isSelected && !prop.IsKey {
+				continue
+			}
+			if value, ok := metadata.ReadPropertyValue(entity, prop); ok {
+				filteredEntity[prop.JsonName] = value
+			}
+		}
+		return filteredEntity
+	}
 
 	filteredEntity := make(map[string]interface{})
 

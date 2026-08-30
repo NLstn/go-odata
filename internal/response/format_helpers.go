@@ -52,12 +52,23 @@ func BuildEntityIDFromEntity(entitySetName string, entity interface{}, keyProper
 		}
 
 		if len(keyProperties) == 1 {
-			return fmt.Sprintf("%s(%s)", entitySetName, formatKeyValueLiteral(value))
+			return fmt.Sprintf("%s(%s)", entitySetName, formatPropertyKeyLiteral(value, keyProp))
 		}
-		keyParts = append(keyParts, fmt.Sprintf("%s=%s", keyProp.JsonName, formatKeyValueLiteral(value)))
+		keyParts = append(keyParts, fmt.Sprintf("%s=%s", keyProp.JsonName, formatPropertyKeyLiteral(value, keyProp)))
 	}
 
 	return fmt.Sprintf("%s(%s)", entitySetName, strings.Join(keyParts, ","))
+}
+
+func formatPropertyKeyLiteral(value interface{}, property metadata.PropertyMetadata) string {
+	primitiveType, ok := property.EffectivePrimitiveType()
+	if !ok || primitiveType == metadata.PrimitiveTypeString {
+		return formatKeyValueLiteral(value)
+	}
+	if primitiveType == metadata.PrimitiveTypeDuration {
+		return fmt.Sprintf("duration'%v'", value)
+	}
+	return fmt.Sprintf("%v", value)
 }
 
 func formatKeyValueLiteral(value interface{}) string {

@@ -453,6 +453,44 @@ func TestParseEntityKeyValues(t *testing.T) {
 	}
 }
 
+func TestParseDynamicEntityKeyValues(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		value         string
+		primitiveType metadata.PrimitiveType
+		want          interface{}
+		wantError     bool
+	}{
+		{name: "int64", value: "9223372036854775807", primitiveType: metadata.PrimitiveTypeInt64, want: int64(9223372036854775807)},
+		{name: "invalid int64", value: "not-an-integer", primitiveType: metadata.PrimitiveTypeInt64, wantError: true},
+		{name: "guid", value: "01234567-89ab-cdef-0123-456789abcdef", primitiveType: metadata.PrimitiveTypeGuid, want: "01234567-89ab-cdef-0123-456789abcdef"},
+		{name: "invalid guid", value: "invalid", primitiveType: metadata.PrimitiveTypeGuid, wantError: true},
+		{name: "date", value: "2026-08-30", primitiveType: metadata.PrimitiveTypeDate, want: "2026-08-30"},
+		{name: "duration", value: "duration'P1DT2H'", primitiveType: metadata.PrimitiveTypeDuration, want: "P1DT2H"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			properties := []metadata.PropertyMetadata{{Name: "ID", JsonName: "ID", EdmType: test.primitiveType}}
+			values, err := parseDynamicEntityKeyValues(test.value, properties)
+			if test.wantError {
+				if err == nil {
+					t.Fatalf("parseDynamicEntityKeyValues() error = nil, want error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("parseDynamicEntityKeyValues() error = %v", err)
+			}
+			if got := values["ID"]; got != test.want {
+				t.Fatalf("key value = %#v, want %#v", got, test.want)
+			}
+		})
+	}
+}
+
 func TestConvertKeyValue(t *testing.T) {
 	tests := []struct {
 		name          string

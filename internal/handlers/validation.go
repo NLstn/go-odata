@@ -2,14 +2,18 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"mime"
 	"net/http"
 	"reflect"
+	"strconv"
 	"strings"
 
 	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/response"
+	"github.com/shopspring/decimal"
 	"go.opentelemetry.io/otel/trace"
 	"gorm.io/gorm"
 )
@@ -31,6 +35,15 @@ func (h *EntityHandler) validateDataTypes(updateData map[string]interface{}) err
 			continue
 		}
 
+		if propMeta.Type == nil {
+			if primitiveType, ok := propMeta.EffectivePrimitiveType(); ok {
+				if err := validatePrimitiveValueType(propValue, primitiveType, propMeta.JsonName); err != nil {
+					return err
+				}
+			}
+			continue
+		}
+
 		// Validate the type
 		if err := validateValueType(propValue, propMeta.Type, propMeta.JsonName); err != nil {
 			return err
@@ -38,6 +51,139 @@ func (h *EntityHandler) validateDataTypes(updateData map[string]interface{}) err
 	}
 
 	return nil
+}
+
+func validatePrimitiveValueType(value interface{}, primitiveType metadata.PrimitiveType, fieldName string) error {
+	valid := false
+	switch primitiveType {
+	case metadata.PrimitiveTypeUntyped:
+		valid = true
+	case metadata.PrimitiveTypeBoolean:
+		_, valid = value.(bool)
+	case metadata.PrimitiveTypeByte, metadata.PrimitiveTypeInt16, metadata.PrimitiveTypeInt32,
+		metadata.PrimitiveTypeInt64, metadata.PrimitiveTypeSByte:
+		_, valid = value.(int64)
+	case metadata.PrimitiveTypeDecimal:
+		_, valid = value.(decimal.Decimal)
+	case metadata.PrimitiveTypeDouble, metadata.PrimitiveTypeSingle:
+		_, valid = value.(float64)
+	case metadata.PrimitiveTypeBinary:
+		_, valid = value.([]byte)
+	case metadata.PrimitiveTypeDate, metadata.PrimitiveTypeDateTimeOffset, metadata.PrimitiveTypeDuration,
+		metadata.PrimitiveTypeGuid, metadata.PrimitiveTypeString, metadata.PrimitiveTypeTimeOfDay:
+		_, valid = value.(string)
+	case metadata.PrimitiveTypeGeography, metadata.PrimitiveTypeGeographyCollection,
+		metadata.PrimitiveTypeGeographyLineString, metadata.PrimitiveTypeGeographyMultiLineString,
+		metadata.PrimitiveTypeGeographyMultiPoint, metadata.PrimitiveTypeGeographyMultiPolygon,
+		metadata.PrimitiveTypeGeographyPoint, metadata.PrimitiveTypeGeographyPolygon,
+		metadata.PrimitiveTypeGeometry, metadata.PrimitiveTypeGeometryCollection,
+		metadata.PrimitiveTypeGeometryLineString, metadata.PrimitiveTypeGeometryMultiLineString,
+		metadata.PrimitiveTypeGeometryMultiPoint, metadata.PrimitiveTypeGeometryMultiPolygon,
+		metadata.PrimitiveTypeGeometryPoint, metadata.PrimitiveTypeGeometryPolygon:
+		_, valid = value.(map[string]interface{})
+	}
+	if !valid {
+		return fmt.Errorf("property '%s' expects type %s but got %T", fieldName, primitiveType, value)
+	}
+	return nil
+}
+
+func (h *EntityHandler) normalizeDynamicPropertyValues(data map[string]interface{}, r *http.Request) error {
+	if !h.isDynamicEntity() {
+		return nil
+	}
+	ieee754Compatible := requestIEEE754Compatible(r)
+	for propertyName, value := range data {
+		if value == nil {
+			continue
+		}
+		property := h.metadata.FindProperty(propertyName)
+		if property == nil {
+			continue
+		}
+		primitiveType, ok := property.EffectivePrimitiveType()
+		if !ok {
+			continue
+		}
+		normalized, err := normalizeDynamicPrimitiveValue(value, primitiveType, ieee754Compatible)
+		if err != nil {
+			return fmt.Errorf("property '%s' expects type %s: %w", property.JsonName, primitiveType, err)
+		}
+		data[propertyName] = normalized
+	}
+	return nil
+}
+
+func (h *EntityHandler) isDynamicEntity() bool {
+	return h.metadata != nil && h.metadata.IsVirtual && h.metadata.EntityType == nil
+}
+
+func normalizeDynamicPrimitiveValue(value interface{}, primitiveType metadata.PrimitiveType, ieee754Compatible bool) (interface{}, error) {
+	lexical, isNumber := "", false
+	switch typed := value.(type) {
+	case json.Number:
+		lexical, isNumber = typed.String(), true
+	case string:
+		if ieee754Compatible && (primitiveType == metadata.PrimitiveTypeInt64 || primitiveType == metadata.PrimitiveTypeDecimal) {
+			lexical, isNumber = typed, true
+		}
+	}
+
+	switch primitiveType {
+	case metadata.PrimitiveTypeByte:
+		parsed, err := strconv.ParseUint(lexical, 10, 8)
+		if !isNumber || err != nil {
+			return nil, fmt.Errorf("invalid integer value %q", lexical)
+		}
+		return int64(parsed), nil
+	case metadata.PrimitiveTypeSByte:
+		return parseDynamicInteger(lexical, isNumber, 8)
+	case metadata.PrimitiveTypeInt16:
+		return parseDynamicInteger(lexical, isNumber, 16)
+	case metadata.PrimitiveTypeInt32:
+		return parseDynamicInteger(lexical, isNumber, 32)
+	case metadata.PrimitiveTypeInt64:
+		return parseDynamicInteger(lexical, isNumber, 64)
+	case metadata.PrimitiveTypeDecimal:
+		if !isNumber {
+			return nil, fmt.Errorf("invalid decimal value")
+		}
+		parsed, err := decimal.NewFromString(lexical)
+		if err != nil {
+			return nil, fmt.Errorf("invalid decimal value %q", lexical)
+		}
+		return parsed, nil
+	case metadata.PrimitiveTypeSingle, metadata.PrimitiveTypeDouble:
+		if !isNumber {
+			return nil, fmt.Errorf("invalid floating-point value")
+		}
+		parsed, err := strconv.ParseFloat(lexical, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid floating-point value %q", lexical)
+		}
+		return parsed, nil
+	default:
+		return value, nil
+	}
+}
+
+func parseDynamicInteger(lexical string, isNumber bool, bitSize int) (interface{}, error) {
+	if !isNumber {
+		return nil, fmt.Errorf("invalid integer value")
+	}
+	parsed, err := strconv.ParseInt(lexical, 10, bitSize)
+	if err != nil {
+		return nil, fmt.Errorf("invalid integer value %q", lexical)
+	}
+	return parsed, nil
+}
+
+func requestIEEE754Compatible(r *http.Request) bool {
+	_, parameters, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil {
+		return false
+	}
+	return strings.EqualFold(parameters["ieee754compatible"], "true")
 }
 
 // validateValueType checks if a value matches the expected reflect.Type

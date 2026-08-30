@@ -132,6 +132,23 @@ func (h *EntityHandler) parseSingleEntityQueryOptions(r *http.Request) (*query.Q
 	return queryOptions, nil
 }
 
+func (h *EntityHandler) parseModificationQueryOptions(r *http.Request) (*query.QueryOptions, error) {
+	queryOptions, err := h.parseSingleEntityQueryOptions(r)
+	if err != nil {
+		return nil, err
+	}
+	if queryOptions.Filter != nil || len(queryOptions.OrderBy) > 0 || queryOptions.Count ||
+		queryOptions.Search != "" || len(queryOptions.Apply) > 0 || queryOptions.Compute != nil ||
+		queryOptions.SkipToken != nil || queryOptions.DeltaToken != nil {
+		return nil, &requestError{
+			StatusCode: http.StatusBadRequest,
+			ErrorCode:  ErrMsgInvalidQueryOptions,
+			Message:    "only $select and $expand are applicable to entity modification requests",
+		}
+	}
+	return queryOptions, nil
+}
+
 // fetchEntityByKey fetches an entity by its key with optional expand
 func (h *EntityHandler) fetchEntityByKey(ctx context.Context, entityKey string, queryOptions *query.QueryOptions, scopes []func(*gorm.DB) *gorm.DB) (interface{}, error) {
 	// Fast path: serve the key read from the in-memory snapshot cache. When the

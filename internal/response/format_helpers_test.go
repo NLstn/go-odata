@@ -38,6 +38,33 @@ func TestBuildEntityIDStringWithQuotes(t *testing.T) {
 	}
 }
 
+func TestBuildEntityIDFromEntityUsesEDMKeyLiterals(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		primitiveType metadata.PrimitiveType
+		value         interface{}
+		want          string
+	}{
+		{name: "string", primitiveType: metadata.PrimitiveTypeString, value: "O'Brien", want: "Items('O''Brien')"},
+		{name: "guid", primitiveType: metadata.PrimitiveTypeGuid, value: "01234567-89ab-cdef-0123-456789abcdef", want: "Items(01234567-89ab-cdef-0123-456789abcdef)"},
+		{name: "date", primitiveType: metadata.PrimitiveTypeDate, value: "2026-08-30", want: "Items(2026-08-30)"},
+		{name: "duration", primitiveType: metadata.PrimitiveTypeDuration, value: "P1D", want: "Items(duration'P1D')"},
+		{name: "int64", primitiveType: metadata.PrimitiveTypeInt64, value: int64(9223372036854775807), want: "Items(9223372036854775807)"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			property := metadata.PropertyMetadata{Name: "ID", JsonName: "ID", EdmType: test.primitiveType}
+			got := BuildEntityIDFromEntity("Items", map[string]interface{}{"ID": test.value}, []metadata.PropertyMetadata{property})
+			if got != test.want {
+				t.Fatalf("BuildEntityIDFromEntity() = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
 func TestFormatKeyValueLiteral(t *testing.T) {
 	tests := []struct {
 		name     string

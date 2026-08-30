@@ -107,7 +107,7 @@ func TestODataHeaderExactCapitalization(t *testing.T) {
 			path:           "/HeaderCapTestProducts",
 			body:           map[string]interface{}{"name": "New Product", "price": 49.99},
 			headers:        map[string]string{"Prefer": "return=minimal"},
-			expectedStatus: http.StatusCreated,
+			expectedStatus: http.StatusNoContent,
 			checkVersion:   true,
 			checkEntityId:  true,
 		},

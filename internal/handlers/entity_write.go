@@ -805,12 +805,17 @@ func (h *EntityHandler) preserveImmutableProperties(source, destination interfac
 
 // handleDeleteEntityOverwrite handles DELETE entity requests using the overwrite handler
 func (h *EntityHandler) handleDeleteEntityOverwrite(w http.ResponseWriter, r *http.Request, entityKey string) {
+	keyValues, err := h.parseOverwriteEntityKeyValues(entityKey)
+	if err != nil {
+		WriteError(w, r, http.StatusBadRequest, "Invalid entity key", err.Error())
+		return
+	}
 	// Create overwrite context with empty query options (DELETE doesn't use query options,
 	// but we provide a consistent context interface across all operations)
 	ctx := &OverwriteContext{
 		QueryOptions:    &query.QueryOptions{},
 		EntityKey:       entityKey,
-		EntityKeyValues: parseEntityKeyValues(entityKey, h.metadata.KeyProperties),
+		EntityKeyValues: keyValues,
 		Request:         r,
 	}
 
@@ -833,12 +838,21 @@ func (h *EntityHandler) handleUpdateEntityOverwrite(w http.ResponseWriter, r *ht
 	if err := validateContentType(w, r); err != nil {
 		return
 	}
+	queryOptions, err := h.parseModificationQueryOptions(r)
+	if err != nil {
+		h.writeRequestError(w, r, err, http.StatusBadRequest, ErrMsgInvalidQueryOptions)
+		return
+	}
 
 	pref := preference.ParsePrefer(r)
 
 	// Parse the request body
 	var updateData map[string]interface{}
-	if err := json.NewDecoder(r.Body).Decode(&updateData); err != nil {
+	decoder := json.NewDecoder(r.Body)
+	if h.isDynamicEntity() {
+		decoder.UseNumber()
+	}
+	if err := decoder.Decode(&updateData); err != nil {
 		WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidRequestBody,
 			fmt.Sprintf(ErrDetailFailedToParseJSON, err.Error()))
 		return
@@ -846,6 +860,10 @@ func (h *EntityHandler) handleUpdateEntityOverwrite(w http.ResponseWriter, r *ht
 
 	if err := h.decodeBinaryPropertiesInPlace(updateData); err != nil {
 		WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidRequestBody, err.Error())
+		return
+	}
+	if err := h.normalizeDynamicPropertyValues(updateData, r); err != nil {
+		WriteError(w, r, http.StatusBadRequest, "Invalid property value", err.Error())
 		return
 	}
 	if !isFullReplace {
@@ -870,12 +888,21 @@ func (h *EntityHandler) handleUpdateEntityOverwrite(w http.ResponseWriter, r *ht
 		WriteError(w, r, http.StatusBadRequest, "Invalid property value", err.Error())
 		return
 	}
+	if err := h.validateDataTypes(updateData); err != nil {
+		WriteError(w, r, http.StatusBadRequest, "Invalid property value", err.Error())
+		return
+	}
+	keyValues, err := h.parseOverwriteEntityKeyValues(entityKey)
+	if err != nil {
+		WriteError(w, r, http.StatusBadRequest, "Invalid entity key", err.Error())
+		return
+	}
 
 	// Create overwrite context
 	ctx := &OverwriteContext{
-		QueryOptions:    &query.QueryOptions{},
+		QueryOptions:    queryOptions,
 		EntityKey:       entityKey,
-		EntityKeyValues: parseEntityKeyValues(entityKey, h.metadata.KeyProperties),
+		EntityKeyValues: keyValues,
 		Request:         r,
 	}
 
@@ -898,7 +925,10 @@ func (h *EntityHandler) handleUpdateEntityOverwrite(w http.ResponseWriter, r *ht
 
 	if pref.ShouldReturnContent(false) {
 		if result != nil {
-			h.writeEntityResponseWithETag(w, r, result, "", http.StatusOK, nil, nil)
+			if len(queryOptions.Select) > 0 {
+				result = query.ApplySelectToEntity(result, queryOptions.Select, h.metadata, queryOptions.Expand)
+			}
+			h.writeEntityResponseWithETag(w, r, result, "", http.StatusOK, queryOptions.Expand, queryOptions.Select)
 		} else {
 			// If no result was returned but content was requested, return 204
 			w.WriteHeader(http.StatusNoContent)
