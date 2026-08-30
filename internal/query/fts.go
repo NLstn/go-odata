@@ -214,7 +214,8 @@ func (m *FTSManager) getSearchableColumns(entityMetadata *metadata.EntityMetadat
 func (m *FTSManager) getAllStringColumns(entityMetadata *metadata.EntityMetadata) []string {
 	var cols []string
 	for _, prop := range entityMetadata.Properties {
-		if prop.Type.String() == "string" && !prop.IsNavigationProp {
+		primitiveType, ok := prop.EffectivePrimitiveType()
+		if ok && primitiveType == metadata.PrimitiveTypeString && !prop.IsNavigationProp {
 			// Use cached column name from metadata
 			cols = append(cols, prop.ColumnName)
 		}

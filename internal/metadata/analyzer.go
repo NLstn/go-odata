@@ -141,7 +141,7 @@ type PropertyMetadata struct {
 	// UnderlyingType where present. Used by $filter to type-check literals and
 	// function arguments against the property's declared type rather than just
 	// its Go reflect.Kind. Empty for navigation properties and complex types.
-	EdmType string
+	EdmType PrimitiveType
 	// Binary properties
 	ContentType string // MIME type for binary properties (e.g., "image/svg+xml"), used when serving /$value
 	// Stream properties
@@ -532,7 +532,7 @@ func analyzeField(field reflect.StructField, metadata *EntityMetadata) (Property
 		if typeDefInfo != nil {
 			property.EdmType = typeDefInfo.UnderlyingType
 		} else if !property.IsEnum {
-			if edmType, err := inferUnderlyingEdmType(fieldType); err == nil {
+			if edmType, err := PrimitiveTypeFromGoType(fieldType); err == nil {
 				property.EdmType = edmType
 			}
 		}
@@ -1200,7 +1200,7 @@ func detectTypeDiscriminator(metadata *EntityMetadata) {
 			prop := &metadata.Properties[i]
 
 			// Discriminator must be a string type
-			if prop.Type.Kind() != reflect.String {
+			if prop.EdmType != PrimitiveTypeString {
 				continue
 			}
 

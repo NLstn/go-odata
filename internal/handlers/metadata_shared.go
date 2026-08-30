@@ -118,6 +118,9 @@ func (h *MetadataHandler) propertyEdmType(model metadataModel, prop *metadata.Pr
 			return model.qualifiedTypeName(name)
 		}
 	}
+	if prop.EdmType != "" {
+		return string(prop.EdmType)
+	}
 	return getEdmType(prop.Type)
 }
 

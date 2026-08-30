@@ -60,15 +60,32 @@ func parseEntityKeyValues(entityKey string, keyProperties []metadata.PropertyMet
 func convertKeyValue(value string, keyName string, keyProperties []metadata.PropertyMetadata) interface{} {
 	// Find the property metadata for this key
 	var propType reflect.Type
+	var edmType metadata.PrimitiveType
 	for _, prop := range keyProperties {
 		if prop.JsonName == keyName || prop.Name == keyName {
 			propType = prop.Type
+			edmType = prop.EdmType
 			break
 		}
 	}
 
-	// If we didn't find the type or type is nil, return string
+	// Preserve exact Go types for struct-backed entities.
 	if propType == nil {
+		switch edmType {
+		case metadata.PrimitiveTypeByte, metadata.PrimitiveTypeInt16, metadata.PrimitiveTypeInt32, metadata.PrimitiveTypeInt64,
+			metadata.PrimitiveTypeSByte:
+			if intVal, err := strconv.ParseInt(value, 10, 64); err == nil {
+				return intVal
+			}
+		case metadata.PrimitiveTypeSingle, metadata.PrimitiveTypeDouble, metadata.PrimitiveTypeDecimal:
+			if floatVal, err := strconv.ParseFloat(value, 64); err == nil {
+				return floatVal
+			}
+		case metadata.PrimitiveTypeBoolean:
+			if boolVal, err := strconv.ParseBool(value); err == nil {
+				return boolVal
+			}
+		}
 		return value
 	}
 

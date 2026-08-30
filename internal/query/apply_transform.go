@@ -1017,7 +1017,7 @@ func isFloatingProperty(prop *metadata.PropertyMetadata) bool {
 	if prop == nil {
 		return false
 	}
-	if prop.EdmType == "Edm.Double" || prop.EdmType == "Edm.Single" {
+	if prop.EdmType == metadata.PrimitiveTypeDouble || prop.EdmType == metadata.PrimitiveTypeSingle {
 		return true
 	}
 	if prop.Type != nil {

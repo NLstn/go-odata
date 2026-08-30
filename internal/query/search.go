@@ -77,7 +77,8 @@ func getSearchableProperties(entityMetadata *metadata.EntityMetadata) []metadata
 func getAllStringProperties(entityMetadata *metadata.EntityMetadata) []metadata.PropertyMetadata {
 	var stringProps []metadata.PropertyMetadata
 	for _, prop := range entityMetadata.Properties {
-		if prop.Type.Kind() == reflect.String && !prop.IsNavigationProp {
+		primitiveType, ok := prop.EffectivePrimitiveType()
+		if ok && primitiveType == metadata.PrimitiveTypeString && !prop.IsNavigationProp {
 			// Set default fuzziness to 1 (exact substring match) for implicitly searchable properties
 			prop.SearchFuzziness = 1
 			stringProps = append(stringProps, prop)

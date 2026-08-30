@@ -190,18 +190,18 @@ func convertSingleArgFunctionWithContext(n *FunctionCallExpr, functionName strin
 // set of EDM primitive types its argument may be declared as. Per OData Protocol
 // §11.2.5.1, these functions only apply to Edm.Date/Edm.TimeOfDay/Edm.DateTimeOffset/
 // Edm.Duration values - applying them to e.g. an Edm.String property is a type error.
-var dateTimeFunctionCompatibleEdmTypes = map[string]map[string]bool{
-	"year":               {"Edm.Date": true, "Edm.DateTimeOffset": true},
-	"month":              {"Edm.Date": true, "Edm.DateTimeOffset": true},
-	"day":                {"Edm.Date": true, "Edm.DateTimeOffset": true},
-	"hour":               {"Edm.TimeOfDay": true, "Edm.DateTimeOffset": true},
-	"minute":             {"Edm.TimeOfDay": true, "Edm.DateTimeOffset": true},
-	"second":             {"Edm.TimeOfDay": true, "Edm.DateTimeOffset": true},
-	"fractionalseconds":  {"Edm.TimeOfDay": true, "Edm.DateTimeOffset": true},
-	"date":               {"Edm.Date": true, "Edm.DateTimeOffset": true},
-	"time":               {"Edm.TimeOfDay": true, "Edm.DateTimeOffset": true},
-	"totaloffsetminutes": {"Edm.DateTimeOffset": true},
-	"totalseconds":       {"Edm.Duration": true},
+var dateTimeFunctionCompatibleEdmTypes = map[string]map[metadata.PrimitiveType]bool{
+	"year":               {metadata.PrimitiveTypeDate: true, metadata.PrimitiveTypeDateTimeOffset: true},
+	"month":              {metadata.PrimitiveTypeDate: true, metadata.PrimitiveTypeDateTimeOffset: true},
+	"day":                {metadata.PrimitiveTypeDate: true, metadata.PrimitiveTypeDateTimeOffset: true},
+	"hour":               {metadata.PrimitiveTypeTimeOfDay: true, metadata.PrimitiveTypeDateTimeOffset: true},
+	"minute":             {metadata.PrimitiveTypeTimeOfDay: true, metadata.PrimitiveTypeDateTimeOffset: true},
+	"second":             {metadata.PrimitiveTypeTimeOfDay: true, metadata.PrimitiveTypeDateTimeOffset: true},
+	"fractionalseconds":  {metadata.PrimitiveTypeTimeOfDay: true, metadata.PrimitiveTypeDateTimeOffset: true},
+	"date":               {metadata.PrimitiveTypeDate: true, metadata.PrimitiveTypeDateTimeOffset: true},
+	"time":               {metadata.PrimitiveTypeTimeOfDay: true, metadata.PrimitiveTypeDateTimeOffset: true},
+	"totaloffsetminutes": {metadata.PrimitiveTypeDateTimeOffset: true},
+	"totalseconds":       {metadata.PrimitiveTypeDuration: true},
 }
 
 // validateDateTimeFunctionArgType rejects date/time-extraction functions applied to a

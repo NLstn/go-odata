@@ -98,6 +98,40 @@ func TestMetadataHandler_HandleMetadata_GetJSON(t *testing.T) {
 	}
 }
 
+func TestMetadataHandlerUsesPrimitiveTypeWithoutGoType(t *testing.T) {
+	entityMetadata := &metadata.EntityMetadata{
+		EntityName:    "RuntimeProduct",
+		EntitySetName: "RuntimeProducts",
+		Properties: []metadata.PropertyMetadata{
+			{
+				Name:     "ReleaseDate",
+				JsonName: "ReleaseDate",
+				EdmType:  metadata.PrimitiveTypeDate,
+			},
+		},
+	}
+	handler := NewMetadataHandler(map[string]*metadata.EntityMetadata{
+		entityMetadata.EntitySetName: entityMetadata,
+	})
+
+	for _, accept := range []string{"application/xml", "application/json"} {
+		t.Run(accept, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/$metadata", nil)
+			req.Header.Set("Accept", accept)
+			w := httptest.NewRecorder()
+
+			handler.HandleMetadata(w, req)
+
+			if w.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d: %s", w.Code, http.StatusOK, w.Body.String())
+			}
+			if !strings.Contains(w.Body.String(), "Edm.Date") {
+				t.Fatalf("metadata does not contain declared EDM type: %s", w.Body.String())
+			}
+		})
+	}
+}
+
 func TestMetadataHandler_HandleMetadata_Head(t *testing.T) {
 	meta1, _ := metadata.AnalyzeEntity(MetadataTestProduct{})
 	entitiesMetadata := map[string]*metadata.EntityMetadata{

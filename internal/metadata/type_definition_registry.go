@@ -15,7 +15,7 @@ type TypeDefinitionInfo struct {
 	Name string
 	// UnderlyingType is the EDM primitive type (e.g., "Edm.Decimal", "Edm.String").
 	// Derived automatically from the Go type if not provided.
-	UnderlyingType string
+	UnderlyingType PrimitiveType
 	// Precision is the numeric precision facet (only for Edm.Decimal).
 	Precision int
 	// Scale is the numeric scale facet (only for Edm.Decimal).
@@ -61,6 +61,8 @@ func RegisterTypeDefinition(goType reflect.Type, info TypeDefinitionInfo) error 
 			return fmt.Errorf("cannot infer underlying EDM type for %s: %w", goType.Name(), err)
 		}
 		info.UnderlyingType = underlying
+	} else if _, err := ParsePrimitiveType(string(info.UnderlyingType)); err != nil {
+		return fmt.Errorf("invalid underlying EDM type for %s: %w", goType.Name(), err)
 	}
 
 	typeDefinitionRegistry.Lock()
@@ -90,46 +92,6 @@ func GetTypeDefinition(goType reflect.Type) (*TypeDefinitionInfo, bool) {
 }
 
 // inferUnderlyingEdmType returns the EDM primitive type name for the given Go type.
-func inferUnderlyingEdmType(t reflect.Type) (string, error) {
-	// Check for well-known named types first
-	switch t.String() {
-	case "time.Time":
-		return "Edm.DateTimeOffset", nil
-	case "uuid.UUID", "github.com/google/uuid.UUID":
-		return "Edm.Guid", nil
-	case "decimal.Decimal", "github.com/shopspring/decimal.Decimal":
-		return "Edm.Decimal", nil
-	}
-
-	switch t.Kind() {
-	case reflect.String:
-		return "Edm.String", nil
-	case reflect.Bool:
-		return "Edm.Boolean", nil
-	case reflect.Int8:
-		return "Edm.SByte", nil
-	case reflect.Int16:
-		return "Edm.Int16", nil
-	case reflect.Int, reflect.Int32:
-		return "Edm.Int32", nil
-	case reflect.Int64:
-		return "Edm.Int64", nil
-	case reflect.Uint8:
-		return "Edm.Byte", nil
-	case reflect.Uint16:
-		return "Edm.Int32", nil
-	case reflect.Uint, reflect.Uint32:
-		return "Edm.Int64", nil
-	case reflect.Uint64:
-		return "Edm.Int64", nil
-	case reflect.Float32:
-		return "Edm.Single", nil
-	case reflect.Float64:
-		return "Edm.Double", nil
-	default:
-		if t.Kind() == reflect.Slice && t.Elem().Kind() == reflect.Uint8 {
-			return "Edm.Binary", nil
-		}
-		return "", fmt.Errorf("unsupported underlying kind %s for TypeDefinition", t.Kind())
-	}
+func inferUnderlyingEdmType(t reflect.Type) (PrimitiveType, error) {
+	return PrimitiveTypeFromGoType(t)
 }

@@ -588,6 +588,15 @@ func TestConvertKeyValue(t *testing.T) {
 			expected: "abc123",
 		},
 		{
+			name:    "Convert from EDM type without Go type",
+			value:   "42",
+			keyName: "ID",
+			keyProperties: []metadata.PropertyMetadata{
+				{JsonName: "ID", Name: "ID", EdmType: metadata.PrimitiveTypeInt64},
+			},
+			expected: int64(42),
+		},
+		{
 			name:    "Invalid int - return string",
 			value:   "not-a-number",
 			keyName: "ID",
