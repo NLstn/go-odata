@@ -437,7 +437,7 @@ func (m metadataModel) collectTypeDefinitions() map[string]*typeDefinitionInfo {
 
 			typeDefinitions[prop.TypeDefinitionName] = &typeDefinitionInfo{
 				Name:           tdInfo.Name,
-				UnderlyingType: tdInfo.UnderlyingType,
+				UnderlyingType: string(tdInfo.UnderlyingType),
 				Precision:      tdInfo.Precision,
 				Scale:          tdInfo.Scale,
 				MaxLength:      tdInfo.MaxLength,
@@ -527,6 +527,9 @@ func (m metadataModel) getEntitySetNameForType(entityTypeName string) string {
 
 // getEdmType converts a Go type to an EDM (Entity Data Model) type
 func getEdmType(goType reflect.Type) string {
+	if goType == nil {
+		return ""
+	}
 	// Handle pointer types
 	if goType.Kind() == reflect.Ptr {
 		goType = goType.Elem()

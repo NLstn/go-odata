@@ -155,7 +155,7 @@ func TestInferUnderlyingEdmType(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Unexpected error: %v", err)
 			}
-			if got != tt.want {
+			if string(got) != tt.want {
 				t.Errorf("inferUnderlyingEdmType(%s) = %s, want %s", tt.name, got, tt.want)
 			}
 		})

@@ -281,20 +281,14 @@ func (h *EntityHandler) filterSupported(expr *query.FilterExpression) bool {
 		return true
 	case query.OpContains, query.OpStartsWith, query.OpEndsWith:
 		// Ordinal string functions only make sense for string properties.
-		return prop.Type != nil && underlyingKind(prop.Type) == reflect.String
+		primitiveType, ok := prop.EffectivePrimitiveType()
+		return ok && primitiveType == metadata.PrimitiveTypeString
 	case query.OpIn:
 		_, isSlice := expr.Value.([]interface{})
 		return isSlice
 	default:
 		return false
 	}
-}
-
-func underlyingKind(t reflect.Type) reflect.Kind {
-	for t.Kind() == reflect.Ptr {
-		t = t.Elem()
-	}
-	return t.Kind()
 }
 
 // preparedFilterNode is a query.FilterExpression with its property lookup and

@@ -530,7 +530,8 @@ func (h *EntityHandler) typeDiscriminatorProperty() *metadata.PropertyMetadata {
 	for _, candidate := range candidates {
 		for i := range h.metadata.Properties {
 			prop := &h.metadata.Properties[i]
-			if prop.Type.Kind() != reflect.String {
+			primitiveType, ok := prop.EffectivePrimitiveType()
+			if !ok || primitiveType != metadata.PrimitiveTypeString {
 				continue
 			}
 

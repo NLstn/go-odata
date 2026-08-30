@@ -48,9 +48,18 @@ func RegisterTypeDefinition(goValue interface{}, name string, facets TypeDefinit
 		goType = goType.Elem()
 	}
 
+	var underlyingType PrimitiveType
+	if facets.UnderlyingType != "" {
+		var err error
+		underlyingType, err = ParsePrimitiveType(facets.UnderlyingType)
+		if err != nil {
+			return err
+		}
+	}
+
 	return metadata.RegisterTypeDefinition(goType, metadata.TypeDefinitionInfo{
 		Name:           name,
-		UnderlyingType: facets.UnderlyingType,
+		UnderlyingType: underlyingType,
 		Precision:      facets.Precision,
 		Scale:          facets.Scale,
 		MaxLength:      facets.MaxLength,

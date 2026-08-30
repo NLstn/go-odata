@@ -392,12 +392,12 @@ func resolveEnumMemberName(enumLiteral string, property string, entityMetadata *
 // it may be compared against. Unlike the Go-reflect-based checks below, these
 // literal types are unambiguous at parse time, so a mismatch here is a genuine
 // client error per OData Protocol §11.2.5.1.
-var dateTimeLiteralCompatibleEdmTypes = map[string]map[string]bool{
-	"date":     {"Edm.Date": true, "Edm.DateTimeOffset": true},
-	"time":     {"Edm.TimeOfDay": true},
-	"datetime": {"Edm.DateTimeOffset": true},
-	"duration": {"Edm.Duration": true},
-	"guid":     {"Edm.Guid": true},
+var dateTimeLiteralCompatibleEdmTypes = map[string]map[metadata.PrimitiveType]bool{
+	"date":     {metadata.PrimitiveTypeDate: true, metadata.PrimitiveTypeDateTimeOffset: true},
+	"time":     {metadata.PrimitiveTypeTimeOfDay: true},
+	"datetime": {metadata.PrimitiveTypeDateTimeOffset: true},
+	"duration": {metadata.PrimitiveTypeDuration: true},
+	"guid":     {metadata.PrimitiveTypeGuid: true},
 }
 
 // validateValueAgainstPropertyType validates that a filter value is appropriate for the target property type.
@@ -417,13 +417,9 @@ func validateValueAgainstPropertyType(property string, value interface{}, litera
 		}
 	}
 
-	// Get the property's Go type (handling pointers)
+	// Reflection remains a secondary hint for exact Go-width overflow checks.
 	propType := prop.Type
-	if propType == nil {
-		// Type not available - skip validation (may be enum or other special type)
-		return nil
-	}
-	if propType.Kind() == reflect.Ptr {
+	if propType != nil && propType.Kind() == reflect.Ptr {
 		propType = propType.Elem()
 	}
 
@@ -438,7 +434,7 @@ func validateValueAgainstPropertyType(property string, value interface{}, litera
 	if isNumeric {
 		// Validate numeric value against numeric property
 		// Check for Int64 overflow (only relevant for float64 values)
-		if floatVal, isFloat := value.(float64); isFloat {
+		if floatVal, isFloat := value.(float64); isFloat && propType != nil {
 			if propType.Kind() == reflect.Int64 || propType.Kind() == reflect.Uint64 {
 				const maxInt64Plus1 = 9223372036854775808.0 // 2^63
 				const minInt64 = -9223372036854775808.0     // -2^63
@@ -449,13 +445,13 @@ func validateValueAgainstPropertyType(property string, value interface{}, litera
 		}
 
 		// Verify property is numeric (compatible with numeric value)
-		switch propType.Kind() {
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-			reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
-			reflect.Float32, reflect.Float64:
+		switch prop.EdmType {
+		case metadata.PrimitiveTypeByte, metadata.PrimitiveTypeSByte,
+			metadata.PrimitiveTypeInt16, metadata.PrimitiveTypeInt32, metadata.PrimitiveTypeInt64,
+			metadata.PrimitiveTypeSingle, metadata.PrimitiveTypeDouble, metadata.PrimitiveTypeDecimal:
 			// All good - numeric value for numeric property
 			return nil
-		case reflect.String:
+		case metadata.PrimitiveTypeString:
 			// Type mismatch: numeric value for string property
 			return fmt.Errorf("type mismatch: cannot compare numeric value %v to string property '%s'", value, property)
 		default:
@@ -472,13 +468,13 @@ func validateValueAgainstPropertyType(property string, value interface{}, litera
 		}
 
 		// Validate string value against string property
-		switch propType.Kind() {
-		case reflect.String:
+		switch prop.EdmType {
+		case metadata.PrimitiveTypeString:
 			// All good - string value for string property
 			return nil
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-			reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
-			reflect.Float32, reflect.Float64:
+		case metadata.PrimitiveTypeByte, metadata.PrimitiveTypeSByte,
+			metadata.PrimitiveTypeInt16, metadata.PrimitiveTypeInt32, metadata.PrimitiveTypeInt64,
+			metadata.PrimitiveTypeSingle, metadata.PrimitiveTypeDouble, metadata.PrimitiveTypeDecimal:
 			// Type mismatch: string value for numeric property
 			return fmt.Errorf("type mismatch: cannot compare string value %q to numeric property '%s'", strVal, property)
 		default:
