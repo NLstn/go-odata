@@ -250,15 +250,7 @@ func writeFastEntity(buf *bytes.Buffer, entity reflect.Value, ctx *fastEntityCon
 	// @odata.id — full and minimal metadata.
 	if needsKeySegment && keySegment != "" {
 		writeKey("@odata.id")
-		var sb strings.Builder
-		sb.Grow(len(ctx.baseURL) + len(ctx.entitySetName) + len(keySegment) + 3)
-		sb.WriteString(ctx.baseURL)
-		sb.WriteByte('/')
-		sb.WriteString(ctx.entitySetName)
-		sb.WriteByte('(')
-		sb.WriteString(keySegment)
-		sb.WriteByte(')')
-		if err := writeJSONString(buf, sb.String(), enc); err != nil {
+		if err := writeEntityID(buf, ctx.baseURL, ctx.entitySetName, keySegment, enc); err != nil {
 			return err
 		}
 	}
@@ -495,6 +487,32 @@ func writeFastEntityFallback(buf *bytes.Buffer, entity reflect.Value, ctx *fastE
 	err := om.marshalTo(buf)
 	om.Release()
 	return err
+}
+
+// writeEntityID avoids materializing the URL when writeJSONString would emit it
+// verbatim. If any component needs escaping, keep the whole-string fallback:
+// encoding components separately can change how Unicode and invalid UTF-8 are
+// handled elsewhere in the URL.
+func writeEntityID(buf *bytes.Buffer, baseURL, entitySetName, keySegment string, enc **json.Encoder) error {
+	if !needsEscaping(baseURL) && !needsEscaping(entitySetName) && !needsEscaping(keySegment) {
+		buf.WriteByte('"')
+		buf.WriteString(baseURL)
+		buf.WriteByte('/')
+		buf.WriteString(entitySetName)
+		buf.WriteByte('(')
+		buf.WriteString(keySegment)
+		buf.WriteString(")\"")
+		return nil
+	}
+	var sb strings.Builder
+	sb.Grow(len(baseURL) + len(entitySetName) + len(keySegment) + 3)
+	sb.WriteString(baseURL)
+	sb.WriteByte('/')
+	sb.WriteString(entitySetName)
+	sb.WriteByte('(')
+	sb.WriteString(keySegment)
+	sb.WriteByte(')')
+	return writeJSONString(buf, sb.String(), enc)
 }
 
 // writeFastCollectionToResponse is the entry point used by the collection writer.
