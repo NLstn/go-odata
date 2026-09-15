@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/nlstn/go-odata/internal/fastscan"
@@ -358,6 +359,7 @@ func splitCSV(value string) []string {
 func collectParentKeyValues(parentValues []reflect.Value, constraints []parentReferenceConstraint) (map[string][]reflect.Value, []parentKey) {
 	parentKeyMap := make(map[string][]reflect.Value)
 	parentKeys := make([]parentKey, 0)
+	values := make([]interface{}, 0, len(constraints))
 
 	for _, parentVal := range parentValues {
 		parentStruct := dereferenceValue(parentVal)
@@ -365,7 +367,7 @@ func collectParentKeyValues(parentValues []reflect.Value, constraints []parentRe
 			continue
 		}
 
-		values := make([]interface{}, 0, len(constraints))
+		values = values[:0]
 		valid := true
 		for _, constraint := range constraints {
 			if constraint.principalProperty == "" {
@@ -391,7 +393,11 @@ func collectParentKeyValues(parentValues []reflect.Value, constraints []parentRe
 
 		key := buildCompositeKey(values)
 		if _, exists := parentKeyMap[key]; !exists {
-			parentKeys = append(parentKeys, parentKey{key: key, values: values})
+			// Only unique keys outlive this iteration; duplicate rows can reuse
+			// the scratch slice without allocating another set of SQL arguments.
+			keyValues := make([]interface{}, len(values))
+			copy(keyValues, values)
+			parentKeys = append(parentKeys, parentKey{key: key, values: keyValues})
 		}
 		parentKeyMap[key] = append(parentKeyMap[key], parentVal)
 	}
@@ -457,12 +463,15 @@ func applyParentKeyFilter(db *gorm.DB, constraints []parentReferenceConstraint, 
 }
 
 func groupChildrenByParentKey(children reflect.Value, constraints []parentReferenceConstraint) map[string]reflect.Value {
-	grouped := make(map[string]reflect.Value)
 	children = dereferenceValue(children)
 	if !children.IsValid() || (children.Kind() != reflect.Slice && children.Kind() != reflect.Array) {
-		return grouped
+		return make(map[string]reflect.Value)
 	}
 
+	values := make([]interface{}, 0, len(constraints))
+	// Accumulate row indices rather than repeatedly growing reflected entity
+	// slices. Each output bucket is allocated once at its exact final size.
+	indices := make(map[string][]int)
 	for i := 0; i < children.Len(); i++ {
 		child := children.Index(i)
 		childStruct := dereferenceValue(child)
@@ -470,7 +479,7 @@ func groupChildrenByParentKey(children reflect.Value, constraints []parentRefere
 			continue
 		}
 
-		values := make([]interface{}, 0, len(constraints))
+		values = values[:0]
 		valid := true
 		for _, constraint := range constraints {
 			if constraint.dependentProperty == "" {
@@ -494,11 +503,15 @@ func groupChildrenByParentKey(children reflect.Value, constraints []parentRefere
 		}
 
 		key := buildCompositeKey(values)
-		current := grouped[key]
-		if !current.IsValid() {
-			current = reflect.MakeSlice(children.Type(), 0, 0)
+		indices[key] = append(indices[key], i)
+	}
+
+	grouped := make(map[string]reflect.Value, len(indices))
+	for key, rows := range indices {
+		current := reflect.MakeSlice(children.Type(), len(rows), len(rows))
+		for i, row := range rows {
+			current.Index(i).Set(children.Index(row))
 		}
-		current = reflect.Append(current, child)
 		grouped[key] = current
 	}
 
@@ -536,12 +549,61 @@ func stripPagination(expandOpt ExpandOption) ExpandOption {
 }
 
 func buildCompositeKey(values []interface{}) string {
+	if len(values) == 1 {
+		// Concrete types only: named types and custom formatters must retain
+		// fmt's exact %T:%v representation, as must composite keys.
+		switch value := normalizeKeyValue(values[0]).(type) {
+		case int:
+			return signedScalarKey("int:", int64(value))
+		case int8:
+			return signedScalarKey("int8:", int64(value))
+		case int16:
+			return signedScalarKey("int16:", int64(value))
+		case int32:
+			return signedScalarKey("int32:", int64(value))
+		case int64:
+			return signedScalarKey("int64:", value)
+		case uint:
+			return unsignedScalarKey("uint:", uint64(value))
+		case uint8:
+			return unsignedScalarKey("uint8:", uint64(value))
+		case uint16:
+			return unsignedScalarKey("uint16:", uint64(value))
+		case uint32:
+			return unsignedScalarKey("uint32:", uint64(value))
+		case uint64:
+			return unsignedScalarKey("uint64:", value)
+		case uintptr:
+			return unsignedScalarKey("uintptr:", uint64(value))
+		case string:
+			return "string:" + value + "|"
+		case bool:
+			if value {
+				return "bool:true|"
+			}
+			return "bool:false|"
+		}
+	}
 	var builder strings.Builder
 	for _, value := range values {
 		normalized := normalizeKeyValue(value)
 		_, _ = fmt.Fprintf(&builder, "%T:%v|", normalized, normalized)
 	}
 	return builder.String()
+}
+
+func signedScalarKey(prefix string, value int64) string {
+	var scratch [32]byte
+	key := append(scratch[:0], prefix...)
+	key = strconv.AppendInt(key, value, 10)
+	return string(append(key, '|'))
+}
+
+func unsignedScalarKey(prefix string, value uint64) string {
+	var scratch [32]byte
+	key := append(scratch[:0], prefix...)
+	key = strconv.AppendUint(key, value, 10)
+	return string(append(key, '|'))
 }
 
 func normalizeKeyValue(value interface{}) interface{} {
