@@ -10,10 +10,11 @@ import (
 
 	"github.com/NLstn/go-odata/devserver/entities"
 	"github.com/nlstn/go-odata"
+	odatasqlite "github.com/nlstn/go-odata/sqlite"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
-	"gorm.io/driver/sqlserver"
 	"gorm.io/driver/sqlite"
+	"gorm.io/driver/sqlserver"
 	"gorm.io/gorm"
 )
 
@@ -38,6 +39,9 @@ func main() {
 		Db, err = gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 		if err != nil {
 			log.Fatal("Failed to connect to SQLite database:", err)
+		}
+		if err := odatasqlite.Configure(Db); err != nil {
+			log.Fatal("Failed to configure SQLite for OData:", err)
 		}
 
 		fmt.Println("📦 Using SQLite database:", dsn)
