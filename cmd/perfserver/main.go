@@ -14,6 +14,7 @@ import (
 
 	"github.com/NLstn/go-odata/perfserver/entities"
 	"github.com/nlstn/go-odata"
+	odatasqlite "github.com/nlstn/go-odata/sqlite"
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -155,6 +156,12 @@ func main() {
 	sqlDB.SetMaxIdleConns(*maxIdleConns)
 	sqlDB.SetConnMaxLifetime(*connMaxLifetime)
 	sqlDB.SetConnMaxIdleTime(*connMaxIdleTime)
+	if *dbType == "sqlite" {
+		if err := odatasqlite.Configure(Db); err != nil {
+			log.Fatal("Failed to configure SQLite for OData:", err)
+		}
+		fmt.Println("🔗 SQLite OData compatibility configured: connection pool pinned to one connection")
+	}
 
 	fmt.Printf("🔗 Connection pool configured: maxOpen=%d, maxIdle=%d, maxLifetime=%v, maxIdleTime=%v\n",
 		*maxOpenConns, *maxIdleConns, *connMaxLifetime, *connMaxIdleTime)

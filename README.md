@@ -45,9 +45,10 @@ package main
 import (
     "log"
     "net/http"
-    
+
     "github.com/nlstn/go-odata"
-    "gorm.io/driver/sqlite"
+    odatasqlite "github.com/nlstn/go-odata/sqlite"
+    gormsqlite "gorm.io/driver/sqlite"
     "gorm.io/gorm"
 )
 
@@ -61,8 +62,11 @@ type Product struct {
 
 func main() {
     // Initialize database
-    db, err := gorm.Open(sqlite.Open("test.db"), &gorm.Config{})
+    db, err := gorm.Open(gormsqlite.Open("test.db"), &gorm.Config{})
     if err != nil {
+        log.Fatal(err)
+    }
+    if err := odatasqlite.Configure(db); err != nil {
         log.Fatal(err)
     }
     
@@ -95,6 +99,11 @@ func main() {
     log.Fatal(http.ListenAndServe(":8080", mux))
 }
 ```
+
+`go-odata` core does not import a concrete database driver. SQLite applications
+should call `sqlite.Configure` explicitly to enable case-sensitive OData string
+filters and the `matchesPattern` function. The SQLite adapter pins the connection
+pool to one connection because SQLite functions and pragmas are connection-local.
 
 This creates a fully functional OData v4 service accessible at `http://localhost:8080`. Make sure to surface registration
 errors—invalid struct tags or duplicate entity names will cause `RegisterEntity` to fail and should be addressed immediately.

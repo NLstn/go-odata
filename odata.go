@@ -582,11 +582,6 @@ func NewServiceWithConfig(db *gorm.DB, cfg ServiceConfig) (*Service, error) {
 		return nil, fmt.Errorf("failed to register default key generator: %w", err)
 	}
 
-	// For SQLite, ensure REGEXP is available for the OData v4.01 matchesPattern() filter.
-	// This works transparently with standard sqlite.Open() or odata.SQLiteOpen().
-	//nolint:errcheck
-	ensureSQLiteRegexp(db)
-
 	return s, nil
 }
 

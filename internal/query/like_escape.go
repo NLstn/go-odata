@@ -39,9 +39,9 @@ func escapeLikePattern(value string) string {
 // explicit, deterministic byte-wise comparison rather than relying on
 // whatever collation happens to be configured. SQLite is handled separately:
 // its LIKE operator is case-insensitive for ASCII by default and can only be
-// made case-sensitive via the connection-wide "case_sensitive_like" pragma,
-// which is enabled in ensureSQLiteRegexp (sqlite.go) for every connection
-// this library opens.
+// made case-sensitive via the connection-wide "case_sensitive_like" pragma.
+// Applications using SQLite can enable it with the optional
+// github.com/nlstn/go-odata/sqlite package.
 func buildLikeComparison(dialect string, columnName string, value interface{}, prefixWildcard bool, suffixWildcard bool) (string, []interface{}) {
 	pattern := escapeLikePattern(fmt.Sprint(value))
 	if prefixWildcard {

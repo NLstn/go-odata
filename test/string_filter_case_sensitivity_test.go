@@ -8,7 +8,8 @@ import (
 	"testing"
 
 	odata "github.com/nlstn/go-odata"
-	"gorm.io/driver/sqlite"
+	odatasqlite "github.com/nlstn/go-odata/sqlite"
+	gormsqlite "gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
@@ -25,9 +26,12 @@ type CaseSensitivityProduct struct {
 func setupCaseSensitivityTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := gorm.Open(gormsqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("Failed to connect to database: %v", err)
+	}
+	if err := odatasqlite.Configure(db); err != nil {
+		t.Fatalf("Failed to configure SQLite for OData: %v", err)
 	}
 
 	if err := db.AutoMigrate(&CaseSensitivityProduct{}); err != nil {
