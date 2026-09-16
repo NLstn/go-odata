@@ -1118,13 +1118,14 @@ func parseNestTransformation(transStr string, entityMetadata *metadata.EntityMet
 		return nil, fmt.Errorf("nest requires a $apply= argument")
 	}
 
-	// Parse: $apply=transformationSequence[, alias]
+	// Parse the specification form: transformationSequence as alias. Keep
+	// accepting the historical internal $apply=... form for parser compatibility.
 	// Split at the top-level comma to separate $apply= value from optional alias
 	applyPrefix := "$apply="
-	if !strings.HasPrefix(strings.ToLower(content), applyPrefix) {
-		return nil, fmt.Errorf("nest argument must start with $apply=")
+	applyContent := content
+	if strings.HasPrefix(strings.ToLower(content), applyPrefix) {
+		applyContent = content[len(applyPrefix):]
 	}
-	applyContent := content[len(applyPrefix):]
 
 	// Check for an optional alias after the transformation sequence
 	alias := ""
@@ -1146,6 +1147,19 @@ func parseNestTransformation(transStr string, entityMetadata *metadata.EntityMet
 	if commaIdx >= 0 {
 		alias = strings.TrimSpace(applyContent[commaIdx+1:])
 		applyContent = strings.TrimSpace(applyContent[:commaIdx])
+	}
+	if alias == "" {
+		lower := strings.ToLower(applyContent)
+		if idx := strings.LastIndex(lower, " as "); idx > 0 {
+			alias = strings.TrimSpace(applyContent[idx+4:])
+			applyContent = strings.TrimSpace(applyContent[:idx])
+		}
+	}
+	if alias == "" && strings.HasPrefix(strings.ToLower(content), applyPrefix) {
+		alias = "value"
+	}
+	if alias == "" || !isIdentifier(alias) {
+		return nil, fmt.Errorf("nest requires a transformation sequence followed by as alias")
 	}
 
 	innerTransforms, err := parseApplyWithCaseSensitivity(applyContent, entityMetadata, maxInClauseSize, caseInsensitive)
@@ -1198,7 +1212,7 @@ func parseFromTransformation(transStr string) (*ApplyTransformation, error) {
 func validateExecutableApply(seq []ApplyTransformation) error {
 	for _, tr := range seq {
 		switch tr.Type {
-		case ApplyTypeNest, ApplyTypeFrom, ApplyTypeFunction:
+		case ApplyTypeFrom, ApplyTypeFunction:
 			return fmt.Errorf("unsupported $apply transformation: %s", tr.Type)
 		}
 		if tr.Concat != nil {
