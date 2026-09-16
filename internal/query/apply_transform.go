@@ -131,7 +131,7 @@ func applyTransformations(db *gorm.DB, transformations []ApplyTransformation, en
 			db = applySearchTransformation(db, transformation.Search, entityMetadata)
 		case ApplyTypeTopCount, ApplyTypeBottomCount, ApplyTypeTopPercent, ApplyTypeBottomPercent, ApplyTypeTopSum, ApplyTypeBottomSum:
 			db = applySetTransformation(db, transformation, entityMetadata)
-		case ApplyTypeConcat, ApplyTypeAncestors, ApplyTypeDescendants, ApplyTypeTraverse, ApplyTypeFunction, ApplyTypeNest, ApplyTypeFrom:
+		case ApplyTypeConcat, ApplyTypeAncestors, ApplyTypeDescendants, ApplyTypeTraverse, ApplyTypeFunction, ApplyTypeNest, ApplyTypeAddNested, ApplyTypeFrom:
 			db.Error = fmt.Errorf("transformation %s requires a structural executor", transformation.Type)
 		}
 		outputMetadata = applyOutputMetadata(outputMetadata, transformation)
