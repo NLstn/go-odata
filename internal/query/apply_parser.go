@@ -1156,10 +1156,7 @@ func parseNestTransformation(transStr string, entityMetadata *metadata.EntityMet
 			applyContent = strings.TrimSpace(applyContent[:idx])
 		}
 	}
-	if alias == "" && legacyForm {
-		alias = "value"
-	}
-	if alias == "" || !isIdentifier(alias) {
+	if (!legacyForm && alias == "") || (alias != "" && !isIdentifier(alias)) {
 		return nil, fmt.Errorf("nest requires a transformation sequence followed by as alias")
 	}
 
