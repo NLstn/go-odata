@@ -111,6 +111,7 @@ func canonicalizeApplyTransformationKeyword(transStr string) string {
 		"top(",
 		"skip(",
 		"nest(",
+		"addnested(",
 		"from(",
 	}
 
@@ -218,6 +219,8 @@ func parseApplyTransformationWithAliases(transStr string, entityMetadata *metada
 		return parseHierarchyTransformationWithMetadata(transStr, ApplyTypeTraverse, entityMetadata, maxInClauseSize, caseInsensitive)
 	} else if strings.HasPrefix(transStr, "nest(") {
 		return parseNestTransformation(transStr, entityMetadata, maxInClauseSize, caseInsensitive)
+	} else if strings.HasPrefix(transStr, "addnested(") {
+		return parseAddNestedTransformation(transStr, entityMetadata, maxInClauseSize, caseInsensitive)
 	} else if strings.HasPrefix(transStr, "from(") {
 		return parseFromTransformation(transStr)
 	} else if fnName, ok := parseServiceDefinedFunctionTransformation(transStr); ok {
@@ -1146,6 +1149,50 @@ func parseNestTransformation(transStr string, entityMetadata *metadata.EntityMet
 	}, nil
 }
 
+func parseAddNestedTransformation(transStr string, entityMetadata *metadata.EntityMetadata, maxInClauseSize int, caseInsensitive bool) (*ApplyTransformation, error) {
+	content := transStr[len("addnested("):]
+	if !strings.HasSuffix(content, ")") {
+		return nil, fmt.Errorf("missing closing parenthesis in addnested")
+	}
+	parts := splitAggregateExpressions(strings.TrimSpace(content[:len(content)-1]))
+	if len(parts) < 2 || entityMetadata == nil {
+		return nil, fmt.Errorf("addnested requires a path and transformation sequence")
+	}
+	path := strings.TrimSpace(parts[0])
+	if path == "" || strings.Contains(path, "/") {
+		return nil, fmt.Errorf("addnested currently requires a single navigation path")
+	}
+	nav := entityMetadata.FindNavigationProperty(path)
+	if nav == nil || !nav.NavigationIsArray {
+		return nil, fmt.Errorf("addnested path '%s' must be a collection navigation property", path)
+	}
+	target, err := entityMetadata.ResolveNavigationTarget(path)
+	if err != nil {
+		return nil, fmt.Errorf("resolve addnested target: %w", err)
+	}
+	sequences := make([]AddNestedSequence, 0, len(parts)-1)
+	aliases := make(map[string]bool)
+	for _, raw := range parts[1:] {
+		binding := strings.TrimSpace(raw)
+		lower := strings.ToLower(binding)
+		idx := strings.LastIndex(lower, " as ")
+		if idx <= 0 {
+			return nil, fmt.Errorf("addnested transformation must end with as alias")
+		}
+		alias := strings.TrimSpace(binding[idx+4:])
+		if alias == "" || !isIdentifier(alias) || aliases[alias] {
+			return nil, fmt.Errorf("invalid or duplicate addnested alias '%s'", alias)
+		}
+		sequence, err := parseApplyWithCaseSensitivity(strings.TrimSpace(binding[:idx]), target, maxInClauseSize, caseInsensitive)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse addnested sequence: %w", err)
+		}
+		aliases[alias] = true
+		sequences = append(sequences, AddNestedSequence{Apply: sequence, Alias: alias})
+	}
+	return &ApplyTransformation{Type: ApplyTypeAddNested, AddNested: &AddNestedTransformation{Path: path, Sequences: sequences}}, nil
+}
+
 // parseFromTransformation parses a from(NavigationPath) transformation.
 // Format: from(NavigationPath)
 //
@@ -1195,6 +1242,13 @@ func validateExecutableApply(seq []ApplyTransformation) error {
 		if tr.GroupBy != nil {
 			if err := validateExecutableApply(tr.GroupBy.Transform); err != nil {
 				return err
+			}
+		}
+		if tr.AddNested != nil {
+			for _, sequence := range tr.AddNested.Sequences {
+				if err := validateExecutableApply(sequence.Apply); err != nil {
+					return err
+				}
 			}
 		}
 	}
