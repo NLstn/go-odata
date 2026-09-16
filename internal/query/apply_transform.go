@@ -58,10 +58,18 @@ func applyTransformations(db *gorm.DB, transformations []ApplyTransformation, en
 	db = applyDefaultMapResultSelect(db, dialect, entityMetadata)
 
 	hasGrouping := false
+	outputMetadata := entityMetadata
 	// Initialize alias expressions map in GORM context for this query
 	db = setAliasExprsInDB(db, make(map[string]string))
 
-	for _, transformation := range transformations {
+	for i, transformation := range transformations {
+		if i > 0 {
+			previous := transformations[i-1]
+			if previous.Type == ApplyTypeCompute || previous.Type == ApplyTypeTop || previous.Type == ApplyTypeSkip || (hasGrouping && (transformation.Type == ApplyTypeCompute || transformation.Type == ApplyTypeAggregate || transformation.Type == ApplyTypeGroupBy)) {
+				db, entityMetadata = materializeApplyStage(db, outputMetadata)
+				hasGrouping = false
+			}
+		}
 		switch transformation.Type {
 		case ApplyTypeIdentity:
 			// identity is a no-op transformation.
@@ -123,29 +131,12 @@ func applyTransformations(db *gorm.DB, transformations []ApplyTransformation, en
 			db = applySearchTransformation(db, transformation.Search, entityMetadata)
 		case ApplyTypeTopCount, ApplyTypeBottomCount, ApplyTypeTopPercent, ApplyTypeBottomPercent, ApplyTypeTopSum, ApplyTypeBottomSum:
 			db = applySetTransformation(db, transformation, entityMetadata)
-		case ApplyTypeConcat:
-			// concat is parsed and carried through the transformation model.
-			// Full UNION-ALL execution is not yet implemented at SQL-builder layer.
-			// Leave the current set unchanged.
-		case ApplyTypeAncestors, ApplyTypeDescendants, ApplyTypeTraverse:
-			// Hierarchy transformations are recognized and carried through.
-			// Full hierarchy semantics are handled outside the generic SQL-builder path.
-		case ApplyTypeFunction:
-			// Service-defined set transformations are recognized by the parser.
-			// Generic SQL-builder execution currently treats them as pass-through.
-		case ApplyTypeNest:
-			// nest() produces a nested sub-collection property on each result row.
-			// Full sub-query nesting requires post-processing outside the SQL builder.
-			// Leave the current set unchanged; the parsed NestTransformation is available
-			// in the transformation model for higher-level handlers to act on.
-		case ApplyTypeFrom:
-			// from() changes the input collection to a related navigation path.
-			// Implementing this requires following a navigation property to a related
-			// entity set and rebasing the query, which is not yet supported at the
-			// SQL-builder layer. Leave the current set unchanged.
+		case ApplyTypeConcat, ApplyTypeAncestors, ApplyTypeDescendants, ApplyTypeTraverse, ApplyTypeFunction, ApplyTypeNest, ApplyTypeFrom:
+			db.Error = fmt.Errorf("transformation %s requires a structural executor", transformation.Type)
 		}
+		outputMetadata = applyOutputMetadata(outputMetadata, transformation)
 	}
-	return db, hasGrouping
+	return db.Set("_odata_apply_input_metadata", entityMetadata).Set("_odata_apply_output_metadata", outputMetadata), hasGrouping
 }
 
 // applyDefaultMapResultSelect builds a SELECT clause that aliases every scalar
@@ -754,6 +745,14 @@ func buildComputeSQLWithDB(dialect string, computeExpr ComputeExpression, entity
 	}
 
 	expression := computeExpr.Expression
+	if expression.Property != "" && expression.Left == nil && expression.Right == nil && (expression.Operator == "" || (expression.Operator == OpEqual && expression.Value == true)) {
+		prop, prefix, err := entityMetadata.ResolvePropertyPath(expression.Property)
+		if err != nil || prop.IsNavigationProp || prop.IsComplexType || prop.IsStream {
+			return "", "", ""
+		}
+		expressionSQL := quoteTableName(dialect, entityMetadata.TableName) + "." + quoteIdent(dialect, prefix+prop.ColumnName)
+		return fmt.Sprintf("%s as %s", expressionSQL, quoteIdent(dialect, computeExpr.Alias)), computeExpr.Alias, expressionSQL
+	}
 
 	if expression.Left == nil &&
 		expression.Right == nil &&
@@ -1271,4 +1270,18 @@ func addOrderByNavigationJoins(db *gorm.DB, orderBy []OrderByItem, entityMetadat
 	}
 
 	return db
+}
+
+// materializeApplyStage makes an earlier projection or page an input relation.
+func materializeApplyStage(db *gorm.DB, source *metadata.EntityMetadata) (*gorm.DB, *metadata.EntityMetadata) {
+	copied := *source
+	copied.Properties = append([]metadata.PropertyMetadata(nil), source.Properties...)
+	for i := range copied.Properties {
+		copied.Properties[i].ColumnName = copied.Properties[i].JsonName
+	}
+	dialect := getDatabaseDialect(db)
+	result := db.Session(&gorm.Session{NewDB: true}).Table("(?) AS "+quoteIdent(dialect, copied.TableName), db)
+	result = applyDefaultMapResultSelect(result, dialect, &copied)
+	result = setAliasExprsInDB(result, make(map[string]string))
+	return result, &copied
 }

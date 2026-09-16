@@ -385,88 +385,26 @@ func TestParseApply_From(t *testing.T) {
 	}
 }
 
-// TestApplyNest_Passthrough verifies that the nest transformation leaves the
-// query set unchanged (pass-through behaviour) at the SQL-builder layer.
-func TestApplyNest_Passthrough(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Silent),
-	})
+// Unsupported SQL execution must fail rather than silently returning unchanged rows.
+func TestApplyUnsupportedStructuralExecution(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	if err != nil {
-		t.Fatalf("failed to open in-memory SQLite: %v", err)
+		t.Fatal(err)
 	}
-
-	if err := db.AutoMigrate(&ApplyTestEntity{}); err != nil {
-		t.Fatalf("failed to migrate: %v", err)
-	}
-
-	entities := []ApplyTestEntity{
-		{ID: 1, Name: "A", Category: "X", Price: 10.0, Quantity: 2},
-		{ID: 2, Name: "B", Category: "Y", Price: 20.0, Quantity: 3},
-	}
-	if err := db.Create(&entities).Error; err != nil {
-		t.Fatalf("failed to seed data: %v", err)
-	}
-
-	meta := getApplyTestMetadata(t)
-
-	// nest() is a pass-through at the SQL-builder level; the full set is returned.
-	applyStr := "nest($apply=aggregate(Price with sum as Total))"
-	transformations, err := parseApply(applyStr, meta, 0)
+	raw, err := db.DB()
 	if err != nil {
-		t.Fatalf("parseApply failed: %v", err)
+		t.Fatal(err)
 	}
-
-	resultDB, _ := applyTransformations(db.Session(&gorm.Session{}), transformations, meta)
-	var results []ApplyTestEntity
-	if err := resultDB.Find(&results).Error; err != nil {
-		t.Fatalf("query failed: %v", err)
-	}
-
-	// Pass-through: all entities should be returned unchanged
-	if len(results) != 2 {
-		t.Errorf("expected 2 entities (pass-through), got %d", len(results))
-	}
-}
-
-// TestApplyFrom_Passthrough verifies that the from transformation leaves the
-// query set unchanged (pass-through behaviour) at the SQL-builder layer.
-func TestApplyFrom_Passthrough(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Silent),
-	})
-	if err != nil {
-		t.Fatalf("failed to open in-memory SQLite: %v", err)
-	}
-
-	if err := db.AutoMigrate(&ApplyTestEntity{}); err != nil {
-		t.Fatalf("failed to migrate: %v", err)
-	}
-
-	entities := []ApplyTestEntity{
-		{ID: 1, Name: "A", Category: "X", Price: 10.0, Quantity: 2},
-		{ID: 2, Name: "B", Category: "Y", Price: 20.0, Quantity: 3},
-	}
-	if err := db.Create(&entities).Error; err != nil {
-		t.Fatalf("failed to seed data: %v", err)
-	}
-
-	meta := getApplyTestMetadata(t)
-
-	applyStr := "from(Lines)"
-	transformations, err := parseApply(applyStr, meta, 0)
-	if err != nil {
-		t.Fatalf("parseApply failed: %v", err)
-	}
-
-	resultDB, _ := applyTransformations(db.Session(&gorm.Session{}), transformations, meta)
-	var results []ApplyTestEntity
-	if err := resultDB.Find(&results).Error; err != nil {
-		t.Fatalf("query failed: %v", err)
-	}
-
-	// Pass-through: all entities should be returned unchanged
-	if len(results) != 2 {
-		t.Errorf("expected 2 entities (pass-through), got %d", len(results))
+	t.Cleanup(func() { _ = raw.Close() })
+	for _, expr := range []string{"nest($apply=aggregate(Price with sum as Total))", "from(Lines)", "concat(identity,identity)"} {
+		trans, err := parseApply(expr, getApplyTestMetadata(t), 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		result, _ := applyTransformations(db.Session(&gorm.Session{}), trans, getApplyTestMetadata(t))
+		if result.Error == nil {
+			t.Errorf("silently ignored %s", expr)
+		}
 	}
 }
 

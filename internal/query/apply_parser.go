@@ -35,6 +35,9 @@ func parseApplyOption(queryParams map[string][]string, entityMetadata *metadata.
 	if err != nil {
 		return fmt.Errorf("invalid $apply: %w", err)
 	}
+	if err := validateExecutableApply(transformations); err != nil {
+		return err
+	}
 	options.Apply = transformations
 	return nil
 }
@@ -75,6 +78,7 @@ func parseApplyWithCaseSensitivity(applyStr string, entityMetadata *metadata.Ent
 
 		// Extract aliases from this transformation for use in subsequent transformations
 		extractAliasesFromTransformation(transformation, computedAliases)
+		entityMetadata = applyOutputMetadata(entityMetadata, *transformation)
 	}
 
 	if len(transformations) == 0 {
@@ -207,11 +211,11 @@ func parseApplyTransformationWithAliases(transStr string, entityMetadata *metada
 	} else if strings.HasPrefix(transStr, "bottomsum(") {
 		return parseSetTransformation(transStr, entityMetadata, ApplyTypeBottomSum)
 	} else if strings.HasPrefix(transStr, "ancestors(") {
-		return parseHierarchyTransformation(transStr, ApplyTypeAncestors)
+		return parseHierarchyTransformationWithMetadata(transStr, ApplyTypeAncestors, entityMetadata, maxInClauseSize, caseInsensitive)
 	} else if strings.HasPrefix(transStr, "descendants(") {
-		return parseHierarchyTransformation(transStr, ApplyTypeDescendants)
+		return parseHierarchyTransformationWithMetadata(transStr, ApplyTypeDescendants, entityMetadata, maxInClauseSize, caseInsensitive)
 	} else if strings.HasPrefix(transStr, "traverse(") {
-		return parseHierarchyTransformation(transStr, ApplyTypeTraverse)
+		return parseHierarchyTransformationWithMetadata(transStr, ApplyTypeTraverse, entityMetadata, maxInClauseSize, caseInsensitive)
 	} else if strings.HasPrefix(transStr, "nest(") {
 		return parseNestTransformation(transStr, entityMetadata, maxInClauseSize, caseInsensitive)
 	} else if strings.HasPrefix(transStr, "from(") {
@@ -230,6 +234,14 @@ func extractAliasesFromTransformation(trans *ApplyTransformation, aliases map[st
 	}
 
 	switch trans.Type {
+	case ApplyTypeConcat:
+		if trans.Concat != nil {
+			for _, branch := range trans.Concat.Sequences {
+				for i := range branch {
+					extractAliasesFromTransformation(&branch[i], aliases)
+				}
+			}
+		}
 	case ApplyTypeGroupBy:
 		// groupby creates a virtual $count property that can be used in subsequent filters
 		if trans.GroupBy != nil {
@@ -472,8 +484,8 @@ func parseConcatTransformation(transStr string, entityMetadata *metadata.EntityM
 	}
 
 	parts := splitAggregateExpressions(content)
-	if len(parts) == 0 {
-		return nil, fmt.Errorf("concat requires at least one transformation sequence")
+	if len(parts) < 2 {
+		return nil, fmt.Errorf("concat requires at least two transformation sequences")
 	}
 
 	sequences := make([][]ApplyTransformation, 0, len(parts))
@@ -557,20 +569,6 @@ func parseJoinTransformation(transStr string, entityMetadata *metadata.EntityMet
 			Transform: nestedTransform,
 		},
 	}, nil
-}
-
-func parseHierarchyTransformation(transStr string, t ApplyTransformationType) (*ApplyTransformation, error) {
-	keyword := string(t) + "("
-	content := transStr[len(keyword):]
-	if !strings.HasSuffix(content, ")") {
-		return nil, fmt.Errorf("missing closing parenthesis in %s", t)
-	}
-	content = strings.TrimSpace(content[:len(content)-1])
-	if content == "" {
-		return nil, fmt.Errorf("%s requires fully-specified hierarchy parameters and must not be invoked without arguments", t)
-	}
-	// Hierarchy traversal semantics are not yet implemented
-	return nil, fmt.Errorf("%s requires fully-specified hierarchy parameters; hierarchy traversal is not yet supported", t)
 }
 
 func parseServiceDefinedFunctionTransformation(transStr string) (string, bool) {
@@ -940,15 +938,19 @@ func parseCompute(transStr string, entityMetadata *metadata.EntityMetadata, maxI
 	// Parse individual compute expressions
 	exprStrs := splitComputeExpressions(content)
 	expressions := make([]ComputeExpression, 0, len(exprStrs))
+	aliases := make(map[string]bool)
 
 	for _, exprStr := range exprStrs {
 		expr, err := parseComputeExpression(exprStr, entityMetadata, maxInClauseSize)
 		if err != nil {
 			return nil, err
 		}
+		if !isIdentifier(expr.Alias) || aliases[expr.Alias] || (entityMetadata != nil && entityMetadata.FindProperty(expr.Alias) != nil) {
+			return nil, fmt.Errorf("invalid or colliding compute alias %q", expr.Alias)
+		}
+		aliases[expr.Alias] = true
 		expressions = append(expressions, *expr)
 	}
-
 	if len(expressions) == 0 {
 		return nil, errNoValidComputeExpressions
 	}
@@ -1191,4 +1193,26 @@ func parseFromTransformation(transStr string) (*ApplyTransformation, error) {
 			Path: path,
 		},
 	}, nil
+}
+
+func validateExecutableApply(seq []ApplyTransformation) error {
+	for _, tr := range seq {
+		switch tr.Type {
+		case ApplyTypeNest, ApplyTypeFrom, ApplyTypeFunction:
+			return fmt.Errorf("unsupported $apply transformation: %s", tr.Type)
+		}
+		if tr.Concat != nil {
+			for _, branch := range tr.Concat.Sequences {
+				if err := validateExecutableApply(branch); err != nil {
+					return err
+				}
+			}
+		}
+		if tr.GroupBy != nil {
+			if err := validateExecutableApply(tr.GroupBy.Transform); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }

@@ -288,6 +288,13 @@ func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.Qu
 
 	fts := h.ftsManager
 
+	if containsHierarchy(modifiedOptions.Apply) {
+		rows, err := h.executeHierarchyPipeline(db, &modifiedOptions, h.metadata)
+		if err != nil {
+			return nil, &collectionRequestError{StatusCode: http.StatusBadRequest, ErrorCode: ErrMsgInvalidQueryOptions, Message: err.Error()}
+		}
+		return rows, nil
+	}
 	if structuralIdx := findFirstStructuralTransformation(modifiedOptions.Apply); structuralIdx > 0 {
 		structural := modifiedOptions.Apply[structuralIdx]
 		switch structural.Type {
@@ -559,6 +566,16 @@ func applyMapTopSkip(results []map[string]interface{}, top *int, skip *int) []ma
 func applySupportedTailTransformations(results []map[string]interface{}, tail []query.ApplyTransformation) ([]map[string]interface{}, error) {
 	for _, tr := range tail {
 		switch tr.Type {
+		case query.ApplyTypeConcat:
+			combined := make([]map[string]interface{}, 0)
+			for _, branch := range tr.Concat.Sequences {
+				part, err := applySupportedTailTransformations(cloneApplyRows(results), branch)
+				if err != nil {
+					return nil, err
+				}
+				combined = append(combined, part...)
+			}
+			results = combined
 		case query.ApplyTypeIdentity:
 			// no-op
 		case query.ApplyTypeFilter:
@@ -1252,12 +1269,31 @@ func (h *EntityHandler) executeConcatApplyPipelineForMetadata(db *gorm.DB, optio
 		seqOptions.Skip = nil
 		seqOptions.Top = nil
 
+		seqOptions.Filter = nil
+		seqOptions.Compute = nil
+		seqOptions.Select = nil
 		seqDB := db.Session(&gorm.Session{})
-		seqDB = query.ApplyQueryOptionsWithFTS(seqDB, &seqOptions, entityMetadata, fts, tableName, h.logger)
-
 		var part []map[string]interface{}
-		if err := seqDB.Find(&part).Error; err != nil {
-			return nil, err
+		if idx := findFirstStructuralTransformation(sequence); idx >= 0 && sequence[idx].Type == query.ApplyTypeConcat {
+			seqOptions.Apply = promoteConcatToLeading(idx, sequence)
+			var err error
+			part, err = h.executeConcatApplyPipelineForMetadata(seqDB, &seqOptions, fts, tableName, entityMetadata)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			seqDB = query.ApplyQueryOptionsWithFTS(seqDB, &seqOptions, entityMetadata, fts, tableName, h.logger)
+			if err := seqDB.Find(&part).Error; err != nil {
+				return nil, err
+			}
+			normalizeComputedResultValues(part, &seqOptions, entityMetadata)
+			for alias := range query.AggregateAliases(sequence) {
+				for _, row := range part {
+					if num, ok := coerceNumericAggregate(row[alias]); ok {
+						row[alias] = num
+					}
+				}
+			}
 		}
 		results = append(results, part...)
 	}
@@ -1269,6 +1305,14 @@ func (h *EntityHandler) executeConcatApplyPipelineForMetadata(db *gorm.DB, optio
 		return nil, err
 	}
 
+	if options.Compute != nil {
+		results, err = applyMapCompute(results, options.Compute)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	results = applyMapFilter(results, options.Filter)
 	if len(options.OrderBy) > 0 {
 		applyMapOrderBy(results, options.OrderBy)
 	}
@@ -1633,6 +1677,14 @@ func extractAliasesFromApplyTransformation(trans *query.ApplyTransformation, ali
 	}
 
 	switch trans.Type {
+	case query.ApplyTypeConcat:
+		if trans.Concat != nil {
+			for _, seq := range trans.Concat.Sequences {
+				for i := range seq {
+					extractAliasesFromApplyTransformation(&seq[i], aliases)
+				}
+			}
+		}
 	case query.ApplyTypeGroupBy:
 		if trans.GroupBy != nil {
 			aliases["$count"] = true

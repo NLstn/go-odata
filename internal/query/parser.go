@@ -66,6 +66,7 @@ type ApplyTransformation struct {
 	Top       *int
 	Skip      *int
 	Search    *string
+	Hierarchy *HierarchyTransformation
 	Concat    *ConcatTransformation
 	Join      *JoinTransformation
 	Set       *SetTransformation
@@ -1255,4 +1256,13 @@ func resolveAliasesInString(s string, aliases map[string]string) (string, error)
 // isAlphaNumeric checks if a rune is alphanumeric
 func isAlphaNumeric(r rune) bool {
 	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9')
+}
+
+// HierarchyTransformation describes a validated single-parent hierarchy.
+type HierarchyTransformation struct {
+	Nodes, Qualifier, Property, NodeProperty, ParentProperty string
+	Start                                                    []ApplyTransformation
+	Distance                                                 int
+	KeepStart, PostOrder                                     bool
+	OrderBy                                                  []OrderByItem
 }

@@ -903,6 +903,14 @@ func (h *MetadataHandler) buildAnnotationValueElementXML(value interface{}, inde
 }
 
 func annotationPrimitiveAttribute(value interface{}) (string, string, bool) {
+	if expr, ok := value.(map[string]interface{}); ok && len(expr) == 1 {
+		for _, kind := range []string{"PropertyPath", "NavigationPropertyPath"} {
+			if path, ok := expr["$"+kind].(string); ok {
+				return kind, escapeXML(path), true
+			}
+		}
+	}
+
 	switch typed := value.(type) {
 	case bool:
 		return "Bool", strconv.FormatBool(typed), true
@@ -951,6 +959,7 @@ func escapeXML(s string) string {
 func vocabularyURI(namespace string) string {
 	// Standard OData vocabularies
 	standardVocabularyURIs := map[string]string{
+		"Org.OData.Aggregation.V1":   "https://oasis-tcs.github.io/odata-vocabularies/vocabularies/Org.OData.Aggregation.V1.xml",
 		"Org.OData.Core.V1":          "https://oasis-tcs.github.io/odata-vocabularies/vocabularies/Org.OData.Core.V1.xml",
 		"Org.OData.Capabilities.V1":  "https://oasis-tcs.github.io/odata-vocabularies/vocabularies/Org.OData.Capabilities.V1.xml",
 		"Org.OData.Validation.V1":    "https://oasis-tcs.github.io/odata-vocabularies/vocabularies/Org.OData.Validation.V1.xml",

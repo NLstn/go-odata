@@ -63,6 +63,29 @@ func ApplyQueryOptionsWithFTS(db *gorm.DB, options *QueryOptions, entityMetadata
 	if len(options.Apply) > 0 {
 		var hasGrouping bool
 		db, hasGrouping = applyTransformations(db, options.Apply, entityMetadata)
+		if value, ok := db.Get("_odata_apply_input_metadata"); ok {
+			if current, ok := value.(*metadata.EntityMetadata); ok {
+				entityMetadata = current
+			}
+		}
+		last := options.Apply[len(options.Apply)-1]
+		if (last.Type == ApplyTypeTop || last.Type == ApplyTypeSkip) && (options.Filter != nil || options.Compute != nil || len(options.OrderBy) > 0 || options.Top != nil || options.Skip != nil) {
+			if value, ok := db.Get("_odata_apply_output_metadata"); ok {
+				if output, ok := value.(*metadata.EntityMetadata); ok {
+					db, entityMetadata = materializeApplyStage(db, output)
+					hasGrouping = false
+				}
+			}
+		}
+		if options.Compute != nil {
+			if value, ok := db.Get("_odata_apply_output_metadata"); ok {
+				if output, ok := value.(*metadata.EntityMetadata); ok {
+					db, entityMetadata = materializeApplyStage(db, output)
+					hasGrouping = false
+				}
+			}
+			db = applyCompute(db, dialect, options.Compute, entityMetadata)
+		}
 
 		// Per the OData Data Aggregation extension, system query options besides $apply
 		// (here $filter, $orderby, $skip, $top) apply to the transformed result set, not

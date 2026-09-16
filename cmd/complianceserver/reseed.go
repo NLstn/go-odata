@@ -57,6 +57,17 @@ func seedDatabase(db *gorm.DB) error {
 	//nolint:errcheck
 	_ = db.Migrator().DropTable(&entities.DecimalSample{})
 
+	if err := db.Migrator().DropTable(&entities.HierarchyNode{}); err != nil {
+		return err
+	}
+	if err := db.AutoMigrate(&entities.HierarchyNode{}); err != nil {
+		return err
+	}
+	for _, node := range entities.GetSampleHierarchyNodes() {
+		if err := db.Create(&node).Error; err != nil {
+			return err
+		}
+	}
 	// Drop FTS tables if they exist to ensure search indexes are rebuilt
 	// Only for SQLite - FTS tables are virtual tables specific to SQLite
 	if dialectName == "sqlite" {
