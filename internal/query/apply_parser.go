@@ -1123,7 +1123,8 @@ func parseNestTransformation(transStr string, entityMetadata *metadata.EntityMet
 	// Split at the top-level comma to separate $apply= value from optional alias
 	applyPrefix := "$apply="
 	applyContent := content
-	if strings.HasPrefix(strings.ToLower(content), applyPrefix) {
+	legacyForm := strings.HasPrefix(strings.ToLower(content), applyPrefix)
+	if legacyForm {
 		applyContent = content[len(applyPrefix):]
 	}
 
@@ -1148,14 +1149,14 @@ func parseNestTransformation(transStr string, entityMetadata *metadata.EntityMet
 		alias = strings.TrimSpace(applyContent[commaIdx+1:])
 		applyContent = strings.TrimSpace(applyContent[:commaIdx])
 	}
-	if alias == "" {
+	if alias == "" && !legacyForm {
 		lower := strings.ToLower(applyContent)
 		if idx := strings.LastIndex(lower, " as "); idx > 0 {
 			alias = strings.TrimSpace(applyContent[idx+4:])
 			applyContent = strings.TrimSpace(applyContent[:idx])
 		}
 	}
-	if alias == "" && strings.HasPrefix(strings.ToLower(content), applyPrefix) {
+	if alias == "" && legacyForm {
 		alias = "value"
 	}
 	if alias == "" || !isIdentifier(alias) {
