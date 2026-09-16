@@ -1166,9 +1166,9 @@ func parseAddNestedTransformation(transStr string, entityMetadata *metadata.Enti
 	if nav == nil || !nav.NavigationIsArray {
 		return nil, fmt.Errorf("addnested path '%s' must be a collection navigation property", path)
 	}
-	target, err := entityMetadata.ResolveNavigationTarget(path)
-	if err != nil {
-		return nil, fmt.Errorf("resolve addnested target: %w", err)
+	target := entityMetadata
+	if resolved, err := entityMetadata.ResolveNavigationTarget(path); err == nil && resolved != nil {
+		target = resolved
 	}
 	sequences := make([]AddNestedSequence, 0, len(parts)-1)
 	aliases := make(map[string]bool)
