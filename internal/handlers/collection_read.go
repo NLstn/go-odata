@@ -324,6 +324,8 @@ func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.Qu
 			results, err = h.executeJoinApplyPipelineForMetadata(db, &modifiedOptions, h.metadata)
 		case query.ApplyTypeNest:
 			results, err = h.executeNestApplyPipeline(db, &modifiedOptions, fts, tableName, h.metadata)
+		case query.ApplyTypeAddNested:
+			results, err = h.executeAddNestedApplyPipeline(db, &modifiedOptions, h.metadata)
 		default:
 			err = fmt.Errorf("unsupported structural apply transformation: %s", modifiedOptions.Apply[0].Type)
 		}
@@ -494,6 +496,8 @@ func hasLeadingStructuralApplyTransformation(apply []query.ApplyTransformation) 
 		return first.Join != nil
 	case query.ApplyTypeNest:
 		return first.Nest != nil
+	case query.ApplyTypeAddNested:
+		return first.AddNested != nil
 	default:
 		return false
 	}
@@ -512,6 +516,10 @@ func findFirstStructuralTransformation(apply []query.ApplyTransformation) int {
 			}
 		case query.ApplyTypeNest:
 			if tr.Nest != nil {
+				return i
+			}
+		case query.ApplyTypeAddNested:
+			if tr.AddNested != nil {
 				return i
 			}
 		}
@@ -1277,6 +1285,56 @@ func (h *EntityHandler) executeNestApplyPipeline(db *gorm.DB, options *query.Que
 	var rows []map[string]interface{}
 	if err := base.Find(&rows).Error; err != nil { return nil, err }
 	return applySupportedTailTransformations(rows, options.Apply)
+}
+
+// executeAddNestedApplyPipeline evaluates the CS03 addnested transformation for
+// a collection-valued navigation property. Each input entity is cloned and each
+// requested transformation sequence is evaluated over that entity's related
+// collection, producing a dynamic property under its alias.
+func (h *EntityHandler) executeAddNestedApplyPipeline(db *gorm.DB, options *query.QueryOptions, entityMetadata *metadata.EntityMetadata) ([]map[string]interface{}, error) {
+	if len(options.Apply) == 0 || options.Apply[0].AddNested == nil {
+		return nil, fmt.Errorf("invalid addnested apply pipeline")
+	}
+	add := options.Apply[0].AddNested
+	nav := entityMetadata.FindNavigationProperty(add.Path)
+	if nav == nil || !nav.NavigationIsArray {
+		return nil, fmt.Errorf("addnested path '%s' must be a collection navigation property", add.Path)
+	}
+	target, err := entityMetadata.ResolveNavigationTarget(add.Path)
+	if err != nil {
+		return nil, err
+	}
+	base := reflect.New(reflect.SliceOf(entityMetadata.EntityType)).Interface()
+	if err := db.Session(&gorm.Session{}).Preload(nav.Name, childPreloadScope(target)).Find(base).Error; err != nil {
+		return nil, err
+	}
+	items := reflect.ValueOf(base).Elem()
+	results := make([]map[string]interface{}, 0, items.Len())
+	for i := 0; i < items.Len(); i++ {
+		parent := items.Index(i)
+		row := entityValueToMap(parent, entityMetadata)
+		if row == nil {
+			continue
+		}
+		navValue := parent.FieldByName(nav.FieldName)
+		children := make([]map[string]interface{}, 0)
+		if navValue.IsValid() && navValue.Kind() == reflect.Slice {
+			for j := 0; j < navValue.Len(); j++ {
+				if child := entityValueToMap(navValue.Index(j), target); child != nil {
+					children = append(children, child)
+				}
+			}
+		}
+		for _, seq := range add.Sequences {
+			transformed, err := applySupportedTailTransformations(cloneApplyRows(children), seq.Apply)
+			if err != nil {
+				return nil, err
+			}
+			row[seq.Alias] = transformed
+		}
+		results = append(results, row)
+	}
+	return results, nil
 }
 
 func (h *EntityHandler) executeConcatApplyPipelineForMetadata(db *gorm.DB, options *query.QueryOptions, fts *query.FTSManager, tableName string, entityMetadata *metadata.EntityMetadata) ([]map[string]interface{}, error) {
