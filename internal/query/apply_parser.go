@@ -1115,48 +1115,22 @@ func parseNestTransformation(transStr string, entityMetadata *metadata.EntityMet
 	}
 	content = strings.TrimSpace(content[:len(content)-1])
 	if content == "" {
-		return nil, fmt.Errorf("nest requires a $apply= argument")
+		return nil, fmt.Errorf("nest requires a transformation sequence and alias")
 	}
 
-	// Parse the specification form: transformationSequence as alias. Keep
-	// accepting the historical internal $apply=... form for parser compatibility.
-	// Split at the top-level comma to separate $apply= value from optional alias
-	applyPrefix := "$apply="
+	// Parse the specification form: transformationSequence as alias.
 	applyContent := content
-	legacyForm := strings.HasPrefix(strings.ToLower(content), applyPrefix)
-	if legacyForm {
-		applyContent = content[len(applyPrefix):]
-	}
 
 	// Check for an optional alias after the transformation sequence
 	alias := ""
-	// Split top-level: everything before the last top-level comma is the $apply, after is alias
-	commaIdx := -1
-	depth := 0
-	for i := 0; i < len(applyContent); i++ {
-		switch applyContent[i] {
-		case '(':
-			depth++
-		case ')':
-			depth--
-		case ',':
-			if depth == 0 {
-				commaIdx = i
-			}
-		}
-	}
-	if commaIdx >= 0 {
-		alias = strings.TrimSpace(applyContent[commaIdx+1:])
-		applyContent = strings.TrimSpace(applyContent[:commaIdx])
-	}
-	if alias == "" && !legacyForm {
+	if alias == "" {
 		lower := strings.ToLower(applyContent)
 		if idx := strings.LastIndex(lower, " as "); idx > 0 {
 			alias = strings.TrimSpace(applyContent[idx+4:])
 			applyContent = strings.TrimSpace(applyContent[:idx])
 		}
 	}
-	if (!legacyForm && alias == "") || (alias != "" && !isIdentifier(alias)) {
+	if alias == "" || !isIdentifier(alias) {
 		return nil, fmt.Errorf("nest requires a transformation sequence followed by as alias")
 	}
 
