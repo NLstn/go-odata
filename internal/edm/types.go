@@ -1,10 +1,16 @@
 package edm
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"sync"
 )
+
+// jsonRawMessageType must be matched by identity rather than by package/name:
+// since Go 1.27 json.RawMessage is an alias for jsontext.Value, so reflect
+// reports it as "encoding/json/jsontext".Value and name-based matching breaks.
+var jsonRawMessageType = reflect.TypeOf(json.RawMessage(nil))
 
 // Type represents an EDM primitive type with value and metadata
 type Type interface {
@@ -86,7 +92,7 @@ func FromGoType(goType reflect.Type) (string, error) {
 	}
 
 	// json.RawMessage represents arbitrary JSON → Edm.Untyped (must be checked before []byte)
-	if goType.PkgPath() == "encoding/json" && goType.Name() == "RawMessage" {
+	if goType == jsonRawMessageType {
 		return "Edm.Untyped", nil
 	}
 

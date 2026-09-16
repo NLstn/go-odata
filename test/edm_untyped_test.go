@@ -58,9 +58,13 @@ func TestUntypedPropertyInXMLMetadata(t *testing.T) {
 
 	body := w.Body.String()
 
-	// The Payload field (json.RawMessage) must appear as Edm.Untyped
-	if !strings.Contains(body, `Type="Edm.Untyped"`) {
-		t.Errorf("expected Edm.Untyped in XML metadata, got:\n%s", body)
+	// Assert per property: a blanket Contains check would let the tagged Meta
+	// field mask a regression in json.RawMessage detection (Payload).
+	if !strings.Contains(body, `Name="payload" Type="Edm.Untyped"`) {
+		t.Errorf("expected payload property to be Edm.Untyped in XML metadata, got:\n%s", body)
+	}
+	if !strings.Contains(body, `Name="meta" Type="Edm.Untyped"`) {
+		t.Errorf("expected meta property to be Edm.Untyped in XML metadata, got:\n%s", body)
 	}
 }
 

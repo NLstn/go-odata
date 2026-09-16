@@ -142,7 +142,7 @@ func (h *MetadataHandler) getEdmTypeName(t reflect.Type) string {
 	}
 
 	// json.RawMessage → Edm.Untyped (must be checked before the slice/array branch)
-	if t.PkgPath() == "encoding/json" && t.Name() == "RawMessage" {
+	if t == metadata.JSONRawMessageType {
 		return "Edm.Untyped"
 	}
 

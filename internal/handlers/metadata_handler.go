@@ -540,6 +540,12 @@ func getEdmType(goType reflect.Type) string {
 		return "Edm.Untyped"
 	}
 
+	// json.RawMessage must be matched by type identity, not name: since
+	// Go 1.27 it is an alias for jsontext.Value, so its reflect name changed.
+	if goType == metadata.JSONRawMessageType {
+		return "Edm.Untyped"
+	}
+
 	// Check for specific types by name
 	typeName := goType.String()
 	switch typeName {
@@ -549,8 +555,6 @@ func getEdmType(goType reflect.Type) string {
 		return "Edm.Guid"
 	case "decimal.Decimal", "github.com/shopspring/decimal.Decimal":
 		return "Edm.Decimal"
-	case "json.RawMessage", "encoding/json.RawMessage":
-		return "Edm.Untyped"
 	}
 
 	switch goType.Kind() {

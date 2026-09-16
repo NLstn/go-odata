@@ -1,9 +1,16 @@
 package metadata
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
 )
+
+// JSONRawMessageType is the reflect.Type of json.RawMessage. It must be
+// matched by identity rather than by name: since Go 1.27 json.RawMessage is
+// an alias for jsontext.Value, so reflect reports its name as
+// "jsontext.Value" and string-based matching breaks.
+var JSONRawMessageType = reflect.TypeOf(json.RawMessage(nil))
 
 // PrimitiveType identifies an EDM primitive type.
 type PrimitiveType string
@@ -113,6 +120,10 @@ func PrimitiveTypeFromGoType(goType reflect.Type) (PrimitiveType, error) {
 		goType = goType.Elem()
 	}
 
+	if goType == JSONRawMessageType {
+		return PrimitiveTypeUntyped, nil
+	}
+
 	switch goType.String() {
 	case "time.Time":
 		return PrimitiveTypeDateTimeOffset, nil
@@ -120,8 +131,6 @@ func PrimitiveTypeFromGoType(goType reflect.Type) (PrimitiveType, error) {
 		return PrimitiveTypeGuid, nil
 	case "decimal.Decimal", "github.com/shopspring/decimal.Decimal":
 		return PrimitiveTypeDecimal, nil
-	case "json.RawMessage", "encoding/json.RawMessage":
-		return PrimitiveTypeUntyped, nil
 	}
 
 	if goType.Kind() == reflect.Interface {
