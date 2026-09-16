@@ -32,7 +32,7 @@ func TestParseApply_TransformationCatalog_AllSupported(t *testing.T) {
 		{name: "bottomsum", apply: "bottomsum(100000,Price)", expectedType: ApplyTransformationType("bottomsum")},
 		{name: "groupby-all", apply: "groupby(($all))", expectedType: ApplyTypeGroupBy},
 		{name: "nest", apply: "nest(aggregate(Price with sum as Total) as Totals)", expectedType: ApplyTypeNest},
-		{name: "addnested", apply: "addnested(Descriptions,filter(LanguageKey eq 'EN') as EnglishDescriptions)", expectedType: ApplyTypeAddNested},
+		{name: "addnested", apply: "addnested(Lines,filter(Price gt 10) as FilteredLines)", expectedType: ApplyTypeAddNested},
 		{name: "from", apply: "from(Lines)", expectedType: ApplyTypeFrom},
 	}
 
