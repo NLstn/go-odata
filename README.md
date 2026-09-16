@@ -340,3 +340,30 @@ All tests run automatically in CI/CD on every push and pull request.
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+### Aggregation pipelines and recursive hierarchies
+
+Nested `concat` branches execute independently, preserving branch order,
+duplicates, and heterogeneous result shapes. Computed properties can be used by
+later transformations. SQL subqueries preserve projection and paging boundaries
+before later filters, computations, and aggregations.
+
+`ancestors`, `descendants`, and `traverse` support top-level collections with a
+qualified `Org.OData.Aggregation.V1.RecursiveHierarchy` annotation on that same
+entity type. Register `NodeProperty` as
+`map[string]interface{}{"$PropertyPath": "ID"}` and `ParentNavigationProperty` as
+`map[string]interface{}{"$NavigationPropertyPath": "Parent"}` in the annotation
+record. The parent must be a direct single-valued self-navigation with a
+resolvable foreign key. Ancestors/descendants support distance and `keep start`;
+traverse supports preorder/postorder and sibling ordering. Cycles are rejected.
+The hierarchy is loaded into memory, avoiding dialect-specific recursive SQL.
+
+Cross-entity hierarchies, collection-valued paths, multi-parent hierarchies, and
+hierarchy transformations on navigation collections remain unsupported and
+return explicit query errors. Structural tails support filter, ordering, paging,
+aggregate, groupby, compute, identity and nested concat. Other tail operations
+return explicit errors. `nest`, `from`, and service-defined set transformations
+are rejected rather than silently treated as identity.
+
+Specification: [Data Aggregation sections 3.1, 3.2.2, 3.4.2, 5.5.1 and 6.2](https://docs.oasis-open.org/odata/odata-data-aggregation-ext/v4.0/cs04/odata-data-aggregation-ext-v4.0-cs04.html),
+[OData 4.01 URL Conventions](https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part2-url-conventions.html).

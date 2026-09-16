@@ -473,6 +473,14 @@ func (h *MetadataHandler) buildJSONNavigationProperty(model metadataModel, prop 
 }
 
 func (h *MetadataHandler) annotationJSONValue(value interface{}) interface{} {
+	if expr, ok := value.(map[string]interface{}); ok && len(expr) == 1 {
+		for _, kind := range []string{"$PropertyPath", "$NavigationPropertyPath"} {
+			if _, ok := expr[kind].(string); ok {
+				return expr
+			}
+		}
+	}
+
 	if collectionValues, ok := annotationCollectionValues(value); ok {
 		collection := make([]interface{}, 0, len(collectionValues))
 		for _, item := range collectionValues {

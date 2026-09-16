@@ -133,6 +133,12 @@ func main() {
 
 	service.SetSchemaVersion("1.0")
 
+	if err := service.RegisterEntity(&entities.HierarchyNode{}); err != nil {
+		log.Fatal(err)
+	}
+	if err := service.RegisterEntityAnnotation("HierarchyNodes", "Org.OData.Aggregation.V1.RecursiveHierarchy#Tree", map[string]interface{}{"NodeProperty": map[string]interface{}{"$PropertyPath": "ID"}, "ParentNavigationProperty": map[string]interface{}{"$NavigationPropertyPath": "Parent"}}); err != nil {
+		log.Fatal(err)
+	}
 	// Register the Category, Product and ProductDescription entities
 	if err := service.RegisterEntity(&entities.Category{}); err != nil {
 		log.Fatal("Failed to register Category entity:", err)

@@ -395,6 +395,13 @@ func (h *EntityHandler) createNavFetchFunc(relatedDB *gorm.DB, targetMetadata *m
 			db = db.Scopes(scopes...)
 		}
 
+		if containsHierarchy(modifiedOptions.Apply) {
+			return nil, &collectionRequestError{StatusCode: http.StatusBadRequest, ErrorCode: ErrMsgInvalidQueryOptions, Message: "hierarchy transformations require a top-level collection"}
+		}
+		if idx := findFirstStructuralTransformation(modifiedOptions.Apply); idx > 0 && modifiedOptions.Apply[idx].Type == query.ApplyTypeConcat {
+			modifiedOptions.Apply = promoteConcatToLeading(idx, modifiedOptions.Apply)
+		}
+
 		if hasLeadingStructuralApplyTransformation(modifiedOptions.Apply) {
 			var (
 				results []map[string]interface{}
