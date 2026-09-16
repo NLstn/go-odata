@@ -225,7 +225,7 @@ func TestParseApply_Nest(t *testing.T) {
 	}{
 		{
 			name:     "basic nest with aggregate",
-			applyStr: "nest($apply=aggregate(Price with sum as Total))",
+			applyStr: "nest(aggregate(Price with sum as Total) as Totals)",
 			validate: func(t *testing.T, trans []ApplyTransformation) {
 				if len(trans) != 1 {
 					t.Fatalf("expected 1 transformation, got %d", len(trans))
@@ -250,7 +250,7 @@ func TestParseApply_Nest(t *testing.T) {
 		},
 		{
 			name:     "nest with groupby inner transformation",
-			applyStr: "nest($apply=groupby((Category),aggregate(Price with sum as Total)))",
+			applyStr: "nest(groupby((Category),aggregate(Price with sum as Total)) as CategoryTotals)",
 			validate: func(t *testing.T, trans []ApplyTransformation) {
 				if len(trans) != 1 {
 					t.Fatalf("expected 1 transformation, got %d", len(trans))
@@ -269,7 +269,7 @@ func TestParseApply_Nest(t *testing.T) {
 		},
 		{
 			name:     "nest with alias",
-			applyStr: "nest($apply=aggregate(Price with sum as Total),CategoryTotals)",
+			applyStr: "nest(aggregate(Price with sum as Total) as CategoryTotals)",
 			validate: func(t *testing.T, trans []ApplyTransformation) {
 				if len(trans) != 1 {
 					t.Fatalf("expected 1 transformation, got %d", len(trans))
@@ -420,7 +420,7 @@ func TestParseApply_CaseInsensitive_NewKeywords(t *testing.T) {
 	}{
 		{
 			name:         "NEST uppercase",
-			applyStr:     "NEST($apply=aggregate(Price with sum as Total))",
+			applyStr:     "NEST(aggregate(Price with sum as Total) AS Totals)",
 			expectedType: ApplyTypeNest,
 		},
 		{
@@ -430,7 +430,7 @@ func TestParseApply_CaseInsensitive_NewKeywords(t *testing.T) {
 		},
 		{
 			name:         "Nest mixed case",
-			applyStr:     "Nest($apply=aggregate(Price with sum as Total))",
+			applyStr:     "Nest(aggregate(Price with sum as Total) as Totals)",
 			expectedType: ApplyTypeNest,
 		},
 	}
