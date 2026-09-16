@@ -24,7 +24,16 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
-    
+    strategy:
+      fail-fast: false
+      # Test the minimum supported Go version and newer releases: stdlib
+      # changes (e.g. json.RawMessage becoming a jsontext.Value alias in
+      # Go 1.27) can break the library on toolchains newer than go.mod's.
+      # The matrix legs report as "Test (1.25)" etc. - the branch ruleset's
+      # required status checks must list each leg by that name.
+      matrix:
+        go-version: ['1.25', '1.26', '1.27']
+
     steps:
     - name: Check out code
       uses: actions/checkout@v7
@@ -32,7 +41,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
-        go-version: '1.25'
+        go-version: ${{ matrix.go-version }}
 
     - name: Cache Go modules
       uses: actions/cache@v6
@@ -40,9 +49,9 @@ jobs:
         path: |
           ~/.cache/go-build
           ~/go/pkg/mod
-        key: ${{ runner.os }}-go-1.25-${{ hashFiles('**/go.sum') }}
+        key: ${{ runner.os }}-go-${{ matrix.go-version }}-${{ hashFiles('**/go.sum') }}
         restore-keys: |
-          ${{ runner.os }}-go-1.25-
+          ${{ runner.os }}-go-${{ matrix.go-version }}-
 
     - name: Download dependencies
       run: go mod download
