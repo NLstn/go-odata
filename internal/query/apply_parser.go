@@ -1123,12 +1123,10 @@ func parseNestTransformation(transStr string, entityMetadata *metadata.EntityMet
 
 	// Check for an optional alias after the transformation sequence
 	alias := ""
-	if alias == "" {
-		lower := strings.ToLower(applyContent)
-		if idx := strings.LastIndex(lower, " as "); idx > 0 {
-			alias = strings.TrimSpace(applyContent[idx+4:])
-			applyContent = strings.TrimSpace(applyContent[:idx])
-		}
+	lower := strings.ToLower(applyContent)
+	if idx := strings.LastIndex(lower, " as "); idx > 0 {
+		alias = strings.TrimSpace(applyContent[idx+4:])
+		applyContent = strings.TrimSpace(applyContent[:idx])
 	}
 	if alias == "" || !isIdentifier(alias) {
 		return nil, fmt.Errorf("nest requires a transformation sequence followed by as alias")
