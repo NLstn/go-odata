@@ -616,7 +616,9 @@ func applySupportedTailTransformations(results []map[string]interface{}, tail []
 			if tr.Nest == nil { return nil, fmt.Errorf("nest requires a transformation") }
 			nested, err := applySupportedTailTransformations(cloneApplyRows(results), tr.Nest.Apply)
 			if err != nil { return nil, err }
-			results = []map[string]interface{}{{tr.Nest.Alias: nested}}
+			alias := tr.Nest.Alias
+			if alias == "" { alias = "value" }
+			results = []map[string]interface{}{{alias: nested}}
 		default:
 			return nil, fmt.Errorf("unsupported transformation after structural apply execution: %s", tr.Type)
 		}
