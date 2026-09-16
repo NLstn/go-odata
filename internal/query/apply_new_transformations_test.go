@@ -243,8 +243,8 @@ func TestParseApply_Nest(t *testing.T) {
 				if n.Apply[0].Type != ApplyTypeAggregate {
 					t.Fatalf("expected inner aggregate, got %q", n.Apply[0].Type)
 				}
-				if n.Alias != "" {
-					t.Errorf("expected no alias, got %q", n.Alias)
+				if n.Alias != "Totals" {
+					t.Errorf("expected Totals alias, got %q", n.Alias)
 				}
 			},
 		},
