@@ -72,6 +72,7 @@ type ApplyTransformation struct {
 	Set       *SetTransformation
 	Function  *string
 	Nest      *NestTransformation
+	AddNested *AddNestedTransformation
 	From      *FromTransformation
 }
 
@@ -102,6 +103,7 @@ const (
 	ApplyTypeTraverse      ApplyTransformationType = "traverse"
 	ApplyTypeFunction      ApplyTransformationType = "function"
 	ApplyTypeNest          ApplyTransformationType = "nest"
+	ApplyTypeAddNested     ApplyTransformationType = "addnested"
 	ApplyTypeFrom          ApplyTransformationType = "from"
 )
 
@@ -134,6 +136,18 @@ type SetTransformation struct {
 // a transformation sequence result as a sub-collection property on each input entity.
 // The Alias field holds the name of the nested collection property in the response.
 type NestTransformation struct {
+	Apply []ApplyTransformation
+	Alias string
+}
+
+// AddNestedTransformation adds transformed related resources as dynamic
+// properties on each input instance.
+type AddNestedTransformation struct {
+	Path       string
+	Sequences  []AddNestedSequence
+}
+
+type AddNestedSequence struct {
 	Apply []ApplyTransformation
 	Alias string
 }
