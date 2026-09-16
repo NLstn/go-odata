@@ -322,6 +322,8 @@ func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.Qu
 			results, err = h.executeConcatApplyPipelineForMetadata(db, &modifiedOptions, fts, tableName, h.metadata)
 		case query.ApplyTypeJoin, query.ApplyTypeOuterJoin:
 			results, err = h.executeJoinApplyPipelineForMetadata(db, &modifiedOptions, h.metadata)
+		case query.ApplyTypeNest:
+			results, err = h.executeNestApplyPipeline(db, &modifiedOptions, fts, tableName, h.metadata)
 		default:
 			err = fmt.Errorf("unsupported structural apply transformation: %s", modifiedOptions.Apply[0].Type)
 		}
@@ -490,6 +492,8 @@ func hasLeadingStructuralApplyTransformation(apply []query.ApplyTransformation) 
 		return first.Concat != nil
 	case query.ApplyTypeJoin, query.ApplyTypeOuterJoin:
 		return first.Join != nil
+	case query.ApplyTypeNest:
+		return first.Nest != nil
 	default:
 		return false
 	}
@@ -504,6 +508,10 @@ func findFirstStructuralTransformation(apply []query.ApplyTransformation) int {
 			}
 		case query.ApplyTypeJoin, query.ApplyTypeOuterJoin:
 			if tr.Join != nil {
+				return i
+			}
+		case query.ApplyTypeNest:
+			if tr.Nest != nil {
 				return i
 			}
 		}
@@ -604,6 +612,11 @@ func applySupportedTailTransformations(results []map[string]interface{}, tail []
 			if err != nil {
 				return nil, err
 			}
+		case query.ApplyTypeNest:
+			if tr.Nest == nil { return nil, fmt.Errorf("nest requires a transformation") }
+			nested, err := applySupportedTailTransformations(cloneApplyRows(results), tr.Nest.Apply)
+			if err != nil { return nil, err }
+			results = []map[string]interface{}{{tr.Nest.Alias: nested}}
 		default:
 			return nil, fmt.Errorf("unsupported transformation after structural apply execution: %s", tr.Type)
 		}
@@ -1252,6 +1265,16 @@ func (h *EntityHandler) executeJoinApplyPipelineForMetadata(db *gorm.DB, options
 	}
 
 	return flattened, nil
+}
+
+func (h *EntityHandler) executeNestApplyPipeline(db *gorm.DB, options *query.QueryOptions, fts *query.FTSManager, tableName string, entityMetadata *metadata.EntityMetadata) ([]map[string]interface{}, error) {
+	if len(options.Apply) == 0 || options.Apply[0].Nest == nil {
+		return nil, fmt.Errorf("invalid nest apply pipeline")
+	}
+	base := query.ApplyQueryOptionsWithFTS(db.Session(&gorm.Session{}), &query.QueryOptions{Apply: []query.ApplyTransformation{{Type: query.ApplyTypeIdentity}}}, entityMetadata, fts, tableName, h.logger)
+	var rows []map[string]interface{}
+	if err := base.Find(&rows).Error; err != nil { return nil, err }
+	return applySupportedTailTransformations(rows, options.Apply)
 }
 
 func (h *EntityHandler) executeConcatApplyPipelineForMetadata(db *gorm.DB, options *query.QueryOptions, fts *query.FTSManager, tableName string, entityMetadata *metadata.EntityMetadata) ([]map[string]interface{}, error) {
