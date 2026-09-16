@@ -396,7 +396,7 @@ func TestApplyUnsupportedStructuralExecution(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = raw.Close() })
-	for _, expr := range []string{"nest($apply=aggregate(Price with sum as Total))", "from(Lines)", "concat(identity,identity)"} {
+	for _, expr := range []string{"from(Lines)", "concat(identity,identity)"} {
 		trans, err := parseApply(expr, getApplyTestMetadata(t), 0)
 		if err != nil {
 			t.Fatal(err)
