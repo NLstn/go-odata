@@ -345,6 +345,12 @@ func TestWithMonitorURL(t *testing.T) {
 	if job.MonitorURL() != monitorURL {
 		t.Errorf("expected monitor URL %q, got %q", monitorURL, job.MonitorURL())
 	}
+
+	// Wait for the job goroutine to finish before the test returns; otherwise it
+	// keeps persisting status to the SQLite file while t.Cleanup closes the DB and
+	// removes the temp dir, which fails under -race ("database is closed" /
+	// "directory not empty").
+	job.Wait()
 }
 
 func TestWithRetentionDisabled(t *testing.T) {
