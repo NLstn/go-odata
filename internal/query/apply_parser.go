@@ -1227,6 +1227,35 @@ func parseFromTransformation(transStr string) (*ApplyTransformation, error) {
 }
 
 func validateExecutableApply(seq []ApplyTransformation) error {
+	if err := validateStructuralPlacement(seq); err != nil {
+		return err
+	}
+	return validateExecutableTransformations(seq)
+}
+
+// validateStructuralPlacement rejects non-leading nest/addnested transformations
+// in the top-level $apply pipeline. These transformations require a structural
+// executor that only supports them in leading position; the structural executors
+// for concat, join/outerjoin, and the hierarchy transformations process trailing
+// transformations themselves (where nest is supported), so a nest/addnested that
+// follows one of them is left to those executors.
+func validateStructuralPlacement(seq []ApplyTransformation) error {
+	for i, tr := range seq {
+		switch tr.Type {
+		case ApplyTypeConcat, ApplyTypeJoin, ApplyTypeOuterJoin,
+			ApplyTypeAncestors, ApplyTypeDescendants, ApplyTypeTraverse:
+			return nil
+		case ApplyTypeNest, ApplyTypeAddNested:
+			if i > 0 {
+				return fmt.Errorf("unsupported $apply transformation: non-leading %s (%s is only supported as the first transformation)", tr.Type, tr.Type)
+			}
+			return nil
+		}
+	}
+	return nil
+}
+
+func validateExecutableTransformations(seq []ApplyTransformation) error {
 	for _, tr := range seq {
 		switch tr.Type {
 		case ApplyTypeFrom, ApplyTypeFunction:
@@ -1234,19 +1263,19 @@ func validateExecutableApply(seq []ApplyTransformation) error {
 		}
 		if tr.Concat != nil {
 			for _, branch := range tr.Concat.Sequences {
-				if err := validateExecutableApply(branch); err != nil {
+				if err := validateExecutableTransformations(branch); err != nil {
 					return err
 				}
 			}
 		}
 		if tr.GroupBy != nil {
-			if err := validateExecutableApply(tr.GroupBy.Transform); err != nil {
+			if err := validateExecutableTransformations(tr.GroupBy.Transform); err != nil {
 				return err
 			}
 		}
 		if tr.AddNested != nil {
 			for _, sequence := range tr.AddNested.Sequences {
-				if err := validateExecutableApply(sequence.Apply); err != nil {
+				if err := validateExecutableTransformations(sequence.Apply); err != nil {
 					return err
 				}
 			}

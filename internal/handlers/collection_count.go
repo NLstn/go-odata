@@ -110,10 +110,23 @@ func (h *EntityHandler) countTransformedEntities(ctx context.Context, queryOptio
 		rows, err := h.executeHierarchyPipeline(baseDB.WithContext(ctx), countOptions, h.metadata)
 		return int64(len(rows)), err
 	}
-	if idx := findFirstStructuralTransformation(countOptions.Apply); idx >= 0 && countOptions.Apply[idx].Type == query.ApplyTypeConcat {
-		countOptions.Apply = promoteConcatToLeading(idx, countOptions.Apply)
-		rows, err := h.executeConcatApplyPipelineForMetadata(baseDB.WithContext(ctx), countOptions, nil, "", h.metadata)
-		return int64(len(rows)), err
+	if idx := findFirstStructuralTransformation(countOptions.Apply); idx >= 0 {
+		switch countOptions.Apply[idx].Type {
+		case query.ApplyTypeConcat:
+			countOptions.Apply = promoteConcatToLeading(idx, countOptions.Apply)
+			rows, err := h.executeConcatApplyPipelineForMetadata(baseDB.WithContext(ctx), countOptions, nil, "", h.metadata)
+			return int64(len(rows)), err
+		case query.ApplyTypeNest:
+			if idx == 0 {
+				rows, err := h.executeNestApplyPipeline(baseDB.WithContext(ctx), countOptions, nil, "", h.metadata)
+				return int64(len(rows)), err
+			}
+		case query.ApplyTypeAddNested:
+			if idx == 0 {
+				rows, err := h.executeAddNestedApplyPipeline(baseDB.WithContext(ctx), countOptions, h.metadata)
+				return int64(len(rows)), err
+			}
+		}
 	}
 	countDB := query.ApplyQueryOptionsWithFTS(baseDB.WithContext(ctx), countOptions, h.metadata, nil, "", h.logger)
 
