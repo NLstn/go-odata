@@ -143,8 +143,8 @@ type NestTransformation struct {
 // AddNestedTransformation adds transformed related resources as dynamic
 // properties on each input instance.
 type AddNestedTransformation struct {
-	Path       string
-	Sequences  []AddNestedSequence
+	Path      string
+	Sequences []AddNestedSequence
 }
 
 type AddNestedSequence struct {

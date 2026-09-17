@@ -621,11 +621,17 @@ func applySupportedTailTransformations(results []map[string]interface{}, tail []
 				return nil, err
 			}
 		case query.ApplyTypeNest:
-			if tr.Nest == nil { return nil, fmt.Errorf("nest requires a transformation") }
+			if tr.Nest == nil {
+				return nil, fmt.Errorf("nest requires a transformation")
+			}
 			nested, err := applySupportedTailTransformations(cloneApplyRows(results), tr.Nest.Apply)
-			if err != nil { return nil, err }
+			if err != nil {
+				return nil, err
+			}
 			alias := tr.Nest.Alias
-			if alias == "" { alias = "value" }
+			if alias == "" {
+				alias = "value"
+			}
 			results = []map[string]interface{}{{alias: nested}}
 		default:
 			return nil, fmt.Errorf("unsupported transformation after structural apply execution: %s", tr.Type)
@@ -1283,8 +1289,14 @@ func (h *EntityHandler) executeNestApplyPipeline(db *gorm.DB, options *query.Que
 	}
 	base := query.ApplyQueryOptionsWithFTS(db.Session(&gorm.Session{}), &query.QueryOptions{Apply: []query.ApplyTransformation{{Type: query.ApplyTypeIdentity}}}, entityMetadata, fts, tableName, h.logger)
 	var rows []map[string]interface{}
-	if err := base.Find(&rows).Error; err != nil { return nil, err }
-	return applySupportedTailTransformations(rows, options.Apply)
+	if err := base.Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	rows, err := applySupportedTailTransformations(rows, options.Apply)
+	if err != nil {
+		return nil, err
+	}
+	return applyMapSystemQueryOptions(rows, options, entityMetadata)
 }
 
 // executeAddNestedApplyPipeline evaluates the CS03 addnested transformation for
@@ -1334,7 +1346,17 @@ func (h *EntityHandler) executeAddNestedApplyPipeline(db *gorm.DB, options *quer
 		}
 		results = append(results, row)
 	}
-	return results, nil
+
+	// Apply the trailing transformations of the pipeline (everything after the
+	// leading addnested) and the system query options to the transformed set,
+	// mirroring the concat pipeline. Without this, tail transformations and the
+	// system $filter would be silently dropped.
+	results, err = applySupportedTailTransformations(results, options.Apply[1:])
+	if err != nil {
+		return nil, err
+	}
+
+	return applyMapSystemQueryOptions(results, options, entityMetadata)
 }
 
 func (h *EntityHandler) executeConcatApplyPipelineForMetadata(db *gorm.DB, options *query.QueryOptions, fts *query.FTSManager, tableName string, entityMetadata *metadata.EntityMetadata) ([]map[string]interface{}, error) {
@@ -1388,6 +1410,15 @@ func (h *EntityHandler) executeConcatApplyPipelineForMetadata(db *gorm.DB, optio
 		return nil, err
 	}
 
+	return applyMapSystemQueryOptions(results, options, entityMetadata)
+}
+
+// applyMapSystemQueryOptions applies the system query options ($compute, $filter,
+// $orderby, $top/$skip, $select) to the in-memory map results produced by a
+// structural apply pipeline (concat, nest, addnested), mirroring the semantics of
+// the SQL execution path where system options operate on the transformed set.
+func applyMapSystemQueryOptions(results []map[string]interface{}, options *query.QueryOptions, entityMetadata *metadata.EntityMetadata) ([]map[string]interface{}, error) {
+	var err error
 	if options.Compute != nil {
 		results, err = applyMapCompute(results, options.Compute)
 		if err != nil {

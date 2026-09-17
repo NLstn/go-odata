@@ -412,6 +412,10 @@ func (h *EntityHandler) createNavFetchFunc(relatedDB *gorm.DB, targetMetadata *m
 				results, err = h.executeConcatApplyPipelineForMetadata(db, &modifiedOptions, nil, "", targetMetadata)
 			case query.ApplyTypeJoin, query.ApplyTypeOuterJoin:
 				results, err = h.executeJoinApplyPipelineForMetadata(db, &modifiedOptions, targetMetadata)
+			case query.ApplyTypeNest:
+				results, err = h.executeNestApplyPipeline(db, &modifiedOptions, nil, "", targetMetadata)
+			case query.ApplyTypeAddNested:
+				results, err = h.executeAddNestedApplyPipeline(db, &modifiedOptions, targetMetadata)
 			default:
 				err = fmt.Errorf("unsupported structural apply transformation: %s", modifiedOptions.Apply[0].Type)
 			}
@@ -948,7 +952,7 @@ func (h *EntityHandler) getTargetMetadata(targetName string) (*metadata.EntityMe
 // hasQueryOptions checks if the request has any OData query options
 func hasQueryOptions(r *http.Request) bool {
 	q := query.ParseRawQuery(r.URL.RawQuery)
-	odataOptions := []string{"$filter", "$select", "$orderby", "$top", "$skip", "$count", "$expand", "$search", "$skiptoken"}
+	odataOptions := []string{"$filter", "$select", "$orderby", "$top", "$skip", "$count", "$expand", "$search", "$skiptoken", "$apply"}
 	for _, option := range odataOptions {
 		if q.Has(option) {
 			return true

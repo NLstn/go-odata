@@ -361,9 +361,13 @@ The hierarchy is loaded into memory, avoiding dialect-specific recursive SQL.
 Cross-entity hierarchies, collection-valued paths, multi-parent hierarchies, and
 hierarchy transformations on navigation collections remain unsupported and
 return explicit query errors. Structural tails support filter, ordering, paging,
-aggregate, groupby, compute, identity and nested concat. Other tail operations
-return explicit errors. `nest`, `from`, and service-defined set transformations
-are rejected rather than silently treated as identity.
+aggregate, groupby, compute, identity, nest and nested concat. Other tail
+operations return explicit errors.
+
+Unsupported transformations: `from`, service-defined set transformations, and
+non-leading `nest`/`addnested` (i.e. `nest`/`addnested` preceded by anything
+other than a `concat`, `join`/`outerjoin`, or hierarchy transformation) are
+rejected with an explicit 400 error rather than silently treated as identity.
 
 Specification: [Data Aggregation sections 3.1, 3.2.2, 3.4.2, 5.5.1 and 6.2](https://docs.oasis-open.org/odata/odata-data-aggregation-ext/v4.0/cs04/odata-data-aggregation-ext-v4.0-cs04.html),
 [OData 4.01 URL Conventions](https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part2-url-conventions.html).
