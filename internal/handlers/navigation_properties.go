@@ -208,8 +208,7 @@ func (h *EntityHandler) handleNavigationCollectionWithQueryOptions(w http.Respon
 // verifyAndFetchParentEntity verifies that the parent entity exists and is authorized
 func (h *EntityHandler) verifyAndFetchParentEntity(w http.ResponseWriter, r *http.Request, entityKey string) (interface{}, error) {
 	parentOptions := &query.QueryOptions{}
-	parentScopes, parentHookErr := callBeforeReadEntity(h.metadata, r, parentOptions)
-	if parentHookErr != nil {
+	if parentHookErr := callBeforeReadEntity(h.metadata, r, parentOptions); parentHookErr != nil {
 		h.writeHookError(w, r, parentHookErr, http.StatusForbidden, "Authorization failed")
 		return nil, parentHookErr
 	}
@@ -219,9 +218,6 @@ func (h *EntityHandler) verifyAndFetchParentEntity(w http.ResponseWriter, r *htt
 	if err != nil {
 		WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidKey, err.Error())
 		return nil, err
-	}
-	if len(parentScopes) > 0 {
-		db = db.Scopes(parentScopes...)
 	}
 	if err := db.First(parent).Error; err != nil {
 		h.handleFetchError(w, r, err, entityKey)
@@ -318,7 +314,7 @@ func (h *EntityHandler) createNavParseQueryOptions(r *http.Request, targetMetada
 // createNavBeforeRead creates the BeforeRead callback for navigation collections
 func (h *EntityHandler) createNavBeforeRead(r *http.Request, targetMetadata *metadata.EntityMetadata) func(*query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
 	return func(queryOptions *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
-		return callBeforeReadCollection(targetMetadata, r, queryOptions)
+		return nil, callBeforeReadCollection(targetMetadata, r, queryOptions)
 	}
 }
 

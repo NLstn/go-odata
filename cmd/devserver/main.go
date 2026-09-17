@@ -130,7 +130,9 @@ func main() {
 		log.Fatal("Failed to set service namespace:", err)
 	}
 
-	service.SetSchemaVersion("1.0")
+	if err := service.SetSchemaVersion("1.0"); err != nil {
+		log.Fatal("Failed to set schema version:", err)
+	}
 
 	// Register the Category, Product and ProductDescription entities
 	if err := service.RegisterEntity(&entities.Category{}); err != nil {

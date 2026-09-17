@@ -22,16 +22,16 @@ type ProductWithComputed struct {
 	DisplayName string  `json:"displayName" odata:"computed"` // Server-side computed, no database column
 }
 
-// ODataAfterReadEntity hook to populate the computed field
-func (ProductWithComputed) ODataAfterReadEntity(ctx context.Context, r *http.Request, opts *odata.QueryOptions, entity interface{}) (interface{}, error) {
+// ODataAfterReadEntityGeneric hook to populate the computed field
+func (ProductWithComputed) ODataAfterReadEntityGeneric(ctx context.Context, r *http.Request, opts *odata.QueryOptions, entity interface{}) (interface{}, error) {
 	if p, ok := entity.(*ProductWithComputed); ok {
 		p.DisplayName = "Product: " + p.Name
 	}
 	return nil, nil
 }
 
-// ODataAfterReadCollection hook to populate the computed field
-func (ProductWithComputed) ODataAfterReadCollection(ctx context.Context, r *http.Request, opts *odata.QueryOptions, results interface{}) (interface{}, error) {
+// ODataAfterReadCollectionGeneric hook to populate the computed field
+func (ProductWithComputed) ODataAfterReadCollectionGeneric(ctx context.Context, r *http.Request, opts *odata.QueryOptions, results interface{}) (interface{}, error) {
 	if products, ok := results.(*[]ProductWithComputed); ok {
 		for i := range *products {
 			(*products)[i].DisplayName = "Product: " + (*products)[i].Name

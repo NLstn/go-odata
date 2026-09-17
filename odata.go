@@ -31,17 +31,17 @@ package odata
 //
 // Implement any of these methods to customize query behavior and response data:
 //
-//	func (p Product) ODataBeforeReadCollection(ctx context.Context, r *http.Request, opts *odata.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error)
-//	func (p Product) ODataAfterReadCollection(ctx context.Context, r *http.Request, opts *odata.QueryOptions, results interface{}) (interface{}, error)
-//	func (p Product) ODataBeforeReadEntity(ctx context.Context, r *http.Request, opts *odata.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error)
-//	func (p Product) ODataAfterReadEntity(ctx context.Context, r *http.Request, opts *odata.QueryOptions, entity interface{}) (interface{}, error)
+//	func (p Product) ODataBeforeReadCollectionGeneric(ctx context.Context, r *http.Request, opts *odata.QueryOptions) error
+//	func (p Product) ODataAfterReadCollectionGeneric(ctx context.Context, r *http.Request, opts *odata.QueryOptions, results interface{}) (interface{}, error)
+//	func (p Product) ODataBeforeReadEntityGeneric(ctx context.Context, r *http.Request, opts *odata.QueryOptions) error
+//	func (p Product) ODataAfterReadEntityGeneric(ctx context.Context, r *http.Request, opts *odata.QueryOptions, entity interface{}) (interface{}, error)
 //
-// Before* read hooks return GORM scopes that are applied before OData query options
-// ($filter, $orderby, $top, $skip). Use them for authorization filters and eager-loading.
-// After* read hooks receive the final results after all query processing and can redact
-// sensitive data or append computed fields.
+// Before* read hooks run before the query executes and can reject the request or adjust
+// the parsed query options. For row-level authorization filters, use an authorization
+// policy that implements QueryFilterProvider. After* read hooks receive the final results
+// after all query processing and can redact sensitive data or append computed fields.
 //
-// See the EntityHook and ReadHook interface documentation for detailed hook descriptions
+// See the EntityHook and ReadHookGeneric interface documentation for detailed hook descriptions
 // and the documentation directory for comprehensive examples and use cases. Note that these
 // interfaces are purely for documentation - entities do not need to implement them.
 
@@ -178,26 +178,18 @@ type PreRequestHook func(r *http.Request) (context.Context, error)
 // ODataAfterDelete is called after an entity has been successfully deleted. Errors are logged
 // but do not affect the response. Use this for audit logging or cleanup.
 //
-// # Accessing the Transaction
+// # Transactional Behaviour
 //
-// Write hooks (Before/After Create/Update/Delete) execute inside a shared GORM transaction.
-// Use TransactionFromContext to participate in the same transaction:
+// Write hooks (Before/After Create/Update/Delete) execute inside a shared database
+// transaction. Any error returned from a Before* hook aborts the operation and rolls
+// back all changes made in that transaction, so hook-driven validation never leaves
+// partial writes behind.
 //
-//	func (p *Product) ODataBeforeCreate(ctx context.Context, r *http.Request) error {
-//	    tx, ok := TransactionFromContext(ctx)
-//	    if !ok {
-//	        return fmt.Errorf("transaction unavailable")
-//	    }
-//
-//	    audit := AuditLog{ProductID: p.ID, Action: "CREATE"}
-//	    if err := tx.Create(&audit).Error; err != nil {
-//	        return err
-//	    }
-//	    return nil
-//	}
-//
-// Any error returned aborts the operation and rolls back all changes made via
-// the shared transaction.
+// The hooks themselves are storage-agnostic: they receive only the request context and
+// the *http.Request. If you need to perform additional database writes atomically with
+// the entity write (for example audit records), use your storage layer's own hook
+// mechanism — with GORM, model callbacks such as BeforeCreate(tx *gorm.DB) run inside
+// the same transaction as the entity write.
 type EntityHook interface {
 	// ODataBeforeCreate is called before a new entity is created via POST.
 	// Return an error to prevent the creation and return that error to the client.
@@ -224,42 +216,41 @@ type EntityHook interface {
 	ODataAfterDelete(ctx context.Context, r *http.Request) error
 }
 
-// ReadHook defines optional read hooks that entity types can implement to customize
-// query behavior and response data.
+// ReadHookGeneric defines optional, storage-agnostic read hooks that entity types can
+// implement to customize query behavior and response data.
 //
 // IMPORTANT: This interface is provided for documentation purposes only. Like EntityHook,
 // entities do NOT need to implement this interface. Read hook methods are discovered via
 // reflection - simply define any subset of these methods on your entity type.
 //
-// All read hook methods are optional and are discovered via reflection on your entity type.
-//
 // # Before Read Hooks
 //
-// ODataBeforeReadCollection is called before fetching a collection. It returns GORM scopes
-// that are applied before OData query options ($filter, $orderby, $top, $skip).
+// ODataBeforeReadCollectionGeneric is called before fetching a collection, after the
+// OData query options ($filter, $orderby, $top, $skip) have been parsed. Return an error
+// to reject the request; the error is surfaced to the client (HookError and ODataError
+// values control the HTTP status code).
 //
-//	func (p Product) ODataBeforeReadCollection(ctx context.Context, r *http.Request, opts *odata.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
-//	    // Apply tenant filter
-//	    tenantID := r.Header.Get("X-Tenant-ID")
-//	    if tenantID == "" {
-//	        return nil, fmt.Errorf("missing tenant header")
+//	func (p Product) ODataBeforeReadCollectionGeneric(ctx context.Context, r *http.Request, opts *odata.QueryOptions) error {
+//	    if r.Header.Get("X-Tenant-ID") == "" {
+//	        return fmt.Errorf("missing tenant header")
 //	    }
-//	    return []func(*gorm.DB) *gorm.DB{
-//	        func(db *gorm.DB) *gorm.DB { return db.Where("tenant_id = ?", tenantID) },
-//	    }, nil
+//	    return nil
 //	}
 //
-// ODataBeforeReadEntity is called before fetching a single entity. It works the same as
-// ODataBeforeReadCollection but for individual entity reads. Return scopes for authorization
-// filters or eager-loading related data.
+// For row-level filtering (tenant scoping, soft-delete predicates), register an
+// authorization policy that implements QueryFilterProvider; the returned filter is
+// combined with the client's $filter for collections, $count, and navigation reads.
+//
+// ODataBeforeReadEntityGeneric is called before fetching a single entity and works the
+// same as ODataBeforeReadCollectionGeneric but for individual entity reads.
 //
 // # After Read Hooks
 //
-// ODataAfterReadCollection is called after fetching a collection. It receives the results
-// after all query processing and can redact sensitive data or transform the response.
-// Return nil, nil to keep the original response.
+// ODataAfterReadCollectionGeneric is called after fetching a collection. It receives the
+// results after all query processing and can redact sensitive data or transform the
+// response. Return nil, nil to keep the original response.
 //
-//	func (p Product) ODataAfterReadCollection(ctx context.Context, r *http.Request, opts *odata.QueryOptions, results interface{}) (interface{}, error) {
+//	func (p Product) ODataAfterReadCollectionGeneric(ctx context.Context, r *http.Request, opts *odata.QueryOptions, results interface{}) (interface{}, error) {
 //	    products, ok := results.([]Product)
 //	    if !ok {
 //	        return results, nil
@@ -273,8 +264,8 @@ type EntityHook interface {
 //	    return products, nil
 //	}
 //
-// ODataAfterReadEntity is called after fetching a single entity. It works the same as
-// ODataAfterReadCollection but for individual entity reads.
+// ODataAfterReadEntityGeneric is called after fetching a single entity. It works the
+// same as ODataAfterReadCollectionGeneric but for individual entity reads.
 //
 // # Hook Execution Order
 //
@@ -283,34 +274,7 @@ type EntityHook interface {
 //	Create: ODataBeforeCreate -> INSERT -> ODataAfterCreate
 //	Update: ODataBeforeUpdate -> UPDATE -> ODataAfterUpdate
 //	Delete: ODataBeforeDelete -> DELETE -> ODataAfterDelete
-//	Read:   ODataBeforeReadCollection/ODataBeforeReadEntity -> SELECT + OData options -> ODataAfterReadCollection/ODataAfterReadEntity
-type ReadHook interface {
-	// Deprecated: prefer storage-agnostic hook methods (see ReadHookGeneric).
-	// ODataBeforeReadCollection is called before fetching a collection.
-	// Return GORM scopes to apply before OData options ($filter, $orderby, etc).
-	// These scopes are ideal for authorization filters and eager-loading.
-	ODataBeforeReadCollection(ctx context.Context, r *http.Request, opts *QueryOptions) ([]func(*gorm.DB) *gorm.DB, error)
-
-	// Deprecated: prefer storage-agnostic hook methods (see ReadHookGeneric).
-	// ODataAfterReadCollection is called after fetching a collection.
-	// It receives the results after all query processing and can redact or transform them.
-	// Return nil, nil to keep the original response.
-	ODataAfterReadCollection(ctx context.Context, r *http.Request, opts *QueryOptions, results interface{}) (interface{}, error)
-
-	// Deprecated: prefer storage-agnostic hook methods (see ReadHookGeneric).
-	// ODataBeforeReadEntity is called before fetching a single entity.
-	// Return GORM scopes to apply before OData options. Ideal for authorization and eager-loading.
-	ODataBeforeReadEntity(ctx context.Context, r *http.Request, opts *QueryOptions) ([]func(*gorm.DB) *gorm.DB, error)
-
-	// Deprecated: prefer storage-agnostic hook methods (see ReadHookGeneric).
-	// ODataAfterReadEntity is called after fetching a single entity.
-	// It receives the entity after all query processing and can redact or transform it.
-	// Return nil, nil to keep the original response.
-	ODataAfterReadEntity(ctx context.Context, r *http.Request, opts *QueryOptions, entity interface{}) (interface{}, error)
-}
-
-// ReadHookGeneric defines storage-agnostic optional read hooks.
-// When both generic and legacy GORM read hooks are implemented, generic hooks take precedence.
+//	Read:   ODataBeforeReadCollectionGeneric/ODataBeforeReadEntityGeneric -> SELECT + OData options -> ODataAfterReadCollectionGeneric/ODataAfterReadEntityGeneric
 type ReadHookGeneric interface {
 	ODataBeforeReadCollectionGeneric(ctx context.Context, r *http.Request, opts *QueryOptions) error
 	ODataAfterReadCollectionGeneric(ctx context.Context, r *http.Request, opts *QueryOptions, results interface{}) (interface{}, error)
@@ -647,10 +611,6 @@ type ObservabilityConfig struct {
 	// This can generate significant trace data; disabled by default.
 	EnableDetailedDBTracing bool
 
-	// EnableQueryOptionTracing adds spans for individual query option processing.
-	// Note: This feature is not yet implemented and is reserved for future use.
-	EnableQueryOptionTracing bool
-
 	// EnableServerTiming enables the Server-Timing HTTP response header.
 	// When enabled, timing metrics are added to responses for debugging in browser dev tools.
 	EnableServerTiming bool
@@ -710,9 +670,6 @@ func (s *Service) SetObservability(cfg ObservabilityConfig) error {
 	if cfg.EnableDetailedDBTracing {
 		opts = append(opts, observability.WithDetailedDBTracing())
 	}
-	if cfg.EnableQueryOptionTracing {
-		opts = append(opts, observability.WithQueryOptionTracing())
-	}
 	if cfg.EnableServerTiming {
 		opts = append(opts, observability.WithServerTiming())
 	}
@@ -765,9 +722,17 @@ func (s *Service) SetObservability(cfg ObservabilityConfig) error {
 	return nil
 }
 
+// ObservabilityState is the initialized observability runtime returned by
+// Service.Observability. It exposes the effective settings along with the
+// configured tracer and metrics instances.
+//
+// It is distinct from ObservabilityConfig, which is the input passed to
+// SetObservability; ObservabilityState is the resulting active configuration.
+type ObservabilityState = observability.Config
+
 // Observability returns the current observability configuration.
 // Returns nil if observability is not configured.
-func (s *Service) Observability() *observability.Config {
+func (s *Service) Observability() *ObservabilityState {
 	return s.observability
 }
 
@@ -882,8 +847,13 @@ func (s *Service) EnableAsyncProcessing(cfg AsyncConfig) error {
 	return nil
 }
 
+// AsyncManager tracks asynchronous jobs for a service. It is returned by
+// Service.AsyncManager for testing and monitoring purposes.
+type AsyncManager = async.Manager
+
 // AsyncManager exposes the current async manager instance for testing and monitoring.
-func (s *Service) AsyncManager() *async.Manager {
+// Returns nil if async processing has not been enabled.
+func (s *Service) AsyncManager() *AsyncManager {
 	return s.asyncManager
 }
 
@@ -1825,12 +1795,21 @@ func (s *Service) SetNamespace(namespace string) error {
 // handlers are updated when this method is called.
 //
 // An empty string disables schema versioning.
-func (s *Service) SetSchemaVersion(v string) {
-	s.schemaVersion = v
-	s.metadataHandler.SetSchemaVersion(v)
-	for _, handler := range s.handlers {
-		handler.SetSchemaVersion(v)
+func (s *Service) SetSchemaVersion(v string) error {
+	trimmed := strings.TrimSpace(v)
+	if trimmed == "" && v != "" {
+		return fmt.Errorf("schema version cannot be blank: got %q", v)
 	}
+	if trimmed == "*" {
+		return fmt.Errorf("schema version cannot be the wildcard %q", "*")
+	}
+
+	s.schemaVersion = trimmed
+	s.metadataHandler.SetSchemaVersion(trimmed)
+	for _, handler := range s.handlers {
+		handler.SetSchemaVersion(trimmed)
+	}
+	return nil
 }
 
 // SetBasePath configures the path prefix for the service mount point.

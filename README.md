@@ -156,22 +156,19 @@ func (p *Product) ODataAfterCreate(ctx context.Context, r *http.Request) error {
 
 ### Read Hooks
 
-Customize queries with tenant filters and redact sensitive data:
+Reject unauthorized reads and redact sensitive data:
 
 ```go
-// Apply tenant filter before querying
-func (p Product) ODataBeforeReadCollection(ctx context.Context, r *http.Request, opts *odata.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
-    tenantID := r.Header.Get("X-Tenant-ID")
-    if tenantID == "" {
-        return nil, fmt.Errorf("missing tenant header")
+// Reject requests without a tenant before querying
+func (p Product) ODataBeforeReadCollectionGeneric(ctx context.Context, r *http.Request, opts *odata.QueryOptions) error {
+    if r.Header.Get("X-Tenant-ID") == "" {
+        return fmt.Errorf("missing tenant header")
     }
-    return []func(*gorm.DB) *gorm.DB{
-        func(db *gorm.DB) *gorm.DB { return db.Where("tenant_id = ?", tenantID) },
-    }, nil
+    return nil
 }
 
 // Redact sensitive fields before returning
-func (p Product) ODataAfterReadEntity(ctx context.Context, r *http.Request, opts *odata.QueryOptions, entity interface{}) (interface{}, error) {
+func (p Product) ODataAfterReadEntityGeneric(ctx context.Context, r *http.Request, opts *odata.QueryOptions, entity interface{}) (interface{}, error) {
     product, ok := entity.(*Product)
     if !ok || isPrivileged(r) {
         return entity, nil
@@ -180,6 +177,9 @@ func (p Product) ODataAfterReadEntity(ctx context.Context, r *http.Request, opts
     return product, nil
 }
 ```
+
+For row-level filtering (such as tenant scoping), register an authorization policy that
+implements `QueryFilterProvider` — see the [Authorization documentation](documentation/authorization.md).
 
 All hook methods are optional. See [EntityHook](https://pkg.go.dev/github.com/nlstn/go-odata#EntityHook) and the [Advanced Features documentation](documentation/advanced-features.md) for details.
 

@@ -10,16 +10,16 @@ import "github.com/nlstn/go-odata/internal/hookerrors"
 //   - Target: request segment/property associated with the error
 //   - Details: additional structured OData error details
 //
-// Example usage in a BeforeReadEntity hook:
+// Example usage in a before-read hook:
 //
-//	func (e *Employee) ODataBeforeReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
+//	func (e *Employee) ODataBeforeReadEntityGeneric(ctx context.Context, r *http.Request, opts *odata.QueryOptions) error {
 //	    if !userHasAccess(ctx) {
-//	        return nil, &odata.HookError{
+//	        return &odata.HookError{
 //	            StatusCode: http.StatusUnauthorized,
 //	            Message:    "User is not authorized to access this resource",
 //	        }
 //	    }
-//	    return nil, nil
+//	    return nil
 //	}
 type HookError = hookerrors.HookError
 

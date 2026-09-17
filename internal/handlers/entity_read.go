@@ -97,15 +97,14 @@ func (h *EntityHandler) handleGetEntity(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	// Invoke BeforeReadEntity hooks to obtain scopes
-	scopes, hookErr := callBeforeReadEntity(h.metadata, r, queryOptions)
-	if hookErr != nil {
+	// Invoke BeforeReadEntity hooks for authorization
+	if hookErr := callBeforeReadEntity(h.metadata, r, queryOptions); hookErr != nil {
 		h.writeHookError(w, r, hookErr, http.StatusForbidden, "Authorization failed")
 		return
 	}
 
 	// Fetch the entity
-	result, err := h.fetchEntityByKey(ctx, entityKey, queryOptions, scopes)
+	result, err := h.fetchEntityByKey(ctx, entityKey, queryOptions, nil)
 	if err != nil {
 		h.handleFetchError(w, r, err, entityKey)
 		return
@@ -245,8 +244,7 @@ func (h *EntityHandler) HandleEntityRef(w http.ResponseWriter, r *http.Request, 
 
 	// Invoke BeforeReadEntity hooks for authorization
 	refQueryOptions := &query.QueryOptions{}
-	refScopes, hookErr := callBeforeReadEntity(h.metadata, r, refQueryOptions)
-	if hookErr != nil {
+	if hookErr := callBeforeReadEntity(h.metadata, r, refQueryOptions); hookErr != nil {
 		h.writeHookError(w, r, hookErr, http.StatusForbidden, "Authorization failed")
 		return
 	}
@@ -260,10 +258,6 @@ func (h *EntityHandler) HandleEntityRef(w http.ResponseWriter, r *http.Request, 
 		}
 		return
 	}
-	if len(refScopes) > 0 {
-		db = db.Scopes(refScopes...)
-	}
-
 	if err := db.First(entity).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			if writeErr := response.WriteError(w, r, http.StatusNotFound, ErrMsgEntityNotFound,
@@ -339,21 +333,20 @@ func (h *EntityHandler) HandleCollectionRef(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Invoke BeforeReadCollection hooks to obtain scopes
-	scopes, hookErr := callBeforeReadCollection(h.metadata, r, queryOptions)
-	if hookErr != nil {
+	// Invoke BeforeReadCollection hooks for authorization
+	if hookErr := callBeforeReadCollection(h.metadata, r, queryOptions); hookErr != nil {
 		h.writeHookError(w, r, hookErr, http.StatusForbidden, "Authorization failed")
 		return
 	}
 
 	// Get the total count if $count=true is specified
-	totalCount := h.getTotalCount(ctx, queryOptions, w, r, scopes)
+	totalCount := h.getTotalCount(ctx, queryOptions, w, r, nil)
 	if totalCount == nil && queryOptions.Count {
 		return // Error already written
 	}
 
 	// Fetch the results
-	results, err := h.fetchResults(ctx, queryOptions, scopes)
+	results, err := h.fetchResults(ctx, queryOptions, nil)
 	if err != nil {
 		h.writeDatabaseError(w, r, err)
 		return

@@ -6,7 +6,6 @@ import (
 
 	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/query"
-	"gorm.io/gorm"
 )
 
 // callBeforeCreate calls the ODataBeforeCreate hook if it exists on the entity
@@ -64,9 +63,9 @@ func (h *EntityHandler) callAfterDelete(entity interface{}, r *http.Request) err
 }
 
 // callHook invokes a hook method on an entity using reflection.
-// It tries both value and pointer receivers. Hooks receive the request context and
-// can access the active transaction via odata.TransactionFromContext when invoked
-// from entity and collection write handlers.
+// It tries both value and pointer receivers. Hooks invoked from entity and collection
+// write handlers receive a request context that carries the active transaction
+// (see TransactionFromContext in this package).
 func callHook(entity interface{}, methodName string, r *http.Request) error {
 	ctx := r.Context()
 
@@ -109,155 +108,38 @@ func callHook(entity interface{}, methodName string, r *http.Request) error {
 	return nil
 }
 
-// callBeforeReadCollection invokes the ODataBeforeReadCollection hook if defined and returns any scopes it produces.
-func callBeforeReadCollection(meta *metadata.EntityMetadata, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
+// callBeforeReadCollection invokes the ODataBeforeReadCollectionGeneric hook if defined.
+func callBeforeReadCollection(meta *metadata.EntityMetadata, r *http.Request, opts *query.QueryOptions) error {
 	if meta == nil {
-		return nil, nil
+		return nil
 	}
-	if invoked, err := invokeGenericBeforeReadHook(meta, "ODataBeforeReadCollectionGeneric", r, opts); invoked {
-		return nil, err
-	}
-	if !meta.Hooks.HasODataBeforeReadCollection {
-		return nil, nil
-	}
-
-	ctx := r.Context()
-	results, ok := invokeReadHook(meta, "ODataBeforeReadCollection", ctx, r, opts)
-	if !ok || len(results) == 0 {
-		return nil, nil
-	}
-
-	var scopes []func(*gorm.DB) *gorm.DB
-	if first := results[0]; first.IsValid() && (first.Kind() != reflect.Interface || !first.IsNil()) {
-		if s, ok := first.Interface().([]func(*gorm.DB) *gorm.DB); ok {
-			scopes = s
-		}
-	}
-
-	if len(results) > 1 {
-		if errVal := results[1]; errVal.IsValid() && !errVal.IsNil() {
-			if err, ok := errVal.Interface().(error); ok && err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	return scopes, nil
+	return invokeGenericBeforeReadHook(meta, "ODataBeforeReadCollectionGeneric", r, opts)
 }
 
-// callAfterReadCollection invokes the ODataAfterReadCollection hook if defined and returns an override when provided.
+// callAfterReadCollection invokes the ODataAfterReadCollectionGeneric hook if defined and returns an override when provided.
 func callAfterReadCollection(meta *metadata.EntityMetadata, r *http.Request, opts *query.QueryOptions, results interface{}) (interface{}, bool, error) {
 	if meta == nil {
 		return nil, false, nil
 	}
-	if override, hasOverride, invoked, err := invokeGenericAfterReadHook(meta, "ODataAfterReadCollectionGeneric", r, opts, results); invoked {
-		return override, hasOverride, err
-	}
-	if !meta.Hooks.HasODataAfterReadCollection {
-		return nil, false, nil
-	}
-
-	ctx := r.Context()
-	callResults, ok := invokeReadHook(meta, "ODataAfterReadCollection", ctx, r, opts, results)
-	if !ok || len(callResults) == 0 {
-		return nil, false, nil
-	}
-
-	overrideProvided := false
-	var override interface{}
-
-	if first := callResults[0]; first.IsValid() {
-		// Treat typed nils as an explicit override but ignore interface nils.
-		if first.Kind() != reflect.Interface || !first.IsNil() {
-			override = first.Interface()
-			overrideProvided = true
-		}
-	}
-
-	if len(callResults) > 1 {
-		if errVal := callResults[1]; errVal.IsValid() && !errVal.IsNil() {
-			if err, ok := errVal.Interface().(error); ok && err != nil {
-				return nil, false, err
-			}
-		}
-	}
-
-	return override, overrideProvided, nil
+	override, hasOverride, err := invokeGenericAfterReadHook(meta, "ODataAfterReadCollectionGeneric", r, opts, results)
+	return override, hasOverride, err
 }
 
-// callBeforeReadEntity invokes the ODataBeforeReadEntity hook if defined and returns any scopes it produces.
-func callBeforeReadEntity(meta *metadata.EntityMetadata, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
+// callBeforeReadEntity invokes the ODataBeforeReadEntityGeneric hook if defined.
+func callBeforeReadEntity(meta *metadata.EntityMetadata, r *http.Request, opts *query.QueryOptions) error {
 	if meta == nil {
-		return nil, nil
+		return nil
 	}
-	if invoked, err := invokeGenericBeforeReadHook(meta, "ODataBeforeReadEntityGeneric", r, opts); invoked {
-		return nil, err
-	}
-	if !meta.Hooks.HasODataBeforeReadEntity {
-		return nil, nil
-	}
-
-	ctx := r.Context()
-	results, ok := invokeReadHook(meta, "ODataBeforeReadEntity", ctx, r, opts)
-	if !ok || len(results) == 0 {
-		return nil, nil
-	}
-
-	var scopes []func(*gorm.DB) *gorm.DB
-	if first := results[0]; first.IsValid() && (first.Kind() != reflect.Interface || !first.IsNil()) {
-		if s, ok := first.Interface().([]func(*gorm.DB) *gorm.DB); ok {
-			scopes = s
-		}
-	}
-
-	if len(results) > 1 {
-		if errVal := results[1]; errVal.IsValid() && !errVal.IsNil() {
-			if err, ok := errVal.Interface().(error); ok && err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	return scopes, nil
+	return invokeGenericBeforeReadHook(meta, "ODataBeforeReadEntityGeneric", r, opts)
 }
 
-// callAfterReadEntity invokes the ODataAfterReadEntity hook if defined and returns an override when provided.
+// callAfterReadEntity invokes the ODataAfterReadEntityGeneric hook if defined and returns an override when provided.
 func callAfterReadEntity(meta *metadata.EntityMetadata, r *http.Request, opts *query.QueryOptions, entity interface{}) (interface{}, bool, error) {
 	if meta == nil {
 		return nil, false, nil
 	}
-	if override, hasOverride, invoked, err := invokeGenericAfterReadHook(meta, "ODataAfterReadEntityGeneric", r, opts, entity); invoked {
-		return override, hasOverride, err
-	}
-	if !meta.Hooks.HasODataAfterReadEntity {
-		return nil, false, nil
-	}
-
-	ctx := r.Context()
-	callResults, ok := invokeReadHook(meta, "ODataAfterReadEntity", ctx, r, opts, entity)
-	if !ok || len(callResults) == 0 {
-		return nil, false, nil
-	}
-
-	overrideProvided := false
-	var override interface{}
-
-	if first := callResults[0]; first.IsValid() {
-		if first.Kind() != reflect.Interface || !first.IsNil() {
-			override = first.Interface()
-			overrideProvided = true
-		}
-	}
-
-	if len(callResults) > 1 {
-		if errVal := callResults[1]; errVal.IsValid() && !errVal.IsNil() {
-			if err, ok := errVal.Interface().(error); ok && err != nil {
-				return nil, false, err
-			}
-		}
-	}
-
-	return override, overrideProvided, nil
+	override, hasOverride, err := invokeGenericAfterReadHook(meta, "ODataAfterReadEntityGeneric", r, opts, entity)
+	return override, hasOverride, err
 }
 
 // invokeReadHook instantiates an entity value for the provided metadata and calls the requested hook method.
@@ -294,27 +176,27 @@ func callHookMethod(method reflect.Value, args ...interface{}) []reflect.Value {
 	return method.Call(callArgs)
 }
 
-func invokeGenericBeforeReadHook(meta *metadata.EntityMetadata, methodName string, r *http.Request, opts *query.QueryOptions) (bool, error) {
+func invokeGenericBeforeReadHook(meta *metadata.EntityMetadata, methodName string, r *http.Request, opts *query.QueryOptions) error {
 	ctx := r.Context()
 	results, ok := invokeReadHook(meta, methodName, ctx, r, opts)
 	if !ok {
-		return false, nil
+		return nil
 	}
 	if len(results) > 0 {
 		if errVal := results[0]; errVal.IsValid() && !errVal.IsNil() {
 			if err, ok := errVal.Interface().(error); ok && err != nil {
-				return true, err
+				return err
 			}
 		}
 	}
-	return true, nil
+	return nil
 }
 
-func invokeGenericAfterReadHook(meta *metadata.EntityMetadata, methodName string, r *http.Request, opts *query.QueryOptions, payload interface{}) (interface{}, bool, bool, error) {
+func invokeGenericAfterReadHook(meta *metadata.EntityMetadata, methodName string, r *http.Request, opts *query.QueryOptions, payload interface{}) (interface{}, bool, error) {
 	ctx := r.Context()
 	results, ok := invokeReadHook(meta, methodName, ctx, r, opts, payload)
 	if !ok {
-		return nil, false, false, nil
+		return nil, false, nil
 	}
 
 	overrideProvided := false
@@ -329,9 +211,9 @@ func invokeGenericAfterReadHook(meta *metadata.EntityMetadata, methodName string
 	if len(results) > 1 {
 		if errVal := results[1]; errVal.IsValid() && !errVal.IsNil() {
 			if err, ok := errVal.Interface().(error); ok && err != nil {
-				return nil, false, true, err
+				return nil, false, err
 			}
 		}
 	}
-	return override, overrideProvided, true, nil
+	return override, overrideProvided, nil
 }

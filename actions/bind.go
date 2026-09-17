@@ -3,6 +3,8 @@ package actions
 import (
 	"fmt"
 	"reflect"
+
+	internalactions "github.com/nlstn/go-odata/internal/actions"
 )
 
 // BindParams converts the provided parameter map into the requested struct type.
@@ -15,7 +17,7 @@ func BindParams[T any](params map[string]interface{}) (T, error) {
 		return zero, fmt.Errorf("parameters map cannot be nil")
 	}
 
-	if bound, ok := params[BoundStructKey]; ok {
+	if bound, ok := params[internalactions.BoundStructKey]; ok {
 		if converted, ok := tryConvertBound[T](bound); ok {
 			return converted, nil
 		}
@@ -25,7 +27,7 @@ func BindParams[T any](params map[string]interface{}) (T, error) {
 	targetVal := reflect.ValueOf(&target).Elem()
 	targetType := targetVal.Type()
 
-	bindings, err := CollectFieldBindings(targetType)
+	bindings, err := internalactions.CollectFieldBindings(targetType)
 	if err != nil {
 		return zero, err
 	}
@@ -38,12 +40,12 @@ func BindParams[T any](params map[string]interface{}) (T, error) {
 		}
 	}
 
-	storedValue, err := NewDecodeTarget(targetType)
+	storedValue, err := internalactions.NewDecodeTarget(targetType)
 	if err != nil {
 		return zero, err
 	}
 
-	if err := ApplyBindings(storedValue, bindings, params); err != nil {
+	if err := internalactions.ApplyBindings(storedValue, bindings, params); err != nil {
 		return zero, err
 	}
 
@@ -52,7 +54,7 @@ func BindParams[T any](params map[string]interface{}) (T, error) {
 		resultVal = storedValue.Elem()
 	}
 
-	params[BoundStructKey] = storedValue.Interface()
+	params[internalactions.BoundStructKey] = storedValue.Interface()
 
 	if !resultVal.Type().AssignableTo(targetVal.Type()) {
 		return zero, fmt.Errorf("unable to bind parameters to target type %s", targetType)

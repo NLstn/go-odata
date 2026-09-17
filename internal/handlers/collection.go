@@ -112,13 +112,12 @@ func (h *EntityHandler) handleGetCount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	scopes, hookErr := callBeforeReadCollection(h.metadata, r, queryOptions)
-	if hookErr != nil {
+	if hookErr := callBeforeReadCollection(h.metadata, r, queryOptions); hookErr != nil {
 		h.writeHookError(w, r, hookErr, http.StatusForbidden, "Authorization failed")
 		return
 	}
 
-	count, countErr := h.countEntities(r.Context(), queryOptions, scopes)
+	count, countErr := h.countEntities(r.Context(), queryOptions, nil)
 	if countErr != nil {
 		WriteError(w, r, http.StatusInternalServerError, ErrMsgDatabaseError, countErr.Error())
 		return
