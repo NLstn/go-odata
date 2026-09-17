@@ -59,7 +59,7 @@ jobs:
         echo "Started complianceserver (pid $!)"
 
     - name: Run compliance suite
-      uses: NLstn/odata-compliance-suite@main # follow the latest compliance-suite source
+      uses: NLstn/odata-compliance-suite@875e9c66a4ab5b542d83156106a7c9297544941f # latest compliance-suite source commit
       with:
         server: http://localhost:9090
         timeout: 60
