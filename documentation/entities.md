@@ -444,7 +444,7 @@ A field tagged `odata:"computed"` has no backing database column. It stays in `m
 | `$orderby=field` | ❌ Returns `400 Bad Request` |
 | POST / PATCH with field | ❌ Returns `400 Bad Request` |
 
-Populate computed fields in `ODataAfterReadEntity` or `ODataAfterReadCollection` hooks:
+Populate computed fields in `ODataAfterReadEntityGeneric` or `ODataAfterReadCollectionGeneric` hooks:
 
 ```go
 type Employee struct {
@@ -454,8 +454,8 @@ type Employee struct {
     DisplayName string `json:"displayName" gorm:"-"           odata:"computed"` // no DB column
 }
 
-// ODataAfterReadCollection populates DisplayName for each employee.
-func (Employee) ODataAfterReadCollection(ctx context.Context, r *http.Request, opts *odata.QueryOptions, results interface{}) (interface{}, error) {
+// ODataAfterReadCollectionGeneric populates DisplayName for each employee.
+func (Employee) ODataAfterReadCollectionGeneric(ctx context.Context, r *http.Request, opts *odata.QueryOptions, results interface{}) (interface{}, error) {
     if employees, ok := results.(*[]Employee); ok {
         for i := range *employees {
             e := &(*employees)[i]
@@ -465,8 +465,8 @@ func (Employee) ODataAfterReadCollection(ctx context.Context, r *http.Request, o
     return nil, nil
 }
 
-// ODataAfterReadEntity populates DisplayName for a single employee.
-func (Employee) ODataAfterReadEntity(ctx context.Context, r *http.Request, opts *odata.QueryOptions, entity interface{}) (interface{}, error) {
+// ODataAfterReadEntityGeneric populates DisplayName for a single employee.
+func (Employee) ODataAfterReadEntityGeneric(ctx context.Context, r *http.Request, opts *odata.QueryOptions, entity interface{}) (interface{}, error) {
     if e, ok := entity.(*Employee); ok {
         e.DisplayName = e.FirstName + " " + e.LastName
     }
@@ -489,28 +489,22 @@ Use `computed` for fields populated entirely in application code after the datab
 
 ## Read Hooks and Query Options
 
-Read hooks run alongside the entity metadata you define here. When you implement `BeforeReadCollection` or `BeforeReadEntity`, return one or more [GORM scopes](https://gorm.io/docs/scopes.html). `go-odata` applies those scopes to the base query *before* it executes OData options such as `$filter`, `$orderby`, `$top`, `$skip`, `$expand`, and `$count`.
+Read hooks run alongside the entity metadata you define here. Implement `ODataBeforeReadCollectionGeneric` or `ODataBeforeReadEntityGeneric` to validate a read request before the query executes; returning an error aborts the request.
 
 Best practices:
 
-- **Return scopes, not mutations.** Always return scopes from `BeforeRead*` hooks instead of modifying the `*gorm.DB` manually. This keeps the handler free to compose query options, pagination, `$count`, and `$expand` requests using the same filtered query.
-- **Handle `$count` transparently.** The same scopes are reused when clients request `$count=true`, so tenant filters or soft-delete predicates remain in sync.
-- **Keep After hooks pure.** `AfterReadEntity` and `AfterReadCollection` receive the materialized result *after* pagination and projections. Use them to redact or enrich the payload, but avoid additional database work to keep responses fast.
+- **Use query filters for row-level security.** For tenant filters or soft-delete predicates, register an authorization policy that implements `QueryFilterProvider` (see [Authorization](authorization.md#row-level-security-with-query-filters)). The returned filter is combined with the client's `$filter` and stays in sync across pagination and `$count=true` requests.
+- **Keep After hooks pure.** `ODataAfterReadEntityGeneric` and `ODataAfterReadCollectionGeneric` receive the materialized result *after* pagination and projections. Use them to redact or enrich the payload, but avoid additional database work to keep responses fast.
 
-Example multi-tenant hook that preserves pagination and `$count` alignment:
+Example before-read hook that rejects requests without a tenant:
 
 ```go
-// Requires: import "fmt" and "gorm.io/gorm"
-func (Order) ODataBeforeReadCollection(ctx context.Context, r *http.Request, opts *odata.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
-    tenantID := r.Header.Get("X-Tenant-ID")
-    if tenantID == "" {
-        return nil, fmt.Errorf("missing tenant header")
+// Requires: import "fmt"
+func (Order) ODataBeforeReadCollectionGeneric(ctx context.Context, r *http.Request, opts *odata.QueryOptions) error {
+    if r.Header.Get("X-Tenant-ID") == "" {
+        return fmt.Errorf("missing tenant header")
     }
-
-    scope := func(db *gorm.DB) *gorm.DB {
-        return db.Where("tenant_id = ?", tenantID)
-    }
-    return []func(*gorm.DB) *gorm.DB{scope}, nil
+    return nil
 }
 ```
 

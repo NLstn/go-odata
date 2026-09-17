@@ -131,7 +131,9 @@ func main() {
 		log.Fatal("Failed to set service namespace:", err)
 	}
 
-	service.SetSchemaVersion("1.0")
+	if err := service.SetSchemaVersion("1.0"); err != nil {
+		log.Fatal("Failed to set schema version:", err)
+	}
 
 	if err := service.RegisterEntity(&entities.HierarchyNode{}); err != nil {
 		log.Fatal(err)

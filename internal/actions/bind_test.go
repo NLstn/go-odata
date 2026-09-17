@@ -4,8 +4,6 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-
-	publicactions "github.com/nlstn/go-odata/actions"
 )
 
 type testParams struct {
@@ -71,7 +69,7 @@ func TestBindStructToParams(t *testing.T) {
 		if err := bindStructToParams(params, nil); err != nil {
 			t.Fatalf("bindStructToParams nil type error: %v", err)
 		}
-		if _, ok := params[publicactions.BoundStructKey]; ok {
+		if _, ok := params[BoundStructKey]; ok {
 			t.Fatal("expected no bound struct for nil type")
 		}
 	})
@@ -93,7 +91,7 @@ func TestBindStructToParams(t *testing.T) {
 			t.Fatalf("bindStructToParams error: %v", err)
 		}
 
-		bound, ok := params[publicactions.BoundStructKey]
+		bound, ok := params[BoundStructKey]
 		if !ok {
 			t.Fatal("expected bound struct in params")
 		}

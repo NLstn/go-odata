@@ -93,12 +93,11 @@ func TestEntityHandlerCount(t *testing.T) {
 				t.Fatalf("failed to parse query options: %v", err)
 			}
 
-			scopes, hookErr := callBeforeReadCollection(handler.metadata, helperReq, queryOptions)
-			if hookErr != nil {
+			if hookErr := callBeforeReadCollection(handler.metadata, helperReq, queryOptions); hookErr != nil {
 				t.Fatalf("before read hook failed: %v", hookErr)
 			}
 
-			helperCount, err := handler.countEntities(context.Background(), queryOptions, scopes)
+			helperCount, err := handler.countEntities(context.Background(), queryOptions, nil)
 			if err != nil {
 				t.Fatalf("countEntities returned error: %v", err)
 			}
@@ -205,12 +204,11 @@ func TestCountConsistencyAcrossEndpoints(t *testing.T) {
 				t.Fatalf("failed to parse query options: %v", err)
 			}
 
-			scopes, hookErr := callBeforeReadCollection(handler.metadata, helperReq, queryOptions)
-			if hookErr != nil {
+			if hookErr := callBeforeReadCollection(handler.metadata, helperReq, queryOptions); hookErr != nil {
 				t.Fatalf("before read hook failed: %v", hookErr)
 			}
 
-			helperCount, err := handler.countEntities(context.Background(), queryOptions, scopes)
+			helperCount, err := handler.countEntities(context.Background(), queryOptions, nil)
 			if err != nil {
 				t.Fatalf("countEntities returned error: %v", err)
 			}

@@ -25,10 +25,6 @@ type Config struct {
 	// This adds overhead but provides detailed insight into query performance.
 	EnableDetailedDBTracing bool
 
-	// EnableQueryOptionTracing is reserved for future implementation.
-	// When implemented, it will add query options ($filter, $select, etc.) as span attributes.
-	EnableQueryOptionTracing bool
-
 	// EnableServerTiming enables the Server-Timing HTTP response header.
 	// When enabled, timing metrics are added to responses for debugging in browser dev tools.
 	EnableServerTiming bool
@@ -68,13 +64,6 @@ func WithServiceName(name string) Option {
 func WithDetailedDBTracing() Option {
 	return func(c *Config) {
 		c.EnableDetailedDBTracing = true
-	}
-}
-
-// WithQueryOptionTracing enables query option attributes on spans.
-func WithQueryOptionTracing() Option {
-	return func(c *Config) {
-		c.EnableQueryOptionTracing = true
 	}
 }
 

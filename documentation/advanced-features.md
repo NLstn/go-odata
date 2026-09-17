@@ -351,17 +351,12 @@ type User struct {
     Name string `json:"name"`
 }
 
-func (u User) ODataBeforeReadCollection(ctx context.Context, r *http.Request, opts *odata.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
-    // Add tenant filter
-    tenantID := r.Header.Get("X-Tenant-ID")
-    if tenantID == "" {
-        return nil, fmt.Errorf("missing tenant header")
+func (u User) ODataBeforeReadCollectionGeneric(ctx context.Context, r *http.Request, opts *odata.QueryOptions) error {
+    // Require a tenant header
+    if r.Header.Get("X-Tenant-ID") == "" {
+        return fmt.Errorf("missing tenant header")
     }
-    return []func(*gorm.DB) *gorm.DB{
-        func(db *gorm.DB) *gorm.DB {
-            return db.Where("tenant_id = ?", tenantID)
-        },
-    }, nil
+    return nil
 }
 ```
 
@@ -539,10 +534,10 @@ The library supports the following hooks:
 - `ODataAfterUpdate` - Called after updating an entity
 - `ODataBeforeDelete` - Called before deleting an entity
 - `ODataAfterDelete` - Called after deleting an entity
-- `ODataBeforeReadCollection` - Called before reading a collection (applies additional GORM scopes)
-- `ODataAfterReadCollection` - Called after reading a collection (allows mutating/overriding the result)
-- `ODataBeforeReadEntity` - Called before reading a single entity (applies additional GORM scopes)
-- `ODataAfterReadEntity` - Called after reading a single entity (allows mutating/overriding the result)
+- `ODataBeforeReadCollectionGeneric` - Called before reading a collection (can reject the request)
+- `ODataAfterReadCollectionGeneric` - Called after reading a collection (allows mutating/overriding the result)
+- `ODataBeforeReadEntityGeneric` - Called before reading a single entity (can reject the request)
+- `ODataAfterReadEntityGeneric` - Called after reading a single entity (allows mutating/overriding the result)
 
 ### Implementing Hooks
 
@@ -586,49 +581,24 @@ func (p *Product) ODataAfterCreate(ctx context.Context, r *http.Request) error {
 }
 ```
 
-### Using the active transaction inside hooks
+### Transactional behaviour of write hooks
 
-Entity and collection write handlers execute inside a shared GORM transaction. The active `*gorm.DB` is stored on the request
-context so your hooks can participate in the same transaction by calling `odata.TransactionFromContext`:
+Entity and collection write handlers execute inside a shared database transaction. Returning a non-`nil` error from any
+`Before*` hook aborts the handler and rolls back the transaction, so hook-driven validation never leaves partial updates
+behind.
+
+The hooks themselves are storage-agnostic and do not expose the underlying transaction. If you need to perform additional
+database writes atomically with the entity write (for example audit records), use your storage layer's own hook mechanism —
+with GORM, model callbacks such as `BeforeCreate(tx *gorm.DB)` and `AfterCreate(tx *gorm.DB)` run inside the same
+transaction as the entity write:
 
 ```go
-func (p *Product) ODataBeforeCreate(ctx context.Context, r *http.Request) error {
-    tx, ok := odata.TransactionFromContext(ctx)
-    if !ok {
-        return fmt.Errorf("transaction unavailable")
-    }
-
-    audit := CreationAudit{
-        ProductID: p.ID,
-        PerformedBy: r.Header.Get("X-User"),
-    }
-    if err := tx.Create(&audit).Error; err != nil {
-        return err
-    }
-    return nil
-}
-
-func (p *Product) ODataBeforeUpdate(ctx context.Context, r *http.Request) error {
-    tx, ok := odata.TransactionFromContext(ctx)
-    if !ok {
-        return fmt.Errorf("transaction unavailable")
-    }
-
-    if err := tx.Model(&Inventory{}).
-        Where("product_id = ?", p.ID).
-        Update("last_checked_at", time.Now()).Error; err != nil {
-        return err
-    }
-
-    if p.IsRetired {
-        return fmt.Errorf("retired products cannot be edited")
-    }
-    return nil
+// GORM model callback: runs in the same transaction as the OData write.
+func (p *Product) AfterCreate(tx *gorm.DB) error {
+    audit := CreationAudit{ProductID: p.ID}
+    return tx.Create(&audit).Error
 }
 ```
-
-Any error returned by a hook still aborts the handler, rolling back changes performed via the shared transaction so partial updates
-never escape to the database.
 
 ### Hook Use Cases
 
@@ -751,16 +721,16 @@ func (p *Product) ODataBeforeCreate(_ context.Context, _ *http.Request) error {
 
 Read hooks let you shape read behavior without forking handlers:
 
-- **Before hooks** (`ODataBeforeReadCollection` / `ODataBeforeReadEntity`) return additional [GORM scopes](https://gorm.io/docs/scopes.html). Each scope is applied to the underlying query *before* OData options like `$filter`, `$orderby`, `$top`, `$skip`, and `$count` execute. This is the preferred place for authorization filters, tenant scoping, or eager-loading navigation properties.
-- **After hooks** (`ODataAfterReadCollection` / `ODataAfterReadEntity`) receive the fetched results after all query options and pagination have been applied. They can mutate or replace the response payload (e.g., redact fields, append computed properties) before it is sent to the client.
+- **Before hooks** (`ODataBeforeReadCollectionGeneric` / `ODataBeforeReadEntityGeneric`) run before the query executes, after the OData query options have been parsed. Return an error to reject the request (use `odata.HookError` or `odata.ODataError` to control the HTTP status code).
+- **After hooks** (`ODataAfterReadCollectionGeneric` / `ODataAfterReadEntityGeneric`) receive the fetched results after all query options and pagination have been applied. They can mutate or replace the response payload (e.g., redact fields, append computed properties) before it is sent to the client.
 
 Hook signatures:
 
 ```go
-func (Product) ODataBeforeReadCollection(ctx context.Context, r *http.Request, opts *odata.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error)
-func (Product) ODataAfterReadCollection(ctx context.Context, r *http.Request, opts *odata.QueryOptions, results interface{}) (interface{}, error)
-func (Product) ODataBeforeReadEntity(ctx context.Context, r *http.Request, opts *odata.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error)
-func (Product) ODataAfterReadEntity(ctx context.Context, r *http.Request, opts *odata.QueryOptions, entity interface{}) (interface{}, error)
+func (Product) ODataBeforeReadCollectionGeneric(ctx context.Context, r *http.Request, opts *odata.QueryOptions) error
+func (Product) ODataAfterReadCollectionGeneric(ctx context.Context, r *http.Request, opts *odata.QueryOptions, results interface{}) (interface{}, error)
+func (Product) ODataBeforeReadEntityGeneric(ctx context.Context, r *http.Request, opts *odata.QueryOptions) error
+func (Product) ODataAfterReadEntityGeneric(ctx context.Context, r *http.Request, opts *odata.QueryOptions, entity interface{}) (interface{}, error)
 ```
 
 Each hook receives the active HTTP request, context, and parsed OData query options. Returning an error aborts the request and surfaces the error to the client.
@@ -768,47 +738,47 @@ Return `(nil, nil)` from an After hook to keep the original response body.
 
 ### Tenant Filtering Example
 
-Apply multi-tenant filters centrally by returning scopes from `ODataBeforeReadCollection` and `ODataBeforeReadEntity` hooks:
+For row-level filtering such as multi-tenancy, register an authorization policy that implements `QueryFilterProvider`. The
+filter it returns is combined with the client's `$filter` and applied consistently across collection reads, `$count`,
+pagination, and navigation reads (see [Authorization](authorization.md#row-level-security-with-query-filters) for details):
 
 ```go
-// Requires: import "fmt" and "gorm.io/gorm"
-type Product struct {
-    ID        uint   `json:"ID" gorm:"primaryKey" odata:"key"`
-    Name      string `json:"Name"`
-    TenantID  string `json:"TenantID"`
+type TenantPolicy struct{}
+
+func (TenantPolicy) Authorize(ctx odata.AuthContext, resource odata.ResourceDescriptor, operation odata.Operation) odata.Decision {
+    if tenant, ok := ctx.Claims["tenant"].(string); !ok || tenant == "" {
+        return odata.Deny("missing tenant")
+    }
+    return odata.Allow()
 }
 
-func (Product) tenantScope(tenantID string) func(*gorm.DB) *gorm.DB {
-    return func(db *gorm.DB) *gorm.DB {
-        return db.Where("tenant_id = ?", tenantID)
-    }
-}
-
-func (Product) ODataBeforeReadCollection(ctx context.Context, r *http.Request, opts *odata.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
-    tenantID := r.Header.Get("X-Tenant-ID")
-    if tenantID == "" {
-        return nil, fmt.Errorf("missing tenant header")
-    }
-    return []func(*gorm.DB) *gorm.DB{Product{}.tenantScope(tenantID)}, nil
-}
-
-func (Product) ODataBeforeReadEntity(ctx context.Context, r *http.Request, opts *odata.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
-    tenantID := r.Header.Get("X-Tenant-ID")
-    if tenantID == "" {
-        return nil, fmt.Errorf("missing tenant header")
-    }
-    return []func(*gorm.DB) *gorm.DB{Product{}.tenantScope(tenantID)}, nil
+func (TenantPolicy) QueryFilter(ctx odata.AuthContext, resource odata.ResourceDescriptor, operation odata.Operation) (*odata.FilterExpression, error) {
+    tenant, _ := ctx.Claims["tenant"].(string)
+    return &odata.FilterExpression{
+        Property: "TenantID",
+        Operator: "eq",
+        Value:    tenant,
+    }, nil
 }
 ```
 
-By returning scopes instead of mutating the request, the same tenant filter is applied consistently across `$count`, pagination, `$expand`, and navigation reads.
+Use a before-read hook when you only need to validate the request (for example, require a tenant header) rather than filter rows:
+
+```go
+func (Product) ODataBeforeReadCollectionGeneric(ctx context.Context, r *http.Request, opts *odata.QueryOptions) error {
+    if r.Header.Get("X-Tenant-ID") == "" {
+        return fmt.Errorf("missing tenant header")
+    }
+    return nil
+}
+```
 
 ### Redacting Sensitive Data
 
-Use `ODataAfterReadEntity` or `ODataAfterReadCollection` to redact fields just before they leave the service:
+Use `ODataAfterReadEntityGeneric` or `ODataAfterReadCollectionGeneric` to redact fields just before they leave the service:
 
 ```go
-func (Product) ODataAfterReadEntity(ctx context.Context, r *http.Request, opts *odata.QueryOptions, entity interface{}) (interface{}, error) {
+func (Product) ODataAfterReadEntityGeneric(ctx context.Context, r *http.Request, opts *odata.QueryOptions, entity interface{}) (interface{}, error) {
     product, ok := entity.(*Product)
     if !ok {
         return entity, nil
@@ -820,7 +790,7 @@ func (Product) ODataAfterReadEntity(ctx context.Context, r *http.Request, opts *
     return product, nil
 }
 
-func (Product) ODataAfterReadCollection(ctx context.Context, r *http.Request, opts *odata.QueryOptions, results interface{}) (interface{}, error) {
+func (Product) ODataAfterReadCollectionGeneric(ctx context.Context, r *http.Request, opts *odata.QueryOptions, results interface{}) (interface{}, error) {
     products, ok := results.([]Product)
     if !ok {
         return results, nil

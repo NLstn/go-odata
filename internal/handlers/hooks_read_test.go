@@ -28,39 +28,48 @@ type readHookChild struct {
 	Value            string `json:"Value"`
 }
 
-func tenantScopes(r *http.Request) ([]func(*gorm.DB) *gorm.DB, error) {
+// applyTenantFilter narrows the parsed query options to the tenant supplied on the
+// request. Generic before-read hooks are storage-agnostic: instead of returning GORM
+// scopes they mutate the parsed OData query options.
+func applyTenantFilter(r *http.Request, opts *query.QueryOptions) error {
 	tenant := r.Header.Get("X-Tenant")
 	if tenant == "" {
-		return nil, fmt.Errorf("missing tenant")
+		return fmt.Errorf("missing tenant")
 	}
-	scope := func(db *gorm.DB) *gorm.DB {
-		return db.Where("tenant = ?", tenant)
+	tenantFilter := &query.FilterExpression{Property: "Tenant", Operator: query.OpEqual, Value: tenant}
+	if opts.Filter != nil {
+		opts.Filter = &query.FilterExpression{Left: opts.Filter, Right: tenantFilter, Logical: query.LogicalAnd}
+	} else {
+		opts.Filter = tenantFilter
 	}
-	return []func(*gorm.DB) *gorm.DB{scope}, nil
+	return nil
 }
 
-func (readHookEntity) ODataBeforeReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
+func (readHookEntity) ODataBeforeReadCollectionGeneric(ctx context.Context, r *http.Request, opts *query.QueryOptions) error {
 	if r.Header.Get("X-Deny") == "collection" {
-		return nil, fmt.Errorf("collection denied")
+		return fmt.Errorf("collection denied")
 	}
-	return tenantScopes(r)
+	return applyTenantFilter(r, opts)
 }
 
-func (readHookEntity) ODataAfterReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions, results interface{}) (interface{}, error) {
+func (readHookEntity) ODataAfterReadCollectionGeneric(ctx context.Context, r *http.Request, opts *query.QueryOptions, results interface{}) (interface{}, error) {
 	if r.Header.Get("X-Override") == "collection" {
 		return []map[string]interface{}{{"Custom": "collection"}}, nil
 	}
 	return nil, nil
 }
 
-func (readHookEntity) ODataBeforeReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
+func (readHookEntity) ODataBeforeReadEntityGeneric(ctx context.Context, r *http.Request, opts *query.QueryOptions) error {
 	if r.Header.Get("X-Deny") == "entity" {
-		return nil, fmt.Errorf("entity denied")
+		return fmt.Errorf("entity denied")
 	}
-	return tenantScopes(r)
+	if r.Header.Get("X-Tenant") == "" {
+		return fmt.Errorf("missing tenant")
+	}
+	return nil
 }
 
-func (readHookEntity) ODataAfterReadEntity(ctx context.Context, r *http.Request, opts *query.QueryOptions, entity interface{}) (interface{}, error) {
+func (readHookEntity) ODataAfterReadEntityGeneric(ctx context.Context, r *http.Request, opts *query.QueryOptions, entity interface{}) (interface{}, error) {
 	if r.Header.Get("X-Override") == "entity" {
 		return map[string]interface{}{"Message": "entity"}, nil
 	}
@@ -70,11 +79,11 @@ func (readHookEntity) ODataAfterReadEntity(ctx context.Context, r *http.Request,
 	return nil, nil
 }
 
-func (readHookChild) ODataBeforeReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
-	return tenantScopes(r)
+func (readHookChild) ODataBeforeReadCollectionGeneric(ctx context.Context, r *http.Request, opts *query.QueryOptions) error {
+	return applyTenantFilter(r, opts)
 }
 
-func (readHookChild) ODataAfterReadCollection(ctx context.Context, r *http.Request, opts *query.QueryOptions, results interface{}) (interface{}, error) {
+func (readHookChild) ODataAfterReadCollectionGeneric(ctx context.Context, r *http.Request, opts *query.QueryOptions, results interface{}) (interface{}, error) {
 	if r.Header.Get("X-Override") == "nav" {
 		return []map[string]interface{}{{"Custom": "nav"}}, nil
 	}
@@ -145,7 +154,7 @@ func decodeBody(t *testing.T, body []byte) map[string]interface{} {
 }
 
 func TestHandleGetCollectionReadHooks(t *testing.T) {
-	t.Run("scopes apply to data and count", func(t *testing.T) {
+	t.Run("before hook filter applies to data and count", func(t *testing.T) {
 		handler := setupReadHookHandler(t)
 		req := httptest.NewRequest(http.MethodGet, "/ReadHookEntities?$count=true", nil)
 		req.Header.Set("X-Tenant", "tenantA")
@@ -213,7 +222,7 @@ func TestHandleGetCollectionReadHooks(t *testing.T) {
 	})
 }
 
-func TestHandleCollectionRefScopesApplied(t *testing.T) {
+func TestHandleCollectionRefFilterApplied(t *testing.T) {
 	handler := setupReadHookHandler(t)
 	req := httptest.NewRequest(http.MethodGet, "/ReadHookEntities/$ref?$count=true", nil)
 	req.Header.Set("X-Tenant", "tenantA")
@@ -239,7 +248,7 @@ func TestHandleCollectionRefScopesApplied(t *testing.T) {
 }
 
 func TestHandleGetEntityReadHooks(t *testing.T) {
-	t.Run("mutation and scopes", func(t *testing.T) {
+	t.Run("mutation and tenant check", func(t *testing.T) {
 		handler := setupReadHookHandler(t)
 		req := httptest.NewRequest(http.MethodGet, "/ReadHookEntities(1)", nil)
 		req.Header.Set("X-Tenant", "tenantA")
@@ -289,7 +298,7 @@ func TestHandleGetEntityReadHooks(t *testing.T) {
 func TestNavigationCollectionReadHooks(t *testing.T) {
 	navPropName := "Children"
 
-	t.Run("scopes apply to navigation reads", func(t *testing.T) {
+	t.Run("before hook filter applies to navigation reads", func(t *testing.T) {
 		handler := setupReadHookHandler(t)
 		navProp := handler.findNavigationProperty(navPropName)
 		if navProp == nil {

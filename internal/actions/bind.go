@@ -3,14 +3,12 @@ package actions
 import (
 	"fmt"
 	"reflect"
-
-	publicactions "github.com/nlstn/go-odata/actions"
 )
 
 // ParameterDefinitionsFromStruct derives parameter definitions for the provided struct type.
 // The type may be either a struct or a pointer to struct.
 func ParameterDefinitionsFromStruct(t reflect.Type) ([]ParameterDefinition, error) {
-	bindings, err := publicactions.CollectFieldBindings(t)
+	bindings, err := CollectFieldBindings(t)
 	if err != nil {
 		return nil, err
 	}
@@ -32,7 +30,7 @@ func bindStructToParams(params map[string]interface{}, structType reflect.Type) 
 		return nil
 	}
 
-	bindings, err := publicactions.CollectFieldBindings(structType)
+	bindings, err := CollectFieldBindings(structType)
 	if err != nil {
 		return err
 	}
@@ -45,15 +43,15 @@ func bindStructToParams(params map[string]interface{}, structType reflect.Type) 
 		}
 	}
 
-	storedValue, err := publicactions.NewDecodeTarget(structType)
+	storedValue, err := NewDecodeTarget(structType)
 	if err != nil {
 		return err
 	}
 
-	if err := publicactions.ApplyBindings(storedValue, bindings, params); err != nil {
+	if err := ApplyBindings(storedValue, bindings, params); err != nil {
 		return err
 	}
 
-	params[publicactions.BoundStructKey] = storedValue.Interface()
+	params[BoundStructKey] = storedValue.Interface()
 	return nil
 }

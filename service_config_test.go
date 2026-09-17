@@ -363,15 +363,30 @@ func TestHandler(t *testing.T) {
 	}
 }
 
-// TestTransactionFromContext verifies transaction context extraction
-func TestTransactionFromContext(t *testing.T) {
-	// Test with context that has no transaction
-	ctx := context.Background()
-	tx, ok := TransactionFromContext(ctx)
-	if ok {
-		t.Error("Expected no transaction from empty context")
+// TestSetSchemaVersion verifies schema version validation
+func TestSetSchemaVersion(t *testing.T) {
+	db := setupTestDB(t)
+	service, err := NewService(db)
+	if err != nil {
+		t.Fatalf("Failed to create service: %v", err)
 	}
-	if tx != nil {
-		t.Error("Expected nil transaction from empty context")
+
+	if err := service.SetSchemaVersion("1.0"); err != nil {
+		t.Errorf("SetSchemaVersion(\"1.0\") returned error: %v", err)
+	}
+
+	// Empty string disables schema versioning and is valid
+	if err := service.SetSchemaVersion(""); err != nil {
+		t.Errorf("SetSchemaVersion(\"\") returned error: %v", err)
+	}
+
+	// Blank (whitespace-only) versions are rejected
+	if err := service.SetSchemaVersion("   "); err == nil {
+		t.Error("SetSchemaVersion(\"   \") expected error, got nil")
+	}
+
+	// The wildcard is reserved for client requests
+	if err := service.SetSchemaVersion("*"); err == nil {
+		t.Error("SetSchemaVersion(\"*\") expected error, got nil")
 	}
 }

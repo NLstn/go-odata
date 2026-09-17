@@ -1,6 +1,9 @@
 # Temporary files
 tmp/
 
+# Local git worktrees
+.worktrees/
+
 # Compliance test reports (generated)
 **/compliance-report.md
 
@@ -12,6 +15,7 @@ tmp/
 *.dylib
 
 # Binary executables
+bin/
 cmd/devserver/devserver
 cmd/complianceserver/complianceserver
 cmd/perfserver/perfserver

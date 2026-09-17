@@ -414,7 +414,7 @@ Consider implementing authorization at multiple levels:
 Example field-level redaction:
 
 ```go
-func (u User) ODataAfterReadEntity(
+func (u User) ODataAfterReadEntityGeneric(
     ctx context.Context,
     r *http.Request,
     opts *odata.QueryOptions,

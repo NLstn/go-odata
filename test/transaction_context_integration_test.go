@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	odata "github.com/nlstn/go-odata"
+	"github.com/nlstn/go-odata/internal/handlers"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -28,9 +29,12 @@ var (
 	hookTransactionAttempted bool
 )
 
+// ODataBeforeUpdate exercises the shared write transaction end to end. The public
+// TransactionFromContext helper was removed pre-1.0; this test reaches into the
+// internal accessor to keep coverage of the rollback-on-hook-error semantics.
 func (e *TransactionContextEntity) ODataBeforeUpdate(ctx context.Context, _ *http.Request) error {
 	hookTransactionAttempted = true
-	tx, ok := odata.TransactionFromContext(ctx)
+	tx, ok := handlers.TransactionFromContext(ctx)
 	if !ok {
 		return fmt.Errorf("transaction not available in context")
 	}

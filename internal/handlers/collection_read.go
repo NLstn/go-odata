@@ -192,11 +192,11 @@ func (h *EntityHandler) parseCollectionQueryOptions(w http.ResponseWriter, r *ht
 
 func (h *EntityHandler) beforeReadCollection(r *http.Request) func(*query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
 	return func(queryOptions *query.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
-		scopes, err := callBeforeReadCollection(h.metadata, r, queryOptions)
-		if err != nil {
+		if err := callBeforeReadCollection(h.metadata, r, queryOptions); err != nil {
 			return nil, err
 		}
 
+		var scopes []func(*gorm.DB) *gorm.DB
 		if typeCast := GetTypeCast(r.Context()); typeCast != "" {
 			if scope := h.buildTypeCastScope(typeCast); scope != nil {
 				scopes = append(scopes, scope)

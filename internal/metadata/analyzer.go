@@ -50,16 +50,12 @@ type EntityMetadata struct {
 	TypeDiscriminator *TypeDiscriminatorInfo
 	// Hooks defines which lifecycle hooks are available on this entity
 	Hooks struct {
-		HasODataBeforeCreate         bool
-		HasODataAfterCreate          bool
-		HasODataBeforeUpdate         bool
-		HasODataAfterUpdate          bool
-		HasODataBeforeDelete         bool
-		HasODataAfterDelete          bool
-		HasODataBeforeReadCollection bool
-		HasODataAfterReadCollection  bool
-		HasODataBeforeReadEntity     bool
-		HasODataAfterReadEntity      bool
+		HasODataBeforeCreate bool
+		HasODataAfterCreate  bool
+		HasODataBeforeUpdate bool
+		HasODataAfterUpdate  bool
+		HasODataBeforeDelete bool
+		HasODataAfterDelete  bool
 	}
 	// Annotations holds OData vocabulary annotations for this entity type
 	Annotations           *AnnotationCollection
@@ -1255,26 +1251,6 @@ func detectHooks(metadata *EntityMetadata) {
 	// Check ODataAfterDelete
 	if hasMethod(valueType, "ODataAfterDelete") || hasMethod(ptrType, "ODataAfterDelete") {
 		metadata.Hooks.HasODataAfterDelete = true
-	}
-
-	// Check ODataBeforeReadCollection
-	if hasMethod(valueType, "ODataBeforeReadCollection") || hasMethod(ptrType, "ODataBeforeReadCollection") {
-		metadata.Hooks.HasODataBeforeReadCollection = true
-	}
-
-	// Check ODataAfterReadCollection
-	if hasMethod(valueType, "ODataAfterReadCollection") || hasMethod(ptrType, "ODataAfterReadCollection") {
-		metadata.Hooks.HasODataAfterReadCollection = true
-	}
-
-	// Check ODataBeforeReadEntity
-	if hasMethod(valueType, "ODataBeforeReadEntity") || hasMethod(ptrType, "ODataBeforeReadEntity") {
-		metadata.Hooks.HasODataBeforeReadEntity = true
-	}
-
-	// Check ODataAfterReadEntity
-	if hasMethod(valueType, "ODataAfterReadEntity") || hasMethod(ptrType, "ODataAfterReadEntity") {
-		metadata.Hooks.HasODataAfterReadEntity = true
 	}
 }
 

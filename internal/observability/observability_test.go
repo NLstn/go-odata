@@ -17,7 +17,6 @@ func TestNewConfig(t *testing.T) {
 	cfg := NewConfig(
 		WithServiceName("test-service"),
 		WithDetailedDBTracing(),
-		WithQueryOptionTracing(),
 	)
 
 	if cfg.ServiceName != "test-service" {
@@ -25,9 +24,6 @@ func TestNewConfig(t *testing.T) {
 	}
 	if !cfg.EnableDetailedDBTracing {
 		t.Error("expected detailed DB tracing to be enabled")
-	}
-	if !cfg.EnableQueryOptionTracing {
-		t.Error("expected query option tracing to be enabled")
 	}
 }
 

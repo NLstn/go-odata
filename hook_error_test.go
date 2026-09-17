@@ -27,10 +27,10 @@ func (EmployeeWithCustomHook) TableName() string {
 	return "employees"
 }
 
-// ODataBeforeReadEntity returns a 401 Unauthorized status code
-func (e *EmployeeWithCustomHook) ODataBeforeReadEntity(ctx context.Context, r *http.Request, opts *odata.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
+// ODataBeforeReadEntityGeneric returns a 401 Unauthorized status code
+func (e *EmployeeWithCustomHook) ODataBeforeReadEntityGeneric(ctx context.Context, r *http.Request, opts *odata.QueryOptions) error {
 	if r.Header.Get("X-Use-ODataError") == "1" {
-		return nil, &odata.ODataError{
+		return &odata.ODataError{
 			StatusCode: http.StatusConflict,
 			Code:       "INVITE_ALREADY_MEMBER",
 			Message:    "invite already exists",
@@ -45,23 +45,23 @@ func (e *EmployeeWithCustomHook) ODataBeforeReadEntity(ctx context.Context, r *h
 
 	// Simulate checking if user is authenticated by checking a header
 	if r.Header.Get("Authorization") == "" {
-		return nil, &odata.HookError{
+		return &odata.HookError{
 			StatusCode: http.StatusUnauthorized,
 			Code:       "AUTH_REQUIRED",
 			Message:    "User is not authenticated",
 			Target:     "Authorization",
 		}
 	}
-	return nil, nil
+	return nil
 }
 
-// ODataBeforeReadCollection returns a 404 Not Found for demonstration
-func (e *EmployeeWithCustomHook) ODataBeforeReadCollection(ctx context.Context, r *http.Request, opts *odata.QueryOptions) ([]func(*gorm.DB) *gorm.DB, error) {
+// ODataBeforeReadCollectionGeneric returns a 404 Not Found for demonstration
+func (e *EmployeeWithCustomHook) ODataBeforeReadCollectionGeneric(ctx context.Context, r *http.Request, opts *odata.QueryOptions) error {
 	// Simulate a scenario where the collection doesn't exist for this user
 	if r.Header.Get("X-Tenant-ID") == "missing" {
-		return nil, odata.NewHookError(http.StatusNotFound, "Collection not found for this tenant")
+		return odata.NewHookError(http.StatusNotFound, "Collection not found for this tenant")
 	}
-	return nil, nil
+	return nil
 }
 
 func TestHookError_CustomStatusCodes(t *testing.T) {

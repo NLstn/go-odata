@@ -312,8 +312,8 @@ func (u *User) GetTenantID() string {
 	return u.TenantID
 }
 
-// ODataAfterReadEntity redacts sensitive fields based on user permissions
-func (u User) ODataAfterReadEntity(ctx context.Context, r *http.Request, opts *odata.QueryOptions, entity interface{}) (interface{}, error) {
+// ODataAfterReadEntityGeneric redacts sensitive fields based on user permissions
+func (u User) ODataAfterReadEntityGeneric(ctx context.Context, r *http.Request, opts *odata.QueryOptions, entity interface{}) (interface{}, error) {
 	user := entity.(*User)
 
 	// Extract auth context from request context
