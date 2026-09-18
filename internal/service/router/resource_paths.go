@@ -206,7 +206,8 @@ func withoutPagingOptions(rawQuery string) string {
 
 func applyPaging(items []json.RawMessage, values url.Values) []json.RawMessage {
 	skip, _ := strconv.Atoi(values.Get("$skip"))
-	top, topSet := strconv.Atoi(values.Get("$top"))
+	top, topErr := strconv.Atoi(values.Get("$top"))
+	topSet := topErr == nil && values.Get("$top") != ""
 	if skip < 0 {
 		skip = 0
 	}
