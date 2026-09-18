@@ -67,6 +67,9 @@ func (r *Router) handleQueryBody(w http.ResponseWriter, req *http.Request) bool 
 	// The query body has been consumed; keep the downstream collection handler from
 	// treating this request as a JSON data-modification payload.
 	req.Header.Set("Content-Type", "application/json")
+	// /$query is a read operation even though the protocol uses POST for its
+	// query-options body; dispatch the consumed request through collection GET logic.
+	req.Method = http.MethodGet
 	return false
 }
 
