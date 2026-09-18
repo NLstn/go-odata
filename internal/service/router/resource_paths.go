@@ -49,7 +49,7 @@ func (r *Router) handleQueryBody(w http.ResponseWriter, req *http.Request) bool 
 		return true
 	}
 	bodyText := string(body)
-	if bodyText == "" || strings.ContainsAny(bodyText, " \\t\\r\\n") {
+	if bodyText == "" || strings.ContainsAny(bodyText, " \t\r\n") {
 		if err := response.WriteError(w, req, http.StatusBadRequest, "Invalid query options",
 			"the /$query request body must contain percent-encoded query options without whitespace"); err != nil {
 			r.logger.Error("Error writing error response", "error", err)
@@ -70,9 +70,9 @@ func (r *Router) handleQueryBody(w http.ResponseWriter, req *http.Request) bool 
 // handleAllResource serves the symbolic service-root $all collection.
 func (r *Router) handleAllResource(w http.ResponseWriter, req *http.Request) {
 	if r.entitySetNames == nil {
-\t\tif err := response.WriteError(w, req, http.StatusNotImplemented, "Not Implemented", "$all is not configured"); err != nil {
-\t\t\tr.logger.Error("Error writing error response", "error", err)
-\t\t}
+		if err := response.WriteError(w, req, http.StatusNotImplemented, "Not Implemented", "$all is not configured"); err != nil {
+			r.logger.Error("Error writing error response", "error", err)
+		}
 		return
 	}
 
@@ -166,9 +166,9 @@ func (r *Router) handleCrossJoin(w http.ResponseWriter, req *http.Request, path 
 			return
 		}
 		if err := json.Unmarshal(document["value"], &collections[i]); err != nil {
-\t\t\tif writeErr := response.WriteError(w, req, http.StatusInternalServerError, "Invalid entity response", err.Error()); writeErr != nil {
-\t\t\t\tr.logger.Error("Error writing error response", "error", writeErr)
-\t\t\t}
+			if writeErr := response.WriteError(w, req, http.StatusInternalServerError, err.Error()); writeErr != nil {
+				r.logger.Error("Error writing error response", "error", writeErr)
+			}
 			return
 		}
 	}
