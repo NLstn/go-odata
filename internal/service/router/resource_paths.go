@@ -64,6 +64,9 @@ func (r *Router) handleQueryBody(w http.ResponseWriter, req *http.Request) bool 
 		req.URL.RawQuery += "&" + bodyText
 	}
 	req.Body = io.NopCloser(bytes.NewReader(nil))
+	// The query body has been consumed; keep the downstream collection handler from
+	// treating this request as a JSON data-modification payload.
+	req.Header.Set("Content-Type", "application/json")
 	return false
 }
 
