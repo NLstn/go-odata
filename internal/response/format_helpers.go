@@ -370,8 +370,8 @@ func preferredResponseFormat(accept string) responseFormat {
 			// Wildcards preserve the library's JSON default.
 			format = responseFormatJSON
 		}
-		if format != responseFormatNone && quality > bestQuality ||
-			format != responseFormatNone && quality == bestQuality && specificity > bestSpecificity {
+		if format != responseFormatNone && quality > 0 &&
+			(quality > bestQuality || quality == bestQuality && specificity > bestSpecificity) {
 			bestFormat, bestQuality, bestSpecificity = format, quality, specificity
 		}
 	}
