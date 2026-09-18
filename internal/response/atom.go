@@ -33,23 +33,7 @@ func isAtomFrom(format, accept string) bool {
 		baseFormat := strings.TrimSpace(parts[0])
 		return baseFormat == "atom" || baseFormat == "application/atom+xml"
 	}
-	if accept == "" {
-		return false
-	}
-	for _, part := range strings.Split(accept, ",") {
-		part = strings.TrimSpace(part)
-		subparts := strings.Split(part, ";")
-
-		// we check json first, because powerquery wants us to provide that if it asks for it.
-		// the order of these IF-statements is critical
-		if strings.TrimSpace(subparts[0]) == "application/json" {
-			return false
-		}
-		if strings.TrimSpace(subparts[0]) == "application/atom+xml" {
-			return true
-		}
-	}
-	return false
+	return preferredResponseFormat(accept) == responseFormatAtom
 }
 
 // atomWriter wraps xml.Encoder to accumulate errors from EncodeToken calls.
