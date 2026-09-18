@@ -8,6 +8,7 @@ import (
 	"mime"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -204,7 +205,7 @@ func withoutPagingOptions(rawQuery string) string {
 	return strings.Join(kept, "&")
 }
 
-func applyPaging(items []json.RawMessage, values map[string][]string) []json.RawMessage {
+func applyPaging(items []json.RawMessage, values url.Values) []json.RawMessage {
 	skip, _ := strconv.Atoi(values.Get("$skip"))
 	top, topSet := strconv.Atoi(values.Get("$top"))
 	if skip < 0 {
