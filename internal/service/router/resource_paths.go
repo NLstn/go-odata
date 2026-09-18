@@ -166,7 +166,7 @@ func (r *Router) handleCrossJoin(w http.ResponseWriter, req *http.Request, path 
 			return
 		}
 		if err := json.Unmarshal(document["value"], &collections[i]); err != nil {
-			if writeErr := response.WriteError(w, req, http.StatusInternalServerError, err.Error()); writeErr != nil {
+			if writeErr := response.WriteError(w, req, http.StatusInternalServerError, "Invalid entity response", err.Error()); writeErr != nil {
 				r.logger.Error("Error writing error response", "error", writeErr)
 			}
 			return
