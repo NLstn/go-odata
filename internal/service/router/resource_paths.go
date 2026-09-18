@@ -117,14 +117,18 @@ func (r *Router) handleAllResource(w http.ResponseWriter, req *http.Request) {
 func (r *Router) handleCrossJoin(w http.ResponseWriter, req *http.Request, path string) {
 	open := strings.Index(path, "(")
 	if open < 0 || !strings.HasSuffix(path, ")") {
-		_ = response.WriteError(w, req, http.StatusBadRequest, "Invalid $crossjoin",
-			"entity sets must be supplied in parentheses")
+		if err := response.WriteError(w, req, http.StatusBadRequest, "Invalid $crossjoin",
+			"entity sets must be supplied in parentheses"); err != nil {
+			r.logger.Error("Error writing error response", "error", err)
+		}
 		return
 	}
 	sets := strings.Split(path[open+1:len(path)-1], ",")
 	if len(sets) < 2 {
-		_ = response.WriteError(w, req, http.StatusBadRequest, "Invalid $crossjoin",
-			"at least two entity sets are required")
+		if err := response.WriteError(w, req, http.StatusBadRequest, "Invalid $crossjoin",
+			"at least two entity sets are required"); err != nil {
+			r.logger.Error("Error writing error response", "error", err)
+		}
 		return
 	}
 
@@ -133,8 +137,10 @@ func (r *Router) handleCrossJoin(w http.ResponseWriter, req *http.Request, path 
 		set = strings.TrimSpace(set)
 		handler, ok := r.resolveHandler(set)
 		if !ok || handler.IsSingleton() {
-			_ = response.WriteError(w, req, http.StatusNotFound, "Entity set not found",
-				fmt.Sprintf("entity set %q is not registered", set))
+			if err := response.WriteError(w, req, http.StatusNotFound, "Entity set not found",
+				fmt.Sprintf("entity set %q is not registered", set)); err != nil {
+				r.logger.Error("Error writing error response", "error", err)
+			}
 			return
 		}
 		child := req.Clone(req.Context())
@@ -143,14 +149,18 @@ func (r *Router) handleCrossJoin(w http.ResponseWriter, req *http.Request, path 
 		recorder := httptest.NewRecorder()
 		handler.HandleCollection(recorder, child)
 		if recorder.Code >= http.StatusBadRequest {
-			_ = response.WriteError(w, req, recorder.Code, "Unable to read entity set",
-				fmt.Sprintf("entity set %q returned status %d", set, recorder.Code))
+			if err := response.WriteError(w, req, recorder.Code, "Unable to read entity set",
+				fmt.Sprintf("entity set %q returned status %d", set, recorder.Code)); err != nil {
+				r.logger.Error("Error writing error response", "error", err)
+			}
 			return
 		}
 
 		var document map[string]json.RawMessage
 		if err := json.Unmarshal(recorder.Body.Bytes(), &document); err != nil {
-			_ = response.WriteError(w, req, http.StatusInternalServerError, "Invalid entity response", err.Error())
+			if writeErr := response.WriteError(w, req, http.StatusInternalServerError, "Invalid entity response", err.Error()); writeErr != nil {
+				r.logger.Error("Error writing error response", "error", writeErr)
+			}
 			return
 		}
 		if err := json.Unmarshal(document["value"], &collections[i]); err != nil {
@@ -216,7 +226,10 @@ func withoutPagingOptions(rawQuery string) string {
 }
 
 func applyPaging(items []json.RawMessage, values url.Values) []json.RawMessage {
-	skip, _ := strconv.Atoi(values.Get("$skip"))
+	skip, skipErr := strconv.Atoi(values.Get("$skip"))
+	if skipErr != nil {
+		skip = 0
+	}
 	top, topErr := strconv.Atoi(values.Get("$top"))
 	topSet := topErr == nil && values.Get("$top") != ""
 	if skip < 0 {
