@@ -71,6 +71,10 @@ func (h *EntityHandler) handleGetCollectionOverwrite(w http.ResponseWriter, r *h
 		h.writeRequestError(w, r, err, http.StatusBadRequest, ErrMsgInvalidQueryOptions)
 		return
 	}
+	if err := h.queryRestrictionError(queryOptions); err != nil {
+		h.writeRequestError(w, r, err, http.StatusBadRequest, ErrMsgInvalidQueryOptions)
+		return
+	}
 
 	// Check if geospatial operations are used but not enabled
 	if queryOptions.Filter != nil && query.ContainsGeospatialOperations(queryOptions.Filter) {
@@ -134,6 +138,14 @@ func (h *EntityHandler) parseCollectionQueryOptions(w http.ResponseWriter, r *ht
 		queryOptions, err := h.parseQueryOptionsByNegotiatedVersion(r, h.metadata, h.getParserConfig())
 		if err != nil {
 			return nil, err
+		}
+
+		if err := h.queryRestrictionError(queryOptions); err != nil {
+			return nil, &collectionRequestError{
+				StatusCode: http.StatusBadRequest,
+				ErrorCode:  ErrMsgInvalidQueryOptions,
+				Message:    err.Error(),
+			}
 		}
 
 		// Check if geospatial operations are used but not enabled

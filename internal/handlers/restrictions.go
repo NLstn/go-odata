@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/nlstn/go-odata/internal/metadata"
+	"github.com/nlstn/go-odata/internal/query"
 )
 
 func isOperationProhibited(annotations *metadata.AnnotationCollection, term, field string) bool {
@@ -68,4 +69,51 @@ func (h *EntityHandler) enforceDeleteRestrictions(w http.ResponseWriter, r *http
 	}
 
 	return true
+}
+
+// queryRestrictionError validates query options against the entity-set
+// capability annotations. Capability metadata is a contract with clients: when
+// a service advertises an option as unsupported, it must reject that option
+// instead of silently executing it.
+func (h *EntityHandler) queryRestrictionError(queryOptions *query.QueryOptions) error {
+	if queryOptions == nil {
+		return nil
+	}
+
+	checks := []struct {
+		used       bool
+		term       string
+		field      string
+		optionName string
+	}{
+		{queryOptions.Filter != nil, metadata.CapFilterRestrictions, "Filterable", "$filter"},
+		{len(queryOptions.OrderBy) > 0, metadata.CapSortRestrictions, "Sortable", "$orderby"},
+		{len(queryOptions.Expand) > 0, metadata.CapExpandRestrictions, "Expandable", "$expand"},
+		{queryOptions.Count, metadata.CapCountRestrictions, "Countable", "$count"},
+		{queryOptions.Search != "", metadata.CapSearchRestrictions, "Searchable", "$search"},
+		{len(queryOptions.Select) > 0, metadata.CapSelectSupport, "Supported", "$select"},
+	}
+
+	for _, check := range checks {
+		if check.used && isOperationProhibited(h.metadata.EntitySetAnnotations, check.term, check.field) {
+			return &requestError{
+				StatusCode: http.StatusBadRequest,
+				ErrorCode:  ErrMsgInvalidQueryOptions,
+				Message:    fmt.Sprintf("%s is not supported for entity set '%s'", check.optionName, h.metadata.EntitySetName),
+			}
+		}
+	}
+
+	return nil
+}
+
+func (h *EntityHandler) countRestrictionError() error {
+	if isOperationProhibited(h.metadata.EntitySetAnnotations, metadata.CapCountRestrictions, "Countable") {
+		return &requestError{
+			StatusCode: http.StatusBadRequest,
+			ErrorCode:  ErrMsgInvalidQueryOptions,
+			Message:    fmt.Sprintf("$count is not supported for entity set '%s'", h.metadata.EntitySetName),
+		}
+	}
+	return nil
 }

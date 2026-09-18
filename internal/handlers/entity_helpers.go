@@ -121,6 +121,10 @@ func (h *EntityHandler) parseSingleEntityQueryOptions(r *http.Request) (*query.Q
 		}
 	}
 
+	if err := h.queryRestrictionError(queryOptions); err != nil {
+		return nil, err
+	}
+
 	if err := applyPolicyFiltersToExpand(r, h.policy, h.metadata, queryOptions.Expand); err != nil {
 		return nil, &requestError{
 			StatusCode: http.StatusForbidden,
