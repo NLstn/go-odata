@@ -25,27 +25,35 @@ func (r *Router) handleQueryBody(w http.ResponseWriter, req *http.Request) bool 
 	}
 
 	if req.Method != http.MethodPost {
-		_ = response.WriteMethodNotAllowed(w, req, "POST, OPTIONS", "Method not allowed",
-			"resource paths ending in /$query require POST")
+		if err := response.WriteMethodNotAllowed(w, req, "POST, OPTIONS", "Method not allowed",
+			"resource paths ending in /$query require POST"); err != nil {
+			r.logger.Error("Error writing error response", "error", err)
+		}
 		return true
 	}
 
 	mediaType, _, err := mime.ParseMediaType(req.Header.Get("Content-Type"))
 	if err != nil || !strings.EqualFold(mediaType, "text/plain") {
-		_ = response.WriteError(w, req, http.StatusUnsupportedMediaType, "Unsupported Media Type",
-			"the /$query request body must use Content-Type text/plain")
+		if err := response.WriteError(w, req, http.StatusUnsupportedMediaType, "Unsupported Media Type",
+			"the /$query request body must use Content-Type text/plain"); err != nil {
+			r.logger.Error("Error writing error response", "error", err)
+		}
 		return true
 	}
 
 	body, err := io.ReadAll(req.Body)
 	if err != nil {
-		_ = response.WriteError(w, req, http.StatusBadRequest, "Invalid query options", err.Error())
+		if writeErr := response.WriteError(w, req, http.StatusBadRequest, "Invalid query options", err.Error()); writeErr != nil {
+			r.logger.Error("Error writing error response", "error", writeErr)
+		}
 		return true
 	}
 	bodyText := string(body)
 	if bodyText == "" || strings.ContainsAny(bodyText, " \\t\\r\\n") {
-		_ = response.WriteError(w, req, http.StatusBadRequest, "Invalid query options",
-			"the /$query request body must contain percent-encoded query options without whitespace")
+		if err := response.WriteError(w, req, http.StatusBadRequest, "Invalid query options",
+			"the /$query request body must contain percent-encoded query options without whitespace"); err != nil {
+			r.logger.Error("Error writing error response", "error", err)
+		}
 		return true
 	}
 
@@ -179,7 +187,10 @@ func (r *Router) handleCrossJoin(w http.ResponseWriter, req *http.Request, path 
 					row[key] = raw
 				}
 				row[set+"@odata.id"] = id
-				encoded, _ := json.Marshal(row)
+				encoded, err := json.Marshal(row)
+				if err != nil {
+					continue
+				}
 				next = append(next, encoded)
 			}
 		}
@@ -231,5 +242,7 @@ func writeVirtualCollection(w http.ResponseWriter, req *http.Request, items []js
 		"@odata.context": "$metadata#Collection(Edm.EntityType)",
 		"value":         items,
 	}
-	_ = json.NewEncoder(w).Encode(payload)
+	if err := json.NewEncoder(w).Encode(payload); err != nil {
+		r.logger.Error("Error writing virtual collection response", "error", err)
+	}
 }
