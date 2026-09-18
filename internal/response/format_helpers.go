@@ -319,6 +319,64 @@ func extractIEEE754FromParts(parts []string) (bool, bool) {
 	return false, false
 }
 
+// responseFormat identifies the supported response representations.
+type responseFormat int
+
+const (
+	responseFormatNone responseFormat = iota
+	responseFormatJSON
+	responseFormatAtom
+)
+
+// preferredResponseFormat selects the supported representation with the highest
+// Accept quality value. A quality of zero means that representation is not
+// acceptable. Ties retain the order in which the media types were listed.
+func preferredResponseFormat(accept string) responseFormat {
+	if accept == "" {
+		return responseFormatNone
+	}
+
+	bestFormat := responseFormatNone
+	bestQuality := float64(0)
+	bestSpecificity := -1
+	for _, part := range strings.Split(accept, ",") {
+		parts := strings.Split(part, ";")
+		if len(parts) == 0 {
+			continue
+		}
+		mimeType := strings.ToLower(strings.TrimSpace(parts[0]))
+		quality := float64(1)
+		for _, parameter := range parts[1:] {
+			pieces := strings.SplitN(strings.TrimSpace(parameter), "=", 2)
+			if len(pieces) == 2 && strings.EqualFold(strings.TrimSpace(pieces[0]), "q") {
+				parsed, err := strconv.ParseFloat(strings.Trim(strings.TrimSpace(pieces[1]), "\""), 64)
+				if err != nil || parsed < 0 || parsed > 1 {
+					quality = 0
+				} else {
+					quality = parsed
+				}
+			}
+		}
+		format := responseFormatNone
+		specificity := 0
+		switch mimeType {
+		case "application/json":
+			format, specificity = responseFormatJSON, 2
+		case "application/atom+xml":
+			format, specificity = responseFormatAtom, 2
+		case "application/*", "*/*":
+			specificity = 1
+			// Wildcards preserve the library's JSON default.
+			format = responseFormatJSON
+		}
+		if format != responseFormatNone && quality > bestQuality ||
+			format != responseFormatNone && quality == bestQuality && specificity > bestSpecificity {
+			bestFormat, bestQuality, bestSpecificity = format, quality, specificity
+		}
+	}
+	return bestFormat
+}
+
 // IsAcceptableFormat checks if the requested format via Accept header or $format is supported
 // Returns true if the format is acceptable (JSON, Atom/XML, or wildcard), false otherwise
 func IsAcceptableFormat(r *http.Request) bool {
@@ -334,85 +392,10 @@ func isAcceptableFrom(format, accept string) bool {
 		return baseFormat == "json" || baseFormat == "application/json" ||
 			baseFormat == "atom" || baseFormat == "application/atom+xml"
 	}
-
 	if accept == "" {
 		return true
 	}
-
-	type mediaType struct {
-		mimeType string
-		quality  float64
-	}
-
-	parts := strings.Split(accept, ",")
-	mediaTypes := make([]mediaType, 0, len(parts))
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			continue
-		}
-
-		subparts := strings.Split(part, ";")
-		mimeType := strings.TrimSpace(subparts[0])
-		quality := 1.0
-
-		for _, param := range subparts[1:] {
-			param = strings.TrimSpace(param)
-			if strings.HasPrefix(param, "q=") {
-				var q float64
-				if _, err := fmt.Sscanf(param[2:], "%f", &q); err == nil {
-					if q >= 0 && q <= 1 {
-						quality = q
-					}
-				}
-			}
-		}
-
-		mediaTypes = append(mediaTypes, mediaType{mimeType: mimeType, quality: quality})
-	}
-
-	var bestJSON, bestAtom, bestXML, bestWildcard float64
-	sawAnyAcceptType := false
-	for _, mt := range mediaTypes {
-		sawAnyAcceptType = true
-		switch mt.mimeType {
-		case "application/json":
-			if mt.quality > bestJSON {
-				bestJSON = mt.quality
-			}
-		case "application/atom+xml":
-			if mt.quality > bestAtom {
-				bestAtom = mt.quality
-			}
-		case "application/xml", "text/xml":
-			if mt.quality > bestXML {
-				bestXML = mt.quality
-			}
-		case "*/*", "application/*":
-			if mt.quality > bestWildcard {
-				bestWildcard = mt.quality
-			}
-		}
-	}
-
-	if bestWildcard > 0 {
-		return true
-	}
-	if bestJSON > 0 {
-		return true
-	}
-	if bestAtom > 0 {
-		return true
-	}
-	if bestXML > 0 {
-		return false
-	}
-
-	if sawAnyAcceptType {
-		return false
-	}
-
-	return true
+	return preferredResponseFormat(accept) != responseFormatNone
 }
 
 // BuildBaseURL builds the base URL for the service (exported for use in handlers)
