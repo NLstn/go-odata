@@ -14,6 +14,7 @@ import (
 	"github.com/nlstn/go-odata/internal/query"
 	"github.com/nlstn/go-odata/internal/response"
 	"github.com/nlstn/go-odata/internal/trackchanges"
+	"github.com/nlstn/go-odata/internal/version"
 	"go.opentelemetry.io/otel/trace"
 	"gorm.io/gorm"
 )
@@ -75,6 +76,11 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 	if err := json.NewDecoder(r.Body).Decode(&requestData); err != nil {
 		WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidRequestBody,
 			fmt.Sprintf(ErrDetailFailedToParseJSON, err.Error()))
+		return
+	}
+
+	if err := validateJSONRequestAnnotations(requestData, version.GetRequestVersion(r.Context())); err != nil {
+		WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidRequestBody, err.Error())
 		return
 	}
 
