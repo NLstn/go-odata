@@ -106,6 +106,10 @@ func (h *EntityHandler) handleGetCount(w http.ResponseWriter, r *http.Request) {
 		h.writeRequestError(w, r, err, http.StatusBadRequest, ErrMsgInvalidQueryOptions)
 		return
 	}
+	if err := h.countRestrictionError(); err != nil {
+		h.writeRequestError(w, r, err, http.StatusBadRequest, ErrMsgInvalidQueryOptions)
+		return
+	}
 
 	if err := applyPolicyFilter(r, h.policy, buildEntityResourceDescriptor(h.metadata, "", []string{"$count"}), queryOptions); err != nil {
 		WriteError(w, r, http.StatusForbidden, "Authorization failed", err.Error())
@@ -139,6 +143,10 @@ func (h *EntityHandler) handleGetCount(w http.ResponseWriter, r *http.Request) {
 func (h *EntityHandler) handleGetCountOverwrite(w http.ResponseWriter, r *http.Request) {
 	queryOptions, err := h.parseQueryOptionsByNegotiatedVersion(r, h.metadata, nil)
 	if err != nil {
+		h.writeRequestError(w, r, err, http.StatusBadRequest, ErrMsgInvalidQueryOptions)
+		return
+	}
+	if err := h.countRestrictionError(); err != nil {
 		h.writeRequestError(w, r, err, http.StatusBadRequest, ErrMsgInvalidQueryOptions)
 		return
 	}

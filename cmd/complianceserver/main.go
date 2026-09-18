@@ -148,6 +148,12 @@ func main() {
 	if err := service.RegisterEntity(&entities.Product{}); err != nil {
 		log.Fatal("Failed to register Product entity:", err)
 	}
+	if err := service.RegisterPropertyAnnotation("Products", "Name", "Org.OData.Core.V1.LongDescription", "The customer-facing product name used in catalog listings and search results."); err != nil {
+		log.Fatal("Failed to register Product Name long description:", err)
+	}
+	if err := service.RegisterPropertyAnnotation("Products", "Name", "Org.OData.Validation.V1.Pattern", `^[A-Za-z0-9][A-Za-z0-9 -]{0,99}$`); err != nil {
+		log.Fatal("Failed to register Product Name validation pattern:", err)
+	}
 	if err := service.RegisterEntity(&entities.ProductDescription{}); err != nil {
 		log.Fatal("Failed to register ProductDescription entity:", err)
 	}
@@ -190,6 +196,51 @@ func main() {
 		"Org.OData.Capabilities.V1.DeleteRestrictions",
 		map[string]interface{}{"Deletable": false}); err != nil {
 		log.Fatal("Failed to register ReadOnlyItems delete restrictions:", err)
+	}
+	if err := service.RegisterEntitySetAnnotation("ReadOnlyItems",
+		"Org.OData.Capabilities.V1.FilterRestrictions",
+		map[string]interface{}{"Filterable": false}); err != nil {
+		log.Fatal("Failed to register ReadOnlyItems filter restrictions:", err)
+	}
+	if err := service.RegisterEntitySetAnnotation("ReadOnlyItems",
+		"Org.OData.Capabilities.V1.SortRestrictions",
+		map[string]interface{}{"Sortable": false}); err != nil {
+		log.Fatal("Failed to register ReadOnlyItems sort restrictions:", err)
+	}
+	if err := service.RegisterEntitySetAnnotation("ReadOnlyItems",
+		"Org.OData.Capabilities.V1.ExpandRestrictions",
+		map[string]interface{}{"Expandable": false}); err != nil {
+		log.Fatal("Failed to register ReadOnlyItems expand restrictions:", err)
+	}
+	if err := service.RegisterEntitySetAnnotation("ReadOnlyItems",
+		"Org.OData.Capabilities.V1.CountRestrictions",
+		map[string]interface{}{"Countable": false}); err != nil {
+		log.Fatal("Failed to register ReadOnlyItems count restrictions:", err)
+	}
+	if err := service.RegisterEntitySetAnnotation("ReadOnlyItems",
+		"Org.OData.Capabilities.V1.SearchRestrictions",
+		map[string]interface{}{"Searchable": false}); err != nil {
+		log.Fatal("Failed to register ReadOnlyItems search restrictions:", err)
+	}
+	if err := service.RegisterEntitySetAnnotation("ReadOnlyItems",
+		"Org.OData.Capabilities.V1.SelectSupport",
+		map[string]interface{}{"Supported": false}); err != nil {
+		log.Fatal("Failed to register ReadOnlyItems select support:", err)
+	}
+	if err := service.RegisterEntitySetAnnotation("Products",
+		"Org.OData.Capabilities.V1.ReadRestrictions",
+		map[string]interface{}{"Readable": true}); err != nil {
+		log.Fatal("Failed to register Products read restrictions:", err)
+	}
+	if err := service.RegisterEntitySetAnnotation("Products",
+		"Org.OData.Capabilities.V1.ChangeTracking",
+		map[string]interface{}{"Supported": true}); err != nil {
+		log.Fatal("Failed to register Products change tracking capability:", err)
+	}
+	if err := service.RegisterEntitySetAnnotation("Products",
+		"Org.OData.Core.V1.OptimisticConcurrency",
+		[]interface{}{map[string]interface{}{"$PropertyPath": "Version"}}); err != nil {
+		log.Fatal("Failed to register Products optimistic concurrency:", err)
 	}
 
 	// Register functions for compliance testing
