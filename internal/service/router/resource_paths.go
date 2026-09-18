@@ -43,8 +43,7 @@ func (r *Router) handleQueryBody(w http.ResponseWriter, req *http.Request) bool 
 		return true
 	}
 	bodyText := string(body)
-	if bodyText == "" || strings.ContainsAny(bodyText, " 	
-") {
+	if bodyText == "" || strings.ContainsAny(bodyText, " \\t\\r\\n")
 		_ = response.WriteError(w, req, http.StatusBadRequest, "Invalid query options",
 			"the /$query request body must contain percent-encoded query options without whitespace")
 		return true
