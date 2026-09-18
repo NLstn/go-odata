@@ -121,7 +121,7 @@ func (h *EntityHandler) parseSingleEntityQueryOptions(r *http.Request) (*query.Q
 		}
 	}
 
-	if err := h.queryRestrictionError(queryOptions); err != nil {
+	if err := h.queryRestrictionError(r, queryOptions); err != nil {
 		return nil, err
 	}
 

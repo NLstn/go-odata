@@ -75,9 +75,13 @@ func (h *EntityHandler) enforceDeleteRestrictions(w http.ResponseWriter, r *http
 // capability annotations. Capability metadata is a contract with clients: when
 // a service advertises an option as unsupported, it must reject that option
 // instead of silently executing it.
-func (h *EntityHandler) queryRestrictionError(queryOptions *query.QueryOptions) error {
+func (h *EntityHandler) queryRestrictionError(r *http.Request, queryOptions *query.QueryOptions) error {
 	if queryOptions == nil {
 		return nil
+	}
+	expandUsed := len(queryOptions.Expand) > 0
+	if r != nil {
+		expandUsed = expandUsed || query.ParseRawQuery(r.URL.RawQuery).Get("$expand") != ""
 	}
 
 	checks := []struct {
@@ -88,7 +92,7 @@ func (h *EntityHandler) queryRestrictionError(queryOptions *query.QueryOptions) 
 	}{
 		{queryOptions.Filter != nil, metadata.CapFilterRestrictions, "Filterable", "$filter"},
 		{len(queryOptions.OrderBy) > 0, metadata.CapSortRestrictions, "Sortable", "$orderby"},
-		{len(queryOptions.Expand) > 0, metadata.CapExpandRestrictions, "Expandable", "$expand"},
+		{expandUsed, metadata.CapExpandRestrictions, "Expandable", "$expand"},
 		{queryOptions.Count, metadata.CapCountRestrictions, "Countable", "$count"},
 		{queryOptions.Search != "", metadata.CapSearchRestrictions, "Searchable", "$search"},
 		{len(queryOptions.Select) > 0, metadata.CapSelectSupport, "Supported", "$select"},

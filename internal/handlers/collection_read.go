@@ -71,7 +71,7 @@ func (h *EntityHandler) handleGetCollectionOverwrite(w http.ResponseWriter, r *h
 		h.writeRequestError(w, r, err, http.StatusBadRequest, ErrMsgInvalidQueryOptions)
 		return
 	}
-	if err := h.queryRestrictionError(queryOptions); err != nil {
+	if err := h.queryRestrictionError(r, queryOptions); err != nil {
 		h.writeRequestError(w, r, err, http.StatusBadRequest, ErrMsgInvalidQueryOptions)
 		return
 	}
@@ -140,7 +140,7 @@ func (h *EntityHandler) parseCollectionQueryOptions(w http.ResponseWriter, r *ht
 			return nil, err
 		}
 
-		if err := h.queryRestrictionError(queryOptions); err != nil {
+		if err := h.queryRestrictionError(r, queryOptions); err != nil {
 			return nil, &collectionRequestError{
 				StatusCode: http.StatusBadRequest,
 				ErrorCode:  ErrMsgInvalidQueryOptions,
