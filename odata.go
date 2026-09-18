@@ -51,6 +51,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -534,6 +535,14 @@ func NewServiceWithConfig(db *gorm.DB, cfg ServiceConfig) (*Service, error) {
 	)
 	s.router.SetAsyncMonitor(s.asyncMonitorPrefix, s.asyncManager)
 	s.router.SetNamespace(s.namespace)
+	s.router.SetEntitySetNames(func() []string {
+		names := make([]string, 0, len(s.handlers))
+		for name := range s.handlers {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		return names
+	})
 	s.runtime = servruntime.New(s.router, logger)
 
 	if err := s.RegisterKeyGenerator("uuid", func(context.Context) (interface{}, error) {
