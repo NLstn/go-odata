@@ -243,6 +243,6 @@ func writeVirtualCollection(w http.ResponseWriter, req *http.Request, items []js
 		"value":         items,
 	}
 	if err := json.NewEncoder(w).Encode(payload); err != nil {
-		r.logger.Error("Error writing virtual collection response", "error", err)
+		return
 	}
 }
