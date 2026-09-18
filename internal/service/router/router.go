@@ -199,8 +199,10 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	if path == "$all" {
 		if req.Method != http.MethodGet && req.Method != http.MethodHead {
-			_ = response.WriteMethodNotAllowed(w, req, "GET, HEAD, OPTIONS", "Method not allowed",
-				"$all supports only GET and HEAD requests")
+			if err := response.WriteMethodNotAllowed(w, req, "GET, HEAD, OPTIONS", "Method not allowed",
+				"$all supports only GET and HEAD, OPTIONS requests"); err != nil {
+				r.logger.Error("Error writing error response", "error", err)
+			}
 			return
 		}
 		r.handleAllResource(w, req)
@@ -209,8 +211,10 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	if strings.HasPrefix(path, "$crossjoin(") {
 		if req.Method != http.MethodGet && req.Method != http.MethodHead {
-			_ = response.WriteMethodNotAllowed(w, req, "GET, HEAD, OPTIONS", "Method not allowed",
-				"$crossjoin supports only GET and HEAD requests")
+			if err := response.WriteMethodNotAllowed(w, req, "GET, HEAD, OPTIONS", "Method not allowed",
+				"$crossjoin supports only GET and HEAD, OPTIONS requests"); err != nil {
+				r.logger.Error("Error writing error response", "error", err)
+			}
 			return
 		}
 		r.handleCrossJoin(w, req, path)
