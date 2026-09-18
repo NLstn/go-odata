@@ -176,7 +176,7 @@ func (r *Router) handleCrossJoin(w http.ResponseWriter, req *http.Request, path 
 	rows := []json.RawMessage{{}}
 	for i, set := range sets {
 		set = strings.TrimSpace(set)
-		next := make([]json.RawMessage, 0, len(rows)*len(collections[i]))
+		next := make([]json.RawMessage, 0)
 		for _, prefix := range rows {
 			var base map[string]json.RawMessage
 			if err := json.Unmarshal(prefix, &base); err != nil {
