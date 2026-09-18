@@ -51,6 +51,7 @@ type ActionInvoker func(http.ResponseWriter, *http.Request, string, string, bool
 // Router routes incoming HTTP requests to the appropriate handlers.
 type Router struct {
 	resolveHandler        HandlerResolver
+	entitySetNames        func() []string
 	handleServiceDocument func(http.ResponseWriter, *http.Request)
 	handleMetadata        func(http.ResponseWriter, *http.Request)
 	handleBatch           func(http.ResponseWriter, *http.Request)
@@ -101,6 +102,12 @@ func NewRouter(
 }
 
 // SetLogger sets the logger for the router.
+// SetEntitySetNames configures the entity-set enumeration used by service-root
+// resources such as $all.
+func (r *Router) SetEntitySetNames(names func() []string) {
+	r.entitySetNames = names
+}
+
 func (r *Router) SetLogger(logger *slog.Logger) {
 	if logger == nil {
 		logger = slog.Default()
@@ -182,6 +189,33 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	path := strings.TrimPrefix(req.URL.Path, "/")
+
+	if strings.HasSuffix(path, "/$query") {
+		if r.handleQueryBody(w, req) {
+			return
+		}
+		path = strings.TrimPrefix(req.URL.Path, "/")
+	}
+
+	if path == "$all" {
+		if req.Method != http.MethodGet && req.Method != http.MethodHead {
+			_ = response.WriteMethodNotAllowed(w, req, "GET, HEAD, OPTIONS", "Method not allowed",
+				"$all supports only GET and HEAD requests")
+			return
+		}
+		r.handleAllResource(w, req)
+		return
+	}
+
+	if strings.HasPrefix(path, "$crossjoin(") {
+		if req.Method != http.MethodGet && req.Method != http.MethodHead {
+			_ = response.WriteMethodNotAllowed(w, req, "GET, HEAD, OPTIONS", "Method not allowed",
+				"$crossjoin supports only GET and HEAD requests")
+			return
+		}
+		r.handleCrossJoin(w, req, path)
+		return
+	}
 
 	if path == "" {
 		r.handleServiceDocument(w, req)
