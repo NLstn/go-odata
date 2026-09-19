@@ -12,6 +12,7 @@ import (
 	"github.com/nlstn/go-odata/internal/actions"
 	"github.com/nlstn/go-odata/internal/async"
 	"github.com/nlstn/go-odata/internal/handlers"
+	"github.com/nlstn/go-odata/internal/preference"
 	"github.com/nlstn/go-odata/internal/query"
 	"github.com/nlstn/go-odata/internal/response"
 	"github.com/nlstn/go-odata/internal/version"
@@ -147,6 +148,24 @@ func addVaryHeader(header http.Header, fieldName string) {
 	header.Add("Vary", fieldName)
 }
 
+func shouldVaryOnPrefer(req *http.Request) bool {
+	if req.Header.Get("Prefer") == "" {
+		return false
+	}
+
+	pref := preference.ParsePrefer(req)
+	if pref.ReturnMinimal {
+		return true
+	}
+	if pref.ReturnRepresentation {
+		return true
+	}
+	return pref.MaxPageSize != nil ||
+		pref.TrackChangesRequested ||
+		pref.IncludeAnnotations != nil ||
+		pref.OmitValues != nil
+}
+
 // ServeHTTP implements http.Handler interface.
 func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	// Check if client's OData-MaxVersion is below 4.0 (reject old versions)
@@ -179,8 +198,8 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	// Responses vary by the version selected from OData-MaxVersion.
 	addVaryHeader(w.Header(), handlers.HeaderODataMaxVersion)
-	// Responses can also vary based on applied request preferences.
-	if req.Header.Get("Prefer") != "" {
+
+	if shouldVaryOnPrefer(req) {
 		addVaryHeader(w.Header(), "Prefer")
 	}
 
