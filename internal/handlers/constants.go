@@ -5,6 +5,7 @@ const (
 	HeaderContentType       = "Content-Type"
 	HeaderODataVersion      = "OData-Version"
 	HeaderODataMaxVersion   = "OData-MaxVersion"
+	HeaderPrefer            = "Prefer"
 	HeaderPreferenceApplied = "Preference-Applied"
 	HeaderIfMatch           = "If-Match"
 	HeaderIfNoneMatch       = "If-None-Match"
