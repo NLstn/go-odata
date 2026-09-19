@@ -2,6 +2,10 @@ package query
 
 import (
 	"testing"
+
+	"github.com/nlstn/go-odata/internal/metadata"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
 // TestCastFunctions_EndToEnd tests complete flow from OData query to SQL
@@ -104,6 +108,18 @@ func TestCastFunctions_EndToEnd(t *testing.T) {
 			expectSQL:   "(CASE WHEN price = CAST(price AS INTEGER) THEN price ELSE CAST(price AS INTEGER) + (CASE WHEN price > 0 THEN 1 ELSE 0 END) END > ?) AND (CAST(name AS TEXT) = ?)",
 			expectArgs:  2,
 		},
+		{
+			name:        "cast string literal to int32 true",
+			odataFilter: "cast('5',Edm.Int32) eq 5",
+			expectSQL:   "CAST(? AS INTEGER) = ?",
+			expectArgs:  2,
+		},
+		{
+			name:        "cast string literal to int32 false",
+			odataFilter: "cast('5',Edm.Int32) eq 6",
+			expectSQL:   "CAST(? AS INTEGER) = ?",
+			expectArgs:  2,
+		},
 	}
 
 	for _, tt := range tests {
@@ -128,6 +144,60 @@ func TestCastFunctions_EndToEnd(t *testing.T) {
 			t.Logf("✓ OData: %s", tt.odataFilter)
 			t.Logf("✓ SQL:   %s", sql)
 			t.Logf("✓ Args:  %v", args)
+		})
+	}
+}
+
+func TestCastStringLiteralToPrimitive_Execution(t *testing.T) {
+	type castLiteralProduct struct {
+		ID int `gorm:"primaryKey"`
+	}
+
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	if err := db.AutoMigrate(&castLiteralProduct{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	if err := db.Create([]castLiteralProduct{{ID: 1}, {ID: 2}}).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	meta := &metadata.EntityMetadata{
+		EntityName: "castLiteralProduct",
+		TableName:  "cast_literal_products",
+		Properties: []metadata.PropertyMetadata{
+			{Name: "ID", FieldName: "ID", JsonName: "ID", ColumnName: "id"},
+		},
+	}
+
+	tests := []struct {
+		name        string
+		filter      string
+		expectCount int64
+	}{
+		{name: "true comparison", filter: "cast('5',Edm.Int32) eq 5", expectCount: 2},
+		{name: "false comparison", filter: "cast('5',Edm.Int32) eq 6", expectCount: 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			filterExpr, err := parseFilter(tt.filter, meta, nil, 0)
+			if err != nil {
+				t.Fatalf("parse filter: %v", err)
+			}
+			var count int64
+			if err := db.Model(&castLiteralProduct{}).
+				Scopes(func(d *gorm.DB) *gorm.DB {
+					return ApplyFilterOnly(d, filterExpr, meta, nil)
+				}).
+				Count(&count).Error; err != nil {
+				t.Fatalf("query: %v", err)
+			}
+			if count != tt.expectCount {
+				t.Fatalf("expected %d rows, got %d", tt.expectCount, count)
+			}
 		})
 	}
 }

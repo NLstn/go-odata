@@ -388,6 +388,78 @@ func TestHasInfixInComplexExpression(t *testing.T) {
 	}
 }
 
+func TestEnumLiteralEqualitySupportsUnprefixedAndQualified(t *testing.T) {
+	type Product struct {
+		ID     int    `gorm:"primaryKey"`
+		Name   string `gorm:"column:name"`
+		Status int    `gorm:"column:status"`
+	}
+
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	if err := db.AutoMigrate(&Product{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	products := []Product{
+		{ID: 1, Name: "InStock", Status: 1},
+		{ID: 2, Name: "OnSale", Status: 2},
+	}
+	if err := db.Create(&products).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	meta := &metadata.EntityMetadata{
+		EntityName: "Product",
+		Properties: []metadata.PropertyMetadata{
+			{Name: "ID", FieldName: "ID", JsonName: "ID", ColumnName: "id"},
+			{Name: "Name", FieldName: "Name", JsonName: "Name", ColumnName: "name"},
+			{
+				Name:       "Status",
+				FieldName:  "Status",
+				JsonName:   "Status",
+				ColumnName: "status",
+				IsEnum:     true,
+				EnumMembers: []metadata.EnumMember{
+					{Name: "InStock", Value: 1},
+					{Name: "OnSale", Value: 2},
+				},
+			},
+		},
+	}
+
+	tests := []struct {
+		name   string
+		filter string
+	}{
+		{name: "qualified enum literal", filter: "Status eq ComplianceService.ProductStatus'InStock'"},
+		{name: "unprefixed enum literal", filter: "Status eq 'InStock'"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			filterExpr, err := parseFilter(tt.filter, meta, nil, 0)
+			if err != nil {
+				t.Fatalf("parse filter: %v", err)
+			}
+			var matched []Product
+			if err := db.Model(&Product{}).
+				Scopes(func(d *gorm.DB) *gorm.DB {
+					return ApplyFilterOnly(d, filterExpr, meta, nil)
+				}).
+				Order("id").
+				Find(&matched).Error; err != nil {
+				t.Fatalf("query: %v", err)
+			}
+			if len(matched) != 1 || matched[0].ID != 1 {
+				t.Fatalf("expected only product ID 1, got %+v", matched)
+			}
+		})
+	}
+}
+
 func TestHasBothSyntaxes(t *testing.T) {
 	// Test that both function and infix syntax work and produce the same result
 	entityType := &metadata.EntityMetadata{

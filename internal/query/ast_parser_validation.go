@@ -320,17 +320,20 @@ func convertComparisonExprWithContext(n *ComparisonExpr, ctx *conversionContext)
 		return nil, err
 	}
 
-	// Resolve enum value literals (e.g. Namespace.TypeName'MemberName') to their numeric value
-	if enumLit, ok := n.Right.(*LiteralExpr); ok && enumLit.Type == "enum" {
-		strVal, ok := enumLit.Value.(string)
-		if !ok {
-			return nil, fmt.Errorf("internal error: enum literal has non-string value %T", enumLit.Value)
+	// Resolve enum value literals to their numeric value. OData 4.01 supports both
+	// qualified (Namespace.Type'Member') and unprefixed ('Member') enum literals.
+	if enumLit, ok := n.Right.(*LiteralExpr); ok && (enumLit.Type == "enum" || enumLit.Type == "string") {
+		if isEnumProperty(property, entityMetadata) {
+			strVal, ok := enumLit.Value.(string)
+			if !ok {
+				return nil, fmt.Errorf("internal error: enum literal has non-string value %T", enumLit.Value)
+			}
+			resolved, err := resolveEnumMemberName(strVal, property, entityMetadata)
+			if err != nil {
+				return nil, err
+			}
+			value = resolved
 		}
-		resolved, err := resolveEnumMemberName(strVal, property, entityMetadata)
-		if err != nil {
-			return nil, err
-		}
-		value = resolved
 	}
 
 	// Validate numeric value against numeric property
@@ -362,11 +365,13 @@ func convertComparisonExprWithContext(n *ComparisonExpr, ctx *conversionContext)
 // "Namespace.TypeName'MemberName'" to the int64 value of the named member
 // by looking it up in the property's registered enum members.
 func resolveEnumMemberName(enumLiteral string, property string, entityMetadata *metadata.EntityMetadata) (int64, error) {
-	start := strings.Index(enumLiteral, "'")
-	if start < 0 || !strings.HasSuffix(enumLiteral, "'") {
-		return 0, fmt.Errorf("invalid enum value literal: %s", enumLiteral)
+	memberName := enumLiteral
+	if start := strings.Index(enumLiteral, "'"); start >= 0 {
+		if !strings.HasSuffix(enumLiteral, "'") {
+			return 0, fmt.Errorf("invalid enum value literal: %s", enumLiteral)
+		}
+		memberName = enumLiteral[start+1 : len(enumLiteral)-1]
 	}
-	memberName := enumLiteral[start+1 : len(enumLiteral)-1]
 
 	if entityMetadata == nil {
 		return 0, fmt.Errorf("cannot resolve enum member %q: no entity metadata available", memberName)
@@ -384,6 +389,14 @@ func resolveEnumMemberName(enumLiteral string, property string, entityMetadata *
 	}
 
 	return 0, fmt.Errorf("enum member %q not found for property %q", memberName, property)
+}
+
+func isEnumProperty(property string, entityMetadata *metadata.EntityMetadata) bool {
+	if entityMetadata == nil {
+		return false
+	}
+	prop := entityMetadata.FindProperty(property)
+	return prop != nil && prop.IsEnum
 }
 
 // dateTimeLiteralCompatibleEdmTypes maps each OData literal type parsed from a

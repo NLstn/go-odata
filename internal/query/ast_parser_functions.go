@@ -7,6 +7,11 @@ import (
 	"github.com/nlstn/go-odata/internal/metadata"
 )
 
+type castLiteralValue struct {
+	Input    interface{}
+	TypeName string
+}
+
 // parseFunctionCall parses a function call like func(arg1, arg2)
 func (p *ASTParser) parseFunctionCall(functionName string) (ASTNode, error) {
 	p.advance() // consume '('
@@ -467,10 +472,20 @@ func convertCastFunctionWithContext(n *FunctionCallExpr, entityMetadata *metadat
 		return nil, errCastRequires2Args
 	}
 
-	// First argument can be a property or another function call
-	property, err := extractPropertyFromFunctionArgWithContext(n.Args[0], "cast", entityMetadata, ctx)
-	if err != nil {
-		return nil, err
+	// First argument can be a property, function call, or a literal (OData 4.01 string-to-primitive cast)
+	property := ""
+	var castInput interface{}
+	switch arg := n.Args[0].(type) {
+	case *IdentifierExpr, *FunctionCallExpr:
+		var err error
+		property, err = extractPropertyFromFunctionArgWithContext(n.Args[0], "cast", entityMetadata, ctx)
+		if err != nil {
+			return nil, err
+		}
+	case *LiteralExpr:
+		castInput = arg.Value
+	default:
+		return nil, fmt.Errorf("first argument of cast must be a property name, function call, or literal")
 	}
 
 	// Second argument should be a type name (either as an identifier or string literal)
@@ -517,7 +532,14 @@ func convertCastFunctionWithContext(n *FunctionCallExpr, entityMetadata *metadat
 	expr := acquireFilterExpression()
 	expr.Property = property
 	expr.Operator = OpCast
-	expr.Value = typeName
+	if property == "" {
+		expr.Value = castLiteralValue{
+			Input:    castInput,
+			TypeName: typeName,
+		}
+	} else {
+		expr.Value = typeName
+	}
 	return expr, nil
 }
 
