@@ -437,22 +437,8 @@ func validateExpandSelect(selectedProps []string, entityMetadata *metadata.Entit
 		}
 
 		if strings.Contains(propName, "/") {
-			parts := strings.SplitN(propName, "/", 2)
-			navPropName := strings.TrimSpace(parts[0])
-			subPropName := strings.TrimSpace(parts[1])
-
-			if !isNavigationProperty(navPropName, entityMetadata) {
+			if !propertyExists(propName, entityMetadata) {
 				return fmt.Errorf("property '%s' does not exist in entity type", propName)
-			}
-
-			if subPropName != "" {
-				targetMetadata, err := entityMetadata.ResolveNavigationTarget(navPropName)
-				if err != nil {
-					return err
-				}
-				if !propertyExists(subPropName, targetMetadata) {
-					return fmt.Errorf("property '%s' does not exist in entity type", propName)
-				}
 			}
 			continue
 		}
