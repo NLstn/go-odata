@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -128,6 +129,19 @@ func TestPostEntity_PreferReturnMinimal(t *testing.T) {
 	// Body should be empty
 	if w.Body.Len() > 0 {
 		t.Errorf("Body should be empty but has %d bytes", w.Body.Len())
+	}
+
+	varyMembers := map[string]bool{}
+	for _, value := range w.Header().Values("Vary") {
+		for member := range strings.SplitSeq(value, ",") {
+			varyMembers[strings.ToLower(strings.TrimSpace(member))] = true
+		}
+	}
+	if !varyMembers["odata-maxversion"] {
+		t.Errorf("Vary should contain OData-MaxVersion, got %v", w.Header().Values("Vary"))
+	}
+	if !varyMembers["prefer"] {
+		t.Errorf("Vary should contain Prefer when Prefer affects representation, got %v", w.Header().Values("Vary"))
 	}
 }
 

@@ -54,6 +54,7 @@ func TestRouter_ODataMaxVersionAddsVaryHeader(t *testing.T) {
 	tests := []struct {
 		name         string
 		existingVary []string
+		prefer       string
 		wantMembers  map[string]int
 	}{
 		{
@@ -80,6 +81,23 @@ func TestRouter_ODataMaxVersionAddsVaryHeader(t *testing.T) {
 			existingVary: []string{"*"},
 			wantMembers:  map[string]int{"*": 1},
 		},
+		{
+			name:        "adds prefer when request has prefer header",
+			prefer:      "return=minimal",
+			wantMembers: map[string]int{"odata-maxversion": 1, "prefer": 1},
+		},
+		{
+			name:         "does not duplicate existing prefer member",
+			existingVary: []string{"Prefer"},
+			prefer:       "return=minimal",
+			wantMembers:  map[string]int{"odata-maxversion": 1, "prefer": 1},
+		},
+		{
+			name:         "prefer with wildcard leaves wildcard only",
+			existingVary: []string{"*"},
+			prefer:       "return=minimal",
+			wantMembers:  map[string]int{"*": 1},
+		},
 	}
 
 	for _, tt := range tests {
@@ -87,6 +105,9 @@ func TestRouter_ODataMaxVersionAddsVaryHeader(t *testing.T) {
 			r := newTestRouter(nil, nil, nil, func(http.ResponseWriter, *http.Request, string, string, bool, string) {})
 			req := httptest.NewRequest(http.MethodGet, "/", nil)
 			req.Header.Set("OData-MaxVersion", "4.0")
+			if tt.prefer != "" {
+				req.Header.Set("Prefer", tt.prefer)
+			}
 			rec := httptest.NewRecorder()
 			for _, value := range tt.existingVary {
 				rec.Header().Add("Vary", value)

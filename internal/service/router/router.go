@@ -179,6 +179,10 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	// Responses vary by the version selected from OData-MaxVersion.
 	addVaryHeader(w.Header(), handlers.HeaderODataMaxVersion)
+	// Responses can also vary based on applied request preferences.
+	if req.Header.Get("Prefer") != "" {
+		addVaryHeader(w.Header(), "Prefer")
+	}
 
 	// Set the OData-Version header based on the negotiated version
 	// Use direct assignment to preserve exact casing per OData spec
