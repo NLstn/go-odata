@@ -364,3 +364,185 @@ func TestMultiLevelNavigationPathRejection(t *testing.T) {
 		t.Errorf("Expected response to include context. Body: %s", bodyStr)
 	}
 }
+
+func TestSingleNavigationPropertyNullComparison(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("Failed to connect to database: %v", err)
+	}
+
+	type Category struct {
+		ID   uint   `json:"ID" gorm:"primaryKey" odata:"key"`
+		Name string `json:"Name"`
+	}
+
+	type Product struct {
+		ID         uint      `json:"ID" gorm:"primaryKey" odata:"key"`
+		Name       string    `json:"Name"`
+		CategoryID *uint     `json:"CategoryID"`
+		Category   *Category `json:"Category" gorm:"foreignKey:CategoryID;references:ID"`
+	}
+
+	if err := db.AutoMigrate(&Category{}, &Product{}); err != nil {
+		t.Fatalf("Failed to migrate: %v", err)
+	}
+
+	categoryID := uint(1)
+	if err := db.Create(&Category{ID: categoryID, Name: "Hardware"}).Error; err != nil {
+		t.Fatalf("Failed to seed category: %v", err)
+	}
+	products := []Product{
+		{ID: 1, Name: "Laptop", CategoryID: &categoryID},
+		{ID: 2, Name: "Mouse", CategoryID: &categoryID},
+		{ID: 3, Name: "Sticker"},
+	}
+	if err := db.Create(&products).Error; err != nil {
+		t.Fatalf("Failed to seed products: %v", err)
+	}
+
+	service, err := odata.NewService(db)
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
+	service.RegisterEntity(&Category{})
+	service.RegisterEntity(&Product{})
+
+	tests := []struct {
+		name          string
+		filter        string
+		expectedIDs   []float64
+		expectedCount float64
+	}{
+		{
+			name:          "eq null",
+			filter:        "Category eq null",
+			expectedIDs:   []float64{3},
+			expectedCount: 1,
+		},
+		{
+			name:          "ne null",
+			filter:        "Category ne null",
+			expectedIDs:   []float64{1, 2},
+			expectedCount: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/Products?$filter="+url.QueryEscape(tt.filter)+"&$select=ID&$count=true", nil)
+			req.Header.Set("OData-MaxVersion", "4.01")
+			w := httptest.NewRecorder()
+
+			service.ServeHTTP(w, req)
+
+			if w.Code != http.StatusOK {
+				t.Fatalf("Expected status %d, got %d. Body: %s", http.StatusOK, w.Code, w.Body.String())
+			}
+
+			var response map[string]interface{}
+			if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+				t.Fatalf("Failed to parse response: %v", err)
+			}
+
+			if got := response["@odata.count"]; got != tt.expectedCount {
+				t.Fatalf("Expected @odata.count %v, got %v", tt.expectedCount, got)
+			}
+
+			values, ok := response["value"].([]interface{})
+			if !ok {
+				t.Fatalf("Expected value array, got %T", response["value"])
+			}
+			if len(values) != len(tt.expectedIDs) {
+				t.Fatalf("Expected %d rows, got %d", len(tt.expectedIDs), len(values))
+			}
+			for i, wantID := range tt.expectedIDs {
+				row := values[i].(map[string]interface{})
+				if row["ID"] != wantID {
+					t.Fatalf("Row %d ID = %v, want %v", i, row["ID"], wantID)
+				}
+			}
+		})
+	}
+}
+
+func TestFilteredCollectionCountExpression(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("Failed to connect to database: %v", err)
+	}
+
+	type Product struct {
+		ID         uint    `json:"ID" gorm:"primaryKey" odata:"key"`
+		CategoryID uint    `json:"CategoryID"`
+		Name       string  `json:"Name"`
+		Price      float64 `json:"Price"`
+	}
+
+	type Category struct {
+		ID       uint      `json:"ID" gorm:"primaryKey" odata:"key"`
+		Name     string    `json:"Name"`
+		Products []Product `json:"Products" gorm:"foreignKey:CategoryID;references:ID"`
+	}
+
+	if err := db.AutoMigrate(&Category{}, &Product{}); err != nil {
+		t.Fatalf("Failed to migrate: %v", err)
+	}
+
+	categories := []Category{
+		{ID: 1, Name: "Electronics"},
+		{ID: 2, Name: "Office"},
+		{ID: 3, Name: "Empty"},
+	}
+	if err := db.Create(&categories).Error; err != nil {
+		t.Fatalf("Failed to seed categories: %v", err)
+	}
+
+	products := []Product{
+		{ID: 1, CategoryID: 1, Name: "Laptop", Price: 150},
+		{ID: 2, CategoryID: 1, Name: "Cable", Price: 20},
+		{ID: 3, CategoryID: 2, Name: "Mouse", Price: 80},
+	}
+	if err := db.Create(&products).Error; err != nil {
+		t.Fatalf("Failed to seed products: %v", err)
+	}
+
+	service, err := odata.NewService(db)
+	if err != nil {
+		t.Fatalf("NewService() error: %v", err)
+	}
+	service.RegisterEntity(&Category{})
+	service.RegisterEntity(&Product{})
+
+	filter := "Products/$count($filter=Price gt 100) gt 0"
+	req := httptest.NewRequest(http.MethodGet, "/Categories?$filter="+url.QueryEscape(filter)+"&$select=ID&$count=true", nil)
+	req.Header.Set("OData-MaxVersion", "4.01")
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected status %d, got %d. Body: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+
+	if got := response["@odata.count"]; got != float64(1) {
+		t.Fatalf("Expected @odata.count 1, got %v", got)
+	}
+
+	values, ok := response["value"].([]interface{})
+	if !ok {
+		t.Fatalf("Expected value array, got %T", response["value"])
+	}
+	if len(values) != 1 {
+		t.Fatalf("Expected 1 category, got %d", len(values))
+	}
+
+	row := values[0].(map[string]interface{})
+	if row["ID"] != float64(1) {
+		t.Fatalf("Expected category ID 1, got %v", row["ID"])
+	}
+}

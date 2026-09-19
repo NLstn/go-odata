@@ -223,6 +223,30 @@ func resolveNavigationPropertyPath(propertyName string, entityMetadata *metadata
 	return targetMetadata, navSegments, prop, prefix, nil
 }
 
+func parseCollectionCountPath(path string) (string, string, error) {
+	trimmedPath := strings.TrimSpace(path)
+	if trimmedPath == "" {
+		return "", "", fmt.Errorf("collection count path cannot be empty")
+	}
+
+	idx := strings.LastIndex(trimmedPath, "/$count")
+	if idx == -1 {
+		return "", "", fmt.Errorf("path '%s' is not a collection count path", trimmedPath)
+	}
+
+	basePath := trimmedPath[:idx] + "/$count"
+	suffix := strings.TrimSpace(trimmedPath[idx+len("/$count"):])
+	if suffix == "" {
+		return basePath, "", nil
+	}
+
+	if !strings.HasPrefix(suffix, "(") || !strings.HasSuffix(suffix, ")") {
+		return "", "", fmt.Errorf("path '%s' is not a valid collection count path", trimmedPath)
+	}
+
+	return basePath, strings.TrimSpace(suffix[1 : len(suffix)-1]), nil
+}
+
 // resolveCollectionCountPath resolves a path ending with "/$count" where the final
 // segment before $count must be a collection-valued navigation property.
 // It returns the metadata of the entity that owns the collection navigation property
@@ -232,14 +256,14 @@ func resolveCollectionCountPath(path string, entityMetadata *metadata.EntityMeta
 		return nil, nil, errEntityMetadataIsNil
 	}
 
-	trimmedPath := strings.TrimSpace(path)
-	if trimmedPath == "" {
-		return nil, nil, fmt.Errorf("collection count path cannot be empty")
+	normalizedPath, _, err := parseCollectionCountPath(path)
+	if err != nil {
+		return nil, nil, err
 	}
 
-	segments := strings.Split(trimmedPath, "/")
+	segments := strings.Split(normalizedPath, "/")
 	if len(segments) < 2 || strings.TrimSpace(segments[len(segments)-1]) != "$count" {
-		return nil, nil, fmt.Errorf("path '%s' is not a collection count path", trimmedPath)
+		return nil, nil, fmt.Errorf("path '%s' is not a collection count path", normalizedPath)
 	}
 
 	current := entityMetadata
@@ -247,25 +271,25 @@ func resolveCollectionCountPath(path string, entityMetadata *metadata.EntityMeta
 	for i := 0; i < len(segments)-1; i++ {
 		segment := strings.TrimSpace(segments[i])
 		if segment == "" {
-			return nil, nil, fmt.Errorf("collection count path '%s' contains an empty segment", trimmedPath)
+			return nil, nil, fmt.Errorf("collection count path '%s' contains an empty segment", normalizedPath)
 		}
 
 		navProp := current.FindNavigationProperty(segment)
 		if navProp == nil {
-			return nil, nil, fmt.Errorf("segment '%s' is not a navigation property in path '%s'", segment, trimmedPath)
+			return nil, nil, fmt.Errorf("segment '%s' is not a navigation property in path '%s'", segment, normalizedPath)
 		}
 
 		// The final segment before /$count must be collection-valued.
 		if i == len(segments)-2 {
 			if !navProp.NavigationIsArray {
-				return nil, nil, fmt.Errorf("navigation property '%s' in path '%s' is not a collection", segment, trimmedPath)
+				return nil, nil, fmt.Errorf("navigation property '%s' in path '%s' is not a collection", segment, normalizedPath)
 			}
 			return current, navProp, nil
 		}
 
 		// Intermediate segments must be single-entity navigation properties.
 		if navProp.NavigationIsArray {
-			return nil, nil, fmt.Errorf("navigation property '%s' in path '%s' is a collection before final segment", segment, trimmedPath)
+			return nil, nil, fmt.Errorf("navigation property '%s' in path '%s' is a collection before final segment", segment, normalizedPath)
 		}
 
 		target, err := current.ResolveNavigationTarget(segment)
@@ -273,17 +297,42 @@ func resolveCollectionCountPath(path string, entityMetadata *metadata.EntityMeta
 			return nil, nil, err
 		}
 		if target == nil {
-			return nil, nil, fmt.Errorf("navigation target for '%s' in path '%s' is missing", segment, trimmedPath)
+			return nil, nil, fmt.Errorf("navigation target for '%s' in path '%s' is missing", segment, normalizedPath)
 		}
 		current = target
 	}
 
-	return nil, nil, fmt.Errorf("path '%s' is not a valid collection count path", trimmedPath)
+	return nil, nil, fmt.Errorf("path '%s' is not a valid collection count path", normalizedPath)
 }
 
 func isCollectionCountPath(path string, entityMetadata *metadata.EntityMetadata) bool {
-	_, _, err := resolveCollectionCountPath(path, entityMetadata)
+	normalizedPath, optionsStr, err := parseCollectionCountPath(path)
+	if err != nil {
+		return false
+	}
+
+	ownerMetadata, navProp, err := resolveCollectionCountPath(normalizedPath, entityMetadata)
+	if err != nil {
+		return false
+	}
+
+	if strings.TrimSpace(optionsStr) == "" {
+		return true
+	}
+
+	targetMetadata, err := ownerMetadata.ResolveNavigationTarget(navProp.Name)
+	if err != nil {
+		return false
+	}
+
+	_, err = parseCollectionCountNestedFilter(optionsStr, targetMetadata)
 	return err == nil
+}
+
+// IsCollectionCountPath reports whether path is a valid collection navigation count path,
+// including 4.01 filtered count forms such as "Products/$count($filter=Price gt 100)".
+func IsCollectionCountPath(path string, entityMetadata *metadata.EntityMetadata) bool {
+	return isCollectionCountPath(path, entityMetadata)
 }
 
 func navigationAliasForPath(segments []string) string {

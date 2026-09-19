@@ -1930,16 +1930,11 @@ func (h *EntityHandler) validateFilterForComplexTypes(filter *query.FilterExpres
 			goto validateChildren
 		}
 
-		// Allow collection navigation path counts, e.g. "Descriptions/$count".
+		// Allow collection navigation path counts, e.g. "Descriptions/$count" or
+		// "Products/$count($filter=Price gt 100)".
 		// These are validated by the query parser and translated to correlated COUNT subqueries.
-		if strings.HasSuffix(filter.Property, "/$count") {
-			segments := strings.Split(filter.Property, "/")
-			if len(segments) == 2 {
-				navProp := h.metadata.FindNavigationProperty(strings.TrimSpace(segments[0]))
-				if navProp != nil && navProp.NavigationIsArray {
-					goto validateChildren
-				}
-			}
+		if query.IsCollectionCountPath(filter.Property, h.metadata) {
+			goto validateChildren
 		}
 
 		// Check if this looks like a navigation property path but wasn't validated above
@@ -1970,8 +1965,10 @@ func (h *EntityHandler) validateFilterForComplexTypes(filter *query.FilterExpres
 			if prop.NavigationIsArray {
 				return fmt.Errorf("filtering by collection navigation property '%s' is not supported (use any/all operators)", filter.Property)
 			}
-			// Single-entity navigation properties are not allowed as terminal values
-			// (e.g., "Team eq null" is not currently supported, but "Team/ClubID eq 'xyz'" is)
+			if filter.Value == nil && (filter.Operator == query.OpEqual || filter.Operator == query.OpNotEqual) {
+				goto validateChildren
+			}
+			// Single-entity navigation properties are only supported as terminal values for null checks.
 			return fmt.Errorf("filtering by navigation property '%s' requires a property path (e.g., '%s/PropertyName')", filter.Property, filter.Property)
 		}
 		if prop.IsComplexType {
