@@ -1236,6 +1236,15 @@ func buildFunctionComparison(dialect string, filter *FilterExpression, entityMet
 		if funcSQL == "" {
 			return "", nil
 		}
+	} else if funcExpr.Operator == OpCast && funcExpr.Property == "" {
+		castValue, ok := funcExpr.Value.(castLiteralValue)
+		if !ok {
+			return "", nil
+		}
+		funcSQL, funcArgs = buildCastLiteralSQL(dialect, castValue)
+		if funcSQL == "" {
+			return "", nil
+		}
 	} else {
 		columnName := getQuotedColumnName(dialect, funcExpr.Property, entityMetadata)
 		funcSQL, funcArgs = buildFunctionSQL(dialect, funcExpr.Operator, columnName, funcExpr.Value)
@@ -1310,6 +1319,36 @@ func buildFunctionComparison(dialect string, filter *FilterExpression, entityMet
 
 	allArgs := append(funcArgs, rightValue)
 	return compSQL, allArgs
+}
+
+func buildCastLiteralSQL(dialect string, castValue castLiteralValue) (string, []interface{}) {
+	switch castValue.TypeName {
+	case "Edm.Date":
+		switch dialect {
+		case "postgres", "postgresql":
+			return "CAST(? AS DATE)", []interface{}{castValue.Input}
+		case "mysql", "mariadb":
+			return "DATE(?)", []interface{}{castValue.Input}
+		case "sqlserver", "mssql":
+			return "CAST(TRY_CONVERT(date, ?) AS DATE)", []interface{}{castValue.Input}
+		default:
+			return "date(?)", []interface{}{castValue.Input}
+		}
+	case "Edm.TimeOfDay":
+		switch dialect {
+		case "postgres", "postgresql":
+			return "CAST(? AS TIME)", []interface{}{castValue.Input}
+		case "mysql", "mariadb":
+			return "TIME(?)", []interface{}{castValue.Input}
+		case "sqlserver", "mssql":
+			return "CAST(TRY_CONVERT(time, ?) AS TIME)", []interface{}{castValue.Input}
+		default:
+			return "time(?)", []interface{}{castValue.Input}
+		}
+	default:
+		sqlType := edmTypeToSQLType(dialect, castValue.TypeName)
+		return fmt.Sprintf("CAST(? AS %s)", sqlType), []interface{}{castValue.Input}
+	}
 }
 
 // iso8601DurationToSecondsSQL builds a CASE expression that converts an ISO-8601
