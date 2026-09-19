@@ -198,12 +198,6 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	// Responses vary by the version selected from OData-MaxVersion.
 	addVaryHeader(w.Header(), handlers.HeaderODataMaxVersion)
-	// OData Protocol 4.0 §8.3.8: include Prefer (or *) when a preference
-	// changes status, headers, or payload (e.g. Prefer: return=minimal).
-	if req.Header.Get(handlers.HeaderPrefer) != "" {
-		addVaryHeader(w.Header(), handlers.HeaderPrefer)
-	}
-
 	if shouldVaryOnPrefer(req) {
 		addVaryHeader(w.Header(), "Prefer")
 	}
