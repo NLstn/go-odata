@@ -19,6 +19,14 @@ type MetadataTestProduct struct {
 	Category string  `json:"Category"`
 }
 
+type MetadataStreamTestProduct struct {
+	ID               uint   `json:"ID" gorm:"primaryKey" odata:"key"`
+	Name             string `json:"Name"`
+	Photo            []byte `json:"-" odata:"stream"`
+	PhotoContentType string `json:"-"`
+	PhotoContent     []byte `json:"-"`
+}
+
 func TestNewMetadataHandler(t *testing.T) {
 	meta1, _ := metadata.AnalyzeEntity(MetadataTestProduct{})
 	entitiesMetadata := map[string]*metadata.EntityMetadata{
@@ -65,6 +73,42 @@ func TestMetadataHandler_HandleMetadata_GetXML(t *testing.T) {
 			t.Errorf("Invalid XML response: %v", err)
 			break
 		}
+	}
+}
+
+func TestMetadataHandler_HandleMetadata_GetXML_EmitsNamedStreamOnce(t *testing.T) {
+	meta1, err := metadata.AnalyzeEntity(MetadataStreamTestProduct{})
+	if err != nil {
+		t.Fatalf("AnalyzeEntity() error = %v", err)
+	}
+	entitiesMetadata := map[string]*metadata.EntityMetadata{
+		"MetadataStreamTestProducts": meta1,
+	}
+
+	handler := NewMetadataHandler(entitiesMetadata)
+
+	req := httptest.NewRequest(http.MethodGet, "/$metadata", nil)
+	req.Header.Set("Accept", "application/xml")
+	w := httptest.NewRecorder()
+
+	handler.HandleMetadata(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Status = %v, want %v", w.Code, http.StatusOK)
+	}
+
+	body := w.Body.String()
+	if count := strings.Count(body, `<Property Name="Photo" Type="Edm.Stream" />`); count != 1 {
+		t.Fatalf("expected Photo stream property once, got %d occurrences in metadata: %s", count, body)
+	}
+	if count := strings.Count(body, `Name="Photo"`); count != 1 {
+		t.Fatalf("expected exactly one Photo property declaration, got %d occurrences in metadata: %s", count, body)
+	}
+	if strings.Contains(body, `Name="PhotoContent"`) {
+		t.Fatalf("metadata should omit PhotoContent backing field: %s", body)
+	}
+	if strings.Contains(body, `Name="PhotoContentType"`) {
+		t.Fatalf("metadata should omit PhotoContentType backing field: %s", body)
 	}
 }
 

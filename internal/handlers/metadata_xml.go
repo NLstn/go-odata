@@ -481,11 +481,11 @@ func (h *MetadataHandler) buildEntityType(model metadataModel, entityMeta *metad
 func (h *MetadataHandler) buildRegularProperties(model metadataModel, entityMeta *metadata.EntityMetadata) string {
 	var builder strings.Builder
 	for _, prop := range entityMeta.Properties {
-		if prop.IsNavigationProp {
+		if prop.IsNavigationProp || prop.IsStream {
 			continue
 		}
 
-		if prop.IsStream || strings.HasSuffix(prop.FieldName, "ContentType") || strings.HasSuffix(prop.FieldName, "Content") {
+		if strings.HasSuffix(prop.FieldName, "ContentType") || strings.HasSuffix(prop.FieldName, "Content") {
 			isStreamField := false
 			for _, streamProp := range entityMeta.StreamProperties {
 				if prop.FieldName == streamProp.StreamContentTypeField || prop.FieldName == streamProp.StreamContentField {
