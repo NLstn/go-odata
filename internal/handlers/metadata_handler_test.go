@@ -101,6 +101,9 @@ func TestMetadataHandler_HandleMetadata_GetXML_EmitsNamedStreamOnce(t *testing.T
 	if count := strings.Count(body, `<Property Name="Photo" Type="Edm.Stream" />`); count != 1 {
 		t.Fatalf("expected Photo stream property once, got %d occurrences in metadata: %s", count, body)
 	}
+	if count := strings.Count(body, `Name="Photo"`); count != 1 {
+		t.Fatalf("expected exactly one Photo property declaration, got %d occurrences in metadata: %s", count, body)
+	}
 	if strings.Contains(body, `Name="PhotoContent"`) {
 		t.Fatalf("metadata should omit PhotoContent backing field: %s", body)
 	}
