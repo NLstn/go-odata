@@ -112,6 +112,68 @@ func TestRouter_ODataMaxVersionAddsVaryHeader(t *testing.T) {
 	}
 }
 
+func TestRouter_PreferAddsVaryHeader(t *testing.T) {
+	tests := []struct {
+		name         string
+		prefer       string
+		existingVary []string
+		wantMembers  map[string]int
+	}{
+		{
+			name:        "no Prefer header",
+			wantMembers: map[string]int{"odata-maxversion": 1},
+		},
+		{
+			name:        "Prefer return=minimal",
+			prefer:      "return=minimal",
+			wantMembers: map[string]int{"odata-maxversion": 1, "prefer": 1},
+		},
+		{
+			name:         "does not duplicate existing Prefer member",
+			prefer:       "return=representation",
+			existingVary: []string{"Prefer"},
+			wantMembers:  map[string]int{"prefer": 1, "odata-maxversion": 1},
+		},
+		{
+			name:         "respects wildcard",
+			prefer:       "return=minimal",
+			existingVary: []string{"*"},
+			wantMembers:  map[string]int{"*": 1},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := newTestRouter(nil, nil, nil, func(http.ResponseWriter, *http.Request, string, string, bool, string) {})
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			if tt.prefer != "" {
+				req.Header.Set("Prefer", tt.prefer)
+			}
+			rec := httptest.NewRecorder()
+			for _, value := range tt.existingVary {
+				rec.Header().Add("Vary", value)
+			}
+
+			r.ServeHTTP(rec, req)
+
+			gotMembers := make(map[string]int)
+			for _, value := range rec.Header().Values("Vary") {
+				for member := range strings.SplitSeq(value, ",") {
+					gotMembers[strings.ToLower(strings.TrimSpace(member))]++
+				}
+			}
+			if len(gotMembers) != len(tt.wantMembers) {
+				t.Fatalf("Vary members = %v, want %v", gotMembers, tt.wantMembers)
+			}
+			for member, wantCount := range tt.wantMembers {
+				if gotMembers[member] != wantCount {
+					t.Errorf("Vary member %q count = %d, want %d", member, gotMembers[member], wantCount)
+				}
+			}
+		})
+	}
+}
+
 func TestRouter_ActionOrFunctionMethodNotAllowed(t *testing.T) {
 	r := newTestRouter(nil, nil, map[string][]*actions.FunctionDefinition{
 		"TopProducts": nil,
