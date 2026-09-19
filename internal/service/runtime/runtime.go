@@ -428,3 +428,61 @@ func extractEntitySetFromPath(path string) string {
 	path = strings.TrimPrefix(path, "/")
 
 	if path == "" || path == "$metadata" || path == "$batch" {
+		return ""
+	}
+
+	parts := strings.SplitN(path, "/", 2)
+	if len(parts) == 0 {
+		return ""
+	}
+
+	entitySet := parts[0]
+	if idx := strings.Index(entitySet, "("); idx > 0 {
+		entitySet = entitySet[:idx]
+	}
+
+	return entitySet
+}
+
+// extractOperationType determines the OData operation type from the request.
+// The returned value is a constant string matching the operation type and is used only for metrics/logging.
+// The value is not written to HTTP responses and does not require HTML escaping.
+func extractOperationType(r *http.Request) string {
+	path := strings.TrimPrefix(r.URL.Path, "/")
+
+	if path == "$metadata" {
+		return observability.OpMetadata
+	}
+	if path == "" {
+		return observability.OpServiceDoc
+	}
+	if path == "$batch" || strings.HasSuffix(path, "/$batch") {
+		return observability.OpBatch
+	}
+	if strings.HasSuffix(path, "/$count") {
+		return observability.OpCount
+	}
+	if strings.Contains(path, "/$ref") {
+		return observability.OpRef
+	}
+
+	hasKey := strings.Contains(path, "(") && strings.Contains(path, ")")
+
+	switch r.Method {
+	case http.MethodGet, http.MethodHead:
+		if hasKey {
+			return observability.OpReadEntity
+		}
+		return observability.OpReadCollection
+	case http.MethodPost:
+		return observability.OpCreate
+	case http.MethodPatch:
+		return observability.OpPatch
+	case http.MethodPut:
+		return observability.OpUpdate
+	case http.MethodDelete:
+		return observability.OpDelete
+	}
+
+	return ""
+}
