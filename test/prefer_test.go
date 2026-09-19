@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,6 +17,18 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
+
+func varyContains(header http.Header, fieldName string) bool {
+	for _, value := range header.Values("Vary") {
+		for member := range strings.SplitSeq(value, ",") {
+			member = strings.TrimSpace(member)
+			if member == "*" || strings.EqualFold(member, fieldName) {
+				return true
+			}
+		}
+	}
+	return false
+}
 
 // PreferTestProduct is a test entity for Prefer header tests
 type PreferTestProduct struct {
@@ -118,6 +131,10 @@ func TestPostEntity_PreferReturnMinimal(t *testing.T) {
 	preferenceApplied := w.Header().Get("Preference-Applied")
 	if preferenceApplied != "return=minimal" {
 		t.Errorf("Preference-Applied = %v, want return=minimal", preferenceApplied)
+	}
+
+	if !varyContains(w.Header(), "Prefer") {
+		t.Errorf("Vary = %v, want Prefer (OData §8.3.8 when return=minimal changes the representation)", w.Header().Values("Vary"))
 	}
 
 	// Location header should still be present
