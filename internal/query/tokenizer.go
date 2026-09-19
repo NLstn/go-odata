@@ -632,6 +632,12 @@ func (t *Tokenizer) tokenizeSpecialChar(pos int) *Token {
 	case ':':
 		t.advance()
 		return t.getToken(TokenColon, ":", pos)
+	case '=':
+		t.advance()
+		return t.getToken(TokenOperator, "=", pos)
+	case ';':
+		t.advance()
+		return t.getToken(TokenComma, ";", pos)
 	case '+', '-', '*', '/':
 		op := string(t.ch)
 		t.advance()

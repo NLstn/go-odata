@@ -430,6 +430,10 @@ func (p *ASTParser) parsePropertyPath(initialProp string) (ASTNode, error) {
 			// If not followed by '(', treat as regular property
 		}
 
+		if nextProp == "$count" && p.currentToken().Type == TokenLParen {
+			return p.parseCollectionCountPath(path + "/" + nextProp)
+		}
+
 		// Continue building path
 		path = path + "/" + nextProp
 	}
@@ -453,4 +457,45 @@ func (p *ASTParser) parsePropertyPath(initialProp string) (ASTNode, error) {
 	identExpr := AcquireIdentifierExpr()
 	identExpr.Name = path
 	return identExpr, nil
+}
+
+func (p *ASTParser) parseCollectionCountPath(path string) (ASTNode, error) {
+	p.advance() // consume '('
+
+	depth := 1
+	parts := make([]string, 0, 8)
+
+	for depth > 0 {
+		token := p.currentToken()
+		if token.Type == TokenEOF {
+			return nil, fmt.Errorf("unterminated collection count options in path %q", path)
+		}
+
+		switch token.Type {
+		case TokenLParen:
+			depth++
+			parts = append(parts, "(")
+		case TokenRParen:
+			depth--
+			if depth == 0 {
+				p.advance()
+				identExpr := AcquireIdentifierExpr()
+				identExpr.Name = path + "(" + strings.TrimSpace(strings.Join(parts, " ")) + ")"
+				return identExpr, nil
+			}
+			parts = append(parts, ")")
+		case TokenComma:
+			parts = append(parts, ",")
+		case TokenColon:
+			parts = append(parts, ":")
+		case TokenString:
+			parts = append(parts, "'"+strings.ReplaceAll(token.Value, "'", "''")+"'")
+		default:
+			parts = append(parts, token.Value)
+		}
+
+		p.advance()
+	}
+
+	return nil, fmt.Errorf("unterminated collection count options in path %q", path)
 }

@@ -64,12 +64,31 @@ type countFilterDescription struct {
 	Text      string `json:"Text"`
 }
 
+type filteredCountCategory struct {
+	ID       uint                   `json:"ID" gorm:"primaryKey" odata:"key"`
+	Products []filteredCountProduct `json:"Products" gorm:"foreignKey:CategoryID"`
+}
+
+type filteredCountProduct struct {
+	ID         uint    `json:"ID" gorm:"primaryKey" odata:"key"`
+	CategoryID uint    `json:"CategoryID"`
+	Price      float64 `json:"Price"`
+}
+
 func (countFilterProduct) TableName() string {
 	return "count_filter_products"
 }
 
 func (countFilterDescription) TableName() string {
 	return "count_filter_descriptions"
+}
+
+func (filteredCountCategory) TableName() string {
+	return "filtered_count_categories"
+}
+
+func (filteredCountProduct) TableName() string {
+	return "filtered_count_products"
 }
 
 func buildNavigationFilterMetadata(t *testing.T) (*metadata.EntityMetadata, *metadata.EntityMetadata, *metadata.EntityMetadata) {
@@ -258,5 +277,34 @@ func TestCollectionCountFilterBuildsCorrelatedSubquery(t *testing.T) {
 
 	if len(args) != 1 || args[0] != int64(1) {
 		t.Fatalf("expected args [1], got %#v", args)
+	}
+}
+
+func TestFilteredCollectionCountBuildsCorrelatedSubquery(t *testing.T) {
+	categoryMeta, err := metadata.AnalyzeEntity(&filteredCountCategory{})
+	if err != nil {
+		t.Fatalf("Failed to analyze category entity: %v", err)
+	}
+
+	productMeta, err := metadata.AnalyzeEntity(&filteredCountProduct{})
+	if err != nil {
+		t.Fatalf("Failed to analyze product entity: %v", err)
+	}
+
+	setEntitiesRegistry(categoryMeta, productMeta)
+
+	filterExpr, err := parseFilter("Products/$count($filter=Price gt 100) gt 0", categoryMeta, nil, 0)
+	if err != nil {
+		t.Fatalf("Failed to parse filtered collection count filter: %v", err)
+	}
+
+	sql, args := buildFilterCondition("postgres", filterExpr, categoryMeta)
+	expectedSQL := "(SELECT COUNT(*) FROM \"filtered_count_products\" WHERE \"filtered_count_products\".\"category_id\" = \"filtered_count_categories\".\"id\" AND (\"price\" > ?)) > ?"
+	if sql != expectedSQL {
+		t.Fatalf("expected SQL %q, got %q", expectedSQL, sql)
+	}
+
+	if len(args) != 2 || args[0] != int64(100) || args[1] != int64(0) {
+		t.Fatalf("expected args [100 0], got %#v", args)
 	}
 }

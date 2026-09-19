@@ -352,7 +352,7 @@ func buildLogicalConditionWithDB(db *gorm.DB, dialect string, filter *FilterExpr
 // resolveColumnName determines the correct column name to use in SQL queries.
 // It handles special cases like $it, $count, aggregate aliases, and regular properties.
 func resolveColumnName(db *gorm.DB, dialect string, propertyName string, entityMetadata *metadata.EntityMetadata) string {
-	if countExpr, ok := buildCollectionCountExpression(dialect, propertyName, entityMetadata); ok {
+	if countExpr, _, ok := buildCollectionCountExpression(dialect, propertyName, entityMetadata); ok {
 		return countExpr
 	}
 
@@ -404,25 +404,30 @@ func resolveColumnName(db *gorm.DB, dialect string, propertyName string, entityM
 	return quoteIdent(dialect, rawName)
 }
 
-func buildCollectionCountExpression(dialect string, propertyName string, entityMetadata *metadata.EntityMetadata) (string, bool) {
-	ownerMetadata, navProp, err := resolveCollectionCountPath(propertyName, entityMetadata)
+func buildCollectionCountExpression(dialect string, propertyName string, entityMetadata *metadata.EntityMetadata) (string, []interface{}, bool) {
+	normalizedPath, optionsStr, err := parseCollectionCountPath(propertyName)
+	if err != nil {
+		return "", nil, false
+	}
+
+	ownerMetadata, navProp, err := resolveCollectionCountPath(normalizedPath, entityMetadata)
 	if err != nil || ownerMetadata == nil || navProp == nil {
-		return "", false
+		return "", nil, false
 	}
 
 	relatedTableName := strings.TrimSpace(navProp.NavigationTargetTableName)
 	if relatedTableName == "" {
-		return "", false
+		return "", nil, false
 	}
 
 	foreignKeyColumn := strings.TrimSpace(navProp.ForeignKeyColumnName)
 	if foreignKeyColumn == "" {
-		return "", false
+		return "", nil, false
 	}
 
 	parentTableName := strings.TrimSpace(ownerMetadata.TableName)
 	if parentTableName == "" {
-		return "", false
+		return "", nil, false
 	}
 
 	quotedRelatedTable := quoteIdent(dialect, relatedTableName)
@@ -433,7 +438,7 @@ func buildCollectionCountExpression(dialect string, propertyName string, entityM
 	if len(ownerMetadata.KeyProperties) == 0 {
 		fkCol := strings.TrimSpace(foreignKeyColumns[0])
 		if fkCol == "" {
-			return "", false
+			return "", nil, false
 		}
 		joinConditions = append(joinConditions,
 			fmt.Sprintf("%s.%s = %s.%s",
@@ -460,10 +465,35 @@ func buildCollectionCountExpression(dialect string, propertyName string, entityM
 	}
 
 	if len(joinConditions) == 0 {
-		return "", false
+		return "", nil, false
 	}
 
-	return fmt.Sprintf("(SELECT COUNT(*) FROM %s WHERE %s)", quotedRelatedTable, strings.Join(joinConditions, " AND ")), true
+	var targetMetadata *metadata.EntityMetadata
+	if ownerMetadata != nil {
+		targetMetadata, err = ownerMetadata.ResolveNavigationTarget(navProp.Name)
+		if err != nil {
+			return "", nil, false
+		}
+	}
+
+	whereClause := strings.Join(joinConditions, " AND ")
+	args := make([]interface{}, 0)
+	if optionsStr != "" {
+		nestedFilter, err := parseCollectionCountNestedFilter(optionsStr, targetMetadata)
+		if err != nil {
+			return "", nil, false
+		}
+		if nestedFilter != nil {
+			filterSQL, filterArgs := buildFilterCondition(dialect, nestedFilter, targetMetadata)
+			if filterSQL == "" {
+				return "", nil, false
+			}
+			whereClause = whereClause + " AND (" + filterSQL + ")"
+			args = append(args, filterArgs...)
+		}
+	}
+
+	return fmt.Sprintf("(SELECT COUNT(*) FROM %s WHERE %s)", quotedRelatedTable, whereClause), args, true
 }
 
 // tryBuildRightSideFunctionComparison attempts to build a comparison when the right side is a function call.
@@ -704,6 +734,74 @@ func buildComparisonCondition(dialect string, filter *FilterExpression, entityMe
 	return buildComparisonConditionWithDB(nil, dialect, filter, entityMetadata)
 }
 
+func buildNavigationNullComparison(dialect string, op FilterOperator, navProp *metadata.PropertyMetadata) (string, []interface{}) {
+	if navProp == nil || navProp.NavigationIsArray {
+		return "", nil
+	}
+
+	fkColumns := strings.Split(strings.TrimSpace(navProp.ForeignKeyColumnName), ",")
+	conditions := make([]string, 0, len(fkColumns))
+	for _, fkColumn := range fkColumns {
+		fkColumn = strings.TrimSpace(fkColumn)
+		if fkColumn == "" {
+			continue
+		}
+		if op == OpEqual {
+			conditions = append(conditions, fmt.Sprintf("%s IS NULL", quoteIdent(dialect, fkColumn)))
+		} else {
+			conditions = append(conditions, fmt.Sprintf("%s IS NOT NULL", quoteIdent(dialect, fkColumn)))
+		}
+	}
+
+	if len(conditions) == 0 {
+		return "", nil
+	}
+
+	if op == OpEqual {
+		return fmt.Sprintf("(%s)", strings.Join(conditions, " AND ")), []interface{}{}
+	}
+	return fmt.Sprintf("(%s)", strings.Join(conditions, " OR ")), []interface{}{}
+}
+
+func parseCollectionCountNestedFilter(optionsStr string, targetMetadata *metadata.EntityMetadata) (*FilterExpression, error) {
+	optionsStr = strings.TrimSpace(optionsStr)
+	if optionsStr == "" {
+		return nil, nil
+	}
+
+	parts, err := splitExpandOptionsParts(optionsStr)
+	if err != nil {
+		return nil, err
+	}
+
+	var nestedFilter *FilterExpression
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+
+		eqIdx := strings.Index(part, "=")
+		if eqIdx == -1 {
+			return nil, fmt.Errorf("invalid collection count option %q", part)
+		}
+
+		key := normalizeQueryOptionKey(strings.TrimSpace(part[:eqIdx]))
+		value := strings.TrimSpace(part[eqIdx+1:])
+		switch strings.ToLower(key) {
+		case "$filter":
+			nestedFilter, err = parseFilter(value, targetMetadata, nil, 0)
+			if err != nil {
+				return nil, fmt.Errorf("invalid collection count $filter: %w", err)
+			}
+		default:
+			return nil, fmt.Errorf("unsupported collection count option: %s", strings.TrimSpace(part[:eqIdx]))
+		}
+	}
+
+	return nestedFilter, nil
+}
+
 // buildComplexTypeNullComparison builds SQL for a complex type eq null or ne null comparison.
 // Per OData v4.01 spec, eq null is true when all embedded scalar columns are null,
 // and ne null is true when at least one embedded scalar column is non-null.
@@ -757,6 +855,13 @@ func buildComparisonConditionWithDB(db *gorm.DB, dialect string, filter *FilterE
 		return buildLambdaCondition(dialect, filter, entityMetadata, "")
 	}
 
+	if filter.Property != "" && entityMetadata != nil {
+		if countExpr, countArgs, ok := buildCollectionCountExpression(dialect, filter.Property, entityMetadata); ok {
+			sql, args := buildStandardComparison(dialect, filter.Operator, countExpr, filter.Value, entityMetadata)
+			return sql, append(countArgs, args...)
+		}
+	}
+
 	// Handle function comparisons (e.g., tolower(Name) eq 'john')
 	if filter.Left != nil && filter.Left.Operator != "" {
 		return buildFunctionComparison(dialect, filter, entityMetadata)
@@ -765,6 +870,9 @@ func buildComparisonConditionWithDB(db *gorm.DB, dialect string, filter *FilterE
 	// Handle complex type eq null / ne null comparisons
 	if filter.Property != "" && entityMetadata != nil && filter.Value == nil &&
 		(filter.Operator == OpEqual || filter.Operator == OpNotEqual) {
+		if navProp := entityMetadata.FindNavigationProperty(filter.Property); navProp != nil && !navProp.NavigationIsArray {
+			return buildNavigationNullComparison(dialect, filter.Operator, navProp)
+		}
 		if complexProp := entityMetadata.FindComplexTypeProperty(filter.Property); complexProp != nil {
 			return buildComplexTypeNullComparison(dialect, filter.Operator, complexProp)
 		}
