@@ -140,7 +140,7 @@ func (rt *Runtime) serveHTTPInternal(w http.ResponseWriter, r *http.Request, all
 	}
 
 	// Wrap response writer to capture status code for metrics
-	wrapped := &statusRecorder{ResponseWriter: w, statusCode: http.StatusOK}
+	wrapped := &statusRecorder{ResponseWriter: w, request: r, statusCode: http.StatusOK}
 	rt.router.ServeHTTP(wrapped, r)
 
 	// Record metrics if observability is configured
@@ -315,12 +315,45 @@ func isAsyncEligiblePath(path string) bool {
 // statusRecorder wraps http.ResponseWriter to capture the status code.
 type statusRecorder struct {
 	http.ResponseWriter
+	request    *http.Request
 	statusCode int
 	written    bool
 }
 
+func (r *statusRecorder) ensurePreferVary() {
+	if r.request == nil || r.request.Header.Get("Prefer") == "" {
+		return
+	}
+
+	pref := preference.ParsePrefer(r.request)
+	if !pref.ReturnMinimal &&
+		!pref.ReturnRepresentation &&
+		pref.MaxPageSize == nil &&
+		!pref.TrackChangesRequested &&
+		pref.IncludeAnnotations == nil &&
+		pref.OmitValues == nil {
+		return
+	}
+
+	for name, values := range r.Header() {
+		if !strings.EqualFold(name, "Vary") {
+			continue
+		}
+		for _, value := range values {
+			for _, member := range strings.Split(value, ",") {
+				member = strings.TrimSpace(member)
+				if member == "*" || strings.EqualFold(member, "Prefer") {
+					return
+				}
+			}
+		}
+	}
+	r.Header().Add("Vary", "Prefer")
+}
+
 func (r *statusRecorder) WriteHeader(statusCode int) {
 	if !r.written {
+		r.ensurePreferVary()
 		r.statusCode = statusCode
 		r.written = true
 		r.ResponseWriter.WriteHeader(statusCode)
@@ -329,6 +362,7 @@ func (r *statusRecorder) WriteHeader(statusCode int) {
 
 func (r *statusRecorder) Write(b []byte) (int, error) {
 	if !r.written {
+		r.ensurePreferVary()
 		r.written = true
 	}
 	return r.ResponseWriter.Write(b)
@@ -394,61 +428,3 @@ func extractEntitySetFromPath(path string) string {
 	path = strings.TrimPrefix(path, "/")
 
 	if path == "" || path == "$metadata" || path == "$batch" {
-		return ""
-	}
-
-	parts := strings.SplitN(path, "/", 2)
-	if len(parts) == 0 {
-		return ""
-	}
-
-	entitySet := parts[0]
-	if idx := strings.Index(entitySet, "("); idx > 0 {
-		entitySet = entitySet[:idx]
-	}
-
-	return entitySet
-}
-
-// extractOperationType determines the OData operation type from the request.
-// The returned value is a constant string matching the operation type and is used only for metrics/logging.
-// The value is not written to HTTP responses and does not require HTML escaping.
-func extractOperationType(r *http.Request) string {
-	path := strings.TrimPrefix(r.URL.Path, "/")
-
-	if path == "$metadata" {
-		return observability.OpMetadata
-	}
-	if path == "" {
-		return observability.OpServiceDoc
-	}
-	if path == "$batch" || strings.HasSuffix(path, "/$batch") {
-		return observability.OpBatch
-	}
-	if strings.HasSuffix(path, "/$count") {
-		return observability.OpCount
-	}
-	if strings.Contains(path, "/$ref") {
-		return observability.OpRef
-	}
-
-	hasKey := strings.Contains(path, "(") && strings.Contains(path, ")")
-
-	switch r.Method {
-	case http.MethodGet, http.MethodHead:
-		if hasKey {
-			return observability.OpReadEntity
-		}
-		return observability.OpReadCollection
-	case http.MethodPost:
-		return observability.OpCreate
-	case http.MethodPatch:
-		return observability.OpPatch
-	case http.MethodPut:
-		return observability.OpUpdate
-	case http.MethodDelete:
-		return observability.OpDelete
-	}
-
-	return ""
-}
