@@ -233,6 +233,34 @@ func TestStatusRecorder_Write(t *testing.T) {
 	}
 }
 
+func TestStatusRecorder_EnsurePreferVaryBeforeCommit(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/Products", nil)
+	req.Header.Set("Prefer", "return=minimal")
+	rec := httptest.NewRecorder()
+	sr := &statusRecorder{ResponseWriter: rec, request: req, statusCode: http.StatusOK}
+
+	sr.WriteHeader(http.StatusCreated)
+
+	if got := rec.Header().Get("Vary"); got != "Prefer" {
+		t.Fatalf("Vary = %q, want Prefer", got)
+	}
+}
+
+func TestStatusRecorder_DoesNotVaryForIgnoredPrefer(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/Products", nil)
+	req.Header.Set("Prefer", "respond-async")
+	rec := httptest.NewRecorder()
+	sr := &statusRecorder{ResponseWriter: rec, request: req, statusCode: http.StatusOK}
+
+	_, err := sr.Write([]byte("{}"))
+	if err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+	if got := rec.Header().Get("Vary"); got != "" {
+		t.Fatalf("Vary = %q, want empty", got)
+	}
+}
+
 func TestQueueToken_Release(t *testing.T) {
 	// Test nil token
 	var nilToken *queueToken
