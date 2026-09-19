@@ -54,7 +54,7 @@ func TestMergeNavigationSelectsPlainNavProperty(t *testing.T) {
 				Expand: tt.existingExpands,
 			}
 
-			mergeNavigationSelects(options)
+			mergeNavigationSelects(options, nil)
 
 			if len(options.Expand) != tt.expectedExpands {
 				t.Errorf("Expected %d expand options, got %d", tt.expectedExpands, len(options.Expand))
@@ -84,7 +84,7 @@ func TestMergeNavigationSelectsRegularProperty(t *testing.T) {
 		Expand: []ExpandOption{},
 	}
 
-	mergeNavigationSelects(options)
+	mergeNavigationSelects(options, nil)
 
 	if len(options.Expand) != 0 {
 		t.Errorf("Expected 0 expand options for regular properties, got %d", len(options.Expand))

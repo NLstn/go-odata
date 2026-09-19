@@ -505,7 +505,7 @@ func ParseQueryOptionsWithConfigAndCaseSensitivity(queryParams url.Values, entit
 
 	// Post-process: merge navigation property selections into expand options
 	// This handles cases like $select=Product/Name with $expand=Product
-	mergeNavigationSelects(options)
+	mergeNavigationSelects(options, entityMetadata)
 
 	return options, nil
 }
@@ -623,21 +623,10 @@ func parseSelectOption(queryParams url.Values, entityMetadata *metadata.EntityMe
 				continue
 			}
 
-			// Handle navigation property paths (e.g., "Product/Name")
 			if strings.Contains(propName, "/") {
-				parts := strings.SplitN(propName, "/", 2)
-				navPropName := strings.TrimSpace(parts[0])
-				subPropName := strings.TrimSpace(parts[1])
-
-				// Validate navigation property exists
-				if !isNavigationProperty(navPropName, entityMetadata) {
+				if !propertyExists(propName, entityMetadata) {
 					return fmt.Errorf("property '%s' does not exist in entity type", propName)
 				}
-
-				// Note: We can't easily validate the sub-property without loading the target entity metadata
-				// The validation of sub-properties will be handled when the expand is processed
-				// For now, we just validate that the navigation property itself exists
-				_ = subPropName // Used to track sub-property for later processing
 			} else {
 				// Regular property validation (also check computed aliases)
 				if !propertyExists(propName, entityMetadata) && !computedAliases[propName] {
@@ -675,6 +664,17 @@ func parseSelectWithNestedOptions(selectStr string, entityMetadata *metadata.Ent
 			return nil, nil, fmt.Errorf("invalid nested select item %q", part)
 		}
 
+		if entityMetadata != nil {
+			if prop := entityMetadata.FindProperty(navPropName); prop != nil && prop.IsComplexType {
+				complexSelects, err := parseComplexSelectItem(part, prop, navPropName)
+				if err != nil {
+					return nil, nil, err
+				}
+				selectedProps = append(selectedProps, complexSelects...)
+				continue
+			}
+		}
+
 		expand, err := parseSingleExpandCoreWithConfig(part, entityMetadata, entityMetadata != nil, config, 0, caseInsensitive)
 		if err != nil {
 			return nil, nil, err
@@ -684,6 +684,98 @@ func parseSelectWithNestedOptions(selectStr string, entityMetadata *metadata.Ent
 	}
 
 	return selectedProps, selectedExpands, nil
+}
+
+func parseComplexSelectItem(part string, complexProp *metadata.PropertyMetadata, pathPrefix string) ([]string, error) {
+	openIdx := strings.IndexByte(part, '(')
+	if openIdx <= 0 || !strings.HasSuffix(part, ")") {
+		return nil, fmt.Errorf("invalid nested select item %q", part)
+	}
+
+	nestedOptions := part[openIdx+1 : len(part)-1]
+	optionParts, err := splitExpandOptionsParts(nestedOptions)
+	if err != nil {
+		return nil, err
+	}
+
+	var selectedProps []string
+	sawSelect := false
+	for _, option := range optionParts {
+		option = strings.TrimSpace(option)
+		if option == "" {
+			continue
+		}
+
+		eqIdx := strings.Index(option, "=")
+		if eqIdx <= 0 {
+			return nil, fmt.Errorf("invalid nested select item %q", part)
+		}
+
+		key := strings.TrimSpace(option[:eqIdx])
+		value := strings.TrimSpace(option[eqIdx+1:])
+		if !strings.EqualFold(key, "$select") {
+			return nil, fmt.Errorf("unsupported nested query option %q for complex property '%s'", key, pathPrefix)
+		}
+		sawSelect = true
+
+		nestedSelects, err := expandComplexSelectPaths(parseSelect(value), complexProp, pathPrefix)
+		if err != nil {
+			return nil, err
+		}
+		selectedProps = append(selectedProps, nestedSelects...)
+	}
+
+	if !sawSelect {
+		return nil, fmt.Errorf("complex property '%s' is missing nested $select", pathPrefix)
+	}
+
+	return selectedProps, nil
+}
+
+func expandComplexSelectPaths(selectParts []string, complexProp *metadata.PropertyMetadata, pathPrefix string) ([]string, error) {
+	selectedProps := make([]string, 0, len(selectParts))
+
+	for _, part := range selectParts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+
+		if part == "*" {
+			return []string{pathPrefix}, nil
+		}
+
+		if !strings.Contains(part, "(") {
+			nestedProp := complexProp.FindComplexField(part)
+			if nestedProp == nil {
+				return nil, fmt.Errorf("property '%s/%s' does not exist in entity type", pathPrefix, part)
+			}
+			selectedProps = append(selectedProps, pathPrefix+"/"+part)
+			continue
+		}
+
+		openIdx := strings.IndexByte(part, '(')
+		if openIdx <= 0 || !strings.HasSuffix(part, ")") {
+			return nil, fmt.Errorf("invalid nested select item %q", part)
+		}
+
+		nestedName := strings.TrimSpace(part[:openIdx])
+		nestedProp := complexProp.FindComplexField(nestedName)
+		if nestedProp == nil {
+			return nil, fmt.Errorf("property '%s/%s' does not exist in entity type", pathPrefix, nestedName)
+		}
+		if !nestedProp.IsComplexType {
+			return nil, fmt.Errorf("property '%s/%s' is not a complex type", pathPrefix, nestedName)
+		}
+
+		nestedSelects, err := parseComplexSelectItem(part, nestedProp, pathPrefix+"/"+nestedName)
+		if err != nil {
+			return nil, err
+		}
+		selectedProps = append(selectedProps, nestedSelects...)
+	}
+
+	return selectedProps, nil
 }
 
 func mergeExpandOptions(existing []ExpandOption, additions []ExpandOption) []ExpandOption {
@@ -1066,7 +1158,7 @@ func parsePositiveInt(str, paramName string) (int, error) {
 
 // mergeNavigationSelects processes $select with navigation paths and merges them into expand options
 // For example: $select=Product/Name with $expand=Product should result in Product being expanded with $select=Name
-func mergeNavigationSelects(options *QueryOptions) {
+func mergeNavigationSelects(options *QueryOptions, entityMetadata *metadata.EntityMetadata) {
 	if len(options.Select) == 0 {
 		return
 	}
@@ -1081,6 +1173,9 @@ func mergeNavigationSelects(options *QueryOptions) {
 			// Handle navigation path (e.g., "Product/Name")
 			parts := strings.SplitN(propName, "/", 2)
 			navProp := strings.TrimSpace(parts[0])
+			if entityMetadata != nil && entityMetadata.FindNavigationProperty(navProp) == nil {
+				continue
+			}
 			subProp := strings.TrimSpace(parts[1])
 			if navSelects[navProp] == nil {
 				navSelects[navProp] = []string{}

@@ -17,10 +17,30 @@ type TestEntity struct {
 	CreatedAt   time.Time `json:"CreatedAt"`
 }
 
+type testSelectComplexAddress struct {
+	City    string `json:"City"`
+	Country string `json:"Country"`
+}
+
+type testSelectComplexProduct struct {
+	ID              int                       `json:"ID" odata:"key"`
+	Name            string                    `json:"Name"`
+	ShippingAddress *testSelectComplexAddress `json:"ShippingAddress,omitempty" gorm:"embedded;embeddedPrefix:ship_"`
+}
+
 func getTestMetadata(t *testing.T) *metadata.EntityMetadata {
 	meta, err := metadata.AnalyzeEntity(TestEntity{})
 	if err != nil {
 		t.Fatalf("Failed to analyze entity: %v", err)
+	}
+	return meta
+}
+
+func getTestSelectComplexMetadata(t *testing.T) *metadata.EntityMetadata {
+	t.Helper()
+	meta, err := metadata.AnalyzeEntity(testSelectComplexProduct{})
+	if err != nil {
+		t.Fatalf("Failed to analyze complex select entity: %v", err)
 	}
 	return meta
 }
@@ -100,6 +120,29 @@ func TestParseQueryOptionsSelectNestedOptions(t *testing.T) {
 	}
 	if opts.Expand[0].Top == nil || *opts.Expand[0].Top != 1 {
 		t.Fatalf("expected nested $top=1, got %#v", opts.Expand[0].Top)
+	}
+}
+
+func TestParseQueryOptionsSelectNestedComplexOptions(t *testing.T) {
+	params := url.Values{}
+	params.Set("$select", "Name,ShippingAddress($select=City,Country)")
+
+	opts, err := ParseQueryOptionsWithConfigAndCaseSensitivity(params, getTestSelectComplexMetadata(t), nil, true)
+	if err != nil {
+		t.Fatalf("ParseQueryOptionsWithConfigAndCaseSensitivity returned error: %v", err)
+	}
+
+	expectedSelect := []string{"Name", "ShippingAddress/City", "ShippingAddress/Country"}
+	if len(opts.Select) != len(expectedSelect) {
+		t.Fatalf("expected %d selected properties, got %d (%#v)", len(expectedSelect), len(opts.Select), opts.Select)
+	}
+	for i, want := range expectedSelect {
+		if opts.Select[i] != want {
+			t.Fatalf("expected select[%d] = %q, got %q", i, want, opts.Select[i])
+		}
+	}
+	if len(opts.Expand) != 0 {
+		t.Fatalf("expected nested complex $select to avoid implicit expands, got %#v", opts.Expand)
 	}
 }
 

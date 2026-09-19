@@ -213,6 +213,58 @@ func TestComplexPropertyNestedValue(t *testing.T) {
 	}
 }
 
+func TestComplexPropertyNestedSelect(t *testing.T) {
+	service, db := setupComplexPropertyService(t)
+
+	product := ComplexPropertyProduct{
+		ID:   1,
+		Name: "Widget",
+		ShippingAddress: &ComplexPropertyAddress{
+			Street: "123 Main St",
+			City:   "Metropolis",
+		},
+	}
+	if err := db.Create(&product).Error; err != nil {
+		t.Fatalf("failed to insert product: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/ComplexPropertyProducts?$filter=Name%20eq%20'Widget'&$select=ID,shippingAddress($select=city)", nil)
+	req.Header.Set("OData-MaxVersion", "4.01")
+	w := httptest.NewRecorder()
+
+	service.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var body map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	values, ok := body["value"].([]interface{})
+	if !ok || len(values) != 1 {
+		t.Fatalf("expected single result, got %#v", body["value"])
+	}
+
+	entity, ok := values[0].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected entity object, got %T", values[0])
+	}
+
+	address, ok := entity["shippingAddress"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected shippingAddress object, got %T", entity["shippingAddress"])
+	}
+	if address["city"] != "Metropolis" {
+		t.Fatalf("expected city to be selected, got %#v", address)
+	}
+	if _, ok := address["street"]; ok {
+		t.Fatalf("expected street to be omitted by nested complex $select, got %#v", address)
+	}
+}
+
 func TestComplexPropertyNull(t *testing.T) {
 	service, db := setupComplexPropertyService(t)
 

@@ -31,6 +31,18 @@ type selectTestTag struct {
 	ProductID int    `json:"productID"`
 }
 
+type selectTestAddress struct {
+	Street  string `json:"street"`
+	City    string `json:"city"`
+	Country string `json:"country"`
+}
+
+type selectTestProductWithComplex struct {
+	ID              int                `json:"ID" odata:"key"`
+	Name            string             `json:"name"`
+	ShippingAddress *selectTestAddress `json:"shippingAddress,omitempty" gorm:"embedded;embeddedPrefix:ship_"`
+}
+
 // has-one test types: MemberID is on the child (selectTestPrivacySettings), not on selectTestMember
 type selectTestPrivacySettings struct {
 	ID       int    `json:"ID" odata:"key"`
@@ -47,6 +59,15 @@ type selectTestMember struct {
 func getSelectTestMetadata(t *testing.T) *metadata.EntityMetadata {
 	t.Helper()
 	meta, err := metadata.AnalyzeEntity(selectTestProduct{})
+	if err != nil {
+		t.Fatalf("AnalyzeEntity returned error: %v", err)
+	}
+	return meta
+}
+
+func getSelectComplexTestMetadata(t *testing.T) *metadata.EntityMetadata {
+	t.Helper()
+	meta, err := metadata.AnalyzeEntity(selectTestProductWithComplex{})
 	if err != nil {
 		t.Fatalf("AnalyzeEntity returned error: %v", err)
 	}
@@ -142,6 +163,41 @@ func TestApplySelect(t *testing.T) {
 		firstProduct := maps[0]
 		if _, ok := firstProduct["category"]; !ok {
 			t.Error("expected 'category' to be in result")
+		}
+	})
+
+	t.Run("Select with complex property path", func(t *testing.T) {
+		meta := getSelectComplexTestMetadata(t)
+		productsWithComplex := []selectTestProductWithComplex{
+			{
+				ID:   1,
+				Name: "Product1",
+				ShippingAddress: &selectTestAddress{
+					Street:  "123 Main St",
+					City:    "Seattle",
+					Country: "USA",
+				},
+			},
+		}
+
+		result := ApplySelect(productsWithComplex, []string{"name", "shippingAddress/city", "shippingAddress/country"}, meta, nil)
+		maps, ok := result.([]map[string]interface{})
+		if !ok {
+			t.Fatal("expected result to be []map[string]interface{}")
+		}
+		if len(maps) != 1 {
+			t.Fatalf("expected 1 result, got %d", len(maps))
+		}
+
+		address, ok := maps[0]["shippingAddress"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("expected shippingAddress to be a filtered map, got %T", maps[0]["shippingAddress"])
+		}
+		if _, ok := address["street"]; ok {
+			t.Fatal("expected street to be omitted from filtered complex property")
+		}
+		if address["city"] != "Seattle" || address["country"] != "USA" {
+			t.Fatalf("unexpected filtered address: %#v", address)
 		}
 	})
 }
@@ -254,6 +310,36 @@ func TestApplySelectToEntity(t *testing.T) {
 
 		if _, ok := resultMap["category"]; !ok {
 			t.Error("expected 'category' to be in result")
+		}
+	})
+
+	t.Run("Select with complex property path", func(t *testing.T) {
+		meta := getSelectComplexTestMetadata(t)
+		productWithComplex := selectTestProductWithComplex{
+			ID:   1,
+			Name: "Product1",
+			ShippingAddress: &selectTestAddress{
+				Street:  "123 Main St",
+				City:    "Seattle",
+				Country: "USA",
+			},
+		}
+
+		result := ApplySelectToEntity(&productWithComplex, []string{"name", "shippingAddress/city"}, meta, nil)
+		resultMap, ok := result.(map[string]interface{})
+		if !ok {
+			t.Fatal("expected result to be map[string]interface{}")
+		}
+
+		address, ok := resultMap["shippingAddress"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("expected shippingAddress to be a filtered map, got %T", resultMap["shippingAddress"])
+		}
+		if _, ok := address["street"]; ok {
+			t.Fatal("expected street to be omitted from filtered complex property")
+		}
+		if address["city"] != "Seattle" {
+			t.Fatalf("unexpected filtered address: %#v", address)
 		}
 	})
 }

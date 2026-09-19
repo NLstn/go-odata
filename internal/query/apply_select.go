@@ -52,6 +52,42 @@ func selectContainsWildcard(selectedProperties []string) bool {
 	return false
 }
 
+func splitSelectedPaths(selectedProperties []string, entityMetadata *metadata.EntityMetadata) (map[string]bool, map[string][]string, map[string][]string) {
+	selectedPropMap := make(map[string]bool)
+	navPropSelects := make(map[string][]string)
+	complexPropSelects := make(map[string][]string)
+
+	for _, propName := range selectedProperties {
+		propName = strings.TrimSpace(propName)
+		if !strings.Contains(propName, "/") {
+			selectedPropMap[propName] = true
+			continue
+		}
+
+		parts := strings.SplitN(propName, "/", 2)
+		rootProp := strings.TrimSpace(parts[0])
+		subProp := strings.TrimSpace(parts[1])
+		if rootProp == "" || subProp == "" {
+			continue
+		}
+
+		if entityMetadata != nil {
+			if entityMetadata.FindNavigationProperty(rootProp) != nil {
+				navPropSelects[rootProp] = append(navPropSelects[rootProp], subProp)
+				continue
+			}
+			if complexProp := entityMetadata.FindComplexTypeProperty(rootProp); complexProp != nil {
+				complexPropSelects[rootProp] = append(complexPropSelects[rootProp], subProp)
+				continue
+			}
+		}
+
+		navPropSelects[rootProp] = append(navPropSelects[rootProp], subProp)
+	}
+
+	return selectedPropMap, navPropSelects, complexPropSelects
+}
+
 // applySelect applies select clause to fetch only specified columns at database level
 func applySelect(db *gorm.DB, selectedProperties []string, expandOptions []ExpandOption, entityMetadata *metadata.EntityMetadata) *gorm.DB {
 	if len(selectedProperties) == 0 {
@@ -81,8 +117,8 @@ func applySelect(db *gorm.DB, selectedProperties []string, expandOptions []Expan
 		columns = append(columns, qualifiedColumn)
 	}
 
-	addComplexTypeColumns := func(complexProp *metadata.PropertyMetadata) {
-		prefix := complexProp.EmbeddedPrefix
+	addComplexTypeColumns := func(complexProp *metadata.PropertyMetadata, basePrefix string) {
+		prefix := basePrefix + complexProp.EmbeddedPrefix
 		seen := make(map[string]bool)
 		for _, field := range complexProp.ComplexTypeFields {
 			if field.IsNavigationProp || field.IsComplexType || field.ColumnName == "" {
@@ -98,10 +134,23 @@ func applySelect(db *gorm.DB, selectedProperties []string, expandOptions []Expan
 
 	for _, propName := range selectedProperties {
 		propName = strings.TrimSpace(propName)
+		if propName == "" {
+			continue
+		}
+
+		if prop, prefix, err := entityMetadata.ResolvePropertyPath(propName); err == nil && prop != nil && !prop.IsNavigationProp && !prop.IsStream && !prop.IsComputed {
+			if prop.IsComplexType {
+				addComplexTypeColumns(prop, prefix)
+			} else if prop.ColumnName != "" {
+				addColumn(prefix + prop.ColumnName)
+			}
+			continue
+		}
+
 		for _, prop := range entityMetadata.Properties {
 			if (prop.JsonName == propName || prop.Name == propName) && !prop.IsNavigationProp && !prop.IsStream && !prop.IsComputed {
 				if prop.IsComplexType {
-					addComplexTypeColumns(&prop)
+					addComplexTypeColumns(&prop, "")
 				} else {
 					// Use GetColumnName for proper column name resolution (handles GORM tags and metadata)
 					columnName := GetColumnName(prop.Name, entityMetadata)
@@ -174,20 +223,7 @@ func ApplySelect(results interface{}, selectedProperties []string, entityMetadat
 
 	filteredResults := make([]map[string]interface{}, sliceValue.Len())
 
-	selectedPropMap := make(map[string]bool)
-	navPropSelects := make(map[string][]string)
-
-	for _, propName := range selectedProperties {
-		propName = strings.TrimSpace(propName)
-		if strings.Contains(propName, "/") {
-			parts := strings.SplitN(propName, "/", 2)
-			navProp := strings.TrimSpace(parts[0])
-			subProp := strings.TrimSpace(parts[1])
-			navPropSelects[navProp] = append(navPropSelects[navProp], subProp)
-		} else {
-			selectedPropMap[propName] = true
-		}
-	}
+	selectedPropMap, navPropSelects, complexPropSelects := splitSelectedPaths(selectedProperties, entityMetadata)
 
 	expandedPropMap := make(map[string]*ExpandOption)
 	for i := range expandOptions {
@@ -208,8 +244,9 @@ func ApplySelect(results interface{}, selectedProperties []string, entityMetadat
 			isKey := keyPropMap[prop.Name]
 			isExpanded := prop.IsNavigationProp && (expandedPropMap[prop.Name] != nil || expandedPropMap[prop.JsonName] != nil)
 			hasNavSelect := len(navPropSelects[prop.JsonName]) > 0 || len(navPropSelects[prop.Name]) > 0
+			hasComplexSelect := prop.IsComplexType && (len(complexPropSelects[prop.JsonName]) > 0 || len(complexPropSelects[prop.Name]) > 0)
 
-			if isSelected || isKey || isExpanded || hasNavSelect {
+			if isSelected || isKey || isExpanded || hasNavSelect || hasComplexSelect {
 				fieldValue := item.FieldByName(prop.Name)
 				if fieldValue.IsValid() && fieldValue.CanInterface() {
 					fieldVal := fieldValue.Interface()
@@ -247,6 +284,12 @@ func ApplySelect(results interface{}, selectedProperties []string, entityMetadat
 							}
 							fieldVal = applySelectToExpandedEntity(fieldVal, nestedSelect, nestedExpand)
 						}
+					} else if prop.IsComplexType && !isSelected && hasComplexSelect {
+						nestedSelect := complexPropSelects[prop.JsonName]
+						if len(nestedSelect) == 0 {
+							nestedSelect = complexPropSelects[prop.Name]
+						}
+						fieldVal = applySelectToComplexValue(fieldVal, nestedSelect)
 					}
 
 					filteredItem[prop.JsonName] = fieldVal
@@ -271,20 +314,7 @@ func ApplySelectToEntity(entity interface{}, selectedProperties []string, entity
 		return entity
 	}
 
-	selectedPropMap := make(map[string]bool)
-	navPropSelects := make(map[string][]string)
-
-	for _, propName := range selectedProperties {
-		propName = strings.TrimSpace(propName)
-		if strings.Contains(propName, "/") {
-			parts := strings.SplitN(propName, "/", 2)
-			navProp := strings.TrimSpace(parts[0])
-			subProp := strings.TrimSpace(parts[1])
-			navPropSelects[navProp] = append(navPropSelects[navProp], subProp)
-		} else {
-			selectedPropMap[propName] = true
-		}
-	}
+	selectedPropMap, navPropSelects, complexPropSelects := splitSelectedPaths(selectedProperties, entityMetadata)
 
 	expandedPropMap := make(map[string]*ExpandOption)
 	for i := range expandOptions {
@@ -321,8 +351,9 @@ func ApplySelectToEntity(entity interface{}, selectedProperties []string, entity
 		isKey := keyPropMap[prop.Name]
 		isExpanded := prop.IsNavigationProp && (expandedPropMap[prop.Name] != nil || expandedPropMap[prop.JsonName] != nil)
 		hasNavSelect := len(navPropSelects[prop.JsonName]) > 0 || len(navPropSelects[prop.Name]) > 0
+		hasComplexSelect := prop.IsComplexType && (len(complexPropSelects[prop.JsonName]) > 0 || len(complexPropSelects[prop.Name]) > 0)
 
-		if isSelected || isKey || isExpanded || hasNavSelect {
+		if isSelected || isKey || isExpanded || hasNavSelect || hasComplexSelect {
 			fieldValue := entityValue.FieldByName(prop.Name)
 			if fieldValue.IsValid() && fieldValue.CanInterface() {
 				fieldVal := fieldValue.Interface()
@@ -360,6 +391,12 @@ func ApplySelectToEntity(entity interface{}, selectedProperties []string, entity
 						}
 						fieldVal = applySelectToExpandedEntity(fieldVal, nestedSelect, nestedExpand)
 					}
+				} else if prop.IsComplexType && !isSelected && hasComplexSelect {
+					nestedSelect := complexPropSelects[prop.JsonName]
+					if len(nestedSelect) == 0 {
+						nestedSelect = complexPropSelects[prop.Name]
+					}
+					fieldVal = applySelectToComplexValue(fieldVal, nestedSelect)
 				}
 
 				filteredEntity[prop.JsonName] = fieldVal
@@ -433,4 +470,94 @@ func isForeignKeyOnEntity(fkColumn string, entityMeta *metadata.EntityMetadata) 
 		}
 	}
 	return false
+}
+
+func applySelectToComplexValue(value interface{}, selectedProperties []string) interface{} {
+	if len(selectedProperties) == 0 || value == nil {
+		return value
+	}
+
+	selectedPropMap := make(map[string]bool)
+	nestedPropSelects := make(map[string][]string)
+	for _, propName := range selectedProperties {
+		propName = strings.TrimSpace(propName)
+		if propName == "" {
+			continue
+		}
+		if strings.Contains(propName, "/") {
+			parts := strings.SplitN(propName, "/", 2)
+			rootProp := strings.TrimSpace(parts[0])
+			subProp := strings.TrimSpace(parts[1])
+			if rootProp != "" && subProp != "" {
+				nestedPropSelects[rootProp] = append(nestedPropSelects[rootProp], subProp)
+			}
+			continue
+		}
+		selectedPropMap[propName] = true
+	}
+
+	val := reflect.ValueOf(value)
+	for val.Kind() == reflect.Ptr {
+		if val.IsNil() {
+			return nil
+		}
+		val = val.Elem()
+	}
+
+	switch val.Kind() {
+	case reflect.Struct:
+		filtered := make(map[string]interface{})
+		entityType := val.Type()
+		for i := 0; i < val.NumField(); i++ {
+			field := entityType.Field(i)
+			fieldVal := val.Field(i)
+			if !fieldVal.IsValid() || !fieldVal.CanInterface() {
+				continue
+			}
+
+			jsonName := field.Name
+			if jsonTag := field.Tag.Get("json"); jsonTag != "" {
+				parts := strings.Split(jsonTag, ",")
+				if parts[0] != "" && parts[0] != "-" {
+					jsonName = parts[0]
+				}
+			}
+
+			isSelected := selectedPropMap[field.Name] || selectedPropMap[jsonName]
+			nestedSelect := nestedPropSelects[field.Name]
+			if len(nestedSelect) == 0 {
+				nestedSelect = nestedPropSelects[jsonName]
+			}
+
+			if !isSelected && len(nestedSelect) == 0 {
+				continue
+			}
+
+			fieldValue := fieldVal.Interface()
+			if !isSelected && len(nestedSelect) > 0 {
+				fieldValue = applySelectToComplexValue(fieldValue, nestedSelect)
+			}
+			filtered[jsonName] = fieldValue
+		}
+		return filtered
+	case reflect.Map:
+		filtered := make(map[string]interface{})
+		for _, key := range val.MapKeys() {
+			keyStr := key.String()
+			isSelected := selectedPropMap[keyStr]
+			nestedSelect := nestedPropSelects[keyStr]
+			if !isSelected && len(nestedSelect) == 0 {
+				continue
+			}
+
+			fieldValue := val.MapIndex(key).Interface()
+			if !isSelected && len(nestedSelect) > 0 {
+				fieldValue = applySelectToComplexValue(fieldValue, nestedSelect)
+			}
+			filtered[keyStr] = fieldValue
+		}
+		return filtered
+	default:
+		return value
+	}
 }
