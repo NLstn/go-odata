@@ -53,57 +53,121 @@ func TestRouter_ODataMaxVersionInvalidIgnored(t *testing.T) {
 func TestRouter_ODataMaxVersionAddsVaryHeader(t *testing.T) {
 	tests := []struct {
 		name         string
+		method       string
 		existingVary []string
 		prefer       string
 		wantMembers  map[string]int
 	}{
 		{
 			name:        "no existing header",
+			method:      http.MethodGet,
 			wantMembers: map[string]int{"odata-maxversion": 1},
 		},
 		{
 			name:         "preserves existing member",
+			method:       http.MethodGet,
 			existingVary: []string{"Accept-Encoding"},
 			wantMembers:  map[string]int{"accept-encoding": 1, "odata-maxversion": 1},
 		},
 		{
 			name:         "does not duplicate case-insensitive member",
+			method:       http.MethodGet,
 			existingVary: []string{"Accept-Encoding, odata-maxversion"},
 			wantMembers:  map[string]int{"accept-encoding": 1, "odata-maxversion": 1},
 		},
 		{
 			name:         "preserves multiple header lines",
+			method:       http.MethodGet,
 			existingVary: []string{"Accept-Encoding", "Origin"},
 			wantMembers:  map[string]int{"accept-encoding": 1, "origin": 1, "odata-maxversion": 1},
 		},
 		{
 			name:         "respects wildcard",
+			method:       http.MethodGet,
 			existingVary: []string{"*"},
 			wantMembers:  map[string]int{"*": 1},
 		},
 		{
-			name:        "adds prefer when request has prefer header",
+			name:        "adds prefer when preference can change representation",
+			method:      http.MethodGet,
 			prefer:      "return=minimal",
 			wantMembers: map[string]int{"odata-maxversion": 1, "prefer": 1},
 		},
 		{
 			name:         "does not duplicate existing prefer member",
+			method:       http.MethodGet,
 			existingVary: []string{"Prefer"},
 			prefer:       "return=minimal",
 			wantMembers:  map[string]int{"odata-maxversion": 1, "prefer": 1},
 		},
 		{
 			name:         "prefer with wildcard leaves wildcard only",
+			method:       http.MethodGet,
 			existingVary: []string{"*"},
 			prefer:       "return=minimal",
 			wantMembers:  map[string]int{"*": 1},
+		},
+		{
+			name:        "prefer without applied preference does not vary on prefer",
+			method:      http.MethodGet,
+			prefer:      "respond-async",
+			wantMembers: map[string]int{"odata-maxversion": 1},
+		},
+		{
+			name:        "maxpagesize varies on prefer",
+			method:      http.MethodGet,
+			prefer:      "odata.maxpagesize=5",
+			wantMembers: map[string]int{"odata-maxversion": 1, "prefer": 1},
+		},
+		{
+			name:        "track changes varies on prefer",
+			method:      http.MethodGet,
+			prefer:      "odata.track-changes",
+			wantMembers: map[string]int{"odata-maxversion": 1, "prefer": 1},
+		},
+		{
+			name:        "include annotations varies on prefer",
+			method:      http.MethodGet,
+			prefer:      `odata.include-annotations="*"`,
+			wantMembers: map[string]int{"odata-maxversion": 1, "prefer": 1},
+		},
+		{
+			name:        "omit values varies on prefer",
+			method:      http.MethodGet,
+			prefer:      "omit-values=nulls",
+			wantMembers: map[string]int{"odata-maxversion": 1, "prefer": 1},
+		},
+		{
+			name:        "allow entity references does not vary on prefer by default",
+			method:      http.MethodGet,
+			prefer:      "odata.allow-entityreferences",
+			wantMembers: map[string]int{"odata-maxversion": 1},
+		},
+		{
+			name:        "post return representation varies on prefer",
+			method:      http.MethodPost,
+			prefer:      "return=representation",
+			wantMembers: map[string]int{"odata-maxversion": 1, "prefer": 1},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := newTestRouter(nil, nil, nil, func(http.ResponseWriter, *http.Request, string, string, bool, string) {})
-			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			r := NewRouter(
+				func(string) (EntityHandler, bool) { return nil, false },
+				func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) },
+				func(http.ResponseWriter, *http.Request) {},
+				func(http.ResponseWriter, *http.Request) {},
+				nil,
+				nil,
+				func(http.ResponseWriter, *http.Request, string, string, bool, string) {},
+				nil,
+			)
+			method := tt.method
+			if method == "" {
+				method = http.MethodGet
+			}
+			req := httptest.NewRequest(method, "/", nil)
 			req.Header.Set("OData-MaxVersion", "4.0")
 			if tt.prefer != "" {
 				req.Header.Set("Prefer", tt.prefer)
