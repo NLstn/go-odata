@@ -283,8 +283,9 @@ func TestODataEntityIdHeader_PUT(t *testing.T) {
 	db.Create(&product)
 
 	replacementData := map[string]interface{}{
-		"name":  "Replaced",
-		"price": 200.00,
+		"name":        "Replaced",
+		"price":       200.00,
+		"description": "Replacement description",
 	}
 	body, _ := json.Marshal(replacementData)
 
@@ -324,7 +325,8 @@ func TestODataEntityIdHeader_PUT_CompositeKey(t *testing.T) {
 	db.Create(&product)
 
 	replacementData := map[string]interface{}{
-		"name": "Replaced",
+		"name":        "Replaced",
+		"description": "Replacement description",
 	}
 	body, _ := json.Marshal(replacementData)
 

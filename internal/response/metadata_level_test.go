@@ -214,8 +214,8 @@ func TestIsAcceptableFormatWithMetadata(t *testing.T) {
 		{
 			name:        "$format with odata.metadata parameter - json",
 			formatParam: "json;odata.metadata=minimal",
-			expected:    true,
-			description: "Should accept json format with metadata parameter",
+			expected:    false,
+			description: "The json abbreviation cannot have format parameters",
 		},
 		{
 			name:         "Accept with odata.metadata parameter",

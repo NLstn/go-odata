@@ -249,6 +249,25 @@ func validateValueType(value interface{}, expectedType reflect.Type, fieldName s
 	return nil
 }
 
+// validatePutProperties rejects an incomplete replacement before any database write.
+// CSDL non-nullability, rather than the optional odata:"required" tag, determines
+// whether omitting a structural property is valid on PUT.
+func (h *EntityHandler) validatePutProperties(data map[string]interface{}) error {
+	for _, prop := range h.metadata.Properties {
+		if prop.IsKey || prop.IsAuto || prop.IsComputed || prop.IsETag || prop.IsNavigationProp || prop.IsStream || prop.DefaultValue != "" || prop.Nullable == nil || *prop.Nullable {
+			continue
+		}
+		if prop.Annotations != nil && (prop.Annotations.Has("Org.OData.Core.V1.Computed") || prop.Annotations.Has("Org.OData.Core.V1.Immutable")) {
+			continue
+		}
+		value, exists := data[prop.JsonName]
+		if !exists || value == nil {
+			return fmt.Errorf("non-nullable property %s must be supplied in PUT", prop.JsonName)
+		}
+	}
+	return nil
+}
+
 // validateRequiredFieldsNotNull validates that required fields are not being set to null
 func (h *EntityHandler) validateRequiredFieldsNotNull(updateData map[string]interface{}) error {
 	var nullRequiredFields []string

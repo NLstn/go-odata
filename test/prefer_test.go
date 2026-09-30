@@ -328,8 +328,9 @@ func TestPutEntity_DefaultNoContent(t *testing.T) {
 	db.Create(&product)
 
 	updateData := map[string]interface{}{
-		"name":  "Updated",
-		"price": 200.00,
+		"name":        "Updated",
+		"price":       200.00,
+		"description": "Updated description",
 	}
 	body, _ := json.Marshal(updateData)
 
@@ -359,8 +360,9 @@ func TestPutEntity_PreferReturnRepresentation(t *testing.T) {
 	db.Create(&product)
 
 	updateData := map[string]interface{}{
-		"name":  "Updated",
-		"price": 200.00,
+		"name":        "Updated",
+		"price":       200.00,
+		"description": "Updated description",
 	}
 	body, _ := json.Marshal(updateData)
 

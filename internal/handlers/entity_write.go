@@ -474,6 +474,12 @@ func (h *EntityHandler) handlePutEntity(w http.ResponseWriter, r *http.Request, 
 			}
 			return newTransactionHandledError(err)
 		}
+		if err := h.validatePutProperties(replacementData); err != nil {
+			if writeErr := response.WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidRequestBody, err.Error()); writeErr != nil {
+				h.logger.Error("Error writing error response", "error", writeErr)
+			}
+			return newTransactionHandledError(err)
+		}
 
 		if err := h.decodeBinaryPropertiesInPlace(replacementData); err != nil {
 			if writeErr := response.WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidRequestBody, err.Error()); writeErr != nil {

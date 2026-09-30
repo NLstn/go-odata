@@ -1,6 +1,7 @@
 package router
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -9,6 +10,50 @@ import (
 	"github.com/nlstn/go-odata/internal/actions"
 	"github.com/nlstn/go-odata/internal/response"
 )
+
+type crossjoinTestHandler struct {
+	*stubEntityHandler
+	id int
+}
+
+func (h *crossjoinTestHandler) HandleCollection(w http.ResponseWriter, _ *http.Request) {
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{
+		"value": []map[string]interface{}{{"ID": h.id, "@odata.id": "/Entities(1)"}},
+	}); err != nil {
+		panic(err)
+	}
+}
+
+func TestCrossJoinUsesNavigationLinksAndComplexContext(t *testing.T) {
+	r := newTestRouterMulti(map[string]EntityHandler{
+		"Products":   &crossjoinTestHandler{stubEntityHandler: newStubEntityHandler(), id: 1},
+		"Categories": &crossjoinTestHandler{stubEntityHandler: newStubEntityHandler(), id: 2},
+	}, nil, nil, func(http.ResponseWriter, *http.Request, string, string, bool, string) {})
+	req := httptest.NewRequest(http.MethodGet, "/$crossjoin(Products,Categories)?$top=1", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", w.Code, w.Body.String())
+	}
+	var body struct {
+		Context string                   `json:"@odata.context"`
+		Value   []map[string]interface{} `json:"value"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Context != "$metadata#Collection(Edm.ComplexType)" || len(body.Value) != 1 {
+		t.Fatalf("crossjoin response = %s", w.Body.String())
+	}
+	for _, set := range []string{"Products", "Categories"} {
+		if _, ok := body.Value[0][set+"@odata.navigationLink"]; !ok {
+			t.Errorf("missing %s navigation link: %s", set, w.Body.String())
+		}
+		if _, ok := body.Value[0][set+"@odata.id"]; ok {
+			t.Errorf("unexpected %s entity ID annotation", set)
+		}
+	}
+}
 
 func TestRouter_ODataMaxVersionRejected(t *testing.T) {
 	handler := newStubEntityHandler()
@@ -254,6 +299,29 @@ func TestRouter_PreferAddsVaryHeader(t *testing.T) {
 				if gotMembers[member] != wantCount {
 					t.Errorf("Vary member %q count = %d, want %d", member, gotMembers[member], wantCount)
 				}
+			}
+		})
+	}
+}
+
+func TestRouter_WriteVariantsBothVaryOnPrefer(t *testing.T) {
+	r := newTestRouter(nil, nil, nil, func(http.ResponseWriter, *http.Request, string, string, bool, string) {})
+	for _, prefer := range []string{"", "return=minimal"} {
+		t.Run(prefer, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/", nil)
+			if prefer != "" {
+				req.Header.Set("Prefer", prefer)
+			}
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+			found := false
+			for _, value := range w.Header().Values("Vary") {
+				for member := range strings.SplitSeq(value, ",") {
+					found = found || strings.EqualFold(strings.TrimSpace(member), "Prefer")
+				}
+			}
+			if !found {
+				t.Fatalf("POST with Prefer %q has Vary %v", prefer, w.Header().Values("Vary"))
 			}
 		})
 	}

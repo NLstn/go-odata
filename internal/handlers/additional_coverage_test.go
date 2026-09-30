@@ -134,7 +134,7 @@ func TestHandlePutEntity_Success(t *testing.T) {
 		t.Fatalf("Failed to create test data: %v", err)
 	}
 
-	body := `{"ID": 1, "Name": "Replaced", "Price": 20.0, "Category": "NewCategory"}`
+	body := `{"ID": 1, "Name": "Replaced", "Price": 20.0, "Category": "NewCategory", "Description": "New description"}`
 	req := httptest.NewRequest(http.MethodPut, "/AdditionalCoverageTestEntities(1)", requestBody(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()

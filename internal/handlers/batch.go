@@ -203,8 +203,9 @@ func (h *BatchHandler) HandleBatch(w http.ResponseWriter, r *http.Request) {
 	// Parse multipart request
 	reader := multipart.NewReader(r.Body, boundary)
 	responses := []batchResponse{}
+	continueOnError := multipartBatchContinueOnError(r.Header.Values("Prefer"))
 
-	for {
+	for continueOnError || len(responses) == 0 || responses[len(responses)-1].StatusCode < http.StatusBadRequest {
 		part, err := reader.NextPart()
 		if err == io.EOF {
 			break
@@ -292,6 +293,18 @@ func (h *BatchHandler) HandleBatch(w http.ResponseWriter, r *http.Request) {
 		batchSpan.SetAttributes(observability.BatchSizeAttr(len(responses)))
 		h.observability.Metrics().RecordBatchSize(ctx, len(responses))
 	}
+}
+
+func multipartBatchContinueOnError(headers []string) bool {
+	for _, header := range headers {
+		for _, value := range strings.Split(header, ",") {
+			name := strings.TrimSpace(strings.SplitN(value, ";", 2)[0])
+			if strings.EqualFold(name, "odata.continue-on-error") || strings.EqualFold(name, "continue-on-error") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // processChangeset processes a changeset (atomic operations)

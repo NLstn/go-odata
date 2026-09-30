@@ -340,9 +340,10 @@ func TestPutEntity_WithMatchingETag(t *testing.T) {
 
 	// Now try to replace with the correct ETag
 	replacement := map[string]interface{}{
-		"name":    "Gaming Laptop",
-		"price":   1299.99,
-		"version": 1,
+		"name":         "Gaming Laptop",
+		"price":        1299.99,
+		"version":      1,
+		"last_updated": product.LastUpdated,
 	}
 	body, _ := json.Marshal(replacement)
 
@@ -374,9 +375,10 @@ func TestPutEntity_WithNonMatchingETag(t *testing.T) {
 
 	// Try to replace with an incorrect ETag
 	replacement := map[string]interface{}{
-		"name":    "Gaming Laptop",
-		"price":   1299.99,
-		"version": 1,
+		"name":         "Gaming Laptop",
+		"price":        1299.99,
+		"version":      1,
+		"last_updated": product.LastUpdated,
 	}
 	body, _ := json.Marshal(replacement)
 
@@ -408,9 +410,10 @@ func TestPutEntity_WithWildcardIfNoneMatch(t *testing.T) {
 	db.Create(&product)
 
 	replacement := map[string]interface{}{
-		"name":    "Gaming Laptop",
-		"price":   1299.99,
-		"version": 1,
+		"name":         "Gaming Laptop",
+		"price":        1299.99,
+		"version":      1,
+		"last_updated": product.LastUpdated,
 	}
 	body, _ := json.Marshal(replacement)
 
@@ -682,9 +685,10 @@ func TestPutEntity_WithPreferReturnRepresentation_IncludesETag(t *testing.T) {
 
 	// Replace with Prefer: return=representation
 	replacement := map[string]interface{}{
-		"name":    "Gaming Laptop",
-		"price":   1299.99,
-		"version": 1,
+		"name":         "Gaming Laptop",
+		"price":        1299.99,
+		"version":      1,
+		"last_updated": product.LastUpdated,
 	}
 	body, _ := json.Marshal(replacement)
 

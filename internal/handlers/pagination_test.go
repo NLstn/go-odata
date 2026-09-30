@@ -34,7 +34,7 @@ func TestEntityHandlerCollectionWithTop(t *testing.T) {
 			name:          "Top 5",
 			top:           5,
 			expectedCount: 5,
-			expectNext:    true,
+			expectNext:    false,
 		},
 		{
 			name:          "Top 10",
@@ -46,7 +46,7 @@ func TestEntityHandlerCollectionWithTop(t *testing.T) {
 			name:          "Top 3",
 			top:           3,
 			expectedCount: 3,
-			expectNext:    true,
+			expectNext:    false,
 		},
 	}
 
@@ -85,6 +85,66 @@ func TestEntityHandlerCollectionWithTop(t *testing.T) {
 			}
 			if !tt.expectNext && hasNextLink {
 				t.Error("Did not expect @odata.nextLink to be present")
+			}
+		})
+	}
+}
+
+func TestCollectionTopAcrossServerPages(t *testing.T) {
+	handler, db := setupProductHandler(t)
+	for id := 1; id <= 5; id++ {
+		if err := db.Create(&Product{ID: id, Name: fmt.Sprintf("Product %d", id), Price: float64(id), Category: "Test"}).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, tt := range []struct {
+		name string
+		top  string
+		want int
+	}{
+		{name: "zero", top: "0", want: 0},
+		{name: "limited", top: "3", want: 2},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/Products?$top="+tt.top, nil)
+			req.Header.Set("Prefer", "odata.maxpagesize=2")
+			w := httptest.NewRecorder()
+			handler.HandleCollection(w, req)
+			if w.Code != http.StatusOK {
+				t.Fatalf("status = %d: %s", w.Code, w.Body.String())
+			}
+			var page struct {
+				Value []map[string]interface{} `json:"value"`
+				Next  string                   `json:"@odata.nextLink"`
+			}
+			if err := json.Unmarshal(w.Body.Bytes(), &page); err != nil {
+				t.Fatal(err)
+			}
+			if len(page.Value) != tt.want {
+				t.Fatalf("first page has %d items, want %d", len(page.Value), tt.want)
+			}
+			if tt.top == "0" {
+				if page.Next != "" {
+					t.Fatalf("$top=0 must not continue: %s", page.Next)
+				}
+				return
+			}
+			if page.Next == "" {
+				t.Fatal("expected a continuation for the remaining item")
+			}
+			follow := httptest.NewRequest(http.MethodGet, page.Next, nil)
+			follow.Header.Set("Prefer", "odata.maxpagesize=2")
+			if got := follow.URL.Query().Get("$top"); got != "1" {
+				t.Fatalf("continuation $top = %q, want 1", got)
+			}
+			w = httptest.NewRecorder()
+			handler.HandleCollection(w, follow)
+			page.Next = ""
+			if err := json.Unmarshal(w.Body.Bytes(), &page); err != nil {
+				t.Fatal(err)
+			}
+			if len(page.Value) != 1 || page.Next != "" {
+				t.Fatalf("final page: %s", w.Body.String())
 			}
 		})
 	}
@@ -211,7 +271,7 @@ func TestEntityHandlerCollectionWithTopAndSkip(t *testing.T) {
 			skip:          0,
 			expectedCount: 5,
 			expectFirstID: 1,
-			expectNext:    true,
+			expectNext:    false,
 		},
 		{
 			name:          "Second page (top=5, skip=5)",
@@ -219,7 +279,7 @@ func TestEntityHandlerCollectionWithTopAndSkip(t *testing.T) {
 			skip:          5,
 			expectedCount: 5,
 			expectFirstID: 6,
-			expectNext:    true,
+			expectNext:    false,
 		},
 		{
 			name:          "Last page (top=5, skip=15)",
@@ -625,7 +685,7 @@ func TestEntityHandlerCollectionWithMaxPageSize(t *testing.T) {
 			maxPageSize:         10,
 			top:                 intPtr(5),
 			expectedCount:       5,
-			expectNext:          true,
+			expectNext:          false,
 			expectAppliedHeader: true,
 		},
 		{
@@ -641,7 +701,7 @@ func TestEntityHandlerCollectionWithMaxPageSize(t *testing.T) {
 			maxPageSize:         100,
 			top:                 intPtr(8),
 			expectedCount:       8,
-			expectNext:          true,
+			expectNext:          false,
 			expectAppliedHeader: true,
 		},
 	}
@@ -693,6 +753,8 @@ func TestEntityHandlerCollectionWithMaxPageSize(t *testing.T) {
 				if _, hasNext := response["@odata.nextLink"]; !hasNext {
 					t.Error("Expected @odata.nextLink to be present")
 				}
+			} else if _, hasNext := response["@odata.nextLink"]; hasNext {
+				t.Error("Did not expect @odata.nextLink")
 			}
 		})
 	}
@@ -714,8 +776,9 @@ func TestEntityHandlerCollectionWithSkipToken(t *testing.T) {
 		db.Create(&products[i])
 	}
 
-	// First request with $top=5 and $orderby=Price
-	req1 := httptest.NewRequest(http.MethodGet, "/Products?$top=5&$orderby=Price", nil)
+	// A page-size preference creates a server-driven continuation.
+	req1 := httptest.NewRequest(http.MethodGet, "/Products?$orderby=Price", nil)
+	req1.Header.Set("Prefer", "odata.maxpagesize=5")
 	w1 := httptest.NewRecorder()
 	handler.HandleCollection(w1, req1)
 
@@ -859,9 +922,7 @@ func TestSkipTokenInNextLink(t *testing.T) {
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/Products", nil)
-	q := req.URL.Query()
-	q.Add("$top", "3")
-	req.URL.RawQuery = q.Encode()
+	req.Header.Set("Prefer", "odata.maxpagesize=3")
 	w := httptest.NewRecorder()
 
 	handler.HandleCollection(w, req)
@@ -910,7 +971,8 @@ func TestSkipTokenPreservesQueryOptions(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/Products", nil)
 	q := req.URL.Query()
-	q.Add("$top", "3")
+	q.Add("$top", "8")
+	req.Header.Set("Prefer", "odata.maxpagesize=3")
 	q.Add("$filter", "Price gt 20")
 	q.Add("$orderby", "Price desc")
 	req.URL.RawQuery = q.Encode()
@@ -970,10 +1032,11 @@ func TestSkipTokenFullTraversalWithoutOrderBy(t *testing.T) {
 	}
 
 	seen := make(map[int]bool)
-	url := fmt.Sprintf("/Products?$top=%d", pageSize)
+	url := "/Products"
 
 	for page := 0; ; page++ {
 		req := httptest.NewRequest(http.MethodGet, url, nil)
+		req.Header.Set("Prefer", fmt.Sprintf("odata.maxpagesize=%d", pageSize))
 		w := httptest.NewRecorder()
 		handler.HandleCollection(w, req)
 

@@ -198,7 +198,9 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	// Responses vary by the version selected from OData-MaxVersion.
 	addVaryHeader(w.Header(), handlers.HeaderODataMaxVersion)
-	if shouldVaryOnPrefer(req) {
+	// A return preference changes write responses even when this request omits
+	// Prefer, so both representations must carry the same cache key.
+	if req.Method == http.MethodPost || req.Method == http.MethodPut || req.Method == http.MethodPatch || shouldVaryOnPrefer(req) {
 		addVaryHeader(w.Header(), "Prefer")
 	}
 

@@ -31,6 +31,18 @@ func TestIsAcceptableFormat(t *testing.T) {
 			description:  "Should accept application/json",
 		},
 		{
+			name:         "Unknown JSON format parameter",
+			acceptHeader: "application/json;odata.compliance-unknown=true",
+			want:         false,
+			description:  "Unknown format parameters must be rejected",
+		},
+		{
+			name:         "Unknown parameter on one of two alternatives",
+			acceptHeader: "application/json;odata.compliance-unknown=true, application/json",
+			want:         true,
+			description:  "A separate supported alternative remains acceptable",
+		},
+		{
 			name:         "Accept XML only",
 			acceptHeader: "application/xml",
 			want:         false,
