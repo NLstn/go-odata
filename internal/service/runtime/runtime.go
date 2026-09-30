@@ -354,6 +354,12 @@ func (r *statusRecorder) ensurePreferVary() {
 func (r *statusRecorder) WriteHeader(statusCode int) {
 	if !r.written {
 		r.ensurePreferVary()
+		if statusCode >= http.StatusOK && statusCode != http.StatusNoContent && statusCode != http.StatusNotModified {
+			if r.Header().Get("Content-Type") == "" {
+				r.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			}
+			r.Header().Set("X-Content-Type-Options", "nosniff")
+		}
 		r.statusCode = statusCode
 		r.written = true
 		r.ResponseWriter.WriteHeader(statusCode)
@@ -365,6 +371,10 @@ func (r *statusRecorder) Write(b []byte) (int, error) {
 		r.ensurePreferVary()
 		r.written = true
 	}
+	if r.Header().Get("Content-Type") == "" {
+		r.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	}
+	r.Header().Set("X-Content-Type-Options", "nosniff")
 	return r.ResponseWriter.Write(b)
 }
 
@@ -388,6 +398,12 @@ func (w *serverTimingResponseWriter) Unwrap() http.ResponseWriter {
 // into the outgoing response, and then delegates to the real WriteHeader.
 func (w *serverTimingResponseWriter) WriteHeader(statusCode int) {
 	if !w.headerWritten {
+		if statusCode >= http.StatusOK && statusCode != http.StatusNoContent && statusCode != http.StatusNotModified {
+			if w.Header().Get("Content-Type") == "" {
+				w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			}
+			w.Header().Set("X-Content-Type-Options", "nosniff")
+		}
 		w.headerWritten = true
 		// Snapshot timing at the moment headers are committed.
 		observability.SetServerTimingMetricDuration(w.ctx, "total", time.Since(w.start), "Total request duration")
@@ -404,6 +420,10 @@ func (w *serverTimingResponseWriter) WriteHeader(statusCode int) {
 // Write triggers an implicit WriteHeader(200) on the first call (mirroring net/http semantics)
 // and then passes the bytes directly to the underlying writer — no buffering.
 func (w *serverTimingResponseWriter) Write(b []byte) (int, error) {
+	if w.Header().Get("Content-Type") == "" {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	}
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	if !w.headerWritten {
 		w.WriteHeader(http.StatusOK)
 	}

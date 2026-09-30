@@ -1,9 +1,11 @@
 package runtime
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 func TestExtractEntitySetFromPath(t *testing.T) {
@@ -230,6 +232,43 @@ func TestStatusRecorder_Write(t *testing.T) {
 	}
 	if !sr.written {
 		t.Error("statusRecorder.written should be true after Write")
+	}
+	if got := w.Header().Get("Content-Type"); got != "text/plain; charset=utf-8" {
+		t.Errorf("Content-Type = %q, want safe plain-text default", got)
+	}
+	if got := w.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+		t.Errorf("X-Content-Type-Options = %q, want nosniff", got)
+	}
+}
+
+func TestResponseWrappersPreserveExplicitContentType(t *testing.T) {
+	rec := httptest.NewRecorder()
+	rec.Header().Set("Content-Type", "application/json")
+	timing := &serverTimingResponseWriter{ResponseWriter: rec, ctx: context.Background(), start: time.Now()}
+	status := &statusRecorder{ResponseWriter: timing, statusCode: http.StatusOK}
+
+	if _, err := status.Write([]byte(`{"value":"<script>"}`)); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+	if got := rec.Result().Header.Get("Content-Type"); got != "application/json" {
+		t.Errorf("Content-Type = %q, want application/json", got)
+	}
+	if got := rec.Result().Header.Get("X-Content-Type-Options"); got != "nosniff" {
+		t.Errorf("X-Content-Type-Options = %q, want nosniff", got)
+	}
+}
+
+func TestServerTimingWriterDefaultsToPlainText(t *testing.T) {
+	rec := httptest.NewRecorder()
+	w := &serverTimingResponseWriter{ResponseWriter: rec, ctx: context.Background(), start: time.Now()}
+	if _, err := w.Write([]byte("<script>alert(1)</script>")); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+	if got := rec.Result().Header.Get("Content-Type"); got != "text/plain; charset=utf-8" {
+		t.Errorf("Content-Type = %q, want safe plain-text default", got)
+	}
+	if got := rec.Result().Header.Get("X-Content-Type-Options"); got != "nosniff" {
+		t.Errorf("X-Content-Type-Options = %q, want nosniff", got)
 	}
 }
 
