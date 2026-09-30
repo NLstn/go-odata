@@ -213,6 +213,29 @@ func TestHandlePut_FullReplacement(t *testing.T) {
 	}
 }
 
+func TestHandlePut_RejectsOmittedNonNullableProperty(t *testing.T) {
+	handler, db := setupWriteTestHandler(t)
+	entity := WriteTestEntity{ID: 1, Name: "Original", Description: "Old", Price: 10, Active: true}
+	if err := db.Create(&entity).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodPut, "/WriteTestEntities(1)", strings.NewReader(`{"Name":"Incomplete","Description":"New","Active":false}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	handler.HandleEntity(w, req, "1")
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400: %s", w.Code, w.Body.String())
+	}
+	var stored WriteTestEntity
+	if err := db.First(&stored, 1).Error; err != nil {
+		t.Fatal(err)
+	}
+	if stored.Name != "Original" || stored.Price != 10 || !stored.Active {
+		t.Fatalf("rejected PUT changed entity: %+v", stored)
+	}
+}
+
 func TestHandlePut_WithPreferRepresentation(t *testing.T) {
 	handler, db := setupWriteTestHandler(t)
 
@@ -222,7 +245,7 @@ func TestHandlePut_WithPreferRepresentation(t *testing.T) {
 		t.Fatalf("Failed to create entity: %v", err)
 	}
 
-	body := `{"ID": 1, "Name": "Replaced", "Price": 99.99}`
+	body := `{"ID": 1, "Name": "Replaced", "Description": "Replacement", "Price": 99.99, "Active": false}`
 	req := httptest.NewRequest(http.MethodPut, "/WriteTestEntities(1)", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Prefer", "return=representation")

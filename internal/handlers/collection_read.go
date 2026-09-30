@@ -1582,11 +1582,32 @@ func (h *EntityHandler) calculateNextLink(queryOptions *query.QueryOptions, slic
 	if queryOptions.Top == nil {
 		return nil, false
 	}
+	if *queryOptions.Top == 0 {
+		return nil, true
+	}
 
 	resultCount := reflect.ValueOf(sliceValue).Len()
 
 	if resultCount > *queryOptions.Top {
-		nextURL := buildNextLinkWithSkipToken(h.metadata, queryOptions, sliceValue, r)
+		// $top limits the entire collection response, not each server page.
+		// Carry only the remaining allowance into a continuation URL.
+		continuation := r
+		if rawTop := query.NormalizeQueryParams(r.URL.Query()).Get("$top"); rawTop != "" {
+			requestedTop, err := strconv.Atoi(rawTop)
+			if err == nil {
+				remaining := requestedTop - *queryOptions.Top
+				if remaining <= 0 {
+					return nil, true
+				}
+				continuation = r.Clone(r.Context())
+				urlCopy := *r.URL
+				continuation.URL = &urlCopy
+				values := query.NormalizeQueryParams(continuation.URL.Query())
+				values.Set("$top", strconv.Itoa(remaining))
+				continuation.URL.RawQuery = values.Encode()
+			}
+		}
+		nextURL := buildNextLinkWithSkipToken(h.metadata, queryOptions, sliceValue, continuation)
 		if nextURL != nil {
 			return nextURL, true
 		}
@@ -1597,7 +1618,7 @@ func (h *EntityHandler) calculateNextLink(queryOptions *query.QueryOptions, slic
 		}
 		nextSkip := currentSkip + *queryOptions.Top
 
-		fallbackURL := response.BuildNextLink(r, nextSkip)
+		fallbackURL := response.BuildNextLink(continuation, nextSkip)
 		return &fallbackURL, true
 	}
 

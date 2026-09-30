@@ -135,12 +135,10 @@ func TestPutEntity_WithMissingFields(t *testing.T) {
 	}
 	db.Create(&product)
 
-	// Replace with data that has missing optional fields
-	// According to OData v4, missing fields should be set to default values
+	// Non-nullable fields without metadata defaults cannot be omitted in PUT.
 	replacementData := map[string]interface{}{
 		"name":  "Basic Laptop",
 		"price": 599.99,
-		// Description and Category are missing - should be set to empty string (default)
 	}
 	body, _ := json.Marshal(replacementData)
 
@@ -150,25 +148,24 @@ func TestPutEntity_WithMissingFields(t *testing.T) {
 
 	service.ServeHTTP(w, req)
 
-	// Should return 204 No Content
-	if w.Code != http.StatusNoContent {
-		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusNoContent, w.Body.String())
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Status = %v, want %v. Body: %s", w.Code, http.StatusBadRequest, w.Body.String())
 	}
 
-	// Verify the entity was replaced and missing fields are default values
+	// A rejected replacement must leave the existing entity unchanged.
 	var updated PutTestProduct
 	db.First(&updated, 1)
-	if updated.Name != "Basic Laptop" {
-		t.Errorf("Name = %v, want Basic Laptop", updated.Name)
+	if updated.Name != "Laptop" {
+		t.Errorf("Name = %v, want Laptop", updated.Name)
 	}
-	if updated.Price != 599.99 {
-		t.Errorf("Price = %v, want 599.99", updated.Price)
+	if updated.Price != 999.99 {
+		t.Errorf("Price = %v, want 999.99", updated.Price)
 	}
-	if updated.Description != "" {
-		t.Errorf("Description = %v, want empty string (default)", updated.Description)
+	if updated.Description != "A high-performance laptop" {
+		t.Errorf("Description = %v, want original value", updated.Description)
 	}
-	if updated.Category != "" {
-		t.Errorf("Category = %v, want empty string (default)", updated.Category)
+	if updated.Category != "Electronics" {
+		t.Errorf("Category = %v, want Electronics", updated.Category)
 	}
 }
 
@@ -372,11 +369,12 @@ func TestPutEntity_MultiplePuts(t *testing.T) {
 		t.Errorf("Second PUT: Status = %v, want %v", w.Code, http.StatusNoContent)
 	}
 
-	// Third PUT - with missing fields
+	// Third PUT explicitly clears fields using empty strings.
 	updateData3 := map[string]interface{}{
-		"name":  "Budget Laptop",
-		"price": 599.99,
-		// Missing description and category - should be set to defaults
+		"name":        "Budget Laptop",
+		"price":       599.99,
+		"description": "",
+		"category":    "",
 	}
 	body3, _ := json.Marshal(updateData3)
 	req = httptest.NewRequest(http.MethodPut, "/PutTestProducts(1)", bytes.NewBuffer(body3))
@@ -458,10 +456,12 @@ func TestPutEntity_DifferenceFromPatch(t *testing.T) {
 	}
 	db.Create(&product)
 
-	// PUT with only name and price - description and category should be cleared
+	// PUT explicitly replaces description and category with empty strings.
 	updateData := map[string]interface{}{
-		"name":  "Updated Laptop",
-		"price": 1299.99,
+		"name":        "Updated Laptop",
+		"price":       1299.99,
+		"description": "",
+		"category":    "",
 	}
 	body, _ := json.Marshal(updateData)
 
@@ -474,7 +474,7 @@ func TestPutEntity_DifferenceFromPatch(t *testing.T) {
 		t.Fatalf("PUT failed: Status = %v, want %v", w.Code, http.StatusNoContent)
 	}
 
-	// Verify that omitted fields were set to defaults (this is the difference from PATCH)
+	// Verify the explicitly cleared fields.
 	var updated PutTestProduct
 	db.First(&updated, 1)
 	if updated.Name != "Updated Laptop" {
@@ -483,7 +483,7 @@ func TestPutEntity_DifferenceFromPatch(t *testing.T) {
 	if updated.Price != 1299.99 {
 		t.Errorf("Price = %v, want 1299.99", updated.Price)
 	}
-	// These should be empty/default because they were not in the PUT request
+	// These fields were explicitly set to empty strings in the PUT request.
 	if updated.Description != "" {
 		t.Errorf("Description = %v, want empty string (default for PUT)", updated.Description)
 	}
@@ -538,7 +538,7 @@ func TestPutUpsert_ThenUpdate(t *testing.T) {
 	}
 
 	// First PUT – update (entity now exists)
-	body1, _ := json.Marshal(map[string]interface{}{"name": "Initial", "price": 10.0})
+	body1, _ := json.Marshal(map[string]interface{}{"name": "Initial", "price": 10.0, "description": "", "category": ""})
 	req1 := httptest.NewRequest(http.MethodPut, "/PutTestProducts(77)", bytes.NewBuffer(body1))
 	req1.Header.Set("Content-Type", "application/json")
 	w1 := httptest.NewRecorder()
@@ -549,7 +549,7 @@ func TestPutUpsert_ThenUpdate(t *testing.T) {
 	}
 
 	// Second PUT – regular update (entity now exists)
-	body2, _ := json.Marshal(map[string]interface{}{"name": "Updated", "price": 20.0})
+	body2, _ := json.Marshal(map[string]interface{}{"name": "Updated", "price": 20.0, "description": "", "category": ""})
 	req2 := httptest.NewRequest(http.MethodPut, "/PutTestProducts(77)", bytes.NewBuffer(body2))
 	req2.Header.Set("Content-Type", "application/json")
 	w2 := httptest.NewRecorder()

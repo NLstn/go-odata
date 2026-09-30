@@ -239,9 +239,10 @@ func TestODataMetadataNoneWithCountAndNextLink(t *testing.T) {
 	}
 	service.RegisterEntity(&Product{})
 
-	// Test with $count and $top
-	req := httptest.NewRequest(http.MethodGet, "/Products?$count=true&$top=5", nil)
+	// A page-size preference allows a continuation without exhausting $top.
+	req := httptest.NewRequest(http.MethodGet, "/Products?$count=true", nil)
 	req.Header.Set("Accept", "application/json;odata.metadata=none")
+	req.Header.Set("Prefer", "odata.maxpagesize=2")
 	w := httptest.NewRecorder()
 
 	service.ServeHTTP(w, req)

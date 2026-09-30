@@ -252,6 +252,7 @@ func TestConditionalRequests_PutWithIfMatch(t *testing.T) {
 		"name":        "Replaced Product",
 		"description": "Replaced description",
 		"version":     1,
+		"updated_at":  entity.UpdatedAt,
 	}
 	body, _ := json.Marshal(replacement)
 

@@ -274,10 +274,10 @@ type Product struct {
 	Name            string            `json:"Name" gorm:"not null" odata:"required,maxlength=100,searchable,annotation:Core.Description=Product display name"`
 	Description     *string           `json:"Description" odata:"nullable,maxlength=500,annotation:Core.Description=Detailed product description"` // Nullable description field
 	Price           float64           `json:"Price" gorm:"not null" odata:"required,precision=10,scale=2"`
-	Rating          RatingValue       `json:"Rating" odata:""`
-	Temperature     TemperatureValue  `json:"Temperature" odata:""`
-	Quantity        QuantityValue     `json:"Quantity" odata:""`
-	Weight          float32           `json:"Weight" odata:""`
+	Rating          RatingValue       `json:"Rating" odata:"default=0"`
+	Temperature     TemperatureValue  `json:"Temperature" odata:"default=0"`
+	Quantity        QuantityValue     `json:"Quantity" odata:"default=0"`
+	Weight          float32           `json:"Weight" odata:"default=0"`
 	Data            []byte            `json:"Data,omitempty" odata:"nullable"`
 	ReleaseDate     *ReleaseDateValue `json:"ReleaseDate,omitempty" odata:"nullable"`
 	OpenTime        *TimeOfDayValue   `json:"OpenTime,omitempty" odata:"nullable"`
@@ -289,9 +289,9 @@ type Product struct {
 	Version         int               `json:"Version" gorm:"default:1" odata:"etag"` // Version field used for optimistic concurrency control via ETag
 	CreatedAt       time.Time         `json:"CreatedAt" gorm:"not null" odata:"annotation:Core.Computed"`
 	SerialNumber    *string           `json:"SerialNumber,omitempty" gorm:"type:varchar(50)" odata:"nullable,maxlength=50,annotation:Core.Immutable,annotation:Core.Description=Unique serial number assigned at creation"`
-	ProductType     string            `json:"ProductType,omitempty" gorm:"default:'Product'" odata:"maxlength=50"` // Discriminator for type inheritance
-	SpecialProperty *string           `json:"SpecialProperty,omitempty" odata:"nullable,maxlength=200"`            // Property for SpecialProduct derived type
-	SpecialFeature  *string           `json:"SpecialFeature,omitempty" odata:"nullable,maxlength=100"`             // Property for SpecialProduct derived type
+	ProductType     string            `json:"ProductType,omitempty" gorm:"default:'Product'" odata:"maxlength=50,annotation:Core.Immutable"` // Discriminator for type inheritance
+	SpecialProperty *string           `json:"SpecialProperty,omitempty" odata:"nullable,maxlength=200"`                                      // Property for SpecialProduct derived type
+	SpecialFeature  *string           `json:"SpecialFeature,omitempty" odata:"nullable,maxlength=100"`                                       // Property for SpecialProduct derived type
 	// Complex type properties
 	ShippingAddress *Address    `json:"ShippingAddress,omitempty" gorm:"embedded;embeddedPrefix:shipping_" odata:"nullable"`
 	Dimensions      *Dimensions `json:"Dimensions,omitempty" gorm:"embedded;embeddedPrefix:dim_" odata:"nullable"`

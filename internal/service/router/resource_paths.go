@@ -118,7 +118,7 @@ func (r *Router) handleAllResource(w http.ResponseWriter, req *http.Request) {
 	}
 
 	items = applyPaging(items, req.URL.Query())
-	writeVirtualCollection(w, req, items)
+	writeVirtualCollection(w, req, items, "Collection(Edm.EntityType)")
 }
 
 // handleCrossJoin serves the service-root $crossjoin(E1,E2,...) collection.
@@ -206,7 +206,7 @@ func (r *Router) handleCrossJoin(w http.ResponseWriter, req *http.Request, path 
 				for key, raw := range base {
 					row[key] = raw
 				}
-				row[set+"@odata.id"] = id
+				row[set+"@odata.navigationLink"] = id
 				encoded, err := json.Marshal(row)
 				if err != nil {
 					continue
@@ -217,7 +217,7 @@ func (r *Router) handleCrossJoin(w http.ResponseWriter, req *http.Request, path 
 		rows = next
 	}
 	rows = applyPaging(rows, req.URL.Query())
-	writeVirtualCollection(w, req, rows)
+	writeVirtualCollection(w, req, rows, "Collection(Edm.ComplexType)")
 }
 
 func withoutPagingOptions(rawQuery string) string {
@@ -255,15 +255,15 @@ func applyPaging(items []json.RawMessage, values url.Values) []json.RawMessage {
 	return items
 }
 
-func writeVirtualCollection(w http.ResponseWriter, req *http.Request, items []json.RawMessage) {
+func writeVirtualCollection(w http.ResponseWriter, req *http.Request, items []json.RawMessage, contextType string) {
 	w.Header().Set("Content-Type", "application/json")
 	if req.Method == http.MethodHead {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
 	payload := map[string]interface{}{
-		"@odata.context": "$metadata#Collection(Edm.EntityType)",
-		"value":         items,
+		"@odata.context": "$metadata#" + contextType,
+		"value":          items,
 	}
 	if err := json.NewEncoder(w).Encode(payload); err != nil {
 		return

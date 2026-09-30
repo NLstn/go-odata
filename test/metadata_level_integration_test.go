@@ -90,10 +90,10 @@ func TestODataMetadataLevelIntegration(t *testing.T) {
 			description:  "$format should take precedence over Accept",
 		},
 		{
-			name:        "$format shorthand with metadata",
-			formatParam: "json;odata.metadata=full",
-			expectedCT:  "application/json;odata.metadata=full",
-			description: "Should handle 'json' shorthand with metadata parameter",
+			name:        "$format shorthand",
+			formatParam: "json",
+			expectedCT:  "application/json;odata.metadata=minimal",
+			description: "Should handle 'json' shorthand without format parameters",
 		},
 	}
 

@@ -311,6 +311,69 @@ Accept: application/json
 	}
 }
 
+func TestMultipartBatchStopsAfterErrorUnlessPreferred(t *testing.T) {
+	handler, db, _ := setupBatchTestHandler(t)
+	for _, id := range []uint{1, 2} {
+		if err := db.Create(&BatchTestProduct{ID: id, Name: fmt.Sprintf("Product %d", id)}).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	const boundary = "batch_stop_on_error"
+	body := fmt.Sprintf(`--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+GET /BatchTestProducts(1) HTTP/1.1
+Host: localhost
+
+
+--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+GET /BatchTestProducts(999) HTTP/1.1
+Host: localhost
+
+
+--%s
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+GET /BatchTestProducts(2) HTTP/1.1
+Host: localhost
+
+
+--%s--
+`, boundary, boundary, boundary, boundary)
+	for _, tt := range []struct {
+		name    string
+		prefer  string
+		want200 int
+	}{
+		{name: "default stops", want200: 1},
+		{name: "continue preference", prefer: "odata.continue-on-error", want200: 2},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/$batch", strings.NewReader(body))
+			req.Header.Set("Content-Type", "multipart/mixed; boundary="+boundary)
+			if tt.prefer != "" {
+				req.Header.Set("Prefer", tt.prefer)
+			}
+			w := httptest.NewRecorder()
+			handler.HandleBatch(w, req)
+			if w.Code != http.StatusOK {
+				t.Fatalf("batch status = %d: %s", w.Code, w.Body.String())
+			}
+			if got := strings.Count(w.Body.String(), "HTTP/1.1 200"); got != tt.want200 {
+				t.Fatalf("200 subresponses = %d, want %d: %s", got, tt.want200, w.Body.String())
+			}
+			if got := strings.Count(w.Body.String(), "HTTP/1.1 404"); got != 1 {
+				t.Fatalf("404 subresponses = %d, want 1: %s", got, w.Body.String())
+			}
+		})
+	}
+}
+
 func TestParseHTTPRequestHandlesLargeBody(t *testing.T) {
 	handler := &BatchHandler{}
 

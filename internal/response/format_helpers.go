@@ -346,6 +346,9 @@ func preferredResponseFormat(accept string) responseFormat {
 			continue
 		}
 		mimeType := strings.ToLower(strings.TrimSpace(parts[0]))
+		if !supportedFormatParameters(parts[1:], mimeType == "application/json" || mimeType == "application/*" || mimeType == "*/*") {
+			continue
+		}
 		quality := float64(1)
 		for _, parameter := range parts[1:] {
 			pieces := strings.SplitN(strings.TrimSpace(parameter), "=", 2)
@@ -390,6 +393,10 @@ func isAcceptableFrom(format, accept string) bool {
 	if format != "" {
 		parts := strings.Split(format, ";")
 		baseFormat := strings.TrimSpace(parts[0])
+		if !supportedFormatParameters(parts[1:], baseFormat == "application/json") ||
+			(baseFormat == "json" || baseFormat == "atom") && len(parts) > 1 {
+			return false
+		}
 		return baseFormat == "json" || baseFormat == "application/json" ||
 			baseFormat == "atom" || baseFormat == "application/atom+xml"
 	}
@@ -397,6 +404,36 @@ func isAcceptableFrom(format, accept string) bool {
 		return true
 	}
 	return preferredResponseFormat(accept) != responseFormatNone
+}
+
+func supportedFormatParameters(parameters []string, jsonFormat bool) bool {
+	for _, parameter := range parameters {
+		name, value, ok := strings.Cut(strings.TrimSpace(parameter), "=")
+		if !ok {
+			return false
+		}
+		name = strings.ToLower(strings.TrimSpace(name))
+		value = strings.Trim(strings.TrimSpace(value), `"`)
+		switch name {
+		case "q":
+			continue
+		case "charset":
+			if !strings.EqualFold(value, "utf-8") {
+				return false
+			}
+		case "odata.metadata":
+			if !jsonFormat || !isValidMetadataLevel(strings.ToLower(value)) {
+				return false
+			}
+		case "ieee754compatible", "exponentialdecimals", "odata.streaming":
+			if !jsonFormat || (!strings.EqualFold(value, "true") && !strings.EqualFold(value, "false")) {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // BuildBaseURL builds the base URL for the service (exported for use in handlers)
