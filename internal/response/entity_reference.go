@@ -21,7 +21,6 @@ func WriteEntityReference(w http.ResponseWriter, r *http.Request, entityID strin
 		"@odata.id":      baseURL + "/" + entityID,
 	}
 
-	metadataLevel := GetODataMetadataLevel(r)
 	SetODataVersionHeaderFromRequest(w, r)
 
 	if r.Method == http.MethodHead {
@@ -29,13 +28,13 @@ func WriteEntityReference(w http.ResponseWriter, r *http.Request, entityID strin
 		if err != nil {
 			return WriteError(w, r, http.StatusInternalServerError, "Internal Server Error", "Failed to serialize response to JSON.")
 		}
-		w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
+		w.Header().Set("Content-Type", BuildJSONContentType(r))
 		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(jsonBytes)))
 		w.WriteHeader(http.StatusOK)
 		return nil
 	}
 
-	w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
+	w.Header().Set("Content-Type", BuildJSONContentType(r))
 	w.WriteHeader(http.StatusOK)
 	encoder := json.NewEncoder(w)
 	encoder.SetEscapeHTML(false)
@@ -65,13 +64,12 @@ func WriteEntityReferenceCollection(w http.ResponseWriter, r *http.Request, enti
 	}
 
 	if count != nil {
-		response["@odata.count"] = *count
+		response["@odata.count"] = countValue(r, *count)
 	}
 	if nextLink != nil && *nextLink != "" {
 		response["@odata.nextLink"] = *nextLink
 	}
 
-	metadataLevel := GetODataMetadataLevel(r)
 	SetODataVersionHeaderFromRequest(w, r)
 
 	if r.Method == http.MethodHead {
@@ -79,13 +77,13 @@ func WriteEntityReferenceCollection(w http.ResponseWriter, r *http.Request, enti
 		if err != nil {
 			return WriteError(w, r, http.StatusInternalServerError, "Internal Server Error", "Failed to serialize response to JSON.")
 		}
-		w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
+		w.Header().Set("Content-Type", BuildJSONContentType(r))
 		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(jsonBytes)))
 		w.WriteHeader(http.StatusOK)
 		return nil
 	}
 
-	w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
+	w.Header().Set("Content-Type", BuildJSONContentType(r))
 	w.WriteHeader(http.StatusOK)
 	encoder := json.NewEncoder(w)
 	encoder.SetEscapeHTML(false)

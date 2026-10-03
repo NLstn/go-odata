@@ -1141,7 +1141,7 @@ func hasNavigationJoins(db *gorm.DB, orderBy []OrderByItem, entityMetadata *meta
 // applyOrderBy applies order by clauses to the GORM query
 func applyOrderBy(db *gorm.DB, orderBy []OrderByItem, entityMetadata *metadata.EntityMetadata) *gorm.DB {
 	dialect := getDatabaseDialect(db)
-	doQualifyColumns := hasNavigationJoins(db, orderBy, entityMetadata)
+	doQualifyColumns := hasNavigationJoins(db, orderBy, entityMetadata) || len(db.Statement.Joins) > 0
 	db = addOrderByNavigationJoins(db, orderBy, entityMetadata)
 
 	// For PostgreSQL, we need to build all ORDER BY expressions in a single Clauses() call

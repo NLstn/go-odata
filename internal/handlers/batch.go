@@ -97,7 +97,8 @@ type batchResponse struct {
 	StatusCode int
 	Headers    http.Header
 	Body       []byte
-	ContentID  string // Content-ID to include in the response MIME part envelope
+	ContentID  string          // Content-ID to include in the response MIME part envelope
+	Changeset  []batchResponse // Successful changesets retain their nested MIME envelope
 }
 
 // jsonBatchRequestItem represents a single request object in a JSON batch envelope.
@@ -203,6 +204,7 @@ func (h *BatchHandler) HandleBatch(w http.ResponseWriter, r *http.Request) {
 	// Parse multipart request
 	reader := multipart.NewReader(r.Body, boundary)
 	responses := []batchResponse{}
+	processedRequests := 0
 	continueOnError := multipartBatchContinueOnError(r.Header.Values("Prefer"))
 
 	for continueOnError || len(responses) == 0 || responses[len(responses)-1].StatusCode < http.StatusBadRequest {
@@ -221,6 +223,7 @@ func (h *BatchHandler) HandleBatch(w http.ResponseWriter, r *http.Request) {
 		partContentType := part.Header.Get("Content-Type")
 		partMediaType, partParams, err := mime.ParseMediaType(partContentType)
 		if err != nil {
+			processedRequests++
 			responses = append(responses, h.createErrorResponse(http.StatusBadRequest, "Invalid part Content-Type"))
 			continue
 		}
@@ -235,7 +238,7 @@ func (h *BatchHandler) HandleBatch(w http.ResponseWriter, r *http.Request) {
 
 			// Process changeset (atomic operations)
 			// Pass remaining capacity to ensure changeset doesn't exceed batch limit
-			remainingCapacity := h.maxBatchSize - len(responses)
+			remainingCapacity := h.maxBatchSize - processedRequests
 			changesetResponses, exceeded := h.processChangeset(part, changesetBoundary, remainingCapacity, r)
 			// Check if batch size limit was exceeded
 			if exceeded {
@@ -245,16 +248,24 @@ func (h *BatchHandler) HandleBatch(w http.ResponseWriter, r *http.Request) {
 				}
 				return
 			}
-			responses = append(responses, changesetResponses...)
+			processedRequests += len(changesetResponses)
+			if len(changesetResponses) > 0 && changesetResponses[len(changesetResponses)-1].StatusCode >= 400 {
+				// A failed changeset has one error response for the entire atomic unit.
+				responses = append(responses, changesetResponses[len(changesetResponses)-1])
+			} else {
+				responses = append(responses, batchResponse{Changeset: changesetResponses})
+			}
 		} else if partMediaType == "application/http" {
 			// Check batch size limit before processing single request
-			if len(responses)+1 > h.maxBatchSize {
+			if processedRequests+1 > h.maxBatchSize {
 				if err := response.WriteError(w, r, http.StatusRequestEntityTooLarge, "Batch size limit exceeded",
 					fmt.Sprintf("Batch request contains too many sub-requests. Maximum allowed: %d", h.maxBatchSize)); err != nil {
 					h.logger.Error("Error writing error response", "error", err)
 				}
 				return
 			}
+
+			processedRequests++
 
 			// Process single request
 			// Capture Content-ID from MIME part envelope headers (per OData v4 spec, must be echoed in response)
@@ -274,13 +285,14 @@ func (h *BatchHandler) HandleBatch(w http.ResponseWriter, r *http.Request) {
 			responses = append(responses, resp)
 		} else {
 			// Check batch size limit before appending error response
-			if len(responses)+1 > h.maxBatchSize {
+			if processedRequests+1 > h.maxBatchSize {
 				if err := response.WriteError(w, r, http.StatusRequestEntityTooLarge, "Batch size limit exceeded",
 					fmt.Sprintf("Batch request contains too many sub-requests. Maximum allowed: %d", h.maxBatchSize)); err != nil {
 					h.logger.Error("Error writing error response", "error", err)
 				}
 				return
 			}
+			processedRequests++
 			responses = append(responses, h.createErrorResponse(http.StatusBadRequest, "Invalid part Content-Type"))
 		}
 	}
@@ -290,8 +302,8 @@ func (h *BatchHandler) HandleBatch(w http.ResponseWriter, r *http.Request) {
 
 	// Update batch span with actual size and record batch metrics
 	if h.observability != nil {
-		batchSpan.SetAttributes(observability.BatchSizeAttr(len(responses)))
-		h.observability.Metrics().RecordBatchSize(ctx, len(responses))
+		batchSpan.SetAttributes(observability.BatchSizeAttr(processedRequests))
+		h.observability.Metrics().RecordBatchSize(ctx, processedRequests)
 	}
 }
 
@@ -380,14 +392,8 @@ func (h *BatchHandler) processChangeset(r io.Reader, boundary string, remainingC
 
 		req.ContentID = contentID
 
-		// Per OData v4 spec §11.4.9.2, only modification requests (POST, PUT, PATCH, DELETE)
-		// are allowed inside a changeset, except when the request URL is a Content-ID reference
-		// (§11.4.9.3). A Content-ID reference (e.g. "$1/Descriptions") retrieves a navigation
-		// property on an entity created earlier in the same changeset and is permitted by the
-		// spec as a read within the atomic unit.
-		isContentIDRef := strings.HasPrefix(strings.TrimPrefix(req.URL, "/"), "$")
-		if !isContentIDRef &&
-			req.Method != http.MethodPost && req.Method != http.MethodPut &&
+		// Changesets contain only modification requests, including Content-ID references.
+		if req.Method != http.MethodPost && req.Method != http.MethodPut &&
 			req.Method != http.MethodPatch && req.Method != http.MethodDelete {
 			hasError = true
 			errResp := h.createErrorResponse(http.StatusBadRequest,
@@ -469,6 +475,12 @@ func (h *BatchHandler) parseHTTPRequest(r io.Reader) (*batchRequest, error) {
 
 	if reqURL == "" {
 		return nil, fmt.Errorf("invalid request line: %s", requestLine)
+	}
+
+	if parsedURL, err := url.Parse(reqURL); err != nil {
+		return nil, fmt.Errorf("invalid request URL: %w", err)
+	} else if parsedURL.IsAbs() {
+		reqURL = parsedURL.RequestURI()
 	}
 
 	tp := textproto.NewReader(reader)
@@ -572,6 +584,9 @@ func (h *BatchHandler) executeRequestInTransaction(req *batchRequest, tx *gorm.D
 		txHandler.SetNamespace(handler.namespace)
 		txHandler.SetDeltaTracker(handler.tracker)
 		txHandler.SetPolicy(handler.policy)
+		txHandler.SetEntityHandlers(txHandlers)
+		txHandler.overwrite = handler.overwrite
+		txHandler.observability = handler.observability
 		if handler.entitiesMetadata != nil {
 			txHandler.SetEntitiesMetadata(handler.entitiesMetadata)
 		}
@@ -924,69 +939,52 @@ func (h *BatchHandler) writeBatchResponse(w http.ResponseWriter, responses []bat
 	w.Header().Set("Content-Type", fmt.Sprintf("multipart/mixed; boundary=%s", boundary))
 	w.WriteHeader(http.StatusOK)
 
-	// Write each response as a multipart part
+	if err := writeMultipartBatchParts(w, boundary, responses); err != nil {
+		h.logger.Error("Error writing batch response", "error", err)
+	}
+}
+
+func writeMultipartBatchParts(w io.Writer, boundary string, responses []batchResponse) error {
 	for _, resp := range responses {
 		if _, err := fmt.Fprintf(w, "--%s\r\n", boundary); err != nil {
-			h.logger.Error("Error writing boundary", "error", err)
-			return
+			return err
 		}
-		if _, err := fmt.Fprintf(w, "Content-Type: application/http\r\n"); err != nil {
-			h.logger.Error("Error writing content type", "error", err)
-			return
+		if resp.Changeset != nil {
+			changesetBoundary := "changesetresponse_" + generateBoundary()
+			if _, err := fmt.Fprintf(w, "Content-Type: multipart/mixed; boundary=%s\r\n\r\n", changesetBoundary); err != nil {
+				return err
+			}
+			if err := writeMultipartBatchParts(w, changesetBoundary, resp.Changeset); err != nil {
+				return err
+			}
+			continue
 		}
-		if _, err := fmt.Fprintf(w, "Content-Transfer-Encoding: binary\r\n"); err != nil {
-			h.logger.Error("Error writing encoding", "error", err)
-			return
+		if _, err := fmt.Fprint(w, "Content-Type: application/http\r\nContent-Transfer-Encoding: binary\r\n"); err != nil {
+			return err
 		}
-		// Echo Content-ID in the response MIME part envelope if it was present in the request
-		// Per OData v4 spec section 11.7.4, the Content-ID MUST be echoed back
 		if resp.ContentID != "" {
 			if _, err := fmt.Fprintf(w, "Content-ID: %s\r\n", resp.ContentID); err != nil {
-				h.logger.Error("Error writing Content-ID", "error", err)
-				return
+				return err
 			}
 		}
-		if _, err := fmt.Fprintf(w, "\r\n"); err != nil {
-			h.logger.Error("Error writing newline", "error", err)
-			return
+		if _, err := fmt.Fprintf(w, "\r\nHTTP/1.1 %d %s\r\n", resp.StatusCode, http.StatusText(resp.StatusCode)); err != nil {
+			return err
 		}
-
-		// Write status line
-		if _, err := fmt.Fprintf(w, "HTTP/1.1 %d %s\r\n", resp.StatusCode, http.StatusText(resp.StatusCode)); err != nil {
-			h.logger.Error("Error writing status line", "error", err)
-			return
+		if err := resp.Headers.Write(w); err != nil {
+			return err
 		}
-
-		// Write headers
-		for key, values := range resp.Headers {
-			for _, value := range values {
-				if _, err := fmt.Fprintf(w, "%s: %s\r\n", key, value); err != nil {
-					h.logger.Error("Error writing header", "error", err)
-					return
-				}
-			}
+		if _, err := fmt.Fprint(w, "\r\n"); err != nil {
+			return err
 		}
-
-		if _, err := fmt.Fprintf(w, "\r\n"); err != nil {
-			h.logger.Error("Error writing newline", "error", err)
-			return
-		}
-
-		// Write body
 		if _, err := w.Write(resp.Body); err != nil {
-			h.logger.Error("Error writing body", "error", err)
-			return
+			return err
 		}
-		if _, err := fmt.Fprintf(w, "\r\n"); err != nil {
-			h.logger.Error("Error writing newline", "error", err)
-			return
+		if _, err := fmt.Fprint(w, "\r\n"); err != nil {
+			return err
 		}
 	}
-
-	// Write final boundary
-	if _, err := fmt.Fprintf(w, "--%s--\r\n", boundary); err != nil {
-		h.logger.Error("Error writing final boundary", "error", err)
-	}
+	_, err := fmt.Fprintf(w, "--%s--\r\n", boundary)
+	return err
 }
 
 // handleJSONBatch processes a JSON-encoded batch request per OData JSON Format v4.01 §19.

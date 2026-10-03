@@ -3,6 +3,7 @@ package query
 import (
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/nlstn/go-odata/internal/metadata"
@@ -1014,7 +1015,8 @@ func parseOrderByOption(queryParams url.Values, entityMetadata *metadata.EntityM
 
 // parseTopOption parses the $top query parameter
 func parseTopOption(queryParams url.Values, options *QueryOptions) error {
-	if topStr := queryParams.Get("$top"); topStr != "" {
+	if queryParams.Has("$top") {
+		topStr := queryParams.Get("$top")
 		top, err := parseNonNegativeInt(topStr, "$top")
 		if err != nil {
 			return err
@@ -1026,7 +1028,8 @@ func parseTopOption(queryParams url.Values, options *QueryOptions) error {
 
 // parseSkipOption parses the $skip query parameter
 func parseSkipOption(queryParams url.Values, options *QueryOptions) error {
-	if skipStr := queryParams.Get("$skip"); skipStr != "" {
+	if queryParams.Has("$skip") {
+		skipStr := queryParams.Get("$skip")
 		skip, err := parseNonNegativeInt(skipStr, "$skip")
 		if err != nil {
 			return err
@@ -1057,7 +1060,8 @@ func parseDeltaTokenOption(queryParams url.Values, options *QueryOptions) {
 
 // parseCountOption parses the $count query parameter
 func parseCountOption(queryParams url.Values, options *QueryOptions) error {
-	if countStr := queryParams.Get("$count"); countStr != "" {
+	if queryParams.Has("$count") {
+		countStr := queryParams.Get("$count")
 		countLower := strings.ToLower(countStr)
 		if countLower == "true" {
 			options.Count = true
@@ -1134,11 +1138,11 @@ func parseSchemaVersionOption(queryParams url.Values, options *QueryOptions) err
 
 // parseNonNegativeInt parses a string as a non-negative integer
 func parseNonNegativeInt(str, paramName string) (int, error) {
-	var value int
-	if _, err := fmt.Sscanf(str, "%d", &value); err != nil {
+	if str == "" || strings.IndexFunc(str, func(r rune) bool { return r < '0' || r > '9' }) >= 0 {
 		return 0, fmt.Errorf("invalid %s: must be a non-negative integer", paramName)
 	}
-	if value < 0 {
+	value, err := strconv.Atoi(str)
+	if err != nil {
 		return 0, fmt.Errorf("invalid %s: must be a non-negative integer", paramName)
 	}
 	return value, nil

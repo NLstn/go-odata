@@ -20,6 +20,10 @@ import (
 )
 
 func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request) {
+	h.handlePostEntityWithNavigation(w, r, nil)
+}
+
+func (h *EntityHandler) handlePostEntityWithNavigation(w http.ResponseWriter, r *http.Request, navigation *navigationCreate) {
 	ctx := r.Context()
 
 	// Start tracing span for create operation
@@ -94,6 +98,9 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 	}
 
 	entity := reflect.New(h.metadata.EntityType).Interface()
+	if navigation != nil {
+		navigation.supplyDependentProperties(ctx, requestData, h.metadata)
+	}
 
 	jsonData, err := json.Marshal(requestData)
 	if err != nil {
@@ -112,6 +119,13 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 		if err != nil {
 			WriteError(w, r, http.StatusBadRequest, "Invalid @odata.bind annotation", err.Error())
 			return newTransactionHandledError(err)
+		}
+
+		if navigation != nil {
+			if err := navigation.initialize(ctx, entity, requestData, h.metadata); err != nil {
+				WriteError(w, r, http.StatusBadRequest, "Invalid navigation binding", err.Error())
+				return newTransactionHandledError(err)
+			}
 		}
 
 		if err := h.initializeEntityKeys(ctx, entity); err != nil {
@@ -149,6 +163,13 @@ func (h *EntityHandler) handlePostEntity(w http.ResponseWriter, r *http.Request)
 		if err := tx.Create(entity).Error; err != nil {
 			h.writeCreateDatabaseError(w, r, err)
 			return newTransactionHandledError(err)
+		}
+
+		if navigation != nil {
+			if err := tx.Model(navigation.parent).Association(navigation.propertyName).Append(entity); err != nil {
+				h.writeCreateDatabaseError(w, r, err)
+				return newTransactionHandledError(err)
+			}
 		}
 
 		// Apply pending collection-valued navigation property bindings after entity is saved
