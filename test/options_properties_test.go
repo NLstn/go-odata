@@ -182,8 +182,8 @@ func TestOptionsNavigationPropertyCollection(t *testing.T) {
 	}
 
 	allowHeader := w.Header().Get("Allow")
-	if allowHeader != "GET, HEAD, OPTIONS" {
-		t.Errorf("Allow header = %v, want 'GET, HEAD, OPTIONS'", allowHeader)
+	if allowHeader != "GET, HEAD, POST, OPTIONS" {
+		t.Errorf("Allow header = %v, want 'GET, HEAD, POST, OPTIONS'", allowHeader)
 	}
 
 	// OPTIONS should return no body

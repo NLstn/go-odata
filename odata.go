@@ -1018,6 +1018,7 @@ func (s *Service) RegisterEntity(entity interface{}, cacheConfigs ...EntityCache
 	handler := handlers.NewEntityHandlerWithStore(s.store, entityMetadata, s.logger)
 	handler.SetNamespace(s.namespace)
 	handler.SetEntitiesMetadata(s.entities)
+	handler.SetEntityHandlers(s.handlers)
 	handler.SetDeltaTracker(s.deltaTracker)
 	handler.SetFTSManager(s.ftsManager)
 	handler.SetPolicy(s.policy)
@@ -1147,6 +1148,7 @@ func (s *Service) RegisterSingleton(entity interface{}, singletonName string) er
 	handler := handlers.NewEntityHandlerWithStore(s.store, singletonMetadata, s.logger)
 	handler.SetNamespace(s.namespace)
 	handler.SetEntitiesMetadata(s.entities)
+	handler.SetEntityHandlers(s.handlers)
 	handler.SetFTSManager(s.ftsManager)
 	handler.SetPolicy(s.policy)
 	handler.SetKeyGeneratorResolver(func(name string) (func(context.Context) (interface{}, error), bool) {
@@ -1241,6 +1243,7 @@ func (s *Service) RegisterVirtualEntity(entity interface{}) error {
 	handler := handlers.NewEntityHandlerWithStore(s.store, entityMetadata, s.logger)
 	handler.SetNamespace(s.namespace)
 	handler.SetEntitiesMetadata(s.entities)
+	handler.SetEntityHandlers(s.handlers)
 	handler.SetFTSManager(s.ftsManager)
 	handler.SetPolicy(s.policy)
 	handler.SetKeyGeneratorResolver(func(name string) (func(context.Context) (interface{}, error), bool) {
@@ -1299,6 +1302,7 @@ func (s *Service) RegisterDynamicEntity(definition EntityDefinition, overwrite *
 	handler := handlers.NewEntityHandlerWithStore(s.store, entityMetadata, s.logger)
 	handler.SetNamespace(s.namespace)
 	handler.SetEntitiesMetadata(s.entities)
+	handler.SetEntityHandlers(s.handlers)
 	handler.SetFTSManager(s.ftsManager)
 	handler.SetPolicy(s.policy)
 	handler.SetKeyGeneratorResolver(func(name string) (func(context.Context) (interface{}, error), bool) {

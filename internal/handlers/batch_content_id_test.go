@@ -586,10 +586,9 @@ Content-Type: application/json
 	}
 }
 
-// TestBatchChangeset_ContentIDURLReference_GetCreatedEntity verifies reading an entity
-// that was created earlier in the same changeset via a $<contentID> GET request.
-func TestBatchChangeset_ContentIDURLReference_GetCreatedEntity(t *testing.T) {
-	handler, _ := setupContentIDTestHandler(t)
+// TestBatchChangeset_ContentIDURLReference_GetRejected verifies reads are rejected and writes rolled back.
+func TestBatchChangeset_ContentIDURLReference_GetRejected(t *testing.T) {
+	handler, db := setupContentIDTestHandler(t)
 
 	batchBoundary := "batch_get"
 	changesetBoundary := "changeset_get"
@@ -632,8 +631,12 @@ GET /$1 HTTP/1.1
 	}
 
 	respBody := w.Body.String()
-	if !strings.Contains(respBody, "ReadBack") {
-		t.Errorf("GET via $1 did not return the created entity; body:\n%s", respBody)
+	if !strings.Contains(respBody, "HTTP/1.1 400") || strings.Contains(respBody, "HTTP/1.1 201") {
+		t.Fatalf("expected one changeset error, got: %s", respBody)
+	}
+	var count int64
+	if err := db.Model(&ContentIDRefProduct{}).Count(&count).Error; err != nil || count != 0 {
+		t.Fatalf("expected rollback: count=%d err=%v", count, err)
 	}
 }
 

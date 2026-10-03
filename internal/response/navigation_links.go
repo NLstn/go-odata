@@ -44,6 +44,9 @@ func addNavigationLinks(data interface{}, metadata EntityMetadataProvider, expan
 		}
 	}
 
+	if GetIEEE754Compatible(r) {
+		stringifyCountAnnotations(result)
+	}
 	return result
 }
 

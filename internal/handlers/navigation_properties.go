@@ -45,8 +45,7 @@ func (h *EntityHandler) HandleNavigationProperty(w http.ResponseWriter, r *http.
 		if isRef {
 			h.handlePostNavigationPropertyRef(w, r, entityKey, navigationProperty)
 		} else {
-			WriteMethodNotAllowed(w, r, "GET, HEAD, OPTIONS", ErrMsgMethodNotAllowed,
-				fmt.Sprintf("Method %s is not supported for navigation properties without $ref", r.Method))
+			h.handlePostNavigationProperty(w, r, entityKey, navigationProperty)
 		}
 	case http.MethodDelete:
 		if !authorizeRequest(w, r, h.policy, buildEntityResourceDescriptor(h.metadata, entityKey, propertyPath), auth.OperationUpdate, h.logger) {
@@ -65,7 +64,7 @@ func (h *EntityHandler) HandleNavigationProperty(w http.ResponseWriter, r *http.
 		if isRef {
 			h.handleOptionsNavigationPropertyRef(w)
 		} else {
-			h.handleOptionsNavigationProperty(w)
+			h.handleOptionsNavigationProperty(w, navigationProperty)
 		}
 	default:
 		if isRef {
@@ -164,8 +163,12 @@ func (h *EntityHandler) handleGetNavigationProperty(w http.ResponseWriter, r *ht
 }
 
 // handleOptionsNavigationProperty handles OPTIONS requests for navigation properties (without $ref)
-func (h *EntityHandler) handleOptionsNavigationProperty(w http.ResponseWriter) {
-	w.Header().Set("Allow", "GET, HEAD, OPTIONS")
+func (h *EntityHandler) handleOptionsNavigationProperty(w http.ResponseWriter, navigationProperty string) {
+	allow := "GET, HEAD, OPTIONS"
+	if prop := h.findNavigationProperty(navigationProperty); prop != nil && prop.NavigationIsArray {
+		allow = "GET, HEAD, POST, OPTIONS"
+	}
+	w.Header().Set("Allow", allow)
 	w.WriteHeader(http.StatusOK)
 }
 

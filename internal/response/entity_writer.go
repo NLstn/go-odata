@@ -35,11 +35,12 @@ import (
 // fastEntityContext carries the request-static parameters the direct writer needs.
 // Everything in it is constant across the rows of a single response.
 type fastEntityContext struct {
-	baseURL       string
-	entitySetName string
-	metadataLevel string
-	metadata      EntityMetadataProvider
-	fullMetadata  *internalMetadata.EntityMetadata
+	baseURL           string
+	entitySetName     string
+	metadataLevel     string
+	ieee754Compatible bool
+	metadata          EntityMetadataProvider
+	fullMetadata      *internalMetadata.EntityMetadata
 	// selectedNavProps drives which navigation links appear under minimal metadata.
 	selectedNavProps []string
 	// expandOptions holds the $expand tree. Expanded navigation properties emit
@@ -146,7 +147,7 @@ func writeFastCollection(buf *bytes.Buffer, slice reflect.Value, ctx *fastEntity
 	}
 	if count != nil {
 		writeEnvelopeKey("@odata.count")
-		writeInt(buf, *count)
+		writeFastCount(buf, *count, ctx.ieee754Compatible)
 	}
 	if nextLink != nil && *nextLink != "" {
 		writeEnvelopeKey("@odata.nextLink")
@@ -401,7 +402,7 @@ func (ctx *fastEntityContext) writeExpandedNavigation(buf *bytes.Buffer, fieldVa
 
 	if count != nil {
 		writeKey(jsonName + "@odata.count")
-		writeInt(buf, int64(*count))
+		writeFastCount(buf, int64(*count), ctx.ieee754Compatible)
 	}
 
 	if truncated && keySegment != "" {
@@ -413,6 +414,9 @@ func (ctx *fastEntityContext) writeExpandedNavigation(buf *bytes.Buffer, fieldVa
 	}
 
 	writeKey(jsonName)
+	if ctx.ieee754Compatible {
+		stringifyCountAnnotations(updatedValue)
+	}
 	return encodeFallback(buf, enc, updatedValue)
 }
 
@@ -527,7 +531,7 @@ func writeFastCollectionToResponse(w http.ResponseWriter, r *http.Request, slice
 		return err
 	}
 
-	w.Header().Set("Content-Type", "application/json;odata.metadata="+ctx.metadataLevel)
+	w.Header().Set("Content-Type", BuildJSONContentType(r))
 	w.Header().Set("Content-Length", strconv.Itoa(buf.Len()))
 	w.WriteHeader(http.StatusOK)
 	if r.Method == http.MethodHead {
@@ -535,4 +539,14 @@ func writeFastCollectionToResponse(w http.ResponseWriter, r *http.Request, slice
 	}
 	_, err := w.Write(buf.Bytes())
 	return err
+}
+
+func writeFastCount(buf *bytes.Buffer, count int64, compatible bool) {
+	if compatible {
+		buf.WriteByte('"')
+	}
+	writeInt(buf, count)
+	if compatible {
+		buf.WriteByte('"')
+	}
 }

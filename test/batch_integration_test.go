@@ -1867,10 +1867,10 @@ Content-Type: application/json
 	}
 }
 
-// TestBatchIntegration_ContentIDURLReference_ReadBackCreatedEntity verifies that a GET
-// using "$<contentID>" returns the entity created in the same changeset.
-func TestBatchIntegration_ContentIDURLReference_ReadBackCreatedEntity(t *testing.T) {
-	service, _ := setupBatchContentIDIntegrationTest(t)
+// TestBatchIntegration_ContentIDURLReference_ReadRejected verifies that a read
+// using "$<contentID>" fails the changeset and rolls back the preceding create.
+func TestBatchIntegration_ContentIDURLReference_ReadRejected(t *testing.T) {
+	service, db := setupBatchContentIDIntegrationTest(t)
 
 	batchBoundary := "batch_read_int"
 	changesetBoundary := "changeset_read_int"
@@ -1912,8 +1912,12 @@ GET /$1 HTTP/1.1
 		t.Fatalf("Status = %v, want 200. Body: %s", w.Code, w.Body.String())
 	}
 
-	if !strings.Contains(w.Body.String(), "ReadBack Corp") {
-		t.Errorf("GET via $1 did not return the created entity; body:\n%s", w.Body.String())
+	if !strings.Contains(w.Body.String(), "HTTP/1.1 400") || strings.Contains(w.Body.String(), "HTTP/1.1 201") {
+		t.Fatalf("expected one changeset error: %s", w.Body.String())
+	}
+	var count int64
+	if err := db.Model(&BatchIntegrationCustomer{}).Count(&count).Error; err != nil || count != 0 {
+		t.Fatalf("expected rollback: count=%d err=%v", count, err)
 	}
 }
 

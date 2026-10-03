@@ -28,6 +28,7 @@ type EntityHandler struct {
 	store                storage.Store
 	metadata             *metadata.EntityMetadata
 	entitiesMetadata     map[string]*metadata.EntityMetadata
+	entityHandlers       map[string]*EntityHandler
 	namespace            string
 	tracker              *trackchanges.Tracker
 	logger               *slog.Logger
@@ -636,4 +637,9 @@ func uniqueStrings(values []string) []string {
 	}
 
 	return result
+}
+
+// SetEntityHandlers supplies the registered handlers for navigation writes.
+func (h *EntityHandler) SetEntityHandlers(entityHandlers map[string]*EntityHandler) {
+	h.entityHandlers = entityHandlers
 }

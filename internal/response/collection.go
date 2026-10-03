@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/preference"
@@ -78,7 +79,7 @@ func writeODataCollectionResponse(w http.ResponseWriter, r *http.Request, entity
 		response["@odata.context"] = contextURL
 	}
 	if count != nil {
-		response["@odata.count"] = *count
+		response["@odata.count"] = countValue(r, *count)
 	}
 	if nextLink != nil && *nextLink != "" {
 		response["@odata.nextLink"] = *nextLink
@@ -92,13 +93,13 @@ func writeODataCollectionResponse(w http.ResponseWriter, r *http.Request, entity
 		if err != nil {
 			return WriteError(w, r, http.StatusInternalServerError, "Internal Server Error", "Failed to marshal response to JSON")
 		}
-		w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
+		w.Header().Set("Content-Type", BuildJSONContentType(r))
 		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(jsonBytes)))
 		w.WriteHeader(http.StatusOK)
 		return nil
 	}
 
-	w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
+	w.Header().Set("Content-Type", BuildJSONContentType(r))
 	w.WriteHeader(http.StatusOK)
 	encoder := json.NewEncoder(w)
 	encoder.SetEscapeHTML(false)
@@ -143,16 +144,17 @@ func writeODataCollectionWithNavigationResponse(w http.ResponseWriter, r *http.R
 				annotationFilter = pref.IncludeAnnotations
 			}
 			ctx := &fastEntityContext{
-				baseURL:          buildBaseURL(r),
-				entitySetName:    entitySetName,
-				metadataLevel:    metadataLevel,
-				metadata:         metadata,
-				fullMetadata:     fullMetadata,
-				selectedNavProps: selectedNavProps,
-				expandOptions:    expandOptions,
-				annotationFilter: annotationFilter,
-				selectedSet:      buildSelectedSet(selectedProps),
-				keySet:           buildKeySet(metadata),
+				baseURL:           buildBaseURL(r),
+				entitySetName:     entitySetName,
+				metadataLevel:     metadataLevel,
+				ieee754Compatible: GetIEEE754Compatible(r),
+				metadata:          metadata,
+				fullMetadata:      fullMetadata,
+				selectedNavProps:  selectedNavProps,
+				expandOptions:     expandOptions,
+				annotationFilter:  annotationFilter,
+				selectedSet:       buildSelectedSet(selectedProps),
+				keySet:            buildKeySet(metadata),
 			}
 			return writeFastCollectionToResponse(w, r, fastSlice, ctx, contextURL, count, nextLink, deltaLink)
 		}
@@ -185,7 +187,7 @@ func writeODataCollectionWithNavigationResponse(w http.ResponseWriter, r *http.R
 		envelope.Set("@odata.context", contextURL)
 	}
 	if count != nil {
-		envelope.Set("@odata.count", *count)
+		envelope.Set("@odata.count", countValue(r, *count))
 	}
 	if nextLink != nil && *nextLink != "" {
 		envelope.Set("@odata.nextLink", *nextLink)
@@ -202,7 +204,7 @@ func writeODataCollectionWithNavigationResponse(w http.ResponseWriter, r *http.R
 			releaseOrderedMaps(transformedData)
 			return WriteError(w, r, http.StatusInternalServerError, "Internal Server Error", "Failed to serialize response to JSON.")
 		}
-		w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
+		w.Header().Set("Content-Type", BuildJSONContentType(r))
 		w.Header().Set("Content-Length", fmt.Sprintf("%d", buf.Len()))
 		w.WriteHeader(http.StatusOK)
 		releasePooledBuffer(buf)
@@ -219,7 +221,7 @@ func writeODataCollectionWithNavigationResponse(w http.ResponseWriter, r *http.R
 	if marshalErr != nil {
 		return marshalErr
 	}
-	w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
+	w.Header().Set("Content-Type", BuildJSONContentType(r))
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", buf.Len()))
 	w.WriteHeader(http.StatusOK)
 	_, err := w.Write(buf.Bytes())
@@ -256,13 +258,13 @@ func WriteODataDeltaResponse(w http.ResponseWriter, r *http.Request, entitySetNa
 		if err != nil {
 			return err
 		}
-		w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
+		w.Header().Set("Content-Type", BuildJSONContentType(r))
 		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(jsonBytes)))
 		w.WriteHeader(http.StatusOK)
 		return nil
 	}
 
-	w.Header().Set("Content-Type", fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
+	w.Header().Set("Content-Type", BuildJSONContentType(r))
 	w.WriteHeader(http.StatusOK)
 	encoder := json.NewEncoder(w)
 	encoder.SetEscapeHTML(false)
@@ -298,4 +300,12 @@ func releaseOrderedMaps(data []interface{}) {
 			om.Release()
 		}
 	}
+}
+
+// countValue preserves Int64 precision when IEEE754Compatible is negotiated.
+func countValue(r *http.Request, count int64) interface{} {
+	if GetIEEE754Compatible(r) {
+		return strconv.FormatInt(count, 10)
+	}
+	return count
 }

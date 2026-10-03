@@ -850,6 +850,16 @@ func buildComplexTypeNullComparison(dialect string, op FilterOperator, complexPr
 }
 
 func buildComparisonConditionWithDB(db *gorm.DB, dialect string, filter *FilterExpression, entityMetadata *metadata.EntityMetadata) (string, []interface{}) {
+	// A standalone Boolean literal is a predicate, including within logical expressions.
+	if filter.Property == "" && filter.Left == nil && filter.Right == nil {
+		if value, ok := filter.Value.(bool); ok {
+			if value {
+				return "1 = 1", nil
+			}
+			return "1 = 0", nil
+		}
+	}
+
 	// Handle lambda operators (any, all)
 	if filter.Operator == OpAny || filter.Operator == OpAll {
 		return buildLambdaCondition(dialect, filter, entityMetadata, "")

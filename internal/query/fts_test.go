@@ -1,12 +1,60 @@
 package query
 
 import (
+	"net/url"
 	"testing"
 
 	"github.com/nlstn/go-odata/internal/metadata"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
+
+func TestFTSSearchWithKeyOrdering(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&FTSTestEntity{}); err != nil {
+		t.Fatal(err)
+	}
+	data := []FTSTestEntity{{ID: 3, Name: "Laptop Pro"}, {ID: 1, Name: "Laptop Mini"}, {ID: 2, Name: "Desktop"}}
+	if err := db.Create(&data).Error; err != nil {
+		t.Fatal(err)
+	}
+	meta, err := metadata.AnalyzeEntity(FTSTestEntity{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager := NewFTSManager(db)
+	if !manager.IsFTSAvailable() {
+		t.Fatal("SQLite FTS is required for this regression")
+	}
+	if err := manager.EnsureFTSTable(meta.TableName, meta); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		order string
+		ids   []int
+	}{{"ID", []int{1, 3}}, {"ID desc", []int{3, 1}}} {
+		opts, err := ParseQueryOptions(url.Values{"$search": {"Laptop"}, "$orderby": {tc.order}}, meta)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var results []FTSTestEntity
+		q := ApplyQueryOptionsWithFTS(db.Model(&FTSTestEntity{}), opts, meta, manager, meta.TableName, nil)
+		if err := q.Find(&results).Error; err != nil {
+			t.Fatal(err)
+		}
+		if len(results) != len(tc.ids) {
+			t.Fatalf("got %d rows, want %d", len(results), len(tc.ids))
+		}
+		for i, id := range tc.ids {
+			if results[i].ID != id {
+				t.Fatalf("row %d has ID %d, want %d", i, results[i].ID, id)
+			}
+		}
+	}
+}
 
 // FTSTestEntity represents a test entity for FTS testing
 type FTSTestEntity struct {

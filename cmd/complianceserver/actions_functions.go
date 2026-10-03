@@ -341,12 +341,17 @@ func registerActions(service *odata.Service, db *gorm.DB) {
 			w.Header().Set("Content-Type", "application/json;odata.metadata=minimal")
 			w.WriteHeader(http.StatusOK)
 
-			response := map[string]interface{}{
-				"@odata.context": "$metadata#Products/$entity",
-				"value":          product,
+			// Entity-valued operation results use the entity representation at the root.
+			body, err := json.Marshal(product)
+			if err != nil {
+				return err
 			}
-
-			return json.NewEncoder(w).Encode(response)
+			var result map[string]interface{}
+			if err := json.Unmarshal(body, &result); err != nil {
+				return err
+			}
+			result["@odata.context"] = "$metadata#Products/$entity"
+			return json.NewEncoder(w).Encode(result)
 		},
 	}); err != nil {
 		fmt.Printf("Failed to register ApplyDiscount action: %v\n", err)
