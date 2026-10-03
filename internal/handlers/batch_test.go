@@ -2152,9 +2152,8 @@ Accept: application/json
 	}
 }
 
-func TestBatchHandler_GetContentIDRefInChangesetAllowed(t *testing.T) {
-	// A GET using a Content-ID reference ($1/...) inside a changeset must be allowed
-	// per OData spec §11.4.9.3, even though plain GETs are rejected (§11.4.9.2).
+func TestBatchHandler_GetContentIDRefInChangesetRejected(t *testing.T) {
+	// Content-ID references do not permit read requests inside a changeset.
 	handler, _, _ := setupBatchTestHandler(t)
 
 	batchBoundary := "batch_outer"
@@ -2195,9 +2194,9 @@ Accept: application/json
 		t.Errorf("Outer batch status = %v, want %v. Body: %s", w.Code, http.StatusOK, w.Body.String())
 	}
 
-	// The GET via Content-ID reference must not be rejected (no 400 "not allowed in a changeset").
+	// The entire changeset must fail with one error response.
 	responseBody := w.Body.String()
-	if strings.Contains(responseBody, "not allowed in a changeset") {
-		t.Errorf("Content-ID GET should be allowed inside changeset, got: %s", responseBody)
+	if !strings.Contains(responseBody, "HTTP/1.1 400") || strings.Contains(responseBody, "HTTP/1.1 201") {
+		t.Errorf("Content-ID GET must fail the changeset, got: %s", responseBody)
 	}
 }
