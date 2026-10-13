@@ -108,7 +108,10 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
-        go-version: '1.25'
+        # Scan with a supported, patched toolchain; Go 1.25 no longer
+        # receives fixes for the standard-library vulnerabilities reported here.
+        go-version: '1.26'
+        check-latest: true
 
     - name: Scan for reachable vulnerabilities
       run: go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
