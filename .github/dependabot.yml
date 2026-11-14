@@ -2,10 +2,19 @@ version: 2
 updates:
   # Enable version updates for Go modules
   - package-ecosystem: "gomod"
-    directory: "/"
+    directories:
+      - "/"
+      - "/cmd/complianceserver"
+      - "/cmd/devserver"
+      - "/cmd/perfserver"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
+    groups:
+      shared-go-dependencies:
+        patterns:
+          - "*"
+        group-by: dependency-name
 
   # Enable version updates for GitHub Actions
   - package-ecosystem: "github-actions"
