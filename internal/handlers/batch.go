@@ -124,8 +124,8 @@ type jsonBatchResponseItem struct {
 	ID             string            `json:"id"`
 	Status         int               `json:"status"`
 	Headers        map[string]string `json:"headers,omitempty"`
-	Body           json.RawMessage   `json:"body,omitempty"`
 	AtomicityGroup string            `json:"atomicityGroup,omitempty"`
+	Body           json.RawMessage   `json:"body,omitempty"`
 }
 
 // jsonBatchResponseEnvelope is the top-level structure of a JSON batch response body.
@@ -180,7 +180,7 @@ func (h *BatchHandler) HandleBatch(w http.ResponseWriter, r *http.Request) {
 
 	// Route to JSON batch handler for application/json Content-Type (OData 4.01).
 	if mediaType == "application/json" {
-		h.handleJSONBatch(w, r)
+		h.handleJSONBatch(w, r, params)
 		return
 	}
 
@@ -294,6 +294,15 @@ func (h *BatchHandler) HandleBatch(w http.ResponseWriter, r *http.Request) {
 			}
 			processedRequests++
 			responses = append(responses, h.createErrorResponse(http.StatusBadRequest, "Invalid part Content-Type"))
+		}
+	}
+
+	if continueOnError && version.GetVersion(r.Context()).Is402OrLater() {
+		for _, part := range responses {
+			if part.StatusCode >= http.StatusBadRequest {
+				w.Header().Add("Preference-Applied", "continue-on-error=true")
+				break
+			}
 		}
 	}
 
@@ -997,7 +1006,7 @@ func writeMultipartBatchParts(w io.Writer, boundary string, responses []batchRes
 //     responses for that group (including ones already written) are changed to 424.
 //   - Prefer: continue-on-error – processing continues by default and stops after the first
 //     standalone failure only when the preference is explicitly set to false.
-func (h *BatchHandler) handleJSONBatch(w http.ResponseWriter, r *http.Request) {
+func (h *BatchHandler) handleJSONBatch(w http.ResponseWriter, r *http.Request, mediaParams map[string]string) {
 	// JSON batch is an OData 4.01-only feature.  Reject requests when the
 	// negotiated version is 4.0 (i.e. the client sent OData-MaxVersion: 4.0).
 	negotiated := version.GetVersion(r.Context())
@@ -1045,6 +1054,17 @@ func (h *BatchHandler) handleJSONBatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if version.GetRequestVersion(r.Context()).Is402OrLater() {
+		if strings.EqualFold(mediaParams["streaming"], "true") || strings.EqualFold(mediaParams["odata.streaming"], "true") {
+			if err := validateOrderedJSONBatch(body); err != nil {
+				if writeErr := response.WriteError(w, r, http.StatusBadRequest, "Invalid JSON batch request", err.Error()); writeErr != nil {
+					h.logger.Error("Error writing error response", "error", writeErr)
+				}
+				return
+			}
+		}
+	}
+
 	// Validate identifiers and structural ordering constraints before executing anything.
 	allIDs := make(map[string]bool, len(envelope.Requests))
 	for _, item := range envelope.Requests {
@@ -1066,7 +1086,9 @@ func (h *BatchHandler) handleJSONBatch(w http.ResponseWriter, r *http.Request) {
 	}
 	groupLastIdx := make(map[string]int)
 	groupIDs := make(map[string]bool)
+	requestGroups := make(map[string]string, len(envelope.Requests))
 	for i, item := range envelope.Requests {
+		requestGroups[item.ID] = item.AtomicityGroup
 		if item.AtomicityGroup != "" {
 			groupIDs[item.AtomicityGroup] = true
 			groupLastIdx[item.AtomicityGroup] = i
@@ -1134,7 +1156,8 @@ func (h *BatchHandler) handleJSONBatch(w http.ResponseWriter, r *http.Request) {
 		// --- Check dependsOn ---
 		depFailed := false
 		for _, dep := range item.DependsOn {
-			if failedIDs[dep] {
+			depGroup := requestGroups[dep]
+			if failedIDs[dep] || (depGroup != "" && depGroup != item.AtomicityGroup && failedIDs[depGroup]) {
 				depFailed = true
 				break
 			}
@@ -1150,9 +1173,15 @@ func (h *BatchHandler) handleJSONBatch(w http.ResponseWriter, r *http.Request) {
 			}
 			resp := h.makeJSONFailedDependencyResponse(item.ID, item.AtomicityGroup)
 			if item.AtomicityGroup != "" {
-				if gs == nil {
-					gs = &jsonGroupState{contentIDLocations: map[string]string{}}
-					groups[item.AtomicityGroup] = gs
+				gs = h.getOrCreateJSONGroupState(groups, item.AtomicityGroup)
+				if !gs.failed {
+					if gs.tx != nil {
+						gs.tx.Rollback()
+					}
+					gs.failed = true
+					for _, idx := range gs.responseIndices {
+						responses[idx] = h.makeJSONFailedDependencyResponse(responses[idx].ID, item.AtomicityGroup)
+					}
 				}
 				gs.responseIndices = append(gs.responseIndices, len(responses))
 			}
@@ -1302,12 +1331,58 @@ func (h *BatchHandler) handleJSONBatch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if continueOnError && negotiated.Is402OrLater() {
+		for _, part := range responses {
+			if part.Status >= http.StatusBadRequest {
+				w.Header().Add("Preference-Applied", "continue-on-error=true")
+				break
+			}
+		}
+	}
 	h.writeJSONBatchResponse(w, responses)
 
 	// Update batch span and metrics (reuse observability infrastructure).
 	if h.observability != nil {
 		h.observability.Metrics().RecordBatchSize(r.Context(), len(responses))
 	}
+}
+
+// validateOrderedJSONBatch checks the request object order when the sender
+// declares a 4.02 streaming payload. The envelope has already been decoded.
+func validateOrderedJSONBatch(body []byte) error {
+	var envelope struct {
+		Requests []json.RawMessage `json:"requests"`
+	}
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		return err
+	}
+	for i, raw := range envelope.Requests {
+		decoder := json.NewDecoder(bytes.NewReader(raw))
+		token, err := decoder.Token()
+		if err != nil || token != json.Delim('{') {
+			return fmt.Errorf("batch request %d must be an object", i+1)
+		}
+
+		first := true
+		for decoder.More() {
+			name, err := decoder.Token()
+			if err != nil {
+				return err
+			}
+			if first && name != "id" {
+				return fmt.Errorf("batch request %d must begin with id", i+1)
+			}
+			first = false
+			var value json.RawMessage
+			if err := decoder.Decode(&value); err != nil {
+				return err
+			}
+			if name == "body" && decoder.More() {
+				return fmt.Errorf("batch request %d must end with body", i+1)
+			}
+		}
+	}
+	return nil
 }
 
 // getOrCreateJSONGroupState returns the existing group state or creates a new one.

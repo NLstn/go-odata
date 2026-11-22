@@ -97,7 +97,7 @@ func TestMetadataJSON_VocabularyReferences(t *testing.T) {
 		}
 	})
 
-	t.Run("WithoutAnnotations_NoReferences", func(t *testing.T) {
+	t.Run("WithoutCustomAnnotations_ReferencesCore", func(t *testing.T) {
 		// Create an entity without annotations (not even auto-generated ones)
 		meta, _ := metadata.AnalyzeEntity(PlainTestProduct{})
 		entitiesMetadata := map[string]*metadata.EntityMetadata{
@@ -121,9 +121,9 @@ func TestMetadataJSON_VocabularyReferences(t *testing.T) {
 			t.Fatalf("Failed to decode JSON response: %v", err)
 		}
 
-		// Verify $Reference section does NOT exist
-		if _, ok := response["$Reference"]; ok {
-			t.Error("Expected $Reference section to be absent when no annotations are present")
+		references, ok := response["$Reference"].(map[string]interface{})
+		if !ok || len(references) != 1 || references[vocabularyURI("Org.OData.Core.V1")] == nil {
+			t.Fatalf("expected only the Core reference for ODataVersions, got %v", references)
 		}
 	})
 

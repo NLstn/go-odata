@@ -2,6 +2,7 @@ package query
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -73,6 +74,23 @@ func buildLikeComparison(dialect string, columnName string, value interface{}, p
 	}
 }
 
+type regexMatch struct {
+	pattern string
+	flags   string
+	valid   bool
+}
+
+func validRegexFlags(flags string) bool {
+	var seen string
+	for _, flag := range flags {
+		if !strings.ContainsRune("dgimsuvy", flag) || strings.ContainsRune(seen, flag) {
+			return false
+		}
+		seen += string(flag)
+	}
+	return !strings.Contains(flags, "u") || !strings.Contains(flags, "v")
+}
+
 // buildRegexComparison builds a SQL regex comparison for the OData v4.01 matchesPattern function.
 // The pattern is a POSIX ERE pattern per the OData v4.01 spec (Section 11.5.3.3).
 // SQL dialect mappings:
@@ -82,6 +100,9 @@ func buildLikeComparison(dialect string, columnName string, value interface{}, p
 //   - SQL Server: uses LIKE as a best-effort approximation (limited regex support)
 func buildRegexComparison(dialect string, columnName string, value interface{}) (string, []interface{}) {
 	pattern := fmt.Sprint(value)
+	if match, ok := value.(regexMatch); ok {
+		return buildFlaggedRegexComparison(dialect, columnName, match)
+	}
 	switch dialect {
 	case "postgres", "postgresql":
 		return fmt.Sprintf("%s ~ ?", columnName), []interface{}{pattern}
@@ -103,6 +124,56 @@ func buildRegexComparison(dialect string, columnName string, value interface{}) 
 		// SQLite, MySQL, MariaDB all support the REGEXP operator
 		return fmt.Sprintf("%s REGEXP ?", columnName), []interface{}{pattern}
 	}
+}
+
+// Use the database's regular-expression engine, translating ECMAScript match
+// modifiers to the corresponding engine flags.
+func buildFlaggedRegexComparison(dialect, column string, match regexMatch) (string, []interface{}) {
+	if !match.valid {
+		return "NULL = 1", nil
+	}
+	flags := match.flags
+	pattern := match.pattern
+	if strings.Contains(flags, "y") {
+		pattern = `\A(?:` + pattern + ")"
+	}
+	if dialect == "postgres" || dialect == "postgresql" {
+		mode := "p" // dot excludes newlines, anchors match the whole value
+		switch {
+		case strings.Contains(flags, "m") && strings.Contains(flags, "s"):
+			mode = "w"
+		case strings.Contains(flags, "m"):
+			mode = "n"
+		case strings.Contains(flags, "s"):
+			mode = "s"
+		}
+		if strings.Contains(flags, "i") {
+			mode += "i"
+		}
+		return fmt.Sprintf("%s ~ ?", column), []interface{}{"(?" + mode + ")" + pattern}
+	}
+
+	var nativeFlags strings.Builder
+	for _, flag := range "ims" {
+		if strings.ContainsRune(flags, flag) {
+			nativeFlags.WriteRune(flag)
+		}
+	}
+	if dialect == "sqlserver" || dialect == "mssql" {
+		if strings.Contains(flags, "i") {
+			return buildRegexComparison(dialect, "LOWER("+column+")", strings.ToLower(pattern))
+		}
+		return buildRegexComparison(dialect, column, pattern)
+	}
+	if nativeFlags.Len() > 0 {
+		pattern = "(?" + nativeFlags.String() + ":" + pattern + ")"
+	}
+	if dialect == "sqlite" {
+		if _, err := regexp.Compile(pattern); err != nil {
+			return "NULL = 1", nil
+		}
+	}
+	return buildRegexComparison(dialect, column, pattern)
 }
 
 func regexToLikePattern(pattern string) string {

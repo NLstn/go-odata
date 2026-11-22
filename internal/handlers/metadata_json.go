@@ -121,6 +121,7 @@ func (h *MetadataHandler) buildMetadataJSON(model metadataModel, ver version.Ver
 	}
 
 	container := h.buildJSONEntityContainer(model)
+	container["@"+odataVersionsTerm] = version.SupportedVersions()
 	odataService["Container"] = container
 
 	jsonBytes, err := json.MarshalIndent(csdl, "", "  ")

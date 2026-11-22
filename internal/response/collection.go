@@ -3,12 +3,15 @@ package response
 import (
 	"encoding/json"
 	"fmt"
+	"mime"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/preference"
 	"github.com/nlstn/go-odata/internal/query"
+	"github.com/nlstn/go-odata/internal/version"
 )
 
 // WriteODataCollection writes an OData collection response.
@@ -242,33 +245,85 @@ func WriteODataDeltaResponse(w http.ResponseWriter, r *http.Request, entitySetNa
 		entries = []map[string]interface{}{}
 	}
 
-	response := map[string]interface{}{
-		"value": entries,
-	}
-
+	envelope := NewOrderedMapWithCapacity(3)
 	if metadataLevel != "none" {
-		response["@odata.context"] = buildDeltaContextURL(r, entitySetName)
+		envelope.Set("@odata.context", buildDeltaContextURL(r, entitySetName))
+	}
+	if version.GetVersion(r.Context()).Is402OrLater() {
+		envelope.Set("value", orderDeltaEntries(entries))
+	} else {
+		envelope.Set("value", entries)
 	}
 	if deltaLink != nil && *deltaLink != "" {
-		response["@odata.deltaLink"] = *deltaLink
+		envelope.Set("@odata.deltaLink", *deltaLink)
+	}
+
+	contentType := BuildJSONContentType(r)
+	if version.GetVersion(r.Context()).Is402OrLater() && requestsJSONStreaming(r) {
+		contentType += ";streaming=true"
 	}
 
 	if r.Method == http.MethodHead {
-		jsonBytes, err := json.Marshal(response)
+		jsonBytes, err := json.Marshal(envelope)
 		if err != nil {
 			return err
 		}
-		w.Header().Set("Content-Type", BuildJSONContentType(r))
+		w.Header().Set("Content-Type", contentType)
 		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(jsonBytes)))
 		w.WriteHeader(http.StatusOK)
 		return nil
 	}
 
-	w.Header().Set("Content-Type", BuildJSONContentType(r))
+	w.Header().Set("Content-Type", contentType)
 	w.WriteHeader(http.StatusOK)
 	encoder := json.NewEncoder(w)
 	encoder.SetEscapeHTML(false)
-	return encoder.Encode(response)
+	return encoder.Encode(envelope)
+}
+
+// requestsJSONStreaming recognizes the format parameter for ordered responses.
+func requestsJSONStreaming(r *http.Request) bool {
+	format, _ := parseQueryNegotiation(r.URL.RawQuery)
+	if format == "" {
+		format = r.Header.Get("Accept")
+	}
+	for _, mediaRange := range strings.Split(format, ",") {
+		mediaType, params, err := mime.ParseMediaType(mediaRange)
+		if err != nil || mediaType != "application/json" {
+			continue
+		}
+		if quality, exists := params["q"]; exists {
+			if q, err := strconv.ParseFloat(quality, 64); err != nil || q <= 0 || q > 1 {
+				continue
+			}
+		}
+		if strings.EqualFold(params["streaming"], "true") || strings.EqualFold(params["odata.streaming"], "true") {
+			return true
+		}
+	}
+	return false
+}
+
+// orderDeltaEntries puts 4.02 control information before properties, with
+// type immediately following removed for deleted entities.
+func orderDeltaEntries(entries []map[string]interface{}) []*OrderedMap {
+	ordered := make([]*OrderedMap, 0, len(entries))
+	control := [...]string{"@odata.context", "@odata.removed", "@odata.type", "@odata.id", "@odata.etag"}
+	for _, entry := range entries {
+		value := NewOrderedMapWithCapacity(len(entry))
+		for _, key := range control {
+			if data, exists := entry[key]; exists {
+				value.Set(key, data)
+			}
+		}
+		for key, data := range entry {
+			if _, exists := value.values[key]; !exists {
+				value.Set(key, data)
+			}
+		}
+		ordered = append(ordered, value)
+	}
+	return ordered
 }
 
 // shouldAddIndexAnnotations checks if the $index query parameter is present in the request

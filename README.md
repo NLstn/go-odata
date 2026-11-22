@@ -29,7 +29,19 @@ A Go library for building services that expose OData v4 APIs with automatic hand
 
 ### OData v4 Specification
 
-This library targets the [OData v4.01 specification](https://docs.oasis-open.org/odata/odata/v4.01/odata-v4.01-part1-protocol.html). See the supported endpoints and query options below, and run the external compliance suite against your selected database before relying on a specific protocol feature.
+The service negotiates OData 4.0, 4.01, and
+[4.02](https://docs.oasis-open.org/odata/odata/v4.02/cs01/part1-protocol/odata-v4.02-cs01-part1-protocol.html).
+Send `OData-MaxVersion: 4.02` to opt in to 4.02 responses. Requests without a
+version cap still receive 4.01 responses. If a request has a payload, use
+`OData-Version` to specify its format independently.
+
+4.02 support includes XML and JSON CSDL negotiation, canonical property context
+URLs, `$select=$key`, empty expands, `matchesPattern` flags with database-specific
+regex behavior, and the new query-body, JSON batch, and ordered delta rules. Full 4.02
+conformance still requires work on features such as delta update payloads,
+upserts through non-containment navigation, and expanded operation expressions.
+Run the external compliance suite against your database to verify the features
+your service relies on.
 
 ## Installation
 
@@ -217,6 +229,7 @@ Supported OData v4 query options include:
 - Composite keys: `GET /OrderItems(OrderID=1,ProductID=5)`
 - Singletons: `GET /Company`
 - Batch requests: `POST /$batch`
+- Query request bodies: `QUERY /Products` or `POST /Products/$query`
 - Custom actions and functions
 
 > **Note on UUID/GUID Keys:** When using UUID strings as entity keys, don't use quotes in the path (`/Entity(uuid-value)`), but do use quotes in filter expressions (`?$filter=field eq 'uuid-value'`). See [Working with UUID/GUID Keys](documentation/entities.md#working-with-uuidguid-keys) for details.

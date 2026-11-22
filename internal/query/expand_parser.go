@@ -10,6 +10,10 @@ import (
 
 // parseExpandWithConfig parses the $expand query option with depth tracking
 func parseExpandWithConfig(expandStr string, entityMetadata *metadata.EntityMetadata, config *ParserConfig, currentDepth int, caseInsensitive bool) ([]ExpandOption, error) {
+	// OData 4.02 allows an explicit empty expansion, including when nested.
+	if expandStr == "" {
+		return nil, nil
+	}
 	// Check depth limit if configured
 	if config != nil && config.MaxExpandDepth > 0 && currentDepth >= config.MaxExpandDepth {
 		return nil, fmt.Errorf("$expand nesting level (%d) exceeds maximum allowed depth (%d)", currentDepth+1, config.MaxExpandDepth)
@@ -175,6 +179,7 @@ func parseNestedExpandOptionsCoreWithConfig(expand *ExpandOption, optionsStr str
 	}
 	var computedAliases map[string]bool
 	var computeValue string
+	seenOptions := make(map[string]bool, len(parts))
 
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
@@ -189,7 +194,15 @@ func parseNestedExpandOptionsCoreWithConfig(expand *ExpandOption, optionsStr str
 
 		key := strings.TrimSpace(part[:eqIdx])
 		value := strings.TrimSpace(part[eqIdx+1:])
-		if strings.EqualFold(key, "$compute") {
+		if caseInsensitive {
+			key = normalizeQueryOptionKey(key)
+		}
+		key = strings.ToLower(key)
+		if seenOptions[key] {
+			return fmt.Errorf("nested query option %q must not appear more than once per expand item", key)
+		}
+		seenOptions[key] = true
+		if key == "$compute" {
 			computeValue = value
 		}
 	}
@@ -219,7 +232,11 @@ func parseNestedExpandOptionsCoreWithConfig(expand *ExpandOption, optionsStr str
 
 		switch strings.ToLower(normalizedKey) {
 		case "$select":
-			expand.Select = parseSelect(value)
+			selectProps, err := resolveSelectKeys(parseSelect(value), targetMetadata)
+			if err != nil {
+				return err
+			}
+			expand.Select = selectProps
 			if validateMetadata {
 				if targetMetadata == nil {
 					return errNavMetadataMissingForSelect

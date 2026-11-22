@@ -492,8 +492,8 @@ func TestODataVersionNegotiation_Returns4_01_WhenNoMaxVersion(t *testing.T) {
 	}
 }
 
-// TestODataVersionNegotiation_Returns4_01_WhenClientRequests5_0 verifies version negotiation
-func TestODataVersionNegotiation_Returns4_01_WhenClientRequests5_0(t *testing.T) {
+// TestODataVersionNegotiation_Returns4_02_WhenClientRequests5_0 verifies version negotiation
+func TestODataVersionNegotiation_Returns4_02_WhenClientRequests5_0(t *testing.T) {
 	service := setupVersionTestService(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/VersionTestProducts", nil)
@@ -502,11 +502,11 @@ func TestODataVersionNegotiation_Returns4_01_WhenClientRequests5_0(t *testing.T)
 
 	service.ServeHTTP(w, req)
 
-	// Verify response has OData-Version: 4.01 (highest supported <= 5.0)
+	// Verify response has OData-Version: 4.02 (highest supported <= 5.0)
 	//nolint:staticcheck // SA1008: intentionally using non-canonical header key per OData spec
 	odataVersionValues := w.Header()["OData-Version"]
-	if len(odataVersionValues) == 0 || odataVersionValues[0] != "4.01" {
-		t.Errorf("Expected OData-Version: 4.01 (highest supported), got: %v", odataVersionValues)
+	if len(odataVersionValues) == 0 || odataVersionValues[0] != "4.02" {
+		t.Errorf("Expected OData-Version: 4.02 (highest supported), got: %v", odataVersionValues)
 	}
 }
 
@@ -675,5 +675,46 @@ func TestMetadataHandler_ConcurrentAccessWithNamespaceChange(t *testing.T) {
 	close(errors)
 	for err := range errors {
 		t.Error(err)
+	}
+}
+
+func TestOData402QueryBodyUsesRequestPayloadVersion(t *testing.T) {
+	service := setupVersionTestService(t)
+	for _, tc := range []struct {
+		method, path, version string
+		wantStatus            int
+	}{
+		{"QUERY", "/VersionTestProducts", "4.02", http.StatusOK},
+		{http.MethodPost, "/VersionTestProducts/$query", "4.02", http.StatusOK},
+		{http.MethodPost, "/VersionTestProducts/$query", "4.01", http.StatusUnsupportedMediaType},
+	} {
+		t.Run(tc.method+"/"+tc.version, func(t *testing.T) {
+			req := httptest.NewRequest(tc.method, tc.path, strings.NewReader(`{"$filter":"name eq 'Mouse'","$select":"$key,name"}`))
+			req.Header.Set("OData-Version", tc.version)
+			req.Header.Set("OData-MaxVersion", "4.01")
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			service.ServeHTTP(w, req)
+			//nolint:staticcheck // The service intentionally writes the spec's header spelling.
+			versions := w.Header()["OData-Version"]
+			if w.Code != tc.wantStatus || len(versions) != 1 || versions[0] != "4.01" {
+				t.Fatalf("status = %d, headers = %v, body = %s", w.Code, w.Header(), w.Body)
+			}
+			if w.Code != http.StatusOK {
+				return
+			}
+			var result struct {
+				Value []map[string]interface{} `json:"value"`
+			}
+			if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+				t.Fatal(err)
+			}
+			if len(result.Value) != 1 || result.Value[0]["name"] != "Mouse" || result.Value[0]["id"] == nil {
+				t.Fatalf("expected the projected Mouse, got %+v", result.Value)
+			}
+			if _, present := result.Value[0]["price"]; present {
+				t.Fatalf("price should not be in the projection")
+			}
+		})
 	}
 }
