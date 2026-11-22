@@ -200,13 +200,22 @@ func BuildJSONContentType(r *http.Request) string {
 	return fmt.Sprintf("application/json;odata.metadata=%s", n.metadataLevel)
 }
 
+func metadataParameter(part string) (string, bool) {
+	name, value, ok := strings.Cut(strings.TrimSpace(part), "=")
+	if !ok {
+		return "", false
+	}
+	name = strings.TrimPrefix(strings.ToLower(strings.TrimSpace(name)), "odata.")
+	if name != "metadata" {
+		return "", false
+	}
+	return strings.Trim(strings.TrimSpace(value), `"`), true
+}
+
 func validateMetadataInFormat(format string) error {
 	parts := strings.Split(format, ";")
 	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		if strings.HasPrefix(part, "odata.metadata=") {
-			value := strings.TrimPrefix(part, "odata.metadata=")
-			value = strings.TrimSpace(value)
+		if value, ok := metadataParameter(part); ok {
 			if err := validateMetadataValue(value); err != nil {
 				return err
 			}
@@ -218,10 +227,7 @@ func validateMetadataInFormat(format string) error {
 func extractMetadataFromFormat(format string) string {
 	parts := strings.Split(format, ";")
 	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		if strings.HasPrefix(part, "odata.metadata=") {
-			value := strings.TrimPrefix(part, "odata.metadata=")
-			value = strings.TrimSpace(value)
+		if value, ok := metadataParameter(part); ok {
 			if isValidMetadataLevel(value) {
 				return value
 			}
@@ -244,10 +250,7 @@ func validateMetadataInAccept(accept string) error {
 
 		if mimeType == "application/json" || mimeType == "*/*" || mimeType == "application/*" {
 			for _, param := range subparts[1:] {
-				param = strings.TrimSpace(param)
-				if strings.HasPrefix(param, "odata.metadata=") {
-					value := strings.TrimPrefix(param, "odata.metadata=")
-					value = strings.TrimSpace(value)
+				if value, ok := metadataParameter(param); ok {
 					if err := validateMetadataValue(value); err != nil {
 						return err
 					}
@@ -271,10 +274,7 @@ func extractMetadataFromAccept(accept string) string {
 
 		if mimeType == "application/json" || mimeType == "*/*" || mimeType == "application/*" {
 			for _, param := range subparts[1:] {
-				param = strings.TrimSpace(param)
-				if strings.HasPrefix(param, "odata.metadata=") {
-					value := strings.TrimPrefix(param, "odata.metadata=")
-					value = strings.TrimSpace(value)
+				if value, ok := metadataParameter(param); ok {
 					if isValidMetadataLevel(value) {
 						return value
 					}
@@ -421,11 +421,11 @@ func supportedFormatParameters(parameters []string, jsonFormat bool) bool {
 			if !strings.EqualFold(value, "utf-8") {
 				return false
 			}
-		case "odata.metadata":
+		case "metadata", "odata.metadata":
 			if !jsonFormat || !isValidMetadataLevel(strings.ToLower(value)) {
 				return false
 			}
-		case "ieee754compatible", "exponentialdecimals", "odata.streaming":
+		case "ieee754compatible", "exponentialdecimals", "streaming", "odata.streaming":
 			if !jsonFormat || (!strings.EqualFold(value, "true") && !strings.EqualFold(value, "false")) {
 				return false
 			}

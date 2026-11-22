@@ -2,6 +2,7 @@ package actions
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -317,6 +318,21 @@ func ParseActionParameters(r *http.Request, paramDefs []ParameterDefinition, str
 	return params, nil
 }
 
+type queryBodyParamsKey struct{}
+
+// WithQueryBodyParams carries typed OData 4.02 JSON function parameters to
+// the ordinary function overload selector and parameter binder.
+func WithQueryBodyParams(req *http.Request, params map[string]json.RawMessage) *http.Request {
+	return req.WithContext(context.WithValue(req.Context(), queryBodyParamsKey{}, params))
+}
+
+func queryBodyParams(req *http.Request) map[string]json.RawMessage {
+	if params, ok := req.Context().Value(queryBodyParamsKey{}).(map[string]json.RawMessage); ok {
+		return params
+	}
+	return nil
+}
+
 // ParseFunctionParameters parses function parameters from URL query string or path
 func ParseFunctionParameters(r *http.Request, paramDefs []ParameterDefinition, structType reflect.Type) (map[string]interface{}, error) {
 	params := make(map[string]interface{})
@@ -339,8 +355,20 @@ func ParseFunctionParameters(r *http.Request, paramDefs []ParameterDefinition, s
 	// e.g., /FunctionName?param1=value1&param2=value2
 	query := r.URL.Query()
 
-	// Validate and convert parameters
+	bodyParams := queryBodyParams(r)
+	// Validate and convert parameters.
 	for _, paramDef := range paramDefs {
+		if raw, ok := bodyParams[paramDef.Name]; ok {
+			value, err := decodeJSONToType(raw, paramDef.Type)
+			if err != nil {
+				return nil, fmt.Errorf("parameter '%s' has invalid value: %w", paramDef.Name, err)
+			}
+			if err := validateParameterType(paramDef.Name, value, paramDef.Type); err != nil {
+				return nil, err
+			}
+			params[paramDef.Name] = value
+			continue
+		}
 		var value string
 		var found bool
 
@@ -878,8 +906,22 @@ func ResolveFunctionOverload(r *http.Request, candidates []*FunctionDefinition, 
 		}
 	}
 
+	if bodyParams := queryBodyParams(r); bodyParams != nil {
+		for k := range providedParams {
+			if strings.HasPrefix(k, "$") || strings.HasPrefix(k, "@") {
+				delete(providedParams, k)
+			}
+		}
+		for k := range bodyParams {
+			if _, duplicate := providedParams[k]; duplicate {
+				return nil, nil, fmt.Errorf("function parameter %q appears in both URL and body", k)
+			}
+			providedParams[k] = ""
+		}
+	}
+
 	// If only one candidate after filtering and parameter count matches, use it
-	if len(filtered) == 1 {
+	if len(filtered) == 1 && queryBodyParams(r) == nil {
 		params, err := ParseFunctionParameters(r, filtered[0].Parameters, filtered[0].ParameterStructType)
 		if err != nil {
 			return nil, nil, err

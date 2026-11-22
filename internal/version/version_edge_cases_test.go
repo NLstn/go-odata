@@ -130,8 +130,8 @@ func TestNegotiateVersion_Concurrent(t *testing.T) {
 	// Collect results
 	for i := 0; i < 100; i++ {
 		ver := <-results
-		// All results should be valid versions (4.0 or 4.1)
-		if ver.Major != 4 || (ver.Minor != 0 && ver.Minor != 1) {
+		// All results should be valid versions (4.0 through 4.02)
+		if ver.Major != 4 || (ver.Minor < 0 || ver.Minor > 2) {
 			t.Errorf("Concurrent NegotiateVersion returned unexpected version: %v", ver)
 		}
 	}

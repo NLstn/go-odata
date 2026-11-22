@@ -239,7 +239,8 @@ func isLikeMatchFunction(name string) bool {
 
 // convertTwoArgFunctionWithContext converts two-argument functions using the provided context
 func convertTwoArgFunctionWithContext(n *FunctionCallExpr, functionName string, entityMetadata *metadata.EntityMetadata, ctx *conversionContext) (*FilterExpression, error) {
-	if len(n.Args) != 2 {
+	withRegexFlags := functionName == "matchespattern" && len(n.Args) == 3
+	if len(n.Args) != 2 && !withRegexFlags {
 		return nil, fmt.Errorf("function %s requires 2 arguments", functionName)
 	}
 
@@ -282,6 +283,16 @@ func convertTwoArgFunctionWithContext(n *FunctionCallExpr, functionName string, 
 		value = funcCall
 	} else {
 		return nil, fmt.Errorf("second argument of %s must be a literal, property, or function", functionName)
+	}
+
+	if withRegexFlags {
+		literal, ok := n.Args[2].(*LiteralExpr)
+		if !ok {
+			return nil, fmt.Errorf("matchespattern flags must be a string literal")
+		}
+		flags, isString := literal.Value.(string)
+		pattern, isPattern := value.(string)
+		value = regexMatch{pattern: pattern, flags: flags, valid: isString && isPattern && validRegexFlags(flags)}
 	}
 
 	expr := acquireFilterExpression()

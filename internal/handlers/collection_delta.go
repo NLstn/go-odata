@@ -6,6 +6,7 @@ import (
 	"github.com/nlstn/go-odata/internal/etag"
 	"github.com/nlstn/go-odata/internal/response"
 	"github.com/nlstn/go-odata/internal/trackchanges"
+	"github.com/nlstn/go-odata/internal/version"
 )
 
 func (h *EntityHandler) handleDeltaCollection(w http.ResponseWriter, r *http.Request, token string) {
@@ -82,6 +83,9 @@ func (h *EntityHandler) buildDeltaEntries(r *http.Request, events []trackchanges
 				if entityTypeAnnotation != "" {
 					entry["@odata.type"] = entityTypeAnnotation
 				}
+			}
+			if metadataLevel == response.MetadataFull && version.GetVersion(r.Context()).Is402OrLater() {
+				entry["@odata.context"] = "#" + h.metadata.EntitySetName + "/$deletedEntity"
 			}
 			entry["@odata.removed"] = map[string]string{"reason": "deleted"}
 			for k, v := range event.KeyValues {
