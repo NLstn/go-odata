@@ -252,6 +252,9 @@ func (h *EntityHandler) afterReadCollection(r *http.Request) func(*query.QueryOp
 
 func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.QueryOptions, scopes []func(*gorm.DB) *gorm.DB) (interface{}, error) {
 	modifiedOptions := *queryOptions
+	if len(queryOptions.OrderBy) > 0 && !query.ShouldUseMapResults(queryOptions) {
+		modifiedOptions.OrderBy = collectionCursorOrder(h.metadata, queryOptions.OrderBy)
+	}
 	if queryOptions.Top != nil {
 		topPlusOne := *queryOptions.Top + 1
 		modifiedOptions.Top = &topPlusOne
@@ -279,8 +282,14 @@ func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.Qu
 		baseDB = baseDB.Scopes(scopes...)
 	}
 
-	if queryOptions.SkipToken != nil {
+	if queryOptions.SkipToken != nil && query.ShouldUseMapResults(queryOptions) {
 		db = h.applySkipTokenFilter(db, queryOptions)
+	} else if queryOptions.SkipToken != nil {
+		var err error
+		db, err = h.applyCollectionCursor(db, queryOptions)
+		if err != nil {
+			return nil, &collectionRequestError{StatusCode: http.StatusBadRequest, ErrorCode: ErrMsgInvalidQueryOptions, Message: err.Error()}
+		}
 	}
 
 	applyTopInMemoryForMapResults := false
