@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/query"
@@ -63,4 +64,33 @@ func (h *EntityHandler) applyCollectionCursor(db *gorm.DB, opts *query.QueryOpti
 		prefix = append(prefix, clause.Eq{Column: column, Value: value})
 	}
 	return db.Where(clause.Or(branches...)), nil
+}
+
+// groupedCursorOrder returns the order for a grouped ($apply ... groupby) result.
+// OFFSET paging needs a total order. The requested sort may tie (for example on an
+// aggregate), so the group keys are appended, in declared order, as ascending
+// tie-breakers. When the client gave no sort, the group keys are the order.
+// It only applies when the last transformation is a plain groupby (no rollup, no
+// $all, no navigation paths); every other shape is returned unchanged.
+func groupedCursorOrder(apply []query.ApplyTransformation, order []query.OrderByItem) []query.OrderByItem {
+	if len(apply) == 0 {
+		return order
+	}
+	last := apply[len(apply)-1]
+	if last.Type != query.ApplyTypeGroupBy || last.GroupBy == nil || last.GroupBy.Rollup != nil || last.GroupBy.AllValues {
+		return order
+	}
+	result := append([]query.OrderByItem(nil), order...)
+	have := make(map[string]bool, len(result))
+	for _, item := range result {
+		have[item.Property] = true
+	}
+	for _, key := range last.GroupBy.Properties {
+		if key == "" || strings.Contains(key, "/") || have[key] {
+			return order
+		}
+		result = append(result, query.OrderByItem{Property: key})
+		have[key] = true
+	}
+	return result
 }

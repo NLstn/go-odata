@@ -254,6 +254,8 @@ func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.Qu
 	modifiedOptions := *queryOptions
 	if len(queryOptions.OrderBy) > 0 && !query.ShouldUseMapResults(queryOptions) {
 		modifiedOptions.OrderBy = collectionCursorOrder(h.metadata, queryOptions.OrderBy)
+	} else if query.ShouldUseMapResults(queryOptions) {
+		modifiedOptions.OrderBy = groupedCursorOrder(queryOptions.Apply, queryOptions.OrderBy)
 	}
 	if queryOptions.Top != nil {
 		topPlusOne := *queryOptions.Top + 1
