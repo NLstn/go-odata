@@ -41,7 +41,8 @@ func (h *EntityHandler) applyCollectionCursor(db *gorm.DB, opts *query.QueryOpti
 	}
 	// Each branch matches the preceding components and advances the current
 	// component in its declared direction.
-	var prefix, branches []clause.Expression
+	var prefix []clause.Expression
+	branches := make([]clause.Expression, 0, len(order))
 	for _, item := range order {
 		property := h.metadata.FindProperty(item.Property)
 		if property == nil || property.ColumnName == "" {
