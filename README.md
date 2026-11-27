@@ -276,7 +276,7 @@ release notes before upgrading.
 
 ## Requirements
 
-- Go 1.25 or later
+- Go 1.26 or later
 - GORM-compatible database driver
 
 ## Supported Databases

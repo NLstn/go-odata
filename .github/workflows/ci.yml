@@ -29,10 +29,10 @@ jobs:
       # Test the minimum supported Go version and newer releases: stdlib
       # changes (e.g. json.RawMessage becoming a jsontext.Value alias in
       # Go 1.27) can break the library on toolchains newer than go.mod's.
-      # The matrix legs report as "Test (1.25)" etc. - the branch ruleset's
+      # The matrix legs report as "Test (1.26)" etc. - the branch ruleset's
       # required status checks must list each leg by that name.
       matrix:
-        go-version: ['1.25', '1.26', '1.27']
+        go-version: ['1.26', '1.27']
 
     steps:
     - name: Check out code
@@ -73,7 +73,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
-        go-version: '1.25'
+        go-version: '1.26'
 
     - name: Build
       run: go build -v ./...
@@ -89,12 +89,12 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
-        go-version: '1.25'
+        go-version: '1.26'
 
     - name: Run golangci-lint
       uses: golangci/golangci-lint-action@v9
       with:
-        version: v2.5.0
+        version: v2.11.4
         args: --timeout=5m
 
   vulnerability-scan:
@@ -108,8 +108,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
-        # Scan with a supported, patched toolchain; Go 1.25 no longer
-        # receives fixes for the standard-library vulnerabilities reported here.
+        # Use the latest patch of the minimum supported Go release.
         go-version: '1.26'
         check-latest: true
 
