@@ -4,7 +4,7 @@ This directory contains the PostgreSQL-based development container configuration
 
 ## What's Included
 
-- **Go 1.25**: Latest Go development environment
+- **Go 1.26**: Development environment
 - **PostgreSQL 16**: PostgreSQL database for local development
 - **VS Code Extensions**:
   - Go language support with IntelliSense

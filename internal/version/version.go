@@ -15,6 +15,21 @@ type contextKey string
 const negotiatedVersionKey contextKey = "odata.negotiated.version"
 const requestVersionKey contextKey = "odata.request.version"
 
+var (
+	v40  = Version{Major: 4}
+	v401 = Version{Major: 4, Minor: 1}
+	v402 = Version{Major: 4, Minor: 2}
+)
+
+// SupportedVersions lists the protocol versions the service can negotiate.
+func SupportedVersions() []string {
+	return []string{v40.String(), v401.String(), v402.String()}
+}
+
+func (v Version) Is402OrLater() bool {
+	return v402.LessThanOrEqual(v)
+}
+
 // Version represents an OData protocol version
 type Version struct {
 	Major int
@@ -118,11 +133,13 @@ func ParseVersionString(versionStr string) Version {
 func ParseRequestVersion(versionStr string) (Version, error) {
 	switch strings.TrimSpace(versionStr) {
 	case "4.0":
-		return Version{Major: 4, Minor: 0}, nil
+		return v40, nil
 	case "4.01":
-		return Version{Major: 4, Minor: 1}, nil
+		return v401, nil
+	case "4.02":
+		return v402, nil
 	default:
-		return Version{}, fmt.Errorf("unsupported OData-Version %q: expected 4.0 or 4.01", versionStr)
+		return Version{}, fmt.Errorf("unsupported OData-Version %q: expected 4.0, 4.01 or 4.02", versionStr)
 	}
 }
 
@@ -141,8 +158,12 @@ func HeaderValues(header http.Header, name string) []string {
 // ResolveRequestVersions returns the versions used to interpret the request
 // payload and generate the response.
 func ResolveRequestVersions(header http.Header, hasPayload bool) (Version, Version, error) {
-	responseVersion := NegotiateVersion(header.Get("OData-MaxVersion"))
+	maxVersion := header.Get("OData-MaxVersion")
+	responseVersion := NegotiateVersion(maxVersion)
 	requestVersion := responseVersion
+	if maxVersion == "" {
+		requestVersion = v402
+	}
 	requestVersionValues := HeaderValues(header, "OData-Version")
 	if !hasPayload || len(requestVersionValues) == 0 {
 		return requestVersion, responseVersion, nil
@@ -164,30 +185,40 @@ func ResolveRequestVersions(header http.Header, hasPayload bool) (Version, Versi
 // or equal to the client's requested maximum version.
 // Assumes the client's version has already been validated as >= 4.0
 func NegotiateVersion(clientMaxVersion string) Version {
-	// Define the service's supported versions (highest to lowest)
-	serviceVersion := Version{Major: 4, Minor: 1}
-	supportedVersions := []Version{
-		{Major: 4, Minor: 1},
-		{Major: 4, Minor: 0},
-	}
-
-	// If no max version specified, return the highest supported version
+	// Keep the response default stable for existing clients without a cap.
 	if clientMaxVersion == "" {
-		return serviceVersion
+		return v401
 	}
 
-	// Parse the client's maximum version
-	clientMax := ParseVersionString(clientMaxVersion)
-
-	// Find the highest supported version that is <= client's max
-	for _, supported := range supportedVersions {
+	clientMax, ok := parseMaxVersion(clientMaxVersion)
+	if !ok {
+		return v401
+	}
+	for _, supported := range [...]Version{v402, v401, v40} {
 		if supported.LessThanOrEqual(clientMax) {
 			return supported
 		}
 	}
+	return v40
+}
 
-	// Fallback to v4.0 (shouldn't normally reach here if validation is done first)
-	return Version{Major: 4, Minor: 0}
+// parseMaxVersion reads the fractional part as a decimal. The supported
+// versions have two fractional digits, so further digits cannot affect selection.
+func parseMaxVersion(value string) (Version, bool) {
+	majorText, fraction, ok := strings.Cut(strings.TrimSpace(value), ".")
+	if !ok || majorText == "" || fraction == "" ||
+		strings.Trim(majorText, "0123456789") != "" || strings.Trim(fraction, "0123456789") != "" {
+		return Version{}, false
+	}
+	major, err := strconv.Atoi(majorText)
+	if err != nil {
+		return Version{}, false
+	}
+	minor := int(fraction[0]-'0') * 10
+	if len(fraction) > 1 {
+		minor += int(fraction[1] - '0')
+	}
+	return Version{Major: major, Minor: minor}, true
 }
 
 // WithVersion stores the negotiated OData version in the request context
@@ -201,8 +232,8 @@ func GetVersion(ctx context.Context) Version {
 	if v, ok := ctx.Value(negotiatedVersionKey).(Version); ok {
 		return v
 	}
-	// Default to the highest supported version
-	return Version{Major: 4, Minor: 1}
+	// Default to the version used for responses without a client cap.
+	return v401
 }
 
 // WithRequestVersion stores the version used to interpret the request payload.
@@ -216,5 +247,5 @@ func GetRequestVersion(ctx context.Context) Version {
 	if v, ok := ctx.Value(requestVersionKey).(Version); ok {
 		return v
 	}
-	return Version{Major: 4, Minor: 1}
+	return v402
 }

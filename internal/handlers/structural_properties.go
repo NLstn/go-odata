@@ -9,6 +9,7 @@ import (
 	"github.com/nlstn/go-odata/internal/auth"
 	"github.com/nlstn/go-odata/internal/metadata"
 	"github.com/nlstn/go-odata/internal/response"
+	"github.com/nlstn/go-odata/internal/version"
 	"gorm.io/gorm"
 )
 
@@ -45,7 +46,7 @@ func (h *EntityHandler) handleGetStructuralProperty(w http.ResponseWriter, r *ht
 	}
 
 	// Fetch property value
-	fieldValue, err := h.fetchPropertyValue(w, r, entityKey, prop)
+	fieldValue, contextPath, err := h.fetchPropertyValue(w, r, entityKey, prop)
 	if err != nil {
 		return // Error already written
 	}
@@ -54,7 +55,7 @@ func (h *EntityHandler) handleGetStructuralProperty(w http.ResponseWriter, r *ht
 	if isValue {
 		h.writeRawPropertyValue(w, r, prop, fieldValue)
 	} else {
-		h.writePropertyResponse(w, r, entityKey, prop, fieldValue)
+		h.writePropertyResponse(w, r, contextPath, prop, fieldValue)
 	}
 }
 
@@ -65,7 +66,7 @@ func (h *EntityHandler) handleOptionsStructuralProperty(w http.ResponseWriter) {
 }
 
 // fetchPropertyValue fetches a property value from an entity
-func (h *EntityHandler) fetchPropertyValue(w http.ResponseWriter, r *http.Request, entityKey string, prop *metadata.PropertyMetadata) (reflect.Value, error) {
+func (h *EntityHandler) fetchPropertyValue(w http.ResponseWriter, r *http.Request, entityKey string, prop *metadata.PropertyMetadata) (reflect.Value, string, error) {
 	entity := reflect.New(h.metadata.EntityType).Interface()
 
 	var db *gorm.DB
@@ -82,7 +83,7 @@ func (h *EntityHandler) fetchPropertyValue(w http.ResponseWriter, r *http.Reques
 			if writeErr := response.WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidKey, err.Error()); writeErr != nil {
 				h.logger.Error("Error writing error response", "error", writeErr)
 			}
-			return reflect.Value{}, err
+			return reflect.Value{}, "", err
 		}
 	}
 
@@ -90,7 +91,7 @@ func (h *EntityHandler) fetchPropertyValue(w http.ResponseWriter, r *http.Reques
 
 	if err := db.First(entity).Error; err != nil {
 		h.handlePropertyFetchError(w, r, err, entityKey)
-		return reflect.Value{}, err
+		return reflect.Value{}, "", err
 	}
 
 	entityValue := reflect.ValueOf(entity).Elem()
@@ -100,10 +101,10 @@ func (h *EntityHandler) fetchPropertyValue(w http.ResponseWriter, r *http.Reques
 			"Could not access property"); err != nil {
 			h.logger.Error("Error writing error response", "error", err)
 		}
-		return reflect.Value{}, fmt.Errorf("invalid field")
+		return reflect.Value{}, "", fmt.Errorf("invalid field")
 	}
 
-	return fieldValue, nil
+	return fieldValue, h.propertyContextPath(r, entityKey, entity), nil
 }
 
 // handlePropertyFetchError handles errors when fetching a property
@@ -125,7 +126,7 @@ func (h *EntityHandler) handlePropertyFetchError(w http.ResponseWriter, r *http.
 }
 
 // writePropertyResponse writes a property response with OData context
-func (h *EntityHandler) writePropertyResponse(w http.ResponseWriter, r *http.Request, entityKey string, prop *metadata.PropertyMetadata, fieldValue reflect.Value) {
+func (h *EntityHandler) writePropertyResponse(w http.ResponseWriter, r *http.Request, contextPath string, prop *metadata.PropertyMetadata, fieldValue reflect.Value) {
 	// Get metadata level to determine which fields to include
 	metadataLevel := response.GetODataMetadataLevel(r)
 
@@ -135,7 +136,7 @@ func (h *EntityHandler) writePropertyResponse(w http.ResponseWriter, r *http.Req
 
 	// Only include @odata.context for minimal and full metadata (not for none)
 	if metadataLevel != "none" {
-		contextURL := fmt.Sprintf("%s/$metadata#%s(%s)/%s", response.BuildBaseURL(r), h.metadata.EntitySetName, entityKey, prop.JsonName)
+		contextURL := fmt.Sprintf("%s/$metadata#%s/%s", response.BuildBaseURL(r), contextPath, prop.JsonName)
 		odataResponse[ODataContextProperty] = contextURL
 	}
 
@@ -151,6 +152,20 @@ func (h *EntityHandler) writePropertyResponse(w http.ResponseWriter, r *http.Req
 	if err := json.NewEncoder(w).Encode(odataResponse); err != nil {
 		h.logger.Error("Error writing property response", "error", err)
 	}
+}
+
+// propertyContextPath uses canonical, unescaped key literals for 4.02
+// context fragments, regardless of how the request addressed the entity.
+func (h *EntityHandler) propertyContextPath(r *http.Request, entityKey string, entity interface{}) string {
+	if version.GetVersion(r.Context()).Is402OrLater() {
+		if h.metadata.IsSingleton {
+			return h.metadata.SingletonName
+		}
+		if path := response.BuildEntityIDFromEntity(h.metadata.EntitySetName, entity, h.metadata.KeyProperties); path != "" {
+			return path
+		}
+	}
+	return fmt.Sprintf("%s(%s)", h.metadata.EntitySetName, entityKey)
 }
 
 // writeRawPropertyValue writes a property value in raw format for /$value requests

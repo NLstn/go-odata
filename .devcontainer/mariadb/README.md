@@ -4,7 +4,7 @@ This directory contains the MariaDB-based development container configuration fo
 
 ## What's Included
 
-- **Go 1.25**: Latest Go development environment
+- **Go 1.26**: Development environment
 - **MariaDB 11**: MariaDB database for local development and testing
 - **SQLite**: Also available for testing (file-based or in-memory)
 - **VS Code Extensions**:

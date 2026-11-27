@@ -577,6 +577,11 @@ func (h *MetadataHandler) buildEntityContainer(model metadataModel) string {
 	var builder strings.Builder
 	builder.WriteString(`      <EntityContainer Name="Container">
 `)
+	fmt.Fprintf(&builder, `        <Annotation Term="%s"><Collection>`, odataVersionsTerm)
+	for _, supported := range version.SupportedVersions() {
+		fmt.Fprintf(&builder, "<String>%s</String>", supported)
+	}
+	builder.WriteString("</Collection></Annotation>\n")
 	for entitySetName, entityMeta := range model.entities {
 		// Skip entities that are only accessible via navigation properties (no top-level EntitySet entry)
 		if entityMeta.IsAccessibleOnlyViaNavigation {
@@ -665,6 +670,9 @@ func (h *MetadataHandler) buildAnnotations(model metadataModel) string {
 		builder.WriteString(fmt.Sprintf(`      <Annotations Target="%s">
 `, target))
 		for _, annotation := range model.containerAnnotations.Get() {
+			if annotation.QualifiedTerm() == odataVersionsTerm {
+				continue
+			}
 			builder.WriteString(h.buildAnnotationXML(annotation))
 		}
 		builder.WriteString(`      </Annotations>

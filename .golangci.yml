@@ -49,6 +49,10 @@ linters:
           - staticcheck
         text: "SA5011"
         path: "_test\\.go"
+      # Keep the existing lint scope by excluding the new Fprintf style suggestion.
+      - linters:
+          - staticcheck
+        text: "^QF1012:"
       # Meter instrument creation errors are unlikely and handled gracefully
       - linters:
           - errcheck

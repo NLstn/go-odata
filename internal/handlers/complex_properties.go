@@ -59,7 +59,7 @@ func (h *EntityHandler) handleGetComplexTypeProperty(w http.ResponseWriter, r *h
 		return
 	}
 
-	fieldValue, err := h.fetchComplexPropertyValue(w, r, entityKey, complexProp)
+	fieldValue, contextPath, err := h.fetchComplexPropertyValue(w, r, entityKey, complexProp)
 	if err != nil {
 		return
 	}
@@ -105,7 +105,7 @@ func (h *EntityHandler) handleGetComplexTypeProperty(w http.ResponseWriter, r *h
 		}
 	}
 
-	h.writeResolvedComplexValue(w, r, entityKey, contextSegments, currentValue, currentType, isValue)
+	h.writeResolvedComplexValue(w, r, contextPath, contextSegments, currentValue, currentType, isValue)
 }
 
 // handleOptionsComplexTypeProperty handles OPTIONS requests for complex properties
@@ -115,7 +115,7 @@ func (h *EntityHandler) handleOptionsComplexTypeProperty(w http.ResponseWriter) 
 }
 
 // fetchComplexPropertyValue fetches a complex property value from an entity without applying select clauses
-func (h *EntityHandler) fetchComplexPropertyValue(w http.ResponseWriter, r *http.Request, entityKey string, prop *metadata.PropertyMetadata) (reflect.Value, error) {
+func (h *EntityHandler) fetchComplexPropertyValue(w http.ResponseWriter, r *http.Request, entityKey string, prop *metadata.PropertyMetadata) (reflect.Value, string, error) {
 	entity := reflect.New(h.metadata.EntityType).Interface()
 
 	var db *gorm.DB
@@ -132,13 +132,13 @@ func (h *EntityHandler) fetchComplexPropertyValue(w http.ResponseWriter, r *http
 			if writeErr := response.WriteError(w, r, http.StatusBadRequest, ErrMsgInvalidKey, err.Error()); writeErr != nil {
 				h.logger.Error("Error writing error response", "error", writeErr)
 			}
-			return reflect.Value{}, err
+			return reflect.Value{}, "", err
 		}
 	}
 
 	if err := db.First(entity).Error; err != nil {
 		h.handlePropertyFetchError(w, r, err, entityKey)
-		return reflect.Value{}, err
+		return reflect.Value{}, "", err
 	}
 
 	entityValue := reflect.ValueOf(entity).Elem()
@@ -148,10 +148,10 @@ func (h *EntityHandler) fetchComplexPropertyValue(w http.ResponseWriter, r *http
 			"Could not access complex property"); writeErr != nil {
 			h.logger.Error("Error writing error response", "error", writeErr)
 		}
-		return reflect.Value{}, fmt.Errorf("invalid field")
+		return reflect.Value{}, "", fmt.Errorf("invalid field")
 	}
 
-	return fieldValue, nil
+	return fieldValue, h.propertyContextPath(r, entityKey, entity), nil
 }
 
 // writeNoContentForNullComplex writes a 204 No Content response for null complex properties
@@ -171,7 +171,7 @@ func (h *EntityHandler) writeComplexSegmentNullError(w http.ResponseWriter, r *h
 }
 
 // writeResolvedComplexValue writes the resolved complex property (or nested primitive) response
-func (h *EntityHandler) writeResolvedComplexValue(w http.ResponseWriter, r *http.Request, entityKey string, contextSegments []string, value reflect.Value, valueType reflect.Type, isValue bool) {
+func (h *EntityHandler) writeResolvedComplexValue(w http.ResponseWriter, r *http.Request, entityPath string, contextSegments []string, value reflect.Value, valueType reflect.Type, isValue bool) {
 	if isComplexValue(value, valueType) {
 		if isValue {
 			if err := response.WriteError(w, r, http.StatusBadRequest, "Invalid request",
@@ -187,7 +187,7 @@ func (h *EntityHandler) writeResolvedComplexValue(w http.ResponseWriter, r *http
 		}
 
 		resolvedValue := dereferenceValue(value)
-		h.writeComplexValueResponse(w, r, entityKey, contextSegments, resolvedValue)
+		h.writeComplexValueResponse(w, r, entityPath, contextSegments, resolvedValue)
 		return
 	}
 
@@ -199,11 +199,11 @@ func (h *EntityHandler) writeResolvedComplexValue(w http.ResponseWriter, r *http
 		return
 	}
 
-	h.writePrimitiveComplexPropertyResponse(w, r, entityKey, contextSegments, value)
+	h.writePrimitiveComplexPropertyResponse(w, r, entityPath, contextSegments, value)
 }
 
 // writeComplexValueResponse serializes a complex value (struct or map) with @odata.context
-func (h *EntityHandler) writeComplexValueResponse(w http.ResponseWriter, r *http.Request, entityKey string, contextSegments []string, value reflect.Value) {
+func (h *EntityHandler) writeComplexValueResponse(w http.ResponseWriter, r *http.Request, entityPath string, contextSegments []string, value reflect.Value) {
 	metadataLevel := response.GetODataMetadataLevel(r)
 	w.Header().Set(HeaderContentType, fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
 	w.WriteHeader(http.StatusOK)
@@ -215,7 +215,7 @@ func (h *EntityHandler) writeComplexValueResponse(w http.ResponseWriter, r *http
 	contextPath := strings.Join(contextSegments, "/")
 	responseMap := make(map[string]interface{})
 	if metadataLevel != "none" {
-		contextURL := fmt.Sprintf("%s/$metadata#%s(%s)/%s", response.BuildBaseURL(r), h.metadata.EntitySetName, entityKey, contextPath)
+		contextURL := fmt.Sprintf("%s/$metadata#%s/%s", response.BuildBaseURL(r), entityPath, contextPath)
 		responseMap[ODataContextProperty] = contextURL
 	}
 
@@ -243,7 +243,7 @@ func (h *EntityHandler) writeComplexValueResponse(w http.ResponseWriter, r *http
 }
 
 // writePrimitiveComplexPropertyResponse writes a primitive property (nested within a complex type)
-func (h *EntityHandler) writePrimitiveComplexPropertyResponse(w http.ResponseWriter, r *http.Request, entityKey string, contextSegments []string, value reflect.Value) {
+func (h *EntityHandler) writePrimitiveComplexPropertyResponse(w http.ResponseWriter, r *http.Request, entityPath string, contextSegments []string, value reflect.Value) {
 	metadataLevel := response.GetODataMetadataLevel(r)
 	w.Header().Set(HeaderContentType, fmt.Sprintf("application/json;odata.metadata=%s", metadataLevel))
 	w.WriteHeader(http.StatusOK)
@@ -270,7 +270,7 @@ func (h *EntityHandler) writePrimitiveComplexPropertyResponse(w http.ResponseWri
 	}
 
 	if metadataLevel != "none" {
-		contextURL := fmt.Sprintf("%s/$metadata#%s(%s)/%s", response.BuildBaseURL(r), h.metadata.EntitySetName, entityKey, strings.Join(contextSegments, "/"))
+		contextURL := fmt.Sprintf("%s/$metadata#%s/%s", response.BuildBaseURL(r), entityPath, strings.Join(contextSegments, "/"))
 		responseBody[ODataContextProperty] = contextURL
 	}
 

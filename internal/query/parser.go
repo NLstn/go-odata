@@ -3,6 +3,7 @@ package query
 import (
 	"fmt"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -684,7 +685,35 @@ func parseSelectWithNestedOptions(selectStr string, entityMetadata *metadata.Ent
 		selectedExpands = append(selectedExpands, expand)
 	}
 
+	selectedProps, err := resolveSelectKeys(selectedProps, entityMetadata)
+	if err != nil {
+		return nil, nil, err
+	}
 	return selectedProps, selectedExpands, nil
+}
+
+// resolveSelectKeys replaces the OData 4.02 select item with the declared
+// key properties so projection and context URLs use the same property names.
+func resolveSelectKeys(selected []string, entityMetadata *metadata.EntityMetadata) ([]string, error) {
+	if !slices.Contains(selected, "$key") {
+		return selected, nil
+	}
+	if entityMetadata == nil || len(entityMetadata.KeyProperties) == 0 {
+		return nil, fmt.Errorf("$key requires an entity type with declared keys")
+	}
+	resolved := make([]string, 0, len(selected)+len(entityMetadata.KeyProperties)-1)
+	for _, prop := range selected {
+		if prop == "$key" {
+			for _, key := range entityMetadata.KeyProperties {
+				if !slices.Contains(resolved, key.JsonName) {
+					resolved = append(resolved, key.JsonName)
+				}
+			}
+		} else if !slices.Contains(resolved, prop) {
+			resolved = append(resolved, prop)
+		}
+	}
+	return resolved, nil
 }
 
 func parseComplexSelectItem(part string, complexProp *metadata.PropertyMetadata, pathPrefix string) ([]string, error) {

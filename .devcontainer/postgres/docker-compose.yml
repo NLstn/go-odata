@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   app:
-    image: mcr.microsoft.com/devcontainers/go:1.25
+    image: mcr.microsoft.com/devcontainers/go:1.26
     volumes:
       - ../..:/workspaces/go-odata:cached
     command: sleep infinity

@@ -214,8 +214,14 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	path := strings.TrimPrefix(req.URL.Path, "/")
 
-	if strings.HasSuffix(path, "/$query") {
-		if r.handleQueryBody(w, req) {
+	if req.Method == methodQuery || strings.HasSuffix(path, "/$query") {
+		req = r.handleQueryBody(w, req)
+		if req == nil {
+			return
+		}
+		req = req.WithContext(response.WithNegotiation(req.Context(), req))
+		if err := response.ValidateODataMetadata(req); err != nil {
+			r.writeQueryBodyError(w, req, http.StatusBadRequest, err.Error())
 			return
 		}
 		path = strings.TrimPrefix(req.URL.Path, "/")

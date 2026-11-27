@@ -3,6 +3,7 @@ package router
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime"
@@ -12,65 +13,160 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/nlstn/go-odata/internal/actions"
+	"github.com/nlstn/go-odata/internal/query"
 	"github.com/nlstn/go-odata/internal/response"
+	"github.com/nlstn/go-odata/internal/version"
 )
 
-// handleQueryBody implements OData 4.01 Part 2 §4.17. It moves the
-// percent-encoded query options from a text/plain POST body into the request URL
-// and then lets normal entity-set routing and query execution handle them.
-func (r *Router) handleQueryBody(w http.ResponseWriter, req *http.Request) bool {
-	path := strings.TrimPrefix(req.URL.Path, "/")
-	if !strings.HasSuffix(path, "/$query") {
-		return false
-	}
+const methodQuery = "QUERY"
 
-	if req.Method != http.MethodPost {
+// handleQueryBody rewrites the OData query-body forms to the equivalent GET.
+func (r *Router) handleQueryBody(w http.ResponseWriter, req *http.Request) *http.Request {
+	suffix := strings.HasSuffix(req.URL.Path, "/$query")
+	if suffix && req.Method != http.MethodPost {
 		if err := response.WriteMethodNotAllowed(w, req, "POST, OPTIONS", "Method not allowed",
 			"resource paths ending in /$query require POST"); err != nil {
 			r.logger.Error("Error writing error response", "error", err)
 		}
-		return true
+		return nil
 	}
 
+	request402 := version.GetRequestVersion(req.Context()).Is402OrLater()
+	if req.Method == methodQuery && !request402 {
+		r.writeQueryBodyError(w, req, http.StatusNotImplemented, "QUERY requires an OData 4.02 request")
+		return nil
+	}
 	mediaType, _, err := mime.ParseMediaType(req.Header.Get("Content-Type"))
-	if err != nil || !strings.EqualFold(mediaType, "text/plain") {
-		if err := response.WriteError(w, req, http.StatusUnsupportedMediaType, "Unsupported Media Type",
-			"the /$query request body must use Content-Type text/plain"); err != nil {
-			r.logger.Error("Error writing error response", "error", err)
-		}
-		return true
+	if err != nil || (mediaType != "text/plain" &&
+		(!request402 || (mediaType != "application/x-www-form-urlencoded" && mediaType != "application/json"))) {
+		r.writeQueryBodyError(w, req, http.StatusUnsupportedMediaType, "unsupported Content-Type for an OData query body")
+		return nil
 	}
 
 	body, err := io.ReadAll(req.Body)
 	if err != nil {
-		if writeErr := response.WriteError(w, req, http.StatusBadRequest, "Invalid query options", err.Error()); writeErr != nil {
-			r.logger.Error("Error writing error response", "error", writeErr)
-		}
-		return true
+		r.writeQueryBodyError(w, req, http.StatusBadRequest, err.Error())
+		return nil
 	}
-	bodyText := string(body)
-	if bodyText == "" || strings.ContainsAny(bodyText, " \t\r\n") {
-		if err := response.WriteError(w, req, http.StatusBadRequest, "Invalid query options",
-			"the /$query request body must contain percent-encoded query options without whitespace"); err != nil {
-			r.logger.Error("Error writing error response", "error", err)
-		}
-		return true
+	targetPath := strings.TrimSuffix(req.URL.Path, "/$query")
+	lastSegment := targetPath[strings.LastIndexByte(targetPath, '/')+1:]
+	resolved, _ := r.resolveBoundName(lastSegment)
+	hasFunction := len(r.functions[resolved]) > 0
+
+	var rawQuery string
+	var bodyParams map[string]json.RawMessage
+	if mediaType == "application/json" {
+		rawQuery, bodyParams, err = parseJSONQueryBody(body, hasFunction)
+	} else {
+		rawQuery, err = decodeQueryBody(mediaType, body)
+	}
+	if err != nil {
+		r.writeQueryBodyError(w, req, http.StatusBadRequest, err.Error())
+		return nil
 	}
 
-	req.URL.Path = strings.TrimSuffix(req.URL.Path, "/$query")
-	if req.URL.RawQuery == "" {
-		req.URL.RawQuery = bodyText
-	} else {
-		req.URL.RawQuery += "&" + bodyText
+	req = req.Clone(req.Context())
+	if bodyParams != nil {
+		// The public 4.02 resource path omits parentheses. Reuse the
+		// existing function router with an internal empty argument list.
+		targetPath += "()"
+		req = actions.WithQueryBodyParams(req, bodyParams)
 	}
-	req.Body = io.NopCloser(bytes.NewReader(nil))
-	// The query body has been consumed; keep the downstream collection handler from
-	// treating this request as a JSON data-modification payload.
-	req.Header.Set("Content-Type", "application/json")
-	// /$query is a read operation even though the protocol uses POST for its
-	// query-options body; dispatch the consumed request through collection GET logic.
+	if rawQuery != "" {
+		if req.URL.RawQuery != "" {
+			req.URL.RawQuery += "&"
+		}
+		req.URL.RawQuery += rawQuery
+	}
+	if req.URL.Path != targetPath {
+		req.URL.Path = targetPath
+		req.URL.RawPath = ""
+	}
+	req.Body = http.NoBody
+	req.ContentLength = 0
+	req.Header.Del("Content-Type")
 	req.Method = http.MethodGet
-	return false
+	return req
+}
+
+func (r *Router) writeQueryBodyError(w http.ResponseWriter, req *http.Request, status int, detail string) {
+	if err := response.WriteError(w, req, status, http.StatusText(status), detail); err != nil {
+		r.logger.Error("Error writing query body response", "error", err)
+	}
+}
+
+func decodeQueryBody(mediaType string, body []byte) (string, error) {
+	rawQuery := string(body)
+	if mediaType == "text/plain" && (rawQuery == "" || strings.ContainsAny(rawQuery, " \t\r\n")) {
+		return "", errors.New("text/plain query options must be percent-encoded without whitespace")
+	}
+	if _, err := url.QueryUnescape(rawQuery); err != nil {
+		return "", fmt.Errorf("invalid percent-encoding in query options: %w", err)
+	}
+	return rawQuery, nil
+}
+
+func parseJSONQueryBody(body []byte, hasFunction bool) (string, map[string]json.RawMessage, error) {
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	token, err := decoder.Token()
+	if err != nil || token != json.Delim('{') {
+		return "", nil, errors.New("a JSON query body must be an object")
+	}
+
+	options := url.Values{}
+	var params map[string]json.RawMessage
+	if hasFunction {
+		params = map[string]json.RawMessage{}
+	}
+	for decoder.More() {
+		token, err := decoder.Token()
+		if err != nil {
+			return "", nil, err
+		}
+		key, ok := token.(string)
+		if !ok || key == "" {
+			return "", nil, errors.New("a JSON query option must have a name")
+		}
+		normalized := query.NormalizeQueryParams(url.Values{key: nil})
+		isOption := strings.HasPrefix(key, "$") || strings.HasPrefix(key, "@")
+		if _, unchanged := normalized[key]; !hasFunction && !unchanged && !strings.HasPrefix(key, "$") {
+			return "", nil, fmt.Errorf("JSON system query option %q requires a $ prefix", key)
+		}
+		if _, exists := params[key]; exists || options.Has(key) {
+			return "", nil, fmt.Errorf("JSON query option %q must not appear more than once", key)
+		}
+
+		var value json.RawMessage
+		if err := decoder.Decode(&value); err != nil {
+			return "", nil, err
+		}
+		if hasFunction && !isOption {
+			params[key] = value
+			continue
+		}
+		switch strings.ToLower(key) {
+		case "$top", "$skip":
+			text := string(value)
+			if text == "" || strings.Trim(text, "0123456789") != "" {
+				return "", nil, fmt.Errorf("JSON query option %q must be a non-negative integer", key)
+			}
+			options.Set(key, text)
+		default:
+			var text *string
+			if err := json.Unmarshal(value, &text); err != nil || text == nil {
+				return "", nil, fmt.Errorf("JSON query option %q must be a string", key)
+			}
+			options.Set(key, *text)
+		}
+	}
+	if _, err := decoder.Token(); err != nil {
+		return "", nil, err
+	}
+	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
+		return "", nil, errors.New("unexpected data after JSON query options")
+	}
+	return options.Encode(), params, nil
 }
 
 // handleAllResource serves the symbolic service-root $all collection.

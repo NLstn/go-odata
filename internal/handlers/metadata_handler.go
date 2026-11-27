@@ -212,7 +212,7 @@ func (h *MetadataHandler) evictOldCacheEntriesXML() {
 	}
 
 	// Keep priority versions (most common)
-	priorityVersions := map[string]bool{"4.01": true, "4.0": true}
+	priorityVersions := map[string]bool{"4.02": true, "4.01": true, "4.0": true}
 	keysToKeep := maxCacheEntries / 2
 
 	// First pass: collect all entries and count priority versions
@@ -260,7 +260,7 @@ func (h *MetadataHandler) evictOldCacheEntriesJSON() {
 	}
 
 	// Keep priority versions (most common)
-	priorityVersions := map[string]bool{"4.01": true, "4.0": true}
+	priorityVersions := map[string]bool{"4.02": true, "4.01": true, "4.0": true}
 	keysToKeep := maxCacheEntries / 2
 
 	// First pass: collect all entries and count priority versions
@@ -448,15 +448,12 @@ func (m metadataModel) collectTypeDefinitions() map[string]*typeDefinitionInfo {
 	return typeDefinitions
 }
 
+const odataVersionsTerm = "Org.OData.Core.V1.ODataVersions"
+
 // collectUsedVocabularies returns a sorted list of unique vocabulary namespaces used in annotations
 func (m metadataModel) collectUsedVocabularies() []string {
-	seen := make(map[string]bool)
-
-	// When a schema version is advertised the Core vocabulary is required for the
-	// Core.SchemaVersion annotation.
-	if m.schemaVersion != "" {
-		seen["Org.OData.Core.V1"] = true
-	}
+	// The generated Core.ODataVersions annotation always references Core.
+	seen := map[string]bool{"Org.OData.Core.V1": true}
 
 	if m.containerAnnotations != nil {
 		for _, ns := range m.containerAnnotations.UsedVocabularies() {

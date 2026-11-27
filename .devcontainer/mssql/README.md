@@ -4,7 +4,7 @@ This directory contains the MSSQL-based development container configuration for 
 
 ## What's Included
 
-- **Go 1.25**: Latest Go development environment
+- **Go 1.26**: Development environment
 - **SQL Server 2022 (Developer edition image)**: SQL Server database for local development and testing
 - **SQLite**: Also available for testing (file-based or in-memory)
 - **VS Code Extensions**:

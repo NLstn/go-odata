@@ -138,7 +138,7 @@ The compliance test suite is a Go-based test suite that validates the library's 
 
 ### Requirements
 
-- Go 1.24 or later
+- Go 1.26 or later
 - GORM-compatible database driver
 - MIT License
 

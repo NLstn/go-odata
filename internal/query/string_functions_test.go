@@ -682,8 +682,8 @@ func TestStringFunctions_MatchesPattern(t *testing.T) {
 			expectErr: true,
 		},
 		{
-			name:      "matchesPattern wrong argument count - 3 args",
-			filter:    "matchesPattern(Name, 'a', 'b')",
+			name:      "matchesPattern wrong argument count - 4 args",
+			filter:    "matchesPattern(Name, 'a', 'b', 'c')",
 			expectErr: true,
 		},
 	}

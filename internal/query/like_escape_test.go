@@ -184,3 +184,27 @@ func TestBuildRegexComparison_SQLServerEREAlternation(t *testing.T) {
 		t.Fatalf("unexpected args: %#v", args)
 	}
 }
+
+func TestBuildFlaggedRegexComparison_CaseSensitivity(t *testing.T) {
+	tests := []struct {
+		dialect string
+		flags   string
+		wantSQL string
+		wantArg string
+	}{
+		{"mysql", "", "name REGEXP ?", "(?-i:^Laptop$)"},
+		{"mysql", "m", "name REGEXP ?", "(?m-i:^Laptop$)"},
+		{"mysql", "i", "name REGEXP ?", "(?i:^Laptop$)"},
+		{"mariadb", "", "name REGEXP ?", "(?-i:^Laptop$)"},
+		{"mssql", "", "name COLLATE Latin1_General_BIN2 LIKE ? ESCAPE '\\'", "Laptop"},
+		{"sqlserver", "i", "LOWER(name) COLLATE Latin1_General_BIN2 LIKE ? ESCAPE '\\'", "laptop"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.dialect+"/"+tt.flags, func(t *testing.T) {
+			sql, args := buildRegexComparison(tt.dialect, "name", regexMatch{pattern: "^Laptop$", flags: tt.flags, valid: true})
+			if sql != tt.wantSQL || len(args) != 1 || args[0] != tt.wantArg {
+				t.Fatalf("got %q with args %v, want %q with arg %q", sql, args, tt.wantSQL, tt.wantArg)
+			}
+		})
+	}
+}

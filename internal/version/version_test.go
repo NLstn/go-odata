@@ -143,7 +143,8 @@ func TestParseRequestVersion(t *testing.T) {
 		{name: "surrounding whitespace", input: " 4.01\t", want: Version{4, 1}},
 		{name: "missing minor", input: "4", wantErr: true},
 		{name: "noncanonical minor", input: "4.1", wantErr: true},
-		{name: "unsupported minor", input: "4.02", wantErr: true},
+		{name: "4.02", input: "4.02", want: Version{4, 2}},
+		{name: "unsupported minor", input: "4.03", wantErr: true},
 		{name: "unsupported major", input: "5.0", wantErr: true},
 		{name: "multiple values", input: "4.0, 4.01", wantErr: true},
 		{name: "invalid", input: "invalid", wantErr: true},
@@ -171,8 +172,11 @@ func TestNegotiateVersion(t *testing.T) {
 		{"no header", "", Version{4, 1}},
 		{"client max 4.0", "4.0", Version{4, 0}},
 		{"client max 4.01", "4.01", Version{4, 1}},
-		{"client max 5.0", "5.0", Version{4, 1}},
-		{"client max 10.0", "10.0", Version{4, 1}},
+		{"client max 4.019", "4.019", Version{4, 1}},
+		{"client max 4.02", "4.02", Version{4, 2}},
+		{"client max 4.1", "4.1", Version{4, 2}},
+		{"client max 5.0", "5.0", Version{4, 2}},
+		{"client max 10.0", "10.0", Version{4, 2}},
 	}
 
 	for _, tt := range tests {
