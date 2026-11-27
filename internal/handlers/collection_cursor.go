@@ -30,6 +30,17 @@ func collectionCursorOrder(meta *metadata.EntityMetadata, order []query.OrderByI
 	return result
 }
 
+func collectionCursorSelect(meta *metadata.EntityMetadata, selected []string, order []query.OrderByItem) []string {
+	result := make([]string, 0, len(selected)+len(order))
+	result = append(result, selected...)
+	for _, item := range order {
+		if prop := meta.FindProperty(item.Property); prop != nil && prop.ColumnName != "" && !prop.IsNavigationProp && !prop.IsComputed && !prop.IsStream && !prop.IsComplexType {
+			result = append(result, prop.JsonName)
+		}
+	}
+	return result
+}
+
 func (h *EntityHandler) applyCollectionCursor(db *gorm.DB, opts *query.QueryOptions) (*gorm.DB, error) {
 	token, err := skiptoken.Decode(*opts.SkipToken)
 	if err != nil {
@@ -41,7 +52,7 @@ func (h *EntityHandler) applyCollectionCursor(db *gorm.DB, opts *query.QueryOpti
 	}
 	// Each branch matches the preceding components and advances the current
 	// component in its declared direction.
-	var prefix []clause.Expression
+	prefix := make([]clause.Expression, 0, len(order))
 	branches := make([]clause.Expression, 0, len(order))
 	for _, item := range order {
 		property := h.metadata.FindProperty(item.Property)
@@ -52,43 +63,66 @@ func (h *EntityHandler) applyCollectionCursor(db *gorm.DB, opts *query.QueryOpti
 		if !ok {
 			value, ok = token.KeyValues[property.JsonName]
 		}
-		if !ok || value == nil {
+		if !ok {
 			return nil, fmt.Errorf("missing skiptoken value for %q", item.Property)
 		}
 		column := clause.Column{Table: clause.CurrentTable, Name: property.ColumnName}
-		var after clause.Expression = clause.Gt{Column: column, Value: value}
-		if item.Descending {
-			after = clause.Lt{Column: column, Value: value}
+		// NULL sorts first ascending and last descending. At the last NULL
+		// partition only later terms can advance the cursor.
+		var after clause.Expression
+		switch {
+		case value == nil && !item.Descending:
+			after = clause.Neq{Column: column, Value: nil}
+		case value != nil && item.Descending:
+			after = clause.Or(clause.Lt{Column: column, Value: value}, clause.Eq{Column: column, Value: nil})
+		case value != nil:
+			after = clause.Gt{Column: column, Value: value}
 		}
-		branch := append(append([]clause.Expression(nil), prefix...), after)
-		branches = append(branches, clause.And(branch...))
+		if after != nil {
+			branch := make([]clause.Expression, 0, len(prefix)+1)
+			branch = append(branch, prefix...)
+			branches = append(branches, clause.And(append(branch, after)...))
+		}
 		prefix = append(prefix, clause.Eq{Column: column, Value: value})
+	}
+	if len(branches) == 0 {
+		return db.Where("1 = 0"), nil
 	}
 	return db.Where(clause.Or(branches...)), nil
 }
 
-// groupedCursorOrder returns the order for a grouped ($apply ... groupby) result.
-// OFFSET paging needs a total order. The requested sort may tie (for example on an
-// aggregate), so the group keys are appended, in declared order, as ascending
-// tie-breakers. When the client gave no sort, the group keys are the order.
-// It only applies when the last transformation is a plain groupby (no rollup, no
-// $all, no navigation paths); every other shape is returned unchanged.
-func groupedCursorOrder(apply []query.ApplyTransformation, order []query.OrderByItem) []query.OrderByItem {
+func plainCollectionGroupBy(apply []query.ApplyTransformation) []string {
 	if len(apply) == 0 {
-		return order
+		return nil
 	}
 	last := apply[len(apply)-1]
 	if last.Type != query.ApplyTypeGroupBy || last.GroupBy == nil || last.GroupBy.Rollup != nil || last.GroupBy.AllValues {
+		return nil
+	}
+	for _, key := range last.GroupBy.Properties {
+		if key == "" || strings.Contains(key, "/") {
+			return nil
+		}
+	}
+	return last.GroupBy.Properties
+}
+
+// groupedCursorOrder completes the ordering for offset paging over plain
+// groupby results. Entity keys alone do not identify the cursor position.
+func groupedCursorOrder(apply []query.ApplyTransformation, order []query.OrderByItem) []query.OrderByItem {
+	keys := plainCollectionGroupBy(apply)
+	if len(keys) == 0 {
 		return order
 	}
-	result := append([]query.OrderByItem(nil), order...)
+	result := make([]query.OrderByItem, 0, len(order)+len(keys))
+	result = append(result, order...)
 	have := make(map[string]bool, len(result))
 	for _, item := range result {
 		have[item.Property] = true
 	}
-	for _, key := range last.GroupBy.Properties {
-		if key == "" || strings.Contains(key, "/") || have[key] {
-			return order
+	for _, key := range keys {
+		if have[key] {
+			continue
 		}
 		result = append(result, query.OrderByItem{Property: key})
 		have[key] = true

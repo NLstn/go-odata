@@ -254,6 +254,11 @@ func (h *EntityHandler) fetchResults(ctx context.Context, queryOptions *query.Qu
 	modifiedOptions := *queryOptions
 	if len(queryOptions.OrderBy) > 0 && !query.ShouldUseMapResults(queryOptions) {
 		modifiedOptions.OrderBy = collectionCursorOrder(h.metadata, queryOptions.OrderBy)
+		if queryOptions.Top != nil && *queryOptions.Top > 0 && query.CanDeferSelectProjection(queryOptions.Select, queryOptions.Expand, h.metadata) {
+			// Keep cursor inputs in the SQL projection. The response serializer
+			// still uses the original $select, so these fields stay hidden.
+			modifiedOptions.Select = collectionCursorSelect(h.metadata, queryOptions.Select, queryOptions.OrderBy)
+		}
 	} else if query.ShouldUseMapResults(queryOptions) {
 		modifiedOptions.OrderBy = groupedCursorOrder(queryOptions.Apply, queryOptions.OrderBy)
 	}
@@ -1618,9 +1623,12 @@ func (h *EntityHandler) calculateNextLink(queryOptions *query.QueryOptions, slic
 				continuation.URL.RawQuery = values.Encode()
 			}
 		}
-		nextURL := buildNextLinkWithSkipToken(h.metadata, queryOptions, sliceValue, continuation)
-		if nextURL != nil {
-			return nextURL, true
+		// Group order is defined by the grouping tuple, not by the entity key,
+		// even when the group happens to project every key column.
+		if len(plainCollectionGroupBy(queryOptions.Apply)) == 0 {
+			if nextURL := buildNextLinkWithSkipToken(h.metadata, queryOptions, sliceValue, continuation); nextURL != nil {
+				return nextURL, true
+			}
 		}
 
 		currentSkip := 0
