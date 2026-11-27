@@ -4,7 +4,7 @@ This directory contains the MySQL-based development container configuration for 
 
 ## What's Included
 
-- **Go 1.25**: Latest Go development environment
+- **Go 1.26**: Development environment
 - **MySQL 8**: MySQL database for local development and testing
 - **SQLite**: Also available for testing (file-based or in-memory)
 - **VS Code Extensions**:
