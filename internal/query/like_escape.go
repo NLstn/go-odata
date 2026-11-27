@@ -161,9 +161,15 @@ func buildFlaggedRegexComparison(dialect, column string, match regexMatch) (stri
 	}
 	if dialect == "sqlserver" || dialect == "mssql" {
 		if strings.Contains(flags, "i") {
-			return buildRegexComparison(dialect, "LOWER("+column+")", strings.ToLower(pattern))
+			column = "LOWER(" + column + ")"
+			pattern = strings.ToLower(pattern)
 		}
-		return buildRegexComparison(dialect, column, pattern)
+		return buildRegexComparison(dialect, column+" COLLATE Latin1_General_BIN2", pattern)
+	}
+	if (dialect == "mysql" || dialect == "mariadb") && !strings.Contains(flags, "i") {
+		// ICU (MySQL) and PCRE (MariaDB) inherit case sensitivity from
+		// the collation. Turn off case folding unless the i flag was set.
+		nativeFlags.WriteString("-i")
 	}
 	if nativeFlags.Len() > 0 {
 		pattern = "(?" + nativeFlags.String() + ":" + pattern + ")"
